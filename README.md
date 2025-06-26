@@ -1,298 +1,166 @@
 # PersonaLab
 
-[![PyPI version](https://badge.fury.io/py/personalab.svg)](https://badge.fury.io/py/personalab)
-[![Python Version](https://img.shields.io/pypi/pyversions/personalab.svg)](https://pypi.org/project/personalab/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+PersonaLab is an advanced memory management system for AI agents that provides intelligent profile management and LLM-enhanced search capabilities.
 
-A Python framework for creating and managing AI personas and laboratory environments.
+## 🚀 Features
 
-## Features
+### 📝 Core Memory Management
+- **Agent Memory**: Persistent profile and event storage for AI agents
+- **User Memory**: Individual memory spaces for different users
+- **Profile Management**: Automatic profile updates based on conversations
+- **Event Tracking**: Comprehensive conversation and interaction history
 
-- ✨ Ultra-simple memory management for AI personas
-- 🚀 Agent/User separation for different memory contexts
-- 📦 String-based storage without complex categories
-- 💾 SQLite database persistence with auto-save
+### 🧠 LLM Integration
+- **Multiple LLM Providers**: OpenAI, Anthropic, Google Gemini, Azure OpenAI, Cohere, AWS Bedrock, Together AI, Replicate, Local LLMs
+- **Intelligent Search**: LLM-powered search decision making and content analysis
+- **Profile Updates**: AI-driven profile enhancement from conversation content
+- **XML Parsing**: Structured profile output with automatic parsing
 
-## Memory System
+### 🔍 Advanced Search
+- **LLM-Enhanced Search**: Semantic understanding and relevance scoring
+- **Deep Search**: Multi-level content analysis with cross-referencing
+- **Intent Analysis**: Intelligent extraction of search requirements
+- **Context-Aware Results**: Ranked results based on conversation context
 
-PersonaLab includes a hierarchical memory management system for AI personas:
-
-### Architecture
-
-```
-Memory (Container)
-├── AgentMemory
-│   ├── ProfileMemory (string)
-│   └── EventMemory (list)
-└── UserMemory (per user)
-    ├── ProfileMemory (string) 
-    └── EventMemory (list)
-```
-
-### Memory Classes
-
-- **Memory**: Main container that manages agent and user memories
-- **AgentMemory**: Container for agent-specific profile and events
-- **UserMemory**: Container for user-specific profile and events  
-- **ProfileMemory**: Manages profiles as a single string
-- **EventMemory**: Manages memories as timestamped strings
-
-### Key Features
-
-- **Hierarchical**: Clean separation between agent and user memories
-- **Ultra-Simple**: ProfileMemory is just a string, EventMemory is just a list
-- **Agent/User Separation**: One agent can handle multiple users
-- **String-based Timestamps**: Human-readable datetime strings throughout  
-- **No Categories**: No complex event types or metadata - just content and time
-- **Easy API**: Intuitive hierarchical access patterns
-- **Database Persistence**: SQLite-based storage with manual and auto-save options
-- **Data Integrity**: Complete memory preservation across sessions
-
-### Usage Examples
-
-```python
-from personalab.memory import Memory
-
-# Basic memory usage with built-in database persistence
-memory = Memory("chatbot_v1")  # Auto-loads from "personalab_memory.db"
-
-# Agent memory (auto-saved to database)
-agent = memory.get_agent_memory()
-agent.profile.set_profile("System: ChatBot v1.0, Language: Chinese")
-agent.events.add_memory("系统启动")
-
-# User memory (auto-saved to database)
-alice = memory.get_user_memory("alice")
-alice.profile.set_profile("Name: Alice, Age: 25, Skill: Beginner")
-alice.events.add_memory("用户询问天气信息")
-
-# Simple retrieval
-recent_memories = alice.events.get_recent_memories(5)
-search_results = alice.events.search_memories("天气")
-
-# Custom database file with auto-save
-memory = Memory("chatbot_v2", db_path="my_chatbot.db", auto_save=True)
-# All changes automatically saved to my_chatbot.db
-
-# Manual save control
-memory = Memory("chatbot_v3", db_path="manual.db", auto_save=False)
-agent = memory.get_agent_memory()
-agent.events.add_memory("This is not auto-saved")
-memory.save()  # Save manually when ready
-
-# Data persistence across sessions (automatic)
-memory1 = Memory("persistent_bot")
-memory1.get_agent_memory().events.add_memory("Session 1 data")
-
-# Later... (new process/restart)
-memory2 = Memory("persistent_bot")  # Auto-loads previous data
-print(f"Events: {memory2.get_agent_memory().events.get_size()}")  # Shows: 1
-```
-
-## Installation
-
-### From PyPI (Recommended)
-
-```bash
-pip install personalab
-```
-
-### From Source
+## 📦 Installation
 
 ```bash
 git clone https://github.com/NevaMind-AI/PersonaLab.git
 cd PersonaLab
-pip install -e .
+pip install -r requirements.txt
 ```
 
-### Development Installation
+## 🛠️ Quick Start
 
-```bash
-git clone https://github.com/NevaMind-AI/PersonaLab.git
-cd PersonaLab
-pip install -e ".[dev]"
-```
-
-## Quick Start
+### Basic Usage
 
 ```python
-from personalab.memory import Memory
+from personalab.main import Memory
 
-# Create memory (automatically loads from database if exists)
-memory = Memory("chatbot_v1")
+# Create a memory instance
+memory = Memory("my_agent", enable_llm_search=True)
 
-# Setup agent (automatically saved to database)
-agent = memory.get_agent_memory()
-agent.profile.set_profile("AI Assistant v1.0")
-agent.events.add_memory("System started")
+# Set initial agent profile
+memory.agent_memory.profile.set_profile("I am an AI assistant specialized in programming.")
 
-# Handle user (automatically saved to database)
-alice = memory.get_user_memory("alice")
-alice.profile.set_profile("Name: Alice, Age: 25")
-alice.events.add_memory("User asked about weather")
-alice.events.add_memory("Provided weather information")
+# Add events
+memory.agent_memory.events.add_memory("User asked about Python programming best practices.")
 
-# Retrieve memories
-recent = alice.events.get_recent_memories(2)
-for mem in recent:
-    print(mem)  # [2025-06-26 13:30:00] Provided weather information
-
-# Data automatically persists! Restart and load:
-memory2 = Memory("chatbot_v1")  # Auto-loads all previous data
-print(f"Agent events: {memory2.get_agent_memory().events.get_size()}")  # Shows saved events
+# Search memory
+if memory.need_search("Tell me about Python coding"):
+    results = memory.deep_search("What Python topics have we discussed?")
+    print(results['relevant_context'])
 ```
 
-## API Reference
+### Profile Updates
 
-### Memory
+```python
+# Update agent profile based on conversation
+conversation = """
+User: Can you help with machine learning?
+Agent: Yes! I have experience with scikit-learn, PyTorch, and TensorFlow.
+"""
 
-Main container that manages agent and user memories with built-in database persistence.
+updated_profile = memory.update_agent_profile_memory(conversation)
+print(f"Updated profile: {updated_profile}")
 
-#### Constructor
-
-- `__init__(agent_id, db_path="personalab_memory.db", auto_save=True)` - Initialize memory with database
-
-#### Methods
-
-- `get_agent_memory()` - Get AgentMemory instance (with auto-save)
-- `get_user_memory(user_id)` - Get or create UserMemory for user (with auto-save)
-- `list_users()` - Get list of registered user IDs
-- `save()` - Manually save to database (useful when auto_save=False)
-- `get_memory_info()` - Get comprehensive memory information including database info
-
-#### Key Features
-
-- **Auto-load**: Automatically loads data from database on initialization
-- **Auto-save**: Automatically saves changes to database (when auto_save=True)
-- **Manual save**: Call save() method for manual control (when auto_save=False)
-- **Database file**: Uses SQLite database file for persistence
-
-### AgentMemory / UserMemory
-
-Containers for agent/user-specific memories.
-
-#### Properties
-
-- `profile` - ProfileMemory instance (string storage)
-- `events` - EventMemory instance (list storage)
-
-### ProfileMemory
-
-Manages profiles as a single string.
-
-#### Methods
-
-- `get_profile()` - Get the profile string
-- `set_profile(profile_data)` - Set the profile string
-- `clear()` - Clear the profile
-- `get_size()` - Get length of profile string
-
-### EventMemory
-
-Manages memories as timestamped strings.
-
-#### Methods
-
-- `add_memory(content)` - Add a new memory
-- `get_memories(limit=None)` - Get memories (recent first)
-- `get_recent_memories(limit=10)` - Get recent memories  
-- `search_memories(query, case_sensitive=False)` - Search memories by content
-- `clear()` - Clear all memories
-- `get_size()` - Get number of memories
-
-### MemoryDatabase
-
-SQLite database for memory persistence.
-
-#### Methods
-
-- `__init__(db_path)` - Initialize database with file path
-- `save_memory(memory)` - Save Memory instance to database
-- `load_memory(agent_id)` - Load Memory instance from database
-- `list_agents()` - Get all agent IDs in database
-- `list_users(agent_id)` - Get user IDs for specific agent
-- `delete_agent(agent_id)` - Delete agent and all data
-- `delete_user(agent_id, user_id)` - Delete specific user
-- `get_stats()` - Get database statistics
-
-### PersistentMemory
-
-Memory with automatic database persistence.
-
-#### Methods
-
-- `__init__(agent_id, db_path, auto_save=True)` - Initialize with auto-save
-- `save()` - Manually save to database
-- All Memory methods with automatic persistence
-
-## Development
-
-### Setting up Development Environment
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/NevaMind-AI/PersonaLab.git
-   cd PersonaLab
-   ```
-
-2. Install development dependencies:
-   ```bash
-   pip install -e ".[dev]"
-   ```
-
-3. Install pre-commit hooks:
-   ```bash
-   pre-commit install
-   ```
-
-### Running Tests
-
-```bash
-pytest
+# Update user profile
+user_id = "data_scientist_alice"
+updated_user_profile = memory.update_user_profile_memory(user_id, conversation)
 ```
 
-### Code Formatting
+### LLM Provider Setup
 
-```bash
-black .
+```python
+from personalab.llm import LLMManager
+
+# Quick setup (auto-detects available providers)
+llm_manager = LLMManager.create_quick_setup()
+
+# Use specific provider
+memory = Memory("agent", llm_instance=llm_manager.get_current_provider())
 ```
 
-### Type Checking
+## 🏗️ Architecture
 
-```bash
-mypy personalab
+### Memory Structure
+```
+PersonaLab/
+├── personalab/
+│   ├── main.py              # Main Memory class
+│   │   └── ...              # Other components
+│   └── llm/                 # LLM integrations
+│       └── ...              # Other providers
 ```
 
-### Building the Package
+### Key Components
 
-```bash
-python -m build
+- **Memory**: Main interface for all memory operations
+- **AgentMemory**: Stores agent profile and conversation history
+- **UserMemory**: Individual user profiles and interactions
+- **LLMManager**: Handles multiple LLM provider integrations
+- **Search System**: LLM-powered intelligent search and ranking
+
+## 🔧 Configuration
+
+### LLM Settings
+
+```python
+# Enable/disable LLM-based search
+memory = Memory("agent", enable_llm_search=True)
+
+# Use custom LLM instance
+from personalab.llm import OpenAILLM
+custom_llm = OpenAILLM(api_key="your-key")
+memory = Memory("agent", llm_instance=custom_llm)
 ```
 
-### Publishing to PyPI
+### Search Parameters
 
-```bash
-python -m twine upload dist/*
+```python
+# Configure deep search
+results = memory.deep_search(
+    conversation="What did we discuss about AI?",
+    max_results=10,
+    similarity_threshold=70.0
+)
 ```
 
-## Contributing
+## 📊 API Reference
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### Memory Class
 
-## License
+- `Memory(agent_id, enable_llm_search=True, llm_instance=None)`
+- `need_search(conversation, system_prompt="", context_length=0) -> bool`
+- `deep_search(conversation, system_prompt="", user_id=None, max_results=15) -> Dict`
+- `update_agent_profile_memory(conversation) -> str`
+- `update_user_profile_memory(user_id, conversation) -> str`
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+### LLM Manager
 
-## Changelog
+- `LLMManager.create_quick_setup() -> LLMManager`
+- `add_provider(provider_name, llm_instance)`
+- `switch_provider(provider_name) -> bool`
+- `get_current_provider() -> BaseLLM`
 
-See [CHANGELOG.md](CHANGELOG.md) for details about changes in each version.
+## 🎯 Use Cases
 
-## Support
+- **AI Chatbots**: Persistent memory and context awareness
+- **Personal Assistants**: User preference learning and adaptation
+- **Customer Service**: Agent knowledge base and user history
+- **Educational Systems**: Student progress tracking and personalization
+- **Research Tools**: Information organization and retrieval
 
-- 📧 Email: your.email@example.com
-- 🐛 Issues: [GitHub Issues](https://github.com/NevaMind-AI/PersonaLab/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/NevaMind-AI/PersonaLab/discussions) 
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🌟 Acknowledgments
+
+- Built with modern Python practices and design patterns
+- Integrated with leading LLM providers for maximum flexibility
+- Designed for production use with robust error handling 
