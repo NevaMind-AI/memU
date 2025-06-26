@@ -1,0 +1,9 @@
+# Development dependencies
+pytest>=7.0
+pytest-cov>=4.0
+black>=22.0
+flake8>=5.0
+mypy>=1.0
+pre-commit>=3.0
+twine>=4.0
+build>=0.10 
