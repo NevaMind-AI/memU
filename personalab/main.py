@@ -241,8 +241,8 @@ Return in XML format:
         if self.enable_llm_search and self.llm:
             return self.llm_need_search(conversation, system_prompt, context_length)
         
-        # Fallback to basic search only if LLM unavailable
-        return self.should_search_memory(conversation, system_prompt)
+        # Fallback to basic search only if LLM unavailable (conservative approach)
+        return True
 
     def llm_need_search(self, conversation: str, system_prompt: str = "", 
                        context_length: int = 0) -> bool:
@@ -261,17 +261,17 @@ Return in XML format:
             True if LLM determines memory search should be performed
         """
         if not self.enable_llm_search or not self.llm:
-            # Fallback to basic rule-based search
-            return self.should_search_memory(conversation, system_prompt)
+            # Fallback to basic search (conservative approach)
+            return True
         
         try:
             # Prepare LLM prompt for search decision
             decision_prompt = f"""
 You are helping decide whether to search memory for relevant context. 
 
-Conversation: "{conversation}"
+
 System prompt: "{system_prompt}"
-Context length: {context_length} characters
+Conversation: "{conversation}"
 
 Consider these factors:
 1. Does the query reference past conversations, memories, or personal information?
@@ -295,50 +295,8 @@ Be conservative - only suggest search when it would meaningfully improve the res
             # Fallback on error
             pass
         
-        # Fallback to rule-based approach
-        return self.should_search_memory(conversation, system_prompt)
-
-    def should_search_memory(self, conversation: str, system_prompt: str = "") -> bool:
-        """
-        Determine if memory search is needed based on conversation content.
-        
-        Args:
-            conversation: Current conversation text
-            system_prompt: System prompt being used
-            
-        Returns:
-            True if memory search should be performed
-        """
-        # Search indicators
-        search_indicators = [
-            # Direct memory requests
-            r'\b(remember|recall|what do you know|tell me about|history|previous|before|last time)\b',
-            
-            # Question words that might need context
-            r'\b(who|what|when|where|why|how)\b.*\?',
-            
-            # Personal references
-            r'\b(I|my|me|mine|myself)\b',
-            
-            # Temporal references
-            r'\b(yesterday|today|last week|before|earlier|previously|last time)\b',
-            
-            # Context-dependent words
-            r'\b(this|that|it|they|them|he|she|we|us)\b',
-            
-            # Commands that might benefit from context
-            r'\b(continue|resume|update|change|modify|add to|build on)\b'
-        ]
-        
-        # Combine conversation and system prompt
-        full_text = (conversation + " " + system_prompt).lower()
-        
-        # Check for any indicators
-        for pattern in search_indicators:
-            if re.search(pattern, full_text, re.IGNORECASE):
-                return True
-        
-        return False
+        # Fallback to basic search (return True for conservative approach)
+        return True
 
     def search_memory_with_context(self, conversation: str, system_prompt: str = "", 
                                  user_id: Optional[str] = None, max_results: int = 10) -> Dict[str, Any]:
