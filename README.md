@@ -8,9 +8,65 @@ A Python framework for creating and managing AI personas and laboratory environm
 
 ## Features
 
-- ✨ Feature 1
-- 🚀 Feature 2  
-- 📦 Feature 3
+- ✨ Ultra-simple memory management for AI personas
+- 🚀 Agent/User separation for different memory contexts
+- 📦 String-based storage without complex categories
+
+## Memory System
+
+PersonaLab includes a hierarchical memory management system for AI personas:
+
+### Architecture
+
+```
+Memory (Container)
+├── AgentMemory
+│   ├── ProfileMemory (string)
+│   └── EventMemory (list)
+└── UserMemory (per user)
+    ├── ProfileMemory (string) 
+    └── EventMemory (list)
+```
+
+### Memory Classes
+
+- **Memory**: Main container that manages agent and user memories
+- **AgentMemory**: Container for agent-specific profile and events
+- **UserMemory**: Container for user-specific profile and events  
+- **ProfileMemory**: Manages profiles as a single string
+- **EventMemory**: Manages memories as timestamped strings
+
+### Key Features
+
+- **Hierarchical**: Clean separation between agent and user memories
+- **Ultra-Simple**: ProfileMemory is just a string, EventMemory is just a list
+- **Agent/User Separation**: One agent can handle multiple users
+- **String-based Timestamps**: Human-readable datetime strings throughout  
+- **No Categories**: No complex event types or metadata - just content and time
+- **Easy API**: Intuitive hierarchical access patterns
+
+### Usage Examples
+
+```python
+from personalab.memory import Memory
+
+# Create main memory container
+memory = Memory("chatbot_v1")
+
+# Agent memory (profile + events)
+agent = memory.get_agent_memory()
+agent.profile.set_profile("System: ChatBot v1.0, Language: Chinese")
+agent.events.add_memory("系统启动")
+
+# User memory (profile + events) 
+alice = memory.get_user_memory("alice")
+alice.profile.set_profile("Name: Alice, Age: 25, Skill: Beginner")
+alice.events.add_memory("用户询问天气信息")
+
+# Simple retrieval
+recent_memories = alice.events.get_recent_memories(5)
+search_results = alice.events.search_memories("天气")
+```
 
 ## Installation
 
@@ -39,40 +95,74 @@ pip install -e ".[dev]"
 ## Quick Start
 
 ```python
-from personalab import YourMainClass
+from personalab.memory import Memory
 
-# Example usage
-instance = YourMainClass()
-result = instance.do_something()
-print(result)
-```
+# Create memory container
+memory = Memory("chatbot_v1")
 
-## Usage
+# Setup agent
+agent = memory.get_agent_memory()
+agent.profile.set_profile("AI Assistant v1.0")
+agent.events.add_memory("System started")
 
-### Basic Usage
+# Handle user
+alice = memory.get_user_memory("alice")
+alice.profile.set_profile("Name: Alice, Age: 25")
+alice.events.add_memory("User asked about weather")
+alice.events.add_memory("Provided weather information")
 
-```python
-import personalab
-
-# Your examples here
-```
-
-### Advanced Usage
-
-```python
-# More complex examples
+# Retrieve memories
+recent = alice.events.get_recent_memories(2)
+for mem in recent:
+    print(mem)  # [2025-06-26 13:30:00] Provided weather information
 ```
 
 ## API Reference
 
-### YourMainClass
+### Memory
 
-Main class description.
+Main container that manages agent and user memories.
 
 #### Methods
 
-- `method_name(param1, param2)` - Description of what this method does
-- `another_method()` - Another method description
+- `__init__(agent_id)` - Initialize memory for an agent
+- `get_agent_memory()` - Get AgentMemory instance
+- `get_user_memory(user_id)` - Get or create UserMemory for user
+- `list_users()` - Get list of registered user IDs
+- `get_memory_info()` - Get comprehensive memory information
+
+### AgentMemory / UserMemory
+
+Containers for agent/user-specific memories.
+
+#### Properties
+
+- `profile` - ProfileMemory instance (string storage)
+- `events` - EventMemory instance (list storage)
+
+### ProfileMemory
+
+Manages profiles as a single string.
+
+#### Methods
+
+- `get_profile()` - Get the profile string
+- `set_profile(profile_data)` - Set the profile string
+- `clear()` - Clear the profile
+- `get_size()` - Get length of profile string
+
+### EventMemory
+
+Manages memories as timestamped strings.
+
+#### Methods
+
+- `add_memory(content)` - Add a new memory
+- `get_memories(limit=None)` - Get memories (recent first)
+- `get_recent_memories(limit=10)` - Get recent memories  
+- `search_memories(query, case_sensitive=False)` - Search memories by content
+- `clear()` - Clear all memories
+- `get_size()` - Get number of memories
 
 ## Development
 

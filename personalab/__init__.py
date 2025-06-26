@@ -9,6 +9,6 @@ __author__ = "Your Name"
 __email__ = "your.email@example.com"
 
 # from .main import YourMainClass  # Commented out until main module is created
-from .memory import BaseMemory, ProfileMemory, EventMemory, Memory
+from .memory import Memory, UserMemory, AgentMemory, ProfileMemory, EventMemory, BaseMemory
 
-__all__ = ["BaseMemory", "ProfileMemory", "EventMemory", "Memory"] 
+__all__ = ["Memory", "UserMemory", "AgentMemory", "ProfileMemory", "EventMemory", "BaseMemory"] 
