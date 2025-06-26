@@ -3,12 +3,12 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "your-package-name"
+name = "personalab"
 version = "0.1.0"
 authors = [
     {name = "Your Name", email = "your.email@example.com"},
 ]
-description = "A short description of your package"
+description = "A Python framework for creating and managing AI personas and laboratory environments"
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
@@ -23,7 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-keywords = ["python", "package", "template"]
+keywords = ["ai", "personas", "laboratory", "framework", "python"]
 dependencies = []
 
 [project.optional-dependencies]
@@ -48,7 +48,7 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["your_package*"]
+include = ["personalab*"]
 
 [tool.black]
 line-length = 88
@@ -66,4 +66,4 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--cov=your_package --cov-report=term-missing --cov-report=html" 
+addopts = "--cov=personalab --cov-report=term-missing --cov-report=html" 

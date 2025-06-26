@@ -26,15 +26,15 @@ test: ## Run tests
 	pytest
 
 coverage: ## Run tests with coverage
-	pytest --cov=your_package --cov-report=html --cov-report=term
+	pytest --cov=personalab --cov-report=html --cov-report=term
 
 lint: ## Run linting
-	flake8 your_package tests
-	mypy your_package
+	flake8 personalab tests
+	mypy personalab
 
 format: ## Format code
-	black your_package tests
-	isort your_package tests
+	black personalab tests
+	isort personalab tests
 
 build: clean ## Build package
 	python -m build

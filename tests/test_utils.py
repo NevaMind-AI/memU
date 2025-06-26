@@ -9,7 +9,7 @@ import tempfile
 import os
 from unittest.mock import patch, MagicMock
 
-from your_package.utils import (
+from personalab.utils import (
     setup_logging,
     validate_config,
     load_json_file,

@@ -3,7 +3,7 @@ Tests for the main module.
 """
 
 import pytest
-from your_package.main import YourMainClass
+from personalab.main import YourMainClass
 
 
 class TestYourMainClass:

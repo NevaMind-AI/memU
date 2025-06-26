@@ -1,10 +1,10 @@
-# Your Package Name
+# PersonaLab
 
-[![PyPI version](https://badge.fury.io/py/your-package-name.svg)](https://badge.fury.io/py/your-package-name)
-[![Python Version](https://img.shields.io/pypi/pyversions/your-package-name.svg)](https://pypi.org/project/your-package-name/)
+[![PyPI version](https://badge.fury.io/py/personalab.svg)](https://badge.fury.io/py/personalab)
+[![Python Version](https://img.shields.io/pypi/pyversions/personalab.svg)](https://pypi.org/project/personalab/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A brief description of what your package does.
+A Python framework for creating and managing AI personas and laboratory environments.
 
 ## Features
 
@@ -17,7 +17,7 @@ A brief description of what your package does.
 ### From PyPI (Recommended)
 
 ```bash
-pip install your-package-name
+pip install personalab
 ```
 
 ### From Source
@@ -39,7 +39,7 @@ pip install -e ".[dev]"
 ## Quick Start
 
 ```python
-from your_package import YourMainClass
+from personalab import YourMainClass
 
 # Example usage
 instance = YourMainClass()
@@ -52,7 +52,7 @@ print(result)
 ### Basic Usage
 
 ```python
-import your_package
+import personalab
 
 # Your examples here
 ```
@@ -109,7 +109,7 @@ black .
 ### Type Checking
 
 ```bash
-mypy your_package
+mypy personalab
 ```
 
 ### Building the Package

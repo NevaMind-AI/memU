@@ -3,8 +3,8 @@
 Basic usage example for your package.
 """
 
-from your_package import YourMainClass
-from your_package.utils import setup_logging, validate_config
+from personalab import YourMainClass
+from personalab.utils import setup_logging, validate_config
 
 
 def main():

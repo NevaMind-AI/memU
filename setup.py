@@ -7,11 +7,11 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
     requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
 
 setuptools.setup(
-    name="your-package-name",  # Replace with your package name
+    name="personalab",
     version="0.1.0",
     author="Your Name",
     author_email="your.email@example.com",
-    description="A short description of your package",
+    description="A Python framework for creating and managing AI personas and laboratory environments",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/NevaMind-AI/PersonaLab",

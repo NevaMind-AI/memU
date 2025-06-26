@@ -1,7 +1,7 @@
 """
-Your Package Name
+PersonaLab
 
-A brief description of what your package does.
+A Python framework for creating and managing AI personas and laboratory environments.
 """
 
 __version__ = "0.1.0"
