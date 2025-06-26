@@ -11,6 +11,7 @@ A Python framework for creating and managing AI personas and laboratory environm
 - ✨ Ultra-simple memory management for AI personas
 - 🚀 Agent/User separation for different memory contexts
 - 📦 String-based storage without complex categories
+- 💾 SQLite database persistence with auto-save
 
 ## Memory System
 
@@ -44,13 +45,16 @@ Memory (Container)
 - **String-based Timestamps**: Human-readable datetime strings throughout  
 - **No Categories**: No complex event types or metadata - just content and time
 - **Easy API**: Intuitive hierarchical access patterns
+- **Database Persistence**: SQLite-based storage with manual and auto-save options
+- **Data Integrity**: Complete memory preservation across sessions
 
 ### Usage Examples
 
 ```python
 from personalab.memory import Memory
+from personalab.database import MemoryDatabase, PersistentMemory
 
-# Create main memory container
+# Basic memory usage
 memory = Memory("chatbot_v1")
 
 # Agent memory (profile + events)
@@ -66,6 +70,15 @@ alice.events.add_memory("用户询问天气信息")
 # Simple retrieval
 recent_memories = alice.events.get_recent_memories(5)
 search_results = alice.events.search_memories("天气")
+
+# Database persistence
+db = MemoryDatabase("my_memory.db")
+db.save_memory(memory)  # Save to database
+loaded_memory = db.load_memory("chatbot_v1")  # Load from database
+
+# Auto-save persistence
+persistent_memory = PersistentMemory("chatbot_v2", "auto_save.db", auto_save=True)
+# All changes automatically saved to database
 ```
 
 ## Installation
@@ -163,6 +176,31 @@ Manages memories as timestamped strings.
 - `search_memories(query, case_sensitive=False)` - Search memories by content
 - `clear()` - Clear all memories
 - `get_size()` - Get number of memories
+
+### MemoryDatabase
+
+SQLite database for memory persistence.
+
+#### Methods
+
+- `__init__(db_path)` - Initialize database with file path
+- `save_memory(memory)` - Save Memory instance to database
+- `load_memory(agent_id)` - Load Memory instance from database
+- `list_agents()` - Get all agent IDs in database
+- `list_users(agent_id)` - Get user IDs for specific agent
+- `delete_agent(agent_id)` - Delete agent and all data
+- `delete_user(agent_id, user_id)` - Delete specific user
+- `get_stats()` - Get database statistics
+
+### PersistentMemory
+
+Memory with automatic database persistence.
+
+#### Methods
+
+- `__init__(agent_id, db_path, auto_save=True)` - Initialize with auto-save
+- `save()` - Manually save to database
+- All Memory methods with automatic persistence
 
 ## Development
 
