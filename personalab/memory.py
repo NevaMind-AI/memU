@@ -7,6 +7,7 @@ Memory is a container that manages both user and agent memories.
 
 import json
 import sqlite3
+import re
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
@@ -518,6 +519,232 @@ class Memory:
             "auto_save": self.auto_save
         }
     
+    def should_search_memory(self, conversation: str, system_prompt: str = "") -> bool:
+        """
+        Determine if memory search is needed based on conversation content and system prompt.
+        
+        Args:
+            conversation: Full user-agent conversation
+            system_prompt: System prompt text
+            
+        Returns:
+            True if memory search should be performed, False otherwise
+        """
+        # Combine conversation and system prompt for analysis
+        full_text = f"{system_prompt}\n{conversation}".lower()
+        
+        # Keywords that indicate memory search might be useful
+        memory_keywords = [
+            "remember", "recall", "previous", "before", "earlier", "last time",
+            "you said", "we discussed", "mentioned", "talked about", "history",
+            "past", "context", "background", "what did", "do you know about",
+            "tell me about", "familiar with", "experience with", "learned",
+            "saved", "stored", "recorded", "noted", "documented"
+        ]
+        
+        # Question words that often indicate information retrieval
+        question_keywords = [
+            "what", "when", "where", "who", "how", "why", "which", "can you",
+            "do you", "have you", "did you", "will you", "could you", "would you"
+        ]
+        
+        # Check for memory-related keywords
+        memory_score = sum(1 for keyword in memory_keywords if keyword in full_text)
+        
+        # Check for questions that might benefit from memory
+        question_score = sum(1 for keyword in question_keywords if keyword in full_text)
+        
+        # Check if there are personal pronouns indicating ongoing relationship
+        personal_pronouns = ["my", "me", "i", "you", "we", "us", "our"]
+        personal_score = sum(1 for pronoun in personal_pronouns if pronoun in full_text)
+        
+        # Simple scoring system - adjust thresholds as needed
+        total_score = memory_score * 3 + question_score * 1 + (personal_score > 0) * 2
+        
+        # Return True if score suggests memory search would be beneficial
+        return total_score >= 3
+
+    def search_memory_with_context(self, conversation: str, system_prompt: str = "", 
+                                 user_id: Optional[str] = None, max_results: int = 10) -> Dict[str, Any]:
+        """
+        Search through memories using conversation context and system prompt.
+        
+        Args:
+            conversation: Full user-agent conversation
+            system_prompt: System prompt text
+            user_id: Specific user ID to search (if None, searches agent and all users)
+            max_results: Maximum number of results to return
+            
+        Returns:
+            Dictionary containing search results with metadata
+        """
+        # Extract search terms from conversation and system prompt
+        search_terms = self._extract_search_terms(conversation, system_prompt)
+        
+        search_results = {
+            "search_terms": search_terms,
+            "agent_profile_matches": [],
+            "agent_event_matches": [],
+            "user_profile_matches": [],
+            "user_event_matches": [],
+            "total_matches": 0
+        }
+        
+        if not search_terms:
+            return search_results
+        
+        # Search agent memories
+        agent_profile = self.agent_memory.profile.get_profile()
+        if agent_profile:
+            profile_matches = self._search_text(agent_profile, search_terms)
+            if profile_matches:
+                search_results["agent_profile_matches"] = [{
+                    "content": agent_profile,
+                    "match_score": profile_matches["score"],
+                    "matched_terms": profile_matches["matched_terms"]
+                }]
+        
+        # Search agent events
+        agent_events = self.agent_memory.events.get_memories()
+        for event in agent_events[:max_results]:
+            event_matches = self._search_text(event, search_terms)
+            if event_matches:
+                search_results["agent_event_matches"].append({
+                    "content": event,
+                    "match_score": event_matches["score"],
+                    "matched_terms": event_matches["matched_terms"]
+                })
+        
+        # Search user memories
+        users_to_search = [user_id] if user_id else list(self._user_memories.keys())
+        
+        for uid in users_to_search:
+            if uid in self._user_memories:
+                user_memory = self._user_memories[uid]
+                
+                # Search user profile
+                user_profile = user_memory.profile.get_profile()
+                if user_profile:
+                    profile_matches = self._search_text(user_profile, search_terms)
+                    if profile_matches:
+                        search_results["user_profile_matches"].append({
+                            "user_id": uid,
+                            "content": user_profile,
+                            "match_score": profile_matches["score"],
+                            "matched_terms": profile_matches["matched_terms"]
+                        })
+                
+                # Search user events
+                user_events = user_memory.events.get_memories()
+                for event in user_events[:max_results]:
+                    event_matches = self._search_text(event, search_terms)
+                    if event_matches:
+                        search_results["user_event_matches"].append({
+                            "user_id": uid,
+                            "content": event,
+                            "match_score": event_matches["score"],
+                            "matched_terms": event_matches["matched_terms"]
+                        })
+        
+        # Sort results by match score (highest first)
+        search_results["agent_event_matches"].sort(key=lambda x: x["match_score"], reverse=True)
+        search_results["user_profile_matches"].sort(key=lambda x: x["match_score"], reverse=True)
+        search_results["user_event_matches"].sort(key=lambda x: x["match_score"], reverse=True)
+        
+        # Limit results
+        search_results["agent_event_matches"] = search_results["agent_event_matches"][:max_results]
+        search_results["user_profile_matches"] = search_results["user_profile_matches"][:max_results]
+        search_results["user_event_matches"] = search_results["user_event_matches"][:max_results]
+        
+        # Calculate total matches
+        search_results["total_matches"] = (
+            len(search_results["agent_profile_matches"]) +
+            len(search_results["agent_event_matches"]) +
+            len(search_results["user_profile_matches"]) +
+            len(search_results["user_event_matches"])
+        )
+        
+        return search_results
+
+    def _extract_search_terms(self, conversation: str, system_prompt: str) -> List[str]:
+        """
+        Extract meaningful search terms from conversation and system prompt.
+        
+        Args:
+            conversation: User-agent conversation
+            system_prompt: System prompt
+            
+        Returns:
+            List of search terms
+        """
+        # Combine text sources
+        full_text = f"{system_prompt}\n{conversation}"
+        
+        # Remove common stop words and extract meaningful terms
+        stop_words = {
+            "the", "is", "at", "which", "on", "a", "an", "and", "or", "but", 
+            "in", "with", "to", "for", "of", "as", "by", "that", "this",
+            "be", "have", "do", "will", "would", "could", "should", "may",
+            "might", "can", "must", "shall", "i", "you", "he", "she", "it",
+            "we", "they", "me", "him", "her", "us", "them", "my", "your",
+            "his", "her", "its", "our", "their"
+        }
+        
+        # Extract words (including numbers and basic punctuation)
+        words = re.findall(r'\b\w+\b', full_text.lower())
+        
+        # Filter out stop words and short words
+        meaningful_words = [
+            word for word in words 
+            if len(word) >= 3 and word not in stop_words
+        ]
+        
+        # Remove duplicates while preserving order
+        search_terms = []
+        seen = set()
+        for word in meaningful_words:
+            if word not in seen:
+                search_terms.append(word)
+                seen.add(word)
+        
+        # Limit to most relevant terms (latest conversation usually more important)
+        return search_terms[-20:]  # Return last 20 unique terms
+
+    def _search_text(self, text: str, search_terms: List[str]) -> Optional[Dict[str, Any]]:
+        """
+        Search for terms in text and return match information.
+        
+        Args:
+            text: Text to search in
+            search_terms: Terms to search for
+            
+        Returns:
+            Dictionary with match score and matched terms, or None if no matches
+        """
+        if not text or not search_terms:
+            return None
+        
+        text_lower = text.lower()
+        matched_terms = []
+        match_score = 0
+        
+        for term in search_terms:
+            if term in text_lower:
+                matched_terms.append(term)
+                # Score based on term frequency and length
+                frequency = text_lower.count(term)
+                term_score = frequency * len(term)
+                match_score += term_score
+        
+        if matched_terms:
+            return {
+                "score": match_score,
+                "matched_terms": matched_terms,
+                "match_count": len(matched_terms)
+            }
+        
+        return None
+
     def __str__(self) -> str:
         return f"Memory(agent_id={self.agent_id}, users={len(self._user_memories)}, db={self.db_path.name})"
 
@@ -540,6 +767,36 @@ class DatabaseUserMemory:
     def events(self) -> 'DatabaseEventMemory':
         """Get events with auto-save."""
         return DatabaseEventMemory(self._user_memory.events, self._memory)
+
+    def search_memory_with_context(self, conversation: str, system_prompt: str = "", 
+                                 max_results: int = 10) -> Dict[str, Any]:
+        """
+        Search this user's memories using conversation context.
+        
+        Args:
+            conversation: Full user-agent conversation
+            system_prompt: System prompt text
+            max_results: Maximum number of results to return
+            
+        Returns:
+            Dictionary containing search results with metadata
+        """
+        return self._memory.search_memory_with_context(
+            conversation, system_prompt, self.user_id, max_results
+        )
+
+    def should_search_memory(self, conversation: str, system_prompt: str = "") -> bool:
+        """
+        Determine if memory search is needed for this user.
+        
+        Args:
+            conversation: Full user-agent conversation
+            system_prompt: System prompt text
+            
+        Returns:
+            True if memory search should be performed, False otherwise
+        """
+        return self._memory.should_search_memory(conversation, system_prompt)
     
     def __str__(self) -> str:
         return str(self._user_memory)
@@ -562,6 +819,36 @@ class DatabaseAgentMemory:
     def events(self) -> 'DatabaseEventMemory':
         """Get events with auto-save."""
         return DatabaseEventMemory(self._agent_memory.events, self._memory)
+
+    def search_memory_with_context(self, conversation: str, system_prompt: str = "", 
+                                 max_results: int = 10) -> Dict[str, Any]:
+        """
+        Search all memories (agent and users) using conversation context.
+        
+        Args:
+            conversation: Full user-agent conversation
+            system_prompt: System prompt text
+            max_results: Maximum number of results to return
+            
+        Returns:
+            Dictionary containing search results with metadata
+        """
+        return self._memory.search_memory_with_context(
+            conversation, system_prompt, None, max_results
+        )
+
+    def should_search_memory(self, conversation: str, system_prompt: str = "") -> bool:
+        """
+        Determine if memory search is needed.
+        
+        Args:
+            conversation: Full user-agent conversation
+            system_prompt: System prompt text
+            
+        Returns:
+            True if memory search should be performed, False otherwise
+        """
+        return self._memory.should_search_memory(conversation, system_prompt)
     
     def __str__(self) -> str:
         return str(self._agent_memory)
