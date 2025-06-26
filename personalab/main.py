@@ -31,29 +31,29 @@ class Memory:
     """
     
     def __init__(self, agent_id: str, enable_deep_search: bool = True, 
-                 llm_instance: Optional[BaseLLM] = None, enable_llm_judgment: bool = True):
+                 llm_instance: Optional[BaseLLM] = None, enable_llm_search: bool = True):
         """
         Initialize Memory for a specific agent.
         
         Args:
             agent_id: Unique identifier for the agent
             enable_deep_search: Whether to enable deep search capabilities
-            llm_instance: Optional LLM instance for enhanced search judgment
-            enable_llm_judgment: Whether to use LLM for search relevance judgment
+            llm_instance: Optional LLM instance for enhanced search capabilities
+            enable_llm_search: Whether to use LLM for search decision making and analysis
         """
         self.agent_id = agent_id
         self.enable_deep_search = enable_deep_search
-        self.enable_llm_judgment = enable_llm_judgment and LLM_AVAILABLE
+        self.enable_llm_search = enable_llm_search and LLM_AVAILABLE
         
-        # Set up LLM for enhanced judgment
+        # Set up LLM for enhanced search
         self.llm = llm_instance
-        if self.enable_llm_judgment and self.llm is None and LLM_AVAILABLE:
+        if self.enable_llm_search and self.llm is None and LLM_AVAILABLE:
             # Try to create a default LLM instance
             try:
                 llm_manager = LLMManager.create_quick_setup()
                 self.llm = llm_manager.get_current_provider()
             except Exception:
-                self.enable_llm_judgment = False
+                self.enable_llm_search = False
                 self.llm = None
         
         # Create new memory
@@ -143,7 +143,7 @@ class Memory:
         Returns:
             Updated profile content
         """
-        if not self.enable_llm_judgment or not self.llm:
+        if not self.enable_llm_search or not self.llm:
             # Fallback: simple append if LLM not available
             return self._simple_profile_update(current_profile, conversation)
         
@@ -263,7 +263,7 @@ Return only the updated profile text, nothing else.
             True if memory search should be performed
         """
         # Always try LLM first if available
-        if self.enable_llm_judgment and self.llm:
+        if self.enable_llm_search and self.llm:
             return self.llm_need_search(conversation, system_prompt, context_length)
         
         # Fallback to basic search only if LLM unavailable
@@ -285,7 +285,7 @@ Return only the updated profile text, nothing else.
         Returns:
             True if LLM determines memory search should be performed
         """
-        if not self.enable_llm_judgment or not self.llm:
+        if not self.enable_llm_search or not self.llm:
             # Fallback to basic rule-based search
             return self.should_search_memory(conversation, system_prompt)
         
@@ -454,7 +454,7 @@ Be conservative - only suggest search when it would meaningfully improve the res
             Dictionary containing LLM-enhanced search results with metadata
         """
         # Always try LLM-enhanced search first if available
-        if self.enable_llm_judgment and self.llm:
+        if self.enable_llm_search and self.llm:
             return self.llm_deep_search(conversation, system_prompt, user_id, max_results, similarity_threshold)
         
         # Fallback to basic search if LLM unavailable
@@ -482,7 +482,7 @@ Be conservative - only suggest search when it would meaningfully improve the res
         Returns:
             Dictionary containing LLM-enhanced search results
         """
-        if not self.enable_llm_judgment or not self.llm:
+        if not self.enable_llm_search or not self.llm:
             # Fallback to regular deep search
             return self.deep_search(conversation, system_prompt, user_id, max_results, similarity_threshold)
         
@@ -1325,6 +1325,6 @@ None - No memory content is sufficiently relevant to this query
         return "\n\n".join(context_parts)
 
     def __str__(self) -> str:
-        llm_status = f"llm={self.enable_llm_judgment and self.llm is not None}"
-        search_mode = "LLM-only" if (self.enable_llm_judgment and self.llm is not None) else "keyword-fallback"
+        llm_status = f"llm={self.enable_llm_search and self.llm is not None}"
+        search_mode = "LLM-search" if (self.enable_llm_search and self.llm is not None) else "keyword-fallback"
         return f"Memory(agent_id={self.agent_id}, users={len(self._user_memories)}, search_mode={search_mode}, {llm_status})" 

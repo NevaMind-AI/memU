@@ -46,24 +46,6 @@ class ProfileMemory(BaseMemory):
         self._profile = str(profile_data)
         self._update_timestamp()
     
-    def add_info(self, info: str) -> None:
-        """
-        Add information to the existing profile.
-        
-        Args:
-            info: Additional information to append
-        """
-        if self._profile:
-            self._profile += f"\n{info}"
-        else:
-            self._profile = info
-        self._update_timestamp()
-    
-    def clear(self) -> None:
-        """Clear all profile data."""
-        self._profile = ""
-        self._update_timestamp()
-    
     def get_size(self) -> int:
         """Get length of profile string."""
         return len(self._profile)

@@ -29,10 +29,6 @@ class AgentMemory:
         self.profile = ProfileMemory(agent_id, "0")  # Agent profile
         self.events = EventMemory(agent_id, "0")     # Agent events
     
-    def clear_all(self) -> None:
-        """Clear both profile and event memories."""
-        self.profile.clear()
-        self.events.clear()
     
     def get_total_size(self) -> int:
         """Get total size of profile and events combined."""
@@ -42,23 +38,5 @@ class AgentMemory:
         """Check if both profile and events are empty."""
         return self.profile.is_empty() and self.events.is_empty()
     
-    def get_memory_summary(self) -> dict:
-        """Get a summary of agent memory contents."""
-        return {
-            "agent_id": self.agent_id,
-            "user_id": self.user_id,
-            "memory_type": "agent",
-            "profile": {
-                "size": self.profile.get_size(),
-                "empty": self.profile.is_empty(),
-                "updated_at": self.profile.updated_at
-            },
-            "events": {
-                "count": self.events.get_size(),
-                "empty": self.events.is_empty(),
-                "updated_at": self.events.updated_at
-            },
-            "total_size": self.get_total_size()
-        }
     
     

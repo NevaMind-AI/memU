@@ -34,10 +34,6 @@ class BaseMemory(ABC):
         """Update the last modification timestamp."""
         self.updated_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
-    @abstractmethod
-    def clear(self) -> None:
-        """Clear all memory data."""
-        pass
     
     @abstractmethod
     def get_size(self) -> int:
