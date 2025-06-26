@@ -242,7 +242,7 @@ Return in XML format:
             return self.llm_need_search(conversation, system_prompt, context_length)
         
         # Fallback to basic search only if LLM unavailable (conservative approach)
-        return True
+        return False
 
     def llm_need_search(self, conversation: str, system_prompt: str = "", 
                        context_length: int = 0) -> bool:
@@ -262,7 +262,7 @@ Return in XML format:
         """
         if not self.enable_llm_search or not self.llm:
             # Fallback to basic search (conservative approach)
-            return True
+            return False
         
         try:
             # Prepare LLM prompt for search decision
@@ -294,79 +294,10 @@ Be conservative - only suggest search when it would meaningfully improve the res
         except Exception as e:
             # Fallback on error
             pass
-        
-        # Fallback to basic search (return True for conservative approach)
-        return True
 
-    def search_memory_with_context(self, conversation: str, system_prompt: str = "", 
-                                 user_id: Optional[str] = None, max_results: int = 10) -> Dict[str, Any]:
-        """
-        Search memory and return relevant context for the conversation.
-        
-        Args:
-            conversation: Current conversation text
-            system_prompt: System prompt being used
-            user_id: Optional user ID to search user-specific memory
-            max_results: Maximum number of results to return
-            
-        Returns:
-            Dictionary containing relevant memory context
-        """
-        # Extract search terms
-        search_terms = self._extract_search_terms(conversation, system_prompt)
-        
-        if not search_terms:
-            return {
-                "relevant_context": "",
-                "search_terms": [],
-                "results_found": 0,
-                "agent_context": "",
-                "user_context": ""
-            }
-        
-        results = []
-        
-        # Search agent memory
-        agent_context = self._search_agent_memory(search_terms)
-        if agent_context:
-            results.append({
-                "source": "agent",
-                "type": agent_context["type"],
-                "content": agent_context["content"],
-                "relevance": agent_context["relevance"]
-            })
-        
-        # Search user memory if user_id provided
-        user_context = ""
-        if user_id and user_id in self._user_memories:
-            user_memory_result = self._search_user_memory(user_id, search_terms)
-            if user_memory_result:
-                results.append({
-                    "source": f"user_{user_id}",
-                    "type": user_memory_result["type"],
-                    "content": user_memory_result["content"],
-                    "relevance": user_memory_result["relevance"]
-                })
-                user_context = user_memory_result["content"]
-        
-        # Sort by relevance and limit results
-        results.sort(key=lambda x: x["relevance"], reverse=True)
-        results = results[:max_results]
-        
-        # Create context string
-        relevant_context = "\n".join([
-            f"[{result['source']}] {result['content']}"
-            for result in results
-        ])
-        
-        return {
-            "relevant_context": relevant_context,
-            "search_terms": search_terms,
-            "results_found": len(results),
-            "agent_context": agent_context["content"] if agent_context else "",
-            "user_context": user_context
-        }
+        return False
 
+    
     def deep_search(self, conversation: str, system_prompt: str = "", 
                    user_id: Optional[str] = None, max_results: int = 15,
                    similarity_threshold: float = 60.0) -> Dict[str, Any]:
@@ -391,7 +322,7 @@ Be conservative - only suggest search when it would meaningfully improve the res
             return self.llm_deep_search(conversation, system_prompt, user_id, max_results, similarity_threshold)
         
         # Fallback to basic search if LLM unavailable
-        return self.search_memory_with_context(conversation, system_prompt, user_id, max_results)
+        raise ValueError("LLM not available")
 
     def llm_deep_search(self, conversation: str, system_prompt: str = "", 
                        user_id: Optional[str] = None, max_results: int = 15,
