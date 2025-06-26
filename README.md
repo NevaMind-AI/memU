@@ -52,17 +52,16 @@ Memory (Container)
 
 ```python
 from personalab.memory import Memory
-from personalab.database import MemoryDatabase, PersistentMemory
 
-# Basic memory usage
-memory = Memory("chatbot_v1")
+# Basic memory usage with built-in database persistence
+memory = Memory("chatbot_v1")  # Auto-loads from "personalab_memory.db"
 
-# Agent memory (profile + events)
+# Agent memory (auto-saved to database)
 agent = memory.get_agent_memory()
 agent.profile.set_profile("System: ChatBot v1.0, Language: Chinese")
 agent.events.add_memory("系统启动")
 
-# User memory (profile + events) 
+# User memory (auto-saved to database)
 alice = memory.get_user_memory("alice")
 alice.profile.set_profile("Name: Alice, Age: 25, Skill: Beginner")
 alice.events.add_memory("用户询问天气信息")
@@ -71,14 +70,23 @@ alice.events.add_memory("用户询问天气信息")
 recent_memories = alice.events.get_recent_memories(5)
 search_results = alice.events.search_memories("天气")
 
-# Database persistence
-db = MemoryDatabase("my_memory.db")
-db.save_memory(memory)  # Save to database
-loaded_memory = db.load_memory("chatbot_v1")  # Load from database
+# Custom database file with auto-save
+memory = Memory("chatbot_v2", db_path="my_chatbot.db", auto_save=True)
+# All changes automatically saved to my_chatbot.db
 
-# Auto-save persistence
-persistent_memory = PersistentMemory("chatbot_v2", "auto_save.db", auto_save=True)
-# All changes automatically saved to database
+# Manual save control
+memory = Memory("chatbot_v3", db_path="manual.db", auto_save=False)
+agent = memory.get_agent_memory()
+agent.events.add_memory("This is not auto-saved")
+memory.save()  # Save manually when ready
+
+# Data persistence across sessions (automatic)
+memory1 = Memory("persistent_bot")
+memory1.get_agent_memory().events.add_memory("Session 1 data")
+
+# Later... (new process/restart)
+memory2 = Memory("persistent_bot")  # Auto-loads previous data
+print(f"Events: {memory2.get_agent_memory().events.get_size()}")  # Shows: 1
 ```
 
 ## Installation
@@ -110,15 +118,15 @@ pip install -e ".[dev]"
 ```python
 from personalab.memory import Memory
 
-# Create memory container
+# Create memory (automatically loads from database if exists)
 memory = Memory("chatbot_v1")
 
-# Setup agent
+# Setup agent (automatically saved to database)
 agent = memory.get_agent_memory()
 agent.profile.set_profile("AI Assistant v1.0")
 agent.events.add_memory("System started")
 
-# Handle user
+# Handle user (automatically saved to database)
 alice = memory.get_user_memory("alice")
 alice.profile.set_profile("Name: Alice, Age: 25")
 alice.events.add_memory("User asked about weather")
@@ -128,21 +136,36 @@ alice.events.add_memory("Provided weather information")
 recent = alice.events.get_recent_memories(2)
 for mem in recent:
     print(mem)  # [2025-06-26 13:30:00] Provided weather information
+
+# Data automatically persists! Restart and load:
+memory2 = Memory("chatbot_v1")  # Auto-loads all previous data
+print(f"Agent events: {memory2.get_agent_memory().events.get_size()}")  # Shows saved events
 ```
 
 ## API Reference
 
 ### Memory
 
-Main container that manages agent and user memories.
+Main container that manages agent and user memories with built-in database persistence.
+
+#### Constructor
+
+- `__init__(agent_id, db_path="personalab_memory.db", auto_save=True)` - Initialize memory with database
 
 #### Methods
 
-- `__init__(agent_id)` - Initialize memory for an agent
-- `get_agent_memory()` - Get AgentMemory instance
-- `get_user_memory(user_id)` - Get or create UserMemory for user
+- `get_agent_memory()` - Get AgentMemory instance (with auto-save)
+- `get_user_memory(user_id)` - Get or create UserMemory for user (with auto-save)
 - `list_users()` - Get list of registered user IDs
-- `get_memory_info()` - Get comprehensive memory information
+- `save()` - Manually save to database (useful when auto_save=False)
+- `get_memory_info()` - Get comprehensive memory information including database info
+
+#### Key Features
+
+- **Auto-load**: Automatically loads data from database on initialization
+- **Auto-save**: Automatically saves changes to database (when auto_save=True)
+- **Manual save**: Call save() method for manual control (when auto_save=False)
+- **Database file**: Uses SQLite database file for persistence
 
 ### AgentMemory / UserMemory
 
