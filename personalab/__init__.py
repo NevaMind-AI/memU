@@ -8,7 +8,7 @@ __version__ = "0.1.0"
 __author__ = "Your Name"
 __email__ = "your.email@example.com"
 
-from .main import YourMainClass
+# from .main import YourMainClass  # Commented out until main module is created
 from .memory import BaseMemory, ProfileMemory, EventMemory, Event
 
 __all__ = ["YourMainClass", "BaseMemory", "ProfileMemory", "EventMemory", "Event"] 

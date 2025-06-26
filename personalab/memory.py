@@ -49,14 +49,16 @@ class BaseMemory(ABC):
     such as profile memory and event memory.
     """
     
-    def __init__(self, persona_id: str):
+    def __init__(self, agent_id: str, user_id: str = "0"):
         """
-        Initialize base memory for a specific persona.
+        Initialize base memory for a specific agent and user combination.
         
         Args:
-            persona_id: Unique identifier for the persona
+            agent_id: Unique identifier for the agent
+            user_id: Unique identifier for the user (defaults to "0" for agent-only profiles)
         """
-        self.persona_id = persona_id
+        self.agent_id = agent_id
+        self.user_id = user_id
         self._created_at = time.time()
         self._updated_at = time.time()
     
@@ -113,6 +115,26 @@ class BaseMemory(ABC):
         """
         pass
     
+    @property
+    def is_user_profile(self) -> bool:
+        """
+        Check if this is a user-specific profile.
+        
+        Returns:
+            True if user_id is not "0", False otherwise
+        """
+        return self.user_id != "0"
+    
+    @property
+    def is_agent_profile(self) -> bool:
+        """
+        Check if this is an agent-only profile.
+        
+        Returns:
+            True if user_id is "0", False otherwise
+        """
+        return self.user_id == "0"
+    
     def get_memory_info(self) -> Dict[str, Any]:
         """
         Get general information about this memory instance.
@@ -121,8 +143,11 @@ class BaseMemory(ABC):
             Dictionary containing memory metadata
         """
         return {
-            "persona_id": self.persona_id,
+            "agent_id": self.agent_id,
+            "user_id": self.user_id,
             "memory_type": self.__class__.__name__,
+            "is_user_profile": self.is_user_profile,
+            "is_agent_profile": self.is_agent_profile,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "size": self.get_size()
@@ -137,15 +162,16 @@ class ProfileMemory(BaseMemory):
     such as personality traits, preferences, background information, and configuration settings.
     """
     
-    def __init__(self, persona_id: str, profile_data: Optional[Dict[str, Any]] = None):
+    def __init__(self, agent_id: str, user_id: str = "0", profile_data: Optional[Dict[str, Any]] = None):
         """
-        Initialize ProfileMemory for a specific persona.
+        Initialize ProfileMemory for a specific agent and user combination.
         
         Args:
-            persona_id: Unique identifier for the persona
+            agent_id: Unique identifier for the agent
+            user_id: Unique identifier for the user (defaults to "0" for agent-only profiles)
             profile_data: Initial profile data dictionary
         """
-        super().__init__(persona_id)
+        super().__init__(agent_id, user_id)
         self._profile: Dict[str, Any] = profile_data or {}
     
     def get_profile(self) -> Dict[str, Any]:
@@ -241,7 +267,8 @@ class ProfileMemory(BaseMemory):
             file_path: Path to save the profile
         """
         profile_data = {
-            "persona_id": self.persona_id,
+            "agent_id": self.agent_id,
+            "user_id": self.user_id,
             "profile": self._profile,
             "created_at": self._created_at,
             "updated_at": self._updated_at
@@ -264,13 +291,25 @@ class ProfileMemory(BaseMemory):
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        instance = cls(data["persona_id"], data["profile"])
+        # Support both old format (persona_id) and new format (agent_id, user_id)
+        if "agent_id" in data and "user_id" in data:
+            instance = cls(data["agent_id"], data["user_id"], data["profile"])
+        else:
+            # Legacy support: parse persona_id as agent_id:user_id
+            persona_id = data["persona_id"]
+            if ":" in persona_id:
+                agent_id, user_id = persona_id.split(":", 1)
+            else:
+                agent_id, user_id = persona_id, "0"
+            instance = cls(agent_id, user_id, data["profile"])
+        
         instance._created_at = data.get("created_at", time.time())
         instance._updated_at = data.get("updated_at", time.time())
         return instance
     
     def __str__(self) -> str:
-        return f"ProfileMemory(persona_id={self.persona_id}, fields={len(self._profile)})"
+        profile_type = "user" if self.is_user_profile else "agent"
+        return f"ProfileMemory(agent_id={self.agent_id}, user_id={self.user_id}, type={profile_type}, fields={len(self._profile)})"
 
 
 class EventMemory(BaseMemory):
@@ -281,15 +320,16 @@ class EventMemory(BaseMemory):
     such as conversations, actions, observations, and other temporal experiences.
     """
     
-    def __init__(self, persona_id: str, max_events: int = 1000):
+    def __init__(self, agent_id: str, user_id: str = "0", max_events: int = 1000):
         """
-        Initialize EventMemory for a specific persona.
+        Initialize EventMemory for a specific agent and user combination.
         
         Args:
-            persona_id: Unique identifier for the persona
+            agent_id: Unique identifier for the agent
+            user_id: Unique identifier for the user (defaults to "0" for agent-only memory)
             max_events: Maximum number of events to keep in memory
         """
-        super().__init__(persona_id)
+        super().__init__(agent_id, user_id)
         self.max_events = max_events
         self._events: List[Event] = []
     
@@ -471,7 +511,8 @@ class EventMemory(BaseMemory):
             file_path: Path to save the events
         """
         events_data = {
-            "persona_id": self.persona_id,
+            "agent_id": self.agent_id,
+            "user_id": self.user_id,
             "max_events": self.max_events,
             "created_at": self._created_at,
             "events": [event.to_dict() for event in self._events]
@@ -494,7 +535,18 @@ class EventMemory(BaseMemory):
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        instance = cls(data["persona_id"], data.get("max_events", 1000))
+        # Support both old format (persona_id) and new format (agent_id, user_id)
+        if "agent_id" in data and "user_id" in data:
+            instance = cls(data["agent_id"], data["user_id"], data.get("max_events", 1000))
+        else:
+            # Legacy support: parse persona_id as agent_id:user_id
+            persona_id = data["persona_id"]
+            if ":" in persona_id:
+                agent_id, user_id = persona_id.split(":", 1)
+            else:
+                agent_id, user_id = persona_id, "0"
+            instance = cls(agent_id, user_id, data.get("max_events", 1000))
+        
         instance._created_at = data.get("created_at", time.time())
         instance._events = [Event.from_dict(event_data) for event_data in data["events"]]
         return instance
@@ -509,4 +561,5 @@ class EventMemory(BaseMemory):
         self._events = self._events[:self.max_events]
     
     def __str__(self) -> str:
-        return f"EventMemory(persona_id={self.persona_id}, events={len(self._events)})" 
+        memory_type = "user" if self.is_user_profile else "agent"
+        return f"EventMemory(agent_id={self.agent_id}, user_id={self.user_id}, type={memory_type}, events={len(self._events)})" 
