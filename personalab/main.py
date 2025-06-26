@@ -83,21 +83,6 @@ class Memory:
         """List all user IDs that have memory."""
         return list(self._user_memories.keys())
 
-    def get_memory_info(self) -> Dict[str, Any]:
-        """Get information about memory usage."""
-        return {
-            "agent_id": self.agent_id,
-            "agent_profile_length": len(self.agent_memory.profile.get_profile()),
-            "agent_events_count": len(self.agent_memory.events._memories),
-            "user_count": len(self._user_memories),
-            "users": {
-                user_id: {
-                    "profile_length": len(memory.profile.get_profile()),
-                    "events_count": len(memory.events._memories)
-                }
-                for user_id, memory in self._user_memories.items()
-            }
-        }
 
     def update_agent_profile_memory(self, conversation: str) -> str:
         """
@@ -125,7 +110,7 @@ class Memory:
         """
         user_memory = self.get_user_memory(user_id)
         current_profile = user_memory.profile.get_profile()
-        updated_profile = self._update_profile_with_llm(current_profile, conversation, f"user_{user_id}")
+        updated_profile = self._update_profile_with_llm(current_profile, conversation, "user")
         
         # Update the user's profile
         user_memory.profile.set_profile(updated_profile)
@@ -138,15 +123,14 @@ class Memory:
         Args:
             current_profile: Current profile content
             conversation: Conversation to learn from
-            profile_type: Type of profile ("agent" or "user_id")
+            profile_type: Type of profile ("agent" or "user")
             
         Returns:
             Updated profile content
         """
-        if not self.enable_llm_search or not self.llm:
+        if not self.llm:
             # Fallback: simple append if LLM not available
-            return self._simple_profile_update(current_profile, conversation)
-        
+            raise ValueError("LLM not available")
         try:
             # Create LLM prompt for profile updating
             update_prompt = f"""
@@ -178,74 +162,65 @@ Rules:
 - If the conversation doesn't contain profile-relevant information, return the current profile unchanged
 - Don't include specific conversation details, focus on learnable traits
 
-Return only the updated profile text, nothing else.
+Return in XML format:
+<profile>
+    18 years old boy, like playing game...
+</profile>
 """
             
-            response = self.llm.generate(update_prompt, max_tokens=500, temperature=0.3)
+            response = self.llm.generate(update_prompt, max_tokens=4096, temperature=0.3)
             
             if response and response.content:
                 updated_profile = response.content.strip()
+
+                # Parse the updated profile
+                updated_profile = self._parse_profile(updated_profile)
                 
                 # Validate the updated profile
                 if len(updated_profile) > 50 and updated_profile != current_profile:
                     # Auto-update agent profile if this is agent profile update
                     if profile_type == "agent":
                         self.agent_memory.profile.set_profile(updated_profile)
-                    
                     return updated_profile
                 else:
-                    # Return current profile if update seems invalid or unchanged
                     return current_profile
             
         except Exception as e:
-            # Fallback on error
-            pass
-        
-        # Fallback to simple update
-        return self._simple_profile_update(current_profile, conversation)
+            raise ValueError("Failed to update profile")
 
-    def _simple_profile_update(self, current_profile: str, conversation: str) -> str:
+    def _parse_profile(self, generated_profile: str) -> str:
         """
-        Simple fallback profile update when LLM is not available.
+        Parse the generated profile to extract profile content from XML format.
         
         Args:
-            current_profile: Current profile content
-            conversation: Conversation content
+            generated_profile: LLM response containing profile in XML format
             
         Returns:
-            Updated profile with basic information extraction
+            Extracted profile content
         """
-        if not current_profile:
-            # If no current profile, create a basic one
-            return f"Profile updated based on conversation. Key topics discussed: {conversation[:200]}..."
+        import re
         
-        # Simple approach: check if conversation contains new meaningful information
-        conversation_lower = conversation.lower()
-        profile_lower = current_profile.lower()
+        # Try to extract content from <profile> tags
+        profile_match = re.search(r'<profile>\s*(.*?)\s*</profile>', generated_profile, re.DOTALL | re.IGNORECASE)
         
-        # Look for new information patterns
-        new_info_patterns = [
-            "i am", "i'm", "my name is", "i work", "i study", "i like", "i prefer",
-            "my hobby", "my interest", "i specialize", "i focus on", "my background"
-        ]
-        
-        new_info = []
-        for pattern in new_info_patterns:
-            if pattern in conversation_lower and pattern not in profile_lower:
-                # Extract sentence containing the pattern
-                sentences = conversation.split('.')
-                for sentence in sentences:
-                    if pattern in sentence.lower():
-                        new_info.append(sentence.strip())
-                        break
-        
-        if new_info:
-            # Add new information to profile
-            updated_profile = current_profile + "\n\nRecent updates:\n" + "\n".join(new_info[:3])
-            return updated_profile
+        if profile_match:
+            # Found profile tags, extract the content
+            profile_content = profile_match.group(1).strip()
+            return profile_content
         else:
-            # No significant new information found
-            return current_profile
+            # No XML tags found, try to clean up the response
+            # Remove common XML-like patterns that might be incomplete
+            profile = re.sub(r'</?profile[^>]*>', '', generated_profile, flags=re.IGNORECASE)
+            profile = profile.strip()
+            
+            # If the cleaned response is reasonable, return it
+            if len(profile) > 10:
+                return profile
+            else:
+                # Fall back to original response if cleaning didn't work
+                return generated_profile.strip()
+
+   
 
     def need_search(self, conversation: str, system_prompt: str = "", context_length: int = 0) -> bool:
         """

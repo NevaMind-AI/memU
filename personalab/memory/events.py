@@ -114,12 +114,7 @@ class EventMemory(BaseMemory):
     def get_memories_count(self) -> int:
         """Get total number of memories."""
         return len(self._memories)
-    
-    def clear(self) -> None:
-        """Clear all memories."""
-        self._memories.clear()
-        self._update_timestamp()
-    
+
     def get_size(self) -> int:
         """Get number of memories."""
         return len(self._memories)
