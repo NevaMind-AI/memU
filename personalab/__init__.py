@@ -9,5 +9,6 @@ __author__ = "Your Name"
 __email__ = "your.email@example.com"
 
 from .main import YourMainClass
+from .memory import BaseMemory, ProfileMemory, EventMemory, Event
 
-__all__ = ["YourMainClass"] 
+__all__ = ["YourMainClass", "BaseMemory", "ProfileMemory", "EventMemory", "Event"] 
