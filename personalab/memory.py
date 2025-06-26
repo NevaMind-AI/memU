@@ -317,15 +317,15 @@ class Memory:
                 )
             """)
             
-            # Events table
+            # Events table - stores all events as newline-separated string
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     agent_id TEXT NOT NULL,
                     user_id TEXT NOT NULL,
-                    event_content TEXT NOT NULL,
-                    timestamp TEXT NOT NULL,
+                    events_data TEXT NOT NULL,
                     created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (agent_id, user_id),
                     FOREIGN KEY (agent_id) REFERENCES agents (agent_id)
                 )
             """)
@@ -377,15 +377,16 @@ class Memory:
         if profile_row:
             self.agent_memory.profile.set_profile(profile_row[0])
         
-        # Load agent events
-        cursor.execute("""
-            SELECT event_content FROM events 
-            WHERE agent_id = ? AND user_id = ? 
-            ORDER BY id
-        """, (agent_id, user_id))
-        event_rows = cursor.fetchall()
+        # Load agent events - split newline-separated string
+        cursor.execute("SELECT events_data FROM events WHERE agent_id = ? AND user_id = ?", (agent_id, user_id))
+        events_row = cursor.fetchone()
         
-        self.agent_memory.events._memories = [event[0] for event in event_rows]
+        if events_row and events_row[0].strip():
+            # Split by newlines and restore internal newlines
+            events_list = [event.strip().replace('\\n', '\n') for event in events_row[0].split('\n') if event.strip()]
+            self.agent_memory.events._memories = events_list
+        else:
+            self.agent_memory.events._memories = []
     
     def _load_user_memory(self, cursor: sqlite3.Cursor, user_memory: UserMemory) -> None:
         """Load user memory from database."""
@@ -398,15 +399,16 @@ class Memory:
         if profile_row:
             user_memory.profile.set_profile(profile_row[0])
         
-        # Load user events
-        cursor.execute("""
-            SELECT event_content FROM events 
-            WHERE agent_id = ? AND user_id = ? 
-            ORDER BY id
-        """, (agent_id, user_id))
-        event_rows = cursor.fetchall()
+        # Load user events - split newline-separated string
+        cursor.execute("SELECT events_data FROM events WHERE agent_id = ? AND user_id = ?", (agent_id, user_id))
+        events_row = cursor.fetchone()
         
-        user_memory.events._memories = [event[0] for event in event_rows]
+        if events_row and events_row[0].strip():
+            # Split by newlines and restore internal newlines
+            events_list = [event.strip().replace('\\n', '\n') for event in events_row[0].split('\n') if event.strip()]
+            user_memory.events._memories = events_list
+        else:
+            user_memory.events._memories = []
     
     def _save_to_database(self) -> None:
         """Save memory data to database."""
@@ -441,15 +443,14 @@ class Memory:
             VALUES (?, ?, ?, ?, ?)
         """, (agent_id, user_id, self.agent_memory.profile.get_profile(), current_time, current_time))
         
-        # Clear existing agent events
-        cursor.execute("DELETE FROM events WHERE agent_id = ? AND user_id = ?", (agent_id, user_id))
-        
-        # Save agent events
-        for event in self.agent_memory.events._memories:
-            cursor.execute("""
-                INSERT INTO events (agent_id, user_id, event_content, timestamp, created_at)
-                VALUES (?, ?, ?, ?, ?)
-            """, (agent_id, user_id, event, current_time, current_time))
+        # Save agent events - merge list into newline-separated string
+        # Replace internal newlines with placeholder to avoid split issues
+        safe_events = [event.replace('\n', '\\n') for event in self.agent_memory.events._memories]
+        events_string = '\n'.join(safe_events)
+        cursor.execute("""
+            INSERT OR REPLACE INTO events (agent_id, user_id, events_data, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (agent_id, user_id, events_string, current_time, current_time))
     
     def _save_user_memory(self, cursor: sqlite3.Cursor, user_memory: UserMemory, current_time: str) -> None:
         """Save user memory to database."""
@@ -468,15 +469,14 @@ class Memory:
             VALUES (?, ?, ?, ?, ?)
         """, (agent_id, user_id, user_memory.profile.get_profile(), current_time, current_time))
         
-        # Clear existing user events
-        cursor.execute("DELETE FROM events WHERE agent_id = ? AND user_id = ?", (agent_id, user_id))
-        
-        # Save user events
-        for event in user_memory.events._memories:
-            cursor.execute("""
-                INSERT INTO events (agent_id, user_id, event_content, timestamp, created_at)
-                VALUES (?, ?, ?, ?, ?)
-            """, (agent_id, user_id, event, current_time, current_time))
+        # Save user events - merge list into newline-separated string
+        # Replace internal newlines with placeholder to avoid split issues
+        safe_events = [event.replace('\n', '\\n') for event in user_memory.events._memories]
+        events_string = '\n'.join(safe_events)
+        cursor.execute("""
+            INSERT OR REPLACE INTO events (agent_id, user_id, events_data, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (agent_id, user_id, events_string, current_time, current_time))
     
     def get_user_memory(self, user_id: str) -> 'DatabaseUserMemory':
         """
