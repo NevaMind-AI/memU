@@ -15,15 +15,6 @@ from ..llm import BaseLLMClient, create_llm_client
 
 
 @dataclass
-class ModificationResult:
-    """Modification阶段的结果"""
-    profile: List[str]  # update_profile 
-    events: List[str]   # update_events
-    raw_llm_response: str 
-    metadata: Dict[str, Any] 
-
-
-@dataclass
 class UpdateResult:
     """Update阶段的结果"""
     profile: ProfileMemory
@@ -36,7 +27,7 @@ class UpdateResult:
 @dataclass
 class ToMResult:
     """Theory of Mind阶段的结果"""
-    insights: Dict[str, Any]
+    insights: str  # Changed to string for ToM insights
     confidence_score: float
     raw_llm_response: str
     metadata: Dict[str, Any]
@@ -45,7 +36,7 @@ class ToMResult:
 @dataclass
 class PipelineResult:
     """完整Pipeline的结果"""
-    modification_result: ModificationResult
+    modification_result: str
     update_result: UpdateResult
     tom_result: ToMResult
     new_memory: Memory
@@ -133,7 +124,7 @@ class MemoryUpdatePipeline:
         self, 
         previous_memory: Memory, 
         session_conversation: List[Dict[str, str]]
-    ) -> ModificationResult:
+    ) -> str:
         """
         LLM分析阶段：让LLM分析对话并提取相关信息
         """
@@ -156,79 +147,47 @@ class MemoryUpdatePipeline:
 请分析对话并提取：
 1. 需要更新到用户画像的信息（如个人背景、兴趣爱好、技能特长等）
 2. 值得记录的重要事件或对话要点
-3. 分析的置信度评分（0-1之间）
 
-请以JSON格式返回结果：
-{{
-    "profile_updates": ["更新信息1", "更新信息2", ...],
-    "events": ["事件1", "事件2", ...],
-    "confidence": 0.85
-}}"""
+返回一下格式：
+profile:
+- 更新信息1
+- 更新信息2
+- ...
+events:
+- 事件1
+- 事件2
+- ...
+
+"""
 
         # 调用LLM
         messages = [{"role": "user", "content": prompt}]
         
-        try:
-            if self.llm_client is None:
-                # 没有LLM客户端时的fallback
-                raise Exception("No LLM client provided")
-                
-            response = self.llm_client.chat_completion(
-                messages=messages,
-                **self.llm_config
-            )
+        if self.llm_client is None:
+            raise Exception("No LLM client provided")
             
-            if not response.success:
-                raise Exception(f"LLM调用失败: {response.error}")
-            
-            # 解析LLM响应
-            try:
-                llm_result = json.loads(response.content)
-                profile_updates = llm_result.get('profile_updates', [])
-                events = llm_result.get('events', [])
-                confidence = llm_result.get('confidence', 0.5)
-            except json.JSONDecodeError:
-                # 如果JSON解析失败，使用备用方案
-                logging.warning("LLM响应JSON解析失败，使用备用方案")
-                profile_updates = []
-                events = []
-                confidence = 0.3
-            
-            return ModificationResult(
-                profile=profile_updates,
-                events=events,
-                raw_llm_response=response.content,
-                metadata={
-                    'stage': 'llm_modification',
-                    'processed_at': datetime.now().isoformat(),
-                    'llm_usage': response.usage
-                }
-            )
-            
-        except Exception as e:
-            logging.error(f"LLM分析阶段失败: {e}")
-            # 返回空结果
-            return ModificationResult(
-                profile=[],
-                events=[],
-                raw_llm_response=str(e),
-                metadata={
-                    'stage': 'llm_modification',
-                    'processed_at': datetime.now().isoformat(),
-                    'error': str(e)
-                }
-            )
+        response = self.llm_client.chat_completion(
+            messages=messages,
+            **self.llm_config
+        )
+        
+        if not response.success:
+            raise Exception(f"LLM调用失败: {response.error}")
+        
+        return response.content
     
     def llm_update_stage(
         self, 
         previous_memory: Memory, 
-        modification_result: ModificationResult
+        modification_result: str
     ) -> UpdateResult:
         """
         LLM更新阶段：让LLM更新用户画像
         """
         current_profile = previous_memory.get_profile_content()
-        profile_updates = modification_result.profile
+        
+        # 解析modification_result来提取profile和events信息
+        profile_updates, events_updates = self._parse_modification_result(modification_result)
         
         # 如果没有画像更新，直接返回
         if not profile_updates:
@@ -264,66 +223,64 @@ class MemoryUpdatePipeline:
 4. 使用第三人称描述
 5. 保持简洁明了
 
-请直接返回更新后的完整用户画像，不需要其他格式："""
+请直接返回更新后的完整用户画像，按照下面格式：
+profile:
+- 更新信息1
+- 更新信息2
+- ...
+events:
+- 事件1
+- 事件2
+- ...
+"""
 
         # 调用LLM更新画像
         messages = [{"role": "user", "content": prompt}]
         
-        try:
-            if self.llm_client is None:
-                # 没有LLM客户端时的fallback
-                raise Exception("No LLM client provided")
-                
-            response = self.llm_client.chat_completion(
-                messages=messages,
-                **self.llm_config
-            )
+        if self.llm_client is None:
+            raise Exception("No LLM client provided")
             
-            if response.success:
-                updated_profile_content = response.content.strip()
-            else:
-                # 如果LLM调用失败，使用简单拼接
-                updated_profile_content = current_profile + " " + " ".join(profile_updates)
-            
-            # 更新事件记忆
-            updated_events = EventMemory(
-                events=previous_memory.get_event_content().copy(),
-                max_events=previous_memory.event_memory.max_events
-            )
-            
-            for event in modification_result.events:
-                updated_events.add_event(event)
-            
-            return UpdateResult(
-                profile=ProfileMemory(updated_profile_content),
-                events=updated_events,
-                profile_updated=bool(profile_updates),
-                raw_llm_response=response.content if response.success else "LLM update failed",
-                metadata={
-                    'stage': 'llm_update',
-                    'updated_at': datetime.now().isoformat(),
-                    'llm_usage': response.usage if response.success else {},
-                    'profile_updated': bool(profile_updates)
-                }
-            )
-            
-        except Exception as e:
-            logging.error(f"LLM更新阶段失败: {e}")
-            # 返回原始内容
-            return UpdateResult(
-                profile=ProfileMemory(current_profile),
-                events=EventMemory(
-                    events=previous_memory.get_event_content().copy(),
-                    max_events=previous_memory.event_memory.max_events
-                ),
-                profile_updated=False,
-                raw_llm_response=str(e),
-                metadata={
-                    'stage': 'llm_update',
-                    'updated_at': datetime.now().isoformat(),
-                    'error': str(e)
-                }
-            )
+        response = self.llm_client.chat_completion(
+            messages=messages,
+            **self.llm_config
+        )
+        
+        if not response.success:
+            raise Exception(f"LLM update failed: {response.error}")
+        
+        # 解析LLM结果并分离profile和events
+        updated_profile, updated_events_list = self._parse_modification_result(response.content)
+        
+        # 创建更新后的profile
+        if updated_profile:
+            new_profile_content = "\n".join(updated_profile)
+        else:
+            new_profile_content = current_profile
+        
+        # 更新事件记忆
+        updated_events = EventMemory(
+            events=previous_memory.get_event_content().copy(),
+            max_events=previous_memory.event_memory.max_events
+        )
+        
+        # 添加新事件
+        for event in events_updates:
+            updated_events.add_event(event)
+        for event in updated_events_list:
+            updated_events.add_event(event)
+        
+        return UpdateResult(
+            profile=ProfileMemory(new_profile_content),
+            events=updated_events,
+            profile_updated=bool(profile_updates),
+            raw_llm_response=response.content,
+            metadata={
+                'stage': 'llm_update',
+                'updated_at': datetime.now().isoformat(),
+                'llm_usage': response.usage,
+                'profile_updated': bool(profile_updates)
+            }
+        )
     
     def llm_theory_of_mind_stage(
         self, 
@@ -334,111 +291,60 @@ class MemoryUpdatePipeline:
         LLM Theory of Mind阶段：让LLM进行深度心理分析
         """
         conversation_text = self._format_conversation(session_conversation)
+        updated_memory_content = update_result.profile.get_content() + "\n" + "\n".join(update_result.events.get_content())
         
         prompt = f"""请对以下对话进行Theory of Mind分析，深入理解用户的心理状态和行为模式。
 
 对话内容：
 {conversation_text}
+memory:
+{updated_memory_content}
 
-请从以下维度分析用户：
-1. 意图分析：用户的主要目的和动机
-2. 情绪分析：用户的情绪状态和变化
-3. 行为模式：用户的沟通风格和参与方式
-4. 认知状态：用户的知识水平和学习倾向
+请分析对话并提取：
+1. 用户的主要目的和动机
+2. 用户的情绪状态和变化
+3. 用户的沟通风格和参与方式
+4. 用户的知识水平和学习倾向
 
-请以JSON格式返回分析结果：
-{{
-    "intent_analysis": {{
-        "primary_intent": "主要意图",
-        "secondary_intents": ["次要意图1", "次要意图2"],
-        "confidence": 0.8
-    }},
-    "emotion_analysis": {{
-        "dominant_emotion": "主导情绪",
-        "emotion_intensity": "情绪强度(low/medium/high)",
-        "emotion_trajectory": "情绪变化趋势",
-        "confidence": 0.7
-    }},
-    "behavior_patterns": {{
-        "communication_style": "沟通风格",
-        "engagement_level": "参与度",
-        "information_sharing": "信息分享倾向",
-        "response_pattern": "回应模式"
-    }},
-    "cognitive_state": {{
-        "knowledge_level": "知识水平",
-        "learning_style": "学习风格",
-        "cognitive_load": "认知负荷",
-        "curiosity_level": "好奇心水平"
-    }}
-}}"""
+推测：
+- 推测1
+- 推测2
+- ...
+
+请直接返回推测结果，按照下面格式：
+推测：
+- 推测1
+- 推测2
+- ...
+"""
 
         # 调用LLM进行ToM分析
         messages = [{"role": "user", "content": prompt}]
         
-        try:
-            if self.llm_client is None:
-                # 没有LLM客户端时的fallback
-                raise Exception("No LLM client provided")
-                
-            response = self.llm_client.chat_completion(
-                messages=messages,
-                **self.llm_config
-            )
+        if self.llm_client is None:
+            raise Exception("No LLM client provided")
             
-            if not response.success:
-                raise Exception(f"LLM ToM分析失败: {response.error}")
-            
-            # 解析LLM响应
-            try:
-                insights = json.loads(response.content)
-                # 计算总体置信度
-                confidence_scores = []
-                for analysis in insights.values():
-                    if isinstance(analysis, dict) and 'confidence' in analysis:
-                        confidence_scores.append(analysis['confidence'])
-                
-                overall_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.5
-                
-            except json.JSONDecodeError:
-                logging.warning("LLM ToM响应JSON解析失败，使用默认分析")
-                insights = {
-                    "intent_analysis": {"primary_intent": "conversation", "confidence": 0.5},
-                    "emotion_analysis": {"dominant_emotion": "neutral", "confidence": 0.5},
-                    "behavior_patterns": {"communication_style": "standard", "engagement_level": "medium"},
-                    "cognitive_state": {"knowledge_level": "intermediate", "learning_style": "adaptive"}
-                }
-                overall_confidence = 0.5
-            
-            return ToMResult(
-                insights=insights,
-                confidence_score=overall_confidence,
-                raw_llm_response=response.content,
-                metadata={
-                    'stage': 'llm_theory_of_mind',
-                    'analyzed_at': datetime.now().isoformat(),
-                    'llm_usage': response.usage
-                }
-            )
-            
-        except Exception as e:
-            logging.error(f"LLM ToM分析阶段失败: {e}")
-            # 返回默认分析
-            return ToMResult(
-                insights={
-                    "intent_analysis": {"primary_intent": "unknown", "confidence": 0.3},
-                    "emotion_analysis": {"dominant_emotion": "neutral", "confidence": 0.3},
-                    "behavior_patterns": {"communication_style": "unknown", "engagement_level": "unknown"},
-                    "cognitive_state": {"knowledge_level": "unknown", "learning_style": "unknown"}
-                },
-                confidence_score=0.3,
-                raw_llm_response=str(e),
-                metadata={
-                    'stage': 'llm_theory_of_mind',
-                    'analyzed_at': datetime.now().isoformat(),
-                    'error': str(e)
-                }
-            )
+        response = self.llm_client.chat_completion(
+            messages=messages,
+            **self.llm_config
+        )
+        
+        if not response.success:
+            raise Exception(f"LLM ToM分析失败: {response.error}")
+        
+        # 推测结果直接作为字符串存储
+        insights = response.content
+        
+        return ToMResult(
+            insights=insights,
+            confidence_score=0.8,  # 固定置信度，可以后续通过LLM生成
+            raw_llm_response=response.content,
+            metadata={
+                'stage': 'llm_theory_of_mind',
+                'analyzed_at': datetime.now().isoformat(),
+                'llm_usage': response.usage
+            }
+        )
     
     def _create_updated_memory(
         self, 
@@ -456,7 +362,7 @@ class MemoryUpdatePipeline:
         new_memory.profile_memory = update_result.profile
         new_memory.event_memory = update_result.events
         
-        # 设置Theory of Mind元数据
+        # 设置Theory of Mind元数据，包含ToM推测内容
         new_memory.tom_metadata = {
             'insights': tom_result.insights,
             'confidence_score': tom_result.confidence_score,
@@ -465,6 +371,36 @@ class MemoryUpdatePipeline:
         }
         
         return new_memory
+    
+    def _parse_modification_result(self, content: str) -> Tuple[List[str], List[str]]:
+        """
+        解析LLM返回的内容，提取profile和events
+        
+        Returns:
+            Tuple[profile_updates, events_updates]
+        """
+        profile_updates = []
+        events_updates = []
+        
+        lines = content.strip().split('\n')
+        current_section = None
+        
+        for line in lines:
+            line = line.strip()
+            if line.lower().startswith('profile:'):
+                current_section = 'profile'
+                continue
+            elif line.lower().startswith('events:'):
+                current_section = 'events'
+                continue
+            elif line.startswith('- ') and current_section:
+                item = line[2:].strip()
+                if current_section == 'profile':
+                    profile_updates.append(item)
+                elif current_section == 'events':
+                    events_updates.append(item)
+        
+        return profile_updates, events_updates
     
     def _format_conversation(self, conversation: List[Dict[str, str]]) -> str:
         """格式化对话内容"""
