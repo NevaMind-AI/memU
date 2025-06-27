@@ -22,6 +22,7 @@ from .memory import (
     # Memory组件
     ProfileMemory,             # 画像记忆组件
     EventMemory,               # 事件记忆组件
+    ToMMemory,                 # Theory of Mind记忆组件
     
     # 向后兼容
     BaseMemory,                # 保持向后兼容的基类
@@ -48,6 +49,7 @@ __all__ = [
     # Memory组件
     "ProfileMemory",             # 画像记忆组件
     "EventMemory",               # 事件记忆组件
+    "ToMMemory",                 # Theory of Mind记忆组件
     
     # 向后兼容
     "BaseMemory",                # 保持向后兼容的基类

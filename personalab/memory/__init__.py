@@ -14,7 +14,7 @@ PersonaLab Memory Module
 """
 
 # 新的统一Memory架构
-from .base import Memory, ProfileMemory, EventMemory
+from .base import Memory, ProfileMemory, EventMemory, ToMMemory
 from .manager import MemoryManager, ConversationMemoryInterface
 from .pipeline import MemoryUpdatePipeline, PipelineResult, UpdateResult, ToMResult
 from ..llm import BaseLLMClient, OpenAIClient, create_llm_client
@@ -45,6 +45,7 @@ __all__ = [
     # Memory组件
     'ProfileMemory',
     'EventMemory',
+    'ToMMemory',
     
     # 向后兼容类
     'BaseMemory',

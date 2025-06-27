@@ -362,7 +362,22 @@ memory:
         new_memory.profile_memory = update_result.profile
         new_memory.event_memory = update_result.events
         
-        # 设置Theory of Mind元数据，包含ToM推测内容
+        # 设置Theory of Mind记忆，解析洞察文本为列表
+        insights_text = tom_result.insights
+        if insights_text:
+            # 解析洞察文本，提取列表项
+            insights_list = []
+            lines = insights_text.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                if line.startswith('- '):
+                    insights_list.append(line[2:].strip())
+                elif line and not line.startswith('推测：'):
+                    insights_list.append(line)
+            
+            new_memory.update_tom(insights_list)
+        
+        # 保存原始metadata到tom_metadata（向后兼容）
         new_memory.tom_metadata = {
             'insights': tom_result.insights,
             'confidence_score': tom_result.confidence_score,

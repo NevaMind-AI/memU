@@ -109,13 +109,15 @@ def debug_pipeline_stages():
         print("📋 Final Memory:")
         print(f"Profile: {new_memory.get_profile_content()}")
         print(f"Events: {new_memory.get_event_content()}")
-        print(f"ToM Metadata: {new_memory.tom_metadata}")
+        print(f"ToM Insights: {new_memory.get_tom_content()}")
+        print(f"ToM Metadata (backward compatibility): {new_memory.tom_metadata}")
         print()
         
         print("📊 COMPARISON:")
         print("Before → After")
         print(f"Profile length: {len(memory.get_profile_content())} → {len(new_memory.get_profile_content())}")
         print(f"Event count: {len(memory.get_event_content())} → {len(new_memory.get_event_content())}")
+        print(f"ToM insight count: {len(memory.get_tom_content())} → {len(new_memory.get_tom_content())}")
         print(f"Has ToM data: {memory.tom_metadata is not None} → {new_memory.tom_metadata is not None}")
         
     except Exception as e:
