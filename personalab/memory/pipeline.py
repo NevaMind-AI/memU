@@ -29,6 +29,7 @@ class UpdateResult:
     profile: ProfileMemory
     events: EventMemory
     profile_updated: bool
+    raw_llm_response: str
     metadata: Dict[str, Any]
 
 
@@ -238,6 +239,7 @@ class MemoryUpdatePipeline:
                     max_events=previous_memory.event_memory.max_events
                 ),
                 profile_updated=False,
+                raw_llm_response="No updates needed",
                 metadata={
                     'stage': 'llm_update',
                     'updated_at': datetime.now().isoformat(),
@@ -296,6 +298,7 @@ class MemoryUpdatePipeline:
                 profile=ProfileMemory(updated_profile_content),
                 events=updated_events,
                 profile_updated=bool(profile_updates),
+                raw_llm_response=response.content if response.success else "LLM update failed",
                 metadata={
                     'stage': 'llm_update',
                     'updated_at': datetime.now().isoformat(),
@@ -314,6 +317,7 @@ class MemoryUpdatePipeline:
                     max_events=previous_memory.event_memory.max_events
                 ),
                 profile_updated=False,
+                raw_llm_response=str(e),
                 metadata={
                     'stage': 'llm_update',
                     'updated_at': datetime.now().isoformat(),
