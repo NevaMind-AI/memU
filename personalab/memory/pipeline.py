@@ -17,21 +17,18 @@ from ..llm import BaseLLMClient, create_llm_client
 @dataclass
 class ModificationResult:
     """Modification阶段的结果"""
-    profile_updates: List[str]
-    events: List[str]
-    analysis_confidence: float
-    raw_llm_response: str
-    metadata: Dict[str, Any]
+    profile: List[str]  # update_profile 
+    events: List[str]   # update_events
+    raw_llm_response: str 
+    metadata: Dict[str, Any] 
 
 
 @dataclass
 class UpdateResult:
     """Update阶段的结果"""
-    updated_profile: ProfileMemory
-    updated_events: EventMemory
+    profile: ProfileMemory
+    events: EventMemory
     profile_updated: bool
-    events_added: int
-    updated_profile_content: str
     metadata: Dict[str, Any]
 
 
@@ -125,8 +122,7 @@ class MemoryUpdatePipeline:
                 'execution_time': datetime.now().isoformat(),
                 'conversation_length': len(session_conversation),
                 'llm_model': getattr(self.llm_client, 'model_name', 'unknown'),
-                'profile_updated': update_result.profile_updated,
-                'events_added': update_result.events_added
+                'profile_updated': update_result.profile_updated
             }
         )
         
@@ -198,9 +194,8 @@ class MemoryUpdatePipeline:
                 confidence = 0.3
             
             return ModificationResult(
-                profile_updates=profile_updates,
+                profile=profile_updates,
                 events=events,
-                analysis_confidence=confidence,
                 raw_llm_response=response.content,
                 metadata={
                     'stage': 'llm_modification',
@@ -213,9 +208,8 @@ class MemoryUpdatePipeline:
             logging.error(f"LLM分析阶段失败: {e}")
             # 返回空结果
             return ModificationResult(
-                profile_updates=[],
+                profile=[],
                 events=[],
-                analysis_confidence=0.0,
                 raw_llm_response=str(e),
                 metadata={
                     'stage': 'llm_modification',
@@ -233,19 +227,17 @@ class MemoryUpdatePipeline:
         LLM更新阶段：让LLM更新用户画像
         """
         current_profile = previous_memory.get_profile_content()
-        profile_updates = modification_result.profile_updates
+        profile_updates = modification_result.profile
         
         # 如果没有画像更新，直接返回
         if not profile_updates:
             return UpdateResult(
-                updated_profile=ProfileMemory(current_profile),
-                updated_events=EventMemory(
+                profile=ProfileMemory(current_profile),
+                events=EventMemory(
                     events=previous_memory.get_event_content().copy(),
                     max_events=previous_memory.event_memory.max_events
                 ),
                 profile_updated=False,
-                events_added=len(modification_result.events),
-                updated_profile_content=current_profile,
                 metadata={
                     'stage': 'llm_update',
                     'updated_at': datetime.now().isoformat(),
@@ -297,17 +289,13 @@ class MemoryUpdatePipeline:
                 max_events=previous_memory.event_memory.max_events
             )
             
-            events_added = 0
             for event in modification_result.events:
                 updated_events.add_event(event)
-                events_added += 1
             
             return UpdateResult(
-                updated_profile=ProfileMemory(updated_profile_content),
-                updated_events=updated_events,
+                profile=ProfileMemory(updated_profile_content),
+                events=updated_events,
                 profile_updated=bool(profile_updates),
-                events_added=events_added,
-                updated_profile_content=updated_profile_content,
                 metadata={
                     'stage': 'llm_update',
                     'updated_at': datetime.now().isoformat(),
@@ -320,14 +308,12 @@ class MemoryUpdatePipeline:
             logging.error(f"LLM更新阶段失败: {e}")
             # 返回原始内容
             return UpdateResult(
-                updated_profile=ProfileMemory(current_profile),
-                updated_events=EventMemory(
+                profile=ProfileMemory(current_profile),
+                events=EventMemory(
                     events=previous_memory.get_event_content().copy(),
                     max_events=previous_memory.event_memory.max_events
                 ),
                 profile_updated=False,
-                events_added=0,
-                updated_profile_content=current_profile,
                 metadata={
                     'stage': 'llm_update',
                     'updated_at': datetime.now().isoformat(),
@@ -463,8 +449,8 @@ class MemoryUpdatePipeline:
         )
         
         # 设置更新后的组件
-        new_memory.profile_memory = update_result.updated_profile
-        new_memory.event_memory = update_result.updated_events
+        new_memory.profile_memory = update_result.profile
+        new_memory.event_memory = update_result.events
         
         # 设置Theory of Mind元数据
         new_memory.tom_metadata = {

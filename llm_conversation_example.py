@@ -106,14 +106,14 @@ def basic_conversation_example():
     # 显示pipeline结果
     print(f"📊 Pipeline结果:")
     print(f"- 画像更新: {result.update_result.profile_updated}")
-    print(f"- 事件添加: {result.update_result.events_added}")
-    print(f"- 分析置信度: {result.modification_result.analysis_confidence:.2f}")
+    print(f"- 事件添加: {len(result.modification_result.events)}")
+    print(f"- 画像更新项数: {len(result.modification_result.profile)}")
     print(f"- ToM置信度: {result.tom_result.confidence_score:.2f}")
     
     # 显示提取的信息
     print(f"\n🧠 提取的画像更新:")
     print("-" * 30)
-    for i, update in enumerate(result.modification_result.profile_updates, 1):
+    for i, update in enumerate(result.modification_result.profile, 1):
         print(f"{i}. {update}")
     
     print(f"\n📝 提取的事件:")

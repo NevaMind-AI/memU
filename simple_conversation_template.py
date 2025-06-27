@@ -40,7 +40,7 @@ def process_conversation(conversation, agent_id="default_agent"):
         'event_content': updated_memory.get_event_content(),
         'pipeline_result': {
             'profile_updated': pipeline_result.update_result.profile_updated,
-            'events_added': pipeline_result.update_result.events_added,
+            'events_added': len(pipeline_result.modification_result.events),
             'confidence_score': pipeline_result.tom_result.confidence_score
         }
     }
