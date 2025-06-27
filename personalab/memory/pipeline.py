@@ -1,7 +1,11 @@
 """
-Memory更新Pipeline
+Memory Update Pipeline
 
-使用LLM来进行Memory分析和更新
+LLM-powered memory analysis and update system for PersonaLab.
+This module provides sophisticated memory processing through a three-stage pipeline:
+- Modification: Extract and process information from conversations
+- Update: Update profile and event memories
+- Theory of Mind: Generate psychological insights and behavioral analysis
 """
 
 import json
@@ -16,7 +20,7 @@ from ..llm import BaseLLMClient, create_llm_client
 
 @dataclass
 class UpdateResult:
-    """Update阶段的结果"""
+    """Results from the Update stage of the pipeline"""
     profile: ProfileMemory
     events: EventMemory
     profile_updated: bool
@@ -26,8 +30,8 @@ class UpdateResult:
 
 @dataclass
 class ToMResult:
-    """Theory of Mind阶段的结果"""
-    insights: str  # Changed to string for ToM insights
+    """Results from the Theory of Mind analysis stage"""
+    insights: str  # ToM insights as string
     confidence_score: float
     raw_llm_response: str
     metadata: Dict[str, Any]
@@ -35,7 +39,7 @@ class ToMResult:
 
 @dataclass
 class PipelineResult:
-    """完整Pipeline的结果"""
+    """Complete results from the memory update pipeline"""
     modification_result: str
     update_result: UpdateResult
     tom_result: ToMResult
@@ -45,26 +49,26 @@ class PipelineResult:
 
 class MemoryUpdatePipeline:
     """
-    Memory更新Pipeline
+    Memory Update Pipeline for PersonaLab
     
-    使用LLM完成所有Memory分析和更新任务：
-    1. LLM分析对话内容，提取画像更新和事件
-    2. LLM更新用户画像
-    3. LLM进行Theory of Mind分析
+    LLM-powered pipeline that performs comprehensive memory analysis and updates:
+    1. LLM analyzes conversation content and extracts profile updates and events
+    2. LLM updates user profiles with intelligent merging
+    3. LLM performs Theory of Mind analysis for psychological insights
     """
     
     def __init__(self, llm_client: BaseLLMClient = None, **llm_config):
         """
-        初始化Pipeline
+        Initialize the memory update pipeline
         
         Args:
-            llm_client: LLM客户端实例
-            **llm_config: LLM配置参数
+            llm_client: LLM client instance for processing
+            **llm_config: Additional LLM configuration parameters
         """
         self.llm_client = llm_client
         
         self.llm_config = {
-            'temperature': 0.3,  # 较低的temperature保证稳定性
+            'temperature': 0.3,  # Lower temperature for consistent results
             'max_tokens': 2000,
             **llm_config
         }
@@ -75,36 +79,36 @@ class MemoryUpdatePipeline:
         session_conversation: List[Dict[str, str]]
     ) -> Tuple[Memory, PipelineResult]:
         """
-        通过LLM Pipeline更新Memory
+        Update memory using the LLM-powered pipeline
         
         Args:
-            previous_memory: 之前的Memory对象
-            session_conversation: 当前会话对话内容
+            previous_memory: Previous Memory object to update
+            session_conversation: Current session conversation content
             
         Returns:
-            Tuple[更新后的Memory对象, Pipeline执行结果]
+            Tuple[Updated Memory object, Pipeline execution results]
         """
-        # 1. LLM分析阶段：分析对话并提取信息
+        # 1. LLM Modification stage: Analyze conversation and extract information
         modification_result = self.llm_modification_stage(
             previous_memory, session_conversation
         )
         
-        # 2. LLM更新阶段：更新画像和事件
+        # 2. LLM Update stage: Update profile and events
         update_result = self.llm_update_stage(
             previous_memory, modification_result
         )
         
-        # 3. LLM ToM阶段：深度心理分析
+        # 3. LLM Theory of Mind stage: Deep psychological analysis
         tom_result = self.llm_theory_of_mind_stage(
             update_result, session_conversation
         )
         
-        # 4. 创建新的Memory对象
+        # 4. Create new Memory object
         new_memory = self._create_updated_memory(
             previous_memory, update_result, tom_result
         )
         
-        # 5. 构建Pipeline结果
+        # 5. Build pipeline results
         pipeline_result = PipelineResult(
             modification_result=modification_result,
             update_result=update_result,
@@ -126,41 +130,41 @@ class MemoryUpdatePipeline:
         session_conversation: List[Dict[str, str]]
     ) -> str:
         """
-        LLM分析阶段：让LLM分析对话并提取相关信息
+        LLM Modification stage: Analyze conversation and extract relevant information
         """
-        # 构建LLM prompt
+        # Build LLM prompt
         conversation_text = self._format_conversation(session_conversation)
         current_profile = previous_memory.get_profile_content()
         current_events = previous_memory.get_event_content()
         
-        prompt = f"""请分析以下对话内容，提取用户画像更新信息和重要事件。
+        prompt = f"""Please analyze the following conversation content and extract user profile updates and important events.
 
-当前用户画像：
-{current_profile if current_profile else "暂无"}
+Current User Profile:
+{current_profile if current_profile else "None"}
 
-当前事件记录：
-{self._format_events(current_events) if current_events else "暂无"}
+Current Event Records:
+{self._format_events(current_events) if current_events else "None"}
 
-本次对话内容：
+Current Conversation Content:
 {conversation_text}
 
-请分析对话并提取：
-1. 需要更新到用户画像的信息（如个人背景、兴趣爱好、技能特长等）
-2. 值得记录的重要事件或对话要点
+Please analyze the conversation and extract:
+1. Information that needs to be updated in the user profile (such as personal background, interests, skills, etc.)
+2. Important events or conversation points worth recording
 
-返回一下格式：
+Return in the following format:
 profile:
-- 更新信息1
-- 更新信息2
+- Update information 1
+- Update information 2
 - ...
 events:
-- 事件1
-- 事件2
+- Event 1
+- Event 2
 - ...
 
 """
 
-        # 调用LLM
+        # Call LLM
         messages = [{"role": "user", "content": prompt}]
         
         if self.llm_client is None:
@@ -172,7 +176,7 @@ events:
         )
         
         if not response.success:
-            raise Exception(f"LLM调用失败: {response.error}")
+            raise Exception(f"LLM call failed: {response.error}")
         
         return response.content
     
@@ -182,14 +186,14 @@ events:
         modification_result: str
     ) -> UpdateResult:
         """
-        LLM更新阶段：让LLM更新用户画像
+        LLM Update stage: Update user profile using LLM analysis
         """
         current_profile = previous_memory.get_profile_content()
         
-        # 解析modification_result来提取profile和events信息
+        # Parse modification_result to extract profile and events information
         profile_updates, events_updates = self._parse_modification_result(modification_result)
         
-        # 如果没有画像更新，直接返回
+        # If no profile updates, return directly
         if not profile_updates:
             return UpdateResult(
                 profile=ProfileMemory(current_profile),

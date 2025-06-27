@@ -16,88 +16,90 @@ from typing import List, Optional, Dict, Any, Union
 
 class Memory:
     """
-    Agent的完整记忆系统，集成画像记忆、事件记忆和心理分析记忆组件。
+    Complete memory system for AI agents, integrating profile memory, event memory, 
+    and Theory of Mind psychological analysis components.
     
-    根据STRUCTURE.md设计，Memory是统一的记忆管理类，内部包含：
-    - ProfileMemory组件：管理画像记忆
-    - EventMemory组件：管理事件记忆
-    - ToMMemory组件：管理Theory of Mind心理分析记忆
+    According to the unified memory architecture design, Memory is the central memory 
+    management class that internally contains:
+    - ProfileMemory component: Manages profile/persona memory
+    - EventMemory component: Manages event-based memories
+    - ToMMemory component: Manages Theory of Mind psychological analysis memory
     """
     
     def __init__(self, agent_id: str, memory_id: Optional[str] = None):
         """
-        初始化Memory对象。
+        Initialize Memory object.
         
         Args:
-            agent_id: 关联的Agent ID
-            memory_id: 记忆ID，如果不提供则自动生成
+            agent_id: Associated Agent ID
+            memory_id: Memory ID, auto-generated if not provided
         """
         self.memory_id = memory_id or str(uuid.uuid4())
         self.agent_id = agent_id
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
         
-        # 初始化记忆组件
+        # Initialize memory components
         self.profile_memory = ProfileMemory()
         self.event_memory = EventMemory()
         self.tom_memory = ToMMemory()
     
     def get_profile_content(self) -> str:
-        """获取画像记忆内容"""
+        """Get profile memory content"""
         return self.profile_memory.get_content()
     
     def get_event_content(self) -> List[str]:
-        """获取事件记忆内容"""
+        """Get event memory content"""
         return self.event_memory.get_content()
     
     def get_tom_content(self) -> List[str]:
-        """获取Theory of Mind记忆内容"""
+        """Get Theory of Mind memory content"""
         return self.tom_memory.get_content()
     
     def update_profile(self, new_profile_info: str):
-        """更新画像记忆"""
+        """Update profile memory"""
         self.profile_memory.update_content(new_profile_info)
         self.updated_at = datetime.now()
     
     def update_events(self, new_events: List[str]):
-        """更新事件记忆"""
+        """Update event memory"""
         for event in new_events:
             self.event_memory.add_event(event)
         self.updated_at = datetime.now()
     
     def update_tom(self, new_insights: List[str]):
-        """更新Theory of Mind记忆"""
+        """Update Theory of Mind memory"""
         for insight in new_insights:
             self.tom_memory.add_insight(insight)
         self.updated_at = datetime.now()
     
     def add_tom_insight(self, insight: str):
-        """添加单个Theory of Mind洞察"""
+        """Add single Theory of Mind insight"""
         self.tom_memory.add_insight(insight)
         self.updated_at = datetime.now()
     
     def to_prompt(self) -> str:
-        """将完整记忆转换为prompt格式"""
+        """Convert complete memory to prompt format"""
         prompt = ""
         
-        # 添加画像记忆
+        # Add profile memory
         profile_content = self.profile_memory.get_content()
         if profile_content:
-            prompt += "## 用户画像\n"
+            prompt += "## User Profile\n"
             prompt += f"{profile_content}\n\n"
         
-        # 添加事件记忆
+        # Add event memory
         event_content = self.event_memory.get_content()
         if event_content:
-            prompt += "## 相关事件\n"
+            prompt += "## Related Events\n"
             for event in event_content:
                 prompt += f"- {event}\n"
             prompt += "\n"
         
-        # 添加ToM记忆
+        # Add ToM memory
         tom_content = self.tom_memory.get_content()
         if tom_content:
-            prompt += "## 心理分析\n"
+            prompt += "## Psychological Analysis\n"
             for insight in tom_content:
                 prompt += f"- {insight}\n"
             prompt += "\n"
@@ -105,11 +107,11 @@ class Memory:
         return prompt
     
     def get_memory_content(self) -> str:
-        """获取完整记忆内容（用于LLM处理）"""
+        """Get complete memory content (for LLM processing)"""
         return self.to_prompt()
     
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典格式"""
+        """Convert to dictionary format"""
         return {
             "memory_id": self.memory_id,
             "agent_id": self.agent_id,
@@ -130,7 +132,7 @@ class Memory:
         }
     
     def get_memory_summary(self) -> Dict[str, Any]:
-        """获取Memory摘要信息"""
+        """Get Memory summary information"""
         return {
             "memory_id": self.memory_id,
             "agent_id": self.agent_id,
@@ -142,31 +144,31 @@ class Memory:
         }
     
     def clear_profile(self):
-        """清空画像记忆"""
+        """Clear profile memory"""
         self.profile_memory = ProfileMemory()
         self.updated_at = datetime.now()
     
     def clear_events(self):
-        """清空事件记忆"""
+        """Clear event memory"""
         self.event_memory = EventMemory()
         self.updated_at = datetime.now()
     
     def clear_tom(self):
-        """清空Theory of Mind记忆"""
+        """Clear Theory of Mind memory"""
         self.tom_memory = ToMMemory()
         self.updated_at = datetime.now()
     
     def clear_all(self):
-        """清空所有记忆"""
+        """Clear all memories"""
         self.profile_memory = ProfileMemory()
         self.event_memory = EventMemory()
         self.tom_memory = ToMMemory()
         self.updated_at = datetime.now()
 
-    # 向后兼容的属性
+    # Backward compatibility properties
     @property
     def tom_metadata(self) -> Optional[Dict[str, Any]]:
-        """向后兼容：将tom_memory转换为metadata格式"""
+        """Backward compatibility: Convert tom_memory to metadata format"""
         tom_content = self.tom_memory.get_content()
         if tom_content:
             return {
@@ -178,13 +180,13 @@ class Memory:
     
     @tom_metadata.setter
     def tom_metadata(self, value: Optional[Dict[str, Any]]):
-        """向后兼容：从metadata格式设置tom_memory"""
+        """Backward compatibility: Set tom_memory from metadata format"""
         if value is None:
             self.tom_memory = ToMMemory()
         else:
             insights_text = value.get("insights", "")
             if insights_text:
-                # 如果是字符串，按行分割
+                # If it's a string, split by lines
                 if isinstance(insights_text, str):
                     insights = [line.strip() for line in insights_text.split("\n") if line.strip()]
                 else:
@@ -195,53 +197,53 @@ class Memory:
 
 class ProfileMemory:
     """
-    画像记忆组件。
+    Profile memory component.
     
-    作为Memory类的内部组件，用于存储用户或Agent的画像信息。
-    存储格式：单个paragraph（段落）形式
+    Internal component of the Memory class for storing user or agent profile information.
+    Storage format: Single paragraph form
     """
     
     def __init__(self, content: str = ""):
         """
-        初始化ProfileMemory。
+        Initialize ProfileMemory.
         
         Args:
-            content: 初始画像内容
+            content: Initial profile content
         """
         self.content = content
     
     def get_content(self) -> str:
-        """获取画像内容"""
+        """Get profile content"""
         return self.content
     
     def update_content(self, new_info: str):
         """
-        更新画像信息，支持信息合并。
+        Update profile information with support for information merging.
         
         Args:
-            new_info: 新的画像信息
+            new_info: New profile information
         """
         if not self.content:
             self.content = new_info
         else:
-            # 智能合并逻辑，这里可以通过LLM实现更复杂的合并
+            # Intelligent merging logic, can be implemented with LLM for more complex merging
             self.content = self._merge_profile_info(self.content, new_info)
     
     def set_content(self, content: str):
         """
-        直接设置画像内容。
+        Directly set profile content.
         
         Args:
-            content: 新的画像内容
+            content: New profile content
         """
         self.content = content
     
     def append_content(self, additional_info: str):
         """
-        追加画像信息。
+        Append profile information.
         
         Args:
-            additional_info: 要追加的信息
+            additional_info: Information to append
         """
         if self.content:
             self.content = f"{self.content} {additional_info}".strip()
@@ -250,61 +252,61 @@ class ProfileMemory:
     
     def _merge_profile_info(self, existing: str, new_info: str) -> str:
         """
-        合并画像信息的逻辑。
+        Logic for merging profile information.
         
         Args:
-            existing: 现有画像信息
-            new_info: 新的画像信息
+            existing: Existing profile information
+            new_info: New profile information
             
         Returns:
-            合并后的画像信息
+            Merged profile information
         """
-        # 简化版本：直接追加，实际实现可以通过LLM进行智能合并
+        # Simplified version: direct append, actual implementation can use LLM for intelligent merging
         return f"{existing} {new_info}".strip()
     
     def is_empty(self) -> bool:
-        """检查画像记忆是否为空"""
+        """Check if profile memory is empty"""
         return not self.content.strip()
     
     def get_word_count(self) -> int:
-        """获取画像内容的字数"""
+        """Get word count of profile content"""
         return len(self.content.split())
 
 
 class EventMemory:
     """
-    事件记忆组件。
+    Event memory component.
     
-    作为Memory类的内部组件，用于存储重要事件和对话要点。
-    存储格式：list of paragraphs（段落列表）形式
+    Internal component of the Memory class for storing important events and conversation highlights.
+    Storage format: List of paragraphs form
     """
     
     def __init__(self, events: Optional[List[str]] = None, max_events: int = 50):
         """
-        初始化EventMemory。
+        Initialize EventMemory.
         
         Args:
-            events: 初始事件列表
-            max_events: 最大事件数量
+            events: Initial event list
+            max_events: Maximum number of events
         """
         self.events = events or []
         self.max_events = max_events
     
     def get_content(self) -> List[str]:
-        """获取事件列表"""
+        """Get event list"""
         return self.events.copy()
     
     def add_event(self, event_paragraph: str):
         """
-        添加新事件。
+        Add new event.
         
         Args:
-            event_paragraph: 事件描述段落
+            event_paragraph: Event description paragraph
         """
-        if event_paragraph.strip():  # 只添加非空事件
+        if event_paragraph.strip():  # Only add non-empty events
             self.events.append(event_paragraph.strip())
             
-            # 如果超过最大数量，删除最旧的事件
+            # If exceeds maximum, remove oldest events
             if len(self.events) > self.max_events:
                 self.events = self.events[-self.max_events:]
     
