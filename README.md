@@ -41,10 +41,11 @@ from personalab.main import Memory
 memory = Memory("my_agent", enable_llm_search=True)
 
 # Set initial agent profile
-memory.agent_memory.profile.set_profile("I am an AI assistant specialized in programming.")
+agent_memory = memory.get_agent_memory()
+agent_memory.update_profile("I am an AI assistant specialized in programming.")
 
 # Add events
-memory.agent_memory.events.add_memory("User asked about Python programming best practices.")
+agent_memory.update_events(["User asked about Python programming best practices."])
 
 # Search memory
 if memory.need_search("Tell me about Python coding"):
@@ -95,8 +96,8 @@ PersonaLab/
 
 ### Key Components
 
-- **Memory**: Main interface for all memory operations
-- **AgentMemory**: Stores agent profile and conversation history
+- **Memory**: Main interface for all memory operations  
+- **Unified Memory Architecture**: New architecture with ProfileMemory and EventMemory components
 - **UserMemory**: Individual user profiles and interactions
 - **LLMManager**: Handles multiple LLM provider integrations
 - **Search System**: LLM-powered intelligent search and ranking

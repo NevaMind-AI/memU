@@ -32,12 +32,12 @@ class Memory:
         """
         self.memory_id = memory_id or str(uuid.uuid4())
         self.agent_id = agent_id
+        self.user_id = user_id
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
         
         # 初始化记忆组件
-        self.profile_memory = ProfileMemory()
-        self.event_memory = EventMemory()
+        self.user_memory = UserMemory(agent_id, user_id)
         
         # Theory of Mind元数据
         self.tom_metadata: Optional[Dict[str, Any]] = None

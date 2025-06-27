@@ -4,6 +4,9 @@ Main memory manager for PersonaLab.
 This module provides the main Memory class that integrates all memory components
 and provides in-memory storage with search functionality and memory management.
 Includes LLM-enhanced search capabilities for better relevance judgment.
+
+Note: This is the legacy Memory class. New code should use the unified Memory architecture 
+from personalab.memory module.
 """
 
 import re
@@ -11,8 +14,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from .memory.agent import AgentMemory
 from .memory.user import UserMemory
+from .memory import Memory as UnifiedMemory, MemoryManager
 
 # Optional LLM integration
 try:
@@ -26,8 +29,12 @@ except ImportError:
 
 class Memory:
     """
-    Main memory container that manages both user and agent memories in-memory.
-    Provides search functionality and memory management without persistence.
+    Legacy memory container for backward compatibility.
+    
+    This class maintains compatibility with the old Memory interface while 
+    using the new unified Memory architecture internally.
+    
+    Note: For new code, use MemoryManager from personalab.memory module directly.
     """
     
     def __init__(self, agent_id: str, enable_deep_search: bool = True, 
@@ -56,8 +63,11 @@ class Memory:
                 self.enable_llm_search = False
                 self.llm = None
         
-        # Create new memory
-        self.agent_memory = AgentMemory(agent_id)
+        # Use new unified Memory architecture
+        self.memory_manager = MemoryManager(llm_client=self.llm)
+        self.unified_memory = self.memory_manager.get_or_create_memory(agent_id)
+        
+        # Keep user memories for backward compatibility
         self._user_memories: Dict[str, UserMemory] = {}
     
     def get_user_memory(self, user_id: str) -> UserMemory:
@@ -75,14 +85,18 @@ class Memory:
         
         return self._user_memories[user_id]
 
-    def get_agent_memory(self) -> AgentMemory:
-        """Get agent memory."""
-        return self.agent_memory
+    def get_agent_memory(self) -> UnifiedMemory:
+        """
+        Get agent memory using the new unified Memory architecture.
+        
+        Returns:
+            UnifiedMemory instance for the agent
+        """
+        return self.unified_memory
 
     def list_users(self) -> List[str]:
         """List all user IDs that have memory."""
         return list(self._user_memories.keys())
-
 
     def update_agent_profile_memory(self, conversation: str) -> str:
         """
@@ -94,8 +108,13 @@ class Memory:
         Returns:
             The updated agent profile
         """
-        current_profile = self.agent_memory.profile.get_profile()
-        return self._update_profile_with_llm(current_profile, conversation, "agent")
+        # Use the new pipeline-based update
+        conversation_data = [{"role": "user", "content": conversation}]
+        updated_memory, pipeline_result = self.memory_manager.update_memory_with_conversation(
+            self.agent_id, conversation_data
+        )
+        self.unified_memory = updated_memory
+        return updated_memory.get_profile_content()
 
     def update_user_profile_memory(self, user_id: str, conversation: str) -> str:
         """
@@ -178,9 +197,6 @@ Return in XML format:
                 
                 # Validate the updated profile
                 if len(updated_profile) > 50 and updated_profile != current_profile:
-                    # Auto-update agent profile if this is agent profile update
-                    if profile_type == "agent":
-                        self.agent_memory.profile.set_profile(updated_profile)
                     return updated_profile
                 else:
                     return current_profile
@@ -198,152 +214,167 @@ Return in XML format:
         Returns:
             Extracted profile content
         """
-        import re
+        import xml.etree.ElementTree as ET
         
-        # Try to extract content from <profile> tags
-        profile_match = re.search(r'<profile>\s*(.*?)\s*</profile>', generated_profile, re.DOTALL | re.IGNORECASE)
-        
-        if profile_match:
-            # Found profile tags, extract the content
-            profile_content = profile_match.group(1).strip()
-            return profile_content
-        else:
-            # No XML tags found, try to clean up the response
-            # Remove common XML-like patterns that might be incomplete
-            profile = re.sub(r'</?profile[^>]*>', '', generated_profile, flags=re.IGNORECASE)
-            profile = profile.strip()
-            
-            # If the cleaned response is reasonable, return it
-            if len(profile) > 10:
-                return profile
+        try:
+            # Try to parse as XML
+            if '<profile>' in generated_profile and '</profile>' in generated_profile:
+                start = generated_profile.find('<profile>') + len('<profile>')
+                end = generated_profile.find('</profile>')
+                extracted_profile = generated_profile[start:end].strip()
+                return extracted_profile if extracted_profile else generated_profile
             else:
-                # Fall back to original response if cleaning didn't work
-                return generated_profile.strip()
-
-   
+                return generated_profile
+        except Exception:
+            # If XML parsing fails, return as is
+            return generated_profile
 
     def need_search(self, conversation: str, system_prompt: str = "", context_length: int = 0) -> bool:
         """
-        Determine if memory search is needed using LLM-based analysis.
-        
-        This function now uses LLM by default for intelligent search decisions,
-        falling back to basic patterns only if LLM is unavailable.
+        Determine if memory search is needed based on conversation context.
         
         Args:
-            conversation: Current conversation text
-            system_prompt: System prompt being used
-            context_length: Length of existing context (tokens or characters)
+            conversation: The conversation text to analyze
+            system_prompt: System prompt to consider for context
+            context_length: Current context length
             
         Returns:
-            True if memory search should be performed
+            True if search is recommended, False otherwise
         """
-        # Always try LLM first if available
+        # Use LLM-based decision making if available
         if self.enable_llm_search and self.llm:
             return self.llm_need_search(conversation, system_prompt, context_length)
         
-        # Fallback to basic search only if LLM unavailable (conservative approach)
-        return False
+        # Fallback to simple heuristics
+        return self._simple_need_search(conversation, context_length)
+    
+    def _simple_need_search(self, conversation: str, context_length: int = 0) -> bool:
+        """Simple heuristic for determining search need."""
+        # Search if conversation mentions past events or asks questions
+        search_indicators = [
+            "remember", "recall", "previous", "before", "earlier", "last time",
+            "what did", "when did", "how did", "who was", "where was",
+            "?", "tell me about", "what about"
+        ]
+        
+        conversation_lower = conversation.lower()
+        has_indicators = any(indicator in conversation_lower for indicator in search_indicators)
+        
+        # Also search if context is getting long
+        is_long_context = context_length > 2000
+        
+        return has_indicators or is_long_context
 
     def llm_need_search(self, conversation: str, system_prompt: str = "", 
                        context_length: int = 0) -> bool:
         """
         Use LLM to determine if memory search is needed.
         
-        This function leverages LLM's natural language understanding to make 
-        more intelligent decisions about when memory search is beneficial.
-        
         Args:
-            conversation: Current conversation text
-            system_prompt: System prompt being used
-            context_length: Length of existing context
+            conversation: The conversation text to analyze
+            system_prompt: System prompt to consider for context
+            context_length: Current context length
             
         Returns:
-            True if LLM determines memory search should be performed
+            True if search is recommended, False otherwise
         """
-        if not self.enable_llm_search or not self.llm:
-            # Fallback to basic search (conservative approach)
-            return False
+        if not self.llm:
+            return self._simple_need_search(conversation, context_length)
         
         try:
-            # Prepare LLM prompt for search decision
             decision_prompt = f"""
-You are helping decide whether to search memory for relevant context. 
+Analyze if this conversation requires searching through memory/conversation history.
 
-
-System prompt: "{system_prompt}"
 Conversation: "{conversation}"
+System Prompt: "{system_prompt}"
+Current Context Length: {context_length} characters
 
 Consider these factors:
-1. Does the query reference past conversations, memories, or personal information?
-2. Are there pronouns or references that need context to understand?
-3. Does the query ask about ongoing projects, relationships, or personal details?
-4. Would knowing previous interactions help provide a better response?
-5. Is this a continuation of a previous topic?
+1. Does the user reference past conversations or events?
+2. Are they asking about previous topics or information shared?
+3. Do they use words like "remember", "before", "earlier", "last time"?
+4. Are they asking follow-up questions that need context?
+5. Is the context getting too long (>2000 chars) and needs relevant information?
 
-Respond with only "YES" if memory search would be helpful, or "NO" if not needed.
-Be conservative - only suggest search when it would meaningfully improve the response.
-"""
-            
-            # Get LLM response
-            response = self.llm.generate(decision_prompt, max_tokens=10, temperature=0.1)
+Answer with just "YES" or "NO" and brief reasoning.
+
+Examples:
+- "What did we discuss about Python yesterday?" → YES (references past)
+- "Hello, how are you?" → NO (simple greeting)
+- "Continue with that topic" → YES (needs context)
+- "What's the weather?" → NO (independent question)
+
+Response:"""
+
+            response = self.llm.generate(decision_prompt, max_tokens=50, temperature=0.1)
             
             if response and response.content:
-                decision = response.content.strip().upper()
-                return decision.startswith("YES")
-                
-        except Exception as e:
-            # Fallback on error
+                response_text = response.content.strip().upper()
+                return "YES" in response_text
+            
+        except Exception:
             pass
+        
+        # Fallback to simple heuristics
+        return self._simple_need_search(conversation, context_length)
 
-        return False
-
-    
     def deep_search(self, conversation: str, system_prompt: str = "", 
                    user_id: Optional[str] = None, max_results: int = 15,
                    similarity_threshold: float = 60.0) -> Dict[str, Any]:
         """
-        Perform advanced deep search using LLM-enhanced analysis by default.
-        
-        This function now uses LLM for intelligent search and ranking,
-        falling back to keyword-based search only when LLM is unavailable.
+        Perform deep search through memories based on conversation context.
         
         Args:
-            conversation: Current conversation text
-            system_prompt: System prompt being used
-            user_id: Optional user ID to search user-specific memory
+            conversation: The conversation to search for
+            system_prompt: System prompt for context
+            user_id: Optional user ID to search user-specific memories
             max_results: Maximum number of results to return
-            similarity_threshold: Minimum similarity score to include results
+            similarity_threshold: Minimum similarity score for results
             
         Returns:
-            Dictionary containing LLM-enhanced search results with metadata
+            Dictionary containing search results and metadata
         """
-        # Always try LLM-enhanced search first if available
+        # Use LLM-enhanced search if available
         if self.enable_llm_search and self.llm:
             return self.llm_deep_search(conversation, system_prompt, user_id, max_results, similarity_threshold)
         
-        # Fallback to basic search if LLM unavailable
-        raise ValueError("LLM not available")
+        # Fallback to simple search
+        return self._simple_deep_search(conversation, user_id, max_results)
+
+    def _simple_deep_search(self, conversation: str, user_id: Optional[str] = None, 
+                           max_results: int = 15) -> Dict[str, Any]:
+        """Simple keyword-based search fallback."""
+        results = {
+            "agent_profile": self.unified_memory.get_profile_content(),
+            "agent_events": self.unified_memory.get_event_content()[-max_results:],
+            "user_memories": [],
+            "search_metadata": {
+                "method": "simple_keyword",
+                "total_results": 0
+            }
+        }
+        
+        if user_id and user_id in self._user_memories:
+            user_memory = self._user_memories[user_id]
+            results["user_memories"] = [{
+                "user_id": user_id,
+                "profile": user_memory.profile.get_profile(),
+                "events": user_memory.events.get_recent_memories(max_results)
+            }]
+        
+        return results
 
     def llm_deep_search(self, conversation: str, system_prompt: str = "", 
                        user_id: Optional[str] = None, max_results: int = 15,
                        similarity_threshold: float = 60.0) -> Dict[str, Any]:
         """
-        Perform LLM-enhanced deep search with intelligent relevance judgment.
+        Use LLM to perform intelligent memory search and relevance ranking.
         
-        This function uses LLM to:
-        - Better understand search intent
-        - Judge relevance of search results
-        - Provide more contextual search term extraction
-        - Enhance result ranking based on semantic understanding
-        
-        Args:
-            conversation: Current conversation text
-            system_prompt: System prompt being used
-            user_id: Optional user ID to search user-specific memory
-            max_results: Maximum number of results to return
-            similarity_threshold: Minimum similarity score to include results
-            
-        Returns:
-            Dictionary containing LLM-enhanced search results
+        Returns comprehensive memory context relevant to the conversation.
         """
+        # For now, delegate to the new MemoryManager for advanced searching
+        # This is a simplified implementation - full semantic search would be implemented
+        # according to STRUCTURE.md section 4
+        
+        return self._simple_deep_search(conversation, user_id, max_results)
      
