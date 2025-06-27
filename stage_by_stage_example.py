@@ -7,6 +7,7 @@ Shows how to use individual pipeline stages for more control.
 
 from personalab.memory import Memory, MemoryUpdatePipeline
 from personalab.llm import create_llm_client
+from personalab.config import config
 
 def stage_by_stage_example():
     """Example using individual pipeline stages"""
@@ -59,9 +60,10 @@ def stage_by_stage_example():
         print(f"Expected error (no LLM client): {e}")
         print()
         print("To run with actual LLM processing:")
-        print("1. Set OPENAI_API_KEY environment variable")
-        print("2. Modify pipeline creation to include LLM client:")
-        print("   llm_client = create_llm_client('openai')")
+        print("1. Copy .env.example to .env: cp .env.example .env")
+        print("2. Edit .env file and add your OPENAI_API_KEY")
+        print("3. Modify pipeline creation to include LLM client:")
+        print("   llm_client = create_llm_client('openai', **config.get_llm_config('openai'))")
         print("   pipeline = MemoryUpdatePipeline(llm_client)")
 
 def show_expected_formats():

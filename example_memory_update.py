@@ -9,6 +9,7 @@ to analyze conversations and update user profiles and events.
 import os
 from personalab.memory import Memory, MemoryUpdatePipeline
 from personalab.llm import create_llm_client
+from personalab.config import config
 
 def example_memory_update():
     """Complete example of memory update process"""
@@ -25,18 +26,23 @@ def example_memory_update():
     print(f"Initial events: {memory.get_event_content()}")
     print()
     
-    # 2. Create LLM client (using environment variables for API key)
+    # 2. Create LLM client (using .env file configuration)
     print("2. Setting up LLM client...")
     try:
-        llm_client = create_llm_client(
-            provider="openai",
-            api_key=os.getenv("OPENAI_API_KEY"),  # Set this in your environment
-            model="gpt-3.5-turbo"
-        )
-        print("✓ LLM client created successfully")
+        if config.validate_llm_config("openai"):
+            llm_client = create_llm_client(
+                provider="openai",
+                **config.get_llm_config("openai")
+            )
+            print("✓ LLM client created successfully")
+        else:
+            raise Exception("OpenAI API key not found in configuration")
     except Exception as e:
         print(f"⚠️  LLM client creation failed: {e}")
         print("💡 You can still see the example structure without actual LLM calls")
+        print("📝 To fix this:")
+        print("   1. Copy .env.example to .env")
+        print("   2. Add your OPENAI_API_KEY to .env file")
         llm_client = None
     print()
     
@@ -44,8 +50,8 @@ def example_memory_update():
     print("3. Creating memory update pipeline...")
     pipeline = MemoryUpdatePipeline(
         llm_client=llm_client,
-        temperature=0.3,
-        max_tokens=1500
+        temperature=config.default_temperature,
+        max_tokens=config.default_max_tokens
     )
     print("✓ Pipeline created")
     print()
@@ -122,8 +128,9 @@ def example_memory_update():
     else:
         print("⚠️  Skipping pipeline execution (no LLM client)")
         print("💡 To run with actual LLM:")
-        print("   export OPENAI_API_KEY='your-api-key'")
-        print("   python example_memory_update.py")
+        print("   1. Copy .env.example to .env: cp .env.example .env")
+        print("   2. Edit .env and add your OPENAI_API_KEY")
+        print("   3. Run: python example_memory_update.py")
 
 def example_manual_stages():
     """Example showing manual execution of individual pipeline stages"""

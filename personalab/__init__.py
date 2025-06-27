@@ -33,6 +33,9 @@ from .memory import (
 from . import llm
 from .llm import BaseLLMClient, OpenAIClient, create_llm_client
 
+# Configuration module
+from .config import config, load_config, setup_env_file
+
 __all__ = [
     # 新Memory架构 - 主要接口
     "Memory",                    # 统一Memory类
@@ -52,5 +55,8 @@ __all__ = [
     "LegacyEventMemory",         # 原有的EventMemory
     
     # LLM system
-    "llm", "BaseLLMClient", "OpenAIClient", "create_llm_client"
+    "llm", "BaseLLMClient", "OpenAIClient", "create_llm_client",
+    
+    # Configuration
+    "config", "load_config", "setup_env_file"
 ] 
