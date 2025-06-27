@@ -1,20 +1,223 @@
 """
-Base memory class for PersonaLab.
+Memory base classes for PersonaLab.
 
-This module defines the abstract base class that all memory implementations inherit from.
+This module implements the new unified Memory architecture as described in STRUCTURE.md:
+- Memory: Unified memory class containing ProfileMemory and EventMemory components
+- ProfileMemory: Component for storing user/agent profile information
+- EventMemory: Component for storing event-based memories
 """
 
+import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict
+from typing import List, Optional, Dict, Any, Union
 
 
+class Memory:
+    """
+    Agent的完整记忆系统，集成画像记忆和事件记忆组件。
+    
+    根据STRUCTURE.md设计，Memory是统一的记忆管理类，内部包含：
+    - ProfileMemory组件：管理画像记忆
+    - EventMemory组件：管理事件记忆
+    """
+    
+    def __init__(self, agent_id: str, memory_id: Optional[str] = None):
+        """
+        初始化Memory对象。
+        
+        Args:
+            agent_id: 关联的Agent ID
+            memory_id: 记忆ID，如果不提供则自动生成
+        """
+        self.memory_id = memory_id or str(uuid.uuid4())
+        self.agent_id = agent_id
+        self.created_at = datetime.now()
+        self.updated_at = datetime.now()
+        
+        # 初始化记忆组件
+        self.profile_memory = ProfileMemory()
+        self.event_memory = EventMemory()
+        
+        # Theory of Mind元数据
+        self.tom_metadata: Optional[Dict[str, Any]] = None
+    
+    def get_profile_content(self) -> str:
+        """获取画像记忆内容"""
+        return self.profile_memory.get_content()
+    
+    def get_event_content(self) -> List[str]:
+        """获取事件记忆内容"""
+        return self.event_memory.get_content()
+    
+    def update_profile(self, new_profile_info: str):
+        """更新画像记忆"""
+        self.profile_memory.update_content(new_profile_info)
+        self.updated_at = datetime.now()
+    
+    def update_events(self, new_events: List[str]):
+        """更新事件记忆"""
+        for event in new_events:
+            self.event_memory.add_event(event)
+        self.updated_at = datetime.now()
+    
+    def to_prompt(self) -> str:
+        """将完整记忆转换为prompt格式"""
+        prompt = ""
+        
+        # 添加画像记忆
+        profile_content = self.profile_memory.get_content()
+        if profile_content:
+            prompt += "## 用户画像\n"
+            prompt += f"{profile_content}\n\n"
+        
+        # 添加事件记忆
+        event_content = self.event_memory.get_content()
+        if event_content:
+            prompt += "## 相关事件\n"
+            for event in event_content:
+                prompt += f"- {event}\n"
+            prompt += "\n"
+        
+        return prompt
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典格式"""
+        return {
+            "memory_id": self.memory_id,
+            "agent_id": self.agent_id,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "profile_memory": {
+                "content": self.profile_memory.get_content(),
+                "content_type": "paragraph"
+            },
+            "event_memory": {
+                "content": self.event_memory.get_content(),
+                "content_type": "list_of_paragraphs"
+            },
+            "tom_metadata": self.tom_metadata
+        }
+
+
+class ProfileMemory:
+    """
+    画像记忆组件。
+    
+    作为Memory类的内部组件，用于存储用户或Agent的画像信息。
+    存储格式：单个paragraph（段落）形式
+    """
+    
+    def __init__(self, content: str = ""):
+        """
+        初始化ProfileMemory。
+        
+        Args:
+            content: 初始画像内容
+        """
+        self.content = content
+    
+    def get_content(self) -> str:
+        """获取画像内容"""
+        return self.content
+    
+    def update_content(self, new_info: str):
+        """
+        更新画像信息，支持信息合并。
+        
+        Args:
+            new_info: 新的画像信息
+        """
+        if not self.content:
+            self.content = new_info
+        else:
+            # 智能合并逻辑，这里可以通过LLM实现更复杂的合并
+            self.content = self._merge_profile_info(self.content, new_info)
+    
+    def _merge_profile_info(self, existing: str, new_info: str) -> str:
+        """
+        合并画像信息的逻辑。
+        
+        Args:
+            existing: 现有画像信息
+            new_info: 新的画像信息
+            
+        Returns:
+            合并后的画像信息
+        """
+        # 简化版本：直接追加，实际实现可以通过LLM进行智能合并
+        return f"{existing} {new_info}".strip()
+    
+    def to_prompt(self) -> str:
+        """转换为prompt格式"""
+        if not self.content:
+            return ""
+        return f"## 用户画像\n{self.content}\n\n"
+
+
+class EventMemory:
+    """
+    事件记忆组件。
+    
+    作为Memory类的内部组件，用于存储具体的事件或对话记录。
+    存储格式：list of paragraphs（段落列表）形式
+    """
+    
+    def __init__(self, events: Optional[List[str]] = None, max_events: int = 50):
+        """
+        初始化EventMemory。
+        
+        Args:
+            events: 初始事件列表
+            max_events: 最大事件数量
+        """
+        self.events = events or []
+        self.max_events = max_events
+    
+    def get_content(self) -> List[str]:
+        """获取事件列表"""
+        return self.events
+    
+    def add_event(self, event_paragraph: str):
+        """
+        添加新事件，自动管理容量。
+        
+        Args:
+            event_paragraph: 事件段落描述
+        """
+        self.events.append(event_paragraph)
+        
+        # 如果超过最大容量，移除最旧的事件
+        if len(self.events) > self.max_events:
+            self.events = self.events[-self.max_events:]
+    
+    def update_recent_events(self, new_events: List[str]):
+        """
+        批量更新最近事件。
+        
+        Args:
+            new_events: 新事件列表
+        """
+        for event in new_events:
+            self.add_event(event)
+    
+    def to_prompt(self) -> str:
+        """转换为prompt格式"""
+        if not self.events:
+            return ""
+        
+        prompt = "## 相关事件\n"
+        for event in self.events:
+            prompt += f"- {event}\n"
+        return prompt + "\n"
+
+
+# 保持向后兼容性的基础抽象类
 class BaseMemory(ABC):
     """
-    Abstract base class for all memory types.
+    保持向后兼容性的抽象基类。
     
-    This class defines the common interface and functionality that all memory types
-    must implement, including timestamps, basic metadata, and abstract methods.
+    注意：新代码应该使用上面的Memory统一类架构。
     """
     
     def __init__(self, agent_id: str, user_id: str = "0"):
@@ -33,7 +236,6 @@ class BaseMemory(ABC):
     def _update_timestamp(self) -> None:
         """Update the last modification timestamp."""
         self.updated_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
     
     @abstractmethod
     def get_size(self) -> int:

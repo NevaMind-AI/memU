@@ -2,21 +2,32 @@
 PersonaLab
 
 A Python framework for creating and managing AI personas and laboratory environments.
+
+新版本基于STRUCTURE.md重构，采用统一的Memory架构。
 """
 
 __version__ = "0.1.0"
 __author__ = "Your Name"
 __email__ = "your.email@example.com"
 
-# Memory system - now using modular structure
+# 新的统一Memory架构
 from .memory import (
-    BaseMemory,               # Base class
-    ProfileMemory,            # Profile storage
-    EventMemory,              # Event storage
-    UserMemory,               # User memory container
-    AgentMemory               # Agent memory container
+    Memory,                    # 统一Memory类
+    MemoryManager,             # Memory管理器
+    ConversationMemoryInterface,  # 对话Memory接口
+    MemoryUpdatePipeline,      # Memory更新Pipeline
+    MemoryRepository,          # 数据库存储层
+    PipelineResult,            # Pipeline结果
+    
+    # Memory组件
+    ProfileMemory,             # 画像记忆组件
+    EventMemory,               # 事件记忆组件
+    
+    # 向后兼容
+    BaseMemory,                # 保持向后兼容的基类
+    LegacyProfileMemory,       # 原有的ProfileMemory
+    LegacyEventMemory,         # 原有的EventMemory
 )
-from .main import Memory      # Main memory manager
 
 # LLM module (optional imports with error handling)
 try:
@@ -31,13 +42,23 @@ except ImportError:
     _llm_available = False
 
 __all__ = [
-    # Memory system - modular structure
-    "Memory",                    # Main memory manager
-    "BaseMemory",               # Base class
-    "ProfileMemory",            # Profile storage
-    "EventMemory",              # Event storage  
-    "UserMemory",               # User memory container
-    "AgentMemory",              # Agent memory container
+    # 新Memory架构 - 主要接口
+    "Memory",                    # 统一Memory类
+    "MemoryManager",             # Memory管理器
+    "ConversationMemoryInterface",  # 对话Memory接口
+    "MemoryUpdatePipeline",      # Memory更新Pipeline
+    "MemoryRepository",          # 数据库存储层
+    "PipelineResult",            # Pipeline结果
+    
+    # Memory组件
+    "ProfileMemory",             # 画像记忆组件
+    "EventMemory",               # 事件记忆组件
+    
+    # 向后兼容
+    "BaseMemory",                # 保持向后兼容的基类
+    "LegacyProfileMemory",       # 原有的ProfileMemory
+    "LegacyEventMemory",         # 原有的EventMemory
+    
     # LLM system (if available)
     "llm", "LLMManager", "BaseLLM", "LLMResponse"
 ]

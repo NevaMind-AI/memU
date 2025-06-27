@@ -2,22 +2,29 @@
 
 ## 1. 核心Memory类设计
 
-### 1.1 Memory抽象类
-Memory是所有记忆类型的基础抽象类，定义了记忆的通用接口和基本属性。
+### 1.1 Memory统一类
+Memory是Agent记忆系统的核心类，内部集成ProfileMemory和EventMemory两个组件，为Agent提供完整的记忆管理功能。
 
 **基本属性：**
 - memory_id: 唯一标识符
+- agent_id: 关联的Agent ID
 - created_at: 创建时间
 - updated_at: 更新时间
 
-**核心方法：**
-- get_content(): 获取记忆内容
-- update_content(): 更新记忆内容
-- to_dict(): 转换为字典格式
-- to_prompt(): 将记忆转换为string prompt格式
+**核心组件：**
+- profile_memory: ProfileMemory实例（画像记忆）
+- event_memory: EventMemory实例（事件记忆）
 
-### 1.2 ProfileMemory（画像记忆）
-继承自Memory抽象类，用于存储用户或Agent的画像信息。
+**核心方法：**
+- get_profile_content(): 获取画像记忆内容
+- get_event_content(): 获取事件记忆内容
+- update_profile(): 更新画像记忆
+- update_events(): 更新事件记忆
+- to_prompt(): 将完整记忆转换为prompt格式
+- to_dict(): 转换为字典格式
+
+### 1.2 ProfileMemory（画像记忆组件）
+作为Memory类的内部组件，用于存储用户或Agent的画像信息。
 
 **存储格式：** 单个paragraph（段落）形式
 
@@ -25,6 +32,7 @@ Memory是所有记忆类型的基础抽象类，定义了记忆的通用接口�
 - 内容结构化为一个连贯的段落
 - 描述用户的基本信息、偏好、特征等
 - 相对稳定，更新频率较低
+- 支持增量更新和信息合并
 
 **典型内容示例：**
 ```
@@ -32,15 +40,13 @@ Memory是所有记忆类型的基础抽象类，定义了记忆的通用接口�
 平时比较内向，但对科技和编程很感兴趣。住在北京，正在学习计算机科学专业。
 ```
 
-**to_prompt()输出格式：**
-```
-## 用户画像
-用户是一名18岁的男性学生，喜欢玩游戏，特别是RPG类型的游戏。
-平时比较内向，但对科技和编程很感兴趣。住在北京，正在学习计算机科学专业。
-```
+**核心方法：**
+- get_content(): 获取画像内容
+- update_content(new_info): 更新画像信息
+- to_prompt(): 转换为prompt格式
 
-### 1.3 EventMemory（事件记忆）
-继承自Memory抽象类，用于存储具体的事件或对话记录。
+### 1.3 EventMemory（事件记忆组件）
+作为Memory类的内部组件，用于存储具体的事件或对话记录。
 
 **存储格式：** list of paragraphs（段落列表）形式
 
@@ -49,6 +55,7 @@ Memory是所有记忆类型的基础抽象类，定义了记忆的通用接口�
 - 每个段落描述事件的一个方面或时间点
 - 动态变化，可以添加新的段落
 - 支持时间序列的事件记录
+- 自动管理事件容量（如保留最近N个事件）
 
 **典型内容示例：**
 ```
@@ -61,23 +68,67 @@ Memory是所有记忆类型的基础抽象类，定义了记忆的通用接口�
 ]
 ```
 
-**to_prompt()输出格式：**
+**核心方法：**
+- get_content(): 获取事件列表
+- add_event(event_paragraph): 添加新事件
+- update_recent_events(events): 更新最近事件
+- to_prompt(): 转换为prompt格式
+
+### 1.4 Memory类接口设计
+
+**Memory统一类接口：**
+- `__init__(agent_id, memory_id)`: 初始化Memory对象
+- `get_profile_content()`: 获取画像记忆内容
+- `get_event_content()`: 获取事件记忆内容
+- `update_profile(new_info)`: 更新画像记忆
+- `update_events(new_events)`: 更新事件记忆
+- `to_prompt()`: 转换为完整prompt格式
+- `to_dict()`: 转换为字典格式
+
+**ProfileMemory组件接口：**
+- `get_content()`: 获取画像内容
+- `update_content(new_info)`: 更新画像信息（支持智能合并）
+- `to_prompt()`: 转换为prompt格式
+
+**EventMemory组件接口：**
+- `get_content()`: 获取事件列表
+- `add_event(event)`: 添加新事件
+- `update_recent_events(events)`: 批量更新事件
+- `to_prompt()`: 转换为prompt格式
+- 自动容量管理（保留最近N个事件）
+
+### 1.5 新的类关系图
 ```
-## 相关事件
-- 昨天用户去了迪士尼乐园游玩。
-- 上午10点进入园区，首先体验了太空山项目。
-- 中午在城堡餐厅用餐，点了米奇造型的汉堡。
-- 下午观看了花车巡游，拍了很多照片。
-- 晚上8点观看了烟花表演后离开。
+Memory (统一记忆类)
+├── profile_memory: ProfileMemory
+│   └── content: paragraph (string)
+├── event_memory: EventMemory
+│   └── events: list of paragraphs (list[string])
+└── 统一接口方法
+    ├── get_profile_content()
+    ├── get_event_content()
+    ├── update_profile()
+    ├── update_events()
+    └── to_prompt()
 ```
 
-### 1.4 类关系图
+### 1.6 使用示例
+
+**基本使用流程：**
+1. 创建Memory实例：`memory = Memory(agent_id="agent_123")`
+2. 更新画像记忆：`memory.update_profile("用户基本信息")`
+3. 更新事件记忆：`memory.update_events(["事件1", "事件2"])`
+4. 获取prompt上下文：`context = memory.to_prompt()`
+
+**输出格式示例：**
 ```
-Memory (抽象类)
-├── ProfileMemory
-│   └── content: paragraph (string)
-└── EventMemory
-    └── content: list of paragraphs (list[string])
+## 用户画像
+用户是18岁男学生，喜欢游戏和编程
+
+## 相关事件
+- 用户今天询问了Python编程问题
+- 用户表示想要学习游戏开发
+- 用户分享了自己的项目想法
 ```
 
 ## 2. Memory更新Pipeline
@@ -141,7 +192,7 @@ Input → Modification → Update → Theory of Mind → Database Storage
 **Memory.update_with_pipeline(previous_memory, session_conversation)**
 ```
 参数：
-- previous_memory: 之前的Memory对象（ProfileMemory或EventMemory）
+- previous_memory: 之前的Memory对象（包含ProfileMemory和EventMemory组件）
 - session_conversation: 当前会话的对话内容
 
 返回：
@@ -150,51 +201,48 @@ Input → Modification → Update → Theory of Mind → Database Storage
 
 处理流程：
 1. modification_result = self.modification_stage(session_conversation)
-2. update_result = self.update_stage(previous_memory, modification_result)  
-3. tom_result = self.theory_of_mind_stage(update_result)
-4. new_memory = self.create_new_memory(tom_result)
-5. self.save_conversation_to_database(session_conversation)
-6. self.save_memory_to_database(new_memory)
-7. return new_memory, pipeline_result
+2. profile_update_result = self.update_profile_stage(previous_memory.profile_memory, modification_result)
+3. event_update_result = self.update_event_stage(previous_memory.event_memory, modification_result)  
+4. tom_result = self.theory_of_mind_stage(profile_update_result, event_update_result)
+5. new_memory = self.create_updated_memory(previous_memory, tom_result)
+6. self.save_conversation_to_database(session_conversation)
+7. self.save_memory_to_database(new_memory)
+8. return new_memory, pipeline_result
 ```
 
-**示例调用：**
-```
-# ProfileMemory更新示例
-previous_profile = ProfileMemory("用户是18岁男学生，喜欢游戏")
-conversation = [
-    {"role": "user", "content": "我最近开始学习Python编程"},
-    {"role": "assistant", "content": "很好！Python是很适合初学者的语言"},
-    {"role": "user", "content": "我想做一个游戏项目"}
-]
+**更新策略概要：**
+1. **Modification阶段**：预处理对话内容，提取画像相关信息和事件信息
+2. **Profile Update阶段**：判断是否包含用户新信息，如有则更新画像记忆
+3. **Event Update阶段**：将对话转换为事件段落，添加到事件记忆
+4. **Theory of Mind阶段**：对更新后的记忆进行深度分析和推理
+5. **保存阶段**：保存更新后的Memory对象和会话记录
 
-new_profile, result = previous_profile.update_with_pipeline(previous_profile, conversation)
-# new_profile.content: "用户是18岁男学生，喜欢游戏，最近开始学习Python编程，想做游戏项目"
-```
+**更新示例：**
+- **输入**：已有Memory + 新的对话内容
+- **处理**：通过Pipeline分析和更新画像、事件记忆
+- **输出**：更新后的Memory对象 + Pipeline执行结果
 
 ## 3. 数据库存储设计
 
 ### 3.1 存储架构
-Memory对象持久化存储在数据库中，支持高效的查询和更新操作。
+Memory对象持久化存储在数据库中，采用统一的Memory表设计，支持高效的查询和更新操作。
 
 ```
 数据库层
-├── Memory基础表 (memories)
-├── ProfileMemory扩展表 (profile_memories)  
-├── EventMemory扩展表 (event_memories)
-├── Memory关系表 (memory_relationships)
+├── Memory统一表 (memories) - 存储完整的Memory对象
+├── Memory内容表 (memory_contents) - 存储画像和事件内容
 ├── Conversation表 (conversations)
 ├── Conversation消息表 (conversation_messages)
-└── Pipeline执行日志表 (pipeline_logs)
+├── Pipeline执行日志表 (pipeline_logs)
+└── Embedding向量表 (embedding_vectors) - 用于语义搜索
 ```
 
 ### 3.2 核心数据表设计
 
-#### 3.2.1 memories（基础表）
+#### 3.2.1 memories（统一Memory表）
 ```sql
 CREATE TABLE memories (
     memory_id UUID PRIMARY KEY,
-    memory_type VARCHAR(50) NOT NULL, -- 'profile' or 'event'
     agent_id UUID NOT NULL,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
@@ -204,32 +252,70 @@ CREATE TABLE memories (
     tom_metadata JSONB,
     confidence_score FLOAT,
     
+    -- 记忆统计信息
+    profile_content_hash VARCHAR(64), -- 画像内容哈希，用于变化检测
+    event_count INTEGER DEFAULT 0, -- 事件数量
+    last_event_date TIMESTAMP, -- 最后事件时间
+    
     -- 索引和关联
     CONSTRAINT fk_agent FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
 );
+
+-- 为常用查询创建索引
+CREATE INDEX idx_memories_agent_id ON memories(agent_id);
+CREATE INDEX idx_memories_updated_at ON memories(updated_at);
 ```
 
-#### 3.2.2 profile_memories（画像记忆表）
+#### 3.2.2 memory_contents（Memory内容表）
 ```sql
-CREATE TABLE profile_memories (
-    memory_id UUID PRIMARY KEY,
-    profile_content TEXT NOT NULL,
-    content_hash VARCHAR(64), -- 用于去重
+CREATE TABLE memory_contents (
+    content_id UUID PRIMARY KEY,
+    memory_id UUID NOT NULL,
+    content_type VARCHAR(20) NOT NULL, -- 'profile' or 'event'
     
-    CONSTRAINT fk_memory FOREIGN KEY (memory_id) REFERENCES memories(memory_id)
+    -- 内容数据
+    content_data JSONB NOT NULL, -- 统一存储各种内容格式
+    content_text TEXT, -- 用于全文搜索的文本内容
+    content_hash VARCHAR(64), -- 内容哈希
+    
+    -- 元数据
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL,
+    
+    CONSTRAINT fk_memory FOREIGN KEY (memory_id) REFERENCES memories(memory_id),
+    CONSTRAINT chk_content_type CHECK (content_type IN ('profile', 'event'))
 );
+
+-- 创建复合索引
+CREATE INDEX idx_memory_contents_memory_type ON memory_contents(memory_id, content_type);
+CREATE INDEX idx_memory_contents_hash ON memory_contents(content_hash);
+
+-- 全文搜索索引
+CREATE INDEX idx_memory_contents_text ON memory_contents USING gin(to_tsvector('english', content_text));
 ```
 
-#### 3.2.3 event_memories（事件记忆表）
-```sql
-CREATE TABLE event_memories (
-    memory_id UUID PRIMARY KEY,
-    event_paragraphs JSONB NOT NULL, -- 存储段落数组
-    paragraph_count INTEGER NOT NULL,
-    event_date TIMESTAMP,
-    
-    CONSTRAINT fk_memory FOREIGN KEY (memory_id) REFERENCES memories(memory_id)
-);
+**Memory内容存储格式：**
+```json
+-- ProfileMemory内容格式
+{
+    "content_type": "profile",
+    "content_data": {
+        "paragraph": "用户是18岁男学生，喜欢游戏和编程，最近开始学习Python"
+    }
+}
+
+-- EventMemory内容格式  
+{
+    "content_type": "event", 
+    "content_data": {
+        "events": [
+            "用户今天询问了Python编程问题",
+            "用户表示想要学习游戏开发",
+            "用户分享了自己的项目想法"
+        ],
+        "max_events": 50
+    }
+}
 ```
 
 #### 3.2.4 conversations（会话表）
@@ -290,11 +376,26 @@ CREATE TABLE pipeline_logs (
 
 ### 3.3 数据库操作接口
 
-**基础CRUD操作：**
-- `save_memory(memory)`: 保存Memory对象到数据库
-- `load_memory(memory_id)`: 从数据库加载Memory对象
-- `update_memory(memory_id, updates)`: 更新特定Memory
+**基础Memory操作：**
+- `save_memory(memory)`: 保存完整Memory对象到数据库
+- `load_memory(memory_id)`: 从数据库加载完整Memory对象
+- `load_memory_by_agent(agent_id)`: 根据Agent ID加载Memory
+- `update_memory_profile(memory_id, profile_content)`: 更新画像记忆
+- `update_memory_events(memory_id, events)`: 更新事件记忆
 - `delete_memory(memory_id)`: 删除Memory对象
+
+**Memory内容操作：**
+- `save_memory_content(memory_id, content_type, content_data)`: 保存记忆内容
+- `load_memory_contents(memory_id)`: 加载所有记忆内容
+- `load_profile_content(memory_id)`: 加载画像记忆内容
+- `load_event_content(memory_id)`: 加载事件记忆内容
+
+**MemoryRepository核心操作：**
+- `save_memory(memory)`: 保存Memory对象到数据库（基础信息+内容数据）
+- `load_memory(memory_id)`: 加载完整Memory对象（重构Profile和Event组件）
+- `load_memory_by_agent(agent_id)`: 根据Agent加载其Memory
+- 支持UPSERT操作，自动处理新增和更新
+- 自动计算内容哈希用于变化检测
 
 **Conversation相关操作：**
 - `save_conversation(conversation)`: 保存完整会话到数据库
@@ -315,16 +416,32 @@ CREATE TABLE pipeline_logs (
    ↓
 2. 会话结束，conversation保存到数据库
    ↓
-3. 加载previous_memory
+3. 根据agent_id加载previous_memory（包含profile和event组件）
    ↓
 4. 调用update_with_pipeline(previous_memory, session_conversation)
    ↓
-5. Pipeline执行：modification → update → theory_of_mind
+5. Pipeline执行：
+   - modification → 预处理对话内容
+   - profile_update → 更新画像记忆组件
+   - event_update → 更新事件记忆组件
+   - theory_of_mind → 深度分析和推理
    ↓
-6. 生成new_memory并保存到数据库
+6. 生成updated_memory并保存到数据库
+   - 保存到memories表（基础信息）
+   - 保存到memory_contents表（画像和事件内容）
    ↓
-7. 记录pipeline_logs关联memory和conversation
+7. 生成embedding向量用于搜索
+   ↓
+8. 记录pipeline_logs关联memory和conversation
 ```
+
+**实际使用流程：**
+1. **加载或创建Memory**：根据agent_id加载现有Memory或创建新Memory
+2. **接收对话**：获取用户与AI的对话内容
+3. **Pipeline更新**：通过更新Pipeline处理对话并更新Memory
+4. **保存数据**：将更新后的Memory保存到数据库
+5. **更新索引**：生成embedding向量用于语义搜索
+6. **结果验证**：检查更新后的画像记忆和事件记忆内容
 
 ## 4. Memory语义搜索系统
 
@@ -405,95 +522,23 @@ CREATE INDEX idx_search_topics ON search_indexes USING GIN (topics);
 
 ### 4.3 搜索功能实现
 
-#### 4.3.1 MemorySearcher类
-```python
-class MemorySearcher:
-    """Memory语义搜索引擎"""
-    
-    def __init__(self, agent_id: str, embedding_client: EmbeddingClient):
-        self.agent_id = agent_id
-        self.embedding_client = embedding_client
-        self.vector_db = VectorDatabase()
-        
-    def search_conversations(
-        self, 
-        query: str, 
-        limit: int = 10,
-        time_range: Optional[TimeRange] = None,
-        similarity_threshold: float = 0.7
-    ) -> List[ConversationSearchResult]:
-        """
-        搜索相关的对话记录
-        
-        Args:
-            query: 搜索查询（自然语言）
-            limit: 返回结果数量限制
-            time_range: 时间范围筛选
-            similarity_threshold: 相似度阈值
-            
-        Returns:
-            按相关性排序的对话搜索结果列表
-        """
-        
-    def search_memories(
-        self,
-        query: str,
-        memory_types: List[str] = ['profile', 'event'],
-        limit: int = 5
-    ) -> List[MemorySearchResult]:
-        """
-        搜索相关的记忆内容
-        
-        Args:
-            query: 搜索查询
-            memory_types: 记忆类型过滤
-            limit: 结果数量限制
-            
-        Returns:
-            相关记忆搜索结果列表
-        """
-        
-    def hybrid_search(
-        self,
-        query: str,
-        include_conversations: bool = True,
-        include_memories: bool = True,
-        time_weight: float = 0.1,
-        semantic_weight: float = 0.7,
-        keyword_weight: float = 0.2
-    ) -> HybridSearchResult:
-        """
-        混合搜索：结合语义搜索、关键词搜索和时间权重
-        """
-```
+#### 4.3.1 MemorySearcher类接口
+**核心搜索方法：**
+- `search_conversations(query, limit, time_range, similarity_threshold)`: 搜索相关对话记录
+- `search_memories(query, memory_types, limit)`: 搜索相关记忆内容  
+- `hybrid_search(query, weights)`: 混合搜索（语义+关键词+时间权重）
 
-#### 4.3.2 搜索算法详解
+**搜索参数：**
+- **query**: 自然语言搜索查询
+- **limit**: 返回结果数量限制
+- **time_range**: 时间范围筛选
+- **similarity_threshold**: 相似度阈值
+- **memory_types**: 记忆类型过滤（profile/event）
 
-**1. 语义相似度计算：**
-```python
-def calculate_semantic_similarity(query_embedding, content_embedding):
-    """使用余弦相似度计算语义相似度"""
-    return cosine_similarity(query_embedding, content_embedding)
-```
+#### 4.3.2 搜索算法概要
 
-**2. 综合评分算法：**
-```python
-def calculate_relevance_score(
-    semantic_score: float,
-    keyword_score: float, 
-    time_score: float,
-    importance_score: float,
-    weights: Dict[str, float]
-) -> float:
-    """
-    综合相关性评分
-    
-    final_score = (
-        semantic_score * weights['semantic'] +
-        keyword_score * weights['keyword'] +
-        time_score * weights['time'] +
-        importance_score * weights['importance']
-    )
-    """
-    return final_score
-```
+**核心算法组件：**
+1. **语义相似度计算**：使用余弦相似度计算查询与内容的语义相关性
+2. **综合评分算法**：结合语义、关键词、时间、重要性等多维度评分
+3. **时间衰减函数**：近期内容获得更高权重，使用指数衰减函数
+4. **结果排序优化**：基于综合评分排序并进行结果去重和多样性优化
