@@ -39,9 +39,21 @@ def simple_example():
         new_memory, result = pipeline.update_with_pipeline(memory, conversation)
         
         print("Memory updated successfully!")
-        print(f"New profile: {new_memory.get_profile_content()}")
-        print(f"Events: {new_memory.get_event_content()}")
-        print(f"ToM insights: {result.tom_result.insights}")
+        print()
+        
+        print("=== PIPELINE RESULTS ===")
+        print(f"📋 Stage 1 (Modification): {result.modification_result}")
+        print()
+        print(f"📝 Stage 2 (Update):")
+        print(f"  - Profile Updated: {result.update_result.profile_updated}")
+        print(f"  - New Profile: {new_memory.get_profile_content()}")
+        print(f"  - New Events: {new_memory.get_event_content()}")
+        print()
+        print(f"🧠 Stage 3 (Theory of Mind):")
+        print(f"  - Insights: {result.tom_result.insights}")
+        print(f"  - Confidence: {result.tom_result.confidence_score}")
+        print()
+        print(f"🔧 Pipeline Metadata: {result.pipeline_metadata}")
         
     except Exception as e:
         print(f"Update failed: {e}")
