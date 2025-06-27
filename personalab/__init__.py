@@ -29,17 +29,9 @@ from .memory import (
     LegacyEventMemory,         # 原有的EventMemory
 )
 
-# LLM module (optional imports with error handling)
-try:
-    from . import llm
-    from .llm import LLMManager, BaseLLM, LLMResponse
-    _llm_available = True
-except ImportError:
-    llm = None
-    LLMManager = None
-    BaseLLM = None
-    LLMResponse = None
-    _llm_available = False
+# LLM module
+from . import llm
+from .llm import BaseLLMClient, OpenAIClient, create_llm_client
 
 __all__ = [
     # 新Memory架构 - 主要接口
@@ -59,10 +51,6 @@ __all__ = [
     "LegacyProfileMemory",       # 原有的ProfileMemory
     "LegacyEventMemory",         # 原有的EventMemory
     
-    # LLM system (if available)
-    "llm", "LLMManager", "BaseLLM", "LLMResponse"
-]
-
-# Remove None values from __all__ if LLM not available
-if not _llm_available:
-    __all__ = [item for item in __all__ if not item.startswith(('llm', 'LLM', 'BaseLLM'))] 
+    # LLM system
+    "llm", "BaseLLMClient", "OpenAIClient", "create_llm_client"
+] 

@@ -37,22 +37,19 @@ print(memory.to_prompt())
 
 ### 自定义LLM配置
 ```python
-from personalab.memory import MemoryManager, create_llm_client
+from personalab.llm import create_llm_client
+from personalab.memory import MemoryManager
 
 # 使用OpenAI
 llm_client = create_llm_client("openai", api_key="your-key")
 manager = MemoryManager(
     llm_client=llm_client,
-    use_llm_pipeline=True,
     temperature=0.3,
     max_tokens=2000
 )
 
-# 使用Mock（测试用）
-manager = MemoryManager(
-    use_llm_pipeline=True,  # 使用LLM驱动
-    temperature=0.3
-)
+# 基础功能（无需API）
+manager = MemoryManager()  # 自动使用fallback功能
 ```
 
 ### 创建Memory管理器
@@ -82,7 +79,7 @@ manager = MemoryManager()  # 默认LLM驱动
 
 ### OpenAI
 ```python
-from personalab.memory import create_llm_client
+from personalab.llm import create_llm_client
 
 client = create_llm_client("openai", 
     api_key="your-openai-key",
@@ -90,14 +87,15 @@ client = create_llm_client("openai",
 )
 ```
 
-### Mock LLM（测试用）
+### 基础功能（无需API）
 ```python
-client = create_llm_client("mock")  # 无需配置
+# 直接使用MemoryManager，自动fallback到基础功能
+manager = MemoryManager()  # 无需LLM配置
 ```
 
 ### 扩展其他LLM
 ```python
-from personalab.memory.llm_client import BaseLLMClient
+from personalab.llm import BaseLLMClient
 
 class CustomLLMClient(BaseLLMClient):
     def chat_completion(self, messages, **kwargs):
@@ -139,10 +137,10 @@ manager = MemoryManager()  # 简单明了
 
 ## 🎯 最佳实践
 
-1. **生产环境**: 使用OpenAI或其他真实LLM
-2. **开发测试**: 使用Mock LLM
+1. **生产环境**: 使用OpenAI或其他真实LLM，获得最佳智能分析
+2. **开发测试**: 使用基础功能，无需API密钥即可测试
 3. **参数调节**: temperature=0.3 保证稳定性
-4. **错误处理**: LLM失败时自动降级到备用方案
+4. **错误处理**: LLM失败时自动降级到基础方案
 
 ---
 

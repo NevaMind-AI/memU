@@ -23,7 +23,7 @@ def process_conversation(conversation, agent_id="default_agent"):
         dict: 包含处理结果的字典
     """
     
-    # 1. 创建Memory管理器（使用LLM驱动）
+    # 1. 创建Memory管理器
     memory_manager = MemoryManager(
         db_path=f"{agent_id}_memory.db"
     )
@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
 # 更简洁的使用方式
 def quick_process(conversation, agent_id="quick_agent"):
-    """最简洁的处理方式 - 一行代码搞定（使用LLM）"""
+    """最简洁的处理方式 - 一行代码搞定"""
     memory_manager = MemoryManager(
         db_path=f"{agent_id}.db"
     )

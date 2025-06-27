@@ -17,7 +17,7 @@ PersonaLab Memory Module
 from .base import Memory, ProfileMemory, EventMemory
 from .manager import MemoryManager, ConversationMemoryInterface
 from .pipeline import MemoryUpdatePipeline, PipelineResult, ModificationResult, UpdateResult, ToMResult
-from .llm_client import BaseLLMClient, OpenAIClient, MockLLMClient, create_llm_client
+from ..llm import BaseLLMClient, OpenAIClient, create_llm_client
 from .storage import MemoryRepository
 
 # 向后兼容的原有类
@@ -37,10 +37,9 @@ __all__ = [
     'UpdateResult', 
     'ToMResult',
     
-    # LLM接口
+        # LLM接口
     'BaseLLMClient',
-    'OpenAIClient', 
-    'MockLLMClient',
+    'OpenAIClient',
     'create_llm_client',
     
     # Memory组件

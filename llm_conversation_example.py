@@ -1,47 +1,63 @@
 """
-🚀 LLM驱动的PersonaLab Conversation示例
+PersonaLab LLM驱动的Memory更新示例
 
-演示如何使用完全基于LLM的Memory更新系统，不使用任何规则性逻辑
+展示如何使用LLM客户端进行智能的Memory分析和更新
 """
 
 from personalab.memory import (
     MemoryManager, 
     create_llm_client,
-    OpenAIClient,
-    MockLLMClient
+    OpenAIClient
 )
 
-def create_llm_memory_manager(client_type="mock", **llm_config):
+def create_basic_memory_manager(**llm_config):
     """
-    创建使用LLM的MemoryManager
+    创建基础Memory管理器（不依赖外部LLM API）
     
     Args:
-        client_type: LLM客户端类型 ("mock", "openai")
         **llm_config: LLM配置参数
     """
-    # 创建LLM客户端
-    llm_client = create_llm_client(client_type, **llm_config)
-    
-    # 创建使用LLM的MemoryManager
+    # 创建不依赖外部API的Memory管理器
     memory_manager = MemoryManager(
-        db_path=f"llm_{client_type}_memory.db",
+        db_path="basic_memory.db",
+        llm_client=None,  # 使用基础fallback功能
+        **llm_config
+    )
+    
+    return memory_manager
+
+def create_openai_memory_manager(api_key, **llm_config):
+    """
+    创建OpenAI驱动的Memory管理器
+    
+    Args:
+        api_key: OpenAI API密钥
+        **llm_config: LLM配置参数
+    """
+    # 创建OpenAI客户端
+    llm_client = create_llm_client("openai", api_key=api_key)
+    
+    # 创建使用OpenAI的MemoryManager
+    memory_manager = MemoryManager(
+        db_path="openai_memory.db",
         llm_client=llm_client,
-        temperature=0.3,        # LLM参数
-        max_tokens=2000
+        temperature=0.3,
+        max_tokens=2000,
+        **llm_config
     )
     
     return memory_manager
 
 
-def llm_conversation_example():
-    """LLM驱动的conversation处理示例"""
-    print("🤖 LLM驱动的Memory更新示例")
+def basic_conversation_example():
+    """基础conversation处理示例（使用fallback功能）"""
+    print("🤖 基础Memory更新示例")
     print("=" * 60)
     
-    # 创建LLM驱动的Memory管理器
-    memory_manager = create_llm_memory_manager("mock")
+    # 创建基础Memory管理器
+    memory_manager = create_basic_memory_manager()
     
-    agent_id = "llm_agent_001"
+    agent_id = "basic_agent_001"
     
     # 示例conversation
     conversation = [
@@ -77,44 +93,43 @@ def llm_conversation_example():
         role_emoji = "👤" if msg['role'] == 'user' else "🤖"
         print(f"{i}. {role_emoji} {msg['role']}: {msg['content'][:50]}...")
     
-    print(f"\n🔄 使用LLM Pipeline处理conversation...")
+    print(f"\n🔄 使用基础Pipeline处理conversation...")
     
-    # 使用LLM pipeline处理conversation
-    updated_memory, llm_result = memory_manager.update_memory_with_conversation(
+    # 使用基础pipeline处理conversation
+    updated_memory, result = memory_manager.update_memory_with_conversation(
         agent_id, conversation
     )
     
-    print(f"\n✅ LLM处理完成！")
+    print(f"\n✅ 基础处理完成！")
     print("-" * 40)
     
-    # 显示LLM pipeline结果
-    print(f"📊 LLM Pipeline结果:")
-    print(f"- 使用模型: {llm_result.pipeline_metadata.get('llm_model', 'unknown')}")
-    print(f"- 画像更新: {llm_result.update_result.profile_updated}")
-    print(f"- 事件添加: {llm_result.update_result.events_added}")
-    print(f"- 分析置信度: {llm_result.modification_result.analysis_confidence:.2f}")
-    print(f"- ToM置信度: {llm_result.tom_result.confidence_score:.2f}")
+    # 显示pipeline结果
+    print(f"📊 Pipeline结果:")
+    print(f"- 画像更新: {result.update_result.profile_updated}")
+    print(f"- 事件添加: {result.update_result.events_added}")
+    print(f"- 分析置信度: {result.modification_result.analysis_confidence:.2f}")
+    print(f"- ToM置信度: {result.tom_result.confidence_score:.2f}")
     
-    # 显示LLM提取的信息
-    print(f"\n🧠 LLM提取的画像更新:")
+    # 显示提取的信息
+    print(f"\n🧠 提取的画像更新:")
     print("-" * 30)
-    for i, update in enumerate(llm_result.modification_result.profile_updates, 1):
+    for i, update in enumerate(result.modification_result.profile_updates, 1):
         print(f"{i}. {update}")
     
-    print(f"\n📝 LLM提取的事件:")
+    print(f"\n📝 提取的事件:")
     print("-" * 30)
-    for i, event in enumerate(llm_result.modification_result.events, 1):
+    for i, event in enumerate(result.modification_result.events, 1):
         print(f"{i}. {event}")
     
-    # 显示LLM更新后的画像
-    print(f"\n👤 LLM更新后的用户画像:")
+    # 显示更新后的画像
+    print(f"\n👤 更新后的用户画像:")
     print("-" * 40)
     print(updated_memory.get_profile_content())
     
-    # 显示LLM的Theory of Mind分析
-    print(f"\n🧠 LLM Theory of Mind分析:")
+    # 显示Theory of Mind分析
+    print(f"\n🧠 Theory of Mind分析:")
     print("-" * 40)
-    tom_insights = llm_result.tom_result.insights
+    tom_insights = result.tom_result.insights
     
     if 'intent_analysis' in tom_insights:
         intent = tom_insights['intent_analysis']
@@ -135,70 +150,11 @@ def llm_conversation_example():
         print(f"📚 学习风格: {cognitive.get('learning_style', 'unknown')}")
     
     # 显示完整的Memory prompt
-    print(f"\n📋 完整Memory Prompt (LLM生成):")
+    print(f"\n📋 完整Memory Prompt:")
     print("=" * 60)
     memory_prompt = updated_memory.to_prompt()
     print(memory_prompt)
     print("=" * 60)
-    
-    # 显示原始LLM响应
-    print(f"\n🔍 LLM原始响应 (调试用):")
-    print("-" * 40)
-    print("分析阶段响应:")
-    print(llm_result.modification_result.raw_llm_response[:200] + "...")
-    print("\n更新阶段响应:")
-    print(llm_result.update_result.updated_profile_content[:200] + "...")
-    print("\nToM分析响应:")
-    print(llm_result.tom_result.raw_llm_response[:200] + "...")
-
-
-def compare_pipelines_example():
-    """对比LLM pipeline和规则pipeline的示例"""
-    print("\n" + "=" * 60)
-    print("🔄 LLM Pipeline vs 规则Pipeline对比")
-    print("=" * 60)
-    
-    # 同一个conversation
-    conversation = [
-        {'role': 'user', 'content': '我是王小明，喜欢编程和音乐'},
-        {'role': 'assistant', 'content': '编程和音乐都是很有创意的爱好！'},
-        {'role': 'user', 'content': '是的，我用Python写代码，业余时间弹吉他'},
-        {'role': 'assistant', 'content': 'Python很棒！你弹吉他多久了？'}
-    ]
-    
-    # 1. LLM Pipeline
-    print("🤖 LLM Pipeline处理结果:")
-    print("-" * 30)
-    
-    llm_manager = create_llm_memory_manager("mock")
-    llm_memory, llm_result = llm_manager.update_memory_with_conversation(
-        "compare_llm", conversation
-    )
-    
-    print(f"画像: {llm_memory.get_profile_content()}")
-    print(f"事件数: {len(llm_memory.get_event_content())}")
-    print(f"ToM洞察: {list(llm_result.tom_result.insights.keys())}")
-    
-    # 2. 规则Pipeline
-    print(f"\n📏 规则Pipeline处理结果:")
-    print("-" * 30)
-    
-    # 注意：现在已经没有规则pipeline了，只有LLM pipeline
-    # 这里只是为了演示对比，实际上都是LLM驱动
-    rule_manager = MemoryManager(
-        db_path="rule_memory.db"
-    )
-    rule_memory, rule_result = rule_manager.update_memory_with_conversation(
-        "compare_rule", conversation
-    )
-    
-    print(f"画像: {rule_memory.get_profile_content()}")
-    print(f"事件数: {len(rule_memory.get_event_content())}")
-    print(f"ToM洞察: {list(rule_result.tom_result.insights.keys())}")
-    
-    print(f"\n💡 对比总结:")
-    print(f"- 现在PersonaLab统一使用LLM Pipeline")
-    print(f"- 所有Memory更新都是智能、自然的")
 
 
 def openai_example():
@@ -212,13 +168,15 @@ def openai_example():
     
     if api_key == "your-openai-api-key-here":
         print("⚠️  请设置真实的OpenAI API Key才能运行此示例")
+        print("💡 使用方法:")
+        print("   api_key = 'sk-...'")
+        print("   manager = create_openai_memory_manager(api_key)")
         return
     
     try:
         # 创建OpenAI驱动的Memory管理器
-        openai_manager = MemoryManager(
-            db_path="openai_memory.db",
-            llm_client=create_llm_client("openai", api_key=api_key),
+        openai_manager = create_openai_memory_manager(
+            api_key=api_key,
             temperature=0.3,
             max_tokens=1500
         )
@@ -237,44 +195,45 @@ def openai_example():
         
     except Exception as e:
         print(f"❌ OpenAI API调用失败: {e}")
+        print("💡 请检查API Key是否正确")
 
 
-def simple_llm_usage():
-    """最简单的LLM使用方式"""
+def simple_usage_example():
+    """最简单的使用示例"""
     print("\n" + "=" * 60)
-    print("⚡ 最简单的LLM使用方式")
+    print("⚡ 最简单的使用示例")
     print("=" * 60)
     
-    # 一行代码创建Memory管理器（默认LLM驱动）
+    # 一行代码创建Memory管理器
     manager = MemoryManager()
     
     # 你的conversation
     conversation = [
-        {'role': 'user', 'content': '我叫张三，是个程序员'},
-        {'role': 'assistant', 'content': '你好张三！'},
+        {'role': 'user', 'content': '我是小明，喜欢游戏开发'},
+        {'role': 'assistant', 'content': '游戏开发很有趣！'},
+        {'role': 'user', 'content': '主要用Unity做手游'},
+        {'role': 'assistant', 'content': 'Unity是很棒的引擎'}
     ]
     
-    # 一行代码处理
-    memory, _ = manager.update_memory_with_conversation("simple", conversation)
+    # 处理conversation并获取Memory prompt
+    memory, _ = manager.update_memory_with_conversation("simple_user", conversation)
     
-    # 获取结果
-    prompt = memory.to_prompt()
     print("🎯 结果:")
-    print(prompt)
+    print(memory.to_prompt())
 
 
 if __name__ == "__main__":
-    # 运行主要示例
-    llm_conversation_example()
+    # 运行基础示例
+    basic_conversation_example()
     
-    # 运行对比示例
-    compare_pipelines_example()
+    # 运行OpenAI示例（需要API Key）
+    openai_example()
     
-    # 运行简单使用示例
-    simple_llm_usage()
+    # 运行简单示例
+    simple_usage_example()
     
-    # OpenAI示例（需要API Key）
-    # openai_example()
-    
-    print(f"\n🎉 LLM驱动的Memory更新示例完成！")
-    print(f"💡 现在PersonaLab完全使用LLM来进行Memory分析和更新，不再依赖规则性逻辑！") 
+    print(f"\n🎉 示例完成！")
+    print(f"💡 PersonaLab支持多种使用方式：")
+    print(f"   - 基础功能：无需API密钥即可使用")
+    print(f"   - OpenAI集成：提供API密钥获得更智能的分析")
+    print(f"   - 简洁API：一行代码即可开始使用") 

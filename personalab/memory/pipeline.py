@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Tuple, Optional
 from dataclasses import dataclass
 
 from .base import Memory, ProfileMemory, EventMemory
-from .llm_client import BaseLLMClient, create_llm_client
+from ..llm import BaseLLMClient, create_llm_client
 
 
 @dataclass
@@ -72,11 +72,7 @@ class MemoryUpdatePipeline:
             llm_client: LLM客户端实例
             **llm_config: LLM配置参数
         """
-        if llm_client is None:
-            # 使用默认的Mock客户端
-            self.llm_client = create_llm_client("mock")
-        else:
-            self.llm_client = llm_client
+        self.llm_client = llm_client
         
         self.llm_config = {
             'temperature': 0.3,  # 较低的temperature保证稳定性
@@ -176,6 +172,10 @@ class MemoryUpdatePipeline:
         messages = [{"role": "user", "content": prompt}]
         
         try:
+            if self.llm_client is None:
+                # 没有LLM客户端时的fallback
+                raise Exception("No LLM client provided")
+                
             response = self.llm_client.chat_completion(
                 messages=messages,
                 **self.llm_config
@@ -276,6 +276,10 @@ class MemoryUpdatePipeline:
         messages = [{"role": "user", "content": prompt}]
         
         try:
+            if self.llm_client is None:
+                # 没有LLM客户端时的fallback
+                raise Exception("No LLM client provided")
+                
             response = self.llm_client.chat_completion(
                 messages=messages,
                 **self.llm_config
@@ -383,6 +387,10 @@ class MemoryUpdatePipeline:
         messages = [{"role": "user", "content": prompt}]
         
         try:
+            if self.llm_client is None:
+                # 没有LLM客户端时的fallback
+                raise Exception("No LLM client provided")
+                
             response = self.llm_client.chat_completion(
                 messages=messages,
                 **self.llm_config
