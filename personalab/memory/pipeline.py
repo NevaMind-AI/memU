@@ -1,24 +1,26 @@
 """
-Memory更新Pipeline模块。
+Memory更新Pipeline
 
-根据STRUCTURE.md设计，实现Memory的三阶段更新流程：
-Input → Modification → Update → Theory of Mind → Database Storage
+使用LLM来进行Memory分析和更新
 """
 
+import json
+import logging
 from datetime import datetime
 from typing import List, Dict, Any, Tuple, Optional
 from dataclasses import dataclass
 
 from .base import Memory, ProfileMemory, EventMemory
+from .llm_client import BaseLLMClient, create_llm_client
 
 
 @dataclass
 class ModificationResult:
     """Modification阶段的结果"""
-    processed_conversation: List[Dict[str, str]]
-    contains_profile_info: bool
-    profile_relevant_info: str
-    event_info: List[str]
+    profile_updates: List[str]
+    events: List[str]
+    analysis_confidence: float
+    raw_llm_response: str
     metadata: Dict[str, Any]
 
 
@@ -29,6 +31,7 @@ class UpdateResult:
     updated_events: EventMemory
     profile_updated: bool
     events_added: int
+    updated_profile_content: str
     metadata: Dict[str, Any]
 
 
@@ -36,8 +39,9 @@ class UpdateResult:
 class ToMResult:
     """Theory of Mind阶段的结果"""
     insights: Dict[str, Any]
-    metadata: Dict[str, Any]
     confidence_score: float
+    raw_llm_response: str
+    metadata: Dict[str, Any]
 
 
 @dataclass
@@ -52,22 +56,33 @@ class PipelineResult:
 
 class MemoryUpdatePipeline:
     """
-    Memory更新Pipeline处理器。
+    Memory更新Pipeline
     
-    实现三阶段的Memory更新流程：
-    1. Modification: 预处理对话内容
-    2. Update: 更新画像和事件记忆
-    3. Theory of Mind: 深度分析和推理
+    使用LLM完成所有Memory分析和更新任务：
+    1. LLM分析对话内容，提取画像更新和事件
+    2. LLM更新用户画像
+    3. LLM进行Theory of Mind分析
     """
     
-    def __init__(self, llm_client=None):
+    def __init__(self, llm_client: BaseLLMClient = None, **llm_config):
         """
-        初始化Pipeline。
+        初始化Pipeline
         
         Args:
-            llm_client: LLM客户端，用于智能处理
+            llm_client: LLM客户端实例
+            **llm_config: LLM配置参数
         """
-        self.llm_client = llm_client
+        if llm_client is None:
+            # 使用默认的Mock客户端
+            self.llm_client = create_llm_client("mock")
+        else:
+            self.llm_client = llm_client
+        
+        self.llm_config = {
+            'temperature': 0.3,  # 较低的temperature保证稳定性
+            'max_tokens': 2000,
+            **llm_config
+        }
     
     def update_with_pipeline(
         self, 
@@ -75,7 +90,7 @@ class MemoryUpdatePipeline:
         session_conversation: List[Dict[str, str]]
     ) -> Tuple[Memory, PipelineResult]:
         """
-        通过完整Pipeline更新Memory。
+        通过LLM Pipeline更新Memory
         
         Args:
             previous_memory: 之前的Memory对象
@@ -84,20 +99,24 @@ class MemoryUpdatePipeline:
         Returns:
             Tuple[更新后的Memory对象, Pipeline执行结果]
         """
-        # 1. Modification阶段：预处理对话内容
-        modification_result = self.modification_stage(session_conversation)
+        # 1. LLM分析阶段：分析对话并提取信息
+        modification_result = self.llm_modification_stage(
+            previous_memory, session_conversation
+        )
         
-        # 2. Update阶段：分别更新画像和事件记忆
-        update_result = self.update_stage(previous_memory, modification_result)
+        # 2. LLM更新阶段：更新画像和事件
+        update_result = self.llm_update_stage(
+            previous_memory, modification_result
+        )
         
-        # 3. Theory of Mind阶段：深度分析
-        tom_result = self.theory_of_mind_stage(update_result, session_conversation)
+        # 3. LLM ToM阶段：深度心理分析
+        tom_result = self.llm_theory_of_mind_stage(
+            update_result, session_conversation
+        )
         
         # 4. 创建新的Memory对象
         new_memory = self._create_updated_memory(
-            previous_memory, 
-            update_result, 
-            tom_result
+            previous_memory, update_result, tom_result
         )
         
         # 5. 构建Pipeline结果
@@ -109,6 +128,7 @@ class MemoryUpdatePipeline:
             pipeline_metadata={
                 'execution_time': datetime.now().isoformat(),
                 'conversation_length': len(session_conversation),
+                'llm_model': getattr(self.llm_client, 'model_name', 'unknown'),
                 'profile_updated': update_result.profile_updated,
                 'events_added': update_result.events_added
             }
@@ -116,126 +136,311 @@ class MemoryUpdatePipeline:
         
         return new_memory, pipeline_result
     
-    def modification_stage(self, session_conversation: List[Dict[str, str]]) -> ModificationResult:
+    def llm_modification_stage(
+        self, 
+        previous_memory: Memory, 
+        session_conversation: List[Dict[str, str]]
+    ) -> ModificationResult:
         """
-        Modification阶段：对对话内容进行预处理和分析。
-        
-        Args:
-            session_conversation: 对话内容
-            
-        Returns:
-            ModificationResult: 处理结果
+        LLM分析阶段：让LLM分析对话并提取相关信息
         """
-        # 简化版本的信息提取逻辑
-        profile_relevant_info = ""
-        event_info = []
-        contains_profile_info = False
+        # 构建LLM prompt
+        conversation_text = self._format_conversation(session_conversation)
+        current_profile = previous_memory.get_profile_content()
+        current_events = previous_memory.get_event_content()
         
-        for message in session_conversation:
-            role = message.get('role', '')
-            content = message.get('content', '')
+        prompt = f"""请分析以下对话内容，提取用户画像更新信息和重要事件。
+
+当前用户画像：
+{current_profile if current_profile else "暂无"}
+
+当前事件记录：
+{self._format_events(current_events) if current_events else "暂无"}
+
+本次对话内容：
+{conversation_text}
+
+请分析对话并提取：
+1. 需要更新到用户画像的信息（如个人背景、兴趣爱好、技能特长等）
+2. 值得记录的重要事件或对话要点
+3. 分析的置信度评分（0-1之间）
+
+请以JSON格式返回结果：
+{{
+    "profile_updates": ["更新信息1", "更新信息2", ...],
+    "events": ["事件1", "事件2", ...],
+    "confidence": 0.85
+}}"""
+
+        # 调用LLM
+        messages = [{"role": "user", "content": prompt}]
+        
+        try:
+            response = self.llm_client.chat_completion(
+                messages=messages,
+                **self.llm_config
+            )
             
-            if role == 'user':
-                # 检测是否包含用户画像信息
-                if self._contains_profile_info(content):
-                    contains_profile_info = True
-                    profile_relevant_info += f" {content}"
-                
-                # 提取事件信息
-                event_description = self._extract_event_description(content)
-                if event_description:
-                    event_info.append(event_description)
-        
-        return ModificationResult(
-            processed_conversation=session_conversation,
-            contains_profile_info=contains_profile_info,
-            profile_relevant_info=profile_relevant_info.strip(),
-            event_info=event_info,
-            metadata={
-                'stage': 'modification',
-                'processed_at': datetime.now().isoformat()
-            }
-        )
+            if not response.success:
+                raise Exception(f"LLM调用失败: {response.error}")
+            
+            # 解析LLM响应
+            try:
+                llm_result = json.loads(response.content)
+                profile_updates = llm_result.get('profile_updates', [])
+                events = llm_result.get('events', [])
+                confidence = llm_result.get('confidence', 0.5)
+            except json.JSONDecodeError:
+                # 如果JSON解析失败，使用备用方案
+                logging.warning("LLM响应JSON解析失败，使用备用方案")
+                profile_updates = []
+                events = []
+                confidence = 0.3
+            
+            return ModificationResult(
+                profile_updates=profile_updates,
+                events=events,
+                analysis_confidence=confidence,
+                raw_llm_response=response.content,
+                metadata={
+                    'stage': 'llm_modification',
+                    'processed_at': datetime.now().isoformat(),
+                    'llm_usage': response.usage
+                }
+            )
+            
+        except Exception as e:
+            logging.error(f"LLM分析阶段失败: {e}")
+            # 返回空结果
+            return ModificationResult(
+                profile_updates=[],
+                events=[],
+                analysis_confidence=0.0,
+                raw_llm_response=str(e),
+                metadata={
+                    'stage': 'llm_modification',
+                    'processed_at': datetime.now().isoformat(),
+                    'error': str(e)
+                }
+            )
     
-    def update_stage(
+    def llm_update_stage(
         self, 
         previous_memory: Memory, 
         modification_result: ModificationResult
     ) -> UpdateResult:
         """
-        Update阶段：更新画像和事件记忆。
-        
-        Args:
-            previous_memory: 之前的Memory对象
-            modification_result: Modification阶段结果
-            
-        Returns:
-            UpdateResult: 更新结果
+        LLM更新阶段：让LLM更新用户画像
         """
-        # 更新画像记忆
-        updated_profile = ProfileMemory(previous_memory.get_profile_content())
-        profile_updated = False
+        current_profile = previous_memory.get_profile_content()
+        profile_updates = modification_result.profile_updates
         
-        if modification_result.contains_profile_info and modification_result.profile_relevant_info:
-            updated_profile.update_content(modification_result.profile_relevant_info)
-            profile_updated = True
+        # 如果没有画像更新，直接返回
+        if not profile_updates:
+            return UpdateResult(
+                updated_profile=ProfileMemory(current_profile),
+                updated_events=EventMemory(
+                    events=previous_memory.get_event_content().copy(),
+                    max_events=previous_memory.event_memory.max_events
+                ),
+                profile_updated=False,
+                events_added=len(modification_result.events),
+                updated_profile_content=current_profile,
+                metadata={
+                    'stage': 'llm_update',
+                    'updated_at': datetime.now().isoformat(),
+                    'profile_updated': False
+                }
+            )
         
-        # 更新事件记忆
-        updated_events = EventMemory(
-            events=previous_memory.get_event_content().copy(),
-            max_events=previous_memory.event_memory.max_events
-        )
+        # 构建画像更新prompt
+        prompt = f"""请根据新的信息更新用户画像。
+
+当前用户画像：
+{current_profile if current_profile else "暂无"}
+
+新增信息：
+{chr(10).join(f"- {update}" for update in profile_updates)}
+
+请整合新信息到用户画像中，生成一个完整、连贯的用户画像描述。
+要求：
+1. 保持原有信息的准确性
+2. 自然地融入新信息
+3. 避免重复和冗余
+4. 使用第三人称描述
+5. 保持简洁明了
+
+请直接返回更新后的完整用户画像，不需要其他格式："""
+
+        # 调用LLM更新画像
+        messages = [{"role": "user", "content": prompt}]
         
-        events_added = 0
-        for event in modification_result.event_info:
-            updated_events.add_event(event)
-            events_added += 1
-        
-        return UpdateResult(
-            updated_profile=updated_profile,
-            updated_events=updated_events,
-            profile_updated=profile_updated,
-            events_added=events_added,
-            metadata={
-                'stage': 'update',
-                'updated_at': datetime.now().isoformat()
-            }
-        )
+        try:
+            response = self.llm_client.chat_completion(
+                messages=messages,
+                **self.llm_config
+            )
+            
+            if response.success:
+                updated_profile_content = response.content.strip()
+            else:
+                # 如果LLM调用失败，使用简单拼接
+                updated_profile_content = current_profile + " " + " ".join(profile_updates)
+            
+            # 更新事件记忆
+            updated_events = EventMemory(
+                events=previous_memory.get_event_content().copy(),
+                max_events=previous_memory.event_memory.max_events
+            )
+            
+            events_added = 0
+            for event in modification_result.events:
+                updated_events.add_event(event)
+                events_added += 1
+            
+            return UpdateResult(
+                updated_profile=ProfileMemory(updated_profile_content),
+                updated_events=updated_events,
+                profile_updated=bool(profile_updates),
+                events_added=events_added,
+                updated_profile_content=updated_profile_content,
+                metadata={
+                    'stage': 'llm_update',
+                    'updated_at': datetime.now().isoformat(),
+                    'llm_usage': response.usage if response.success else {},
+                    'profile_updated': bool(profile_updates)
+                }
+            )
+            
+        except Exception as e:
+            logging.error(f"LLM更新阶段失败: {e}")
+            # 返回原始内容
+            return UpdateResult(
+                updated_profile=ProfileMemory(current_profile),
+                updated_events=EventMemory(
+                    events=previous_memory.get_event_content().copy(),
+                    max_events=previous_memory.event_memory.max_events
+                ),
+                profile_updated=False,
+                events_added=0,
+                updated_profile_content=current_profile,
+                metadata={
+                    'stage': 'llm_update',
+                    'updated_at': datetime.now().isoformat(),
+                    'error': str(e)
+                }
+            )
     
-    def theory_of_mind_stage(
+    def llm_theory_of_mind_stage(
         self, 
         update_result: UpdateResult, 
         session_conversation: List[Dict[str, str]]
     ) -> ToMResult:
         """
-        Theory of Mind阶段：深度分析和推理。
-        
-        Args:
-            update_result: Update阶段结果
-            session_conversation: 对话内容
-            
-        Returns:
-            ToMResult: 分析结果
+        LLM Theory of Mind阶段：让LLM进行深度心理分析
         """
-        # 简化版本的Theory of Mind分析
-        insights = {
-            'intent_analysis': self._analyze_user_intent(session_conversation),
-            'emotion_analysis': self._analyze_emotion(session_conversation),
-            'behavior_patterns': self._analyze_behavior_patterns(update_result),
-            'cognitive_state': self._analyze_cognitive_state(session_conversation)
-        }
+        conversation_text = self._format_conversation(session_conversation)
         
-        confidence_score = self._calculate_confidence_score(insights)
+        prompt = f"""请对以下对话进行Theory of Mind分析，深入理解用户的心理状态和行为模式。
+
+对话内容：
+{conversation_text}
+
+请从以下维度分析用户：
+1. 意图分析：用户的主要目的和动机
+2. 情绪分析：用户的情绪状态和变化
+3. 行为模式：用户的沟通风格和参与方式
+4. 认知状态：用户的知识水平和学习倾向
+
+请以JSON格式返回分析结果：
+{{
+    "intent_analysis": {{
+        "primary_intent": "主要意图",
+        "secondary_intents": ["次要意图1", "次要意图2"],
+        "confidence": 0.8
+    }},
+    "emotion_analysis": {{
+        "dominant_emotion": "主导情绪",
+        "emotion_intensity": "情绪强度(low/medium/high)",
+        "emotion_trajectory": "情绪变化趋势",
+        "confidence": 0.7
+    }},
+    "behavior_patterns": {{
+        "communication_style": "沟通风格",
+        "engagement_level": "参与度",
+        "information_sharing": "信息分享倾向",
+        "response_pattern": "回应模式"
+    }},
+    "cognitive_state": {{
+        "knowledge_level": "知识水平",
+        "learning_style": "学习风格",
+        "cognitive_load": "认知负荷",
+        "curiosity_level": "好奇心水平"
+    }}
+}}"""
+
+        # 调用LLM进行ToM分析
+        messages = [{"role": "user", "content": prompt}]
         
-        return ToMResult(
-            insights=insights,
-            metadata={
-                'stage': 'theory_of_mind',
-                'analyzed_at': datetime.now().isoformat(),
-                'confidence_score': confidence_score
-            },
-            confidence_score=confidence_score
-        )
+        try:
+            response = self.llm_client.chat_completion(
+                messages=messages,
+                **self.llm_config
+            )
+            
+            if not response.success:
+                raise Exception(f"LLM ToM分析失败: {response.error}")
+            
+            # 解析LLM响应
+            try:
+                insights = json.loads(response.content)
+                # 计算总体置信度
+                confidence_scores = []
+                for analysis in insights.values():
+                    if isinstance(analysis, dict) and 'confidence' in analysis:
+                        confidence_scores.append(analysis['confidence'])
+                
+                overall_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.5
+                
+            except json.JSONDecodeError:
+                logging.warning("LLM ToM响应JSON解析失败，使用默认分析")
+                insights = {
+                    "intent_analysis": {"primary_intent": "conversation", "confidence": 0.5},
+                    "emotion_analysis": {"dominant_emotion": "neutral", "confidence": 0.5},
+                    "behavior_patterns": {"communication_style": "standard", "engagement_level": "medium"},
+                    "cognitive_state": {"knowledge_level": "intermediate", "learning_style": "adaptive"}
+                }
+                overall_confidence = 0.5
+            
+            return ToMResult(
+                insights=insights,
+                confidence_score=overall_confidence,
+                raw_llm_response=response.content,
+                metadata={
+                    'stage': 'llm_theory_of_mind',
+                    'analyzed_at': datetime.now().isoformat(),
+                    'llm_usage': response.usage
+                }
+            )
+            
+        except Exception as e:
+            logging.error(f"LLM ToM分析阶段失败: {e}")
+            # 返回默认分析
+            return ToMResult(
+                insights={
+                    "intent_analysis": {"primary_intent": "unknown", "confidence": 0.3},
+                    "emotion_analysis": {"dominant_emotion": "neutral", "confidence": 0.3},
+                    "behavior_patterns": {"communication_style": "unknown", "engagement_level": "unknown"},
+                    "cognitive_state": {"knowledge_level": "unknown", "learning_style": "unknown"}
+                },
+                confidence_score=0.3,
+                raw_llm_response=str(e),
+                metadata={
+                    'stage': 'llm_theory_of_mind',
+                    'analyzed_at': datetime.now().isoformat(),
+                    'error': str(e)
+                }
+            )
     
     def _create_updated_memory(
         self, 
@@ -257,65 +462,23 @@ class MemoryUpdatePipeline:
         new_memory.tom_metadata = {
             'insights': tom_result.insights,
             'confidence_score': tom_result.confidence_score,
-            'analysis_metadata': tom_result.metadata
+            'analysis_metadata': tom_result.metadata,
+            'raw_llm_response': tom_result.raw_llm_response
         }
         
         return new_memory
     
-    # 辅助方法（简化版本实现）
+    def _format_conversation(self, conversation: List[Dict[str, str]]) -> str:
+        """格式化对话内容"""
+        formatted_lines = []
+        for msg in conversation:
+            role = msg.get('role', 'unknown')
+            content = msg.get('content', '')
+            formatted_lines.append(f"{role}: {content}")
+        return "\n".join(formatted_lines)
     
-    def _contains_profile_info(self, content: str) -> bool:
-        """检测内容是否包含画像信息"""
-        profile_keywords = ['我是', '我叫', '年龄', '岁', '学习', '工作', '喜欢', '兴趣']
-        return any(keyword in content for keyword in profile_keywords)
-    
-    def _extract_event_description(self, content: str) -> Optional[str]:
-        """提取事件描述"""
-        if len(content.strip()) > 5:  # 简单的事件过滤
-            return f"用户说：{content}"
-        return None
-    
-    def _analyze_user_intent(self, conversation: List[Dict[str, str]]) -> Dict[str, Any]:
-        """分析用户意图"""
-        # 简化版本
-        user_messages = [msg['content'] for msg in conversation if msg.get('role') == 'user']
-        return {
-            'primary_intent': 'information_seeking' if '?' in str(user_messages) else 'conversation',
-            'secondary_intents': [],
-            'confidence': 0.7
-        }
-    
-    def _analyze_emotion(self, conversation: List[Dict[str, str]]) -> Dict[str, Any]:
-        """分析情绪状态"""
-        # 简化版本
-        return {
-            'dominant_emotion': 'neutral',
-            'emotion_confidence': 0.6,
-            'emotion_trajectory': ['neutral']
-        }
-    
-    def _analyze_behavior_patterns(self, update_result: UpdateResult) -> Dict[str, Any]:
-        """分析行为模式"""
-        return {
-            'communication_style': 'direct',
-            'information_sharing': 'moderate',
-            'engagement_level': 'active' if update_result.events_added > 0 else 'passive'
-        }
-    
-    def _analyze_cognitive_state(self, conversation: List[Dict[str, str]]) -> Dict[str, Any]:
-        """分析认知状态"""
-        return {
-            'knowledge_level': 'intermediate',
-            'learning_style': 'interactive',
-            'cognitive_load': 'manageable'
-        }
-    
-    def _calculate_confidence_score(self, insights: Dict[str, Any]) -> float:
-        """计算总体置信度分数"""
-        # 简化版本：基于各项分析的平均置信度
-        confidences = []
-        for analysis in insights.values():
-            if isinstance(analysis, dict) and 'confidence' in analysis:
-                confidences.append(analysis['confidence'])
-        
-        return sum(confidences) / len(confidences) if confidences else 0.5 
+    def _format_events(self, events: List[str]) -> str:
+        """格式化事件列表"""
+        if not events:
+            return "暂无"
+        return "\n".join(f"- {event}" for event in events[-5:])  # 只显示最近5个事件 

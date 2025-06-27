@@ -137,9 +137,9 @@ Memory (统一记忆类)
 Memory的更新通过一个三阶段的pipeline实现：Modification → Update → Theory of Mind
 
 ```
-Input → Modification → Update → Theory of Mind → Database Storage
-  ↓          ↓          ↓            ↓              ↓
-新信息    信息处理    记忆合并    心理建模      持久化存储
+Input   →  Modification → Update  → Theory of Mind → Database Storage
+  ↓             ↓          ↓            ↓                  ↓
+新对话+旧记忆   更新信息   记忆全量更新     心理建模          持久化存储
 ```
 
 ### 2.2 Pipeline阶段详解

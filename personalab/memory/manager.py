@@ -12,6 +12,7 @@ from datetime import datetime
 
 from .base import Memory
 from .pipeline import MemoryUpdatePipeline, PipelineResult
+from .llm_client import BaseLLMClient, create_llm_client
 from .storage import MemoryRepository
 
 
@@ -25,17 +26,25 @@ class MemoryManager:
     - 与数据库的交互
     """
     
-    def __init__(self, db_path: str = "memory.db", llm_client=None):
+    def __init__(
+        self, 
+        db_path: str = "memory.db", 
+        llm_client=None,
+        **llm_config
+    ):
         """
         初始化MemoryManager。
         
         Args:
             db_path: 数据库文件路径
             llm_client: LLM客户端，用于智能处理
+            **llm_config: LLM配置参数
         """
         self.repository = MemoryRepository(db_path)
-        self.pipeline = MemoryUpdatePipeline(llm_client)
         self.llm_client = llm_client
+        
+        # 只使用LLM驱动的pipeline
+        self.pipeline = MemoryUpdatePipeline(llm_client, **llm_config)
     
     def get_or_create_memory(self, agent_id: str) -> Memory:
         """
@@ -79,7 +88,7 @@ class MemoryManager:
         # 1. 获取当前Memory
         current_memory = self.get_or_create_memory(agent_id)
         
-        # 2. 通过Pipeline更新Memory
+        # 2. 通过LLM Pipeline更新Memory
         updated_memory, pipeline_result = self.pipeline.update_with_pipeline(
             current_memory, 
             conversation
