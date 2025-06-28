@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from .memory.user import UserMemory
+
 from .memory import Memory as UnifiedMemory, MemoryManager
 
 # Optional LLM integration
@@ -67,23 +67,9 @@ class Memory:
         self.memory_manager = MemoryManager(llm_client=self.llm)
         self.unified_memory = self.memory_manager.get_or_create_memory(agent_id)
         
-        # Keep user memories for backward compatibility
-        self._user_memories: Dict[str, UserMemory] = {}
+
     
-    def get_user_memory(self, user_id: str) -> UserMemory:
-        """
-        Get or create user memory for the given user ID.
-        
-        Args:
-            user_id: User identifier
-            
-        Returns:
-            UserMemory instance for the user
-        """
-        if user_id not in self._user_memories:
-            self._user_memories[user_id] = UserMemory(self.agent_id, user_id)
-        
-        return self._user_memories[user_id]
+
 
     def get_agent_memory(self) -> UnifiedMemory:
         """
@@ -94,9 +80,7 @@ class Memory:
         """
         return self.unified_memory
 
-    def list_users(self) -> List[str]:
-        """List all user IDs that have memory."""
-        return list(self._user_memories.keys())
+
 
     def update_agent_profile_memory(self, conversation: str) -> str:
         """
@@ -116,24 +100,7 @@ class Memory:
         self.unified_memory = updated_memory
         return updated_memory.get_profile_content()
 
-    def update_user_profile_memory(self, user_id: str, conversation: str) -> str:
-        """
-        Update user profile based on conversation using LLM analysis.
-        
-        Args:
-            user_id: User identifier
-            conversation: The conversation content to learn from
-            
-        Returns:
-            The updated user profile
-        """
-        user_memory = self.get_user_memory(user_id)
-        current_profile = user_memory.profile.get_profile()
-        updated_profile = self._update_profile_with_llm(current_profile, conversation, "user")
-        
-        # Update the user's profile
-        user_memory.profile.set_profile(updated_profile)
-        return updated_profile
+
 
     def _update_profile_with_llm(self, current_profile: str, conversation: str, profile_type: str) -> str:
         """

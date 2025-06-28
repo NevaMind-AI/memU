@@ -1,10 +1,10 @@
 """
-Memory数据库存储层模块。
+Memory database storage layer module.
 
-根据STRUCTURE.md设计，实现Memory对象的数据库存储和管理：
-- memories表：存储Memory基础信息和元数据
-- memory_contents表：统一存储画像和事件内容
-- 支持完整的Memory CRUD操作
+Based on STRUCTURE.md design, implements database storage and management for Memory objects:
+- memories table: stores Memory basic information and metadata
+- memory_contents table: unified storage for profile and event contents
+- supports complete Memory CRUD operations
 """
 
 import json
@@ -17,27 +17,27 @@ from pathlib import Path
 from .base import Memory, ProfileMemory, EventMemory
 
 
-class MemoryRepository:
+class MemoryDB:
     """
-    Memory数据库操作仓库。
+    Memory database operations repository.
     
-    提供Memory对象的完整数据库存储和管理功能。
+    Provides complete database storage and management functionality for Memory objects.
     """
     
     def __init__(self, db_path: str = "memory.db"):
         """
-        初始化数据库连接。
+        Initialize database connection.
         
         Args:
-            db_path: 数据库文件路径
+            db_path: Database file path
         """
         self.db_path = db_path
         self._init_database()
     
     def _init_database(self):
-        """初始化数据库表结构"""
+        """Initialize database table structure"""
         with sqlite3.connect(self.db_path) as conn:
-            # 创建memories表（统一Memory表）
+            # Create memories table (unified Memory table)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS memories (
                     memory_id TEXT PRIMARY KEY,
@@ -46,33 +46,33 @@ class MemoryRepository:
                     updated_at TEXT NOT NULL,
                     version INTEGER DEFAULT 1,
                     
-                    -- Theory of Mind 分析结果
+                    -- Theory of Mind analysis results
                     tom_metadata TEXT,
                     confidence_score REAL,
                     
-                    -- 记忆统计信息
+                    -- Memory statistics
                     profile_content_hash TEXT,
                     event_count INTEGER DEFAULT 0,
                     last_event_date TEXT,
                     
-                    -- 索引
+                    -- Index
                     FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
                 )
             """)
             
-            # 创建memory_contents表（Memory内容表）
+            # Create memory_contents table (Memory content table)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS memory_contents (
                     content_id TEXT PRIMARY KEY,
                     memory_id TEXT NOT NULL,
                     content_type TEXT NOT NULL CHECK (content_type IN ('profile', 'event')),
                     
-                    -- 内容数据
+                    -- Content data
                     content_data TEXT NOT NULL,
                     content_text TEXT,
                     content_hash TEXT,
                     
-                    -- 元数据
+                    -- Metadata
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     
@@ -81,7 +81,7 @@ class MemoryRepository:
                 )
             """)
             
-            # 创建索引
+            # Create indexes
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_agent_id ON memories(agent_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_contents_memory_type ON memory_contents(memory_id, content_type)")
@@ -91,17 +91,17 @@ class MemoryRepository:
     
     def save_memory(self, memory: Memory) -> bool:
         """
-        保存完整Memory对象到数据库。
+        Save complete Memory object to database.
         
         Args:
-            memory: Memory对象
+            memory: Memory object
             
         Returns:
-            bool: 保存是否成功
+            bool: Whether save was successful
         """
         try:
             with sqlite3.connect(self.db_path) as conn:
-                # 1. 保存Memory基础信息
+                # 1. Save Memory basic information
                 memory_data = {
                     'memory_id': memory.memory_id,
                     'agent_id': memory.agent_id,
@@ -129,11 +129,11 @@ class MemoryRepository:
                     memory_data['last_event_date']
                 ))
                 
-                # 2. 保存ProfileMemory内容
+                # 2. Save ProfileMemory content
                 if memory.get_profile_content():
                     self._save_profile_content(conn, memory.memory_id, memory.profile_memory)
                 
-                # 3. 保存EventMemory内容
+                # 3. Save EventMemory content
                 if memory.get_event_content():
                     self._save_event_content(conn, memory.memory_id, memory.event_memory)
                 
@@ -146,19 +146,19 @@ class MemoryRepository:
     
     def load_memory(self, memory_id: str) -> Optional[Memory]:
         """
-        从数据库加载完整Memory对象。
+        Load complete Memory object from database.
         
         Args:
             memory_id: Memory ID
             
         Returns:
-            Optional[Memory]: Memory对象，如果不存在则返回None
+            Optional[Memory]: Memory object, returns None if not exists
         """
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 
-                # 1. 加载Memory基础信息
+                # 1. Load Memory basic information
                 memory_row = conn.execute("""
                     SELECT * FROM memories WHERE memory_id = ?
                 """, [memory_id]).fetchone()
@@ -166,7 +166,7 @@ class MemoryRepository:
                 if not memory_row:
                     return None
                 
-                # 2. 创建Memory对象
+                # 2. Create Memory object
                 memory = Memory(
                     agent_id=memory_row['agent_id'],
                     memory_id=memory_id
@@ -177,12 +177,12 @@ class MemoryRepository:
                 if memory_row['tom_metadata']:
                     memory.tom_metadata = json.loads(memory_row['tom_metadata'])
                 
-                # 3. 加载ProfileMemory内容
+                # 3. Load ProfileMemory content
                 profile_content = self._load_profile_content(conn, memory_id)
                 if profile_content:
                     memory.profile_memory = ProfileMemory(profile_content)
                 
-                # 4. 加载EventMemory内容
+                # 4. Load EventMemory content
                 event_content = self._load_event_content(conn, memory_id)
                 if event_content:
                     memory.event_memory = EventMemory(event_content)
@@ -193,21 +193,21 @@ class MemoryRepository:
             print(f"Error loading memory: {e}")
             return None
     
-    def load_memory_by_agent(self, agent_id: str) -> Optional[Memory]:
+    def get_memory_by_agent(self, agent_id: str) -> Optional[Memory]:
         """
-        根据Agent ID加载Memory。
+        Load Memory by Agent ID.
         
         Args:
             agent_id: Agent ID
             
         Returns:
-            Optional[Memory]: Memory对象，如果不存在则返回None
+            Optional[Memory]: Memory object, returns None if not exists
         """
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 
-                # 查找该Agent的最新Memory
+                # Find the latest Memory for this Agent
                 memory_row = conn.execute("""
                     SELECT memory_id FROM memories 
                     WHERE agent_id = ? 
@@ -226,20 +226,20 @@ class MemoryRepository:
     
     def delete_memory(self, memory_id: str) -> bool:
         """
-        删除Memory对象。
+        Delete Memory object.
         
         Args:
             memory_id: Memory ID
             
         Returns:
-            bool: 删除是否成功
+            bool: Whether deletion was successful
         """
         try:
             with sqlite3.connect(self.db_path) as conn:
-                # 删除memory_contents
+                # Delete memory_contents
                 conn.execute("DELETE FROM memory_contents WHERE memory_id = ?", [memory_id])
                 
-                # 删除memories
+                # Delete memories
                 conn.execute("DELETE FROM memories WHERE memory_id = ?", [memory_id])
                 
                 conn.commit()
@@ -251,14 +251,14 @@ class MemoryRepository:
     
     def list_memories_by_agent(self, agent_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """
-        列出指定Agent的Memory记录。
+        List Memory records for specified Agent.
         
         Args:
             agent_id: Agent ID
-            limit: 返回数量限制
+            limit: Return count limit
             
         Returns:
-            List[Dict]: Memory信息列表
+            List[Dict]: Memory information list
         """
         try:
             with sqlite3.connect(self.db_path) as conn:
@@ -279,7 +279,7 @@ class MemoryRepository:
             return []
     
     def _save_profile_content(self, conn: sqlite3.Connection, memory_id: str, profile_memory: ProfileMemory):
-        """保存画像记忆内容"""
+        """Save profile memory content"""
         content_data = {
             "paragraph": profile_memory.get_content()
         }
@@ -303,7 +303,7 @@ class MemoryRepository:
         ])
     
     def _save_event_content(self, conn: sqlite3.Connection, memory_id: str, event_memory: EventMemory):
-        """保存事件记忆内容"""
+        """Save event memory content"""
         content_data = {
             "events": event_memory.get_content(),
             "max_events": event_memory.max_events
@@ -328,7 +328,7 @@ class MemoryRepository:
         ])
     
     def _load_profile_content(self, conn: sqlite3.Connection, memory_id: str) -> Optional[str]:
-        """加载画像记忆内容"""
+        """Load profile memory content"""
         row = conn.execute("""
             SELECT content_data FROM memory_contents 
             WHERE memory_id = ? AND content_type = 'profile'
@@ -341,7 +341,7 @@ class MemoryRepository:
         return None
     
     def _load_event_content(self, conn: sqlite3.Connection, memory_id: str) -> Optional[List[str]]:
-        """加载事件记忆内容"""
+        """Load event memory content"""
         row = conn.execute("""
             SELECT content_data FROM memory_contents 
             WHERE memory_id = ? AND content_type = 'event'
@@ -354,24 +354,24 @@ class MemoryRepository:
         return None
     
     def _calculate_hash(self, content: str) -> str:
-        """计算内容哈希"""
+        """Calculate content hash"""
         return hashlib.md5(content.encode('utf-8')).hexdigest()
     
     def get_memory_stats(self, agent_id: str) -> Dict[str, Any]:
         """
-        获取Memory统计信息。
+        Get Memory statistics.
         
         Args:
             agent_id: Agent ID
             
         Returns:
-            Dict: 统计信息
+            Dict: Statistics information
         """
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 
-                # 基础统计
+                # Basic statistics
                 stats_row = conn.execute("""
                     SELECT 
                         COUNT(*) as total_memories,

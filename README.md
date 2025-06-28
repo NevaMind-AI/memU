@@ -143,7 +143,7 @@ PersonaLab/
 │       ├── storage.py       # MemoryRepository and database operations
 │       ├── events.py        # Event-related utilities
 │       ├── profile.py       # Profile-related utilities
-│       └── user.py          # UserMemory (legacy support)
+│ 
 └── examples/                # Example scripts and usage demos
 ```
 
@@ -248,7 +248,29 @@ memory_manager = MemoryManager(
 
 ## 🧪 Examples
 
-See the `examples/` directory for comprehensive usage examples:
+### Memory + OpenAI Integration
+
+See the `examples/` directory for comprehensive integration examples:
+
+- **`quick_start.py`**: Simplest possible PersonaLab + OpenAI integration
+- **`memory_chat_integration.py`**: Complete memory-enhanced chatbot with:
+  - Interactive chat interface
+  - Automatic memory updates
+  - Conversation history management
+  - Memory export/import
+
+```bash
+# Quick start
+python examples/quick_start.py
+
+# Interactive demo
+python examples/memory_chat_integration.py demo
+
+# Programmatic example
+python examples/memory_chat_integration.py programmatic
+```
+
+### Core Memory Examples
 
 - `simple_memory_example.py`: Basic memory operations
 - `pipeline_debug_example.py`: Pipeline debugging and inspection

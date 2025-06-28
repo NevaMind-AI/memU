@@ -1,0 +1,12 @@
+## Requirements for PersonaLab + OpenAI Integration Examples
+
+# Core dependencies
+openai>=1.0.0
+personalab
+
+# Optional but recommended
+python-dotenv>=1.0.0  # For .env file support
+
+# Development/testing (optional)
+jupyter>=1.0.0       # For notebook examples
+ipython>=8.0.0       # Enhanced Python shell 
