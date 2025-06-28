@@ -1,84 +1,39 @@
 openapi: 3.0.3
 info:
-  title: Memory API
-  version: 0.0.1
-  description: API for managing agent memory objects, including profile, events, and theory of mind content.
+  title: PersonaLab Memory Service API
+  version: "0.0.1"
+  description: |
+    REST API for PersonaLab AI Memory Framework.
+    All endpoints are prefixed with **/api/v1/** to indicate the first public version.
+
+servers:
+  - url: /api/v1
 
 paths:
-  /v1/memories/{agent_id}:
-    get:
-      summary: Get Memory by Agent ID
-      parameters:
-        - name: agent_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Memory object
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Memory'
-    put:
-      summary: Create or Update Memory
-      parameters:
-        - name: agent_id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MemoryInput'
-      responses:
-        '200':
-          description: Memory saved
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  memory_id:
-                    type: string
-
-  /v1/memory/by-id/{memory_id}:
-    get:
-      summary: Get Memory by Memory ID
-      parameters:
-        - name: memory_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Memory object
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Memory'
-
-  /v1/memories/search:
+  /memories:
     post:
-      summary: Semantic search memories
+      summary: Save a new memory
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                query:
-                  type: string
-                agent_id:
-                  type: string
+              $ref: '#/components/schemas/Memory'
+      responses:
+        '201':
+          description: Memory saved
+
+    get:
+      summary: Search memories
+      parameters:
+        - in: query
+          name: query
+          schema:
+            type: string
+        - in: query
+          name: agent_id
+          schema:
+            type: string
       responses:
         '200':
           description: Search result
@@ -87,89 +42,350 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/MemorySearchResult'
+                  $ref: '#/components/schemas/Memory'
 
-  /v1/memories/{memory_id}:
-    delete:
-      summary: Delete Memory by ID
+  /memories/{memory_id}:
+    get:
+      summary: Get memory by ID
       parameters:
-        - name: memory_id
-          in: path
+        - in: path
+          name: memory_id
           required: true
           schema:
             type: string
       responses:
         '200':
-          description: Deletion status
+          description: Memory found
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-
-  /v1/memories/{agent_id}/history:
-    get:
-      summary: Get memory history for agent
+                $ref: '#/components/schemas/Memory'
+    put:
+      summary: Update entire memory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Memory'
+      responses:
+        '200':
+          description: Memory updated
+    delete:
+      summary: Delete memory
       parameters:
-        - name: agent_id
-          in: path
+        - in: path
+          name: memory_id
           required: true
           schema:
             type: string
-        - name: limit
-          in: query
-          required: false
+      responses:
+        '204':
+          description: Memory deleted
+
+  /memories/{memory_id}/profile:
+    patch:
+      summary: Update profile content
+      parameters:
+        - in: path
+          name: memory_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+      responses:
+        '200':
+          description: Profile updated
+
+  /memories/{memory_id}/events:
+    post:
+      summary: Append a new event paragraph
+      parameters:
+        - in: path
+          name: memory_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventUpdate'
+      responses:
+        '201':
+          description: Event added
+
+  /memories/{memory_id}/tom:
+    post:
+      summary: Append a new ToM insight
+      parameters:
+        - in: path
+          name: memory_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TomUpdate'
+      responses:
+        '201':
+          description: Insight added
+
+  /memories/{memory_id}/update-pipeline:
+    post:
+      summary: Trigger memory update pipeline
+      parameters:
+        - in: path
+          name: memory_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipelineRunRequest'
+      responses:
+        '202':
+          description: Pipeline started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineRunResponse'
+
+  /memories/agent/{agent_id}:
+    get:
+      summary: Load memory by agent ID
+      parameters:
+        - in: path
+          name: agent_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Memory found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Memory'
+
+  /memories/agent/{agent_id}/history:
+    get:
+      summary: Memory history for agent
+      parameters:
+        - in: path
+          name: agent_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
           schema:
             type: integer
             default: 10
       responses:
         '200':
-          description: Memory history
+          description: List of memory history
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    memory_id:
-                      type: string
-                    updated_at:
-                      type: string
-                      format: date-time
-                    version:
-                      type: integer
+                  $ref: '#/components/schemas/Memory'
 
-  /v1/memories/{memory_id}/logs:
+  /conversations:
+    post:
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Conversation'
+      responses:
+        '201':
+          description: Conversation created
+
+  /conversations/{conversation_id}:
     get:
-      summary: Get pipeline logs for memory
+      summary: Get conversation by ID
       parameters:
-        - name: memory_id
-          in: path
+        - in: path
+          name: conversation_id
           required: true
           schema:
             type: string
       responses:
         '200':
-          description: Logs
+          description: Conversation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Conversation'
+    delete:
+      summary: Delete conversation
+      parameters:
+        - in: path
+          name: conversation_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Conversation deleted
+
+  /conversations/agent/{agent_id}:
+    get:
+      summary: List conversations by agent
+      parameters:
+        - in: path
+          name: agent_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Conversations
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    stage_name:
-                      type: string
-                    execution_time:
-                      type: string
-                      format: date-time
-                    llm_model:
-                      type: string
-                    success:
-                      type: boolean
+                  $ref: '#/components/schemas/Conversation'
+
+  /pipeline-logs:
+    post:
+      summary: Create pipeline log
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PipelineLog'
+      responses:
+        '201':
+          description: Log created
+
+  /pipeline-logs/{log_id}:
+    get:
+      summary: Get log by ID
+      parameters:
+        - in: path
+          name: log_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pipeline log
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PipelineLog'
+    delete:
+      summary: Delete log
+      parameters:
+        - in: path
+          name: log_id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Log deleted
+
+  /pipeline-logs/memory/{memory_id}:
+    get:
+      summary: List logs by memory
+      parameters:
+        - in: path
+          name: memory_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: stage_name
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Logs list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PipelineLog'
+
+  /search:
+    get:
+      summary: Semantic or keyword search
+      parameters:
+        - in: query
+          name: query
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: agent_id
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Memory'
+
+  /llm/providers:
+    get:
+      summary: List supported LLM providers
+      responses:
+        '200':
+          description: Providers list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /llm/providers/{provider_name}/switch:
+    post:
+      summary: Switch current LLM provider
+      parameters:
+        - in: path
+          name: provider_name
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Provider switched
 
 components:
   schemas:
@@ -178,54 +394,108 @@ components:
       properties:
         memory_id:
           type: string
+          format: uuid
         agent_id:
           type: string
-        profile_content:
-          type: string
-        event_content:
-          type: array
-          items:
-            type: object
-        tom_content:
-          type: array
-          items:
-            type: object
-        tom_metadata:
-          type: object
+          format: uuid
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
-
-    MemoryInput:
-      type: object
-      properties:
+        version:
+          type: integer
         profile_content:
           type: string
         event_content:
           type: array
           items:
-            type: object
+            type: string
         tom_content:
           type: array
           items:
-            type: object
+            type: string
         tom_metadata:
           type: object
 
-    MemorySearchResult:
+    ProfileUpdate:
       type: object
+      required: [profile_content]
       properties:
-        memory_id:
-          type: string
-        agent_id:
-          type: string
-        score:
-          type: number
-          format: float
         profile_content:
           type: string
-        event_snippet:
+
+    EventUpdate:
+      type: object
+      required: [event_paragraph]
+      properties:
+        event_paragraph:
+          type: string
+
+    TomUpdate:
+      type: object
+      required: [insight]
+      properties:
+        insight:
+          type: string
+
+    PipelineRunRequest:
+      type: object
+      properties:
+        session_conversation:
+          type: string
+      required: [session_conversation]
+
+    PipelineRunResponse:
+      type: object
+      properties:
+        pipeline_run_id:
+          type: string
+        status:
+          type: string
+
+    Conversation:
+      type: object
+      properties:
+        conversation_id:
+          type: string
+          format: uuid
+        agent_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        conversation_data:
+          type: object
+        pipeline_result:
+          type: object
+        memory_id:
+          type: string
+          format: uuid
+
+    PipelineLog:
+      type: object
+      properties:
+        log_id:
+          type: string
+          format: uuid
+        memory_id:
+          type: string
+          format: uuid
+        stage_name:
+          type: string
+        execution_time:
+          type: string
+          format: date-time
+        input_data:
+          type: object
+        output_data:
+          type: object
+        llm_model:
+          type: string
+        success:
+          type: boolean
+        error_message:
           type: string
