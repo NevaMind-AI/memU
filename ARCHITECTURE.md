@@ -43,8 +43,8 @@ The ProfileMemory component stores user or agent profile information as an inter
 
 **Typical Content Example:**
 ```
-User is an 18-year-old male student who enjoys gaming, particularly RPG games. 
-Generally introverted but very interested in technology and programming. 
+User is an 18-year-old male student who enjoys gaming, particularly RPG games.
+Generally introverted but very interested in technology and programming.
 Lives in Beijing and is studying computer science.
 ```
 
@@ -363,6 +363,11 @@ class MemoryRepository:
     def get_memory_history(self, agent_id: str, limit: int = 10) -> List[Memory]
 ```
 
+### 3.4 API Design
+
+See OpenAPI specification for detailed API endpoints in /docs/api-reference/openapi.yaml.
+
+
 ## 4. LLM Integration Architecture
 
 ### 4.1 LLM Manager Design
@@ -374,7 +379,7 @@ class LLMManager:
     def __init__(self):
         self.providers = {}
         self.current_provider = None
-    
+
     def add_provider(self, name: str, provider: BaseLLM)
     def switch_provider(self, name: str) -> bool
     def get_current_provider() -> BaseLLM
@@ -471,4 +476,4 @@ class SearchEngine:
 - **Memory Management**: Optimal memory usage patterns
 - **Query Optimization**: Efficient database queries
 
-This architecture provides a robust, scalable, and maintainable foundation for AI memory management with comprehensive LLM integration and advanced psychological modeling capabilities. 
+This architecture provides a robust, scalable, and maintainable foundation for AI memory management with comprehensive LLM integration and advanced psychological modeling capabilities.

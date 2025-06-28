@@ -1,0 +1,231 @@
+openapi: 3.0.3
+info:
+  title: Memory API
+  version: 0.0.1
+  description: API for managing agent memory objects, including profile, events, and theory of mind content.
+
+paths:
+  /v1/memories/{agent_id}:
+    get:
+      summary: Get Memory by Agent ID
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Memory object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Memory'
+    put:
+      summary: Create or Update Memory
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryInput'
+      responses:
+        '200':
+          description: Memory saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  memory_id:
+                    type: string
+
+  /v1/memory/by-id/{memory_id}:
+    get:
+      summary: Get Memory by Memory ID
+      parameters:
+        - name: memory_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Memory object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Memory'
+
+  /v1/memories/search:
+    post:
+      summary: Semantic search memories
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                agent_id:
+                  type: string
+      responses:
+        '200':
+          description: Search result
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MemorySearchResult'
+
+  /v1/memories/{memory_id}:
+    delete:
+      summary: Delete Memory by ID
+      parameters:
+        - name: memory_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deletion status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /v1/memories/{agent_id}/history:
+    get:
+      summary: Get memory history for agent
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Memory history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    memory_id:
+                      type: string
+                    updated_at:
+                      type: string
+                      format: date-time
+                    version:
+                      type: integer
+
+  /v1/memories/{memory_id}/logs:
+    get:
+      summary: Get pipeline logs for memory
+      parameters:
+        - name: memory_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    stage_name:
+                      type: string
+                    execution_time:
+                      type: string
+                      format: date-time
+                    llm_model:
+                      type: string
+                    success:
+                      type: boolean
+
+components:
+  schemas:
+    Memory:
+      type: object
+      properties:
+        memory_id:
+          type: string
+        agent_id:
+          type: string
+        profile_content:
+          type: string
+        event_content:
+          type: array
+          items:
+            type: object
+        tom_content:
+          type: array
+          items:
+            type: object
+        tom_metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    MemoryInput:
+      type: object
+      properties:
+        profile_content:
+          type: string
+        event_content:
+          type: array
+          items:
+            type: object
+        tom_content:
+          type: array
+          items:
+            type: object
+        tom_metadata:
+          type: object
+
+    MemorySearchResult:
+      type: object
+      properties:
+        memory_id:
+          type: string
+        agent_id:
+          type: string
+        score:
+          type: number
+          format: float
+        profile_content:
+          type: string
+        event_snippet:
+          type: string
