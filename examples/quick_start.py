@@ -92,6 +92,48 @@ def main():
     
     print(f"\n💾 Memory updated from multi-turn conversation: {result.update_result.profile_updated}")
     print("✅ Quick start completed!")
+    
+    # 7. Demonstrate new conversation recording and vector search features
+    print("\n" + "="*50)
+    print("🆕 New Features: Conversation Recording & Vector Search")
+    print("="*50)
+    
+    # Search for similar conversations (if any exist)
+    print(f"\n🔍 Searching for conversations about 'machine learning'...")
+    similar_conversations = memory_client.search_similar_conversations(
+        agent_id, 
+        "machine learning and AI frameworks",
+        limit=3
+    )
+    
+    if similar_conversations:
+        print(f"Found {len(similar_conversations)} similar conversations:")
+        for i, conv in enumerate(similar_conversations, 1):
+            print(f"  {i}. Similarity: {conv['similarity_score']:.3f}")
+            print(f"     Summary: {conv['summary']}")
+    else:
+        print("No similar conversations found (expected for first run)")
+    
+    # Show conversation history
+    print(f"\n📜 Recent conversation history for {agent_id}:")
+    history = memory_client.get_conversation_history(agent_id, limit=3)
+    for i, conv in enumerate(history, 1):
+        print(f"  {i}. {conv['created_at'][:19]} - Turns: {conv['turn_count']}")
+        print(f"     Summary: {conv['summary']}")
+    
+    # Display embedding info if available
+    if memory_client.embedding_manager:
+        print(f"\n⚡ Embedding Provider: {memory_client.embedding_manager.model_name}")
+        print(f"   Vector Dimension: {memory_client.embedding_manager.embedding_dimension}")
+    
+    print("\n💡 New Features Include:")
+    print("   • Automatic conversation recording to database")
+    print("   • Vector embeddings for semantic similarity search")
+    print("   • Conversation history tracking by session")
+    print("   • Multiple embedding provider support (OpenAI, Sentence Transformers, Simple)")
+    print("   • Integration with existing PersonaLab memory system")
+    
+    print("\n✅ Enhanced quick start completed with new features!")
 
 
 if __name__ == "__main__":

@@ -4,14 +4,17 @@ Memory database storage layer module.
 Based on STRUCTURE.md design, implements database storage and management for Memory objects:
 - memories table: stores Memory basic information and metadata
 - memory_contents table: unified storage for profile and event contents
+- conversations table: stores conversation history with vectorization
+- embedding_vectors table: stores conversation embeddings for semantic search
 - supports complete Memory CRUD operations
 """
 
 import json
 import hashlib
 import sqlite3
+import uuid
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
 
 from .base import Memory, ProfileMemory, EventMemory
@@ -21,7 +24,8 @@ class MemoryDB:
     """
     Memory database operations repository.
     
-    Provides complete database storage and management functionality for Memory objects.
+    Provides complete database storage and management functionality for Memory objects,
+    conversation recording, and vector embeddings for semantic search.
     """
     
     def __init__(self, db_path: str = "memory.db"):
@@ -78,6 +82,65 @@ class MemoryDB:
                     
                     FOREIGN KEY (memory_id) REFERENCES memories(memory_id),
                     UNIQUE(memory_id, content_type)
+                )
+            """)
+            
+            # Create conversations table (Conversation recording)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS conversations (
+                    conversation_id TEXT PRIMARY KEY,
+                    agent_id TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    conversation_data TEXT NOT NULL,  -- JSON array of messages
+                    pipeline_result TEXT,            -- Pipeline execution results
+                    memory_id TEXT,                  -- Associated memory ID
+                    session_id TEXT,                 -- Session identifier
+                    turn_count INTEGER DEFAULT 0,    -- Number of conversation turns
+                    summary TEXT,                    -- Conversation summary
+                    
+                    FOREIGN KEY (memory_id) REFERENCES memories(memory_id),
+                    INDEX idx_agent_id (agent_id),
+                    INDEX idx_created_at (created_at),
+                    INDEX idx_session_id (session_id)
+                )
+            """)
+            
+            # Create conversation_messages table (Individual messages)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS conversation_messages (
+                    message_id TEXT PRIMARY KEY,
+                    conversation_id TEXT NOT NULL,
+                    role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+                    content TEXT NOT NULL,
+                    message_index INTEGER NOT NULL,  -- Order within conversation
+                    created_at TEXT NOT NULL,
+                    
+                    FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id),
+                    INDEX idx_conversation_id (conversation_id),
+                    INDEX idx_role (role),
+                    UNIQUE(conversation_id, message_index)
+                )
+            """)
+            
+            # Create embedding_vectors table (Vector storage for semantic search)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS embedding_vectors (
+                    vector_id TEXT PRIMARY KEY,
+                    source_type TEXT NOT NULL CHECK (source_type IN ('conversation', 'message', 'memory')),
+                    source_id TEXT NOT NULL,         -- conversation_id, message_id, or memory_id
+                    agent_id TEXT NOT NULL,
+                    vector_data TEXT NOT NULL,       -- JSON array of float values
+                    vector_dimension INTEGER NOT NULL,
+                    content_text TEXT NOT NULL,      -- Original text for the vector
+                    content_hash TEXT NOT NULL,      -- Hash of content for deduplication
+                    embedding_model TEXT,            -- Model used for embedding
+                    created_at TEXT NOT NULL,
+                    
+                    FOREIGN KEY (agent_id) REFERENCES memories(agent_id),
+                    INDEX idx_agent_id (agent_id),
+                    INDEX idx_source_type (source_type),
+                    INDEX idx_content_hash (content_hash),
+                    UNIQUE(source_type, source_id)
                 )
             """)
             
@@ -390,4 +453,338 @@ class MemoryDB:
                 
         except Exception as e:
             print(f"Error getting memory stats: {e}")
-            return {} 
+            return {}
+    
+    def close(self):
+        """Close database connection"""
+        pass
+    
+    # ========== Conversation Recording Methods ==========
+    
+    def save_conversation(
+        self, 
+        agent_id: str, 
+        conversation: List[Dict[str, str]], 
+        memory_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        pipeline_result: Optional[Dict] = None
+    ) -> str:
+        """
+        Save conversation to database.
+        
+        Args:
+            agent_id: Agent ID
+            conversation: List of conversation messages
+            memory_id: Associated memory ID (optional)
+            session_id: Session identifier (optional)
+            pipeline_result: Pipeline execution results (optional)
+            
+        Returns:
+            str: Conversation ID
+        """
+        conversation_id = str(uuid.uuid4())
+        current_time = datetime.now().isoformat()
+        
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # Save conversation record
+                conn.execute("""
+                    INSERT INTO conversations 
+                    (conversation_id, agent_id, created_at, conversation_data, 
+                     pipeline_result, memory_id, session_id, turn_count, summary)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, [
+                    conversation_id,
+                    agent_id,
+                    current_time,
+                    json.dumps(conversation),
+                    json.dumps(pipeline_result) if pipeline_result else None,
+                    memory_id,
+                    session_id or str(uuid.uuid4()),
+                    len(conversation),
+                    self._generate_conversation_summary(conversation)
+                ])
+                
+                # Save individual messages
+                for idx, message in enumerate(conversation):
+                    message_id = str(uuid.uuid4())
+                    conn.execute("""
+                        INSERT INTO conversation_messages 
+                        (message_id, conversation_id, role, content, message_index, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, [
+                        message_id,
+                        conversation_id,
+                        message.get('role', 'unknown'),
+                        message.get('content', ''),
+                        idx,
+                        current_time
+                    ])
+                
+                conn.commit()
+                return conversation_id
+                
+        except Exception as e:
+            print(f"Error saving conversation: {e}")
+            return ""
+    
+    def get_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get conversation by ID.
+        
+        Args:
+            conversation_id: Conversation ID
+            
+        Returns:
+            Dict: Conversation data or None
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                
+                # Get conversation metadata
+                conv_row = conn.execute("""
+                    SELECT * FROM conversations WHERE conversation_id = ?
+                """, [conversation_id]).fetchone()
+                
+                if not conv_row:
+                    return None
+                
+                # Get messages
+                message_rows = conn.execute("""
+                    SELECT role, content, message_index 
+                    FROM conversation_messages 
+                    WHERE conversation_id = ? 
+                    ORDER BY message_index
+                """, [conversation_id]).fetchall()
+                
+                return {
+                    "conversation_id": conv_row["conversation_id"],
+                    "agent_id": conv_row["agent_id"],
+                    "created_at": conv_row["created_at"],
+                    "messages": [dict(row) for row in message_rows],
+                    "turn_count": conv_row["turn_count"],
+                    "summary": conv_row["summary"],
+                    "memory_id": conv_row["memory_id"],
+                    "session_id": conv_row["session_id"]
+                }
+                
+        except Exception as e:
+            print(f"Error getting conversation: {e}")
+            return None
+    
+    def get_conversations_by_agent(
+        self, 
+        agent_id: str, 
+        limit: int = 20,
+        session_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get conversations for an agent.
+        
+        Args:
+            agent_id: Agent ID
+            limit: Maximum number of conversations
+            session_id: Filter by session ID (optional)
+            
+        Returns:
+            List[Dict]: List of conversations
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                
+                query = """
+                    SELECT conversation_id, created_at, turn_count, summary, session_id, memory_id
+                    FROM conversations 
+                    WHERE agent_id = ?
+                """
+                params = [agent_id]
+                
+                if session_id:
+                    query += " AND session_id = ?"
+                    params.append(session_id)
+                
+                query += " ORDER BY created_at DESC LIMIT ?"
+                params.append(limit)
+                
+                rows = conn.execute(query, params).fetchall()
+                return [dict(row) for row in rows]
+                
+        except Exception as e:
+            print(f"Error getting conversations: {e}")
+            return []
+    
+    # ========== Vector Embedding Methods ==========
+    
+    def save_embedding(
+        self,
+        source_type: str,
+        source_id: str,
+        agent_id: str,
+        vector: List[float],
+        content_text: str,
+        embedding_model: str = "default"
+    ) -> bool:
+        """
+        Save vector embedding to database.
+        
+        Args:
+            source_type: Type of source ('conversation', 'message', 'memory')
+            source_id: ID of the source
+            agent_id: Agent ID
+            vector: Vector embedding as list of floats
+            content_text: Original text content
+            embedding_model: Model used for embedding
+            
+        Returns:
+            bool: Whether save was successful
+        """
+        vector_id = str(uuid.uuid4())
+        content_hash = self._calculate_hash(content_text)
+        
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO embedding_vectors 
+                    (vector_id, source_type, source_id, agent_id, vector_data, 
+                     vector_dimension, content_text, content_hash, embedding_model, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, [
+                    vector_id,
+                    source_type,
+                    source_id,
+                    agent_id,
+                    json.dumps(vector),
+                    len(vector),
+                    content_text,
+                    content_hash,
+                    embedding_model,
+                    datetime.now().isoformat()
+                ])
+                
+                conn.commit()
+                return True
+                
+        except Exception as e:
+            print(f"Error saving embedding: {e}")
+            return False
+    
+    def get_embeddings_by_agent(
+        self, 
+        agent_id: str, 
+        source_type: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Get embeddings for an agent.
+        
+        Args:
+            agent_id: Agent ID
+            source_type: Filter by source type (optional)
+            limit: Maximum number of embeddings
+            
+        Returns:
+            List[Dict]: List of embeddings
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                
+                query = """
+                    SELECT vector_id, source_type, source_id, vector_data, 
+                           content_text, embedding_model, created_at
+                    FROM embedding_vectors 
+                    WHERE agent_id = ?
+                """
+                params = [agent_id]
+                
+                if source_type:
+                    query += " AND source_type = ?"
+                    params.append(source_type)
+                
+                query += " ORDER BY created_at DESC LIMIT ?"
+                params.append(limit)
+                
+                rows = conn.execute(query, params).fetchall()
+                return [dict(row) for row in rows]
+                
+        except Exception as e:
+            print(f"Error getting embeddings: {e}")
+            return []
+    
+    def search_similar_vectors(
+        self,
+        agent_id: str,
+        query_vector: List[float],
+        source_type: Optional[str] = None,
+        limit: int = 10,
+        similarity_threshold: float = 0.7
+    ) -> List[Dict[str, Any]]:
+        """
+        Search for similar vectors using cosine similarity.
+        
+        Args:
+            agent_id: Agent ID
+            query_vector: Query vector for similarity search
+            source_type: Filter by source type (optional)
+            limit: Maximum results
+            similarity_threshold: Minimum similarity score
+            
+        Returns:
+            List[Dict]: Similar vectors with similarity scores
+        """
+        try:
+            embeddings = self.get_embeddings_by_agent(agent_id, source_type, limit * 3)
+            
+            results = []
+            for embedding in embeddings:
+                stored_vector = json.loads(embedding['vector_data'])
+                similarity = self._cosine_similarity(query_vector, stored_vector)
+                
+                if similarity >= similarity_threshold:
+                    results.append({
+                        **embedding,
+                        'similarity_score': similarity
+                    })
+            
+            # Sort by similarity and return top results
+            results.sort(key=lambda x: x['similarity_score'], reverse=True)
+            return results[:limit]
+            
+        except Exception as e:
+            print(f"Error searching similar vectors: {e}")
+            return []
+    
+    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        """Calculate cosine similarity between two vectors."""
+        if len(vec1) != len(vec2):
+            return 0.0
+        
+        try:
+            import math
+            
+            dot_product = sum(a * b for a, b in zip(vec1, vec2))
+            magnitude1 = math.sqrt(sum(a * a for a in vec1))
+            magnitude2 = math.sqrt(sum(a * a for a in vec2))
+            
+            if magnitude1 == 0 or magnitude2 == 0:
+                return 0.0
+            
+            return dot_product / (magnitude1 * magnitude2)
+            
+        except Exception:
+            return 0.0
+    
+    def _generate_conversation_summary(self, conversation: List[Dict[str, str]]) -> str:
+        """Generate a simple summary of the conversation."""
+        if not conversation:
+            return ""
+        
+        # Simple summary: first user message + turn count
+        first_user_msg = next(
+            (msg['content'][:100] for msg in conversation if msg.get('role') == 'user'), 
+            "No user message"
+        )
+        
+        return f"Conversation with {len(conversation)} turns: {first_user_msg}..." 
