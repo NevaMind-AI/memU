@@ -13,6 +13,7 @@ import os
 from openai import OpenAI
 from personalab.utils import enhance_system_prompt_with_memory
 from personalab.memory import MemoryClient
+from personalab.memo import ConversationManager
 
 
 def main():
@@ -27,8 +28,13 @@ def main():
     print("🚀 PersonaLab + OpenAI Quick Start")
     print("=" * 40)
     
-    # 1. Initialize PersonaLab memory
+    # 1. Initialize PersonaLab memory and conversation recording
     memory_client = MemoryClient("quickstart.db")
+    conversation_manager = ConversationManager(
+        db_path="quickstart_conversations.db",
+        enable_embeddings=True,
+        embedding_provider="simple"
+    )
     agent_id = "quickstart_user"
     
     # 2. Add some user information
@@ -85,22 +91,31 @@ def main():
         {"role": "user", "content": "Thanks! I'll start with TensorFlow since I prefer good documentation."}
     ]
     
+    # Update memory with conversation
     updated_memory, result = memory_client.update_memory_with_conversation(
         agent_id, 
-        multi_turn_conversation  # Can process entire conversation history at once
+        multi_turn_conversation
+    )
+    
+    # Record conversation in memo system for vectorization and search
+    recorded_conversation = conversation_manager.record_conversation(
+        agent_id=agent_id,
+        messages=multi_turn_conversation,
+        memory_id=updated_memory.memory_id
     )
     
     print(f"\n💾 Memory updated from multi-turn conversation: {result.update_result.profile_updated}")
+    print(f"📝 Conversation recorded: {recorded_conversation.conversation_id}")
     print("✅ Quick start completed!")
     
-    # 7. Demonstrate new conversation recording and vector search features
+    # 7. Demonstrate memo module: conversation recording and vector search
     print("\n" + "="*50)
-    print("🆕 New Features: Conversation Recording & Vector Search")
+    print("🆕 Memo Module: Conversation Recording & Vector Search")
     print("="*50)
     
     # Search for similar conversations (if any exist)
     print(f"\n🔍 Searching for conversations about 'machine learning'...")
-    similar_conversations = memory_client.search_similar_conversations(
+    similar_conversations = conversation_manager.search_similar_conversations(
         agent_id, 
         "machine learning and AI frameworks",
         limit=3
@@ -116,24 +131,24 @@ def main():
     
     # Show conversation history
     print(f"\n📜 Recent conversation history for {agent_id}:")
-    history = memory_client.get_conversation_history(agent_id, limit=3)
+    history = conversation_manager.get_conversation_history(agent_id, limit=3)
     for i, conv in enumerate(history, 1):
         print(f"  {i}. {conv['created_at'][:19]} - Turns: {conv['turn_count']}")
         print(f"     Summary: {conv['summary']}")
     
     # Display embedding info if available
-    if memory_client.embedding_manager:
-        print(f"\n⚡ Embedding Provider: {memory_client.embedding_manager.model_name}")
-        print(f"   Vector Dimension: {memory_client.embedding_manager.embedding_dimension}")
+    if conversation_manager.embedding_manager:
+        print(f"\n⚡ Embedding Provider: {conversation_manager.embedding_manager.model_name}")
+        print(f"   Vector Dimension: {conversation_manager.embedding_manager.embedding_dimension}")
     
-    print("\n💡 New Features Include:")
-    print("   • Automatic conversation recording to database")
+    print("\n💡 Memo Module Features:")
+    print("   • Separate conversation recording system (memo module)")
     print("   • Vector embeddings for semantic similarity search")
     print("   • Conversation history tracking by session")
     print("   • Multiple embedding provider support (OpenAI, Sentence Transformers, Simple)")
-    print("   • Integration with existing PersonaLab memory system")
+    print("   • Clean separation: memory system for profiles/events, memo for conversations")
     
-    print("\n✅ Enhanced quick start completed with new features!")
+    print("\n✅ Enhanced quick start completed with memo module integration!")
 
 
 if __name__ == "__main__":

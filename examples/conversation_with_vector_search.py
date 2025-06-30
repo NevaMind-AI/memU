@@ -225,7 +225,7 @@ def example_4_embedding_providers():
     print("="*60)
     
     providers = [
-        ("simple", "Simple text-feature based embeddings"),
+
         ("sentence-transformers", "Sentence Transformers (if available)"),
         ("openai", "OpenAI embeddings (if API key available)")
     ]

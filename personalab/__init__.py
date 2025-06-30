@@ -10,24 +10,21 @@ __version__ = "0.1.0"
 __author__ = "Your Name"
 __email__ = "your.email@example.com"
 
-# 新的统一Memory架构
+# Core Memory system
 from .memory import (
-    Memory,                    # 统一Memory类
-    MemoryManager,             # Memory管理器
-    ConversationMemoryInterface,  # 对话Memory接口
-    MemoryUpdatePipeline,      # Memory更新Pipeline
-    MemoryRepository,          # 数据库存储层
-    PipelineResult,            # Pipeline结果
+    Memory,                    # Unified Memory class
+    MemoryClient,              # Memory client
+    MemoryUpdatePipeline,      # Memory update pipeline
+    MemoryDB,                  # Database storage layer
+    PipelineResult,            # Pipeline result
     
-    # Memory组件
-    ProfileMemory,             # 画像记忆组件
-    EventMemory,               # 事件记忆组件
-    ToMMemory,                 # Theory of Mind记忆组件
+    # Memory components
+    ProfileMemory,             # Profile memory component
+    EventMemory,               # Event memory component
+    ToMMemory,                 # Theory of Mind memory component
     
-    # 向后兼容
-    BaseMemory,                # 保持向后兼容的基类
-    LegacyProfileMemory,       # 原有的ProfileMemory
-    LegacyEventMemory,         # 原有的EventMemory
+    # Backward compatibility
+    BaseMemory,                # Backward compatible base class
 )
 
 # LLM module
@@ -38,23 +35,20 @@ from .llm import BaseLLMClient, OpenAIClient, create_llm_client
 from .config import config, load_config, setup_env_file
 
 __all__ = [
-    # 新Memory架构 - 主要接口
-    "Memory",                    # 统一Memory类
-    "MemoryManager",             # Memory管理器
-    "ConversationMemoryInterface",  # 对话Memory接口
-    "MemoryUpdatePipeline",      # Memory更新Pipeline
-    "MemoryRepository",          # 数据库存储层
-    "PipelineResult",            # Pipeline结果
+    # Core Memory system
+    "Memory",                    # Unified Memory class
+    "MemoryClient",              # Memory client
+    "MemoryUpdatePipeline",      # Memory update pipeline
+    "MemoryDB",                  # Database storage layer
+    "PipelineResult",            # Pipeline result
     
-    # Memory组件
-    "ProfileMemory",             # 画像记忆组件
-    "EventMemory",               # 事件记忆组件
-    "ToMMemory",                 # Theory of Mind记忆组件
+    # Memory components
+    "ProfileMemory",             # Profile memory component
+    "EventMemory",               # Event memory component
+    "ToMMemory",                 # Theory of Mind memory component
     
-    # 向后兼容
-    "BaseMemory",                # 保持向后兼容的基类
-    "LegacyProfileMemory",       # 原有的ProfileMemory
-    "LegacyEventMemory",         # 原有的EventMemory
+    # Backward compatibility
+    "BaseMemory",                # Backward compatible base class
     
     # LLM system
     "llm", "BaseLLMClient", "OpenAIClient", "create_llm_client",

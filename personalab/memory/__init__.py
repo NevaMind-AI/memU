@@ -1,17 +1,19 @@
 """
 PersonaLab Memory Module
 
-统一Memory架构，包含：
-- Memory: 统一的记忆管理类
-- MemoryClient: Memory客户端，支持conversation记录和向量化
-- MemoryUpdatePipeline: Memory更新Pipeline
-- MemoryDB: 数据库存储层
-- EmbeddingManager: 向量化和语义搜索功能
+Core Memory system including:
+- Memory: Unified memory management class
+- MemoryClient: Memory client for core memory operations
+- MemoryUpdatePipeline: Memory update pipeline
+- MemoryDB: Database storage layer
+- EmbeddingManager: Vector embeddings (for backward compatibility)
 
-向后兼容的原有类：
-- BaseMemory: 抽象基类（保持向后兼容）
-- ProfileMemory: 画像记忆（现在作为组件）
-- EventMemory: 事件记忆（现在作为组件）
+Note: Conversation recording and vectorization are now handled by the memo module.
+
+Backward compatible classes:
+- BaseMemory: Abstract base class (for backward compatibility)
+- ProfileMemory: Profile memory (now as component)
+- EventMemory: Event memory (now as component)
 """
 
 # 新的统一Memory架构
@@ -19,7 +21,7 @@ from .base import Memory, ProfileMemory, EventMemory, ToMMemory
 from .manager import MemoryClient
 from .pipeline import MemoryUpdatePipeline, PipelineResult, UpdateResult, ToMResult
 from .storage import MemoryDB
-from .embeddings import EmbeddingManager, create_embedding_manager
+# Embeddings moved to memo module
 
 # LLM接口
 from ..llm import BaseLLMClient, create_llm_client
@@ -43,10 +45,7 @@ __all__ = [
     'PipelineResult',
     'UpdateResult', 
     'ToMResult',
-    
-    # 向量化和搜索功能
-    'EmbeddingManager',
-    'create_embedding_manager',
+
     
     # LLM接口
     'BaseLLMClient',
