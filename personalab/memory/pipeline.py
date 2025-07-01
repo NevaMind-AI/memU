@@ -57,21 +57,35 @@ class MemoryUpdatePipeline:
     3. LLM performs Theory of Mind analysis for psychological insights
     """
     
-    def __init__(self, llm_client: BaseLLMClient = None, **llm_config):
+    def __init__(self, llm_client: BaseLLMClient = None, llm_config_manager=None, **llm_config):
         """
         Initialize the memory update pipeline
         
         Args:
             llm_client: LLM client instance for processing
+            llm_config_manager: Unified LLM configuration manager
             **llm_config: Additional LLM configuration parameters
         """
         self.llm_client = llm_client
         
-        self.llm_config = {
-            'temperature': 0.3,  # Lower temperature for consistent results
-            'max_tokens': 2000,
-            **llm_config
-        }
+        # Use unified configuration manager if provided
+        if llm_config_manager is not None:
+            self.llm_config_manager = llm_config_manager
+            self.llm_config = self.llm_config_manager.get_pipeline_config(**llm_config)
+        else:
+            # Fallback to old behavior for backward compatibility
+            try:
+                from ..config import get_llm_config_manager
+                self.llm_config_manager = get_llm_config_manager()
+                self.llm_config = self.llm_config_manager.get_pipeline_config(**llm_config)
+            except ImportError:
+                # Legacy fallback
+                self.llm_config_manager = None
+                self.llm_config = {
+                    'temperature': 0.3,  # Lower temperature for consistent results
+                    'max_tokens': 2000,
+                    **llm_config
+                }
     
     def update_with_pipeline(
         self, 

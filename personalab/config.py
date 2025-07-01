@@ -166,8 +166,157 @@ class Config:
         return {k: v for k, v in config.items() if v is not None}
 
 
+class LLMConfigManager:
+    """
+    Unified LLM Configuration Manager
+    Centralizes all LLM-related configuration management
+    """
+    
+    def __init__(self, config: Config):
+        """
+        Initialize LLM Config Manager
+        
+        Args:
+            config: Base Config instance
+        """
+        self.config = config
+        self._provider_configs = {}
+        self._default_provider = "openai"
+        self._init_provider_configs()
+    
+    def _init_provider_configs(self):
+        """Initialize configurations for all supported providers"""
+        # OpenAI Configuration
+        self._provider_configs["openai"] = {
+            "api_key": self.config.openai_api_key,
+            "model": self.config.openai_model,
+            "base_url": self.config.openai_base_url,
+            "temperature": self.config.default_temperature,
+            "max_tokens": self.config.default_max_tokens,
+            "provider_type": "openai"
+        }
+        
+        # Anthropic Configuration
+        self._provider_configs["anthropic"] = {
+            "api_key": self.config.anthropic_api_key,
+            "model": "claude-3-sonnet-20240229",  # Default model
+            "temperature": self.config.default_temperature,
+            "max_tokens": self.config.default_max_tokens,
+            "provider_type": "anthropic"
+        }
+        
+        # Azure OpenAI Configuration
+        self._provider_configs["azure"] = {
+            "api_key": self.config.azure_openai_api_key,
+            "endpoint": self.config.azure_openai_endpoint,
+            "temperature": self.config.default_temperature,
+            "max_tokens": self.config.default_max_tokens,
+            "provider_type": "azure"
+        }
+    
+    def get_provider_config(self, provider: str = None) -> dict:
+        """
+        Get configuration for specified provider
+        
+        Args:
+            provider: Provider name, defaults to current default
+            
+        Returns:
+            Provider configuration dict
+        """
+        if provider is None:
+            provider = self._default_provider
+            
+        provider = provider.lower()
+        if provider not in self._provider_configs:
+            raise ValueError(f"Unsupported LLM provider: {provider}")
+        
+        config = self._provider_configs[provider].copy()
+        # Remove None values
+        return {k: v for k, v in config.items() if v is not None}
+    
+    def set_default_provider(self, provider: str):
+        """
+        Set default LLM provider
+        
+        Args:
+            provider: Provider name
+        """
+        provider = provider.lower()
+        if provider not in self._provider_configs:
+            raise ValueError(f"Unsupported LLM provider: {provider}")
+        
+        self._default_provider = provider
+    
+    def get_default_provider(self) -> str:
+        """Get current default provider"""
+        return self._default_provider
+    
+    def validate_provider(self, provider: str = None) -> bool:
+        """
+        Validate provider configuration
+        
+        Args:
+            provider: Provider name, defaults to current default
+            
+        Returns:
+            True if configuration is valid
+        """
+        if provider is None:
+            provider = self._default_provider
+            
+        return self.config.validate_llm_config(provider)
+    
+    def get_pipeline_config(self, provider: str = None, **overrides) -> dict:
+        """
+        Get configuration optimized for pipeline usage
+        
+        Args:
+            provider: Provider name
+            **overrides: Configuration overrides
+            
+        Returns:
+            Pipeline-optimized configuration
+        """
+        base_config = self.get_provider_config(provider)
+        
+        # Pipeline-specific defaults
+        pipeline_defaults = {
+            "temperature": 0.3,  # Lower for consistency
+            "max_tokens": 2000,
+            "timeout": 30,
+            "retry_count": 3
+        }
+        
+        # Merge: base_config -> pipeline_defaults -> overrides
+        result = {**base_config, **pipeline_defaults, **overrides}
+        return result
+    
+    def list_providers(self) -> list:
+        """List all supported providers"""
+        return list(self._provider_configs.keys())
+    
+    def get_provider_status(self) -> dict:
+        """
+        Get status of all providers
+        
+        Returns:
+            Dict with provider status information
+        """
+        status = {}
+        for provider in self._provider_configs.keys():
+            status[provider] = {
+                "configured": self.validate_provider(provider),
+                "config": self.get_provider_config(provider)
+            }
+        return status
+
+
 # Global config instance
 config = Config()
+
+# Global LLM config manager instance
+llm_config_manager = LLMConfigManager(config)
 
 
 def load_config(env_file: Optional[str] = None) -> Config:
@@ -180,7 +329,20 @@ def load_config(env_file: Optional[str] = None) -> Config:
     Returns:
         Config instance
     """
-    return Config(env_file)
+    global config, llm_config_manager
+    config = Config(env_file)
+    llm_config_manager = LLMConfigManager(config)
+    return config
+
+
+def get_llm_config_manager() -> LLMConfigManager:
+    """
+    Get global LLM configuration manager instance
+    
+    Returns:
+        LLM configuration manager
+    """
+    return llm_config_manager
 
 
 def setup_env_file():

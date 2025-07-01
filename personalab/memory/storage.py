@@ -38,37 +38,46 @@ class MemoryDB:
         self._init_database()
     
     def _init_database(self):
-        """Initialize database table structure"""
+        """Initialize database table structure with improved schema"""
         with sqlite3.connect(self.db_path) as conn:
-            # Create memories table (unified Memory table)
+            # Enable foreign key constraints and WAL mode for better performance
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA journal_mode = WAL")
+            
+            # Create memories table (unified Memory table) with embedded content
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS memories (
                     memory_id TEXT PRIMARY KEY,
                     agent_id TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    version INTEGER DEFAULT 1,
+                    version INTEGER DEFAULT 2,
+                    
+                    -- Embedded content for simplified access
+                    profile_content TEXT,              -- Direct profile storage
+                    event_content TEXT,                -- JSON array for events
+                    tom_content TEXT,                  -- JSON array for ToM insights
                     
                     -- Theory of Mind analysis results
                     tom_metadata TEXT,
-                    confidence_score REAL,
+                    confidence_score REAL DEFAULT 0.0,
                     
                     -- Memory statistics
                     profile_content_hash TEXT,
                     event_count INTEGER DEFAULT 0,
                     last_event_date TEXT,
                     
-                    -- Index
-                    FOREIGN KEY (agent_id) REFERENCES agents(agent_id)
+                    -- Schema versioning for migrations
+                    schema_version INTEGER DEFAULT 2
                 )
             """)
             
-            # Create memory_contents table (Memory content table)
+            # Create memory_contents table (for backward compatibility and search)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS memory_contents (
                     content_id TEXT PRIMARY KEY,
                     memory_id TEXT NOT NULL,
-                    content_type TEXT NOT NULL CHECK (content_type IN ('profile', 'event')),
+                    content_type TEXT NOT NULL CHECK (content_type IN ('profile', 'event', 'tom')),
                     
                     -- Content data
                     content_data TEXT NOT NULL,
@@ -79,19 +88,60 @@ class MemoryDB:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     
-                    FOREIGN KEY (memory_id) REFERENCES memories(memory_id),
+                    FOREIGN KEY (memory_id) REFERENCES memories(memory_id) ON DELETE CASCADE,
                     UNIQUE(memory_id, content_type)
                 )
             """)
-            
 
-            # Create indexes
+            # Create indexes for better performance
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_agent_id ON memories(agent_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_schema_version ON memories(schema_version)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_contents_memory_type ON memory_contents(memory_id, content_type)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_contents_hash ON memory_contents(content_hash)")
             
+            # Create trigger for automatic cascade deletion
+            conn.execute("""
+                CREATE TRIGGER IF NOT EXISTS cleanup_memory_contents
+                AFTER DELETE ON memories
+                BEGIN
+                    DELETE FROM memory_contents WHERE memory_id = OLD.memory_id;
+                END
+            """)
+            
             conn.commit()
+            
+            # Run schema migration if needed
+            self._migrate_database_schema()
+            
+    def _migrate_database_schema(self):
+        """Migrate database schema to latest version"""
+        with sqlite3.connect(self.db_path) as conn:
+            # Check current schema version
+            try:
+                version_result = conn.execute(
+                    "SELECT MAX(schema_version) FROM memories WHERE schema_version IS NOT NULL"
+                ).fetchone()
+                current_version = version_result[0] if version_result and version_result[0] else 1
+            except sqlite3.OperationalError:
+                current_version = 1
+            
+            if current_version < 2:
+                print("Migrating database schema to version 2...")
+                try:
+                    # Add new columns for embedded content
+                    conn.execute("ALTER TABLE memories ADD COLUMN profile_content TEXT")
+                    conn.execute("ALTER TABLE memories ADD COLUMN event_content TEXT") 
+                    conn.execute("ALTER TABLE memories ADD COLUMN tom_content TEXT")
+                    conn.execute("ALTER TABLE memories ADD COLUMN schema_version INTEGER DEFAULT 2")
+                    
+                    # Update existing records
+                    conn.execute("UPDATE memories SET schema_version = 2 WHERE schema_version IS NULL")
+                    conn.commit()
+                    print("Database schema migration completed.")
+                except sqlite3.OperationalError as e:
+                    print(f"Schema migration warning: {e}")
+                    # Columns may already exist
     
     def save_memory(self, memory: Memory) -> bool:
         """
@@ -230,7 +280,7 @@ class MemoryDB:
     
     def delete_memory(self, memory_id: str) -> bool:
         """
-        Delete Memory object.
+        Delete Memory object with improved transaction handling.
         
         Args:
             memory_id: Memory ID
@@ -240,17 +290,72 @@ class MemoryDB:
         """
         try:
             with sqlite3.connect(self.db_path) as conn:
-                # Delete memory_contents
-                conn.execute("DELETE FROM memory_contents WHERE memory_id = ?", [memory_id])
+                # Start transaction
+                conn.execute("BEGIN TRANSACTION")
                 
-                # Delete memories
-                conn.execute("DELETE FROM memories WHERE memory_id = ?", [memory_id])
-                
-                conn.commit()
-                return True
+                try:
+                    # Check if memory exists
+                    exists = conn.execute(
+                        "SELECT 1 FROM memories WHERE memory_id = ?", 
+                        [memory_id]
+                    ).fetchone()
+                    
+                    if not exists:
+                        conn.execute("ROLLBACK")
+                        return False
+                    
+                    # Delete related content first to maintain referential integrity
+                    content_result = conn.execute(
+                        "DELETE FROM memory_contents WHERE memory_id = ?", 
+                        [memory_id]
+                    )
+                    
+                    # Delete main memory record
+                    memory_result = conn.execute(
+                        "DELETE FROM memories WHERE memory_id = ?", 
+                        [memory_id]
+                    )
+                    
+                    # Verify deletions
+                    if memory_result.rowcount == 0:
+                        conn.execute("ROLLBACK")
+                        return False
+                    
+                    conn.execute("COMMIT")
+                    return True
+                    
+                except Exception as e:
+                    conn.execute("ROLLBACK")
+                    print(f"Transaction failed during deletion: {e}")
+                    return False
                 
         except Exception as e:
             print(f"Error deleting memory: {e}")
+            return False
+
+    def _simplified_delete_memory(self, memory_id: str) -> bool:
+        """
+        Simplified deletion method using CASCADE constraints.
+        This is the preferred approach for future database schema.
+        
+        Args:
+            memory_id: Memory ID
+            
+        Returns:
+            bool: Whether deletion was successful
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # With proper CASCADE constraints, we only need one operation
+                result = conn.execute(
+                    "DELETE FROM memories WHERE memory_id = ?", 
+                    [memory_id]
+                )
+                
+                return result.rowcount > 0
+                
+        except Exception as e:
+            print(f"Error in simplified deletion: {e}")
             return False
     
     def list_memories_by_agent(self, agent_id: str, limit: int = 10) -> List[Dict[str, Any]]:

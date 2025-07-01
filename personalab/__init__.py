@@ -22,15 +22,12 @@ from .memory import (
     ProfileMemory,             # Profile memory component
     EventMemory,               # Event memory component
     ToMMemory,                 # Theory of Mind memory component
-    
-    # Backward compatibility
-    BaseMemory,                # Backward compatible base class
 )
 
 # Conversation management
 from .memo import ConversationManager
 
-# LLM system - NEW!
+# LLM system
 from .llm import (
     BaseLLMClient,             # Base LLM client
     LLMResponse,               # LLM response object
@@ -42,14 +39,24 @@ from .llm import (
 # Persona API - Simple entry point
 from .persona import Persona
 
-# Legacy LLM module (for backward compatibility)
-from . import llm
-
 # Configuration module
-from .config import config, load_config, setup_env_file
+from .config import config, load_config, setup_env_file, LLMConfigManager, get_llm_config_manager
+
+# Backward compatibility (DEPRECATED - will be removed in future versions)
+try:
+    from .memory import BaseMemory
+    _backward_compatibility_available = True
+except ImportError:
+    _backward_compatibility_available = False
+    import warnings
+    warnings.warn(
+        "Some legacy components are not available. Please update to use the new Memory API.",
+        DeprecationWarning,
+        stacklevel=2
+    )
 
 __all__ = [
-    # Simple API
+    # Main API
     "Persona",                   # Main entry point - simple API
     
     # Core Memory system
@@ -64,9 +71,6 @@ __all__ = [
     "EventMemory",               # Event memory component
     "ToMMemory",                 # Theory of Mind memory component
     
-    # Backward compatibility
-    "BaseMemory",                # Backward compatible base class
-    
     # Conversation management
     "ConversationManager",       # Conversation recording and search
     
@@ -77,9 +81,29 @@ __all__ = [
     "AnthropicClient",           # Anthropic implementation
     "CustomLLMClient",           # Custom LLM support
     
-    # Legacy
-    "llm",                       # LLM module
-    
     # Configuration
-    "config", "load_config", "setup_env_file",
-] 
+    "config",                    # Global config instance
+    "load_config",               # Config loader
+    "setup_env_file",            # Environment setup helper
+    "LLMConfigManager",          # Unified LLM config manager
+    "get_llm_config_manager",    # Global LLM config getter
+]
+
+# Legacy support (conditional export)
+if _backward_compatibility_available:
+    __all__.append("BaseMemory")
+
+# Deprecation warning for legacy imports
+def __getattr__(name):
+    """Handle legacy imports with deprecation warnings"""
+    if name == "llm":
+        import warnings
+        warnings.warn(
+            "Direct 'llm' module import is deprecated. Use specific LLM client imports instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        from . import llm
+        return llm
+    
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'") 
