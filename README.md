@@ -28,8 +28,8 @@ pip install personalab[all]  # All features
 ```python
 from personalab import Persona
 
-# Auto-select available LLM (recommended)
-persona = Persona.create_auto(agent_id="my_ai_assistant")
+# Default OpenAI usage (reads OPENAI_API_KEY from .env)
+persona = Persona(agent_id="my_ai_assistant")
 
 # Or specify LLM provider explicitly
 persona = Persona.create_openai(agent_id="openai_assistant")

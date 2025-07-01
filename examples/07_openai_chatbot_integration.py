@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
 """
-PersonaLab示例07：LLM Quick Start Demo
-=====================================
+PersonaLab示例07：OpenAI Quick Start Demo
+=========================================
 
-最简单的PersonaLab + LLM集成示例
-自动从.env文件读取API key，支持多种LLM提供商
+最简单的PersonaLab + OpenAI集成示例
+从.env文件读取OPENAI_API_KEY
 
 运行前请确保：
 1. 安装PersonaLab：pip install -e .
 2. 创建.env文件并设置API key：
    - OPENAI_API_KEY="your-openai-key"
-   - 或 ANTHROPIC_API_KEY="your-anthropic-key"
 3. 运行脚本：python examples/07_openai_chatbot_integration.py
 """
 
 from personalab import Persona
 
-# 自动选择可用的LLM（推荐方式）
-persona = Persona.create_auto(agent_id="chatbot_assistant")
+# 默认使用OpenAI（从.env读取API key）
+persona = Persona(agent_id="chatbot_assistant")
 
 def chat_with_memories(message: str) -> str:
     return persona.chat(message)
