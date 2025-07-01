@@ -1,10 +1,52 @@
-# PersonaLab
+<div align="center">
+  <img src="assets/logo.png" alt="PersonaLab Logo" width="200" height="200">
+  
+  # PersonaLab
+
+  🧠 **AI Memory and Conversation Management** - Simple as mem0, Powerful as PersonaLab
+  
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+  [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+  [![PyPI version](https://badge.fury.io/py/personalab.svg)](https://badge.fury.io/py/personalab)
+</div>
 
 PersonaLab is a comprehensive AI memory and conversation management system that provides intelligent profile management, conversation recording, and advanced semantic search capabilities for AI agents. It combines persistent memory storage, conversation analysis, psychological modeling, and vector-based retrieval for building sophisticated AI applications.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+## ⚡ Quick Start
+
+### Installation
+
+```bash
+pip install personalab[ai]  # Core AI features with OpenAI support
+# or
+pip install personalab[all]  # All features
+```
+
+### Usage (3 lines of code!)
+
+```python
+from personalab import Persona
+from openai import OpenAI
+
+persona = Persona(openai_client=OpenAI())
+
+def chat_with_memories(message: str, user_id: str = "default_user") -> str:
+    return persona.chat(message, user_id=user_id)
+
+# That's it! Your AI now has persistent memory and conversation retrieval
+print(chat_with_memories("Hi, I'm learning Python"))
+print(chat_with_memories("What was I learning?"))  # Remembers previous context
+```
+
+### Environment Setup
+
+```bash
+export OPENAI_API_KEY="your-api-key"
+python -c "from personalab import Persona; print('✅ Ready to go!')"
+```
+
+---
 
 ## 🌟 Key Features
 
@@ -141,26 +183,7 @@ session_conversations = manager.get_session_conversations(
 )
 ```
 
-### Legacy API (Backward Compatibility)
 
-```python
-from personalab.main import Memory
-
-# Create a memory instance
-memory = Memory("my_agent", enable_llm_search=True)
-
-# Set initial agent profile
-agent_memory = memory.get_agent_memory()
-agent_memory.update_profile("I am an AI assistant specialized in programming.")
-
-# Add events
-agent_memory.update_events(["User asked about Python programming best practices."])
-
-# Search memory
-if memory.need_search("Tell me about Python coding"):
-    results = memory.deep_search("What Python topics have we discussed?")
-    print(results['relevant_context'])
-```
 
 ## 🏗️ Architecture
 
@@ -169,7 +192,6 @@ if memory.need_search("Tell me about Python coding"):
 PersonaLab/
 ├── personalab/
 │   ├── __init__.py          # Main exports
-│   ├── main.py              # Legacy Memory class (backward compatibility)
 │   ├── config.py            # Configuration management
 │   ├── llm.py               # LLM integration
 │   ├── memory/              # Core memory management module

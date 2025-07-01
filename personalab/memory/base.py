@@ -63,14 +63,19 @@ class Memory:
     
     def update_events(self, new_events: List[str]):
         """Update event memory"""
-        for event in new_events:
-            self.event_memory.set_content(event)
+        current_events = self.event_memory.get_content()
+        current_events.extend(new_events)
+        # Keep only the most recent events (within max_events limit)
+        if len(current_events) > self.event_memory.max_events:
+            current_events = current_events[-self.event_memory.max_events:]
+        self.event_memory.set_content(current_events)
         self.updated_at = datetime.now()
     
     def update_tom(self, new_insights: List[str]):
         """Update Theory of Mind memory"""
-        for insight in new_insights:
-            self.tom_memory.set_content(insight)
+        current_insights = self.tom_memory.get_content()
+        current_insights.extend(new_insights)
+        self.tom_memory.set_content(current_insights)
         self.updated_at = datetime.now()
     
     def to_prompt(self) -> str:

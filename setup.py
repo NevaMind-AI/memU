@@ -3,24 +3,68 @@ import setuptools
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-with open("requirements.txt", "r", encoding="utf-8") as fh:
-    requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+# 核心依赖 - 最小化安装
+core_requirements = [
+    "requests>=2.31.0",
+    "python-dotenv>=0.19.0",
+    "json5>=0.9.0",
+    "httpx>=0.24.0",
+]
+
+# 可选依赖
+extras_require = {
+    # 核心AI功能
+    "ai": [
+        "openai>=1.0.0",
+        "sentence-transformers>=2.2.0",
+    ],
+    # 完整LLM支持
+    "llm": [
+        "openai>=1.0.0",
+        "anthropic>=0.7.0",
+        "google-generativeai>=0.3.0",
+        "cohere>=4.0.0",
+        "boto3>=1.26.0",
+        "together>=0.2.0",
+        "replicate>=0.15.0",
+    ],
+    # 本地模型支持
+    "local": [
+        "transformers>=4.21.0",
+        "torch>=1.12.0",
+        "sentence-transformers>=2.2.0",
+    ],
+    # 开发依赖
+    "dev": [
+        "pytest>=7.0",
+        "pytest-cov>=4.0",
+        "black>=22.0",
+        "flake8>=5.0",
+        "mypy>=1.0",
+        "pre-commit>=3.0",
+    ],
+}
+
+# 完整安装（包含所有功能）
+extras_require["all"] = list(set(sum(extras_require.values(), [])))
 
 setuptools.setup(
     name="personalab",
     version="0.1.0",
-    author="Your Name",
-    author_email="your.email@example.com",
-    description="A Python framework for creating and managing AI personas and laboratory environments",
+    author="PersonaLab Team",
+    author_email="support@personalab.ai",
+    description="AI Memory and Conversation Management Framework - Simple as mem0, Powerful as PersonaLab",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/NevaMind-AI/PersonaLab",
     project_urls={
         "Bug Tracker": "https://github.com/NevaMind-AI/PersonaLab/issues",
         "Documentation": "https://github.com/NevaMind-AI/PersonaLab#readme",
+        "Source Code": "https://github.com/NevaMind-AI/PersonaLab",
+        "Homepage": "https://personalab.ai",
     },
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
@@ -30,22 +74,19 @@ setuptools.setup(
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
+        "Topic :: Scientific/Engineering :: Artificial Intelligence",
+        "Topic :: Software Development :: Libraries :: Python Modules",
     ],
+    keywords="ai, memory, conversation, llm, chatbot, persona, agent",
     packages=setuptools.find_packages(),
     python_requires=">=3.8",
-    install_requires=requirements,
-    extras_require={
-        "dev": [
-            "pytest>=7.0",
-            "pytest-cov>=4.0",
-            "black>=22.0",
-            "flake8>=5.0",
-            "mypy>=1.0",
-        ],
-    },
+    install_requires=core_requirements,
+    extras_require=extras_require,
     entry_points={
         "console_scripts": [
-            # "your-cli-command=your_package.cli:main",
+            "personalab=personalab.cli:main",
         ],
     },
+    include_package_data=True,
+    zip_safe=False,
 ) 
