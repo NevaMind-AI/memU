@@ -1,7 +1,8 @@
 <div align="center">
-  <img src="assets/banner.png" alt="PersonaLab Banner" width="100%">
+
+![PersonaLab Banner](assets/banner.png)
   
-  # PersonaLab
+# PersonaLab
 
   🧠 **AI Memory and Conversation Management** - Simple as mem0, Powerful as PersonaLab
   
