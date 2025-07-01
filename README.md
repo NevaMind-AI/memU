@@ -1,19 +1,26 @@
 # PersonaLab
 
-PersonaLab is an advanced AI memory management system that provides intelligent profile management and LLM-enhanced search capabilities for AI agents. It offers persistent memory storage, conversation analysis, and psychological modeling through Theory of Mind (ToM) capabilities.
+PersonaLab is a comprehensive AI memory and conversation management system that provides intelligent profile management, conversation recording, and advanced semantic search capabilities for AI agents. It combines persistent memory storage, conversation analysis, psychological modeling, and vector-based retrieval for building sophisticated AI applications.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-## 🚀 Features
+## 🌟 Key Features
 
-### 📝 Core Memory Management
+### 💾 Core Memory Management
 - **Agent Memory**: Persistent profile and event storage for AI agents
-- **User Memory**: Individual memory spaces for different users
+- **User Memory**: Individual memory spaces for different users  
 - **Profile Management**: Automatic profile updates based on conversations
 - **Event Tracking**: Comprehensive conversation and interaction history
-- **Theory of Mind**: Psychological analysis and insights generation
+- **Theory of Mind**: Psychological analysis and behavioral insights
+
+### 💬 Conversation Recording & Retrieval
+- **Conversation Storage**: Structured conversation recording with required fields (user_id, agent_id, created_at)
+- **Vector Embeddings**: High-quality semantic embeddings for conversations and messages
+- **Semantic Search**: Intelligent conversation retrieval based on semantic similarity
+- **Session Management**: Session-based conversation organization and tracking
+- **Multiple Providers**: Support for OpenAI and SentenceTransformers embedding models
 
 ### 🧠 LLM Integration
 - **Multiple LLM Providers**: OpenAI, Anthropic, Google Gemini, Azure OpenAI, Cohere, AWS Bedrock, Together AI, Replicate, Local LLMs
@@ -21,17 +28,11 @@ PersonaLab is an advanced AI memory management system that provides intelligent 
 - **Profile Updates**: AI-driven profile enhancement from conversation content
 - **XML Parsing**: Structured profile output with automatic parsing
 
-### 🔍 Advanced Search
+### 🔍 Advanced Search & Analysis
 - **LLM-Enhanced Search**: Semantic understanding and relevance scoring
-- **Deep Search**: Multi-level content analysis with cross-referencing
+- **Vector Similarity Search**: Fast and accurate conversation retrieval
 - **Intent Analysis**: Intelligent extraction of search requirements
 - **Context-Aware Results**: Ranked results based on conversation context
-
-### 🏗️ Unified Memory Architecture
-- **Unified Memory Class**: Integrated ProfileMemory, EventMemory, and ToMMemory components
-- **Pipeline-Based Updates**: Three-stage update process (Modification → Update → Theory of Mind)
-- **Database Storage**: SQLite-based persistent storage with efficient querying
-- **Memory Manager**: Complete lifecycle management with conversation processing
 
 ## 📦 Installation
 
@@ -47,30 +48,16 @@ pip install -r requirements-dev.txt
 pre-commit install
 ```
 
-## 🛠️ Quick Start
+### Optional: OpenAI Setup for Enhanced Embeddings
 
-### Basic Usage
-
-```python
-from personalab.main import Memory
-
-# Create a memory instance
-memory = Memory("my_agent", enable_llm_search=True)
-
-# Set initial agent profile
-agent_memory = memory.get_agent_memory()
-agent_memory.update_profile("I am an AI assistant specialized in programming.")
-
-# Add events
-agent_memory.update_events(["User asked about Python programming best practices."])
-
-# Search memory
-if memory.need_search("Tell me about Python coding"):
-    results = memory.deep_search("What Python topics have we discussed?")
-    print(results['relevant_context'])
+```bash
+pip install openai
+export OPENAI_API_KEY="your-api-key-here"
 ```
 
-### Using the New Unified Architecture
+## 🚀 Quick Start
+
+### Basic Memory Management
 
 ```python
 from personalab.memory import MemoryManager
@@ -97,101 +84,171 @@ print(f"Events: {updated_memory.get_event_content()}")
 print(f"ToM insights: {updated_memory.get_tom_content()}")
 ```
 
-### Profile Updates
+### Conversation Recording & Semantic Search
 
 ```python
-# Update agent profile based on conversation
-conversation = """
-User: Can you help with machine learning?
-Agent: Yes! I have experience with scikit-learn, PyTorch, and TensorFlow.
-"""
+from personalab.memo import ConversationManager
 
-updated_profile = memory.update_agent_profile_memory(conversation)
-print(f"Updated profile: {updated_profile}")
+# Initialize conversation manager with embeddings
+manager = ConversationManager(
+    db_path="conversations.db",
+    enable_embeddings=True,
+    embedding_provider="auto"  # Automatically selects best available
+)
 
-# Update user profile
-user_id = "data_scientist_alice"
-updated_user_profile = memory.update_user_profile_memory(user_id, conversation)
+# Record a conversation (user_id and agent_id are required)
+conversation = manager.record_conversation(
+    agent_id="assistant_v1",
+    user_id="user_123", 
+    messages=[
+        {"role": "user", "content": "How do I learn Python programming?"},
+        {"role": "assistant", "content": "Start with basic syntax, then practice with projects."},
+        {"role": "user", "content": "Any recommended resources?"},
+        {"role": "assistant", "content": "Try Python.org tutorials and Codecademy."}
+    ],
+    enable_vectorization=True
+)
+
+# Search for similar conversations
+results = manager.search_similar_conversations(
+    agent_id="assistant_v1",
+    query="Python learning resources",
+    limit=5,
+    similarity_threshold=0.7
+)
+
+for result in results:
+    print(f"Similarity: {result['similarity_score']:.3f}")
+    print(f"Summary: {result['summary']}")
+    print("---")
 ```
 
-### LLM Provider Setup
+### User-Based Conversation Filtering
 
 ```python
-from personalab.llm import LLMManager
+# Get conversation history for specific user
+user_conversations = manager.get_conversation_history(
+    agent_id="assistant_v1",
+    user_id="user_123",
+    limit=10
+)
 
-# Quick setup (auto-detects available providers)
-llm_manager = LLMManager.create_quick_setup()
+# Get conversations from specific session
+session_conversations = manager.get_session_conversations(
+    agent_id="assistant_v1",
+    session_id="session_abc",
+    user_id="user_123"
+)
+```
 
-# Use specific provider
-memory = Memory("agent", llm_instance=llm_manager.get_current_provider())
+### Legacy API (Backward Compatibility)
+
+```python
+from personalab.main import Memory
+
+# Create a memory instance
+memory = Memory("my_agent", enable_llm_search=True)
+
+# Set initial agent profile
+agent_memory = memory.get_agent_memory()
+agent_memory.update_profile("I am an AI assistant specialized in programming.")
+
+# Add events
+agent_memory.update_events(["User asked about Python programming best practices."])
+
+# Search memory
+if memory.need_search("Tell me about Python coding"):
+    results = memory.deep_search("What Python topics have we discussed?")
+    print(results['relevant_context'])
 ```
 
 ## 🏗️ Architecture
 
-### Memory Structure
+### Project Structure
 ```
 PersonaLab/
 ├── personalab/
+│   ├── __init__.py          # Main exports
 │   ├── main.py              # Legacy Memory class (backward compatibility)
 │   ├── config.py            # Configuration management
 │   ├── llm.py               # LLM integration
-│   └── memory/              # New unified memory architecture
-│       ├── __init__.py      # Memory module exports
-│       ├── base.py          # Core Memory, ProfileMemory, EventMemory, ToMMemory
-│       ├── manager.py       # MemoryManager and ConversationMemoryInterface
-│       ├── pipeline.py      # MemoryUpdatePipeline and pipeline stages
-│       ├── storage.py       # MemoryRepository and database operations
-│       ├── events.py        # Event-related utilities
-│       ├── profile.py       # Profile-related utilities
-│ 
-└── examples/                # Example scripts and usage demos
+│   ├── memory/              # Core memory management module
+│   │   ├── __init__.py      # Memory module exports
+│   │   ├── base.py          # Core Memory, ProfileMemory, EventMemory, ToMMemory
+│   │   ├── manager.py       # MemoryManager and conversation processing
+│   │   ├── pipeline.py      # MemoryUpdatePipeline and pipeline stages
+│   │   ├── storage.py       # MemoryRepository and database operations
+│   │   ├── events.py        # Event-related utilities
+│   │   └── profile.py       # Profile-related utilities
+│   └── memo/                # Conversation recording and retrieval module
+│       ├── __init__.py      # Memo module exports
+│       ├── models.py        # Conversation and Message data models
+│       ├── storage.py       # ConversationDB and vector storage
+│       ├── manager.py       # ConversationManager and search functionality
+│       └── embeddings.py    # Embedding providers and management
+├── examples/                # Example scripts and usage demos
+├── docs/                    # Documentation
+└── tests/                   # Test suite
 ```
 
-### Key Components
+### Core Components
 
-- **Memory**: Unified memory class containing ProfileMemory, EventMemory, and ToMMemory components
-- **MemoryManager**: Handles complete memory lifecycle including database operations
+#### Memory Module (`personalab.memory`)
+- **Memory**: Unified memory class with ProfileMemory, EventMemory, and ToMMemory
+- **MemoryManager**: Complete memory lifecycle management
 - **MemoryUpdatePipeline**: Three-stage LLM-driven update process
-- **LLMManager**: Handles multiple LLM provider integrations
-- **Search System**: LLM-powered intelligent search and ranking
+- **MemoryRepository**: SQLite-based persistent storage
 
-### Memory Update Pipeline
+#### Memo Module (`personalab.memo`)
+- **ConversationManager**: High-level conversation recording and search
+- **ConversationDB**: Database operations for conversations and vectors
+- **Conversation/ConversationMessage**: Data models with required fields
+- **EmbeddingProviders**: OpenAI, SentenceTransformers, auto-selection
 
-The system uses a sophisticated three-stage pipeline for updating memories:
+### Required Fields for Conversations
 
-1. **Modification Stage**: Analyzes conversation content and extracts relevant information
-2. **Update Stage**: Updates profile and events based on extracted information
-3. **Theory of Mind Stage**: Performs psychological analysis and generates insights
+All conversations must include these mandatory fields:
+- **`agent_id`**: Unique identifier for the AI agent (required, non-empty)
+- **`user_id`**: Unique identifier for the user (required, non-empty)  
+- **`created_at`**: Timestamp (automatically set when conversation is created)
+
+### Embedding Providers
+
+PersonaLab supports multiple embedding providers with automatic fallback:
+
+1. **OpenAI** (Premium): `text-embedding-ada-002` (1536 dimensions)
+2. **SentenceTransformers** (Free): Local models like `all-MiniLM-L6-v2` (384 dimensions)
+3. **Auto**: Automatically selects the best available provider
 
 ## 🔧 Configuration
 
-### LLM Settings
+### Environment Variables
 
-```python
-# Enable/disable LLM-based search
-memory = Memory("agent", enable_llm_search=True)
+```bash
+# OpenAI (for enhanced embeddings)
+export OPENAI_API_KEY="your-openai-api-key"
 
-# Use custom LLM instance
-from personalab.llm import OpenAILLM
-custom_llm = OpenAILLM(api_key="your-key")
-memory = Memory("agent", llm_instance=custom_llm)
+# Other LLM providers
+export ANTHROPIC_API_KEY="your-anthropic-key"
+export GOOGLE_AI_API_KEY="your-google-key"
 ```
 
-### Search Parameters
+### Embedding Provider Configuration
 
 ```python
-# Configure deep search
-results = memory.deep_search(
-    conversation="What did we discuss about AI?",
-    max_results=10,
-    similarity_threshold=70.0
+# Use specific embedding provider
+manager = ConversationManager(
+    embedding_provider="openai"  # or "sentence-transformers", "auto"
 )
+
+# Disable embeddings entirely
+manager = ConversationManager(enable_embeddings=False)
 ```
 
-### Memory Manager Configuration
+### Memory Configuration
 
 ```python
-# Configure memory manager
+# Custom memory manager setup
 memory_manager = MemoryManager(
     db_path="custom_memory.db",
     llm_client=custom_llm,
@@ -200,142 +257,131 @@ memory_manager = MemoryManager(
 )
 ```
 
-## 📊 API Reference
+### Search Parameters
 
-### Memory Class (Legacy)
-
-- `Memory(agent_id, enable_llm_search=True, llm_instance=None)`
-- `need_search(conversation, system_prompt="", context_length=0) -> bool`
-- `deep_search(conversation, system_prompt="", user_id=None, max_results=15) -> Dict`
-- `update_agent_profile_memory(conversation) -> str`
-- `update_user_profile_memory(user_id, conversation) -> str`
-
-### MemoryManager (New Architecture)
-
-- `MemoryManager(db_path="memory.db", llm_client=None, **llm_config)`
-- `get_or_create_memory(agent_id) -> Memory`
-- `update_memory_with_conversation(agent_id, conversation) -> Tuple[Memory, PipelineResult]`
-- `get_memory_prompt(agent_id) -> str`
-- `update_profile(agent_id, profile_info) -> bool`
-- `add_events(agent_id, events) -> bool`
-
-### Unified Memory
-
-- `Memory(agent_id, memory_id=None)`
-- `get_profile_content() -> str`
-- `get_event_content() -> List[str]`
-- `get_tom_content() -> List[str]`
-- `update_profile(new_profile_info)`
-- `update_events(new_events)`
-- `update_tom(new_insights)`
-- `to_prompt() -> str`
-
-### LLM Manager
-
-- `LLMManager.create_quick_setup() -> LLMManager`
-- `add_provider(provider_name, llm_instance)`
-- `switch_provider(provider_name) -> bool`
-- `get_current_provider() -> BaseLLM`
-
-## 🎯 Use Cases
-
-- **AI Chatbots**: Persistent memory and context awareness
-- **Personal Assistants**: User preference learning and adaptation
-- **Customer Service**: Agent knowledge base and user history tracking
-- **Educational Systems**: Student progress tracking and personalization
-- **Research Tools**: Information organization and intelligent retrieval
-- **Multi-Agent Systems**: Inter-agent memory sharing and coordination
-
-## 🧪 Examples
-
-### Memory + OpenAI Integration
-
-See the `examples/` directory for comprehensive integration examples:
-
-- **`quick_start.py`**: Simplest possible PersonaLab + OpenAI integration
-- **`memory_chat_integration.py`**: Complete memory-enhanced chatbot with:
-  - Interactive chat interface
-  - Automatic memory updates
-  - Conversation history management
-  - Memory export/import
-
-```bash
-# Quick start
-python examples/quick_start.py
-
-# Interactive demo
-python examples/memory_chat_integration.py demo
-
-# Programmatic example
-python examples/memory_chat_integration.py programmatic
+```python
+# Configure semantic search
+results = manager.search_similar_conversations(
+    agent_id="assistant",
+    query="machine learning help",
+    limit=10,                    # Maximum results
+    similarity_threshold=0.7     # Minimum similarity score (0.0-1.0)
+)
 ```
 
-### Core Memory Examples
+## 📚 Examples
 
-- `simple_memory_example.py`: Basic memory operations
-- `pipeline_debug_example.py`: Pipeline debugging and inspection
-- `tom_memory_example.py`: Theory of Mind capabilities
-- `stage_by_stage_example.py`: Step-by-step pipeline execution
-- `example_memory_update.py`: Advanced memory update scenarios
+The `examples/` directory contains comprehensive usage examples:
+
+- **`memo_simple_example.py`**: Basic conversation recording and search
+- **`conversation_retrieval_example.py`**: Advanced semantic search demonstrations
+- **`simple_embedding_demo.py`**: Step-by-step embedding workflow
+- **`conversation_validation_example.py`**: Required field validation testing
+- **`quick_start.py`**: Integration of memory and memo systems
+- **`memo_openai_embedding_example.py`**: OpenAI embedding optimization
+
+## 🔍 Use Cases
+
+### Customer Support
+```python
+# Record support conversations
+support_conv = manager.record_conversation(
+    agent_id="support_bot",
+    user_id="customer_456",
+    messages=conversation_data
+)
+
+# Find similar past issues
+similar_issues = manager.search_similar_conversations(
+    agent_id="support_bot", 
+    query="login problems",
+    similarity_threshold=0.8
+)
+```
+
+### Educational Assistants
+```python
+# Track learning conversations
+learning_conv = manager.record_conversation(
+    agent_id="tutor_bot",
+    user_id="student_789",
+    messages=tutoring_session
+)
+
+# Retrieve related learning materials
+related_topics = manager.search_similar_conversations(
+    agent_id="tutor_bot",
+    query="algebra word problems",
+    user_id="student_789"  # User-specific search
+)
+```
+
+### Personal AI Assistants
+```python
+# Maintain conversation history
+personal_conv = manager.record_conversation(
+    agent_id="personal_ai",
+    user_id="user_personal",
+    messages=daily_conversation,
+    session_id="morning_chat"
+)
+
+# Contextual memory retrieval
+context = manager.search_similar_conversations(
+    agent_id="personal_ai",
+    query="previous vacation plans",
+    user_id="user_personal"
+)
+```
 
 ## 🧪 Testing
 
-Run the test suite:
-
 ```bash
 # Run all tests
-pytest
+python -m pytest tests/
+
+# Run specific test files
+python -m pytest tests/test_memory.py
+python -m pytest tests/test_memo.py
 
 # Run with coverage
-pytest --cov=personalab --cov-report=term-missing
-
-# Run specific test file
-pytest tests/test_memory.py
+python -m pytest --cov=personalab tests/
 ```
+
+## 📖 Documentation
+
+For detailed documentation, see the `docs/` directory:
+
+- **[OpenAI Setup Guide](docs/OPENAI_SETUP.md)**: Configure OpenAI embeddings
+- **[Embedding Providers](docs/EMBEDDING_PROVIDERS.md)**: Compare embedding options
+- **API Reference**: Detailed method documentation
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Development Setup
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
 
 1. Fork the repository
-2. Create a virtual environment: `python -m venv venv`
-3. Activate the environment: `source venv/bin/activate` (Linux/Mac) or `venv\Scripts\activate` (Windows)
-4. Install development dependencies: `pip install -r requirements-dev.txt`
-5. Install pre-commit hooks: `pre-commit install`
-6. Make your changes and run tests: `pytest`
-7. Submit a pull request
-
-### Code Style
-
-We use:
-- **Black** for code formatting
-- **Flake8** for linting
-- **MyPy** for type checking
-- **Pre-commit** for automated checks
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🌟 Acknowledgments
+## 🙏 Acknowledgments
 
-- Built with modern Python practices and design patterns
-- Integrated with leading LLM providers for maximum flexibility
-- Designed for production use with robust error handling
-- Inspired by cognitive science and psychology research
+- OpenAI for providing excellent embedding models
+- SentenceTransformers team for open-source embedding solutions
+- Contributors and the AI/ML community for inspiration and feedback
 
-## 📚 Documentation
+## 📞 Support
 
-For detailed documentation, please visit our [Documentation Site](https://nevamind-ai.github.io/PersonaLab/) (coming soon).
+- **Issues**: [GitHub Issues](https://github.com/NevaMind-AI/PersonaLab/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/NevaMind-AI/PersonaLab/discussions)
+- **Documentation**: [docs/](docs/) directory
 
-## 🐛 Bug Reports and Feature Requests
+---
 
-Please use our [GitHub Issues](https://github.com/NevaMind-AI/PersonaLab/issues) to report bugs or request features.
-
-## 💬 Support
-
-- 📧 Email: support@nevamind.ai
-- 💬 Discord: [Join our community](https://discord.gg/nevamind)
-- 📚 Documentation: [docs.nevamind.ai](https://docs.nevamind.ai) 
+**PersonaLab** - Building the memory foundation for next-generation AI agents 🧠✨ 

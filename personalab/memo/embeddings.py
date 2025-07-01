@@ -230,7 +230,6 @@ def create_embedding_manager(provider_type: str = "auto", **kwargs) -> Embedding
         raise ValueError(f"Unknown provider type: {provider_type}. Available: 'auto', 'openai', 'sentence-transformers'")
 
 
-# Export main classes and functions
 __all__ = [
     'EmbeddingProvider',
     'OpenAIEmbeddingProvider', 
