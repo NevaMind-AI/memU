@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.png" alt="PersonaLab Logo" width="200" height="200">
+  <img src="assets/banner.png" alt="PersonaLab Banner" width="100%">
   
   # PersonaLab
 
@@ -35,12 +35,22 @@ persona = Persona(agent_id="my_ai_assistant")
 persona = Persona.create_openai(agent_id="openai_assistant")
 persona = Persona.create_anthropic(agent_id="claude_assistant")
 
+# Flexible feature selection
+persona = Persona(
+    agent_id="my_ai_assistant",
+    use_memory=True,   # 🧠 Long-term memory (facts, preferences, events)
+    use_memo=True      # 💬 Conversation history & semantic search
+)
+
 def chat_with_memories(message: str) -> str:
     return persona.chat(message)
 
 # That's it! Your AI now has persistent memory and conversation retrieval
 print(chat_with_memories("Hi, I'm learning Python"))
 print(chat_with_memories("What was I learning?"))  # Remembers previous context
+
+# The conversations are automatically stored as events in memory
+# and recorded in memo for semantic search retrieval
 ```
 
 ### Environment Setup
@@ -210,7 +220,7 @@ PersonaLab/
 │   │   ├── base.py          # Core Memory, ProfileMemory, EventMemory, ToMMemory
 │   │   ├── manager.py       # MemoryManager and conversation processing
 │   │   ├── pipeline.py      # MemoryUpdatePipeline and pipeline stages
-│   │   ├── storage.py       # MemoryRepository and database operations
+│   │   ├── storage.py       # MemoryDB and database operations
 │   │   ├── events.py        # Event-related utilities
 │   │   └── profile.py       # Profile-related utilities
 │   └── memo/                # Conversation recording and retrieval module
@@ -230,7 +240,7 @@ PersonaLab/
 - **Memory**: Unified memory class with ProfileMemory, EventMemory, and ToMMemory
 - **MemoryManager**: Complete memory lifecycle management
 - **MemoryUpdatePipeline**: Three-stage LLM-driven update process
-- **MemoryRepository**: SQLite-based persistent storage
+- **MemoryDB**: SQLite-based persistent storage
 
 #### Memo Module (`personalab.memo`)
 - **ConversationManager**: High-level conversation recording and search
