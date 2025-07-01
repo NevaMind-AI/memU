@@ -11,17 +11,24 @@ from contextlib import contextmanager
 from ..memory import Memory
 from ..memo import Memo
 from ..llm import OpenAIClient, AnthropicClient, CustomLLMClient
+from ..config import config
 
 class Persona:
     """PersonaLab核心接口，提供简洁的memory和对话功能
     
+    自动从.env文件读取API key，支持多种LLM提供商。
+    
     Example:
-        # 基础用法
-        persona = Persona(agent_id="alice", llm_client=openai_client)
-        response = persona.chat("我喜欢爬山")
+        # 自动选择可用的LLM（推荐）
+        persona = Persona(agent_id="alice")  # 从.env读取API key
         
-        # 类方法创建
-        persona = Persona.create_openai(agent_id="alice", api_key="sk-...")
+        # 或者明确指定LLM类型
+        persona = Persona.create_openai(agent_id="alice")  # 使用OpenAI
+        persona = Persona.create_anthropic(agent_id="bob") # 使用Anthropic
+        persona = Persona.create_auto(agent_id="charlie")  # 自动选择
+        
+        # 使用
+        response = persona.chat("我喜欢爬山")
     """
     
     def __init__(
@@ -39,7 +46,7 @@ class Persona:
         Args:
             agent_id: 智能体ID
             llm_client: 预配置的LLM客户端
-            llm_type: LLM类型 ('openai', 'anthropic', 'custom')
+            llm_type: LLM类型 ('openai', 'anthropic', 'custom', 'auto')
             llm_function: 自定义LLM函数 (llm_type='custom'时使用)
             data_dir: 数据目录
             show_retrieval: 是否显示检索过程
@@ -57,31 +64,76 @@ class Persona:
             self.llm_client = llm_client
         elif llm_type:
             if llm_type == "openai":
-                self.llm_client = OpenAIClient(**llm_kwargs)
+                self.llm_client = self._create_openai_client(**llm_kwargs)
             elif llm_type == "anthropic":
-                self.llm_client = AnthropicClient(**llm_kwargs)
+                self.llm_client = self._create_anthropic_client(**llm_kwargs)
             elif llm_type == "custom":
                 if not llm_function:
                     raise ValueError("llm_function is required when llm_type='custom'")
                 self.llm_client = CustomLLMClient(llm_function=llm_function, **llm_kwargs)
+            elif llm_type == "auto":
+                self.llm_client = self._create_auto_client(**llm_kwargs)
             else:
                 raise ValueError(f"Unsupported llm_type: {llm_type}")
         else:
-            # 默认创建Mock客户端
-            from ..llm.custom_client import create_mock_response
-            self.llm_client = CustomLLMClient(llm_function=create_mock_response)
+            # 默认自动选择可用的LLM
+            self.llm_client = self._create_auto_client(**llm_kwargs)
+    
+    def _create_openai_client(self, **kwargs):
+        """创建OpenAI客户端，从配置中读取API key"""
+        openai_config = config.get_llm_config("openai")
+        if not openai_config.get("api_key"):
+            raise ValueError("OpenAI API key not found. Please set OPENAI_API_KEY in .env file")
+        
+        # 合并配置和用户参数
+        client_config = {**openai_config, **kwargs}
+        return OpenAIClient(**client_config)
+    
+    def _create_anthropic_client(self, **kwargs):
+        """创建Anthropic客户端，从配置中读取API key"""
+        anthropic_config = config.get_llm_config("anthropic")
+        if not anthropic_config.get("api_key"):
+            raise ValueError("Anthropic API key not found. Please set ANTHROPIC_API_KEY in .env file")
+        
+        # 合并配置和用户参数
+        client_config = {**anthropic_config, **kwargs}
+        return AnthropicClient(**client_config)
+    
+    def _create_auto_client(self, **kwargs):
+        """自动选择可用的LLM客户端"""
+        # 按优先级尝试不同的LLM提供商
+        if config.validate_llm_config("openai"):
+            return self._create_openai_client(**kwargs)
+        elif config.validate_llm_config("anthropic"):
+            return self._create_anthropic_client(**kwargs)
+        else:
+            raise ValueError(
+                "No LLM API key found. Please set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env file.\n"
+                "Run 'python setup_env.py' to create a .env file template."
+            )
     
     @classmethod
     def create_openai(cls, agent_id: str, api_key: str = None, **kwargs) -> 'Persona':
         """创建使用OpenAI的Persona实例"""
-        client = OpenAIClient(api_key=api_key)
-        return cls(agent_id=agent_id, llm_client=client, **kwargs)
+        if api_key:
+            client = OpenAIClient(api_key=api_key)
+            return cls(agent_id=agent_id, llm_client=client, **kwargs)
+        else:
+            return cls(agent_id=agent_id, llm_type="openai", **kwargs)
     
     @classmethod  
     def create_anthropic(cls, agent_id: str, api_key: str = None, **kwargs) -> 'Persona':
         """创建使用Anthropic的Persona实例"""
-        client = AnthropicClient(api_key=api_key)
-        return cls(agent_id=agent_id, llm_client=client, **kwargs)
+        if api_key:
+            client = AnthropicClient(api_key=api_key)
+            return cls(agent_id=agent_id, llm_client=client, **kwargs)
+        else:
+            return cls(agent_id=agent_id, llm_type="anthropic", **kwargs)
+    
+    @classmethod
+    def create_auto(cls, agent_id: str, **kwargs) -> 'Persona':
+        """自动选择可用的LLM创建Persona实例"""
+        return cls(agent_id=agent_id, llm_type="auto", **kwargs)
         
     @classmethod
     def create_custom(cls, agent_id: str, llm_function: Callable, **kwargs) -> 'Persona':

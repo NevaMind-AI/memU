@@ -28,11 +28,12 @@ pip install personalab[all]  # All features
 ```python
 from personalab import Persona
 
-# Create AI agent with OpenAI
-persona = Persona.create_openai(agent_id="my_ai_assistant", api_key="your-openai-key")
+# Auto-select available LLM (recommended)
+persona = Persona.create_auto(agent_id="my_ai_assistant")
 
-# Or use mock for testing
-persona = Persona.create_mock(agent_id="test_agent")
+# Or specify LLM provider explicitly
+persona = Persona.create_openai(agent_id="openai_assistant")
+persona = Persona.create_anthropic(agent_id="claude_assistant")
 
 def chat_with_memories(message: str) -> str:
     return persona.chat(message)
@@ -45,8 +46,15 @@ print(chat_with_memories("What was I learning?"))  # Remembers previous context
 ### Environment Setup
 
 ```bash
-export OPENAI_API_KEY="your-api-key"
-python -c "from personalab import Persona; print('✅ Ready to go!')"
+# 1. Copy environment template
+cp .env.example .env
+
+# 2. Edit .env and add your API keys
+# OPENAI_API_KEY=your_openai_key_here
+# ANTHROPIC_API_KEY=your_anthropic_key_here
+
+# 3. Test configuration
+python setup_env.py
 ```
 
 ---
