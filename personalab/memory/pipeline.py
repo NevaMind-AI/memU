@@ -15,7 +15,7 @@ from typing import List, Dict, Any, Tuple, Optional
 from dataclasses import dataclass
 
 from .base import Memory, ProfileMemory, EventMemory
-from ..llm import BaseLLMClient, create_llm_client
+from ..llm import BaseLLMClient
 
 
 @dataclass

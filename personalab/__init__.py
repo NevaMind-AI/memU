@@ -30,12 +30,20 @@ from .memory import (
 # Conversation management
 from .memo import ConversationManager
 
+# LLM system - NEW!
+from .llm import (
+    BaseLLMClient,             # Base LLM client
+    LLMResponse,               # LLM response object
+    OpenAIClient,              # OpenAI implementation
+    AnthropicClient,           # Anthropic implementation  
+    CustomLLMClient,           # Custom LLM support
+)
+
 # Persona API - Simple entry point
 from .persona import Persona
 
-# LLM module
+# Legacy LLM module (for backward compatibility)
 from . import llm
-from .llm import BaseLLMClient, OpenAIClient, create_llm_client
 
 # Configuration module
 from .config import config, load_config, setup_env_file
@@ -63,7 +71,14 @@ __all__ = [
     "ConversationManager",       # Conversation recording and search
     
     # LLM system
-    "llm", "BaseLLMClient", "OpenAI", "create_llm_client",
+    "BaseLLMClient",             # Base LLM client
+    "LLMResponse",               # LLM response object
+    "OpenAIClient",              # OpenAI implementation
+    "AnthropicClient",           # Anthropic implementation
+    "CustomLLMClient",           # Custom LLM support
+    
+    # Legacy
+    "llm",                       # LLM module
     
     # Configuration
     "config", "load_config", "setup_env_file",

@@ -12,7 +12,7 @@ from datetime import datetime
 
 from .base import Memory
 from .pipeline import MemoryUpdatePipeline, PipelineResult
-from ..llm import BaseLLMClient, create_llm_client
+from ..llm import BaseLLMClient
 from .storage import MemoryDB
 
 

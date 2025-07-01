@@ -165,6 +165,53 @@ class Memory:
         self.tom_memory = ToMMemory()
         self.updated_at = datetime.now()
 
+    # New convenient methods for different memory types
+    def add_facts(self, facts: List[str]):
+        """Add facts to profile memory"""
+        current_profile = self.get_profile_content()
+        new_facts = "\n".join(facts)
+        if current_profile:
+            updated_profile = f"{current_profile}\n{new_facts}"
+        else:
+            updated_profile = new_facts
+        self.update_profile(updated_profile)
+    
+    def get_facts(self) -> List[str]:
+        """Get facts from profile memory (split by lines)"""
+        profile_content = self.get_profile_content()
+        if not profile_content:
+            return []
+        return [line.strip() for line in profile_content.split('\n') if line.strip()]
+    
+    def add_preferences(self, preferences: List[str]):
+        """Add preferences to profile memory (same as facts for now)"""
+        self.add_facts(preferences)
+    
+    def get_preferences(self) -> List[str]:
+        """Get preferences from profile memory (same as facts for now)"""
+        return self.get_facts()
+    
+    def add_events(self, events: List[str]):
+        """Add events to event memory"""
+        self.update_events(events)
+    
+    def get_events(self) -> List[str]:
+        """Get events from event memory"""
+        return self.get_event_content()
+    
+    def add_tom(self, insights: List[str]):
+        """Add Theory of Mind insights"""
+        self.update_tom(insights)
+    
+    def get_tom(self) -> List[str]:
+        """Get Theory of Mind insights"""
+        return self.get_tom_content()
+    
+    def close(self):
+        """Close memory resources (for compatibility)"""
+        # Memory doesn't have persistent connections to close
+        pass
+
     # Backward compatibility properties
     @property
     def tom_metadata(self) -> Optional[Dict[str, Any]]:

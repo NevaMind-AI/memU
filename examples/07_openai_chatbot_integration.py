@@ -13,10 +13,10 @@ PersonaLab示例07：OpenAI Quick Start Demo
 
 from personalab import Persona
 
-persona = Persona()
+persona = Persona.create_mock(agent_id="default_agent")
 
-def chat_with_memories(message: str, user_id: str = "default_user") -> str:
-    return persona.chat(message, user_id=user_id)
+def chat_with_memories(message: str, agent_id: str = "default_agent") -> str:
+    return persona.chat(message)
 
 def main():
     print("🚀 PersonaLab Quick Start Demo")

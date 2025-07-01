@@ -24,7 +24,7 @@ from .storage import MemoryDB
 # Embeddings moved to memo module
 
 # LLM接口
-from ..llm import BaseLLMClient, create_llm_client
+from ..llm import BaseLLMClient
 
 # 向后兼容的原有类（如果存在的话）
 try:
@@ -49,7 +49,6 @@ __all__ = [
     
     # LLM接口
     'BaseLLMClient',
-    'create_llm_client',
     
     # Memory组件
     'ProfileMemory',

@@ -27,12 +27,15 @@ pip install personalab[all]  # All features
 
 ```python
 from personalab import Persona
-from openai import OpenAI
 
-persona = Persona(openai_client=OpenAI())
+# Create AI agent with OpenAI
+persona = Persona.create_openai(agent_id="my_ai_assistant", api_key="your-openai-key")
 
-def chat_with_memories(message: str, user_id: str = "default_user") -> str:
-    return persona.chat(message, user_id=user_id)
+# Or use mock for testing
+persona = Persona.create_mock(agent_id="test_agent")
+
+def chat_with_memories(message: str) -> str:
+    return persona.chat(message)
 
 # That's it! Your AI now has persistent memory and conversation retrieval
 print(chat_with_memories("Hi, I'm learning Python"))
