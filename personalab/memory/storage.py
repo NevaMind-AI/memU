@@ -161,7 +161,7 @@ class MemoryDB:
                     'agent_id': memory.agent_id,
                     'created_at': memory.created_at.isoformat(),
                     'updated_at': memory.updated_at.isoformat(),
-                    'tom_metadata': json.dumps(memory.tom_metadata) if memory.tom_metadata else None,
+                    'tom_metadata': json.dumps(memory.mind_metadata) if memory.mind_metadata else None,
                     'profile_content_hash': self._calculate_hash(memory.get_profile_content()),
                     'event_count': len(memory.get_event_content()),
                     'last_event_date': datetime.now().isoformat()
@@ -229,7 +229,7 @@ class MemoryDB:
                 memory.updated_at = datetime.fromisoformat(memory_row['updated_at'])
                 
                 if memory_row['tom_metadata']:
-                    memory.tom_metadata = json.loads(memory_row['tom_metadata'])
+                    memory.mind_metadata = json.loads(memory_row['tom_metadata'])
                 
                 # 3. Load ProfileMemory content
                 profile_content = self._load_profile_content(conn, memory_id)

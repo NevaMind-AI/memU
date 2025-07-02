@@ -393,10 +393,10 @@ Insights:
                 elif line and not line.startswith('Insights:'):
                     insights_list.append(line)
             
-            new_memory.update_tom(insights_list)
+            new_memory.update_mind(insights_list)
         
-        # Save original metadata to tom_metadata (backward compatibility)
-        new_memory.tom_metadata = {
+        # Save original metadata to mind_metadata (backward compatibility)
+        new_memory.mind_metadata = {
             'insights': tom_result.insights,
             'confidence_score': tom_result.confidence_score,
             'analysis_metadata': tom_result.metadata,

@@ -17,7 +17,7 @@ Backward compatible classes:
 """
 
 # 新的统一Memory架构
-from .base import Memory, ProfileMemory, EventMemory, ToMMemory
+from .base import Memory, ProfileMemory, EventMemory, MindMemory
 from .manager import MemoryClient
 from .pipeline import MemoryUpdatePipeline, PipelineResult, UpdateResult, ToMResult
 from .storage import MemoryDB

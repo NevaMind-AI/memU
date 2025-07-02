@@ -166,8 +166,8 @@ class MemoryClient:
             'updated_at': memory.updated_at.isoformat(),
             'profile_content_length': len(memory.get_profile_content()),
             'event_count': len(memory.get_event_content()),
-            'has_tom_metadata': memory.tom_metadata is not None,
-            'confidence_score': memory.tom_metadata.get('confidence_score') if memory.tom_metadata else None
+            'has_mind_metadata': memory.mind_metadata is not None,
+            'confidence_score': memory.mind_metadata.get('confidence_score') if memory.mind_metadata else None
         }
     
     def export_memory(self, agent_id: str) -> Dict[str, Any]:
@@ -216,12 +216,14 @@ class MemoryClient:
                 event_data = memory_data['event_memory']
                 memory.update_events(event_data.get('content', []))
             
-            # Set ToM metadata
-            if 'tom_metadata' in memory_data:
-                memory.tom_metadata = memory_data['tom_metadata']
+            # Set mind metadata
+            if 'mind_metadata' in memory_data:
+                memory.mind_metadata = memory_data['mind_metadata']
+            elif 'tom_metadata' in memory_data:  # Backward compatibility
+                memory.mind_metadata = memory_data['tom_metadata']
             
             # Save to database
-            return self.repository.save_memory(memory)
+            return self.database.save_memory(memory)
             
         except Exception as e:
             print(f"Error importing memory: {e}")

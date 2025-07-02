@@ -76,11 +76,11 @@ def main():
     ]
     
     for insight in tom_insights:
-        memory.update_tom([insight])
+        memory.update_mind([insight])
         print(f"   ✅ 添加洞察: {insight}")
     
     print(f"\n所有洞察:")
-    for i, insight in enumerate(memory.get_tom_content(), 1):
+    for i, insight in enumerate(memory.get_mind_content(), 1):
         print(f"   {i}. {insight}")
     print()
     
@@ -116,7 +116,7 @@ def main():
     print("✅ 内存重新加载成功")
     print(f"   Profile: {reloaded_memory.get_profile_content()[:50]}...")
     print(f"   事件数量: {len(reloaded_memory.get_event_content())}")
-    print(f"   洞察数量: {len(reloaded_memory.get_tom_content())}")
+    print(f"   洞察数量: {len(reloaded_memory.get_mind_content())}")
     
     # 10. 清理
     print("\n10. 清理资源...")

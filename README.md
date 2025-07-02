@@ -152,7 +152,7 @@ updated_memory, pipeline_result = memory_manager.update_memory_with_conversation
 
 print(f"Updated profile: {updated_memory.get_profile_content()}")
 print(f"Events: {updated_memory.get_event_content()}")
-print(f"ToM insights: {updated_memory.get_tom_content()}")
+print(f"Mind insights: {updated_memory.get_mind_content()}")
 ```
 
 ### Conversation Recording & Semantic Search

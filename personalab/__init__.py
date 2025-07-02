@@ -21,7 +21,7 @@ from .memory import (
     # Memory components
     ProfileMemory,             # Profile memory component
     EventMemory,               # Event memory component
-    ToMMemory,                 # Theory of Mind memory component
+    MindMemory,                # Mind memory component
 )
 
 # Conversation management
@@ -69,7 +69,7 @@ __all__ = [
     # Memory components
     "ProfileMemory",             # Profile memory component
     "EventMemory",               # Event memory component
-    "ToMMemory",                 # Theory of Mind memory component
+    "MindMemory",                # Mind memory component
     
     # Conversation management
     "ConversationManager",       # Conversation recording and search

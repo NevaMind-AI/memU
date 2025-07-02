@@ -2,10 +2,10 @@
 Memory base classes for PersonaLab.
 
 This module implements the new unified Memory architecture as described in STRUCTURE.md:
-- Memory: Unified memory class containing ProfileMemory, EventMemory, and ToMMemory components
+- Memory: Unified memory class containing ProfileMemory, EventMemory, and MindMemory components
 - ProfileMemory: Component for storing user/agent profile information
 - EventMemory: Component for storing event-based memories
-- ToMMemory: Component for storing Theory of Mind insights
+- MindMemory: Component for storing psychological insights and mind analysis
 """
 
 import uuid
@@ -17,13 +17,13 @@ from typing import List, Optional, Dict, Any, Union
 class Memory:
     """
     Complete memory system for AI agents, integrating profile memory, event memory, 
-    and Theory of Mind psychological analysis components.
+    and mind psychological analysis components.
     
     According to the unified memory architecture design, Memory is the central memory 
     management class that internally contains:
     - ProfileMemory component: Manages profile/persona memory
     - EventMemory component: Manages event-based memories
-    - ToMMemory component: Manages Theory of Mind psychological analysis memory
+    - MindMemory component: Manages psychological analysis and mind insights
     """
     
     def __init__(self, agent_id: str, memory_id: Optional[str] = None):
@@ -42,7 +42,7 @@ class Memory:
         # Initialize memory components
         self.profile_memory = ProfileMemory()
         self.event_memory = EventMemory()
-        self.tom_memory = ToMMemory()
+        self.mind_memory = MindMemory()
     
     def get_profile_content(self) -> str:
         """Get profile memory content"""
@@ -52,9 +52,9 @@ class Memory:
         """Get event memory content"""
         return self.event_memory.get_content()
     
-    def get_tom_content(self) -> List[str]:
-        """Get Theory of Mind memory content"""
-        return self.tom_memory.get_content()
+    def get_mind_content(self) -> List[str]:
+        """Get mind memory content"""
+        return self.mind_memory.get_content()
     
     def update_profile(self, new_profile_info: str):
         """Update profile memory"""
@@ -71,11 +71,11 @@ class Memory:
         self.event_memory.set_content(current_events)
         self.updated_at = datetime.now()
     
-    def update_tom(self, new_insights: List[str]):
-        """Update Theory of Mind memory"""
-        current_insights = self.tom_memory.get_content()
+    def update_mind(self, new_insights: List[str]):
+        """Update mind memory"""
+        current_insights = self.mind_memory.get_content()
         current_insights.extend(new_insights)
-        self.tom_memory.set_content(current_insights)
+        self.mind_memory.set_content(current_insights)
         self.updated_at = datetime.now()
     
     def to_prompt(self) -> str:
@@ -96,11 +96,11 @@ class Memory:
                 prompt += f"- {event}\n"
             prompt += "\n"
         
-        # Add ToM memory
-        tom_content = self.tom_memory.get_content()
-        if tom_content:
+        # Add mind memory
+        mind_content = self.mind_memory.get_content()
+        if mind_content:
             prompt += "## Insights\n"
-            for insight in tom_content:
+            for insight in mind_content:
                 prompt += f"- {insight}\n"
             prompt += "\n"
         
@@ -125,8 +125,8 @@ class Memory:
                 "content": self.event_memory.get_content(),
                 "content_type": "list_of_paragraphs"
             },
-            "tom_memory": {
-                "content": self.tom_memory.get_content(),
+            "mind_memory": {
+                "content": self.mind_memory.get_content(),
                 "content_type": "list_of_paragraphs"
             }
         }
@@ -138,7 +138,7 @@ class Memory:
             "agent_id": self.agent_id,
             "profile_length": len(self.get_profile_content()),
             "event_count": len(self.get_event_content()),
-            "tom_count": len(self.get_tom_content()),
+            "mind_count": len(self.get_mind_content()),
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat()
         }
@@ -153,16 +153,16 @@ class Memory:
         self.event_memory = EventMemory()
         self.updated_at = datetime.now()
     
-    def clear_tom(self):
-        """Clear Theory of Mind memory"""
-        self.tom_memory = ToMMemory()
+    def clear_mind(self):
+        """Clear mind memory"""
+        self.mind_memory = MindMemory()
         self.updated_at = datetime.now()
     
     def clear_all(self):
         """Clear all memories"""
         self.profile_memory = ProfileMemory()
         self.event_memory = EventMemory()
-        self.tom_memory = ToMMemory()
+        self.mind_memory = MindMemory()
         self.updated_at = datetime.now()
 
     # Convenient methods for different memory types
@@ -193,11 +193,11 @@ class Memory:
     
     def add_mind(self, insights: List[str]):
         """Add mind/psychological insights"""
-        self.update_tom(insights)
+        self.update_mind(insights)
     
     def get_mind(self) -> List[str]:
         """Get mind/psychological insights"""
-        return self.get_tom_content()
+        return self.get_mind_content()
     
     def close(self):
         """Close memory resources (for compatibility)"""
@@ -206,22 +206,22 @@ class Memory:
 
     # Backward compatibility properties
     @property
-    def tom_metadata(self) -> Optional[Dict[str, Any]]:
-        """Backward compatibility: Convert tom_memory to metadata format"""
-        tom_content = self.tom_memory.get_content()
-        if tom_content:
+    def mind_metadata(self) -> Optional[Dict[str, Any]]:
+        """Backward compatibility: Convert mind_memory to metadata format"""
+        mind_content = self.mind_memory.get_content()
+        if mind_content:
             return {
-                "insights": "\n".join(tom_content),
-                "insight_count": len(tom_content),
+                "insights": "\n".join(mind_content),
+                "insight_count": len(mind_content),
                 "content_type": "list_of_paragraphs"
             }
         return None
     
-    @tom_metadata.setter
-    def tom_metadata(self, value: Optional[Dict[str, Any]]):
-        """Backward compatibility: Set tom_memory from metadata format"""
+    @mind_metadata.setter
+    def mind_metadata(self, value: Optional[Dict[str, Any]]):
+        """Backward compatibility: Set mind_memory from metadata format"""
         if value is None:
-            self.tom_memory = ToMMemory()
+            self.mind_memory = MindMemory()
         else:
             insights_text = value.get("insights", "")
             if insights_text:
@@ -231,7 +231,7 @@ class Memory:
                 else:
                     insights = [str(insights_text)]
                 
-                self.tom_memory = ToMMemory(insights)
+                self.mind_memory = MindMemory(insights)
 
 
 class ProfileMemory:
@@ -338,17 +338,17 @@ class EventMemory:
         return sum(len(event) for event in self.events)
 
 
-class ToMMemory:
+class MindMemory:
     """
-    ToM memory component.
+    Mind memory component.
 
-    Internal component of the Memory class for storing Theory of Mind insights.
+    Internal component of the Memory class for storing psychological insights and mind analysis.
     Storage format: List of paragraphs form
     """
     
     def __init__(self, insights: Optional[List[str]] = None):
         """
-        Initialize ToMMemory.
+        Initialize MindMemory.
         
         Args:
             insights: Initial insights list
@@ -387,7 +387,7 @@ class ToMMemory:
         return "\n".join(f"- {insight}" for insight in self.insights)
     
     def is_empty(self) -> bool:
-        """Check if ToM memory is empty"""
+        """Check if mind memory is empty"""
         return len(self.insights) == 0
     
     def get_insight_count(self) -> int:

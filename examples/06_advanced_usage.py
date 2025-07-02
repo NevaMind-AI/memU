@@ -49,7 +49,7 @@ class AdvancedPersonaLabManager:
                 memory.update_events(config['initial_events'])
             
             if config.get('initial_insights'):
-                memory.update_tom(config['initial_insights'])
+                memory.update_mind(config['initial_insights'])
             
             self.agents[agent_id] = {
                 'memory': memory,
@@ -147,7 +147,7 @@ class AdvancedPersonaLabManager:
                 f"通过代理间知识共享，掌握了{source_agent}在{keyword}方面的经验"
                 for keyword in topic_keywords
             ]
-            target_memory.update_tom(learning_insights)
+            target_memory.update_mind(learning_insights)
             transferred_knowledge['insights'] = learning_insights
             
             # 保存更新
@@ -186,7 +186,7 @@ class AdvancedPersonaLabManager:
         
         # 内存分析
         events = memory.get_event_content()
-        insights = memory.get_tom_content()
+        insights = memory.get_mind_content()
         
         report['memory_analysis'] = {
             'total_events': len(events),

@@ -149,10 +149,10 @@ def main():
                 print(f"     - {event}")
         
         # 提取新的洞察
-        current_insights = memory.get_tom_content()
+        current_insights = memory.get_mind_content()
         new_insights = extract_insights_from_conversation(session_messages, current_insights)
         if new_insights:
-            memory.update_tom(new_insights)
+            memory.update_mind(new_insights)
             print(f"   添加洞察: {len(new_insights)} 个")
             for insight in new_insights:
                 print(f"     - {insight}")
@@ -215,7 +215,7 @@ def main():
         # 1. 从内存获取信息
         profile = memory.get_profile_content()
         events = memory.get_event_content()[-3:]  # 最近事件
-        insights = memory.get_tom_content()[-2:]  # 最近洞察
+        insights = memory.get_mind_content()[-2:]  # 最近洞察
         
         # 2. 搜索相关对话
         search_results = conversation_manager.search_similar_conversations(
@@ -265,7 +265,7 @@ def main():
         print(f"   {i}. {event}")
     
     print(f"\n用户特征洞察:")
-    for i, insight in enumerate(memory.get_tom_content(), 1):
+    for i, insight in enumerate(memory.get_mind_content(), 1):
         print(f"   {i}. {insight}")
     
     # 8. 模拟新对话（基于完整历史）

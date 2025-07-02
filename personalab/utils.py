@@ -33,7 +33,7 @@ def simulate_ai_response(memory: Memory, user_message: str, conversation_history
     # 获取用户档案信息
     profile = memory.get_profile_content()
     events = memory.get_event_content()
-    insights = memory.get_tom_content()
+    insights = memory.get_mind_content()
     
     # 基于用户消息类型生成响应
     user_msg_lower = user_message.lower()
@@ -437,7 +437,7 @@ def get_memory_context(memory_manager, agent_id: str) -> str:
         context_parts.append(f"重要事件：" + "；".join(recent_events))
     
     # 添加用户洞察
-    insights = memory.get_tom_content()
+    insights = memory.get_mind_content()
     if insights:
         recent_insights = insights[-2:]  # 最近2个洞察
         context_parts.append(f"用户特征：" + "；".join(recent_insights))
@@ -513,7 +513,7 @@ def learn_from_conversation(
         # 2. 提取学习内容
         memory = memory_manager.get_memory_by_agent(agent_id)
         events = extract_events_from_conversation(messages)
-        insights = extract_insights_from_conversation(messages, memory.get_tom_content())
+        insights = extract_insights_from_conversation(messages, memory.get_mind_content())
         
         # 3. 更新记忆
         updated = False
@@ -523,7 +523,7 @@ def learn_from_conversation(
             updated = True
         
         if insights:
-            memory.update_tom(insights)
+            memory.update_mind(insights)
             print(f"🧠 获得洞察: {len(insights)} 个")
             updated = True
         
@@ -546,7 +546,7 @@ def get_memory_summary(memory_manager, agent_id: str) -> Dict[str, Any]:
         'agent_id': agent_id,
         'profile': memory.get_profile_content(),
         'events': memory.get_event_content(),
-        'insights': memory.get_tom_content()
+        'insights': memory.get_mind_content()
     }
 
 
