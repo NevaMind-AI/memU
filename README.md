@@ -28,17 +28,27 @@ pip install personalab[all]  # All features
 
 ```python
 from personalab import Persona
+from personalab.llm import OpenAIClient, AnthropicClient
 
-# Default OpenAI usage (reads OPENAI_API_KEY from .env)
+# Method 1: Pass llm_client directly (recommended for full control)
+openai_client = OpenAIClient(api_key="your-key", model="gpt-4")
+persona = Persona(agent_id="my_ai_assistant", llm_client=openai_client)
+
+# Or with Anthropic
+anthropic_client = AnthropicClient(api_key="your-key")
+persona = Persona(agent_id="claude_assistant", llm_client=anthropic_client)
+
+# Method 2: Simple default usage (reads OPENAI_API_KEY from .env)
 persona = Persona(agent_id="my_ai_assistant")
 
-# Or specify LLM provider explicitly
+# Method 3: Class methods (also supported)
 persona = Persona.create_openai(agent_id="openai_assistant")
 persona = Persona.create_anthropic(agent_id="claude_assistant")
 
 # Flexible feature selection
 persona = Persona(
     agent_id="my_ai_assistant",
+    llm_client=openai_client,  # Pass your configured LLM client
     use_memory=True,   # 🧠 Long-term memory (facts, preferences, events)
     use_memo=True      # 💬 Conversation history & semantic search
 )

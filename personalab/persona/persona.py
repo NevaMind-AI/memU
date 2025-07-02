@@ -1,10 +1,9 @@
 """
 PersonaLab Persona Class
 
-提供简洁的API来使用PersonaLab的Memory和Memo功能，并集成LLM对话。
+Provides a clean API for using PersonaLab's Memory and Memo functionality with LLM integration.
 """
 
-import json
 from typing import List, Dict, Optional, Union, Any, Callable
 from contextlib import contextmanager
 
@@ -14,85 +13,162 @@ from ..llm import OpenAIClient, AnthropicClient, CustomLLMClient
 from ..config import config
 
 class Persona:
-    """PersonaLab核心接口，提供简洁的memory和对话功能
+    """PersonaLab core interface providing simple memory and conversation functionality
     
-    默认使用OpenAI，从.env文件读取API key。
+    The main parameter is `llm_client` - pass any LLM client instance you want to use.
+    If no llm_client is provided, uses OpenAI by default (reading API key from .env file).
     
-    Example:
-        # 基础用法（默认OpenAI）
-        persona = Persona(agent_id="alice")  # 从.env读取OPENAI_API_KEY
+    Recommended Usage:
+        # Method 1: Pass llm_client directly (recommended)
+        from personalab import Persona
+        from personalab.llm import OpenAIClient, AnthropicClient
         
-        # 或者明确指定LLM类型
+        openai_client = OpenAIClient(api_key="your-key", model="gpt-4")
+        persona = Persona(agent_id="alice", llm_client=openai_client)
+        
+        anthropic_client = AnthropicClient(api_key="your-key")
+        persona = Persona(agent_id="bob", llm_client=anthropic_client)
+        
+        # Method 2: Use default OpenAI (simpler, reads from .env)
+        persona = Persona(agent_id="charlie")  # Uses default OpenAI configuration
+        
+        # Method 3: Class methods (also supported)
         persona = Persona.create_openai(agent_id="alice")
         persona = Persona.create_anthropic(agent_id="bob")
         
-        # 使用
-        response = persona.chat("我喜欢爬山")
+        # Usage
+        response = persona.chat("I love hiking")
     """
     
     def __init__(
         self, 
         agent_id: str,
         llm_client=None,
-        llm_type: str = None,
-        llm_function: Callable = None,
         data_dir: str = "data",
         show_retrieval: bool = False,
+        use_memory: bool = True,
+        use_memo: bool = True,
+        # Deprecated parameters (kept for backward compatibility)
+        llm_type: str = None,
+        llm_function: Callable = None,
         **llm_kwargs
     ):
-        """初始化Persona
+        """Initialize Persona
         
         Args:
-            agent_id: 智能体ID
-            llm_client: 预配置的LLM客户端
-            llm_type: LLM类型 ('openai', 'anthropic', 'custom')，默认为'openai'
-            llm_function: 自定义LLM函数 (llm_type='custom'时使用)
-            data_dir: 数据目录
-            show_retrieval: 是否显示检索过程
-            **llm_kwargs: LLM客户端的额外参数
+            agent_id: Agent identifier
+            llm_client: LLM client instance (OpenAIClient, AnthropicClient, etc.)
+                       If None, will create default OpenAI client
+            data_dir: Data directory for conversation storage
+            show_retrieval: Whether to show retrieval process
+            use_memory: Whether to enable Memory functionality (long-term memory)
+            use_memo: Whether to enable Memo functionality (conversation recording & retrieval)
+            
+        Deprecated Args:
+            llm_type: (deprecated) LLM type, use llm_client parameter instead
+            llm_function: (deprecated) Custom LLM function, use CustomLLMClient instead
+            **llm_kwargs: (deprecated) Additional LLM parameters, configure via llm_client instead
+            
+        Example:
+            # Recommended usage - pass llm_client directly
+            from personalab import Persona
+            from personalab.llm import OpenAIClient, AnthropicClient
+            
+            # Using OpenAI
+            openai_client = OpenAIClient(api_key="your-key", model="gpt-4")
+            persona = Persona(agent_id="alice", llm_client=openai_client)
+            
+            # Using Anthropic
+            anthropic_client = AnthropicClient(api_key="your-key")
+            persona = Persona(agent_id="bob", llm_client=anthropic_client)
+            
+            # Default OpenAI (reads from .env)
+            persona = Persona(agent_id="charlie")  # Uses default OpenAI client
         """
         self.agent_id = agent_id
         self.show_retrieval = show_retrieval
+        self.use_memory = use_memory
+        self.use_memo = use_memo
         
-        # 初始化Memory和Memo
-        self.memory = Memory(agent_id=agent_id)
-        self.memo = Memo(agent_id=agent_id, data_dir=data_dir)
+        # Session conversation buffer for batch memory updates
+        self.session_conversations = []
         
-        # 配置LLM客户端
-        if llm_client:
-            self.llm_client = llm_client
-        elif llm_type:
-            if llm_type == "openai":
-                self.llm_client = self._create_openai_client(**llm_kwargs)
-            elif llm_type == "anthropic":
-                self.llm_client = self._create_anthropic_client(**llm_kwargs)
-            elif llm_type == "custom":
-                if not llm_function:
-                    raise ValueError("llm_function is required when llm_type='custom'")
-                self.llm_client = CustomLLMClient(llm_function=llm_function, **llm_kwargs)
-            else:
-                raise ValueError(f"Unsupported llm_type: {llm_type}")
+        # Selectively initialize Memory and Memo based on parameters
+        if use_memory:
+            self.memory = Memory(agent_id=agent_id)
         else:
-            # 默认使用OpenAI
-            self.llm_client = self._create_openai_client(**llm_kwargs)
+            self.memory = None
+            
+        if use_memo:
+            self.memo = Memo(agent_id=agent_id, data_dir=data_dir)
+        else:
+            self.memo = None
+        
+        # Configure LLM client - prioritize llm_client parameter
+        if llm_client is not None:
+            self.llm_client = llm_client
+        elif llm_type or llm_function or llm_kwargs:
+            # Handle deprecated parameters for backward compatibility
+            import warnings
+            warnings.warn(
+                "llm_type, llm_function, and **llm_kwargs are deprecated. "
+                "Please use the llm_client parameter instead.",
+                DeprecationWarning,
+                stacklevel=2
+            )
+            self.llm_client = self._create_legacy_client(llm_type, llm_function, **llm_kwargs)
+        else:
+            # Default to OpenAI client with environment configuration
+            self.llm_client = self._create_default_openai_client()
+    
+    def _create_default_openai_client(self):
+        """Create default OpenAI client using environment configuration"""
+        try:
+            from ..config import get_llm_config_manager
+            llm_config_manager = get_llm_config_manager()
+            openai_config = llm_config_manager.get_provider_config("openai")
+            
+            if not openai_config.get("api_key"):
+                raise ValueError(
+                    "OpenAI API key not found. Please set OPENAI_API_KEY in .env file or "
+                    "pass a configured llm_client parameter."
+                )
+            
+            return OpenAIClient(**openai_config)
+        except Exception as e:
+            raise ValueError(f"Failed to create default OpenAI client: {e}")
+    
+    def _create_legacy_client(self, llm_type, llm_function, **kwargs):
+        """Create LLM client using deprecated parameters (for backward compatibility)"""
+        if llm_type == "openai":
+            return self._create_openai_client(**kwargs)
+        elif llm_type == "anthropic":
+            return self._create_anthropic_client(**kwargs)
+        elif llm_type == "custom":
+            if not llm_function:
+                raise ValueError("llm_function is required when llm_type='custom'")
+            return CustomLLMClient(llm_function=llm_function, **kwargs)
+        else:
+            # Default to OpenAI for backward compatibility
+            return self._create_openai_client(**kwargs)
     
     def _create_openai_client(self, **kwargs):
-        """创建OpenAI客户端，从配置中读取API key"""
+        """Create OpenAI client, reading API key from configuration (deprecated method)"""
         openai_config = config.get_llm_config("openai")
         if not openai_config.get("api_key"):
             raise ValueError("OpenAI API key not found. Please set OPENAI_API_KEY in .env file")
         
-        # 合并配置和用户参数
+        # Merge configuration and user parameters
         client_config = {**openai_config, **kwargs}
         return OpenAIClient(**client_config)
     
     def _create_anthropic_client(self, **kwargs):
-        """创建Anthropic客户端，从配置中读取API key"""
+        """Create Anthropic client, reading API key from configuration (deprecated method)"""
         anthropic_config = config.get_llm_config("anthropic")
         if not anthropic_config.get("api_key"):
             raise ValueError("Anthropic API key not found. Please set ANTHROPIC_API_KEY in .env file")
         
-        # 合并配置和用户参数
+        # Merge configuration and user parameters
         client_config = {**anthropic_config, **kwargs}
         return AnthropicClient(**client_config)
     
@@ -100,7 +176,7 @@ class Persona:
     
     @classmethod
     def create_openai(cls, agent_id: str, api_key: str = None, **kwargs) -> 'Persona':
-        """创建使用OpenAI的Persona实例"""
+        """Create a Persona instance using OpenAI"""
         if api_key:
             client = OpenAIClient(api_key=api_key)
             return cls(agent_id=agent_id, llm_client=client, **kwargs)
@@ -109,7 +185,7 @@ class Persona:
     
     @classmethod  
     def create_anthropic(cls, agent_id: str, api_key: str = None, **kwargs) -> 'Persona':
-        """创建使用Anthropic的Persona实例"""
+        """Create a Persona instance using Anthropic"""
         if api_key:
             client = AnthropicClient(api_key=api_key)
             return cls(agent_id=agent_id, llm_client=client, **kwargs)
@@ -117,73 +193,95 @@ class Persona:
             return cls(agent_id=agent_id, llm_type="anthropic", **kwargs)
     
 
-        
     @classmethod
     def create_custom(cls, agent_id: str, llm_function: Callable, **kwargs) -> 'Persona':
-        """创建使用自定义LLM函数的Persona实例"""
+        """Create a Persona instance using custom LLM function"""
         client = CustomLLMClient(llm_function=llm_function)
         return cls(agent_id=agent_id, llm_client=client, **kwargs)
         
-    @classmethod
-    def create_mock(cls, agent_id: str, **kwargs) -> 'Persona':
-        """创建使用Mock LLM的Persona实例（用于测试）"""
-        from ..llm.custom_client import create_mock_response
-        client = CustomLLMClient(llm_function=create_mock_response)
-        return cls(agent_id=agent_id, llm_client=client, **kwargs)
 
     def chat(self, message: str, learn: bool = True) -> str:
-        """与AI对话，自动检索相关记忆并学习"""
-        # 1. 检索相关对话
+        """Chat with AI, automatically retrieving relevant memories
+        
+        Note: Memory updates are deferred until endsession() is called.
+        Conversations are stored in session buffer when learn=True.
+        
+        Args:
+            message: User message
+            learn: Whether to record conversation for later memory update
+            
+        Returns:
+            AI response
+        """
+        # 1. Retrieve relevant conversations (if memo is enabled)
         retrieved_conversations = []
-        if self.memo.conversations:
+        if self.use_memo and self.memo and self.memo.conversations:
             search_results = self.memo.search_similar_conversations(message, top_k=3)
             retrieved_conversations = search_results
             
             if self.show_retrieval and retrieved_conversations:
-                print(f"\n🔍 检索到 {len(retrieved_conversations)} 个相关对话:")
+                print(f"\n🔍 Retrieved {len(retrieved_conversations)} relevant conversations:")
                 for i, conv in enumerate(retrieved_conversations, 1):
                     print(f"  {i}. {conv['summary'][:50]}...")
                 print()
         
-        # 2. 构建带检索内容的消息
+        # 2. Build message with retrieved content
         enhanced_message = message
         if retrieved_conversations:
             context = "\n".join([
-                f"相关历史: {conv['summary']}" 
+                f"Related history: {conv['summary']}" 
                 for conv in retrieved_conversations
             ])
-            enhanced_message = f"{message}\n\n相关背景:\n{context}"
+            enhanced_message = f"{message}\n\nRelevant context:\n{context}"
         
-        # 3. 获取memory context
+        # 3. Get memory context (if memory is enabled)
         memory_context = self._get_memory_context()
         
-        # 4. 构建系统提示
-        system_prompt = f"""你是一个智能助手，拥有关于用户的长期记忆。
+        # 4. Build system prompt
+        if memory_context:
+            system_prompt = f"""You are an intelligent assistant with long-term memory about the user.
 
-用户记忆信息:
+User memory information:
 {memory_context}
 
-请基于你对用户的了解，提供个性化的回应。"""
+Please provide personalized responses based on your knowledge of the user."""
+        else:
+            system_prompt = "You are a helpful AI assistant."
         
-        # 5. 调用LLM
+        # 5. Call LLM
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": enhanced_message}
         ]
         response = self.llm_client.chat_completion(messages)
         
-        # 6. 学习对话（如果启用）
+        # 6. Record conversation for potential batch update (if learn=True)
         if learn:
-            self._learn_from_conversation(message, response.content)
+            # Record conversation to memo (if memo is enabled)
+            if self.use_memo and self.memo:
+                self.memo.add_conversation(message, response.content)
+            
+            # Store conversation in session buffer for later memory update
+            self.session_conversations.append({
+                'user_message': message,
+                'ai_response': response.content
+            })
         
         return response.content
 
     def search(self, query: str, top_k: int = 5) -> List[Dict]:
-        """搜索相关记忆"""
+        """Search for relevant memories"""
+        if not self.use_memo or not self.memo:
+            print("⚠️ Memo functionality is not enabled, cannot perform search")
+            return []
         return self.memo.search_similar_conversations(query, top_k=top_k)
     
     def add_memory(self, content: str, memory_type: str = "fact") -> None:
-        """添加记忆"""
+        """Add memory"""
+        if not self.use_memory or not self.memory:
+            print("⚠️ Memory functionality is not enabled, cannot add memory")
+            return
+            
         if memory_type == "fact":
             self.memory.add_facts([content])
         elif memory_type == "preference":
@@ -195,8 +293,56 @@ class Persona:
         else:
             raise ValueError(f"Unsupported memory_type: {memory_type}")
     
+    def endsession(self) -> Dict[str, int]:
+        """End conversation session and update memory with all conversations from this session
+        
+        Returns:
+            Dict with counts of updated memory items
+        """
+        if not self.use_memory or not self.memory:
+            print("⚠️ Memory functionality is not enabled, cannot update memory")
+            self.session_conversations.clear()  # Clear buffer even if memory is disabled
+            return {"events": 0}
+        
+        if not self.session_conversations:
+            print("📝 No conversations to process in this session")
+            return {"events": 0}
+        
+        # Process all conversations in the session
+        events_to_add = []
+        for conv in self.session_conversations:
+            conversation_event = f"User: {conv['user_message']} | AI: {conv['ai_response']}"
+            events_to_add.append(conversation_event)
+        
+        # Batch update memory
+        if events_to_add:
+            self.memory.add_events(events_to_add)
+            print(f"✅ Session ended: {len(events_to_add)} conversations added to memory")
+        
+        # Clear session buffer
+        processed_count = len(self.session_conversations)
+        self.session_conversations.clear()
+        
+        return {"events": processed_count}
+    
+    def get_session_info(self) -> Dict[str, int]:
+        """Get information about the current session
+        
+        Returns:
+            Dict with session statistics
+        """
+        return {
+            "pending_conversations": len(self.session_conversations),
+            "memory_enabled": bool(self.use_memory and self.memory),
+            "memo_enabled": bool(self.use_memo and self.memo)
+        }
+    
     def get_memory(self) -> Dict:
-        """获取所有记忆"""
+        """Get all memories"""
+        if not self.use_memory or not self.memory:
+            print("⚠️ Memory functionality is not enabled, cannot get memory")
+            return {"facts": [], "preferences": [], "events": [], "tom": []}
+            
         return {
             "facts": self.memory.get_facts(),
             "preferences": self.memory.get_preferences(), 
@@ -205,79 +351,49 @@ class Persona:
         }
     
     def close(self) -> None:
-        """关闭所有资源"""
-        self.memory.close()
-        self.memo.close()
+        """Close all resources"""
+        # Automatically end session and update memory before closing
+        if self.session_conversations:
+            self.endsession()
+            
+        if self.memory:
+            self.memory.close()
+        if self.memo:
+            self.memo.close()
         if hasattr(self.llm_client, 'close'):
             self.llm_client.close()
     
     @contextmanager
     def session(self):
-        """上下文管理器，自动管理资源"""
+        """Context manager for automatic resource management"""
         try:
             yield self
         finally:
             self.close()
     
-    # 内部方法
+    # Internal methods
     def _get_memory_context(self) -> str:
-        """获取memory context"""
+        """Get memory context"""
+        if not self.use_memory or not self.memory:
+            return ""
+            
         context_parts = []
         
         facts = self.memory.get_facts()
         if facts:
-            context_parts.append(f"关于用户的事实: {', '.join(facts)}")
+            context_parts.append(f"Facts about user: {', '.join(facts)}")
         
         preferences = self.memory.get_preferences()
         if preferences:
-            context_parts.append(f"用户偏好: {', '.join(preferences)}")
+            context_parts.append(f"User preferences: {', '.join(preferences)}")
         
         events = self.memory.get_events()
         if events:
-            context_parts.append(f"重要事件: {', '.join(events)}")
+            context_parts.append(f"Important events: {', '.join(events)}")
         
         tom = self.memory.get_tom()
         if tom:
-            context_parts.append(f"用户心理模型: {', '.join(tom)}")
+            context_parts.append(f"User psychological model: {', '.join(tom)}")
         
-        return "\n".join(context_parts) if context_parts else "暂无用户记忆信息"
+        return "\n".join(context_parts) if context_parts else "No user memory information available"
     
-    def _learn_from_conversation(self, user_message: str, ai_response: str) -> None:
-        """从对话中学习"""
-        # 记录对话
-        self.memo.add_conversation(user_message, ai_response)
-        
-        # 提取并学习memory
-        learning_prompt = f"""分析以下对话，提取可以学习的信息：
-
-用户: {user_message}
-助手: {ai_response}
-
-请提取：
-1. 关于用户的新事实
-2. 用户的偏好
-3. 重要事件
-4. 用户的想法/感受
-
-返回JSON格式：
-{{"facts": [], "preferences": [], "events": [], "tom": []}}"""
-        
-        try:
-            learning_messages = [{"role": "user", "content": learning_prompt}]
-            learning_response = self.llm_client.chat_completion(learning_messages)
-            learning_data = json.loads(learning_response.content)
-            
-            # 添加到memory
-            if learning_data.get("facts"):
-                self.memory.add_facts(learning_data["facts"])
-            if learning_data.get("preferences"):
-                self.memory.add_preferences(learning_data["preferences"])
-            if learning_data.get("events"):
-                self.memory.add_events(learning_data["events"])
-            if learning_data.get("tom"):
-                self.memory.add_tom(learning_data["tom"])
-                
-        except Exception as e:
-            # 学习失败不影响对话
-            if self.show_retrieval:
-                print(f"⚠️ 学习失败: {e}") 
