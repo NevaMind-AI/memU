@@ -5,10 +5,9 @@ Core Memory system including:
 - Memory: Unified memory management class
 - MemoryClient: Memory client for core memory operations
 - MemoryUpdatePipeline: Memory update pipeline
-- MemoryDB: Database storage layer
-- EmbeddingManager: Vector embeddings (for backward compatibility)
 
-Note: Conversation recording and vectorization are now handled by the memo module.
+Note: Only PostgreSQL with pgvector is supported.
+Conversation recording and vectorization are handled by the memo module.
 
 Backward compatible classes:
 - BaseMemory: Abstract base class (for backward compatibility)
@@ -16,15 +15,16 @@ Backward compatible classes:
 - EventMemory: Event memory (now as component)
 """
 
-# 新的统一Memory架构
-from .base import Memory, ProfileMemory, EventMemory, MindMemory
-from .manager import MemoryClient
-from .pipeline import MemoryUpdatePipeline, PipelineResult, UpdateResult, ToMResult
-from .storage import MemoryDB
-# Embeddings moved to memo module
-
 # LLM接口
 from ..llm import BaseLLMClient
+
+# 新的统一Memory架构
+from .base import EventMemory, Memory, MindMemory, ProfileMemory
+from .manager import MemoryClient
+from .pipeline import MemoryUpdatePipeline, PipelineResult, MindResult, UpdateResult
+
+# Embeddings moved to memo module
+
 
 # 向后兼容的原有类（如果存在的话）
 try:
@@ -37,24 +37,19 @@ MemoryManager = MemoryClient
 
 __all__ = [
     # 新架构的主要类
-    'Memory',
-    'MemoryClient', 
-    'MemoryUpdatePipeline',
-    'MemoryDB',
-    'PipelineResult',
-    'UpdateResult', 
-    'ToMResult',
-
-    
+    "Memory",
+    "MemoryClient",
+    "MemoryUpdatePipeline",
+    "PipelineResult",
+    "UpdateResult",
+    "MindResult",
     # LLM接口
-    'BaseLLMClient',
-    
+    "BaseLLMClient",
     # Memory组件
-    'ProfileMemory',
-    'EventMemory',
-    'ToMMemory',
-    
+    "ProfileMemory",
+    "EventMemory",
+    "MindMemory",
     # 向后兼容类和别名
-    'BaseMemory',
-    'MemoryManager',
-] 
+    "BaseMemory",
+    "MemoryManager",
+]

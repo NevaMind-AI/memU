@@ -225,7 +225,7 @@ PersonaLab/
 │   ├── llm.py               # LLM integration
 │   ├── memory/              # Core memory management module
 │   │   ├── __init__.py      # Memory module exports
-│   │   ├── base.py          # Core Memory, ProfileMemory, EventMemory, ToMMemory
+│   │   ├── base.py          # Core Memory, ProfileMemory, EventMemory, MindMemory
 │   │   ├── manager.py       # MemoryManager and conversation processing
 │   │   ├── pipeline.py      # MemoryUpdatePipeline and pipeline stages
 │   │   ├── storage.py       # MemoryDB and database operations
@@ -245,7 +245,7 @@ PersonaLab/
 ### Core Components
 
 #### Memory Module (`personalab.memory`)
-- **Memory**: Unified memory class with ProfileMemory, EventMemory, and ToMMemory
+- **Memory**: Unified memory class with ProfileMemory, EventMemory, and MindMemory
 - **MemoryManager**: Complete memory lifecycle management
 - **MemoryUpdatePipeline**: Three-stage LLM-driven update process
 - **MemoryDB**: SQLite-based persistent storage
