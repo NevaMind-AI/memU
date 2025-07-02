@@ -87,26 +87,24 @@ class Persona:
                 agent_id="tutor", 
                 personality="You are a supportive math tutor who makes learning fun."
             )
+            
+            # Usage with different users
+            response1 = persona.chat("Hello", user_id="user123")
+            response2 = persona.chat("Hi there", user_id="user456")
         """
         self.agent_id = agent_id
         self.personality = personality
         self.show_retrieval = show_retrieval
         self.use_memory = use_memory
         self.use_memo = use_memo
+        self.data_dir = data_dir
         
-        # Session conversation buffer for batch memory updates
-        self.session_conversations = []
+        # Session conversation buffers for different users
+        self.session_conversations = {}  # user_id -> conversations
         
-        # Selectively initialize Memory and Memo based on parameters
-        if use_memory:
-            self.memory = Memory(agent_id=agent_id)
-        else:
-            self.memory = None
-            
-        if use_memo:
-            self.memo = Memo(agent_id=agent_id, data_dir=data_dir)
-        else:
-            self.memo = None
+        # Memory and Memo instances will be created per user as needed
+        self.memories = {}  # user_id -> Memory instance
+        self.memos = {}     # user_id -> Memo instance
         
         # Configure LLM client
         if llm_client is not None:
@@ -133,7 +131,7 @@ class Persona:
             raise ValueError(f"Failed to create default OpenAI client: {e}")
         
 
-    def chat(self, message: str, learn: bool = True) -> str:
+    def chat(self, message: str, learn: bool = True, user_id: str = "default_user") -> str:
         """Chat with AI, automatically retrieving relevant memories
         
         Note: Memory updates are deferred until endsession() is called.
@@ -142,14 +140,16 @@ class Persona:
         Args:
             message: User message
             learn: Whether to record conversation for later memory update
+            user_id: User identifier
             
         Returns:
             AI response
         """
         # 1. Retrieve relevant conversations (if memo is enabled)
         retrieved_conversations = []
-        if self.use_memo and self.memo and self.memo.conversations:
-            search_results = self.memo.search_similar_conversations(message, top_k=3)
+        memo = self._get_or_create_memo(user_id)
+        if memo and memo.conversations:
+            search_results = memo.search_similar_conversations(message, top_k=3)
             retrieved_conversations = search_results
             
             if self.show_retrieval and retrieved_conversations:
@@ -168,7 +168,7 @@ class Persona:
             enhanced_message = f"{message}\n\nRelevant context:\n{context}"
         
         # 3. Get memory context (if memory is enabled)
-        memory_context = self._get_memory_context()
+        memory_context = self._get_memory_context(user_id)
         
         # 4. Build system prompt
         system_prompt_parts = []
@@ -197,11 +197,11 @@ class Persona:
         # 6. Record conversation for potential batch update (if learn=True)
         if learn:
             # Record conversation to memo (if memo is enabled)
-            if self.use_memo and self.memo:
-                self.memo.add_conversation(message, response.content)
+            if memo:
+                memo.add_conversation(message, response.content)
             
             # Store conversation in session buffer for later memory update
-            self.session_conversations.append({
+            self.session_conversations.setdefault(user_id, []).append({
                 'user_message': message,
                 'ai_response': response.content
             })
@@ -210,102 +210,109 @@ class Persona:
 
     def search(self, query: str, top_k: int = 5) -> List[Dict]:
         """Search for relevant memories"""
-        if not self.use_memo or not self.memo:
+        if not self.use_memo or not self.memos.get("default_user"):
             print("⚠️ Memo functionality is not enabled, cannot perform search")
             return []
-        return self.memo.search_similar_conversations(query, top_k=top_k)
+        return self.memos["default_user"].search_similar_conversations(query, top_k=top_k)
     
-    def add_memory(self, content: str, memory_type: str = "profile") -> None:
+    def add_memory(self, content: str, memory_type: str = "profile", user_id: str = "default_user") -> None:
         """Add memory
         
         Args:
             content: Memory content to add
             memory_type: Type of memory - 'profile', 'event', or 'mind'
+            user_id: User identifier
         """
-        if not self.use_memory or not self.memory:
-            print("⚠️ Memory functionality is not enabled, cannot add memory")
+        memory = self._get_or_create_memory(user_id)
+        if not memory:
+            print(f"⚠️ Memory functionality is not enabled for user {user_id}, cannot add memory")
             return
             
         if memory_type == "profile":
-            self.memory.add_profile([content])
+            memory.add_profile([content])
         elif memory_type == "event":
-            self.memory.add_events([content])
+            memory.add_events([content])
         elif memory_type == "mind":
-            self.memory.add_mind([content])
+            memory.add_mind([content])
         else:
             raise ValueError(f"Unsupported memory_type: {memory_type}. Supported types: 'profile', 'event', 'mind'")
     
-    def endsession(self) -> Dict[str, int]:
+    def endsession(self, user_id: str = "default_user") -> Dict[str, int]:
         """End conversation session and update memory with all conversations from this session
         
         Returns:
             Dict with counts of updated memory items
         """
-        if not self.use_memory or not self.memory:
-            print("⚠️ Memory functionality is not enabled, cannot update memory")
-            self.session_conversations.clear()  # Clear buffer even if memory is disabled
+        memory = self._get_or_create_memory(user_id)
+        if not memory:
+            print(f"⚠️ Memory functionality is not enabled for user {user_id}, cannot update memory")
+            self.session_conversations.setdefault(user_id, []).clear()  # Clear buffer even if memory is disabled
             return {"events": 0}
         
-        if not self.session_conversations:
-            print("📝 No conversations to process in this session")
+        if not self.session_conversations.get(user_id):
+            print(f"📝 No conversations to process in this session for user {user_id}")
             return {"events": 0}
         
         # Process all conversations in the session
         events_to_add = []
-        for conv in self.session_conversations:
+        for conv in self.session_conversations[user_id]:
             conversation_event = f"User: {conv['user_message']} | AI: {conv['ai_response']}"
             events_to_add.append(conversation_event)
         
         # Batch update memory
         if events_to_add:
-            self.memory.add_events(events_to_add)
-            print(f"✅ Session ended: {len(events_to_add)} conversations added to memory")
+            memory.add_events(events_to_add)
+            print(f"✅ Session ended: {len(events_to_add)} conversations added to memory for user {user_id}")
         
         # Clear session buffer
-        processed_count = len(self.session_conversations)
-        self.session_conversations.clear()
+        processed_count = len(self.session_conversations[user_id])
+        self.session_conversations[user_id].clear()
         
         return {"events": processed_count}
     
-    def get_session_info(self) -> Dict[str, int]:
+    def get_session_info(self, user_id: str = "default_user") -> Dict[str, int]:
         """Get information about the current session
         
         Returns:
-            Dict with session statistics
+            Dict with session information
         """
         return {
-            "pending_conversations": len(self.session_conversations),
-            "memory_enabled": bool(self.use_memory and self.memory),
-            "memo_enabled": bool(self.use_memo and self.memo)
+            "pending_conversations": len(self.session_conversations.get(user_id, [])),
+            "memory_enabled": bool(self.use_memory and self.memories.get(user_id)),
+            "memo_enabled": bool(self.use_memo and self.memos.get(user_id))
         }
     
-    def get_memory(self) -> Dict:
+    def get_memory(self, user_id: str = "default_user") -> Dict:
         """Get all memories"""
-        if not self.use_memory or not self.memory:
-            print("⚠️ Memory functionality is not enabled, cannot get memory")
+        memory = self._get_or_create_memory(user_id)
+        if not memory:
+            print(f"⚠️ Memory functionality is not enabled for user {user_id}, cannot get memory")
             return {"profile": [], "events": [], "mind": []}
             
         return {
-            "profile": self.memory.get_profile(),
-            "events": self.memory.get_events(),
-            "mind": self.memory.get_mind()
+            "profile": memory.get_profile(),
+            "events": memory.get_events(),
+            "mind": memory.get_mind()
         }
     
     def close(self) -> None:
         """Close all resources"""
         # Automatically end session and update memory before closing
-        if self.session_conversations:
-            self.endsession()
+        for user_id, conversations in self.session_conversations.items():
+            if conversations:
+                self.endsession(user_id)
             
-        if self.memory:
-            self.memory.close()
-        if self.memo:
-            self.memo.close()
+        for user_id, memory in self.memories.items():
+            if memory:
+                memory.close()
+        for user_id, memo in self.memos.items():
+            if memo:
+                memo.close()
         if hasattr(self.llm_client, 'close'):
             self.llm_client.close()
     
     @contextmanager
-    def session(self):
+    def session(self, user_id: str = "default_user"):
         """Context manager for automatic resource management"""
         try:
             yield self
@@ -313,24 +320,43 @@ class Persona:
             self.close()
     
     # Internal methods
-    def _get_memory_context(self) -> str:
+    def _get_or_create_memory(self, user_id: str):
+        """Get or create Memory instance for a user"""
+        if not self.use_memory:
+            return None
+            
+        if user_id not in self.memories:
+            self.memories[user_id] = Memory(agent_id=self.agent_id, user_id=user_id)
+        return self.memories[user_id]
+    
+    def _get_or_create_memo(self, user_id: str):
+        """Get or create Memo instance for a user"""
+        if not self.use_memo:
+            return None
+            
+        if user_id not in self.memos:
+            self.memos[user_id] = Memo(agent_id=self.agent_id, user_id=user_id, data_dir=self.data_dir)
+        return self.memos[user_id]
+    
+    def _get_memory_context(self, user_id: str = "default_user") -> str:
         """Get memory context"""
-        if not self.use_memory or not self.memory:
+        memory = self._get_or_create_memory(user_id)
+        if not memory:
             return ""
             
         context_parts = []
         
-        profile = self.memory.get_profile()
+        profile = memory.get_profile()
         if profile:
             context_parts.append(f"User profile: {', '.join(profile)}")
         
-        events = self.memory.get_events()
+        events = memory.get_events()
         if events:
             context_parts.append(f"Important events: {', '.join(events)}")
         
-        mind = self.memory.get_mind()
+        mind = memory.get_mind()
         if mind:
             context_parts.append(f"Psychological insights: {', '.join(mind)}")
         
-        return "\n".join(context_parts) if context_parts else "No user memory information available"
+        return "\n".join(context_parts) if context_parts else ""
     

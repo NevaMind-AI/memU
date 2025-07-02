@@ -16,20 +16,22 @@ from .models import Conversation, ConversationMessage
 class Memo:
     """简洁的对话记忆管理API"""
     
-    def __init__(self, agent_id: str, data_dir: str = "data"):
+    def __init__(self, agent_id: str, user_id: str = "default_user", data_dir: str = "data"):
         """初始化Memo
         
         Args:
             agent_id: 智能体ID
+            user_id: 用户ID
             data_dir: 数据目录
         """
         self.agent_id = agent_id
+        self.user_id = user_id
         import os
         
         # 创建数据目录
         os.makedirs(data_dir, exist_ok=True)
         
-        db_path = os.path.join(data_dir, f"conversations_{agent_id}.db")
+        db_path = os.path.join(data_dir, f"conversations.db")  # 使用统一的数据库文件
         self.manager = ConversationManager(db_path=db_path)
     
     def add_conversation(self, user_message: str, ai_response: str, metadata: dict = None):
@@ -40,7 +42,7 @@ class Memo:
         ]
         return self.manager.record_conversation(
             agent_id=self.agent_id,
-            user_id=self.agent_id,  # 在conversation context中，agent_id同时作为user_id
+            user_id=self.user_id,
             messages=messages,
             pipeline_result=metadata  # metadata作为pipeline_result传递
         )
@@ -57,7 +59,7 @@ class Memo:
     @property
     def conversations(self):
         """获取所有对话"""
-        return self.manager.get_conversation_history(agent_id=self.agent_id)
+        return self.manager.get_conversation_history(agent_id=self.agent_id, user_id=self.user_id)
     
     def close(self):
         """关闭资源"""

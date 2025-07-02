@@ -41,24 +41,25 @@ class MemoryClient:
         self.database = MemoryDB(db_path)
         self.pipeline = MemoryUpdatePipeline(**llm_config)
     
-    def get_memory_by_agent(self, agent_id: str) -> Memory:
+    def get_memory_by_agent(self, agent_id: str, user_id: str = "default_user") -> Memory:
         """
-        Get or create Agent's Memory.
+        Get or create Agent's Memory for a specific user.
         
         Args:
             agent_id: Agent ID
+            user_id: User ID, defaults to "default_user"
             
         Returns:
-            Memory: Agent's Memory object
+            Memory: Agent's Memory object for the user
         """
         # Try to load existing Memory from database
-        existing_memory = self.database.get_memory_by_agent(agent_id)
+        existing_memory = self.database.get_memory_by_agent_and_user(agent_id, user_id)
         
         if existing_memory:
             return existing_memory
         
         # Create new Memory
-        new_memory = Memory(agent_id=agent_id)
+        new_memory = Memory(agent_id=agent_id, user_id=user_id)
         
         # Save to database
         self.database.save_memory(new_memory)
@@ -68,6 +69,7 @@ class MemoryClient:
     def update_memory_with_conversation(
         self, 
         agent_id: str, 
+        user_id: str,
         conversation: List[Dict[str, str]]
     ) -> Tuple[Memory, PipelineResult]:
         """
@@ -75,13 +77,14 @@ class MemoryClient:
         
         Args:
             agent_id: Agent ID
+            user_id: User ID
             conversation: Conversation content
             
         Returns:
             Tuple[Updated Memory, Pipeline result]
         """
         # 1. Get current Memory
-        current_memory = self.get_memory_by_agent(agent_id)
+        current_memory = self.get_memory_by_agent(agent_id, user_id)
         
         # 2. Update Memory through LLM Pipeline
         updated_memory, pipeline_result = self.pipeline.update_with_pipeline(
@@ -96,72 +99,77 @@ class MemoryClient:
     
 
     
-    def get_memory_prompt(self, agent_id: str) -> str:
+    def get_memory_prompt(self, agent_id: str, user_id: str = "default_user") -> str:
         """
-        Get Agent's Memory prompt.
+        Get Agent's Memory prompt for a specific user.
         
         Args:
             agent_id: Agent ID
+            user_id: User ID, defaults to "default_user"
             
         Returns:
             str: Formatted Memory prompt
         """
-        memory = self.get_memory_by_agent(agent_id)
+        memory = self.get_memory_by_agent(agent_id, user_id)
         return memory.to_prompt()
     
-    def update_profile(self, agent_id: str, profile_info: str) -> bool:
+    def update_profile(self, agent_id: str, user_id: str, profile_info: str) -> bool:
         """
         Directly update profile information.
         
         Args:
             agent_id: Agent ID
+            user_id: User ID
             profile_info: Profile information
             
         Returns:
             bool: Whether update was successful
         """
         try:
-            memory = self.get_memory_by_agent(agent_id)
+            memory = self.get_memory_by_agent(agent_id, user_id)
             memory.update_profile(profile_info)
             return self.database.save_memory(memory)
         except Exception as e:
             print(f"Error updating profile: {e}")
             return False
     
-    def update_events(self, agent_id: str, events: List[str]) -> bool:
+    def update_events(self, agent_id: str, user_id: str, events: List[str]) -> bool:
         """
         Directly add events.
         
         Args:
             agent_id: Agent ID
+            user_id: User ID
             events: Event list
             
         Returns:
             bool: Whether addition was successful
         """
         try:
-            memory = self.get_memory_by_agent(agent_id)
+            memory = self.get_memory_by_agent(agent_id, user_id)
             memory.update_events(events)
             return self.database.save_memory(memory)
         except Exception as e:
             print(f"Error adding events: {e}")
             return False
     
-    def get_memory_info(self, agent_id: str) -> Dict[str, Any]:
+    def get_memory_info(self, agent_id: str, user_id: str = "default_user") -> Dict[str, Any]:
         """
         Get Memory information.
         
         Args:
             agent_id: Agent ID
+            user_id: User ID, defaults to "default_user"
             
         Returns:
             Dict: Memory information
         """
-        memory = self.get_memory_by_agent(agent_id)
+        memory = self.get_memory_by_agent(agent_id, user_id)
         
         return {
             'memory_id': memory.memory_id,
             'agent_id': memory.agent_id,
+            'user_id': memory.user_id,
             'created_at': memory.created_at.isoformat(),
             'updated_at': memory.updated_at.isoformat(),
             'profile_content_length': len(memory.get_profile_content()),
@@ -170,17 +178,18 @@ class MemoryClient:
             'confidence_score': memory.mind_metadata.get('confidence_score') if memory.mind_metadata else None
         }
     
-    def export_memory(self, agent_id: str) -> Dict[str, Any]:
+    def export_memory(self, agent_id: str, user_id: str = "default_user") -> Dict[str, Any]:
         """
         Export Memory data.
         
         Args:
             agent_id: Agent ID
+            user_id: User ID, defaults to "default_user"
             
         Returns:
             Dict: Complete Memory data
         """
-        memory = self.get_or_create_memory(agent_id)
+        memory = self.get_memory_by_agent(agent_id, user_id)
         return memory.to_dict()
     
     def import_memory(self, memory_data: Dict[str, Any]) -> bool:
@@ -197,6 +206,7 @@ class MemoryClient:
             # Create Memory object
             memory = Memory(
                 agent_id=memory_data['agent_id'],
+                user_id=memory_data.get('user_id', 'default_user'),
                 memory_id=memory_data.get('memory_id')
             )
             

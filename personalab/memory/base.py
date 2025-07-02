@@ -26,16 +26,18 @@ class Memory:
     - MindMemory component: Manages psychological analysis and mind insights
     """
     
-    def __init__(self, agent_id: str, memory_id: Optional[str] = None):
+    def __init__(self, agent_id: str, user_id: str, memory_id: Optional[str] = None):
         """
         Initialize Memory object.
         
         Args:
             agent_id: Associated Agent ID
+            user_id: Associated User ID
             memory_id: Memory ID, auto-generated if not provided
         """
         self.memory_id = memory_id or str(uuid.uuid4())
         self.agent_id = agent_id
+        self.user_id = user_id
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
         
@@ -115,6 +117,7 @@ class Memory:
         return {
             "memory_id": self.memory_id,
             "agent_id": self.agent_id,
+            "user_id": self.user_id,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "profile_memory": {
@@ -136,6 +139,7 @@ class Memory:
         return {
             "memory_id": self.memory_id,
             "agent_id": self.agent_id,
+            "user_id": self.user_id,
             "profile_length": len(self.get_profile_content()),
             "event_count": len(self.get_event_content()),
             "mind_count": len(self.get_mind_content()),

@@ -44,14 +44,15 @@ class MemoryDB:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("PRAGMA journal_mode = WAL")
             
-            # Create memories table (unified Memory table) with embedded content
+            # Create main memories table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS memories (
                     memory_id TEXT PRIMARY KEY,
                     agent_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    version INTEGER DEFAULT 2,
+                    version INTEGER DEFAULT 3,
                     
                     -- Embedded content for simplified access
                     profile_content TEXT,              -- Direct profile storage
@@ -68,7 +69,10 @@ class MemoryDB:
                     last_event_date TEXT,
                     
                     -- Schema versioning for migrations
-                    schema_version INTEGER DEFAULT 2
+                    schema_version INTEGER DEFAULT 3,
+                    
+                    -- Unique constraint for agent-user combination
+                    UNIQUE(agent_id, user_id)
                 )
             """)
             
@@ -95,6 +99,8 @@ class MemoryDB:
 
             # Create indexes for better performance
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_agent_id ON memories(agent_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_agent_user ON memories(agent_id, user_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_schema_version ON memories(schema_version)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_contents_memory_type ON memory_contents(memory_id, content_type)")
@@ -138,10 +144,70 @@ class MemoryDB:
                     # Update existing records
                     conn.execute("UPDATE memories SET schema_version = 2 WHERE schema_version IS NULL")
                     conn.commit()
-                    print("Database schema migration completed.")
+                    print("Database schema migration to version 2 completed.")
                 except sqlite3.OperationalError as e:
                     print(f"Schema migration warning: {e}")
                     # Columns may already exist
+            
+            if current_version < 3:
+                print("Migrating database schema to version 3...")
+                try:
+                    # Add user_id column for multi-user support
+                    conn.execute("ALTER TABLE memories ADD COLUMN user_id TEXT DEFAULT 'default_user'")
+                    
+                    # Update schema version for existing records
+                    conn.execute("UPDATE memories SET schema_version = 3 WHERE schema_version < 3")
+                    
+                    # Create new unique constraint (need to recreate table for this)
+                    conn.execute("""
+                        CREATE TABLE IF NOT EXISTS memories_new (
+                            memory_id TEXT PRIMARY KEY,
+                            agent_id TEXT NOT NULL,
+                            user_id TEXT NOT NULL DEFAULT 'default_user',
+                            created_at TEXT NOT NULL,
+                            updated_at TEXT NOT NULL,
+                            version INTEGER DEFAULT 3,
+                            profile_content TEXT,
+                            event_content TEXT,
+                            tom_content TEXT,
+                            tom_metadata TEXT,
+                            confidence_score REAL DEFAULT 0.0,
+                            profile_content_hash TEXT,
+                            event_count INTEGER DEFAULT 0,
+                            last_event_date TEXT,
+                            schema_version INTEGER DEFAULT 3,
+                            UNIQUE(agent_id, user_id)
+                        )
+                    """)
+                    
+                    # Copy data from old table to new table
+                    conn.execute("""
+                        INSERT OR IGNORE INTO memories_new 
+                        SELECT memory_id, agent_id, 
+                               COALESCE(user_id, 'default_user') as user_id,
+                               created_at, updated_at, version,
+                               profile_content, event_content, tom_content,
+                               tom_metadata, confidence_score, profile_content_hash,
+                               event_count, last_event_date, 3 as schema_version
+                        FROM memories
+                    """)
+                    
+                    # Drop old table and rename new table
+                    conn.execute("DROP TABLE memories")
+                    conn.execute("ALTER TABLE memories_new RENAME TO memories")
+                    
+                    # Recreate indexes
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_agent_id ON memories(agent_id)")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id)")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_agent_user ON memories(agent_id, user_id)")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)")
+                    conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_schema_version ON memories(schema_version)")
+                    
+                    conn.commit()
+                    print("Database schema migration to version 3 completed.")
+                except sqlite3.OperationalError as e:
+                    print(f"Schema migration warning: {e}")
+                    # Migration may have already been applied
     
     def save_memory(self, memory: Memory) -> bool:
         """
@@ -159,6 +225,7 @@ class MemoryDB:
                 memory_data = {
                     'memory_id': memory.memory_id,
                     'agent_id': memory.agent_id,
+                    'user_id': memory.user_id,
                     'created_at': memory.created_at.isoformat(),
                     'updated_at': memory.updated_at.isoformat(),
                     'tom_metadata': json.dumps(memory.mind_metadata) if memory.mind_metadata else None,
@@ -169,12 +236,13 @@ class MemoryDB:
                 
                 conn.execute("""
                     INSERT OR REPLACE INTO memories 
-                    (memory_id, agent_id, created_at, updated_at, tom_metadata, 
+                    (memory_id, agent_id, user_id, created_at, updated_at, tom_metadata, 
                      profile_content_hash, event_count, last_event_date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     memory_data['memory_id'],
                     memory_data['agent_id'],
+                    memory_data['user_id'],
                     memory_data['created_at'],
                     memory_data['updated_at'],
                     memory_data['tom_metadata'],
@@ -223,6 +291,7 @@ class MemoryDB:
                 # 2. Create Memory object
                 memory = Memory(
                     agent_id=memory_row['agent_id'],
+                    user_id=memory_row.get('user_id', 'default_user'),
                     memory_id=memory_id
                 )
                 memory.created_at = datetime.fromisoformat(memory_row['created_at'])
@@ -504,5 +573,36 @@ class MemoryDB:
     def close(self):
         """Close database connection"""
         pass
+    
+    def get_memory_by_agent_and_user(self, agent_id: str, user_id: str) -> Optional[Memory]:
+        """
+        Load Memory by Agent ID and User ID.
+        
+        Args:
+            agent_id: Agent ID
+            user_id: User ID
+            
+        Returns:
+            Optional[Memory]: Memory object, returns None if not exists
+        """
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.row_factory = sqlite3.Row
+                
+                memory_row = conn.execute("""
+                    SELECT memory_id FROM memories 
+                    WHERE agent_id = ? AND user_id = ?
+                    ORDER BY updated_at DESC 
+                    LIMIT 1
+                """, [agent_id, user_id]).fetchone()
+                
+                if memory_row:
+                    return self.load_memory(memory_row['memory_id'])
+                    
+                return None
+                
+        except Exception as e:
+            print(f"Error loading memory by agent and user: {e}")
+            return None
     
  
