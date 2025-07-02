@@ -34,7 +34,6 @@ except ImportError:
 
 # 向后兼容别名
 MemoryManager = MemoryClient
-MemoryRepository = MemoryDB  # 向后兼容别名
 
 __all__ = [
     # 新架构的主要类
@@ -58,5 +57,4 @@ __all__ = [
     # 向后兼容类和别名
     'BaseMemory',
     'MemoryManager',
-    'MemoryRepository',
 ] 

@@ -122,25 +122,6 @@ class CustomLLMClient(BaseLLMClient):
         """获取自定义模型默认名称"""
         return "custom-model"
     
-    @classmethod
-    def create_simple(cls, llm_function: Callable) -> "CustomLLMClient":
-        """
-        创建简单的自定义客户端（函数返回字符串）
-        
-        Args:
-            llm_function: 接受(messages, **kwargs)，返回字符串的函数
-            
-        Returns:
-            CustomLLMClient实例
-            
-        Example:
-            def my_llm(messages, **kwargs):
-                return "This is a mock response"
-            
-            client = CustomLLMClient.create_simple(my_llm)
-        """
-        return cls(llm_function=llm_function, function_type="simple")
-    
     @classmethod 
     def create_full(cls, llm_function: Callable) -> "CustomLLMClient":
         """
@@ -167,47 +148,13 @@ class CustomLLMClient(BaseLLMClient):
         """
         return cls(llm_function=llm_object, function_type="object")
     
-    @classmethod
-    def create_mock(cls, mock_response: str = "This is a mock response") -> "CustomLLMClient":
-        """
-        创建Mock客户端，用于测试
-        
-        Args:
-            mock_response: 固定的模拟回复
-            
-        Returns:
-            CustomLLMClient实例
-        """
-        def mock_function(messages, **kwargs):
-            return mock_response
-        
-        return cls.create_simple(mock_function)
     
     def __str__(self) -> str:
         return f"CustomLLMClient(type={self.function_type}, model={self.default_model})"
 
-
-# 便捷函数
-def create_mock_client(response: str = "Mock response") -> CustomLLMClient:
-    """创建Mock客户端的便捷函数"""
-    return CustomLLMClient.create_mock(response)
 
 
 def create_simple_client(llm_function: Callable) -> CustomLLMClient:
     """创建简单客户端的便捷函数"""
     return CustomLLMClient.create_simple(llm_function)
 
-
-def create_mock_response(mock_text: str = "This is a mock response") -> Callable:
-    """创建Mock响应函数的便捷函数
-    
-    Args:
-        mock_text: Mock响应文本
-        
-    Returns:
-        Mock LLM函数
-    """
-    def mock_function(messages, **kwargs):
-        # 忽略所有kwargs参数，只返回mock响应
-        return mock_text
-    return mock_function 

@@ -41,10 +41,6 @@ persona = Persona(agent_id="claude_assistant", llm_client=anthropic_client)
 # Method 2: Simple default usage (reads OPENAI_API_KEY from .env)
 persona = Persona(agent_id="my_ai_assistant")
 
-# Method 3: Class methods for convenience
-persona = Persona.create_openai(agent_id="openai_assistant")
-persona = Persona.create_anthropic(agent_id="claude_assistant")
-
 # Configure features
 persona = Persona(
     agent_id="my_ai_assistant",

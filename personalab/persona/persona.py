@@ -32,10 +32,6 @@ class Persona:
         # Method 2: Use default OpenAI (reads from .env)
         persona = Persona(agent_id="charlie")
         
-        # Method 3: Class methods for convenience
-        persona = Persona.create_openai(agent_id="alice")
-        persona = Persona.create_anthropic(agent_id="bob")
-        
         # Usage
         response = persona.chat("I love hiking")
     """
@@ -122,34 +118,7 @@ class Persona:
     
 
     
-    @classmethod
-    def create_openai(cls, agent_id: str, api_key: str = None, **kwargs) -> 'Persona':
-        """Create a Persona instance using OpenAI"""
-        if api_key:
-            client = OpenAIClient(api_key=api_key)
-            return cls(agent_id=agent_id, llm_client=client, **kwargs)
-        else:
-            # Use default OpenAI configuration
-            return cls(agent_id=agent_id, **kwargs)
-    
-    @classmethod  
-    def create_anthropic(cls, agent_id: str, api_key: str = None, **kwargs) -> 'Persona':
-        """Create a Persona instance using Anthropic"""
-        if api_key:
-            client = AnthropicClient(api_key=api_key)
-            return cls(agent_id=agent_id, llm_client=client, **kwargs)
-        else:
-            from ..config import get_llm_config_manager
-            llm_config_manager = get_llm_config_manager()
-            anthropic_config = llm_config_manager.get_provider_config("anthropic")
-            client = AnthropicClient(**anthropic_config)
-            return cls(agent_id=agent_id, llm_client=client, **kwargs)
-    
-    @classmethod
-    def create_custom(cls, agent_id: str, llm_function, **kwargs) -> 'Persona':
-        """Create a Persona instance using custom LLM function"""
-        client = CustomLLMClient(llm_function=llm_function)
-        return cls(agent_id=agent_id, llm_client=client, **kwargs)
+
         
 
     def chat(self, message: str, learn: bool = True) -> str:
