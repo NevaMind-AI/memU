@@ -561,64 +561,47 @@ def cleanup_memory_resources(memory_manager, conversation_manager):
         pass
 
 
-def chat_with_personalab(openai_client, memory_manager, conversation_manager, 
-                        message: str, agent_id: str = "default_agent", user_id: str = "default_user") -> str:
-    """
-    使用PersonaLab进行聊天的简化函数，模仿mem0风格
+def chat_with_memory(
+    llm_client, memory: Memory, 
+    message: str, agent_id: str, user_id: str) -> str:
+    """一体化记忆聊天函数
     
     Args:
-        openai_client: OpenAI客户端
-        memory_manager: PersonaLab Memory管理器
-        conversation_manager: PersonaLab对话管理器
+        llm_client: LLM客户端实例
+        memory: 记忆对象
         message: 用户消息
-        agent_id: 代理ID，默认"default_agent"
-        user_id: 用户ID，默认"default_user"
+        agent_id: 智能体ID (required)
+        user_id: 用户ID (required)
         
     Returns:
-        str: AI助手回复
+        AI回复
     """
-    # 检索相关记忆
-    try:
-        relevant_conversations = conversation_manager.search_similar_conversations(
-            agent_id=agent_id, query=message, limit=3, similarity_threshold=0.6
-        )
-        memories_str = "\n".join(f"- {conv['summary']}" for conv in relevant_conversations)
-    except:
-        memories_str = ""
+    # 获取记忆上下文
+    context = memory.get_memory_stats()
     
-    # 获取用户档案
-    memory_context = get_memory_context(memory_manager, agent_id)
+    # 构建系统提示词
+    memory_context = []
+    if memory.get_profile():
+        memory_context.append(f"用户档案: {', '.join(memory.get_profile())}")
+    if memory.get_events():
+        memory_context.append(f"重要事件: {', '.join(memory.get_events())}")
+    if memory.get_mind():
+        memory_context.append(f"心理洞察: {', '.join(memory.get_mind())}")
     
-    # 生成助手回复
-    system_prompt = f"You are a helpful AI assistant. Answer based on the query and memories.\nMemories:\n{memories_str}"
-    if memory_context:
-        system_prompt += f"\nUser Profile:\n{memory_context}"
+    system_prompt = f"""你是智能体 {agent_id}，正在与用户 {user_id} 对话。
+
+记忆上下文：
+{chr(10).join(memory_context) if memory_context else '暂无记忆信息'}
+
+请基于以上记忆信息，以自然、有帮助的方式回复用户。"""
     
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": message}
-    ]
+    # 发送请求
+    response = llm_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": message}
+        ]
+    )
     
-    try:
-        response = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            max_tokens=300,
-            temperature=0.7
-        )
-        assistant_response = response.choices[0].message.content
-    except Exception as e:
-        assistant_response = f"API调用失败: {str(e)}"
-    
-    # 从对话中学习新记忆
-    conversation = [
-        {"role": "user", "content": message},
-        {"role": "assistant", "content": assistant_response}
-    ]
-    
-    try:
-        learn_from_conversation(memory_manager, conversation_manager, agent_id, user_id, conversation)
-    except:
-        pass
-    
-    return assistant_response 
+    return response.choices[0].message.content 

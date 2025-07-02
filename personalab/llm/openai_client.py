@@ -70,13 +70,16 @@ class OpenAIClient(BaseLLMClient):
             # 预处理消息
             processed_messages = self._prepare_messages(messages)
             
+            # 过滤掉不应该传递给OpenAI API的参数
+            api_params = self._filter_api_params(kwargs)
+            
             # 调用OpenAI API
             response = self.client.chat.completions.create(
                 model=model,
                 messages=processed_messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                **kwargs
+                **api_params
             )
             
             # 构造响应
@@ -90,6 +93,21 @@ class OpenAIClient(BaseLLMClient):
         except Exception as e:
             logging.error(f"OpenAI API调用失败: {e}")
             return self._handle_error(e, model)
+    
+    def _filter_api_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """过滤掉不应该传递给OpenAI API的参数"""
+        # 不应该传递给OpenAI API的参数列表
+        excluded_params = {
+            'api_key', 'base_url', 'provider_type', 'timeout', 'retry_count'
+        }
+        
+        # 只保留OpenAI API支持的参数
+        filtered = {}
+        for key, value in params.items():
+            if key not in excluded_params:
+                filtered[key] = value
+        
+        return filtered
     
     def _get_default_model(self) -> str:
         """获取OpenAI默认模型"""

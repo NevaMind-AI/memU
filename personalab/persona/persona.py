@@ -10,7 +10,6 @@ from contextlib import contextmanager
 from ..memory import Memory
 from ..memo import Memo
 from ..llm import OpenAIClient, AnthropicClient, CustomLLMClient
-from ..config import config
 
 class Persona:
     """PersonaLab core interface providing simple memory and conversation functionality
@@ -52,7 +51,8 @@ class Persona:
         data_dir: str = "data",
         show_retrieval: bool = False,
         use_memory: bool = True,
-        use_memo: bool = True
+        use_memo: bool = True,
+        db_manager=None
     ):
         """Initialize Persona
         
@@ -62,10 +62,11 @@ class Persona:
                        If None, will create default OpenAI client
             personality: Personality description for the AI (e.g. "You are a friendly and helpful coding assistant")
                         This will be included in the system prompt to define the AI's character
-            data_dir: Data directory for conversation storage
+            data_dir: Data directory for conversation storage (legacy, for SQLite compatibility)
             show_retrieval: Whether to show retrieval process
             use_memory: Whether to enable Memory functionality (long-term memory)
             use_memo: Whether to enable Memo functionality (conversation recording & retrieval)
+            db_manager: Database manager instance. If None, will use global manager (auto-detects PostgreSQL/SQLite)
             
         Example:
             from personalab import Persona
@@ -99,6 +100,14 @@ class Persona:
         self.use_memo = use_memo
         self.data_dir = data_dir
         
+        # Database manager setup
+        if db_manager is not None:
+            self.db_manager = db_manager
+        else:
+            # Use global database manager (auto-detects PostgreSQL/SQLite from environment)
+            from ..config.database import get_database_manager
+            self.db_manager = get_database_manager()
+        
         # Session conversation buffers for different users
         self.session_conversations = {}  # user_id -> conversations
         
@@ -131,7 +140,7 @@ class Persona:
             raise ValueError(f"Failed to create default OpenAI client: {e}")
         
 
-    def chat(self, message: str, learn: bool = True, user_id: str = "default_user") -> str:
+    def chat(self, message: str, user_id: str, learn: bool = True) -> str:
         """Chat with AI, automatically retrieving relevant memories
         
         Note: Memory updates are deferred until endsession() is called.
@@ -139,8 +148,8 @@ class Persona:
         
         Args:
             message: User message
+            user_id: User identifier (required)
             learn: Whether to record conversation for later memory update
-            user_id: User identifier
             
         Returns:
             AI response
@@ -148,15 +157,21 @@ class Persona:
         # 1. Retrieve relevant conversations (if memo is enabled)
         retrieved_conversations = []
         memo = self._get_or_create_memo(user_id)
-        if memo and memo.conversations:
-            search_results = memo.search_similar_conversations(message, top_k=3)
-            retrieved_conversations = search_results
-            
-            if self.show_retrieval and retrieved_conversations:
-                print(f"\n🔍 Retrieved {len(retrieved_conversations)} relevant conversations:")
-                for i, conv in enumerate(retrieved_conversations, 1):
-                    print(f"  {i}. {conv['summary'][:50]}...")
-                print()
+        if memo:
+            try:
+                search_results = memo.search_similar_conversations(self.agent_id, message, limit=3)
+                retrieved_conversations = search_results
+                
+                if self.show_retrieval and retrieved_conversations:
+                    print(f"\n🔍 Retrieved {len(retrieved_conversations)} relevant conversations:")
+                    for i, conv in enumerate(retrieved_conversations, 1):
+                        summary = conv.get('summary', conv.get('content_text', 'No summary'))[:50]
+                        print(f"  {i}. {summary}...")
+                    print()
+            except Exception as e:
+                if self.show_retrieval:
+                    print(f"⚠️ Could not retrieve conversations: {e}")
+                retrieved_conversations = []
         
         # 2. Build message with retrieved content
         enhanced_message = message
@@ -194,34 +209,62 @@ class Persona:
         ]
         response = self.llm_client.chat_completion(messages)
         
+        # Handle different response formats
+        if isinstance(response, str):
+            response_content = response
+        elif hasattr(response, 'content'):
+            response_content = response.content
+        elif hasattr(response, 'choices') and len(response.choices) > 0:
+            response_content = response.choices[0].message.content
+        else:
+            response_content = str(response)
+        
         # 6. Record conversation for potential batch update (if learn=True)
         if learn:
             # Record conversation to memo (if memo is enabled)
             if memo:
-                memo.add_conversation(message, response.content)
+                messages = [
+                    {'role': 'user', 'content': message},
+                    {'role': 'assistant', 'content': response_content}
+                ]
+                memo.record_conversation(
+                    agent_id=self.agent_id,
+                    user_id=user_id,
+                    messages=messages
+                )
             
             # Store conversation in session buffer for later memory update
             self.session_conversations.setdefault(user_id, []).append({
                 'user_message': message,
-                'ai_response': response.content
+                'ai_response': response_content
             })
         
-        return response.content
+        return response_content
 
-    def search(self, query: str, top_k: int = 5) -> List[Dict]:
-        """Search for relevant memories"""
-        if not self.use_memo or not self.memos.get("default_user"):
-            print("⚠️ Memo functionality is not enabled, cannot perform search")
+    def search(self, query: str, user_id: str, top_k: int = 5) -> List[Dict]:
+        """Search for relevant memories
+        
+        Args:
+            query: Search query
+            user_id: User identifier (required)
+            top_k: Number of results to return
+            
+        Returns:
+            List of search results
+        """
+        memo = self._get_or_create_memo(user_id)
+        if not memo:
+            print(f"⚠️ Memo functionality is not enabled for user {user_id}, cannot perform search")
             return []
-        return self.memos["default_user"].search_similar_conversations(query, top_k=top_k)
+        return memo.search_similar_conversations(query, top_k=top_k)
     
-    def add_memory(self, content: str, memory_type: str = "profile", user_id: str = "default_user") -> None:
+    def add_memory(self, content: str, user_id: str, memory_type: str = "profile") -> None:
         """Add memory
         
         Args:
             content: Memory content to add
+            user_id: User identifier (required)
             memory_type: Type of memory - 'profile', 'event', or 'mind'
-            user_id: User identifier
         """
         memory = self._get_or_create_memory(user_id)
         if not memory:
@@ -229,17 +272,25 @@ class Persona:
             return
             
         if memory_type == "profile":
-            memory.add_profile([content])
+            memory.add_profile(content)
         elif memory_type == "event":
             memory.add_events([content])
         elif memory_type == "mind":
             memory.add_mind([content])
         else:
             raise ValueError(f"Unsupported memory_type: {memory_type}. Supported types: 'profile', 'event', 'mind'")
+        
+        # Save updated memory to database
+        from ..memory import MemoryDB
+        db = MemoryDB()
+        db.save_memory(memory)
     
-    def endsession(self, user_id: str = "default_user") -> Dict[str, int]:
+    def endsession(self, user_id: str) -> Dict[str, int]:
         """End conversation session and update memory with all conversations from this session
         
+        Args:
+            user_id: User identifier (required)
+            
         Returns:
             Dict with counts of updated memory items
         """
@@ -253,26 +304,53 @@ class Persona:
             print(f"📝 No conversations to process in this session for user {user_id}")
             return {"events": 0}
         
-        # Process all conversations in the session
-        events_to_add = []
+        # Convert session conversations to pipeline format
+        session_conversation = []
         for conv in self.session_conversations[user_id]:
-            conversation_event = f"User: {conv['user_message']} | AI: {conv['ai_response']}"
-            events_to_add.append(conversation_event)
+            session_conversation.extend([
+                {'role': 'user', 'content': conv['user_message']},
+                {'role': 'assistant', 'content': conv['ai_response']}
+            ])
         
-        # Batch update memory
-        if events_to_add:
-            memory.add_events(events_to_add)
-            print(f"✅ Session ended: {len(events_to_add)} conversations added to memory for user {user_id}")
+        # Use memory update pipeline to update memory
+        try:
+            from ..memory import MemoryUpdatePipeline
+            pipeline = MemoryUpdatePipeline(llm_client=self.llm_client)
+            updated_memory, pipeline_result = pipeline.update_with_pipeline(memory, session_conversation)
+            
+            # Save updated memory to database
+            from ..memory import MemoryDB
+            db = MemoryDB()
+            db.save_memory(updated_memory)
+            
+            # Update the memory reference
+            self.memories[user_id] = updated_memory
+            
+            print(f"✅ Session ended: Memory updated using pipeline for user {user_id}")
+            print(f"   - Profile updated: {pipeline_result.update_result.profile_updated}")
+            print(f"   - Event count: {len(updated_memory.get_event_content())}")
+            
+        except Exception as e:
+            print(f"❌ Error updating memory with pipeline: {e}")
+            # Fallback to clearing session without updating memory
+            self.session_conversations[user_id].clear()
+            return {"events": 0}
         
         # Clear session buffer
         processed_count = len(self.session_conversations[user_id])
         self.session_conversations[user_id].clear()
         
-        return {"events": processed_count}
+        return {
+            "events": len(updated_memory.get_event_content()),
+            "profile_updated": int(pipeline_result.update_result.profile_updated)
+        }
     
-    def get_session_info(self, user_id: str = "default_user") -> Dict[str, int]:
+    def get_session_info(self, user_id: str) -> Dict[str, int]:
         """Get information about the current session
         
+        Args:
+            user_id: User identifier (required)
+            
         Returns:
             Dict with session information
         """
@@ -282,12 +360,19 @@ class Persona:
             "memo_enabled": bool(self.use_memo and self.memos.get(user_id))
         }
     
-    def get_memory(self, user_id: str = "default_user") -> Dict:
-        """Get all memories"""
+    def get_memory(self, user_id: str) -> Dict:
+        """Get all memories
+        
+        Args:
+            user_id: User identifier (required)
+            
+        Returns:
+            Dict with user's memories
+        """
         memory = self._get_or_create_memory(user_id)
         if not memory:
             print(f"⚠️ Memory functionality is not enabled for user {user_id}, cannot get memory")
-            return {"profile": [], "events": [], "mind": []}
+            return {"profile": "", "events": [], "mind": []}
             
         return {
             "profile": memory.get_profile(),
@@ -312,21 +397,157 @@ class Persona:
             self.llm_client.close()
     
     @contextmanager
-    def session(self, user_id: str = "default_user"):
-        """Context manager for automatic resource management"""
+    def session(self, user_id: str):
+        """Context manager for automatic resource management
+        
+        Args:
+            user_id: User identifier (required)
+        """
         try:
             yield self
         finally:
-            self.close()
+            self.endsession(user_id)
     
     # Internal methods
+    def _extract_events_from_conversations(self, user_id: str, memory) -> List[str]:
+        """Extract important events from session conversations using LLM
+        
+        Args:
+            user_id: User identifier
+            memory: Memory instance
+            
+        Returns:
+            List of extracted event descriptions
+        """
+        if not self.session_conversations.get(user_id):
+            return []
+        
+        # Format conversations for LLM analysis
+        conversation_text = ""
+        for i, conv in enumerate(self.session_conversations[user_id], 1):
+            conversation_text += f"Turn {i}:\n"
+            conversation_text += f"User: {conv['user_message']}\n"
+            conversation_text += f"AI: {conv['ai_response']}\n\n"
+        
+        # Get current memory context
+        current_profile = memory.get_profile()
+        current_events = memory.get_events()
+        
+        # Create LLM prompt for event extraction
+        prompt = f"""Please analyze the following conversation and extract important events that should be remembered.
+
+Current User Profile:
+{current_profile if current_profile else "None"}
+
+Previous Events:
+{chr(10).join(f"- {event}" for event in current_events[-5:]) if current_events else "None"}
+
+Current Conversation:
+{conversation_text}
+
+Please extract only the most important and meaningful events from this conversation. Focus on:
+1. Significant actions the user took or plans to take
+2. Important milestones, achievements, or outcomes
+3. Key decisions or choices made
+4. Notable experiences or changes in the user's situation
+5. Important information shared about the user's life, work, or interests
+
+Do NOT include:
+- Simple greetings or casual conversation
+- Routine questions and answers
+- General information requests
+- Basic pleasantries
+
+Return the events in this format:
+events:
+- Event 1 description
+- Event 2 description
+- ...
+
+If no significant events occurred, return:
+events:
+- (no significant events)
+"""
+
+        try:
+            # Call LLM to extract events
+            messages = [{"role": "user", "content": prompt}]
+            response = self.llm_client.chat_completion(messages)
+            
+            # Handle different response formats
+            if isinstance(response, str):
+                response_content = response
+            elif hasattr(response, 'content'):
+                response_content = response.content
+            elif hasattr(response, 'choices') and len(response.choices) > 0:
+                response_content = response.choices[0].message.content
+            else:
+                response_content = str(response)
+            
+            # Parse events from LLM response
+            events = self._parse_events_from_llm_response(response_content)
+            
+            # Filter out "no significant events" marker
+            events = [event for event in events if event.lower() != "(no significant events)"]
+            
+            return events
+            
+        except Exception as e:
+            print(f"⚠️ Error extracting events from conversations: {e}")
+            # Fallback: return empty list instead of raw conversations
+            return []
+    
+    def _parse_events_from_llm_response(self, response_content: str) -> List[str]:
+        """Parse events from LLM response
+        
+        Args:
+            response_content: LLM response text
+            
+        Returns:
+            List of extracted events
+        """
+        events = []
+        lines = response_content.strip().split('\n')
+        
+        # Look for events section
+        in_events_section = False
+        for line in lines:
+            line = line.strip()
+            
+            if line.lower().startswith('events:'):
+                in_events_section = True
+                continue
+                
+            if in_events_section and line.startswith('- '):
+                event = line[2:].strip()
+                if event:  # Only add non-empty events
+                    events.append(event)
+            elif in_events_section and line and not line.startswith('-'):
+                # Stop if we hit content that's not an event
+                break
+        
+        return events
+
     def _get_or_create_memory(self, user_id: str):
         """Get or create Memory instance for a user"""
         if not self.use_memory:
             return None
             
         if user_id not in self.memories:
-            self.memories[user_id] = Memory(agent_id=self.agent_id, user_id=user_id)
+            # Try to load existing memory from database first
+            db = self.db_manager.get_memory_db()
+            existing_memory = db.get_memory_by_agent_and_user(self.agent_id, user_id)
+            
+            if existing_memory:
+                # Load existing memory
+                self.memories[user_id] = existing_memory
+            else:
+                # Create new memory if none exists
+                from ..memory import Memory
+                new_memory = Memory(agent_id=self.agent_id, user_id=user_id)
+                # Save the new memory to database
+                db.save_memory(new_memory)
+                self.memories[user_id] = new_memory
         return self.memories[user_id]
     
     def _get_or_create_memo(self, user_id: str):
@@ -335,11 +556,23 @@ class Persona:
             return None
             
         if user_id not in self.memos:
-            self.memos[user_id] = Memo(agent_id=self.agent_id, user_id=user_id, data_dir=self.data_dir)
+            from ..memo import ConversationManager
+            self.memos[user_id] = ConversationManager(
+                db_manager=self.db_manager,
+                enable_embeddings=True,
+                embedding_provider="auto"
+            )
         return self.memos[user_id]
     
-    def _get_memory_context(self, user_id: str = "default_user") -> str:
-        """Get memory context"""
+    def _get_memory_context(self, user_id: str) -> str:
+        """Get memory context
+        
+        Args:
+            user_id: User identifier (required)
+            
+        Returns:
+            Formatted memory context string
+        """
         memory = self._get_or_create_memory(user_id)
         if not memory:
             return ""
@@ -348,7 +581,7 @@ class Persona:
         
         profile = memory.get_profile()
         if profile:
-            context_parts.append(f"User profile: {', '.join(profile)}")
+            context_parts.append(f"User profile: {profile}")
         
         events = memory.get_events()
         if events:

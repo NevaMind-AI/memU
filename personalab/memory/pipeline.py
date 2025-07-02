@@ -276,16 +276,21 @@ events:
             new_profile_content = current_profile
         
         # Update event memory
-        updated_events = EventMemory(
-            events=previous_memory.get_event_content().copy(),
-            max_events=previous_memory.event_memory.max_events
-        )
+        current_events = previous_memory.get_event_content().copy()
         
         # Add new events
-        for event in events_updates:
-            updated_events.add_event(event)
-        for event in updated_events_list:
-            updated_events.add_event(event)
+        all_new_events = []
+        all_new_events.extend(events_updates)
+        all_new_events.extend(updated_events_list)
+        
+        # Combine current events with new events
+        updated_event_list = current_events + all_new_events
+        
+        # Create updated EventMemory with the combined event list
+        updated_events = EventMemory(
+            events=updated_event_list,
+            max_events=previous_memory.event_memory.max_events
+        )
         
         return UpdateResult(
             profile=ProfileMemory(new_profile_content),
@@ -373,6 +378,7 @@ Insights:
         """Create updated Memory object"""
         new_memory = Memory(
             agent_id=previous_memory.agent_id,
+            user_id=previous_memory.user_id,
             memory_id=previous_memory.memory_id
         )
         

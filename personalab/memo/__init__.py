@@ -16,13 +16,13 @@ from .models import Conversation, ConversationMessage
 class Memo:
     """简洁的对话记忆管理API"""
     
-    def __init__(self, agent_id: str, user_id: str = "default_user", data_dir: str = "data"):
-        """初始化Memo
+    def __init__(self, agent_id: str, user_id: str, data_dir: str = "data"):
+        """Initialize Memo
         
         Args:
-            agent_id: 智能体ID
-            user_id: 用户ID
-            data_dir: 数据目录
+            agent_id: Agent identifier
+            user_id: User identifier (required)
+            data_dir: Directory to store vector database files
         """
         self.agent_id = agent_id
         self.user_id = user_id

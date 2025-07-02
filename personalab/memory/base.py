@@ -170,22 +170,18 @@ class Memory:
         self.updated_at = datetime.now()
 
     # Convenient methods for different memory types
-    def add_profile(self, profile_items: List[str]):
+    def add_profile(self, profile_info: str):
         """Add profile information"""
         current_profile = self.get_profile_content()
-        new_profile_info = "\n".join(profile_items)
         if current_profile:
-            updated_profile = f"{current_profile}\n{new_profile_info}"
+            updated_profile = f"{current_profile}\n{profile_info}"
         else:
-            updated_profile = new_profile_info
+            updated_profile = profile_info
         self.update_profile(updated_profile)
     
-    def get_profile(self) -> List[str]:
-        """Get profile information (split by lines)"""
-        profile_content = self.get_profile_content()
-        if not profile_content:
-            return []
-        return [line.strip() for line in profile_content.split('\n') if line.strip()]
+    def get_profile(self) -> str:
+        """Get profile information as a single text"""
+        return self.get_profile_content()
     
     def add_events(self, events: List[str]):
         """Add events to event memory"""

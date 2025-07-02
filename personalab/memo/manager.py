@@ -2,30 +2,32 @@
 Conversation management module.
 
 Provides high-level interface for conversation recording, retrieval, and semantic search.
+Supports both SQLite and PostgreSQL backends with pgvector.
 """
 
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 
 from .models import Conversation, ConversationMessage
-from .storage import ConversationDB
 from .embeddings import EmbeddingManager, create_embedding_manager
+from ..config.database import DatabaseManager, get_database_manager
 
 
 class ConversationManager:
     """
-    High-level conversation management interface.
+    High-level conversation management interface with database backend abstraction.
     
     Provides unified interface for:
     - Conversation recording and storage
     - Conversation retrieval and history
-    - Vector embeddings and semantic search
+    - Vector embeddings and semantic search (SQLite/PostgreSQL + pgvector)
     - Integration with memory system
     """
     
     def __init__(
         self, 
-        db_path: str = "conversations.db",
+        db_manager: Optional[DatabaseManager] = None,
+        db_path: Optional[str] = None,  # For backward compatibility
         enable_embeddings: bool = True,
         embedding_provider: str = "auto"
     ):
@@ -33,11 +35,22 @@ class ConversationManager:
         Initialize conversation manager.
         
         Args:
-            db_path: Database file path
+            db_manager: Database manager instance. If None, will use global manager.
+            db_path: Database file path (SQLite only, for backward compatibility)
             enable_embeddings: Whether to enable vector embeddings
-            embedding_provider: Type of embedding provider ('auto', 'openai', 'sentence-transformers', 'simple')
+            embedding_provider: Type of embedding provider ('auto', 'openai', 'sentence-transformers')
         """
-        self.db = ConversationDB(db_path)
+        if db_manager is not None:
+            self.db_manager = db_manager
+        elif db_path is not None:
+            # Backward compatibility: create SQLite-based manager
+            from ..config.database import setup_sqlite
+            self.db_manager = setup_sqlite(conversation_db_path=db_path)
+        else:
+            # Use global database manager (will auto-detect from environment)
+            self.db_manager = get_database_manager()
+        
+        self.db = self.db_manager.get_conversation_db()
         self.enable_embeddings = enable_embeddings
         
         # Initialize embedding manager
@@ -49,7 +62,7 @@ class ConversationManager:
     def record_conversation(
         self,
         agent_id: str,
-        user_id: str,  # REQUIRED: User identifier
+        user_id: str,  
         messages: List[Dict[str, str]],
         session_id: Optional[str] = None,
         memory_id: Optional[str] = None,
@@ -105,6 +118,7 @@ class ConversationManager:
             conv_text = conversation.get_conversation_text()
             conv_embedding = self.embedding_manager.provider.generate_embedding(conv_text)
             
+            # Save conversation embedding (both legacy table and direct table)
             self.db.save_embedding(
                 source_type="conversation",
                 source_id=conversation.conversation_id,
@@ -114,11 +128,20 @@ class ConversationManager:
                 embedding_model=self.embedding_manager.model_name
             )
             
+            # For PostgreSQL, also save directly in conversation table
+            if hasattr(self.db, 'save_conversation_embedding'):
+                self.db.save_conversation_embedding(
+                    conversation.conversation_id,
+                    conv_embedding,
+                    conv_text
+                )
+            
             # Generate message-level embeddings for substantial messages
             for message in conversation.messages:
                 if len(message.content) > 20:  # Only embed substantial messages
                     msg_embedding = self.embedding_manager.provider.generate_embedding(message.content)
                     
+                    # Save to legacy embedding table
                     self.db.save_embedding(
                         source_type="message",
                         source_id=message.message_id,
@@ -127,6 +150,13 @@ class ConversationManager:
                         content_text=message.content,
                         embedding_model=self.embedding_manager.model_name
                     )
+                    
+                    # For PostgreSQL, also save directly in message table
+                    if hasattr(self.db, 'save_message_embedding'):
+                        self.db.save_message_embedding(
+                            message.message_id,
+                            msg_embedding
+                        )
         
         except Exception as e:
             print(f"Error generating embeddings: {e}")
@@ -184,14 +214,39 @@ class ConversationManager:
             List[Dict]: Similar conversations with similarity scores
         """
         if not self.enable_embeddings or not self.embedding_manager:
-            print("Embeddings not enabled. Using text-based search.")
-            return self._text_based_conversation_search(agent_id, query, limit)
+            print("Embeddings not enabled. Search functionality is not available.")
+            return []
         
         try:
             # Generate query embedding
             query_embedding = self.embedding_manager.provider.generate_embedding(query)
             
-            # Search for similar conversation embeddings
+            # Try PostgreSQL-specific search first (more efficient)
+            if hasattr(self.db, 'search_similar_conversations'):
+                similar_conversations = self.db.search_similar_conversations(
+                    agent_id=agent_id,
+                    query_vector=query_embedding,
+                    limit=limit,
+                    similarity_threshold=similarity_threshold
+                )
+                
+                # Convert to expected format
+                results = []
+                for conv in similar_conversations:
+                    results.append({
+                        'conversation_id': conv['conversation_id'],
+                        'agent_id': conv['agent_id'],
+                        'created_at': conv['created_at'].isoformat() if hasattr(conv['created_at'], 'isoformat') else conv['created_at'],
+                        'summary': conv.get('summary'),
+                        'session_id': conv.get('session_id'),
+                        'turn_count': conv.get('turn_count'),
+                        'similarity_score': conv['similarity_score'],
+                        'matched_content': f"Conversation from {conv['created_at']}"
+                    })
+                
+                return results
+            
+            # Fallback to legacy vector search for SQLite
             similar_vectors = self.db.search_similar_vectors(
                 agent_id=agent_id,
                 query_vector=query_embedding,
@@ -222,50 +277,7 @@ class ConversationManager:
             
         except Exception as e:
             print(f"Error in semantic search: {e}")
-            return self._text_based_conversation_search(agent_id, query, limit)
-    
-    def _text_based_conversation_search(
-        self, 
-        agent_id: str, 
-        query: str, 
-        limit: int
-    ) -> List[Dict[str, Any]]:
-        """Fallback text-based conversation search."""
-        conversations_summary = self.db.get_conversations_by_agent(agent_id, limit * 2)
-        
-        # Simple keyword matching
-        query_words = set(query.lower().split())
-        scored_conversations = []
-        
-        for conv_summary in conversations_summary:
-            conversation = self.db.get_conversation(conv_summary['conversation_id'])
-            if not conversation:
-                continue
-            
-            # Calculate simple text similarity
-            conv_text = conversation.get_conversation_text().lower()
-            conv_words = set(conv_text.split())
-            
-            # Jaccard similarity
-            intersection = len(query_words.intersection(conv_words))
-            union = len(query_words.union(conv_words))
-            similarity = intersection / union if union > 0 else 0
-            
-            if similarity > 0.1:  # Basic threshold
-                scored_conversations.append({
-                    'conversation_id': conversation.conversation_id,
-                    'agent_id': conversation.agent_id,
-                    'created_at': conversation.created_at.isoformat(),
-                    'summary': conversation.summary,
-                    'session_id': conversation.session_id,
-                    'turn_count': conversation.turn_count,
-                    'similarity_score': similarity,
-                    'matched_content': conv_text[:200]
-                })
-        
-        # Sort by similarity and return top results
-        scored_conversations.sort(key=lambda x: x['similarity_score'], reverse=True)
-        return scored_conversations[:limit]
+            return []
     
     def delete_conversation(self, conversation_id: str) -> bool:
         """

@@ -211,7 +211,7 @@ class ConversationDB:
                 conversation = Conversation(
                     agent_id=conv_row["agent_id"],
                     user_id=conv_row["user_id"],
-                    messages=[],  # Will be set below
+                    messages=[],  
                     session_id=conv_row["session_id"],
                     conversation_id=conv_row["conversation_id"],
                     created_at=datetime.fromisoformat(conv_row["created_at"]),

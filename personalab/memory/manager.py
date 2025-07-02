@@ -5,6 +5,7 @@ Provides unified Memory management interface, integrating Memory, Pipeline and S
 - MemoryClient: Main Memory client class
 - Complete Memory lifecycle management implementation
 - LLM integration support
+- Database backend abstraction (SQLite/PostgreSQL)
 """
 
 from typing import List, Dict, Any, Optional, Tuple
@@ -13,105 +14,225 @@ from datetime import datetime
 from .base import Memory
 from .pipeline import MemoryUpdatePipeline, PipelineResult
 from ..llm import BaseLLMClient
-from .storage import MemoryDB
+from ..config.database import DatabaseManager, get_database_manager
 
 
 class MemoryClient:
     """
-    Memory client.
+    Memory client with database backend abstraction.
     
     Provides complete Memory lifecycle management, including:
     - Memory creation, loading, updating, saving
     - Pipeline execution and management
-    - Database interaction
+    - Database interaction (SQLite or PostgreSQL)
     """
     
     def __init__(
         self, 
-        db_path: str = "memory.db", 
+        db_manager: Optional[DatabaseManager] = None,
+        db_path: Optional[str] = None,  # For backward compatibility
         **llm_config
     ):
         """
         Initialize MemoryClient.
         
         Args:
-            db_path: Database file path
+            db_manager: Database manager instance. If None, will use global manager.
+            db_path: Database file path (SQLite only, for backward compatibility)
             **llm_config: LLM configuration parameters
         """
-        self.database = MemoryDB(db_path)
+        if db_manager is not None:
+            self.db_manager = db_manager
+        elif db_path is not None:
+            # Backward compatibility: create SQLite-based manager
+            from ..config.database import setup_sqlite
+            self.db_manager = setup_sqlite(memory_db_path=db_path)
+        else:
+            # Use global database manager (will auto-detect from environment)
+            self.db_manager = get_database_manager()
+        
+        self.database = self.db_manager.get_memory_db()
         self.pipeline = MemoryUpdatePipeline(**llm_config)
+        self._memory_cache = {}  # Cache for loaded memories
     
-    def get_memory_by_agent(self, agent_id: str, user_id: str = "default_user") -> Memory:
-        """
-        Get or create Agent's Memory for a specific user.
+    def get_memory_by_agent(self, agent_id: str, user_id: str) -> Memory:
+        """Get memory instance by agent_id and user_id
         
         Args:
             agent_id: Agent ID
-            user_id: User ID, defaults to "default_user"
+            user_id: User ID (required)
             
         Returns:
-            Memory: Agent's Memory object for the user
+            Memory instance for the specified agent and user
         """
-        # Try to load existing Memory from database
-        existing_memory = self.database.get_memory_by_agent_and_user(agent_id, user_id)
+        key = f"{agent_id}:{user_id}"
         
-        if existing_memory:
-            return existing_memory
+        # Check cache first
+        if key in self._memory_cache:
+            return self._memory_cache[key]
         
-        # Create new Memory
-        new_memory = Memory(agent_id=agent_id, user_id=user_id)
+        # Try to load from database
+        memory = self.database.get_memory_by_agent_and_user(agent_id, user_id)
         
-        # Save to database
-        self.database.save_memory(new_memory)
+        # If not found, create new memory
+        if memory is None:
+            memory = Memory(agent_id=agent_id, user_id=user_id)
         
-        return new_memory
+        # Cache the memory
+        self._memory_cache[key] = memory
+        return memory
     
-    def update_memory_with_conversation(
-        self, 
-        agent_id: str, 
-        user_id: str,
-        conversation: List[Dict[str, str]]
-    ) -> Tuple[Memory, PipelineResult]:
-        """
-        Update Memory through conversation.
+    def save_memory(self, memory: Memory) -> bool:
+        """Save memory to database
         
         Args:
-            agent_id: Agent ID
-            user_id: User ID
-            conversation: Conversation content
+            memory: Memory instance to save
             
         Returns:
-            Tuple[Updated Memory, Pipeline result]
+            bool: Whether save was successful
         """
-        # 1. Get current Memory
-        current_memory = self.get_memory_by_agent(agent_id, user_id)
-        
-        # 2. Update Memory through LLM Pipeline
-        updated_memory, pipeline_result = self.pipeline.update_with_pipeline(
-            current_memory, 
-            conversation
-        )
-        
-        # 3. Save updated Memory
-        self.database.save_memory(updated_memory)
-        
-        return updated_memory, pipeline_result
+        return self.database.save_memory(memory)
     
+    def clear_memory(self, agent_id: str = None, user_id: str = None) -> None:
+        """Clear memory data for specified agents/users
+        
+        Args:
+            agent_id: Agent ID to clear (if None, clear all agents)
+            user_id: User ID to clear (if None, clear all users)
+        """
+        if agent_id is None and user_id is None:
+            # Clear all cached memories
+            for memory in self._memory_cache.values():
+                memory.clear_all()
+            self._memory_cache.clear()
+        elif agent_id is not None and user_id is not None:
+            # Clear specific agent-user combination
+            key = f"{agent_id}:{user_id}"
+            if key in self._memory_cache:
+                self._memory_cache[key].clear_all()
+                del self._memory_cache[key]
+        elif agent_id is not None:
+            # Clear all memories for a specific agent
+            to_remove = []
+            for key, memory in self._memory_cache.items():
+                if key.startswith(f"{agent_id}:"):
+                    memory.clear_all()
+                    to_remove.append(key)
+            for key in to_remove:
+                del self._memory_cache[key]
+        elif user_id is not None:
+            # Clear all memories for a specific user
+            to_remove = []
+            for key, memory in self._memory_cache.items():
+                if key.endswith(f":{user_id}"):
+                    memory.clear_all()
+                    to_remove.append(key)
+            for key in to_remove:
+                del self._memory_cache[key]
 
-    
-    def get_memory_prompt(self, agent_id: str, user_id: str = "default_user") -> str:
-        """
-        Get Agent's Memory prompt for a specific user.
+    def update_memory_with_conversation(self, agent_id: str, user_id: str, conversation: List[Dict[str, str]]) -> int:
+        """Update memory with a conversation
         
         Args:
             agent_id: Agent ID
-            user_id: User ID, defaults to "default_user"
+            user_id: User ID (required)
+            conversation: List of conversation messages with 'user' and 'assistant' keys
             
         Returns:
-            str: Formatted Memory prompt
+            Number of memories updated
         """
         memory = self.get_memory_by_agent(agent_id, user_id)
-        return memory.to_prompt()
+        if not conversation:
+            return 0
+        
+        # Convert conversation to memory format
+        conversation_str = ""
+        for turn in conversation:
+            if 'user' in turn and 'assistant' in turn:
+                conversation_str += f"User: {turn['user']}\nAssistant: {turn['assistant']}\n"
+        
+        if conversation_str.strip():
+            memory.add_events([conversation_str.strip()])
+            return 1
+        return 0
+
+    def get_memory_prompt(self, agent_id: str, user_id: str) -> str:
+        """Get memory context as a prompt
+        
+        Args:
+            agent_id: Agent ID
+            user_id: User ID (required)
+            
+        Returns:
+            Formatted memory prompt
+        """
+        memory = self.get_memory_by_agent(agent_id, user_id)
+        
+        prompt_parts = []
+        
+        # Add profile information
+        profile = memory.get_profile()
+        if profile:
+            prompt_parts.append(f"User Profile:\n{chr(10).join(f'- {p}' for p in profile)}")
+        
+        # Add event history
+        events = memory.get_events()
+        if events:
+            prompt_parts.append(f"Recent Events:\n{chr(10).join(f'- {e}' for e in events)}")
+        
+        # Add psychological insights
+        mind = memory.get_mind()
+        if mind:
+            prompt_parts.append(f"Psychological Insights:\n{chr(10).join(f'- {m}' for m in mind)}")
+        
+        return "\n\n".join(prompt_parts) if prompt_parts else ""
+
+    def get_memory_info(self, agent_id: str, user_id: str) -> Dict[str, Any]:
+        """Get memory information and statistics
+        
+        Args:
+            agent_id: Agent ID
+            user_id: User ID (required)
+            
+        Returns:
+            Dictionary containing memory statistics and information
+        """
+        memory = self.get_memory_by_agent(agent_id, user_id)
+        
+        profile = memory.get_profile()
+        events = memory.get_events()
+        mind = memory.get_mind()
+        
+        return {
+            'agent_id': agent_id,
+            'user_id': user_id,
+            'profile_count': len(profile),
+            'events_count': len(events),
+            'mind_count': len(mind),
+            'total_memories': len(profile) + len(events) + len(mind),
+            'memory_stats': memory.get_memory_stats(),
+        }
+
+    def export_memory(self, agent_id: str, user_id: str) -> Dict[str, Any]:
+        """Export all memory data for an agent-user combination
+        
+        Args:
+            agent_id: Agent ID
+            user_id: User ID (required)
+            
+        Returns:
+            Dictionary containing all memory data
+        """
+        memory = self.get_memory_by_agent(agent_id, user_id)
+        
+        return {
+            'agent_id': agent_id,
+            'user_id': user_id,
+            'profile': memory.get_profile(),
+            'events': memory.get_events(),
+            'mind': memory.get_mind(),
+            'metadata': memory.get_memory_stats()
+        }
     
     def update_profile(self, agent_id: str, user_id: str, profile_info: str) -> bool:
         """
@@ -153,45 +274,6 @@ class MemoryClient:
             print(f"Error adding events: {e}")
             return False
     
-    def get_memory_info(self, agent_id: str, user_id: str = "default_user") -> Dict[str, Any]:
-        """
-        Get Memory information.
-        
-        Args:
-            agent_id: Agent ID
-            user_id: User ID, defaults to "default_user"
-            
-        Returns:
-            Dict: Memory information
-        """
-        memory = self.get_memory_by_agent(agent_id, user_id)
-        
-        return {
-            'memory_id': memory.memory_id,
-            'agent_id': memory.agent_id,
-            'user_id': memory.user_id,
-            'created_at': memory.created_at.isoformat(),
-            'updated_at': memory.updated_at.isoformat(),
-            'profile_content_length': len(memory.get_profile_content()),
-            'event_count': len(memory.get_event_content()),
-            'has_mind_metadata': memory.mind_metadata is not None,
-            'confidence_score': memory.mind_metadata.get('confidence_score') if memory.mind_metadata else None
-        }
-    
-    def export_memory(self, agent_id: str, user_id: str = "default_user") -> Dict[str, Any]:
-        """
-        Export Memory data.
-        
-        Args:
-            agent_id: Agent ID
-            user_id: User ID, defaults to "default_user"
-            
-        Returns:
-            Dict: Complete Memory data
-        """
-        memory = self.get_memory_by_agent(agent_id, user_id)
-        return memory.to_dict()
-    
     def import_memory(self, memory_data: Dict[str, Any]) -> bool:
         """
         Import Memory data.
@@ -206,7 +288,7 @@ class MemoryClient:
             # Create Memory object
             memory = Memory(
                 agent_id=memory_data['agent_id'],
-                user_id=memory_data.get('user_id', 'default_user'),
+                user_id=memory_data.get('user_id'),
                 memory_id=memory_data.get('memory_id')
             )
             

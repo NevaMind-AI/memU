@@ -291,7 +291,7 @@ class MemoryDB:
                 # 2. Create Memory object
                 memory = Memory(
                     agent_id=memory_row['agent_id'],
-                    user_id=memory_row.get('user_id', 'default_user'),
+                    user_id=memory_row['user_id'] if 'user_id' in memory_row.keys() and memory_row['user_id'] else 'default_user',
                     memory_id=memory_id
                 )
                 memory.created_at = datetime.fromisoformat(memory_row['created_at'])

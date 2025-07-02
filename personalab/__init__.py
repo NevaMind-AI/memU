@@ -39,8 +39,27 @@ from .llm import (
 # Persona API - Simple entry point
 from .persona import Persona
 
-# Configuration module
-from .config import config, load_config, setup_env_file, LLMConfigManager, get_llm_config_manager
+# Configuration module - import from original config.py file
+import importlib.util
+import os
+_config_file_path = os.path.join(os.path.dirname(__file__), 'config.py')
+_config_spec = importlib.util.spec_from_file_location("personalab_config", _config_file_path)
+_config_module = importlib.util.module_from_spec(_config_spec)
+_config_spec.loader.exec_module(_config_module)
+config = _config_module.config
+load_config = _config_module.load_config
+setup_env_file = _config_module.setup_env_file
+LLMConfigManager = _config_module.LLMConfigManager
+get_llm_config_manager = _config_module.get_llm_config_manager
+
+# Database configuration
+from .config import (
+    setup_postgresql,
+    setup_sqlite,
+    get_database_manager,
+    DatabaseManager,
+    DatabaseConfig
+)
 
 # Backward compatibility (DEPRECATED - will be removed in future versions)
 try:
@@ -87,6 +106,13 @@ __all__ = [
     "setup_env_file",            # Environment setup helper
     "LLMConfigManager",          # Unified LLM config manager
     "get_llm_config_manager",    # Global LLM config getter
+    
+    # Database configuration
+    "setup_postgresql",          # PostgreSQL setup
+    "setup_sqlite",              # SQLite setup
+    "get_database_manager",      # Global database manager
+    "DatabaseManager",           # Database manager class
+    "DatabaseConfig",            # Database config class
 ]
 
 # Legacy support (conditional export)
