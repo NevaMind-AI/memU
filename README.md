@@ -30,7 +30,7 @@ pip install personalab[all]  # All features
 from personalab import Persona
 from personalab.llm import OpenAIClient, AnthropicClient
 
-# Method 1: Pass llm_client directly (recommended for full control)
+# Method 1: Pass llm_client directly
 openai_client = OpenAIClient(api_key="your-key", model="gpt-4")
 persona = Persona(agent_id="my_ai_assistant", llm_client=openai_client)
 
@@ -41,11 +41,11 @@ persona = Persona(agent_id="claude_assistant", llm_client=anthropic_client)
 # Method 2: Simple default usage (reads OPENAI_API_KEY from .env)
 persona = Persona(agent_id="my_ai_assistant")
 
-# Method 3: Class methods (also supported)
+# Method 3: Class methods for convenience
 persona = Persona.create_openai(agent_id="openai_assistant")
 persona = Persona.create_anthropic(agent_id="claude_assistant")
 
-# Flexible feature selection
+# Configure features
 persona = Persona(
     agent_id="my_ai_assistant",
     llm_client=openai_client,  # Pass your configured LLM client

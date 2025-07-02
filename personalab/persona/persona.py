@@ -4,7 +4,7 @@ PersonaLab Persona Class
 Provides a clean API for using PersonaLab's Memory and Memo functionality with LLM integration.
 """
 
-from typing import List, Dict, Optional, Union, Any, Callable
+from typing import List, Dict, Optional, Union, Any
 from contextlib import contextmanager
 
 from ..memory import Memory
@@ -18,21 +18,21 @@ class Persona:
     The main parameter is `llm_client` - pass any LLM client instance you want to use.
     If no llm_client is provided, uses OpenAI by default (reading API key from .env file).
     
-    Recommended Usage:
-        # Method 1: Pass llm_client directly (recommended)
+    Usage Examples:
         from personalab import Persona
         from personalab.llm import OpenAIClient, AnthropicClient
         
+        # Method 1: Pass llm_client directly
         openai_client = OpenAIClient(api_key="your-key", model="gpt-4")
         persona = Persona(agent_id="alice", llm_client=openai_client)
         
         anthropic_client = AnthropicClient(api_key="your-key")
         persona = Persona(agent_id="bob", llm_client=anthropic_client)
         
-        # Method 2: Use default OpenAI (simpler, reads from .env)
-        persona = Persona(agent_id="charlie")  # Uses default OpenAI configuration
+        # Method 2: Use default OpenAI (reads from .env)
+        persona = Persona(agent_id="charlie")
         
-        # Method 3: Class methods (also supported)
+        # Method 3: Class methods for convenience
         persona = Persona.create_openai(agent_id="alice")
         persona = Persona.create_anthropic(agent_id="bob")
         
@@ -47,11 +47,7 @@ class Persona:
         data_dir: str = "data",
         show_retrieval: bool = False,
         use_memory: bool = True,
-        use_memo: bool = True,
-        # Deprecated parameters (kept for backward compatibility)
-        llm_type: str = None,
-        llm_function: Callable = None,
-        **llm_kwargs
+        use_memo: bool = True
     ):
         """Initialize Persona
         
@@ -64,13 +60,7 @@ class Persona:
             use_memory: Whether to enable Memory functionality (long-term memory)
             use_memo: Whether to enable Memo functionality (conversation recording & retrieval)
             
-        Deprecated Args:
-            llm_type: (deprecated) LLM type, use llm_client parameter instead
-            llm_function: (deprecated) Custom LLM function, use CustomLLMClient instead
-            **llm_kwargs: (deprecated) Additional LLM parameters, configure via llm_client instead
-            
         Example:
-            # Recommended usage - pass llm_client directly
             from personalab import Persona
             from personalab.llm import OpenAIClient, AnthropicClient
             
@@ -104,19 +94,9 @@ class Persona:
         else:
             self.memo = None
         
-        # Configure LLM client - prioritize llm_client parameter
+        # Configure LLM client
         if llm_client is not None:
             self.llm_client = llm_client
-        elif llm_type or llm_function or llm_kwargs:
-            # Handle deprecated parameters for backward compatibility
-            import warnings
-            warnings.warn(
-                "llm_type, llm_function, and **llm_kwargs are deprecated. "
-                "Please use the llm_client parameter instead.",
-                DeprecationWarning,
-                stacklevel=2
-            )
-            self.llm_client = self._create_legacy_client(llm_type, llm_function, **llm_kwargs)
         else:
             # Default to OpenAI client with environment configuration
             self.llm_client = self._create_default_openai_client()
@@ -138,39 +118,7 @@ class Persona:
         except Exception as e:
             raise ValueError(f"Failed to create default OpenAI client: {e}")
     
-    def _create_legacy_client(self, llm_type, llm_function, **kwargs):
-        """Create LLM client using deprecated parameters (for backward compatibility)"""
-        if llm_type == "openai":
-            return self._create_openai_client(**kwargs)
-        elif llm_type == "anthropic":
-            return self._create_anthropic_client(**kwargs)
-        elif llm_type == "custom":
-            if not llm_function:
-                raise ValueError("llm_function is required when llm_type='custom'")
-            return CustomLLMClient(llm_function=llm_function, **kwargs)
-        else:
-            # Default to OpenAI for backward compatibility
-            return self._create_openai_client(**kwargs)
-    
-    def _create_openai_client(self, **kwargs):
-        """Create OpenAI client, reading API key from configuration (deprecated method)"""
-        openai_config = config.get_llm_config("openai")
-        if not openai_config.get("api_key"):
-            raise ValueError("OpenAI API key not found. Please set OPENAI_API_KEY in .env file")
-        
-        # Merge configuration and user parameters
-        client_config = {**openai_config, **kwargs}
-        return OpenAIClient(**client_config)
-    
-    def _create_anthropic_client(self, **kwargs):
-        """Create Anthropic client, reading API key from configuration (deprecated method)"""
-        anthropic_config = config.get_llm_config("anthropic")
-        if not anthropic_config.get("api_key"):
-            raise ValueError("Anthropic API key not found. Please set ANTHROPIC_API_KEY in .env file")
-        
-        # Merge configuration and user parameters
-        client_config = {**anthropic_config, **kwargs}
-        return AnthropicClient(**client_config)
+
     
 
     
@@ -181,7 +129,8 @@ class Persona:
             client = OpenAIClient(api_key=api_key)
             return cls(agent_id=agent_id, llm_client=client, **kwargs)
         else:
-            return cls(agent_id=agent_id, llm_type="openai", **kwargs)
+            # Use default OpenAI configuration
+            return cls(agent_id=agent_id, **kwargs)
     
     @classmethod  
     def create_anthropic(cls, agent_id: str, api_key: str = None, **kwargs) -> 'Persona':
@@ -190,11 +139,14 @@ class Persona:
             client = AnthropicClient(api_key=api_key)
             return cls(agent_id=agent_id, llm_client=client, **kwargs)
         else:
-            return cls(agent_id=agent_id, llm_type="anthropic", **kwargs)
+            from ..config import get_llm_config_manager
+            llm_config_manager = get_llm_config_manager()
+            anthropic_config = llm_config_manager.get_provider_config("anthropic")
+            client = AnthropicClient(**anthropic_config)
+            return cls(agent_id=agent_id, llm_client=client, **kwargs)
     
-
     @classmethod
-    def create_custom(cls, agent_id: str, llm_function: Callable, **kwargs) -> 'Persona':
+    def create_custom(cls, agent_id: str, llm_function, **kwargs) -> 'Persona':
         """Create a Persona instance using custom LLM function"""
         client = CustomLLMClient(llm_function=llm_function)
         return cls(agent_id=agent_id, llm_client=client, **kwargs)
