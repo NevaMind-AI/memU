@@ -165,31 +165,23 @@ class Memory:
         self.tom_memory = ToMMemory()
         self.updated_at = datetime.now()
 
-    # New convenient methods for different memory types
-    def add_facts(self, facts: List[str]):
-        """Add facts to profile memory"""
+    # Convenient methods for different memory types
+    def add_profile(self, profile_items: List[str]):
+        """Add profile information"""
         current_profile = self.get_profile_content()
-        new_facts = "\n".join(facts)
+        new_profile_info = "\n".join(profile_items)
         if current_profile:
-            updated_profile = f"{current_profile}\n{new_facts}"
+            updated_profile = f"{current_profile}\n{new_profile_info}"
         else:
-            updated_profile = new_facts
+            updated_profile = new_profile_info
         self.update_profile(updated_profile)
     
-    def get_facts(self) -> List[str]:
-        """Get facts from profile memory (split by lines)"""
+    def get_profile(self) -> List[str]:
+        """Get profile information (split by lines)"""
         profile_content = self.get_profile_content()
         if not profile_content:
             return []
         return [line.strip() for line in profile_content.split('\n') if line.strip()]
-    
-    def add_preferences(self, preferences: List[str]):
-        """Add preferences to profile memory (same as facts for now)"""
-        self.add_facts(preferences)
-    
-    def get_preferences(self) -> List[str]:
-        """Get preferences from profile memory (same as facts for now)"""
-        return self.get_facts()
     
     def add_events(self, events: List[str]):
         """Add events to event memory"""
@@ -199,12 +191,12 @@ class Memory:
         """Get events from event memory"""
         return self.get_event_content()
     
-    def add_tom(self, insights: List[str]):
-        """Add Theory of Mind insights"""
+    def add_mind(self, insights: List[str]):
+        """Add mind/psychological insights"""
         self.update_tom(insights)
     
-    def get_tom(self) -> List[str]:
-        """Get Theory of Mind insights"""
+    def get_mind(self) -> List[str]:
+        """Get mind/psychological insights"""
         return self.get_tom_content()
     
     def close(self):

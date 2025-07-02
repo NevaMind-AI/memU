@@ -17,6 +17,7 @@ class Persona:
     
     The main parameter is `llm_client` - pass any LLM client instance you want to use.
     If no llm_client is provided, uses OpenAI by default (reading API key from .env file).
+    Use `personality` parameter to define the AI's character and behavior.
     
     Usage Examples:
         from personalab import Persona
@@ -32,6 +33,13 @@ class Persona:
         # Method 2: Use default OpenAI (reads from .env)
         persona = Persona(agent_id="charlie")
         
+        # Method 3: Add personality
+        persona = Persona(
+            agent_id="coding_assistant", 
+            personality="You are a friendly and patient Python programming tutor. "
+                       "You explain concepts clearly and provide practical examples."
+        )
+        
         # Usage
         response = persona.chat("I love hiking")
     """
@@ -40,6 +48,7 @@ class Persona:
         self, 
         agent_id: str,
         llm_client=None,
+        personality: str = None,
         data_dir: str = "data",
         show_retrieval: bool = False,
         use_memory: bool = True,
@@ -51,6 +60,8 @@ class Persona:
             agent_id: Agent identifier
             llm_client: LLM client instance (OpenAIClient, AnthropicClient, etc.)
                        If None, will create default OpenAI client
+            personality: Personality description for the AI (e.g. "You are a friendly and helpful coding assistant")
+                        This will be included in the system prompt to define the AI's character
             data_dir: Data directory for conversation storage
             show_retrieval: Whether to show retrieval process
             use_memory: Whether to enable Memory functionality (long-term memory)
@@ -70,8 +81,15 @@ class Persona:
             
             # Default OpenAI (reads from .env)
             persona = Persona(agent_id="charlie")  # Uses default OpenAI client
+            
+            # With personality
+            persona = Persona(
+                agent_id="tutor", 
+                personality="You are a supportive math tutor who makes learning fun."
+            )
         """
         self.agent_id = agent_id
+        self.personality = personality
         self.show_retrieval = show_retrieval
         self.use_memory = use_memory
         self.use_memo = use_memo
@@ -113,12 +131,6 @@ class Persona:
             return OpenAIClient(**openai_config)
         except Exception as e:
             raise ValueError(f"Failed to create default OpenAI client: {e}")
-    
-
-    
-
-    
-
         
 
     def chat(self, message: str, learn: bool = True) -> str:
@@ -159,15 +171,21 @@ class Persona:
         memory_context = self._get_memory_context()
         
         # 4. Build system prompt
-        if memory_context:
-            system_prompt = f"""You are an intelligent assistant with long-term memory about the user.
-
-User memory information:
-{memory_context}
-
-Please provide personalized responses based on your knowledge of the user."""
+        system_prompt_parts = []
+        
+        # Add personality if provided
+        if self.personality:
+            system_prompt_parts.append(self.personality)
         else:
-            system_prompt = "You are a helpful AI assistant."
+            system_prompt_parts.append("You are a helpful AI assistant.")
+        
+        # Add memory context if available
+        if memory_context:
+            system_prompt_parts.append("You have long-term memory about the user:")
+            system_prompt_parts.append(memory_context)
+            system_prompt_parts.append("Please provide personalized responses based on your knowledge of the user.")
+        
+        system_prompt = "\n\n".join(system_prompt_parts)
         
         # 5. Call LLM
         messages = [
@@ -197,22 +215,25 @@ Please provide personalized responses based on your knowledge of the user."""
             return []
         return self.memo.search_similar_conversations(query, top_k=top_k)
     
-    def add_memory(self, content: str, memory_type: str = "fact") -> None:
-        """Add memory"""
+    def add_memory(self, content: str, memory_type: str = "profile") -> None:
+        """Add memory
+        
+        Args:
+            content: Memory content to add
+            memory_type: Type of memory - 'profile', 'event', or 'mind'
+        """
         if not self.use_memory or not self.memory:
             print("⚠️ Memory functionality is not enabled, cannot add memory")
             return
             
-        if memory_type == "fact":
-            self.memory.add_facts([content])
-        elif memory_type == "preference":
-            self.memory.add_preferences([content])
+        if memory_type == "profile":
+            self.memory.add_profile([content])
         elif memory_type == "event":
             self.memory.add_events([content])
-        elif memory_type == "tom":
-            self.memory.add_tom([content])
+        elif memory_type == "mind":
+            self.memory.add_mind([content])
         else:
-            raise ValueError(f"Unsupported memory_type: {memory_type}")
+            raise ValueError(f"Unsupported memory_type: {memory_type}. Supported types: 'profile', 'event', 'mind'")
     
     def endsession(self) -> Dict[str, int]:
         """End conversation session and update memory with all conversations from this session
@@ -262,13 +283,12 @@ Please provide personalized responses based on your knowledge of the user."""
         """Get all memories"""
         if not self.use_memory or not self.memory:
             print("⚠️ Memory functionality is not enabled, cannot get memory")
-            return {"facts": [], "preferences": [], "events": [], "tom": []}
+            return {"profile": [], "events": [], "mind": []}
             
         return {
-            "facts": self.memory.get_facts(),
-            "preferences": self.memory.get_preferences(), 
+            "profile": self.memory.get_profile(),
             "events": self.memory.get_events(),
-            "tom": self.memory.get_tom()
+            "mind": self.memory.get_mind()
         }
     
     def close(self) -> None:
@@ -300,21 +320,17 @@ Please provide personalized responses based on your knowledge of the user."""
             
         context_parts = []
         
-        facts = self.memory.get_facts()
-        if facts:
-            context_parts.append(f"Facts about user: {', '.join(facts)}")
-        
-        preferences = self.memory.get_preferences()
-        if preferences:
-            context_parts.append(f"User preferences: {', '.join(preferences)}")
+        profile = self.memory.get_profile()
+        if profile:
+            context_parts.append(f"User profile: {', '.join(profile)}")
         
         events = self.memory.get_events()
         if events:
             context_parts.append(f"Important events: {', '.join(events)}")
         
-        tom = self.memory.get_tom()
-        if tom:
-            context_parts.append(f"User psychological model: {', '.join(tom)}")
+        mind = self.memory.get_mind()
+        if mind:
+            context_parts.append(f"Psychological insights: {', '.join(mind)}")
         
         return "\n".join(context_parts) if context_parts else "No user memory information available"
     

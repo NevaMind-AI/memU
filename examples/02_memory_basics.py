@@ -64,29 +64,20 @@ def demo_memory_operations():
     print("Step 1: Manual Memory Management")
     print("-" * 40)
     
-    # Add facts manually
-    print("📚 Adding facts to memory...")
-    facts_to_add = [
+    # Add profile information manually
+    print("📚 Adding profile information to memory...")
+    profile_to_add = [
         "User is a software engineer with 5 years experience",
         "User specializes in Python and machine learning",
-        "User works at a tech startup in San Francisco"
-    ]
-    
-    for fact in facts_to_add:
-        persona.add_memory(fact, memory_type="facts")
-        print(f"  ✅ Added fact: {fact}")
-    
-    # Add preferences manually
-    print("\n❤️  Adding preferences to memory...")
-    preferences_to_add = [
+        "User works at a tech startup in San Francisco",
         "Prefers hands-on learning over theoretical explanations",
         "Likes practical examples and code snippets",
         "Interested in AI and machine learning applications"
     ]
     
-    for pref in preferences_to_add:
-        persona.add_memory(pref, memory_type="preferences")
-        print(f"  ✅ Added preference: {pref}")
+    for profile_item in profile_to_add:
+        persona.add_memory(profile_item, memory_type="profile")
+        print(f"  ✅ Added profile info: {profile_item}")
     
     # View current memory state
     print("\n📋 Current memory state:")
@@ -127,17 +118,17 @@ def demo_memory_operations():
     
     updated_memory = persona.get_memory()
     
-    print("📚 Facts:")
-    for i, fact in enumerate(updated_memory.get('facts', []), 1):
-        print(f"  {i}. {fact}")
-    
-    print("\n❤️  Preferences:")
-    for i, pref in enumerate(updated_memory.get('preferences', []), 1):
-        print(f"  {i}. {pref}")
+    print("👤 Profile:")
+    for i, profile_item in enumerate(updated_memory.get('profile', []), 1):
+        print(f"  {i}. {profile_item}")
     
     print("\n🎯 Recent Events:")
     for i, event in enumerate(updated_memory.get('events', []), 1):
         print(f"  {i}. {event}")
+    
+    print("\n🧠 Mind Insights:")
+    for i, insight in enumerate(updated_memory.get('mind', []), 1):
+        print(f"  {i}. {insight}")
     
     # Step 4: Test memory retrieval
     print("\n" + "=" * 50)

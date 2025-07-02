@@ -279,10 +279,10 @@ def demo_advanced_memory_patterns():
     for info in structured_info:
         persona.chat(info)
     
-    # Manually add structured facts
-    persona.add_memory("User has 5 years of industry experience", memory_type="facts")
-    persona.add_memory("User prefers Python over R for data science", memory_type="preferences")
-    persona.add_memory("User is working on autonomous vehicle perception systems", memory_type="facts")
+    # Manually add structured profile information
+    persona.add_memory("User has 5 years of industry experience", memory_type="profile")
+    persona.add_memory("User prefers Python over R for data science", memory_type="profile")
+    persona.add_memory("User is working on autonomous vehicle perception systems", memory_type="profile")
     
     # Pattern 2: Memory retrieval and analysis
     print("\n🔍 Pattern 2: Memory Retrieval and Analysis")
@@ -292,13 +292,13 @@ def demo_advanced_memory_patterns():
     for category, items in memory.items():
         print(f"  {category}: {len(items)} items")
     
-    print("\n📚 Sample Facts:")
-    for fact in memory.get('facts', [])[:3]:
-        print(f"  • {fact}")
+    print("\n👤 Sample Profile:")
+    for profile_item in memory.get('profile', [])[:3]:
+        print(f"  • {profile_item}")
     
-    print("\n❤️  Sample Preferences:")
-    for pref in memory.get('preferences', [])[:3]:
-        print(f"  • {pref}")
+    print("\n🧠 Sample Mind Insights:")
+    for insight in memory.get('mind', [])[:3]:
+        print(f"  • {insight}")
     
     # Pattern 3: Contextual memory queries
     print("\n💬 Pattern 3: Contextual Memory Queries")
@@ -401,12 +401,12 @@ def demo_production_patterns():
     
     # Simulate monitoring
     memory = persona.get_memory()
-    stats = {
-        "total_conversations": len(memory.get('events', [])),
-        "facts_learned": len(memory.get('facts', [])),
-        "preferences_stored": len(memory.get('preferences', [])),
-        "memory_utilization": sum(len(items) for items in memory.values()) / config.get("max_memory_items", 100) * 100
-    }
+                stats = {
+                "total_conversations": len(memory.get('events', [])),
+                "profile_items": len(memory.get('profile', [])),
+                "mind_insights": len(memory.get('mind', [])),
+                "memory_utilization": sum(len(items) for items in memory.values()) / config.get("max_memory_items", 100) * 100
+            }
     
     print("📈 System Statistics:")
     for metric, value in stats.items():

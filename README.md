@@ -45,6 +45,7 @@ persona = Persona(agent_id="my_ai_assistant")
 persona = Persona(
     agent_id="my_ai_assistant",
     llm_client=openai_client,  # Pass your configured LLM client
+    personality="You are a helpful and friendly programming tutor.",  # 🎭 AI personality
     use_memory=True,   # 🧠 Long-term memory (facts, preferences, events)
     use_memo=True      # 💬 Conversation history & semantic search
 )
