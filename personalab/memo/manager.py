@@ -108,17 +108,7 @@ class ConversationManager:
             conv_text = conversation.get_conversation_text()
             conv_embedding = self.embedding_manager.provider.generate_embedding(conv_text)
 
-            # Save conversation embedding (both legacy table and direct table)
-            self.db.save_embedding(
-                source_type="conversation",
-                source_id=conversation.conversation_id,
-                agent_id=conversation.agent_id,
-                vector=conv_embedding,
-                content_text=conv_text,
-                embedding_model=self.embedding_manager.model_name,
-            )
-
-            # For PostgreSQL, also save directly in conversation table
+            # Save conversation embedding directly in conversation table
             if hasattr(self.db, "save_conversation_embedding"):
                 self.db.save_conversation_embedding(
                     conversation.conversation_id, conv_embedding, conv_text
@@ -131,17 +121,7 @@ class ConversationManager:
                         message.content
                     )
 
-                    # Save to legacy embedding table
-                    self.db.save_embedding(
-                        source_type="message",
-                        source_id=message.message_id,
-                        agent_id=conversation.agent_id,
-                        vector=msg_embedding,
-                        content_text=message.content,
-                        embedding_model=self.embedding_manager.model_name,
-                    )
-
-                    # For PostgreSQL, also save directly in message table
+                    # Save message embedding directly in message table
                     if hasattr(self.db, "save_message_embedding"):
                         self.db.save_message_embedding(message.message_id, msg_embedding)
 
@@ -204,7 +184,7 @@ class ConversationManager:
             # Generate query embedding
             query_embedding = self.embedding_manager.provider.generate_embedding(query)
 
-            # Try PostgreSQL-specific search first (more efficient)
+            # Search using conversation vectors
             if hasattr(self.db, "search_similar_conversations"):
                 similar_conversations = self.db.search_similar_conversations(
                     agent_id=agent_id,
@@ -234,37 +214,10 @@ class ConversationManager:
                     )
 
                 return results
-
-                            # Fallback to legacy vector search method
-            similar_vectors = self.db.search_similar_vectors(
-                agent_id=agent_id,
-                query_vector=query_embedding,
-                source_type="conversation",
-                limit=limit,
-                similarity_threshold=similarity_threshold,
-            )
-
-            # Enrich results with conversation details
-            results = []
-            for vector_result in similar_vectors:
-                conversation_id = vector_result["source_id"]
-                conversation = self.db.get_conversation(conversation_id)
-
-                if conversation:
-                    results.append(
-                        {
-                            "conversation_id": conversation.conversation_id,
-                            "agent_id": conversation.agent_id,
-                            "created_at": conversation.created_at.isoformat(),
-                            "summary": conversation.summary,
-                            "session_id": conversation.session_id,
-                            "turn_count": conversation.turn_count,
-                            "similarity_score": vector_result["similarity_score"],
-                            "matched_content": vector_result["content_text"],
-                        }
-                    )
-
-            return results
+            else:
+                # Database doesn't support direct conversation vector search
+                print("Vector search not supported by current database configuration")
+                return []
 
         except Exception as e:
             print(f"Error in semantic search: {e}")

@@ -110,25 +110,7 @@ class PostgreSQLConversationDB:
                 """
                 )
 
-                # Create embedding_vectors table for legacy compatibility and additional vectors
-                cur.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS embedding_vectors (
-                        vector_id TEXT PRIMARY KEY,
-                        source_type TEXT NOT NULL CHECK (source_type IN ('conversation', 'message', 'memory')),
-                        source_id TEXT NOT NULL,
-                        agent_id TEXT NOT NULL,
-                        vector_data vector(1536) NOT NULL,
-                        vector_dimension INTEGER NOT NULL DEFAULT 1536,
-                        content_text TEXT NOT NULL,
-                        content_hash TEXT NOT NULL,
-                        embedding_model TEXT,
-                        created_at TIMESTAMP NOT NULL,
 
-                        UNIQUE(source_type, source_id)
-                    )
-                """
-                )
 
                 # Create indexes for better performance
                 cur.execute(
@@ -151,15 +133,7 @@ class PostgreSQLConversationDB:
                     "CREATE INDEX IF NOT EXISTS idx_messages_role ON conversation_messages(role)"
                 )
 
-                cur.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_vectors_agent_id ON embedding_vectors(agent_id)"
-                )
-                cur.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_vectors_source_type ON embedding_vectors(source_type)"
-                )
-                cur.execute(
-                    "CREATE INDEX IF NOT EXISTS idx_vectors_content_hash ON embedding_vectors(content_hash)"
-                )
+
 
                 # Create vector similarity search indexes using HNSW
                 cur.execute(
@@ -174,12 +148,7 @@ class PostgreSQLConversationDB:
                     ON conversation_messages USING hnsw (message_vector vector_cosine_ops)
                 """
                 )
-                cur.execute(
-                    """
-                    CREATE INDEX IF NOT EXISTS idx_embedding_vectors_hnsw
-                    ON embedding_vectors USING hnsw (vector_data vector_cosine_ops)
-                """
-                )
+
 
                 conn.commit()
 
@@ -401,14 +370,7 @@ class PostgreSQLConversationDB:
                         "DELETE FROM conversations WHERE conversation_id = %s", (conversation_id,)
                     )
 
-                    # Delete related embeddings
-                    cur.execute(
-                        """
-                        DELETE FROM embedding_vectors
-                        WHERE source_type = 'conversation' AND source_id = %s
-                    """,
-                        (conversation_id,),
-                    )
+
 
                     conn.commit()
                     return True
@@ -419,70 +381,7 @@ class PostgreSQLConversationDB:
 
     # ========== Vector Embedding Methods ==========
 
-    def save_embedding(
-        self,
-        source_type: str,
-        source_id: str,
-        agent_id: str,
-        vector: List[float],
-        content_text: str,
-        embedding_model: str = "default",
-    ) -> bool:
-        """
-        Save vector embedding to database using pgvector.
 
-        Args:
-            source_type: Type of source ('conversation', 'message', 'memory')
-            source_id: ID of the source
-            agent_id: Agent ID
-            vector: Vector embedding as list of floats
-            content_text: Original text content
-            embedding_model: Model used for embedding
-
-        Returns:
-            bool: Whether save was successful
-        """
-        vector_id = str(uuid.uuid4())
-        content_hash = self._calculate_hash(content_text)
-
-        try:
-            with psycopg2.connect(self.connection_string) as conn:
-                with conn.cursor() as cur:
-                    register_vector(conn)
-
-                    cur.execute(
-                        """
-                        INSERT INTO embedding_vectors
-                        (vector_id, source_type, source_id, agent_id, vector_data,
-                         vector_dimension, content_text, content_hash, embedding_model, created_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (source_type, source_id) DO UPDATE SET
-                        vector_data = EXCLUDED.vector_data,
-                        content_text = EXCLUDED.content_text,
-                        content_hash = EXCLUDED.content_hash,
-                        embedding_model = EXCLUDED.embedding_model,
-                        created_at = EXCLUDED.created_at
-                    """,
-                        [
-                            vector_id,
-                            source_type,
-                            source_id,
-                            agent_id,
-                            vector,  # pgvector will handle the conversion
-                            len(vector),
-                            content_text,
-                            content_hash,
-                            embedding_model,
-                            datetime.now(),
-                        ],
-                    )
-
-                    conn.commit()
-                    return True
-
-        except Exception as e:
-            print(f"Error saving embedding: {e}")
-            return False
 
     def save_conversation_embedding(
         self, conversation_id: str, vector: List[float], content_text: str
@@ -613,120 +512,9 @@ class PostgreSQLConversationDB:
             print(f"Error searching similar conversations: {e}")
             return []
 
-    def search_similar_vectors(
-        self,
-        agent_id: str,
-        query_vector: List[float],
-        source_type: Optional[str] = None,
-        limit: int = 10,
-        similarity_threshold: float = 0.7,
-    ) -> List[Dict[str, Any]]:
-        """
-        Search for similar vectors using pgvector cosine similarity.
 
-        Args:
-            agent_id: Agent ID
-            query_vector: Query vector for similarity search
-            source_type: Filter by source type (optional)
-            limit: Maximum results
-            similarity_threshold: Minimum similarity score
 
-        Returns:
-            List[Dict]: Similar vectors with similarity scores
-        """
-        try:
-            with psycopg2.connect(self.connection_string) as conn:
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    register_vector(conn)
 
-                    # Convert query_vector to the proper format for pgvector
-                    vector_param = f"[{','.join(map(str, query_vector))}]"
-
-                    query = """
-                        SELECT
-                            vector_id,
-                            source_type,
-                            source_id,
-                            content_text,
-                            embedding_model,
-                            created_at,
-                            1 - (vector_data <=> %s::vector) as similarity_score
-                        FROM embedding_vectors
-                        WHERE agent_id = %s
-                        AND vector_data IS NOT NULL
-                    """
-
-                    params = [vector_param, agent_id]
-
-                    if source_type:
-                        query += " AND source_type = %s"
-                        params.append(source_type)
-
-                    query += """
-                        AND (1 - (vector_data <=> %s::vector)) >= %s
-                        ORDER BY vector_data <=> %s::vector
-                        LIMIT %s
-                    """
-                    params.extend([vector_param, similarity_threshold, vector_param, limit])
-
-                    cur.execute(query, params)
-                    rows = cur.fetchall()
-
-                    return [dict(row) for row in rows]
-
-        except Exception as e:
-            print(f"Error searching similar vectors: {e}")
-            return []
-
-    def get_embeddings_by_agent(
-        self, agent_id: str, source_type: Optional[str] = None, limit: int = 100
-    ) -> List[Dict[str, Any]]:
-        """
-        Get embeddings for an agent.
-
-        Args:
-            agent_id: Agent ID
-            source_type: Filter by source type (optional)
-            limit: Maximum number of embeddings
-
-        Returns:
-            List[Dict]: List of embeddings
-        """
-        try:
-            with psycopg2.connect(self.connection_string) as conn:
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    query = """
-                        SELECT vector_id, source_type, source_id, vector_data,
-                               content_text, embedding_model, created_at
-                        FROM embedding_vectors
-                        WHERE agent_id = %s
-                    """
-                    params = [agent_id]
-
-                    if source_type:
-                        query += " AND source_type = %s"
-                        params.append(source_type)
-
-                    query += " ORDER BY created_at DESC LIMIT %s"
-                    params.append(limit)
-
-                    cur.execute(query, params)
-                    rows = cur.fetchall()
-
-                    # Convert vector_data to list format for compatibility
-                    results = []
-                    for row in rows:
-                        row_dict = dict(row)
-                        if row_dict["vector_data"]:
-                            # pgvector returns the vector as a special type, convert to list
-                            row_dict["vector_data"] = list(row_dict["vector_data"])
-                        results.append(row_dict)
-
-                    return results
-
-        except Exception as e:
-            print(f"Error getting embeddings: {e}")
-            return []
 
     def _calculate_hash(self, content: str) -> str:
         """Calculate content hash."""
