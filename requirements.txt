@@ -1,30 +1,10 @@
-# Core dependencies
+# Core dependencies only - install with pip install personalab
 requests>=2.31.0
-
-# LLM providers (optional - install as needed)
-openai>=1.0.0  # For OpenAI GPT models and Azure OpenAI
-anthropic>=0.7.0  # For Anthropic Claude models
-google-generativeai>=0.3.0  # For Google Gemini models
-cohere>=4.0.0  # For Cohere models
-boto3>=1.26.0  # For AWS Bedrock models
-together>=0.2.0  # For Together AI models
-replicate>=0.15.0  # For Replicate models
-
-# Local LLM support (optional)
-transformers>=4.21.0  # For Hugging Face models
-torch>=1.12.0  # For Hugging Face models
-# Note: Ollama support uses HTTP requests, no additional packages needed
-
-# For examples and development
-python-dotenv>=0.19.0  # For environment variable management
-
-# JSON handling for structured outputs
+python-dotenv>=0.19.0
 json5>=0.9.0
-
-# HTTP client for API calls
 httpx>=0.24.0
+psycopg2-binary>=2.9.9
 
-# FastAPI backend
-fastapi>=0.110.0
-uvicorn[standard]>=0.24.0
-psycopg2-binary>=2.9.9 
+# For full LLM support, install with: pip install personalab[llm]
+# For AI features, install with: pip install personalab[ai]
+# For development, install with: pip install personalab[dev] 
