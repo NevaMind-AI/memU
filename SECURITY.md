@@ -46,7 +46,7 @@ When using PersonaLab, please follow these security guidelines:
 - Keep your database software updated
 
 #### Production Deployment
-- Use PostgreSQL instead of SQLite for production environments
+- Use PostgreSQL for production database operations
 - Enable proper authentication and authorization
 - Use HTTPS for all network communications
 - Implement proper logging and monitoring

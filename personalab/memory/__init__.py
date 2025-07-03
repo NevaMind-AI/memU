@@ -15,10 +15,10 @@ Backward compatible classes:
 - EventMemory: Event memory (now as component)
 """
 
-# LLM接口
+# LLM interface
 from ..llm import BaseLLMClient
 
-# 新的统一Memory架构
+# New unified Memory architecture
 from .base import EventMemory, Memory, MindMemory, ProfileMemory
 from .manager import MemoryClient
 from .pipeline import MemoryUpdatePipeline, PipelineResult, MindResult, UpdateResult
@@ -26,30 +26,30 @@ from .pipeline import MemoryUpdatePipeline, PipelineResult, MindResult, UpdateRe
 # Embeddings moved to memo module
 
 
-# 向后兼容的原有类（如果存在的话）
+# Backward compatible legacy classes (if they exist)
 try:
     from .base import BaseMemory
 except ImportError:
     BaseMemory = None
 
-# 向后兼容别名
+# Backward compatible aliases
 MemoryManager = MemoryClient
 
 __all__ = [
-    # 新架构的主要类
+    # Main classes of new architecture
     "Memory",
     "MemoryClient",
     "MemoryUpdatePipeline",
     "PipelineResult",
     "UpdateResult",
     "MindResult",
-    # LLM接口
+    # LLM interface
     "BaseLLMClient",
-    # Memory组件
+    # Memory components
     "ProfileMemory",
     "EventMemory",
     "MindMemory",
-    # 向后兼容类和别名
+    # Backward compatible classes and aliases
     "BaseMemory",
     "MemoryManager",
 ]

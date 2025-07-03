@@ -3,7 +3,7 @@ PersonaLab
 
 A Python framework for creating and managing AI personas and laboratory environments.
 
-新版本基于STRUCTURE.md重构，采用统一的Memory架构。
+New version refactored based on STRUCTURE.md, adopting unified Memory architecture.
 """
 
 __version__ = "0.1.0"

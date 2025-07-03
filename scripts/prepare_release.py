@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-PersonaLab 发布准备脚本
-- 清理项目文件
-- 验证配置
-- 运行测试
-- 更新版本信息
-- 准备GitHub发布
+PersonaLab Release Preparation Script
+- Clean project files
+- Validate configuration
+- Run tests
+- Update version information
+- Prepare GitHub release
 """
 
 import os
@@ -25,10 +25,10 @@ def run_command(cmd, check=True):
     return result
 
 def cleanup_project():
-    """清理项目文件"""
+    """Clean project files"""
     print("🧹 Cleaning project files...")
     
-    # 清理Python缓存
+    # Clean Python cache
     patterns_to_remove = [
         "__pycache__",
         "*.pyc", 
@@ -48,7 +48,7 @@ def cleanup_project():
     print("✅ Project cleaning completed")
 
 def check_dependencies():
-    """检查依赖项"""
+    """Check project dependencies"""
     print("📦 Checking project dependencies...")
     
     required_files = [
@@ -72,75 +72,75 @@ def check_dependencies():
     return True
 
 def validate_code_quality():
-    """验证代码质量"""
+    """Validate code quality"""
     print("🔍 Validating code quality...")
     
-    # 检查Python语法
+    # Check Python syntax
     try:
         result = run_command("python -m py_compile personalab/__init__.py", check=False)
         if result.returncode != 0:
             print("❌ Python syntax check failed")
             return False
     except:
-        print("⚠️  跳过语法检查（py_compile不可用）")
+        print("⚠️  Skipping syntax check (py_compile not available)")
     
-    # 尝试导入包
+    # Try to import package
     try:
-        run_command("python -c 'import personalab; print(\"导入成功\")'")
-        print("✅ 包导入测试通过")
+        run_command("python -c 'import personalab; print(\"Import successful\")'")
+        print("✅ Package import test passed")
     except:
-        print("❌ 包导入失败")
+        print("❌ Package import failed")
         return False
     
     return True
 
 def check_git_status():
-    """检查Git状态"""
+    """Check Git status"""
     print("📝 Checking Git status...")
     
     try:
-        # 检查是否在git仓库中
+        # Check if in git repository
         run_command("git status --porcelain")
         
-        # 检查是否有未提交的更改
+        # Check for uncommitted changes
         result = run_command("git status --porcelain", check=False)
         if result.stdout.strip():
-            print("📋 发现未提交的更改:")
+            print("📋 Found uncommitted changes:")
             print(result.stdout)
             return True
         else:
-            print("✅ 工作目录干净")
+            print("✅ Working directory clean")
             return True
             
     except:
-        print("❌ 不在Git仓库中或Git不可用")
+        print("❌ Not in Git repository or Git not available")
         return False
 
 def create_release_summary():
-    """创建发布摘要"""
+    """Create release summary"""
     print("📊 Creating release summary...")
     
     summary = {
-        "项目": "PersonaLab",
-        "描述": "AI Memory and Conversation Management System",
-        "主要功能": [
-            "PostgreSQL/SQLite双数据库支持",
-            "多LLM提供商集成 (OpenAI, Anthropic, 等)",
-            "智能记忆管理 (Profile, Events, Mind)", 
-            "向量嵌入和语义搜索",
-            "对话录制和检索",
-            "心理洞察分析"
+        "Project": "PersonaLab",
+        "Description": "AI Memory and Conversation Management System",
+        "Key Features": [
+            "PostgreSQL database support",
+            "Multi-LLM provider integration (OpenAI, Anthropic, etc.)",
+            "Intelligent memory management (Profile, Events, Mind)", 
+            "Vector embeddings and semantic search",
+            "Conversation recording and retrieval",
+            "Psychological insights analysis"
         ],
-        "最新修复": [
-            "SQLite Row对象兼容性问题",
-            "ConversationManager方法调用错误",
-            "PostgreSQL连接和配置问题",
-            "内存更新管道优化"
+        "Latest Fixes": [
+            "ConversationManager method call errors",
+            "PostgreSQL connection and configuration issues",
+            "Memory update pipeline optimization",
+            "Enhanced error handling and logging"
         ]
     }
     
     print("\n" + "="*50)
-    print("🚀 PersonaLab 发布摘要")
+    print("🚀 PersonaLab Release Summary")
     print("="*50)
     for key, value in summary.items():
         if isinstance(value, list):
@@ -154,48 +154,48 @@ def create_release_summary():
     return summary
 
 def main():
-    """主函数"""
-    print("🚀 PersonaLab 发布准备脚本")
+    """Main function"""
+    print("🚀 PersonaLab Release Preparation Script")
     print("="*50)
     
-    # 确保在项目根目录
+    # Ensure we're in project root directory
     project_root = Path(__file__).parent.parent
     os.chdir(project_root)
-    print(f"📂 工作目录: {os.getcwd()}")
+    print(f"📂 Working directory: {os.getcwd()}")
     
     success = True
     
-    # 1. 清理项目
+    # 1. Clean project
     cleanup_project()
     
-    # 2. 检查依赖
+    # 2. Check dependencies
     if not check_dependencies():
         success = False
     
-    # 3. 验证代码质量  
+    # 3. Validate code quality  
     if not validate_code_quality():
         success = False
     
-    # 4. 检查Git状态
+    # 4. Check Git status
     if not check_git_status():
         success = False
     
-    # 5. 创建发布摘要
+    # 5. Create release summary
     create_release_summary()
     
     if success:
-        print("\n🎉 发布准备完成！")
-        print("\n📋 下一步操作:")
+        print("\n🎉 Release preparation completed!")
+        print("\n📋 Next steps:")
         print("  1. git add .")
         print("  2. git commit -m 'feat: prepare for release with PostgreSQL support'")
         print("  3. git push origin main")
-        print("  4. 在GitHub上创建新的Release")
-        print("\n🔗 建议的Release内容:")
-        print("  标题: PersonaLab v1.0.0 - PostgreSQL Integration & Enhanced Memory")
-        print("  标签: v1.0.0")
-        print("  描述: 包含PostgreSQL支持、多LLM集成和增强记忆管理的重大更新")
+        print("  4. Create new Release on GitHub")
+        print("\n🔗 Suggested Release content:")
+        print("  Title: PersonaLab v1.0.0 - PostgreSQL Integration & Enhanced Memory")
+        print("  Tag: v1.0.0")
+        print("  Description: Major update including PostgreSQL support, multi-LLM integration and enhanced memory management")
     else:
-        print("\n❌ 发布准备失败，请修复上述问题")
+        print("\n❌ Release preparation failed, please fix the above issues")
         return 1
     
     return 0

@@ -1,5 +1,5 @@
 """
-Anthropic (Claude) LLM客户端实现
+Anthropic (Claude) LLM Client Implementation
 """
 
 import logging
@@ -10,16 +10,16 @@ from .base import BaseLLMClient, LLMResponse
 
 
 class AnthropicClient(BaseLLMClient):
-    """Anthropic Claude客户端实现"""
+    """Anthropic Claude Client Implementation"""
 
     def __init__(self, api_key: str = None, model: str = "claude-3-sonnet-20240229", **kwargs):
         """
-        初始化Anthropic客户端
+        Initialize Anthropic Client
 
         Args:
-            api_key: Anthropic API密钥，如果为None则从环境变量获取
-            model: 默认模型
-            **kwargs: 其他配置参数
+            api_key: Anthropic API key, retrieved from environment variable if None
+            model: Default model
+            **kwargs: Other configuration parameters
         """
         super().__init__(model=model, **kwargs)
 
@@ -31,12 +31,12 @@ class AnthropicClient(BaseLLMClient):
                 "Set ANTHROPIC_API_KEY environment variable or pass api_key parameter."
             )
 
-        # 延迟导入Anthropic库
+        # Lazy import Anthropic library
         self._client = None
 
     @property
     def client(self):
-        """懒加载Anthropic客户端"""
+        """Lazy load Anthropic client"""
         if self._client is None:
             try:
                 import anthropic
@@ -94,11 +94,11 @@ class AnthropicClient(BaseLLMClient):
             return self._handle_error(e, model)
 
     def _get_default_model(self) -> str:
-        """获取Anthropic默认模型"""
+        """Get Anthropic default model"""
         return "claude-3-sonnet-20240229"
 
     def _prepare_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        """预处理Anthropic消息格式"""
+        """Preprocess Anthropic message format"""
         processed = []
 
         for msg in messages:
@@ -106,9 +106,9 @@ class AnthropicClient(BaseLLMClient):
                 role = msg["role"]
                 content = str(msg["content"])
 
-                # Anthropic的角色映射
+                # Anthropic role mapping
                 if role == "system":
-                    # Claude不支持system角色，需要转换为user消息
+                    # Claude doesn't support system role, need to convert to user message
                     processed.append({"role": "user", "content": f"System: {content}"})
                 elif role in ["user", "assistant"]:
                     processed.append({"role": role, "content": content})
@@ -122,7 +122,7 @@ class AnthropicClient(BaseLLMClient):
 
     @classmethod
     def from_env(cls) -> "AnthropicClient":
-        """从环境变量创建Anthropic客户端"""
+        """Create Anthropic client from environment variables"""
         return cls()
 
     def __str__(self) -> str:

@@ -6,8 +6,8 @@
 
 #### **Production-Ready Database Support**
 - **PostgreSQL Integration**: Full PostgreSQL support for production deployments
-- **Automatic Backend Detection**: Seamlessly switches between PostgreSQL and SQLite based on environment configuration
-- **Database Migration Tools**: Comprehensive migration scripts and documentation
+- **Production Database Backend**: Scalable PostgreSQL database architecture
+- **Database Configuration Tools**: Comprehensive setup scripts and documentation
 
 #### **Enhanced Memory System**
 - **Three-Tier Memory Architecture**: Profile, Events, and Mind components
@@ -28,10 +28,10 @@
 
 ### 🔧 Major Fixes & Improvements
 
-#### **Database Compatibility**
-- Fixed SQLite Row object `.get()` method compatibility
+#### **Database Improvements**
 - Resolved PostgreSQL connection and configuration issues
 - Enhanced database connection error handling
+- Improved database query performance
 
 #### **API Improvements**
 - Fixed `ConversationManager.add_conversation()` → `record_conversation()` method naming
@@ -139,7 +139,7 @@ response = persona.chat("Hello, I'm learning Python", user_id="user123")
 
 #### **System Requirements**
 - **Python**: 3.8+ (tested on 3.8, 3.9, 3.10, 3.11)
-- **Database**: PostgreSQL 12+ (recommended) or SQLite 3.6+
+- **Database**: PostgreSQL 12+
 - **Memory**: 512MB minimum, 2GB+ recommended for large datasets
 - **Storage**: Varies based on conversation volume
 

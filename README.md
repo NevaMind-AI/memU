@@ -274,7 +274,7 @@ PersonaLab/
 - **Memory**: Unified memory class with ProfileMemory, EventMemory, and MindMemory
 - **MemoryManager**: Complete memory lifecycle management
 - **MemoryUpdatePipeline**: Three-stage LLM-driven update process
-- **MemoryDB**: SQLite-based persistent storage
+- **MemoryDB**: PostgreSQL-based persistent storage
 
 #### Memo Module (`personalab.memo`)
 - **ConversationManager**: High-level conversation recording and search

@@ -18,7 +18,7 @@ from .models import Conversation, ConversationMessage
 
 # Simple API wrapper
 class Memo:
-    """简洁的对话记忆管理API"""
+    """Concise conversation memory management API"""
 
     def __init__(self, agent_id: str, user_id: str, data_dir: str = "data", db_manager=None):
         """Initialize Memo
@@ -33,19 +33,19 @@ class Memo:
         self.agent_id = agent_id
         self.user_id = user_id
 
-        # 创建数据目录（向后兼容）
+        # Create data directory (backward compatibility)
         os.makedirs(data_dir, exist_ok=True)
 
-        # 使用数据库管理器
+        # Use database manager
         if db_manager is not None:
             self.manager = ConversationManager(db_manager=db_manager)
         else:
-            # 使用全局数据库管理器（PostgreSQL）
+            # Use global database manager (PostgreSQL)
             db_manager = get_database_manager()
             self.manager = ConversationManager(db_manager=db_manager)
 
     def add_conversation(self, user_message: str, ai_response: str, metadata: dict = None):
-        """添加对话"""
+        """Add conversation"""
         messages = [
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": ai_response},
@@ -54,13 +54,13 @@ class Memo:
             agent_id=self.agent_id,
             user_id=self.user_id,
             messages=messages,
-            pipeline_result=metadata,  # metadata作为pipeline_result传递
+            pipeline_result=metadata,  # metadata passed as pipeline_result
         )
 
     def search_similar_conversations(
         self, query: str, top_k: int = 5, similarity_threshold: float = 0.6
     ):
-        """搜索相似对话"""
+        """Search similar conversations"""
         return self.manager.search_similar_conversations(
             agent_id=self.agent_id,
             query=query,
@@ -70,11 +70,11 @@ class Memo:
 
     @property
     def conversations(self):
-        """获取所有对话"""
+        """Get all conversations"""
         return self.manager.get_conversation_history(agent_id=self.agent_id, user_id=self.user_id)
 
     def close(self):
-        """关闭资源"""
+        """Close resources"""
         if hasattr(self.manager, "close"):
             self.manager.close()
 
@@ -83,5 +83,5 @@ __all__ = [
     "ConversationManager",
     "Conversation", 
     "ConversationMessage",
-    "Memo",  # 新增简洁API
+    "Memo",  # New concise API
 ]

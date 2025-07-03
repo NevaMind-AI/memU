@@ -23,7 +23,7 @@ class MemoryClient:
     Provides complete Memory lifecycle management, including:
     - Memory creation, loading, updating, saving
     - Pipeline execution and management
-    - Database interaction (SQLite or PostgreSQL)
+    - Database interaction (PostgreSQL)
     """
 
     def __init__(

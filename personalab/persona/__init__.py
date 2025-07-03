@@ -1,7 +1,7 @@
 """
-PersonaLab Persona包
+PersonaLab Persona Package
 
-提供简洁易用的PersonaLab智能体接口
+Provides a simple and easy-to-use PersonaLab intelligent agent interface
 """
 
 from .persona import Persona

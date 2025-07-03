@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: personalab
+      POSTGRES_USER: personalab
+      POSTGRES_PASSWORD: personalab
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: .
+    restart: unless-stopped
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: personalab
+      POSTGRES_USER: personalab
+      POSTGRES_PASSWORD: personalab
+    depends_on:
+      - postgres
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata: 

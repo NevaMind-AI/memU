@@ -39,11 +39,11 @@ Paste error output here
  - OS: [e.g. macOS, Ubuntu 22.04]
  - Python version: [e.g. 3.9.7]
  - PersonaLab version: [e.g. 1.0.0]
- - Database: [e.g. PostgreSQL 14.5, SQLite]
+ - Database: [e.g. PostgreSQL 14.5]
  - LLM Provider: [e.g. OpenAI, Anthropic]
 
 **Configuration**
-- Database backend: [PostgreSQL/SQLite]
+- Database backend: PostgreSQL
 - Environment variables set: [list relevant ones]
 - Any custom configuration: [describe]
 

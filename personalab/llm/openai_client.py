@@ -1,5 +1,5 @@
 """
-OpenAI LLM客户端实现
+OpenAI LLM Client Implementation
 """
 
 import logging
@@ -10,19 +10,19 @@ from .base import BaseLLMClient, LLMResponse
 
 
 class OpenAIClient(BaseLLMClient):
-    """OpenAI客户端实现"""
+    """OpenAI Client Implementation"""
 
     def __init__(
         self, api_key: str = None, base_url: str = None, model: str = "gpt-3.5-turbo", **kwargs
     ):
         """
-        初始化OpenAI客户端
+        Initialize OpenAI Client
 
         Args:
-            api_key: OpenAI API密钥，如果为None则从环境变量获取
-            base_url: API基础URL，支持自定义端点
-            model: 默认模型
-            **kwargs: 其他配置参数
+            api_key: OpenAI API key, retrieved from environment variable if None
+            base_url: API base URL, supports custom endpoints
+            model: Default model
+            **kwargs: Other configuration parameters
         """
         super().__init__(model=model, **kwargs)
 
@@ -35,12 +35,12 @@ class OpenAIClient(BaseLLMClient):
                 "Set OPENAI_API_KEY environment variable or pass api_key parameter."
             )
 
-        # 延迟导入OpenAI库
+        # Lazy import OpenAI library
         self._client = None
 
     @property
     def client(self):
-        """懒加载OpenAI客户端"""
+        """Lazy load OpenAI client"""
         if self._client is None:
             try:
                 import openai
@@ -92,11 +92,11 @@ class OpenAIClient(BaseLLMClient):
             return self._handle_error(e, model)
 
     def _filter_api_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """过滤掉不应该传递给OpenAI API的参数"""
-        # 不应该传递给OpenAI API的参数列表
+        """Filter out parameters that should not be passed to OpenAI API"""
+        # List of parameters that should not be passed to OpenAI API
         excluded_params = {"api_key", "base_url", "provider_type", "timeout", "retry_count"}
 
-        # 只保留OpenAI API支持的参数
+        # Only keep parameters supported by OpenAI API
         filtered = {}
         for key, value in params.items():
             if key not in excluded_params:
@@ -105,12 +105,12 @@ class OpenAIClient(BaseLLMClient):
         return filtered
 
     def _get_default_model(self) -> str:
-        """获取OpenAI默认模型"""
+        """Get OpenAI default model"""
         return "gpt-3.5-turbo"
 
     def _prepare_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        """预处理OpenAI消息格式"""
-        # 确保消息格式正确
+        """Preprocess OpenAI message format"""
+        # Ensure message format is correct
         processed = []
         for msg in messages:
             if isinstance(msg, dict) and "role" in msg and "content" in msg:
@@ -122,7 +122,7 @@ class OpenAIClient(BaseLLMClient):
 
     @classmethod
     def from_env(cls) -> "OpenAIClient":
-        """从环境变量创建OpenAI客户端"""
+        """Create OpenAI client from environment variables"""
         return cls()
 
     def __str__(self) -> str:

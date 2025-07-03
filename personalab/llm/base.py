@@ -1,5 +1,5 @@
 """
-LLM基础抽象类和数据结构
+LLM Basic Abstract Classes and Data Structures
 """
 
 from abc import ABC, abstractmethod
@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 
 @dataclass
 class LLMResponse:
-    """LLM响应结果"""
+    """LLM Response Result"""
 
     content: str
     usage: Dict[str, int]
@@ -18,24 +18,24 @@ class LLMResponse:
     error: Optional[str] = None
 
     def __bool__(self) -> bool:
-        """使响应对象可以作为布尔值使用"""
+        """Enable response object to be used as boolean value"""
         return self.success
 
     def __str__(self) -> str:
-        """字符串表示返回内容"""
+        """String representation returns content"""
         return self.content
 
 
 class BaseLLMClient(ABC):
-    """LLM客户端基类"""
+    """LLM Client Base Class"""
 
     def __init__(self, model: str = None, **kwargs):
         """
-        初始化LLM客户端
+        Initialize LLM Client
 
         Args:
-            model: 默认模型名称
-            **kwargs: 其他配置参数
+            model: Default model name
+            **kwargs: Other configuration parameters
         """
         self.default_model = model
         self.config = kwargs
@@ -50,48 +50,48 @@ class BaseLLMClient(ABC):
         **kwargs,
     ) -> LLMResponse:
         """
-        聊天补全接口
+        Chat Completion Interface
 
         Args:
-            messages: 对话消息列表
-            model: 模型名称，如果为None则使用default_model
-            temperature: 生成温度
-            max_tokens: 最大token数
-            **kwargs: 其他参数
+            messages: List of conversation messages
+            model: Model name, uses default_model if None
+            temperature: Generation temperature
+            max_tokens: Maximum number of tokens
+            **kwargs: Other parameters
 
         Returns:
-            LLMResponse: 响应结果
+            LLMResponse: Response result
         """
         pass
 
     def simple_chat(self, prompt: str, **kwargs) -> str:
         """
-        简单聊天接口，返回字符串内容
+        Simple chat interface, returns string content
 
         Args:
-            prompt: 用户输入
-            **kwargs: 其他参数
+            prompt: User input
+            **kwargs: Other parameters
 
         Returns:
-            str: AI回复内容
+            str: AI response content
         """
         messages = [{"role": "user", "content": prompt}]
         response = self.chat_completion(messages, **kwargs)
         return response.content if response.success else f"Error: {response.error}"
 
     def get_model(self, model: str = None) -> str:
-        """获取要使用的模型名称"""
+        """Get the model name to use"""
         return model or self.default_model or self._get_default_model()
 
     @abstractmethod
     def _get_default_model(self) -> str:
-        """获取提供商的默认模型"""
+        """Get provider's default model"""
         pass
 
     def _prepare_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        """预处理消息格式，子类可以重写"""
+        """Preprocess message format, can be overridden by subclasses"""
         return messages
 
     def _handle_error(self, error: Exception, model: str) -> LLMResponse:
-        """统一的错误处理"""
+        """Unified error handling"""
         return LLMResponse(content="", usage={}, model=model, success=False, error=str(error))

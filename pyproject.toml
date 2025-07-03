@@ -4,17 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "personalab"
-version = "0.1.0"
+version = "1.0.0"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"},
+    {name = "PersonaLab Team", email = "support@personalab.ai"},
 ]
-description = "A Python framework for creating and managing AI personas and laboratory environments"
+description = "AI Memory and Conversation Management Framework - Simple as mem0, Powerful as PersonaLab"
 readme = "README.md"
 requires-python = ">=3.8"
+license = "MIT"
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
@@ -23,8 +23,14 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-keywords = ["ai", "personas", "laboratory", "framework", "python"]
-dependencies = []
+keywords = ["ai", "memory", "conversation", "llm", "chatbot", "persona", "agent"]
+dependencies = [
+    "requests>=2.31.0",
+    "python-dotenv>=0.19.0", 
+    "json5>=0.9.0",
+    "httpx>=0.24.0",
+    "psycopg2-binary>=2.9.9",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -36,6 +42,19 @@ dev = [
     "pre-commit>=3.0",
     "twine>=4.0",
     "build>=0.10",
+]
+ai = [
+    "openai>=1.0.0",
+    "sentence-transformers>=2.2.0",
+]
+llm = [
+    "openai>=1.0.0",
+    "anthropic>=0.7.0",
+    "google-generativeai>=0.3.0",
+    "cohere>=4.0.0",
+    "boto3>=1.26.0",
+    "together>=0.2.0",
+    "replicate>=0.15.0",
 ]
 
 [project.urls]

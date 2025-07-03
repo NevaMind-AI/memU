@@ -65,11 +65,11 @@ class Persona:
                        If None, will create default OpenAI client
             personality: Personality description for the AI (e.g. "You are a friendly and helpful coding assistant")
                         This will be included in the system prompt to define the AI's character
-            data_dir: Data directory for conversation storage (legacy, for SQLite compatibility)
+            data_dir: Data directory for conversation storage (legacy parameter)
             show_retrieval: Whether to show retrieval process
             use_memory: Whether to enable Memory functionality (long-term memory)
             use_memo: Whether to enable Memo functionality (conversation recording & retrieval)
-            db_manager: Database manager instance. If None, will use global manager (auto-detects PostgreSQL/SQLite)
+            db_manager: Database manager instance. If None, will use global PostgreSQL manager
 
         Example:
             from personalab import Persona

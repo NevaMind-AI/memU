@@ -1,57 +1,57 @@
 #!/bin/bash
 
-# PersonaLab 后台管理系统 - 一键启动脚本
+# PersonaLab Backend Management System - One-Click Startup Script
 
 set -e
 
-# 颜色定义
+# Color definitions
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# 打印横幅
+# Print banner
 print_banner() {
     echo -e "${BLUE}=================================================${NC}"
-    echo -e "${BLUE}🚀 PersonaLab 后台管理系统 (React + FastAPI)${NC}"
+    echo -e "${BLUE}🚀 PersonaLab Backend Management System (React + FastAPI)${NC}"
     echo -e "${BLUE}=================================================${NC}"
 }
 
-# 检查命令是否存在
+# Check if command exists
 check_command() {
     if ! command -v $1 &> /dev/null; then
-        echo -e "${RED}❌ $1 未安装，请先安装 $1${NC}"
+        echo -e "${RED}❌ $1 is not installed, please install $1 first${NC}"
         exit 1
     fi
 }
 
-# 检查环境
+# Check environment
 check_environment() {
-    echo -e "${YELLOW}🔍 检查运行环境...${NC}"
+    echo -e "${YELLOW}🔍 Checking runtime environment...${NC}"
     
-    # 检查Python
+    # Check Python
     check_command python3
     echo -e "${GREEN}✅ Python: $(python3 --version)${NC}"
     
-    # 检查Node.js
+    # Check Node.js
     check_command node
     echo -e "${GREEN}✅ Node.js: $(node --version)${NC}"
     
-    # 检查npm
+    # Check npm
     check_command npm
     echo -e "${GREEN}✅ npm: $(npm --version)${NC}"
 }
 
-# 安装依赖
+# Install dependencies
 install_dependencies() {
-    echo -e "${YELLOW}📦 检查并安装依赖...${NC}"
+    echo -e "${YELLOW}📦 Checking and installing dependencies...${NC}"
     
-    # 后端依赖
-    echo -e "${BLUE}📥 检查后端依赖...${NC}"
+    # Backend dependencies
+    echo -e "${BLUE}📥 Checking backend dependencies...${NC}"
     cd backend
     if [ ! -f "venv/bin/activate" ]; then
-        echo -e "${YELLOW}🔧 创建Python虚拟环境...${NC}"
+        echo -e "${YELLOW}🔧 Creating Python virtual environment...${NC}"
         python3 -m venv venv
     fi
     
@@ -59,102 +59,102 @@ install_dependencies() {
     pip install -r requirements.txt
     cd ..
     
-    # 前端依赖
-    echo -e "${BLUE}📥 检查前端依赖...${NC}"
+    # Frontend dependencies
+    echo -e "${BLUE}📥 Checking frontend dependencies...${NC}"
     cd frontend
     if [ ! -d "node_modules" ]; then
-        echo -e "${YELLOW}🔧 安装前端依赖...${NC}"
+        echo -e "${YELLOW}🔧 Installing frontend dependencies...${NC}"
         npm install
     fi
     cd ..
 }
 
-# 启动后端
+# Start backend
 start_backend() {
-    echo -e "${BLUE}🔧 启动后端服务器...${NC}"
+    echo -e "${BLUE}🔧 Starting backend server...${NC}"
     cd backend
     source venv/bin/activate
     python start.py &
     BACKEND_PID=$!
     cd ..
-    echo -e "${GREEN}✅ 后端服务器已启动 (PID: $BACKEND_PID)${NC}"
-    echo -e "${GREEN}📍 API接口: http://localhost:8080${NC}"
-    echo -e "${GREEN}📍 API文档: http://localhost:8080/docs${NC}"
+    echo -e "${GREEN}✅ Backend server started (PID: $BACKEND_PID)${NC}"
+    echo -e "${GREEN}📍 API Interface: http://localhost:8080${NC}"
+    echo -e "${GREEN}📍 API Documentation: http://localhost:8080/docs${NC}"
 }
 
-# 启动前端
+# Start frontend
 start_frontend() {
-    echo -e "${BLUE}🔧 启动前端服务器...${NC}"
+    echo -e "${BLUE}🔧 Starting frontend server...${NC}"
     cd frontend
     npm run dev &
     FRONTEND_PID=$!
     cd ..
-    echo -e "${GREEN}✅ 前端服务器已启动 (PID: $FRONTEND_PID)${NC}"
-    echo -e "${GREEN}📍 前端界面: http://localhost:5173${NC}"
+    echo -e "${GREEN}✅ Frontend server started (PID: $FRONTEND_PID)${NC}"
+    echo -e "${GREEN}📍 Frontend Interface: http://localhost:5173${NC}"
 }
 
-# 清理函数
+# Cleanup function
 cleanup() {
-    echo -e "\n${YELLOW}🛑 正在停止服务器...${NC}"
+    echo -e "\n${YELLOW}🛑 Stopping servers...${NC}"
     if [ ! -z "$BACKEND_PID" ]; then
         kill $BACKEND_PID 2>/dev/null || true
-        echo -e "${GREEN}✅ 后端服务器已停止${NC}"
+        echo -e "${GREEN}✅ Backend server stopped${NC}"
     fi
     if [ ! -z "$FRONTEND_PID" ]; then
         kill $FRONTEND_PID 2>/dev/null || true
-        echo -e "${GREEN}✅ 前端服务器已停止${NC}"
+        echo -e "${GREEN}✅ Frontend server stopped${NC}"
     fi
-    echo -e "${GREEN}👋 再见！${NC}"
+    echo -e "${GREEN}👋 Goodbye!${NC}"
     exit 0
 }
 
-# 等待用户输入
+# Wait for user input
 wait_for_user() {
-    echo -e "\n${GREEN}🎉 系统启动完成！${NC}"
-    echo -e "${BLUE}📱 前端界面: http://localhost:5173${NC}"
-    echo -e "${BLUE}🔧 API文档: http://localhost:8080/docs${NC}"
-    echo -e "\n${YELLOW}按 Ctrl+C 停止所有服务${NC}"
+    echo -e "\n${GREEN}🎉 System startup completed!${NC}"
+    echo -e "${BLUE}📱 Frontend Interface: http://localhost:5173${NC}"
+    echo -e "${BLUE}🔧 API Documentation: http://localhost:8080/docs${NC}"
+    echo -e "\n${YELLOW}Press Ctrl+C to stop all services${NC}"
     
-    # 等待中断信号
+    # Wait for interrupt signal
     while true; do
         sleep 1
     done
 }
 
-# 主函数
+# Main function
 main() {
-    # 设置中断处理
+    # Set interrupt handling
     trap cleanup SIGINT SIGTERM
     
     print_banner
     
-    # 检查环境
+    # Check environment
     check_environment
     
-    # 安装依赖
+    # Install dependencies
     install_dependencies
     
-    # 等待一下让用户看到信息
+    # Wait a moment to let user see the information
     sleep 2
     
-    # 启动服务
+    # Start services
     start_backend
-    sleep 3  # 等待后端启动
+    sleep 3  # Wait for backend to start
     start_frontend
-    sleep 2  # 等待前端启动
+    sleep 2  # Wait for frontend to start
     
-    # 等待用户输入
+    # Wait for user input
     wait_for_user
 }
 
-# 检查是否在正确的目录
+# Check if running in correct directory
 if [ ! -d "backend" ] || [ ! -d "frontend" ]; then
-    echo -e "${RED}❌ 请在 server 目录下运行此脚本${NC}"
-    echo -e "${YELLOW}💡 正确的用法:${NC}"
+    echo -e "${RED}❌ Please run this script in the server directory${NC}"
+    echo -e "${YELLOW}💡 Correct usage:${NC}"
     echo -e "   cd server"
     echo -e "   ./start-all.sh"
     exit 1
 fi
 
-# 运行主函数
+# Run main function
 main 

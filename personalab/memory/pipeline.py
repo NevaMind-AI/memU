@@ -244,40 +244,21 @@ events:
             raise Exception(f"LLM update failed: {response.error}")
 
         # Parse LLM results and separate profile and events
-        updated_profile, updated_events_list = self._parse_modification_result(response.content)
-
-        # Create updated profile
-        if updated_profile:
-            new_profile_content = "\n".join(updated_profile)
-        else:
-            new_profile_content = previous_memory.get_profile_content() or ""
-
-        # Update event memory
-        _ = previous_memory.get_event_content().copy()
-
-        # Add new events
-        all_new_events = []
-        all_new_events.extend(events_updates)
-        all_new_events.extend(updated_events_list)
-
-        # Combine current events with new events
-        updated_event_list = previous_memory.get_event_content() + all_new_events
+        updated_profile, updated_events = self._parse_modification_result(response.content)
 
         # Create updated EventMemory with the combined event list
-        updated_events = EventMemory(
-            events=updated_event_list, max_events=previous_memory.event_memory.max_events
-        )
+        updated_events = EventMemory(events=updated_events, max_events=previous_memory.event_memory.max_events)
 
         return UpdateResult(
-            profile=ProfileMemory(new_profile_content),
+            profile=ProfileMemory("\n".join(updated_profile)),
             events=updated_events,
-            profile_updated=bool(profile_updates),
+            profile_updated=bool(updated_profile),
             raw_llm_response=response.content,
             metadata={
                 "stage": "llm_update",
                 "updated_at": datetime.now().isoformat(),
                 "llm_usage": response.usage,
-                "profile_updated": bool(profile_updates),
+                "profile_updated": bool(updated_profile),
             },
         )
 
@@ -287,14 +268,12 @@ events:
         """
         LLM Theory of Mind stage: Let LLM perform deep psychological analysis
         """
-        _ = self._format_conversation(session_conversation)
-        _ = (
-            update_result.profile.get_content()
-            + "\n"
-            + "\n".join(update_result.events.get_content())
+        conversation_text = self._format_conversation(session_conversation)
+        updated_memory_content = (
+            update_result.profile.get_content() + "\n" + "\n".join(update_result.events.get_content())
         )
 
-        prompt = """Please conduct a Theory of Mind analysis on the following conversation to deeply understand the user's psychological state and behavioral patterns.
+        prompt = f"""Please conduct a Theory of Mind analysis on the following conversation to deeply understand the user's psychological state and behavioral patterns.
 
 Conversation Content:
 {conversation_text}
@@ -307,10 +286,6 @@ Please analyze the conversation and extract:
 3. User's communication style and engagement patterns
 4. User's knowledge level and learning tendencies
 
-Insights:
-- Insight 1
-- Insight 2
-- ...
 
 Please return the insights directly in the following format:
 Insights:

@@ -1,89 +1,89 @@
-# PersonaLab 后台管理系统 (React + Vite + FastAPI)
+# PersonaLab Backend Management System (React + Vite + FastAPI)
 
-现代化的PersonaLab后台管理系统，采用前后端分离架构，提供完整的数据库管理功能。
+Modern PersonaLab backend management system with separated frontend and backend architecture, providing complete database management functionality.
 
-## 🏗️ 架构说明
+## 🏗️ Architecture Overview
 
-- **前端**: React 18 + Vite + Material-UI
-- **后端**: FastAPI + PostgreSQL + pgvector
-- **数据库**: PostgreSQL with pgvector extension
-- **API文档**: 自动生成的OpenAPI/Swagger文档
+- **Frontend**: React 18 + Vite + Material-UI
+- **Backend**: FastAPI + PostgreSQL + pgvector
+- **Database**: PostgreSQL with pgvector extension
+- **API Documentation**: Auto-generated OpenAPI/Swagger documentation
 
-## 📁 项目结构
+## 📁 Project Structure
 
 ```
 server/
-├── backend/                 # FastAPI后端
-│   ├── main.py             # FastAPI主应用
-│   ├── start.py            # 启动脚本
-│   └── requirements.txt    # Python依赖
-└── frontend/               # React前端
+├── backend/                 # FastAPI backend
+│   ├── main.py             # FastAPI main application
+│   ├── start.py            # Startup script
+│   └── requirements.txt    # Python dependencies
+└── frontend/               # React frontend
     ├── src/
-    │   ├── api/           # API客户端
-    │   ├── components/    # React组件
-    │   ├── pages/         # 页面组件
-    │   └── App.jsx        # 主应用
-    ├── package.json       # Node依赖
-    └── vite.config.js     # Vite配置
+    │   ├── api/           # API client
+    │   ├── components/    # React components
+    │   ├── pages/         # Page components
+    │   └── App.jsx        # Main application
+    ├── package.json       # Node dependencies
+    └── vite.config.js     # Vite configuration
 ```
 
-## ✨ 功能特性
+## ✨ Features
 
-### 📊 系统概览
-- 实时统计信息展示
-- 对话、记忆、Agent、用户数据统计
-- 今日和本周活跃度指标
+### 📊 System Overview
+- Real-time statistics display
+- Conversation, memory, agent, and user data statistics
+- Today and this week activity metrics
 
-### 💬 对话管理
-- 对话列表浏览和搜索
-- 按Agent和用户筛选
-- 对话详情查看（包含完整消息历史）
-- 对话删除功能
+### 💬 Conversation Management
+- Conversation list browsing and search
+- Filter by agent and user
+- Conversation details view (including complete message history)
+- Conversation deletion functionality
 
-### 🧠 记忆管理
-- 记忆列表展示和过滤
-- 记忆详情查看（Profile、Event、Mind内容）
-- 记忆内容的可折叠展示
-- 记忆删除功能
+### 🧠 Memory Management
+- Memory list display and filtering
+- Memory details view (Profile, Event, Mind content)
+- Collapsible display of memory content
+- Memory deletion functionality
 
-### 📝 操作记录
-- 记忆操作历史跟踪
-- 创建/更新操作记录
-- 操作时间和详情展示
+### 📝 Operation Records
+- Memory operation history tracking
+- Create/update operation records
+- Operation time and details display
 
-### 🔍 高级功能
-- 响应式设计，支持移动设备
-- 实时数据加载
-- 分页浏览
-- 错误处理和用户反馈
-- 现代化UI设计
+### 🔍 Advanced Features
+- Responsive design supporting mobile devices
+- Real-time data loading
+- Paginated browsing
+- Error handling and user feedback
+- Modern UI design
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 环境要求
+### Prerequisites
 
 - Python 3.8+
 - Node.js 16+
 - PostgreSQL 12+ with pgvector extension
-- PersonaLab项目环境
+- PersonaLab project environment
 
-### 1. 安装后端依赖
+### 1. Install Backend Dependencies
 
 ```bash
 cd server/backend
 pip install -r requirements.txt
 ```
 
-### 2. 安装前端依赖
+### 2. Install Frontend Dependencies
 
 ```bash
 cd server/frontend
 npm install
 ```
 
-### 3. 环境配置
+### 3. Environment Configuration
 
-确保设置了以下环境变量（或在PersonaLab根目录的`.env`文件中）：
+Ensure the following environment variables are set (or in `.env` file in PersonaLab root directory):
 
 ```bash
 POSTGRES_HOST=localhost
@@ -93,147 +93,127 @@ POSTGRES_USER=chenhong
 POSTGRES_PASSWORD=
 ```
 
-### 4. 启动服务
+### 4. Start Services
 
-#### 启动后端API服务器
+#### Start Backend API Server
 
 ```bash
 cd server/backend
 python start.py
 ```
 
-后端将运行在 `http://localhost:8080`
+Backend will run on `http://localhost:8080`
 
-- API接口: http://localhost:8080
-- API文档: http://localhost:8080/docs
-- 交互式API文档: http://localhost:8080/redoc
+- API Interface: http://localhost:8080
+- API Documentation: http://localhost:8080/docs
+- Interactive API Documentation: http://localhost:8080/redoc
 
-#### 启动前端开发服务器
+#### Start Frontend Development Server
 
 ```bash
 cd server/frontend
 npm run dev
 ```
 
-前端将运行在 `http://localhost:5173`
+Frontend will run on `http://localhost:5173`
 
-### 5. 访问应用
+### 5. Access Application
 
-打开浏览器访问 `http://localhost:5173` 即可使用管理系统。
+Open browser and visit `http://localhost:5173` to use the management system.
 
-## 📚 API文档
+## 📚 API Documentation
 
-### 主要API端点
+### Main API Endpoints
 
-- `GET /api/stats` - 获取系统统计信息
-- `GET /api/conversations` - 获取对话列表
-- `GET /api/conversations/{id}` - 获取对话详情
-- `DELETE /api/conversations/{id}` - 删除对话
-- `GET /api/memories` - 获取记忆列表
-- `GET /api/memories/{id}` - 获取记忆详情
-- `DELETE /api/memories/{id}` - 删除记忆
-- `GET /api/memory-operations` - 获取记忆操作记录
-- `GET /api/agents` - 获取Agent列表
-- `GET /api/users` - 获取用户列表
+- `GET /api/stats` - Get system statistics
+- `GET /api/conversations` - Get conversation list
+- `GET /api/conversations/{id}` - Get conversation details
+- `DELETE /api/conversations/{id}` - Delete conversation
+- `GET /api/memories` - Get memory list
+- `GET /api/memories/{id}` - Get memory details
+- `DELETE /api/memories/{id}` - Delete memory
+- `GET /api/memory-operations` - Get memory operation records
+- `GET /api/agents` - Get agent list
+- `GET /api/users` - Get user list
 
-所有API都支持分页和过滤参数。详细的API文档可以通过访问 `http://localhost:8080/docs` 查看。
+All APIs support pagination and filter parameters. Detailed API documentation can be viewed by visiting `http://localhost:8080/docs`.
 
-## 🛠️ 开发说明
+## 🛠️ Development Notes
 
-### 前端开发
+### Frontend Development
 
-- 使用React Hooks进行状态管理
-- Material-UI组件库提供一致的设计语言
-- Axios用于HTTP请求
-- React Router用于路由管理
-- 响应式设计适配各种屏幕尺寸
+- Use React Hooks for state management
+- Material-UI component library provides consistent design language
+- Axios for HTTP requests
+- React Router for routing management
+- Responsive design adapted to various screen sizes
 
-### 后端开发
+### Backend Development
 
-- FastAPI提供高性能异步API
-- Pydantic进行数据验证
-- PostgreSQL数据库集成
-- 自动生成的API文档
-- CORS支持前后端分离
+- FastAPI provides high-performance asynchronous API
+- Pydantic for data validation
+- PostgreSQL database integration
+- Auto-generated API documentation
+- CORS support for frontend-backend separation
 
-### 数据库
+### Database
 
-- 兼容现有PersonaLab数据库结构
-- 支持pgvector向量搜索功能
-- 直接SQL查询提供最佳性能
+- Compatible with existing PersonaLab database structure
+- Support pgvector vector search functionality
+- Direct SQL queries provide optimal performance
 
-## 🔧 配置说明
+## 🔧 Configuration
 
-### 后端配置
+### Backend Configuration
 
-后端会自动设置PostgreSQL环境变量，默认配置：
-- 主机: localhost
-- 端口: 5432
-- 数据库: personalab
-- 用户: chenhong
-- 密码: 空
+Backend automatically sets PostgreSQL environment variables with default configuration:
+- Host: localhost
+- Port: 5432
+- Database: personalab
+- User: chenhong
+- Password: empty
 
-### 前端配置
+### Frontend Configuration
 
-前端API客户端配置在 `src/api/client.js` 中，默认连接到 `http://localhost:8080`。
+Frontend API client configuration is in `src/api/client.js`, defaults to connecting to `http://localhost:8080`.
 
-## 🐛 故障排除
+## 🐛 Troubleshooting
 
-### 常见问题
+### Common Issues
 
-1. **数据库连接失败**
-   - 确认PostgreSQL服务正在运行
-   - 检查数据库配置是否正确
-   - 确认pgvector扩展已安装
+1. **Database Connection Failed**
+   - Confirm PostgreSQL service is running
+   - Check database configuration is correct
+   - Confirm pgvector extension is installed
 
-2. **前端无法连接后端**
-   - 确认后端服务器正在运行
-   - 检查CORS配置
-   - 确认端口没有被占用
+2. **Frontend Cannot Connect to Backend**
+   - Confirm backend server is running
+   - Check CORS configuration
+   - Confirm port is not occupied
 
-3. **依赖安装问题**
-   - 确认Python和Node.js版本满足要求
-   - 尝试清除缓存后重新安装
-   - 检查网络连接
+3. **Dependency Installation Issues**
+   - Confirm Python and Node.js versions meet requirements
+   - Try clearing cache and reinstalling
+   - Check network connection
 
-## 📈 性能优化
+## 📈 Performance Optimization
 
-- 前端使用虚拟化技术处理大量数据
-- 后端使用数据库索引优化查询
-- 分页加载减少内存占用
-- 懒加载组件提升加载速度
+- Use connection pooling for database operations
+- Implement frontend caching for static data
+- Use pagination for large datasets
+- Optimize SQL queries for better performance
 
-## 🤝 贡献指南
+## 🔒 Security Considerations
 
-1. Fork项目
-2. 创建功能分支
-3. 提交更改
-4. 推送到分支
-5. 创建Pull Request
+- Implement proper input validation
+- Use parameterized queries to prevent SQL injection
+- Add authentication middleware when needed
+- Sanitize output data to prevent XSS attacks
 
-## 📄 许可证
+## 📄 License
 
-本项目遵循PersonaLab项目的许可证。
+This project is part of PersonaLab and follows the same license terms.
 
-## 🆚 与旧版本对比
+## 🤝 Contributing
 
-### 优势
-
-- **现代化技术栈**: React + FastAPI
-- **更好的用户体验**: Material-UI + 响应式设计
-- **更高的性能**: FastAPI异步处理 + Vite快速构建
-- **更好的维护性**: 前后端分离 + TypeScript支持
-- **自动化API文档**: OpenAPI/Swagger
-- **移动端友好**: 响应式设计
-
-### 迁移指南
-
-从旧的Flask版本迁移：
-1. 数据库结构保持不变
-2. API接口重新设计但功能兼容
-3. 前端完全重写，提供更好的用户体验
-4. 配置文件格式略有调整
-
----
-
-🎉 享受使用PersonaLab后台管理系统！如有问题请提交Issue。 
+Please follow the PersonaLab contribution guidelines for development and submission. 

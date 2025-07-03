@@ -6,7 +6,7 @@ Thank you for your interest in contributing to PersonaLab! This document provide
 
 ### Prerequisites
 - Python 3.8 or higher
-- PostgreSQL (recommended) or SQLite for development
+- PostgreSQL database
 - Git
 
 ### Local Development Setup
@@ -40,13 +40,10 @@ Thank you for your interest in contributing to PersonaLab! This document provide
    # Edit .env with your configuration
    ```
 
-6. **Set up database (PostgreSQL recommended)**
+6. **Set up database**
    ```bash
-   # For PostgreSQL
+   # Configure PostgreSQL
    source setup_postgres_env.sh
-   
-   # Or for SQLite (development only)
-   # No additional setup needed
    ```
 
 ## Development Workflow
@@ -70,8 +67,8 @@ type(scope): description
 
 Examples:
 ```
-feat(memory): add PostgreSQL support for memory storage
-fix(persona): resolve SQLite Row object compatibility issue
+feat(memory): add enhanced memory storage capabilities
+fix(persona): resolve database compatibility issue
 docs(readme): update installation instructions
 ```
 

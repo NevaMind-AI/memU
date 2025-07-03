@@ -1,5 +1,5 @@
 """
-自定义LLM客户端，支持用户自定义实现
+Custom LLM client supporting user-defined implementations
 """
 
 import logging
@@ -10,13 +10,13 @@ from .base import BaseLLMClient, LLMResponse
 
 class CustomLLMClient(BaseLLMClient):
     """
-    自定义LLM客户端，支持用户传入自定义的LLM函数或对象
+    Custom LLM client supporting user-provided custom LLM functions or objects
 
-    使用场景：
-    1. 本地模型（如Ollama、HuggingFace Transformers等）
-    2. 自定义API端点
-    3. Mock/测试用途
-    4. 其他第三方LLM服务
+    Use cases:
+    1. Local models (such as Ollama, HuggingFace Transformers, etc.)
+    2. Custom API endpoints
+    3. Mock/testing purposes
+    4. Other third-party LLM services
     """
 
     def __init__(
@@ -27,18 +27,18 @@ class CustomLLMClient(BaseLLMClient):
         **kwargs,
     ):
         """
-        初始化自定义LLM客户端
+        Initialize custom LLM client
 
         Args:
-            llm_function: 自定义LLM函数或对象
-                - 如果是函数，应该接受(messages, **kwargs)并返回字符串或LLMResponse
-                - 如果是对象，应该有chat_completion方法
-            model: 模型名称
-            function_type: 函数类型
-                - "simple": 函数返回字符串
-                - "full": 函数返回LLMResponse对象
-                - "object": 对象，有chat_completion方法
-            **kwargs: 其他配置参数
+            llm_function: Custom LLM function or object
+                - If function, should accept (messages, **kwargs) and return string or LLMResponse
+                - If object, should have chat_completion method
+            model: Model name
+            function_type: Function type
+                - "simple": Function returns string
+                - "full": Function returns LLMResponse object
+                - "object": Object with chat_completion method
+            **kwargs: Other configuration parameters
         """
         super().__init__(model=model, **kwargs)
 
@@ -48,7 +48,7 @@ class CustomLLMClient(BaseLLMClient):
         self.llm_function = llm_function
         self.function_type = function_type
 
-        # 验证函数类型
+        # Validate function type
         if function_type == "object":
             if not hasattr(llm_function, "chat_completion"):
                 raise ValueError("Object must have 'chat_completion' method")
@@ -63,27 +63,27 @@ class CustomLLMClient(BaseLLMClient):
         max_tokens: int = 1000,
         **kwargs,
     ) -> LLMResponse:
-        """自定义LLM聊天补全"""
+        """Custom LLM chat completion"""
         model = self.get_model(model)
 
         try:
-            # 准备参数
+            # Prepare parameters
             call_kwargs = {"temperature": temperature, "max_tokens": max_tokens, **kwargs}
 
             if self.function_type == "object":
-                # 调用对象的chat_completion方法
+                # Call object's chat_completion method
                 result = self.llm_function.chat_completion(
                     messages=messages, model=model, **call_kwargs
                 )
 
-                # 如果返回的是LLMResponse，直接返回；否则包装
+                # If returns LLMResponse, return directly; otherwise wrap
                 if isinstance(result, LLMResponse):
                     return result
                 else:
                     return LLMResponse(content=str(result), usage={}, model=model, success=True)
 
             elif self.function_type == "full":
-                # 函数返回LLMResponse
+                # Function returns LLMResponse
                 result = self.llm_function(messages, **call_kwargs)
                 if isinstance(result, LLMResponse):
                     return result
@@ -92,7 +92,7 @@ class CustomLLMClient(BaseLLMClient):
                     return LLMResponse(content=str(result), usage={}, model=model, success=True)
 
             else:  # function_type == "simple"
-                # 函数返回字符串
+                # Function returns string
                 result = self.llm_function(messages, **call_kwargs)
                 return LLMResponse(content=str(result), usage={}, model=model, success=True)
 
@@ -101,32 +101,32 @@ class CustomLLMClient(BaseLLMClient):
             return self._handle_error(e, model)
 
     def _get_default_model(self) -> str:
-        """获取自定义模型默认名称"""
+        """Get custom model default name"""
         return "custom-model"
 
     @classmethod
     def create_full(cls, llm_function: Callable) -> "CustomLLMClient":
         """
-        创建完整的自定义客户端（函数返回LLMResponse）
+        Create full custom client (function returns LLMResponse)
 
         Args:
-            llm_function: 接受(messages, **kwargs)，返回LLMResponse的函数
+            llm_function: Function accepting (messages, **kwargs), returning LLMResponse
 
         Returns:
-            CustomLLMClient实例
+            CustomLLMClient instance
         """
         return cls(llm_function=llm_function, function_type="full")
 
     @classmethod
     def create_object(cls, llm_object: object) -> "CustomLLMClient":
         """
-        创建基于对象的自定义客户端
+        Create object-based custom client
 
         Args:
-            llm_object: 有chat_completion方法的对象
+            llm_object: Object with chat_completion method
 
         Returns:
-            CustomLLMClient实例
+            CustomLLMClient instance
         """
         return cls(llm_function=llm_object, function_type="object")
 
@@ -135,5 +135,5 @@ class CustomLLMClient(BaseLLMClient):
 
 
 def create_simple_client(llm_function: Callable) -> CustomLLMClient:
-    """创建简单客户端的便捷函数"""
+    """Convenience function to create simple client"""
     return CustomLLMClient.create_simple(llm_function)
