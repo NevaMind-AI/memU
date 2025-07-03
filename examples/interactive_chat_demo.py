@@ -3,14 +3,15 @@
 PersonaLab Interactive Chat Demo
 """
 
-import sys
 import os
+import sys
 
 sys.path.append(".")
 
+from dotenv import load_dotenv
+
 from personalab import Persona
 from personalab.llm import OpenAIClient
-from dotenv import load_dotenv
 
 load_dotenv()
 

@@ -24,12 +24,11 @@ from .llm import OpenAIClient  # OpenAI implementation
 # Conversation management
 from .memo import ConversationManager
 
+# MemoryDB removed - using PostgreSQL storage only
 # Core Memory system
 from .memory import EventMemory  # Event memory component
 from .memory import Memory  # Unified Memory class
 from .memory import MemoryClient  # Memory client
-
-# MemoryDB removed - using PostgreSQL storage only
 from .memory import MemoryUpdatePipeline  # Memory update pipeline
 from .memory import MindMemory  # Mind memory component
 from .memory import PipelineResult  # Pipeline result

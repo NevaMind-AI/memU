@@ -14,9 +14,10 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .config.database import get_database_manager
 from personalab.memo import ConversationManager
 from personalab.memory import Memory, MemoryClient
+
+from .config.database import get_database_manager
 
 
 def validate_conversation_data(messages: List[Dict[str, str]]) -> Dict[str, Any]:

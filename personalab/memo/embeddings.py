@@ -52,8 +52,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         self._dimension = 1536  # Ada-002 embedding dimension
 
         try:
-            import openai
             import os
+
+            import openai
 
             # Check for API key
             api_key = api_key or os.getenv("OPENAI_API_KEY")

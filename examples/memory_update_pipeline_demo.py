@@ -18,10 +18,10 @@ prompt it receives.  If you want to see real LLM outputs instead, replace the
 
 from __future__ import annotations
 
-from typing import List, Dict
+from typing import Dict, List
 
-from personalab.memory import Memory, MemoryUpdatePipeline, ProfileMemory, EventMemory
 from personalab.llm import OpenAIClient
+from personalab.memory import EventMemory, Memory, MemoryUpdatePipeline, ProfileMemory
 
 # ---------------------------------------------------------------------------
 # 1. Initialize OpenAI client (requires OPENAI_API_KEY environment variable)

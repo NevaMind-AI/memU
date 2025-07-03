@@ -21,7 +21,7 @@ from ..llm import BaseLLMClient
 # New unified Memory architecture
 from .base import EventMemory, Memory, MindMemory, ProfileMemory
 from .manager import MemoryClient
-from .pipeline import MemoryUpdatePipeline, PipelineResult, MindResult, UpdateResult
+from .pipeline import MemoryUpdatePipeline, MindResult, PipelineResult, UpdateResult
 
 # Embeddings moved to memo module
 
