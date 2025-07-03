@@ -52,7 +52,9 @@ class PostgreSQLConversationDB:
             "port": kwargs.get("port", os.getenv("POSTGRES_PORT", "5432")),
             "dbname": kwargs.get("dbname", os.getenv("POSTGRES_DB", "personalab")),
             "user": kwargs.get("user", os.getenv("POSTGRES_USER", "postgres")),
-            "password": kwargs.get("password", os.getenv("POSTGRES_PASSWORD", "postgres")),
+            "password": kwargs.get(
+                "password", os.getenv("POSTGRES_PASSWORD", "postgres")
+            ),
         }
 
         return f"postgresql://{params['user']}:{params['password']}@{params['host']}:{params['port']}/{params['dbname']}"
@@ -110,8 +112,6 @@ class PostgreSQLConversationDB:
                 """
                 )
 
-
-
                 # Create indexes for better performance
                 cur.execute(
                     "CREATE INDEX IF NOT EXISTS idx_conversations_agent_id ON conversations(agent_id)"
@@ -133,8 +133,6 @@ class PostgreSQLConversationDB:
                     "CREATE INDEX IF NOT EXISTS idx_messages_role ON conversation_messages(role)"
                 )
 
-
-
                 # Create vector similarity search indexes using HNSW
                 cur.execute(
                     """
@@ -148,7 +146,6 @@ class PostgreSQLConversationDB:
                     ON conversation_messages USING hnsw (message_vector vector_cosine_ops)
                 """
                 )
-
 
                 conn.commit()
 
@@ -188,7 +185,9 @@ class PostgreSQLConversationDB:
                             conversation.agent_id,
                             conversation.user_id,
                             conversation.created_at,
-                            json.dumps([msg.to_dict() for msg in conversation.messages]),
+                            json.dumps(
+                                [msg.to_dict() for msg in conversation.messages]
+                            ),
                             (
                                 json.dumps(conversation.pipeline_result)
                                 if conversation.pipeline_result
@@ -247,7 +246,8 @@ class PostgreSQLConversationDB:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                     # Get conversation metadata
                     cur.execute(
-                        "SELECT * FROM conversations WHERE conversation_id = %s", (conversation_id,)
+                        "SELECT * FROM conversations WHERE conversation_id = %s",
+                        (conversation_id,),
                     )
                     conv_row = cur.fetchone()
 
@@ -279,9 +279,13 @@ class PostgreSQLConversationDB:
 
                     # Validate required fields
                     if not conv_row["agent_id"]:
-                        raise ValueError(f"Missing agent_id for conversation {conversation_id}")
+                        raise ValueError(
+                            f"Missing agent_id for conversation {conversation_id}"
+                        )
                     if not conv_row["user_id"]:
-                        raise ValueError(f"Missing user_id for conversation {conversation_id}")
+                        raise ValueError(
+                            f"Missing user_id for conversation {conversation_id}"
+                        )
 
                     # Create Conversation object
                     conversation = Conversation(
@@ -367,10 +371,9 @@ class PostgreSQLConversationDB:
                 with conn.cursor() as cur:
                     # Delete conversation (CASCADE will handle messages and embeddings)
                     cur.execute(
-                        "DELETE FROM conversations WHERE conversation_id = %s", (conversation_id,)
+                        "DELETE FROM conversations WHERE conversation_id = %s",
+                        (conversation_id,),
                     )
-
-
 
                     conn.commit()
                     return True
@@ -380,8 +383,6 @@ class PostgreSQLConversationDB:
             return False
 
     # ========== Vector Embedding Methods ==========
-
-
 
     def save_conversation_embedding(
         self, conversation_id: str, vector: List[float], content_text: str
@@ -511,10 +512,6 @@ class PostgreSQLConversationDB:
         except Exception as e:
             print(f"Error searching similar conversations: {e}")
             return []
-
-
-
-
 
     def _calculate_hash(self, content: str) -> str:
         """Calculate content hash."""

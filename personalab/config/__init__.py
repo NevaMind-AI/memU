@@ -12,8 +12,12 @@ from .database import (
     setup_postgresql,
 )
 
-_config_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.py")
-_config_spec = importlib.util.spec_from_file_location("personalab_config", _config_file_path)
+_config_file_path = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "config.py"
+)
+_config_spec = importlib.util.spec_from_file_location(
+    "personalab_config", _config_file_path
+)
 _config_module = importlib.util.module_from_spec(_config_spec)
 _config_spec.loader.exec_module(_config_module)
 

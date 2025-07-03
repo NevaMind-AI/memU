@@ -20,7 +20,9 @@ from .models import Conversation, ConversationMessage
 class Memo:
     """Concise conversation memory management API"""
 
-    def __init__(self, agent_id: str, user_id: str, data_dir: str = "data", db_manager=None):
+    def __init__(
+        self, agent_id: str, user_id: str, data_dir: str = "data", db_manager=None
+    ):
         """Initialize Memo
 
         Args:
@@ -44,7 +46,9 @@ class Memo:
             db_manager = get_database_manager()
             self.manager = ConversationManager(db_manager=db_manager)
 
-    def add_conversation(self, user_message: str, ai_response: str, metadata: dict = None):
+    def add_conversation(
+        self, user_message: str, ai_response: str, metadata: dict = None
+    ):
         """Add conversation"""
         messages = [
             {"role": "user", "content": user_message},
@@ -71,7 +75,9 @@ class Memo:
     @property
     def conversations(self):
         """Get all conversations"""
-        return self.manager.get_conversation_history(agent_id=self.agent_id, user_id=self.user_id)
+        return self.manager.get_conversation_history(
+            agent_id=self.agent_id, user_id=self.user_id
+        )
 
     def close(self):
         """Close resources"""
@@ -81,7 +87,7 @@ class Memo:
 
 __all__ = [
     "ConversationManager",
-    "Conversation", 
+    "Conversation",
     "ConversationMessage",
     "Memo",  # New concise API
 ]

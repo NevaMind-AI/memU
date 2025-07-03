@@ -31,7 +31,9 @@ class Config:
     def _load_env_file(self, env_file: Optional[str] = None):
         """Load environment variables from .env file"""
         if not DOTENV_AVAILABLE:
-            print("Warning: python-dotenv not available. Install with: pip install python-dotenv")
+            print(
+                "Warning: python-dotenv not available. Install with: pip install python-dotenv"
+            )
             return
 
         if env_file:
@@ -122,7 +124,10 @@ class Config:
         elif provider.lower() == "anthropic":
             return self.anthropic_api_key is not None
         elif provider.lower() == "azure":
-            return self.azure_openai_api_key is not None and self.azure_openai_endpoint is not None
+            return (
+                self.azure_openai_api_key is not None
+                and self.azure_openai_endpoint is not None
+            )
 
         return False
 

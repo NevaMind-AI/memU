@@ -22,7 +22,9 @@ class DatabaseConfig:
     def __post_init__(self):
         """Validate configuration after initialization."""
         if self.backend != "postgresql":
-            raise ValueError(f"Only PostgreSQL backend is supported, got: {self.backend}")
+            raise ValueError(
+                f"Only PostgreSQL backend is supported, got: {self.backend}"
+            )
         if self.connection_params is None:
             self.connection_params = {}
 
@@ -74,7 +76,8 @@ class DatabaseConfig:
         """Create PostgreSQL database configuration."""
         if connection_string:
             return cls(
-                backend="postgresql", connection_params={"connection_string": connection_string}
+                backend="postgresql",
+                connection_params={"connection_string": connection_string},
             )
 
         # Auto-detect user if not provided (useful for macOS Homebrew PostgreSQL)
@@ -114,6 +117,7 @@ class DatabaseManager:
         if self._memory_db is None:
             # Import here to avoid circular imports
             from ..memory.pg_storage import PostgreSQLMemoryDB
+
             self._memory_db = PostgreSQLMemoryDB(**self.config.connection_params)
         return self._memory_db
 
@@ -122,7 +126,10 @@ class DatabaseManager:
         if self._conversation_db is None:
             # Import here to avoid circular imports
             from ..memo.pg_storage import PostgreSQLConversationDB
-            self._conversation_db = PostgreSQLConversationDB(**self.config.connection_params)
+
+            self._conversation_db = PostgreSQLConversationDB(
+                **self.config.connection_params
+            )
         return self._conversation_db
 
     def test_connection(self) -> bool:

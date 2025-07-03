@@ -159,13 +159,19 @@ class Persona:
         memo = self._get_or_create_memo(user_id)
         if memo:
             try:
-                search_results = memo.search_similar_conversations(self.agent_id, message, limit=3)
+                search_results = memo.search_similar_conversations(
+                    self.agent_id, message, limit=3
+                )
                 retrieved_conversations = search_results
 
                 if self.show_retrieval and retrieved_conversations:
-                    print(f"\n🔍 Retrieved {len(retrieved_conversations)} relevant conversations:")
+                    print(
+                        f"\n🔍 Retrieved {len(retrieved_conversations)} relevant conversations:"
+                    )
                     for i, conv in enumerate(retrieved_conversations, 1):
-                        summary = conv.get("summary", conv.get("content_text", "No summary"))[:50]
+                        summary = conv.get(
+                            "summary", conv.get("content_text", "No summary")
+                        )[:50]
                         print(f"  {i}. {summary}...")
                     print()
             except Exception as e:
@@ -177,7 +183,10 @@ class Persona:
         enhanced_message = message
         if retrieved_conversations:
             context = "\n".join(
-                [f"Related history: {conv['summary']}" for conv in retrieved_conversations]
+                [
+                    f"Related history: {conv['summary']}"
+                    for conv in retrieved_conversations
+                ]
             )
             enhanced_message = f"{message}\n\nRelevant context:\n{context}"
 
@@ -228,7 +237,9 @@ class Persona:
                     {"role": "user", "content": message},
                     {"role": "assistant", "content": response_content},
                 ]
-                memo.record_conversation(agent_id=self.agent_id, user_id=user_id, messages=messages)
+                memo.record_conversation(
+                    agent_id=self.agent_id, user_id=user_id, messages=messages
+                )
 
             # Store conversation in session buffer for later memory update
             self.session_conversations.setdefault(user_id, []).append(
@@ -250,11 +261,15 @@ class Persona:
         """
         memo = self._get_or_create_memo(user_id)
         if not memo:
-            print(f"⚠️ Memo functionality is not enabled for user {user_id}, cannot perform search")
+            print(
+                f"⚠️ Memo functionality is not enabled for user {user_id}, cannot perform search"
+            )
             return []
         return memo.search_similar_conversations(query, top_k=top_k)
 
-    def add_memory(self, content: str, user_id: str, memory_type: str = "profile") -> None:
+    def add_memory(
+        self, content: str, user_id: str, memory_type: str = "profile"
+    ) -> None:
         """Add memory
 
         Args:
@@ -264,7 +279,9 @@ class Persona:
         """
         memory = self._get_or_create_memory(user_id)
         if not memory:
-            print(f"⚠️ Memory functionality is not enabled for user {user_id}, cannot add memory")
+            print(
+                f"⚠️ Memory functionality is not enabled for user {user_id}, cannot add memory"
+            )
             return
 
         if memory_type == "profile":
@@ -293,7 +310,9 @@ class Persona:
         """
         memory = self._get_or_create_memory(user_id)
         if not memory:
-            print(f"⚠️ Memory functionality is not enabled for user {user_id}, cannot update memory")
+            print(
+                f"⚠️ Memory functionality is not enabled for user {user_id}, cannot update memory"
+            )
             self.session_conversations.setdefault(
                 user_id, []
             ).clear()  # Clear buffer even if memory is disabled
@@ -328,7 +347,9 @@ class Persona:
             self.memories[user_id] = updated_memory
 
             print(f"✅ Session ended: Memory updated using pipeline for user {user_id}")
-            print(f"   - Profile updated: {pipeline_result.update_result.profile_updated}")
+            print(
+                f"   - Profile updated: {pipeline_result.update_result.profile_updated}"
+            )
             print(f"   - Event count: {len(updated_memory.get_event_content())}")
 
         except Exception as e:
@@ -372,7 +393,9 @@ class Persona:
         """
         memory = self._get_or_create_memory(user_id)
         if not memory:
-            print(f"⚠️ Memory functionality is not enabled for user {user_id}, cannot get memory")
+            print(
+                f"⚠️ Memory functionality is not enabled for user {user_id}, cannot get memory"
+            )
             return {"profile": "", "events": [], "mind": []}
 
         return {
@@ -408,7 +431,6 @@ class Persona:
             yield self
         finally:
             self.endsession(user_id)
-
 
     def _parse_events_from_llm_response(self, response_content: str) -> List[str]:
         """Parse events from LLM response
@@ -469,7 +491,9 @@ class Persona:
 
         if user_id not in self.memos:
             self.memos[user_id] = ConversationManager(
-                db_manager=self.db_manager, enable_embeddings=True, embedding_provider="auto"
+                db_manager=self.db_manager,
+                enable_embeddings=True,
+                embedding_provider="auto",
             )
         return self.memos[user_id]
 

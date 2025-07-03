@@ -28,6 +28,7 @@ from .memo import ConversationManager
 from .memory import EventMemory  # Event memory component
 from .memory import Memory  # Unified Memory class
 from .memory import MemoryClient  # Memory client
+
 # MemoryDB removed - using PostgreSQL storage only
 from .memory import MemoryUpdatePipeline  # Memory update pipeline
 from .memory import MindMemory  # Mind memory component
@@ -38,7 +39,9 @@ from .memory import ProfileMemory  # Memory components; Profile memory component
 from .persona import Persona
 
 _config_file_path = os.path.join(os.path.dirname(__file__), "config.py")
-_config_spec = importlib.util.spec_from_file_location("personalab_config", _config_file_path)
+_config_spec = importlib.util.spec_from_file_location(
+    "personalab_config", _config_file_path
+)
 _config_module = importlib.util.module_from_spec(_config_spec)
 _config_spec.loader.exec_module(_config_module)
 config = _config_module.config

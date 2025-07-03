@@ -50,7 +50,11 @@ class ConversationMessage:
             content=data["content"],
             message_index=data["message_index"],
             message_id=data.get("message_id"),
-            created_at=datetime.fromisoformat(data["created_at"]) if "created_at" in data else None,
+            created_at=(
+                datetime.fromisoformat(data["created_at"])
+                if "created_at" in data
+                else None
+            ),
         )
 
 
@@ -117,7 +121,8 @@ class Conversation:
 
         # Find first user message
         first_user_msg = next(
-            (msg.content[:100] for msg in self.messages if msg.role == "user"), "No user message"
+            (msg.content[:100] for msg in self.messages if msg.role == "user"),
+            "No user message",
         )
 
         return f"Conversation with {len(self.messages)} turns: {first_user_msg}..."
@@ -157,7 +162,8 @@ class Conversation:
     def from_dict(cls, data: Dict[str, Any]) -> "Conversation":
         """Create from dictionary format."""
         messages = [
-            ConversationMessage.from_dict(msg_data) for msg_data in data.get("messages", [])
+            ConversationMessage.from_dict(msg_data)
+            for msg_data in data.get("messages", [])
         ]
 
         # Validate required fields in data
@@ -172,7 +178,11 @@ class Conversation:
             messages=[],  # Will be set below
             session_id=data.get("session_id"),
             conversation_id=data.get("conversation_id"),
-            created_at=datetime.fromisoformat(data["created_at"]) if "created_at" in data else None,
+            created_at=(
+                datetime.fromisoformat(data["created_at"])
+                if "created_at" in data
+                else None
+            ),
             memory_id=data.get("memory_id"),
             pipeline_result=data.get("pipeline_result"),
         )

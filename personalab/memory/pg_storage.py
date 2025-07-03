@@ -53,7 +53,9 @@ class PostgreSQLMemoryDB:
             "port": kwargs.get("port", os.getenv("POSTGRES_PORT", "5432")),
             "dbname": kwargs.get("dbname", os.getenv("POSTGRES_DB", "personalab")),
             "user": kwargs.get("user", os.getenv("POSTGRES_USER", "postgres")),
-            "password": kwargs.get("password", os.getenv("POSTGRES_PASSWORD", "postgres")),
+            "password": kwargs.get(
+                "password", os.getenv("POSTGRES_PASSWORD", "postgres")
+            ),
         }
 
         return f"postgresql://{params['user']}:{params['password']}@{params['host']}:{params['port']}/{params['dbname']}"
@@ -138,7 +140,9 @@ class PostgreSQLMemoryDB:
                 cur.execute(
                     "CREATE INDEX IF NOT EXISTS idx_memories_agent_id ON memories(agent_id)"
                 )
-                cur.execute("CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id)")
+                cur.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_memories_user_id ON memories(user_id)"
+                )
                 cur.execute(
                     "CREATE INDEX IF NOT EXISTS idx_memories_agent_user ON memories(agent_id, user_id)"
                 )
@@ -205,7 +209,11 @@ class PostgreSQLMemoryDB:
                             memory.user_id,
                             memory.created_at,
                             memory.updated_at,
-                            json.dumps(memory.mind_metadata) if memory.mind_metadata else None,
+                            (
+                                json.dumps(memory.mind_metadata)
+                                if memory.mind_metadata
+                                else None
+                            ),
                             self._calculate_hash(memory.get_profile_content()),
                             len(memory.get_event_content()),
                             datetime.now(),
@@ -217,11 +225,15 @@ class PostgreSQLMemoryDB:
 
                     # 2. Save ProfileMemory content
                     if memory.get_profile_content():
-                        self._save_profile_content(cur, memory.memory_id, memory.profile_memory)
+                        self._save_profile_content(
+                            cur, memory.memory_id, memory.profile_memory
+                        )
 
                     # 3. Save EventMemory content
                     if memory.get_event_content():
-                        self._save_event_content(cur, memory.memory_id, memory.event_memory)
+                        self._save_event_content(
+                            cur, memory.memory_id, memory.event_memory
+                        )
 
                     conn.commit()
                     return True
@@ -244,7 +256,9 @@ class PostgreSQLMemoryDB:
             with psycopg2.connect(self.connection_string) as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                     # 1. Load Memory basic information
-                    cur.execute("SELECT * FROM memories WHERE memory_id = %s", (memory_id,))
+                    cur.execute(
+                        "SELECT * FROM memories WHERE memory_id = %s", (memory_id,)
+                    )
                     memory_row = cur.fetchone()
 
                     if not memory_row:
@@ -278,7 +292,9 @@ class PostgreSQLMemoryDB:
             print(f"Error loading memory: {e}")
             return None
 
-    def get_memory_by_agent_and_user(self, agent_id: str, user_id: str) -> Optional[Memory]:
+    def get_memory_by_agent_and_user(
+        self, agent_id: str, user_id: str
+    ) -> Optional[Memory]:
         """
         Load Memory by Agent ID and User ID.
 
@@ -365,7 +381,9 @@ class PostgreSQLMemoryDB:
                         ORDER BY mc.content_vector <=> %s
                         LIMIT %s
                     """
-                    params.extend([query_vector, similarity_threshold, query_vector, limit])
+                    params.extend(
+                        [query_vector, similarity_threshold, query_vector, limit]
+                    )
 
                     cur.execute(query, params)
                     rows = cur.fetchall()
@@ -426,7 +444,9 @@ class PostgreSQLMemoryDB:
             with psycopg2.connect(self.connection_string) as conn:
                 with conn.cursor() as cur:
                     # Delete main memory record (CASCADE will handle related content)
-                    cur.execute("DELETE FROM memories WHERE memory_id = %s", (memory_id,))
+                    cur.execute(
+                        "DELETE FROM memories WHERE memory_id = %s", (memory_id,)
+                    )
 
                     conn.commit()
                     return cur.rowcount > 0
@@ -509,7 +529,10 @@ class PostgreSQLMemoryDB:
 
     def _save_event_content(self, cur, memory_id: str, event_memory: EventMemory):
         """Save event memory content."""
-        content_data = {"events": event_memory.get_content(), "max_events": event_memory.max_events}
+        content_data = {
+            "events": event_memory.get_content(),
+            "max_events": event_memory.max_events,
+        }
 
         content_id = f"{memory_id}_event"
         content_text = " ".join(event_memory.get_content())

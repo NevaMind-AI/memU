@@ -45,7 +45,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     Requires OpenAI API key to be set in environment variables.
     """
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "text-embedding-ada-002"):
+    def __init__(
+        self, api_key: Optional[str] = None, model: str = "text-embedding-ada-002"
+    ):
         self.model = model
         self._dimension = 1536  # Ada-002 embedding dimension
 
@@ -56,11 +58,15 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             # Check for API key
             api_key = api_key or os.getenv("OPENAI_API_KEY")
             if not api_key:
-                raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment variable or pass api_key parameter.")
+                raise ValueError(
+                    "OpenAI API key is required. Set OPENAI_API_KEY environment variable or pass api_key parameter."
+                )
 
             self.client = openai.OpenAI(api_key=api_key)
         except ImportError:
-            raise ImportError("OpenAI package not installed. Install with: pip install openai")
+            raise ImportError(
+                "OpenAI package not installed. Install with: pip install openai"
+            )
 
     def generate_embedding(self, text: str) -> List[float]:
         """Generate OpenAI embedding for text."""
@@ -137,7 +143,9 @@ class EmbeddingManager:
     def embedding_dimension(self) -> int:
         return self.provider.embedding_dimension
 
-    def generate_conversation_embedding(self, conversation: List[Dict[str, str]]) -> List[float]:
+    def generate_conversation_embedding(
+        self, conversation: List[Dict[str, str]]
+    ) -> List[float]:
         """
         Generate embedding for entire conversation.
 

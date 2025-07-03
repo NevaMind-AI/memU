@@ -68,7 +68,11 @@ class CustomLLMClient(BaseLLMClient):
 
         try:
             # Prepare parameters
-            call_kwargs = {"temperature": temperature, "max_tokens": max_tokens, **kwargs}
+            call_kwargs = {
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                **kwargs,
+            }
 
             if self.function_type == "object":
                 # Call object's chat_completion method
@@ -80,7 +84,9 @@ class CustomLLMClient(BaseLLMClient):
                 if isinstance(result, LLMResponse):
                     return result
                 else:
-                    return LLMResponse(content=str(result), usage={}, model=model, success=True)
+                    return LLMResponse(
+                        content=str(result), usage={}, model=model, success=True
+                    )
 
             elif self.function_type == "full":
                 # Function returns LLMResponse
@@ -88,13 +94,19 @@ class CustomLLMClient(BaseLLMClient):
                 if isinstance(result, LLMResponse):
                     return result
                 else:
-                    logging.warning("Function declared as 'full' but didn't return LLMResponse")
-                    return LLMResponse(content=str(result), usage={}, model=model, success=True)
+                    logging.warning(
+                        "Function declared as 'full' but didn't return LLMResponse"
+                    )
+                    return LLMResponse(
+                        content=str(result), usage={}, model=model, success=True
+                    )
 
             else:  # function_type == "simple"
                 # Function returns string
                 result = self.llm_function(messages, **call_kwargs)
-                return LLMResponse(content=str(result), usage={}, model=model, success=True)
+                return LLMResponse(
+                    content=str(result), usage={}, model=model, success=True
+                )
 
         except Exception as e:
             logging.error(f"Custom LLM function failed: {e}")

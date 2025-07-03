@@ -141,7 +141,9 @@ class MemoryClient:
         conversation_str = ""
         for turn in conversation:
             if "user" in turn and "assistant" in turn:
-                conversation_str += f"User: {turn['user']}\nAssistant: {turn['assistant']}\n"
+                conversation_str += (
+                    f"User: {turn['user']}\nAssistant: {turn['assistant']}\n"
+                )
 
         if conversation_str.strip():
             memory.add_events([conversation_str.strip()])
@@ -165,17 +167,23 @@ class MemoryClient:
         # Add profile information
         profile = memory.get_profile()
         if profile:
-            prompt_parts.append(f"User Profile:\n{chr(10).join(f'- {p}' for p in profile)}")
+            prompt_parts.append(
+                f"User Profile:\n{chr(10).join(f'- {p}' for p in profile)}"
+            )
 
         # Add event history
         events = memory.get_events()
         if events:
-            prompt_parts.append(f"Recent Events:\n{chr(10).join(f'- {e}' for e in events)}")
+            prompt_parts.append(
+                f"Recent Events:\n{chr(10).join(f'- {e}' for e in events)}"
+            )
 
         # Add psychological insights
         mind = memory.get_mind()
         if mind:
-            prompt_parts.append(f"Psychological Insights:\n{chr(10).join(f'- {m}' for m in mind)}")
+            prompt_parts.append(
+                f"Psychological Insights:\n{chr(10).join(f'- {m}' for m in mind)}"
+            )
 
         return "\n\n".join(prompt_parts) if prompt_parts else ""
 

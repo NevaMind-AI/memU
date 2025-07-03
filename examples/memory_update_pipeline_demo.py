@@ -92,7 +92,9 @@ for idx, conversation in enumerate(sessions, start=1):
     print(f"Session {idx}: processing {len(conversation)} messages")
     print("-" * 80)
 
-    updated_memory, pipeline_result = pipeline.update_with_pipeline(memory, conversation)
+    updated_memory, pipeline_result = pipeline.update_with_pipeline(
+        memory, conversation
+    )
 
     # Stage outputs
     print("\n--- Modification Stage Output ---")
@@ -113,4 +115,4 @@ for idx, conversation in enumerate(sessions, start=1):
 print("\n" + "=" * 80)
 print("All sessions processed.")
 print("Final memory:\n")
-print(memory.to_prompt()) 
+print(memory.to_prompt())

@@ -226,7 +226,11 @@ class Memory:
             if insights_text:
                 # If it's a string, split by lines
                 if isinstance(insights_text, str):
-                    insights = [line.strip() for line in insights_text.split("\n") if line.strip()]
+                    insights = [
+                        line.strip()
+                        for line in insights_text.split("\n")
+                        if line.strip()
+                    ]
                 else:
                     insights = [str(insights_text)]
 

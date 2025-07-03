@@ -12,7 +12,9 @@ from .base import BaseLLMClient, LLMResponse
 class AnthropicClient(BaseLLMClient):
     """Anthropic Claude Client Implementation"""
 
-    def __init__(self, api_key: str = None, model: str = "claude-3-sonnet-20240229", **kwargs):
+    def __init__(
+        self, api_key: str = None, model: str = "claude-3-sonnet-20240229", **kwargs
+    ):
         """
         Initialize Anthropic Client
 
@@ -87,7 +89,9 @@ class AnthropicClient(BaseLLMClient):
                 + getattr(response.usage, "output_tokens", 0),
             }
 
-            return LLMResponse(content=content, usage=usage, model=response.model, success=True)
+            return LLMResponse(
+                content=content, usage=usage, model=response.model, success=True
+            )
 
         except Exception as e:
             logging.error(f"Anthropic API call failed: {e}")

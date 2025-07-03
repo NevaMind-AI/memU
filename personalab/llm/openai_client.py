@@ -13,7 +13,11 @@ class OpenAIClient(BaseLLMClient):
     """OpenAI Client Implementation"""
 
     def __init__(
-        self, api_key: str = None, base_url: str = None, model: str = "gpt-3.5-turbo", **kwargs
+        self,
+        api_key: str = None,
+        base_url: str = None,
+        model: str = "gpt-3.5-turbo",
+        **kwargs,
     ):
         """
         Initialize OpenAI Client
@@ -27,7 +31,9 @@ class OpenAIClient(BaseLLMClient):
         super().__init__(model=model, **kwargs)
 
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self.base_url = base_url or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        self.base_url = base_url or os.getenv(
+            "OPENAI_BASE_URL", "https://api.openai.com/v1"
+        )
 
         if not self.api_key:
             raise ValueError(
@@ -45,7 +51,9 @@ class OpenAIClient(BaseLLMClient):
             try:
                 import openai
 
-                self._client = openai.OpenAI(api_key=self.api_key, base_url=self.base_url)
+                self._client = openai.OpenAI(
+                    api_key=self.api_key, base_url=self.base_url
+                )
             except ImportError:
                 raise ImportError(
                     "OpenAI library is required. Install with: pip install openai>=1.0.0"
@@ -94,7 +102,13 @@ class OpenAIClient(BaseLLMClient):
     def _filter_api_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Filter out parameters that should not be passed to OpenAI API"""
         # List of parameters that should not be passed to OpenAI API
-        excluded_params = {"api_key", "base_url", "provider_type", "timeout", "retry_count"}
+        excluded_params = {
+            "api_key",
+            "base_url",
+            "provider_type",
+            "timeout",
+            "retry_count",
+        }
 
         # Only keep parameters supported by OpenAI API
         filtered = {}

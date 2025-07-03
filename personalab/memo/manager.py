@@ -106,7 +106,9 @@ class ConversationManager:
         try:
             # Generate conversation-level embedding
             conv_text = conversation.get_conversation_text()
-            conv_embedding = self.embedding_manager.provider.generate_embedding(conv_text)
+            conv_embedding = self.embedding_manager.provider.generate_embedding(
+                conv_text
+            )
 
             # Save conversation embedding directly in conversation table
             if hasattr(self.db, "save_conversation_embedding"):
@@ -123,7 +125,9 @@ class ConversationManager:
 
                     # Save message embedding directly in message table
                     if hasattr(self.db, "save_message_embedding"):
-                        self.db.save_message_embedding(message.message_id, msg_embedding)
+                        self.db.save_message_embedding(
+                            message.message_id, msg_embedding
+                        )
 
         except Exception as e:
             print(f"Error generating embeddings: {e}")
@@ -162,7 +166,11 @@ class ConversationManager:
         return self.db.get_conversations_by_agent(agent_id, limit, session_id, user_id)
 
     def search_similar_conversations(
-        self, agent_id: str, query: str, limit: int = 10, similarity_threshold: float = 0.7
+        self,
+        agent_id: str,
+        query: str,
+        limit: int = 10,
+        similarity_threshold: float = 0.7,
     ) -> List[Dict[str, Any]]:
         """
         Search for similar conversations using semantic similarity.
@@ -236,7 +244,11 @@ class ConversationManager:
         return self.db.delete_conversation(conversation_id)
 
     def get_session_conversations(
-        self, agent_id: str, session_id: str, limit: int = 50, user_id: Optional[str] = None
+        self,
+        agent_id: str,
+        session_id: str,
+        limit: int = 50,
+        user_id: Optional[str] = None,
     ) -> List[Conversation]:
         """
         Get all conversations for a specific session.
@@ -250,7 +262,9 @@ class ConversationManager:
         Returns:
             List[Conversation]: List of conversation objects
         """
-        conv_summaries = self.db.get_conversations_by_agent(agent_id, limit, session_id, user_id)
+        conv_summaries = self.db.get_conversations_by_agent(
+            agent_id, limit, session_id, user_id
+        )
 
         conversations = []
         for summary in conv_summaries:
@@ -280,7 +294,9 @@ class ConversationManager:
                 "total_turns": 0,
                 "embedding_enabled": self.enable_embeddings,
                 "embedding_model": (
-                    self.embedding_manager.model_name if self.embedding_manager else None
+                    self.embedding_manager.model_name
+                    if self.embedding_manager
+                    else None
                 ),
             }
 
@@ -297,7 +313,9 @@ class ConversationManager:
             "embedding_model": (
                 self.embedding_manager.model_name if self.embedding_manager else None
             ),
-            "most_recent_conversation": recent_convs[0]["created_at"] if recent_convs else None,
+            "most_recent_conversation": (
+                recent_convs[0]["created_at"] if recent_convs else None
+            ),
         }
 
     def close(self):

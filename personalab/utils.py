@@ -19,8 +19,6 @@ from personalab.memo import ConversationManager
 from personalab.memory import Memory, MemoryClient
 
 
-
-
 def validate_conversation_data(messages: List[Dict[str, str]]) -> Dict[str, Any]:
     """
     Validate conversation data integrity and format
@@ -55,12 +53,16 @@ def validate_conversation_data(messages: List[Dict[str, str]]) -> Dict[str, Any]
 
         # Check role value
         if msg.get("role") not in ["user", "assistant", "system"]:
-            result["warnings"].append(f"Message {i}: Non-standard role value: {msg.get('role')}")
+            result["warnings"].append(
+                f"Message {i}: Non-standard role value: {msg.get('role')}"
+            )
 
         # Check content length
         content = msg.get("content", "")
         if len(content) > 10000:
-            result["warnings"].append(f"Message {i}: Content too long ({len(content)} characters)")
+            result["warnings"].append(
+                f"Message {i}: Content too long ({len(content)} characters)"
+            )
         elif len(content.strip()) == 0:
             result["warnings"].append(f"Message {i}: Content is empty")
 
@@ -85,7 +87,9 @@ def create_conversation_manager(enable_embeddings: bool = True):
     """
 
     db_manager = get_database_manager()
-    return ConversationManager(db_manager=db_manager, enable_embeddings=enable_embeddings)
+    return ConversationManager(
+        db_manager=db_manager, enable_embeddings=enable_embeddings
+    )
 
 
 def setup_agent_memory(memory_manager, agent_id: str, initial_profile: str = ""):
@@ -160,7 +164,9 @@ def build_system_prompt(
         base_prompt += f"\n\n{memory_context}"
 
     # Add conversation history context
-    conversation_context = get_conversation_context(conversation_manager, agent_id, user_message)
+    conversation_context = get_conversation_context(
+        conversation_manager, agent_id, user_message
+    )
     if conversation_context:
         base_prompt += f"\n\n{conversation_context}"
 
@@ -190,7 +196,9 @@ def cleanup_memory_resources(memory_manager, conversation_manager):
         pass
 
 
-def chat_with_memory(llm_client, memory: Memory, message: str, agent_id: str, user_id: str) -> str:
+def chat_with_memory(
+    llm_client, memory: Memory, message: str, agent_id: str, user_id: str
+) -> str:
     """Integrated memory chat function
 
     Args:

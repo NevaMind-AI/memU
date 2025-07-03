@@ -63,7 +63,9 @@ class MemoryUpdatePipeline:
     3. LLM performs Theory of Mind analysis for psychological insights
     """
 
-    def __init__(self, llm_client: BaseLLMClient = None, llm_config_manager=None, **llm_config):
+    def __init__(
+        self, llm_client: BaseLLMClient = None, llm_config_manager=None, **llm_config
+    ):
         """
         Initialize the memory update pipeline
 
@@ -82,7 +84,9 @@ class MemoryUpdatePipeline:
             # Fallback to old behavior for backward compatibility
             if get_llm_config_manager is not None:
                 self.llm_config_manager = get_llm_config_manager()
-                self.llm_config = self.llm_config_manager.get_pipeline_config(**llm_config)
+                self.llm_config = self.llm_config_manager.get_pipeline_config(
+                    **llm_config
+                )
             else:
                 # Legacy fallback
                 self.llm_config_manager = None
@@ -106,7 +110,9 @@ class MemoryUpdatePipeline:
             Tuple[Updated Memory object, Pipeline execution results]
         """
         # 1. LLM Modification stage: Analyze conversation and extract information
-        modification_result = self.llm_modification_stage(previous_memory, session_conversation)
+        modification_result = self.llm_modification_stage(
+            previous_memory, session_conversation
+        )
 
         # 2. LLM Update stage: Update profile and events
         update_result = self.llm_update_stage(previous_memory, modification_result)
@@ -115,7 +121,9 @@ class MemoryUpdatePipeline:
         mind_result = self.llm_theory_of_mind_stage(update_result, session_conversation)
 
         # 4. Create new Memory object
-        new_memory = self._create_updated_memory(previous_memory, update_result, mind_result)
+        new_memory = self._create_updated_memory(
+            previous_memory, update_result, mind_result
+        )
 
         # 5. Build pipeline results
         pipeline_result = PipelineResult(
@@ -175,12 +183,16 @@ events:
 
         return response.content
 
-    def llm_update_stage(self, previous_memory: Memory, modification_result: str) -> UpdateResult:
+    def llm_update_stage(
+        self, previous_memory: Memory, modification_result: str
+    ) -> UpdateResult:
         """
         LLM Update stage: Update user profile using LLM analysis
         """
         # Parse modification_result to extract profile and events information
-        profile_updates, events_updates = self._parse_modification_result(modification_result)
+        profile_updates, events_updates = self._parse_modification_result(
+            modification_result
+        )
 
         # If no profile updates, return directly
         if not profile_updates:
@@ -244,10 +256,14 @@ events:
             raise Exception(f"LLM update failed: {response.error}")
 
         # Parse LLM results and separate profile and events
-        updated_profile, updated_events = self._parse_modification_result(response.content)
+        updated_profile, updated_events = self._parse_modification_result(
+            response.content
+        )
 
         # Create updated EventMemory with the combined event list
-        updated_events = EventMemory(events=updated_events, max_events=previous_memory.event_memory.max_events)
+        updated_events = EventMemory(
+            events=updated_events, max_events=previous_memory.event_memory.max_events
+        )
 
         return UpdateResult(
             profile=ProfileMemory("\n".join(updated_profile)),
@@ -270,7 +286,9 @@ events:
         """
         conversation_text = self._format_conversation(session_conversation)
         updated_memory_content = (
-            update_result.profile.get_content() + "\n" + "\n".join(update_result.events.get_content())
+            update_result.profile.get_content()
+            + "\n"
+            + "\n".join(update_result.events.get_content())
         )
 
         prompt = f"""Please conduct a Theory of Mind analysis on the following conversation to deeply understand the user's psychological state and behavioral patterns.
@@ -320,7 +338,10 @@ Insights:
         )
 
     def _create_updated_memory(
-        self, previous_memory: Memory, update_result: UpdateResult, mind_result: MindResult
+        self,
+        previous_memory: Memory,
+        update_result: UpdateResult,
+        mind_result: MindResult,
     ) -> Memory:
         """Create updated Memory object"""
         new_memory = Memory(
@@ -401,4 +422,6 @@ Insights:
         """Format event list"""
         if not events:
             return "None"
-        return "\n".join(f"- {event}" for event in events[-5:])  # Only show recent 5 events
+        return "\n".join(
+            f"- {event}" for event in events[-5:]
+        )  # Only show recent 5 events

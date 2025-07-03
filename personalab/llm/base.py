@@ -94,4 +94,6 @@ class BaseLLMClient(ABC):
 
     def _handle_error(self, error: Exception, model: str) -> LLMResponse:
         """Unified error handling"""
-        return LLMResponse(content="", usage={}, model=model, success=False, error=str(error))
+        return LLMResponse(
+            content="", usage={}, model=model, success=False, error=str(error)
+        )
