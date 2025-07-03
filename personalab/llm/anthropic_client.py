@@ -56,14 +56,14 @@ class AnthropicClient(BaseLLMClient):
         max_tokens: int = 1000,
         **kwargs,
     ) -> LLMResponse:
-        """Anthropic聊天补全"""
+        """Anthropic chat completion"""
         model = self.get_model(model)
 
         try:
-            # 预处理消息
+            # Preprocess messages
             processed_messages = self._prepare_messages(messages)
 
-            # 调用Anthropic API
+            # Call Anthropic API
             response = self.client.messages.create(
                 model=model,
                 messages=processed_messages,
@@ -72,10 +72,10 @@ class AnthropicClient(BaseLLMClient):
                 **kwargs,
             )
 
-            # 构造响应
+            # Build response
             content = ""
             if response.content:
-                # Claude返回的content是一个列表
+                # Claude returns content as a list
                 content = "".join(
                     [block.text for block in response.content if hasattr(block, "text")]
                 )
@@ -90,7 +90,7 @@ class AnthropicClient(BaseLLMClient):
             return LLMResponse(content=content, usage=usage, model=response.model, success=True)
 
         except Exception as e:
-            logging.error(f"Anthropic API调用失败: {e}")
+            logging.error(f"Anthropic API call failed: {e}")
             return self._handle_error(e, model)
 
     def _get_default_model(self) -> str:

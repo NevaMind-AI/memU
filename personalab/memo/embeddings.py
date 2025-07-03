@@ -51,10 +51,14 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
         try:
             import openai
+            import os
 
-            if api_key:
-                openai.api_key = api_key
-            self.client = openai.OpenAI()
+            # Check for API key
+            api_key = api_key or os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment variable or pass api_key parameter.")
+
+            self.client = openai.OpenAI(api_key=api_key)
         except ImportError:
             raise ImportError("OpenAI package not installed. Install with: pip install openai")
 

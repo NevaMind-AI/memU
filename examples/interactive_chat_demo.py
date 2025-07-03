@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PersonaLab 交互式聊天演示
+PersonaLab Interactive Chat Demo
 """
 
 import sys
@@ -19,22 +19,19 @@ class InteractiveChatDemo:
         self.session_count = 0
         
     def setup(self):
-        print("PersonaLab 交互式聊天演示")
+        print("PersonaLab Interactive Chat Demo")
         print("=" * 40)
-        
-        # 检查API配置
+        # Check API config
         api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
-            print("错误：请设置 OPENAI_API_KEY 环境变量")
+            print("Error: Please set the OPENAI_API_KEY environment variable")
             return False
-        
-        # 获取用户信息
-        self.user_id = input("你的名字: ").strip() or "用户"
-        personality = input("AI个性 (回车使用默认): ").strip()
+        # Get user info
+        self.user_id = input("Your name: ").strip() or "User"
+        personality = input("AI personality (press Enter for default): ").strip()
         if not personality:
-            personality = f"你是一个友善、聪明的AI助手，正在与{self.user_id}对话。"
-        
-        # 创建Persona
+            personality = f"You are a friendly and smart AI assistant, chatting with {self.user_id}."
+        # Create Persona
         try:
             self.persona = Persona(
                 agent_id="interactive_assistant",
@@ -43,14 +40,14 @@ class InteractiveChatDemo:
                 use_memo=True,
                 show_retrieval=False
             )
-            print(f"已创建AI助手，准备与 {self.user_id} 对话")
+            print(f"AI assistant created, ready to chat with {self.user_id}")
             return True
         except Exception as e:
-            print(f"创建AI助手失败: {e}")
+            print(f"Failed to create AI assistant: {e}")
             return False
     
     def display_retrieved_conversations(self, user_input: str):
-        """显示检索到的相关历史对话"""
+        """Display retrieved related historical conversations"""
         try:
             memo = self.persona._get_or_create_memo(self.user_id)
             if not memo:
@@ -64,56 +61,56 @@ class InteractiveChatDemo:
             )
             
             if not similar_conversations:
-                print("未找到相关历史对话")
+                print("No related historical conversations found")
                 return
             
-            print(f"找到 {len(similar_conversations)} 条相关历史对话:")
+            print(f"Found {len(similar_conversations)} related historical conversations:")
             print("-" * 40)
             
             for i, conv_summary in enumerate(similar_conversations, 1):
                 conversation = memo.db.get_conversation(conv_summary['conversation_id'])
                 
                 if conversation:
-                    print(f"对话 {i} (相似度: {conv_summary['similarity_score']:.3f})")
-                    print(f"时间: {conversation.created_at.strftime('%m-%d %H:%M')}")
+                    print(f"Conversation {i} (Similarity: {conv_summary['similarity_score']:.3f})")
+                    print(f"Time: {conversation.created_at.strftime('%m-%d %H:%M')}")
                     
-                    # 显示对话内容
-                    for msg in conversation.messages[:4]:  # 最多4条消息
-                        role = "用户" if msg.role == "user" else "AI"
+                    # Display conversation content
+                    for msg in conversation.messages[:4]:  # Maximum 4 messages
+                        role = "User" if msg.role == "user" else "AI"
                         content = msg.content[:100] + "..." if len(msg.content) > 100 else msg.content
                         print(f"  {role}: {content}")
                     
                     if len(conversation.messages) > 4:
-                        print(f"  ... 还有 {len(conversation.messages) - 4} 条消息")
+                        print(f"  ... and {len(conversation.messages) - 4} more messages")
                     print()
             
         except Exception as e:
-            print(f"检索历史对话失败: {e}")
+            print(f"Failed to retrieve historical conversations: {e}")
     
     def display_memory(self):
-        """显示记忆状态"""
+        """Display memory status"""
         try:
             memory = self.persona.get_memory(self.user_id)
             
-            print("\n=== 记忆状态 ===")
-            print(f"Profile: {memory['profile'] or '暂无'}")
-            print(f"Events: {len(memory['events'])} 条")
+            print("\n=== Memory Status ===")
+            print(f"Profile: {memory['profile'] or 'No profile'}")
+            print(f"Events: {len(memory['events'])} events")
             if memory['events']:
-                for event in memory['events'][-3:]:  # 显示最近3条
+                for event in memory['events'][-3:]:  # Display recent 3 events
                     print(f"  - {event}")
             
-            print(f"Mind: {len(memory['mind'])} 条")
+            print(f"Mind: {len(memory['mind'])} insights")
             if memory['mind']:
-                for insight in memory['mind'][-2:]:  # 显示最近2条
+                for insight in memory['mind'][-2:]:  # Display recent 2 insights
                     print(f"  - {insight}")
             
         except Exception as e:
-            print(f"获取记忆失败: {e}")
+            print(f"Failed to retrieve memory: {e}")
     
     def chat_session(self):
         self.session_count += 1
         print(f"\n=== Session {self.session_count} ===")
-        print("输入 'exit' 结束session, 'memory' 查看记忆, 'help' 查看帮助\n")
+        print("Type 'exit' to end session, 'memory' to view memory, 'help' to view help\n")
         
         message_count = 0
         
@@ -130,31 +127,31 @@ class InteractiveChatDemo:
                     self.display_memory()
                     continue
                 elif user_input.lower() in ['help', 'h']:
-                    print("命令: 直接输入对话 | 'memory' 查看记忆 | 'exit' 退出")
+                    print("Commands: Type directly | 'memory' to view memory | 'exit' to exit")
                     continue
                 
-                # 显示相关历史对话
+                # Display related historical conversations
                 self.display_retrieved_conversations(user_input)
                 
-                # AI对话
+                # AI conversation
                 response = self.persona.chat(user_input, user_id=self.user_id)
                 print(f"AI: {response}\n")
                 
                 message_count += 1
                 
             except KeyboardInterrupt:
-                print("\n退出session...")
+                print("\nExiting session...")
                 break
             except Exception as e:
-                print(f"对话出错: {e}")
+                print(f"Conversation error: {e}")
         
-        # 更新记忆
+        # Update memory
         if message_count > 0:
             try:
                 result = self.persona.endsession(self.user_id)
-                print(f"记忆已更新: {result}")
+                print(f"Memory updated: {result}")
             except Exception as e:
-                print(f"记忆更新失败: {e}")
+                print(f"Failed to update memory: {e}")
         
         return message_count > 0
     
@@ -169,12 +166,12 @@ class InteractiveChatDemo:
                 if had_conversation:
                     self.display_memory()
                 
-                choice = input("\n继续新session? (y/n): ").strip().lower()
+                choice = input("\nStart new session? (y/n): ").strip().lower()
                 if choice in ['n', 'no', 'q']:
                     break
         
         except KeyboardInterrupt:
-            print("\n程序退出")
+            print("\nProgram exiting")
         
         finally:
             if self.persona:
@@ -183,7 +180,7 @@ class InteractiveChatDemo:
                 except:
                     pass
         
-        print(f"总计 {self.session_count} 个session，感谢使用！")
+        print(f"Total {self.session_count} sessions, thank you for using!")
 
 def main():
     demo = InteractiveChatDemo()

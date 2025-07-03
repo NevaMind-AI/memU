@@ -60,17 +60,17 @@ class OpenAIClient(BaseLLMClient):
         max_tokens: int = 1000,
         **kwargs,
     ) -> LLMResponse:
-        """OpenAI聊天补全"""
+        """OpenAI chat completion"""
         model = self.get_model(model)
 
         try:
-            # 预处理消息
+            # Preprocess messages
             processed_messages = self._prepare_messages(messages)
 
-            # 过滤掉不应该传递给OpenAI API的参数
+            # Filter out parameters that should not be passed to OpenAI API
             api_params = self._filter_api_params(kwargs)
 
-            # 调用OpenAI API
+            # Call OpenAI API
             response = self.client.chat.completions.create(
                 model=model,
                 messages=processed_messages,
@@ -79,7 +79,7 @@ class OpenAIClient(BaseLLMClient):
                 **api_params,
             )
 
-            # 构造响应
+            # Build response
             return LLMResponse(
                 content=response.choices[0].message.content,
                 usage=response.usage.model_dump() if response.usage else {},
@@ -88,7 +88,7 @@ class OpenAIClient(BaseLLMClient):
             )
 
         except Exception as e:
-            logging.error(f"OpenAI API调用失败: {e}")
+            logging.error(f"OpenAI API call failed: {e}")
             return self._handle_error(e, model)
 
     def _filter_api_params(self, params: Dict[str, Any]) -> Dict[str, Any]:

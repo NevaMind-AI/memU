@@ -15,18 +15,18 @@ import shutil
 from pathlib import Path
 
 def run_command(cmd, check=True):
-    """运行命令并返回结果"""
-    print(f"🔧 运行: {cmd}")
+    """Run command and return result"""
+    print(f"🔧 Running: {cmd}")
     result = subprocess.run(cmd, shell=True, check=check, capture_output=True, text=True)
     if result.stdout:
         print(result.stdout)
     if result.stderr and check:
-        print(f"错误: {result.stderr}")
+        print(f"Error: {result.stderr}")
     return result
 
 def cleanup_project():
     """清理项目文件"""
-    print("🧹 清理项目文件...")
+    print("🧹 Cleaning project files...")
     
     # 清理Python缓存
     patterns_to_remove = [
@@ -45,11 +45,11 @@ def cleanup_project():
     for pattern in patterns_to_remove:
         run_command(f"find . -name '{pattern}' -exec rm -rf {{}} + 2>/dev/null || true", check=False)
     
-    print("✅ 项目清理完成")
+    print("✅ Project cleaning completed")
 
 def check_dependencies():
     """检查依赖项"""
-    print("📦 检查项目依赖...")
+    print("📦 Checking project dependencies...")
     
     required_files = [
         "requirements.txt",
@@ -65,21 +65,21 @@ def check_dependencies():
             missing_files.append(file)
     
     if missing_files:
-        print(f"❌ 缺少文件: {missing_files}")
+        print(f"❌ Missing files: {missing_files}")
         return False
     
-    print("✅ 依赖检查通过")
+    print("✅ Dependencies check passed")
     return True
 
 def validate_code_quality():
     """验证代码质量"""
-    print("🔍 验证代码质量...")
+    print("🔍 Validating code quality...")
     
     # 检查Python语法
     try:
         result = run_command("python -m py_compile personalab/__init__.py", check=False)
         if result.returncode != 0:
-            print("❌ Python语法检查失败")
+            print("❌ Python syntax check failed")
             return False
     except:
         print("⚠️  跳过语法检查（py_compile不可用）")
@@ -96,7 +96,7 @@ def validate_code_quality():
 
 def check_git_status():
     """检查Git状态"""
-    print("📝 检查Git状态...")
+    print("📝 Checking Git status...")
     
     try:
         # 检查是否在git仓库中
@@ -118,7 +118,7 @@ def check_git_status():
 
 def create_release_summary():
     """创建发布摘要"""
-    print("📊 创建发布摘要...")
+    print("📊 Creating release summary...")
     
     summary = {
         "项目": "PersonaLab",
