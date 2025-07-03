@@ -24,6 +24,8 @@ pip install personalab[ai]  # Core AI features with OpenAI support
 pip install personalab[all]  # All features
 ```
 
+> **Important Note**: All PersonaLab chat interactions require a `user_id` parameter to identify different users and maintain separate memory spaces for each user.
+
 ### Usage (3 lines of code!)
 
 ```python
@@ -50,12 +52,16 @@ persona = Persona(
     use_memo=True      # 💬 Conversation history & semantic search
 )
 
-def chat_with_memories(message: str) -> str:
-    return persona.chat(message)
+def chat_with_memories(message: str, user_id: str) -> str:
+    return persona.chat(message, user_id=user_id)
 
 # That's it! Your AI now has persistent memory and conversation retrieval
-print(chat_with_memories("Hi, I'm learning Python"))
-print(chat_with_memories("What was I learning?"))  # Remembers previous context
+user_id = "student_123"
+print(chat_with_memories("Hi, I'm learning Python", user_id))
+print(chat_with_memories("What was I learning?", user_id))  # Remembers previous context
+
+# Don't forget to call endsession to update memories
+persona.endsession(user_id)
 
 # The conversations are automatically stored as events in memory
 # and recorded in memo for semantic search retrieval
@@ -131,53 +137,59 @@ export OPENAI_API_KEY="your-api-key-here"
 ### Basic Memory Management
 
 ```python
-from personalab.memory import MemoryManager
+from personalab import Persona
+from personalab.llm import OpenAIClient
 
-# Create memory manager
-memory_manager = MemoryManager()
-
-# Get or create agent memory
-memory = memory_manager.get_or_create_memory("agent_123")
-
-# Update memory with conversation
-conversation = [
-    {"role": "user", "content": "I'm learning machine learning"},
-    {"role": "assistant", "content": "That's great! What specific areas interest you?"}
-]
-
-updated_memory, pipeline_result = memory_manager.update_memory_with_conversation(
-    "agent_123", 
-    conversation
+# Create persona with memory enabled
+persona = Persona(
+    agent_id="my_assistant",
+    use_memory=True,
+    use_memo=True
 )
 
-print(f"Updated profile: {updated_memory.get_profile_content()}")
-print(f"Events: {updated_memory.get_event_content()}")
-print(f"Mind insights: {updated_memory.get_mind_content()}")
+# Chat with the AI
+user_id = "user_123"
+response1 = persona.chat("I'm learning machine learning", user_id=user_id)
+response2 = persona.chat("What specific areas should I focus on?", user_id=user_id)
+
+# End session to update memories
+result = persona.endsession(user_id)
+print(f"Memory update result: {result}")
+
+# Get memory information
+memory_info = persona.get_memory(user_id)
+print(f"Profile: {memory_info['profile']}")
+print(f"Events: {len(memory_info['events'])} stored")
+print(f"Mind insights: {len(memory_info['mind'])} stored")
 ```
 
 ### Conversation Recording & Semantic Search
 
 ```python
-from personalab.memo import ConversationManager
+from personalab import Persona, ConversationManager
 
-# Initialize conversation manager with embeddings
-manager = ConversationManager(
-    db_path="conversations.db",
-    enable_embeddings=True,
-    embedding_provider="auto"  # Automatically selects best available
+# Method 1: Using Persona (recommended - automatic conversation management)
+persona = Persona(
+    agent_id="assistant_v1",
+    use_memo=True,  # Enable conversation recording
+    show_retrieval=True  # Show when relevant conversations are retrieved
 )
 
-# Record a conversation (user_id and agent_id are required)
-conversation = manager.record_conversation(
-    agent_id="assistant_v1",
-    user_id="user_123", 
-    messages=[
-        {"role": "user", "content": "How do I learn Python programming?"},
-        {"role": "assistant", "content": "Start with basic syntax, then practice with projects."},
-        {"role": "user", "content": "Any recommended resources?"},
-        {"role": "assistant", "content": "Try Python.org tutorials and Codecademy."}
-    ],
-    enable_vectorization=True
+user_id = "user_123"
+
+# Chat automatically records and retrieves relevant conversations
+response1 = persona.chat("How do I learn Python programming?", user_id=user_id)
+response2 = persona.chat("Any recommended resources?", user_id=user_id)
+
+# Search for similar conversations manually
+results = persona.search("Python tutorials", user_id=user_id, top_k=5)
+for result in results:
+    print(f"Found: {result.get('summary', 'No summary')}")
+
+# Method 2: Direct ConversationManager usage
+manager = ConversationManager(
+    enable_embeddings=True,
+    embedding_provider="auto"  # Automatically selects best available
 )
 
 # Search for similar conversations
@@ -197,6 +209,20 @@ for result in results:
 ### User-Based Conversation Filtering
 
 ```python
+# Using Persona for user-specific operations
+persona = Persona(agent_id="assistant_v1")
+user_id = "user_123"
+
+# Get session information for user
+session_info = persona.get_session_info(user_id)
+print(f"Messages in current session: {session_info['total_messages']}")
+
+# Search conversations for specific user
+user_results = persona.search("learning goals", user_id=user_id, top_k=10)
+
+# Using ConversationManager directly
+manager = ConversationManager()
+
 # Get conversation history for specific user
 user_conversations = manager.get_conversation_history(
     agent_id="assistant_v1",
@@ -204,7 +230,7 @@ user_conversations = manager.get_conversation_history(
     limit=10
 )
 
-# Get conversations from specific session
+# Get conversations from specific session  
 session_conversations = manager.get_session_conversations(
     agent_id="assistant_v1",
     session_id="session_abc",
@@ -299,19 +325,41 @@ manager = ConversationManager(enable_embeddings=False)
 ### Memory Configuration
 
 ```python
-# Custom memory manager setup
-memory_manager = MemoryManager(
-    db_path="custom_memory.db",
-    llm_client=custom_llm,
+# Custom persona setup with specific LLM configuration
+from personalab.llm import OpenAIClient
+
+custom_llm = OpenAIClient(
+    api_key="your-key",
+    model="gpt-4",
     temperature=0.3,
     max_tokens=2000
+)
+
+persona = Persona(
+    agent_id="custom_assistant",
+    llm_client=custom_llm,
+    use_memory=True,
+    use_memo=True,
+    show_retrieval=False
 )
 ```
 
 ### Search Parameters
 
 ```python
-# Configure semantic search
+# Configure semantic search using Persona
+persona = Persona(agent_id="assistant")
+user_id = "user_123"
+
+# Search with parameters
+results = persona.search(
+    query="machine learning help",
+    user_id=user_id,
+    top_k=10                     # Maximum results
+)
+
+# Or using ConversationManager directly for more control
+manager = ConversationManager()
 results = manager.search_similar_conversations(
     agent_id="assistant",
     query="machine learning help",
@@ -335,54 +383,73 @@ The `examples/` directory contains comprehensive usage examples:
 
 ### Customer Support
 ```python
-# Record support conversations
-support_conv = manager.record_conversation(
+# Create support persona
+support_persona = Persona(
     agent_id="support_bot",
-    user_id="customer_456",
-    messages=conversation_data
+    personality="You are a helpful customer support agent.",
+    use_memory=True,
+    use_memo=True
 )
 
+customer_id = "customer_456"
+
+# Handle customer inquiry (automatically records and retrieves context)
+response = support_persona.chat("I'm having login problems", user_id=customer_id)
+
 # Find similar past issues
-similar_issues = manager.search_similar_conversations(
-    agent_id="support_bot", 
-    query="login problems",
-    similarity_threshold=0.8
-)
+similar_issues = support_persona.search("login problems", user_id=customer_id, top_k=5)
+
+# End session to update customer profile
+support_persona.endsession(customer_id)
 ```
 
 ### Educational Assistants
 ```python
-# Track learning conversations
-learning_conv = manager.record_conversation(
+# Create tutor persona
+tutor_persona = Persona(
     agent_id="tutor_bot",
-    user_id="student_789",
-    messages=tutoring_session
+    personality="You are a patient and encouraging math tutor.",
+    use_memory=True,
+    use_memo=True
 )
 
-# Retrieve related learning materials
-related_topics = manager.search_similar_conversations(
-    agent_id="tutor_bot",
-    query="algebra word problems",
-    user_id="student_789"  # User-specific search
-)
+student_id = "student_789"
+
+# Tutoring session (automatically tracks learning progress)
+response1 = tutor_persona.chat("I need help with algebra word problems", user_id=student_id)
+response2 = tutor_persona.chat("Can you give me another example?", user_id=student_id)
+
+# Retrieve related learning materials from past sessions
+related_topics = tutor_persona.search("algebra word problems", user_id=student_id, top_k=5)
+
+# End session to update learning profile
+result = tutor_persona.endsession(student_id)
+print(f"Learning progress updated: {result}")
 ```
 
 ### Personal AI Assistants
 ```python
-# Maintain conversation history
-personal_conv = manager.record_conversation(
+# Create personal assistant
+personal_assistant = Persona(
     agent_id="personal_ai",
-    user_id="user_personal",
-    messages=daily_conversation,
-    session_id="morning_chat"
+    personality="You are a thoughtful personal assistant who remembers important details.",
+    use_memory=True,
+    use_memo=True
 )
 
-# Contextual memory retrieval
-context = manager.search_similar_conversations(
-    agent_id="personal_ai",
-    query="previous vacation plans",
-    user_id="user_personal"
-)
+user_id = "user_personal"
+
+# Daily conversation with memory
+with personal_assistant.session(user_id):
+    response1 = personal_assistant.chat("I'm planning a vacation to Japan", user_id=user_id)
+    response2 = personal_assistant.chat("What should I pack?", user_id=user_id)
+    # Session automatically ends and updates memory
+
+# Later conversation - retrieves context automatically
+response3 = personal_assistant.chat("What were those vacation plans I mentioned?", user_id=user_id)
+
+# Manual context retrieval if needed
+context = personal_assistant.search("vacation plans", user_id=user_id, top_k=3)
 ```
 
 ## 🧪 Testing
