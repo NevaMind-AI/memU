@@ -503,3 +503,15 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **PersonaLab** - Building the memory foundation for next-generation AI agents 🧠✨ 
+
+## 🔄 CI/CD Status
+
+This project uses GitHub Actions for continuous integration and automated PyPI publishing.
+
+- **CI Workflow**: Runs on every push to `main` and `develop` branches
+- **Publish Workflow**: Runs on GitHub releases or manual trigger
+- **Code Quality**: Black, isort, flake8, mypy checks
+- **Testing**: Pytest with PostgreSQL integration
+
+[![CI](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/ci.yml/badge.svg)](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/ci.yml)
+[![Publish](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/publish.yml/badge.svg)](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/publish.yml) 
