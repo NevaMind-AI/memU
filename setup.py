@@ -50,7 +50,7 @@ extras_require["all"] = list(set(sum(extras_require.values(), [])))
 
 setuptools.setup(
     name="personalab",
-    version="1.0.0",
+    version="0.1.0",
     author="PersonaLab Team",
     author_email="support@personalab.ai",
     description="AI Memory and Conversation Management Framework - Simple as mem0, Powerful as PersonaLab",
