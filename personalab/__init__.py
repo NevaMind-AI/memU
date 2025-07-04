@@ -6,7 +6,7 @@ A Python framework for creating and managing AI personas and laboratory environm
 New version refactored based on STRUCTURE.md, adopting unified Memory architecture.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 __author__ = "PersonaLab Team"
 __email__ = "support@personalab.ai"
 
