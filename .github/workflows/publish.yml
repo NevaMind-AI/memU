@@ -1,11 +1,9 @@
 name: Publish to PyPI
 
 on:
-  push:
-    tags: ['v*']      # Auto-publish to Test PyPI on version tags
   release:
     types: [published]  # Auto-publish to PyPI on release
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:  # Allow manual trigger for Test PyPI
 
 jobs:
   test:
@@ -85,7 +83,7 @@ jobs:
   test-pypi:
     needs: build
     runs-on: ubuntu-latest
-    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
