@@ -1,55 +1,35 @@
 """
 PersonaLab Memory Module
 
-Core Memory system including:
-- Memory: Unified memory management class
-- MemoryClient: Memory client for core memory operations
-- MemoryUpdatePipeline: Memory update pipeline
+Core Memory system with API-based remote operations:
+- Memory: Unified API-based memory management class
+- MemoryClient: API client for remote memory operations
+- Memory component classes: ProfileMemory, EventMemory, MindMemory
 
-Note: Only PostgreSQL with pgvector is supported.
-Conversation recording and vectorization are handled by the memo module.
+Architecture: Client -> API -> Backend -> Database
+All memory operations are performed through remote API calls for consistent
+and scalable memory management.
 
-Backward compatible classes:
-- BaseMemory: Abstract base class (for backward compatibility)
-- ProfileMemory: Profile memory (now as component)
-- EventMemory: Event memory (now as component)
+Note: Only API-based memory operations are supported.
+The Memory class internally uses ProfileMemory, EventMemory, and MindMemory 
+components for code organization while all data operations go through remote API.
 """
+
+# Main Memory classes
+from .base import Memory, ProfileMemory, EventMemory, MindMemory
+from .manager import MemoryClient
 
 # LLM interface
 from ..llm import BaseLLMClient
 
-# New unified Memory architecture
-from .base import EventMemory, Memory, MindMemory, ProfileMemory
-from .manager import MemoryClient
-from .pipeline import MemoryUpdatePipeline, MindResult, PipelineResult, UpdateResult
-
-# Embeddings moved to memo module
-
-
-# Backward compatible legacy classes (if they exist)
-try:
-    from .base import BaseMemory
-except ImportError:
-    BaseMemory = None
-
-# Backward compatible aliases
-MemoryManager = MemoryClient
-
 __all__ = [
-    # Main classes of new architecture
+    # Main classes
     "Memory",
-    "MemoryClient",
-    "MemoryUpdatePipeline",
-    "PipelineResult",
-    "UpdateResult",
-    "MindResult",
-    # LLM interface
-    "BaseLLMClient",
+    "MemoryClient", 
     # Memory components
     "ProfileMemory",
-    "EventMemory",
+    "EventMemory", 
     "MindMemory",
-    # Backward compatible classes and aliases
-    "BaseMemory",
-    "MemoryManager",
+    # LLM interface
+    "BaseLLMClient",
 ]

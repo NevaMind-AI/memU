@@ -12,7 +12,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # 4. Copy dependency definitions first (leverage Docker cache)
-COPY requirements.txt ./
+COPY server/backend/requirements.txt ./
 
 # 5. Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt

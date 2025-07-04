@@ -194,23 +194,6 @@ events:
             modification_result
         )
 
-        # If no profile updates, return directly
-        if not profile_updates:
-            return UpdateResult(
-                profile=ProfileMemory(previous_memory.get_profile_content() or ""),
-                events=EventMemory(
-                    events=previous_memory.get_event_content().copy(),
-                    max_events=previous_memory.event_memory.max_events,
-                ),
-                profile_updated=False,
-                raw_llm_response="No updates needed",
-                metadata={
-                    "stage": "llm_update",
-                    "updated_at": datetime.now().isoformat(),
-                    "profile_updated": False,
-                },
-            )
-
         current_profile = previous_memory.get_profile_content()
         current_events = previous_memory.get_event_content()
         # Build profile update prompt

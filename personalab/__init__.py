@@ -29,9 +29,9 @@ from .memo import ConversationManager
 from .memory import EventMemory  # Event memory component
 from .memory import Memory  # Unified Memory class
 from .memory import MemoryClient  # Memory client
-from .memory import MemoryUpdatePipeline  # Memory update pipeline
+# MemoryUpdatePipeline removed in API-only architecture
 from .memory import MindMemory  # Mind memory component
-from .memory import PipelineResult  # Pipeline result
+# PipelineResult removed in API-only architecture
 from .memory import ProfileMemory  # Memory components; Profile memory component
 
 # Persona API - Simple entry point
@@ -77,8 +77,7 @@ __all__ = [
     # Core Memory system
     "Memory",  # Unified Memory class
     "MemoryClient",  # Memory client
-    "MemoryUpdatePipeline",  # Memory update pipeline
-    "PipelineResult",  # Pipeline result
+    # "MemoryUpdatePipeline" and "PipelineResult" removed in API-only architecture
     # Memory components
     "ProfileMemory",  # Profile memory component
     "EventMemory",  # Event memory component

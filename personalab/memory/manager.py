@@ -1,51 +1,74 @@
 """
 Memory client module.
 
-Provides unified Memory management interface, integrating Memory, Pipeline and Storage layers:
-- MemoryClient: Main Memory client class
-- Complete Memory lifecycle management implementation
-- LLM integration support
-- PostgreSQL backend with pgvector
+Provides Memory management interface through remote API:
+- MemoryClient: Memory API client for remote operations
+- Complete Memory lifecycle management through API calls
+- Clean separation: Client -> API -> Backend -> Database
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
-
-from ..config.database import DatabaseManager, get_database_manager
-from .base import Memory
-from .pipeline import MemoryUpdatePipeline, PipelineResult
+from typing import Any, Dict, List, Optional
+import requests
 
 
 class MemoryClient:
     """
-    Memory client with database backend abstraction.
+    Memory API client for remote operations.
 
-    Provides complete Memory lifecycle management, including:
-    - Memory creation, loading, updating, saving
-    - Pipeline execution and management
-    - Database interaction (PostgreSQL)
+    All memory operations are performed through remote API calls.
+    No direct database access - maintains clean client-server architecture.
     """
 
     def __init__(
         self,
-        db_manager: Optional[DatabaseManager] = None,
-        **llm_config,
+        api_url: str = "http://localhost:8000",
+        timeout: int = 30,
     ):
         """
         Initialize MemoryClient.
 
         Args:
-            db_manager: Optional database manager instance. If not provided, the global PostgreSQL manager will be used.
-            **llm_config: LLM configuration parameters
+            api_url: Remote API URL for memory operations (e.g., "http://remote-server:8000")
+            timeout: Request timeout in seconds
         """
-        # Use provided database manager or fallback to global one (PostgreSQL-only)
-        self.db_manager = db_manager or get_database_manager()
-
-        self.database = self.db_manager.get_memory_db()
-        self.pipeline = MemoryUpdatePipeline(**llm_config)
+        self.api_url = api_url.rstrip('/')
+        self.timeout = timeout
         self._memory_cache = {}  # Cache for loaded memories
+        
+        print(f"🌐 MemoryClient initialized with API: {self.api_url}")
 
-    def get_memory_by_agent(self, agent_id: str, user_id: str) -> Memory:
+    def _make_api_request(self, method: str, endpoint: str, data: dict = None, params: dict = None) -> dict:
+        """Make HTTP request to remote API
+        
+        Args:
+            method: HTTP method (GET, POST, DELETE, etc.)
+            endpoint: API endpoint (without base URL)
+            data: Request body data
+            params: Query parameters
+            
+        Returns:
+            Response data as dictionary
+            
+        Raises:
+            Exception: If API request fails
+        """
+        url = f"{self.api_url}/api/{endpoint.lstrip('/')}"
+        
+        try:
+            response = requests.request(
+                method=method,
+                url=url,
+                json=data,
+                params=params,
+                timeout=self.timeout
+            )
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"API request failed: {e}")
+
+    def get_memory_by_agent(self, agent_id: str, user_id: str) -> "Memory":
         """Get memory instance by agent_id and user_id
 
         Args:
@@ -55,25 +78,53 @@ class MemoryClient:
         Returns:
             Memory instance for the specified agent and user
         """
+        # Import here to avoid circular imports
+        from .base import Memory
+        
         key = f"{agent_id}:{user_id}"
 
         # Check cache first
         if key in self._memory_cache:
             return self._memory_cache[key]
 
-        # Try to load from database
-        memory = self.database.get_memory_by_agent_and_user(agent_id, user_id)
+        # Load from API
+        try:
+            memories = self._make_api_request("GET", "memories", params={
+                "agent_id": agent_id,
+                "user_id": user_id
+            })
+            
+            memory_data = None
+            if memories and len(memories) > 0:
+                memory_id = memories[0]["memory_id"]
+                memory_data = self._make_api_request("GET", f"memories/{memory_id}")
+            
+            # Create Memory instance
+            memory = Memory(
+                agent_id=agent_id,
+                user_id=user_id,
+                memory_client=self,
+                data=memory_data
+            )
+            
+            # Cache the memory
+            self._memory_cache[key] = memory
+            return memory
+            
+        except Exception as e:
+            # If API fails, return empty memory
+            print(f"Warning: Failed to load memory from API: {e}")
+            memory = Memory(
+                agent_id=agent_id,
+                user_id=user_id,
+                memory_client=self,
+                data=None
+            )
+            self._memory_cache[key] = memory
+            return memory
 
-        # If not found, create new memory
-        if memory is None:
-            memory = Memory(agent_id=agent_id, user_id=user_id)
-
-        # Cache the memory
-        self._memory_cache[key] = memory
-        return memory
-
-    def save_memory(self, memory: Memory) -> bool:
-        """Save memory to database
+    def save_memory(self, memory: "Memory") -> bool:
+        """Save memory via API
 
         Args:
             memory: Memory instance to save
@@ -81,74 +132,72 @@ class MemoryClient:
         Returns:
             bool: Whether save was successful
         """
-        return self.database.save_memory(memory)
-
-    def clear_memory(self, agent_id: str = None, user_id: str = None) -> None:
-        """Clear memory data for specified agents/users
-
-        Args:
-            agent_id: Agent ID to clear (if None, clear all agents)
-            user_id: User ID to clear (if None, clear all users)
-        """
-        if agent_id is None and user_id is None:
-            # Clear all cached memories
-            for memory in self._memory_cache.values():
-                memory.clear_all()
-            self._memory_cache.clear()
-        elif agent_id is not None and user_id is not None:
-            # Clear specific agent-user combination
-            key = f"{agent_id}:{user_id}"
-            if key in self._memory_cache:
-                self._memory_cache[key].clear_all()
-                del self._memory_cache[key]
-        elif agent_id is not None:
-            # Clear all memories for a specific agent
-            to_remove = []
-            for key, memory in self._memory_cache.items():
-                if key.startswith(f"{agent_id}:"):
-                    memory.clear_all()
-                    to_remove.append(key)
-            for key in to_remove:
-                del self._memory_cache[key]
-        elif user_id is not None:
-            # Clear all memories for a specific user
-            to_remove = []
-            for key, memory in self._memory_cache.items():
-                if key.endswith(f":{user_id}"):
-                    memory.clear_all()
-                    to_remove.append(key)
-            for key in to_remove:
-                del self._memory_cache[key]
+        # Import here to avoid circular imports
+        from .base import Memory
+        
+        if not isinstance(memory, Memory):
+            print("Warning: Can only save Memory instances")
+            return False
+            
+        # TODO: Implement API endpoint for memory saving
+        print("Info: Memory saving via API endpoint not yet implemented")
+        return True
 
     def update_memory_with_conversation(
         self, agent_id: str, user_id: str, conversation: List[Dict[str, str]]
     ) -> int:
-        """Update memory with a conversation
+        """Update memory with a conversation via API
 
         Args:
             agent_id: Agent ID
             user_id: User ID (required)
-            conversation: List of conversation messages with 'user' and 'assistant' keys
+            conversation: List of conversation messages
 
         Returns:
             Number of memories updated
         """
-        memory = self.get_memory_by_agent(agent_id, user_id)
-        if not conversation:
+        try:
+            # Send conversation to API for processing
+            response = self._make_api_request("POST", "memories/update-conversation", data={
+                "agent_id": agent_id,
+                "user_id": user_id,
+                "conversation": conversation
+            })
+            
+            # Clear cache to force reload
+            key = f"{agent_id}:{user_id}"
+            if key in self._memory_cache:
+                del self._memory_cache[key]
+                
+            return response.get("updated_count", 0)
+            
+        except Exception as e:
+            print(f"Warning: Failed to update memory via API: {e}")
             return 0
 
-        # Convert conversation to memory format
-        conversation_str = ""
-        for turn in conversation:
-            if "user" in turn and "assistant" in turn:
-                conversation_str += (
-                    f"User: {turn['user']}\nAssistant: {turn['assistant']}\n"
-                )
+    def clear_memory_cache(self, agent_id: str = None, user_id: str = None) -> None:
+        """Clear memory cache
 
-        if conversation_str.strip():
-            memory.add_events([conversation_str.strip()])
-            return 1
-        return 0
+        Args:
+            agent_id: Agent ID (optional)
+            user_id: User ID (optional)
+        """
+        if agent_id and user_id:
+            # Clear specific cache entry
+            key = f"{agent_id}:{user_id}"
+            if key in self._memory_cache:
+                del self._memory_cache[key]
+        elif agent_id:
+            # Clear all cache entries for agent
+            keys_to_remove = [
+                key for key in self._memory_cache.keys() 
+                if key.startswith(f"{agent_id}:")
+            ]
+            for key in keys_to_remove:
+                del self._memory_cache[key]
+        else:
+            # Clear all cache
+            self._memory_cache.clear()
 
     def get_memory_prompt(self, agent_id: str, user_id: str) -> str:
         """Get memory context as a prompt
@@ -236,7 +285,7 @@ class MemoryClient:
 
     def update_profile(self, agent_id: str, user_id: str, profile_info: str) -> bool:
         """
-        Directly update profile information.
+        Update profile information via API.
 
         Args:
             agent_id: Agent ID
@@ -247,16 +296,25 @@ class MemoryClient:
             bool: Whether update was successful
         """
         try:
-            memory = self.get_memory_by_agent(agent_id, user_id)
-            memory.update_profile(profile_info)
-            return self.database.save_memory(memory)
+            response = self._make_api_request("POST", "memories/update-profile", data={
+                "agent_id": agent_id,
+                "user_id": user_id,
+                "profile_info": profile_info
+            })
+            
+            # Clear cache to force reload
+            key = f"{agent_id}:{user_id}"
+            if key in self._memory_cache:
+                del self._memory_cache[key]
+                
+            return response.get("success", False)
         except Exception as e:
-            print(f"Error updating profile: {e}")
+            print(f"Error updating profile via API: {e}")
             return False
 
     def update_events(self, agent_id: str, user_id: str, events: List[str]) -> bool:
         """
-        Directly add events.
+        Add events via API.
 
         Args:
             agent_id: Agent ID
@@ -267,63 +325,25 @@ class MemoryClient:
             bool: Whether addition was successful
         """
         try:
-            memory = self.get_memory_by_agent(agent_id, user_id)
-            memory.update_events(events)
-            return self.database.save_memory(memory)
+            response = self._make_api_request("POST", "memories/update-events", data={
+                "agent_id": agent_id,
+                "user_id": user_id,
+                "events": events
+            })
+            
+            # Clear cache to force reload
+            key = f"{agent_id}:{user_id}"
+            if key in self._memory_cache:
+                del self._memory_cache[key]
+                
+            return response.get("success", False)
         except Exception as e:
-            print(f"Error adding events: {e}")
-            return False
-
-    def import_memory(self, memory_data: Dict[str, Any]) -> bool:
-        """
-        Import Memory data.
-
-        Args:
-            memory_data: Memory data dictionary
-
-        Returns:
-            bool: Whether import was successful
-        """
-        try:
-            # Create Memory object
-            memory = Memory(
-                agent_id=memory_data["agent_id"],
-                user_id=memory_data.get("user_id"),
-                memory_id=memory_data.get("memory_id"),
-            )
-
-            # Set timestamps
-            if "created_at" in memory_data:
-                memory.created_at = datetime.fromisoformat(memory_data["created_at"])
-            if "updated_at" in memory_data:
-                memory.updated_at = datetime.fromisoformat(memory_data["updated_at"])
-
-            # Set Profile Memory
-            if "profile_memory" in memory_data:
-                profile_data = memory_data["profile_memory"]
-                memory.update_profile(profile_data.get("content", ""))
-
-            # Set Event Memory
-            if "event_memory" in memory_data:
-                event_data = memory_data["event_memory"]
-                memory.update_events(event_data.get("content", []))
-
-            # Set mind metadata
-            if "mind_metadata" in memory_data:
-                memory.mind_metadata = memory_data["mind_metadata"]
-            elif "tom_metadata" in memory_data:  # Backward compatibility
-                memory.mind_metadata = memory_data["tom_metadata"]
-
-            # Save to database
-            return self.database.save_memory(memory)
-
-        except Exception as e:
-            print(f"Error importing memory: {e}")
+            print(f"Error adding events via API: {e}")
             return False
 
     def get_memory_stats(self, agent_id: str) -> Dict[str, Any]:
         """
-        Get Memory statistics.
+        Get Memory statistics via API.
 
         Args:
             agent_id: Agent ID
@@ -331,4 +351,8 @@ class MemoryClient:
         Returns:
             Dict: Statistics information
         """
-        return self.database.get_memory_stats(agent_id)
+        try:
+            return self._make_api_request("GET", f"memories/stats/{agent_id}")
+        except Exception as e:
+            print(f"Error getting memory stats via API: {e}")
+            return {}
