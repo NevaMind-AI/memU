@@ -4,241 +4,231 @@
   
 # PersonaLab
 
-  🧠 **AI Memory and Conversation Management** - Simple as mem0, Powerful as PersonaLab
-  
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-  [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-  [![PyPI version](https://badge.fury.io/py/personalab.svg)](https://badge.fury.io/py/personalab)
+🧠 **AI Memory and Conversation Management Framework** - Simple as mem0, Powerful as PersonaLab
+
+[![PyPI version](https://badge.fury.io/py/personalab.svg)](https://badge.fury.io/py/personalab)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![CI](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/ci.yml/badge.svg)](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/ci.yml)
+[![Publish](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/publish.yml/badge.svg)](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/publish.yml)
+
 </div>
+
+> 🎉 **PersonaLab v0.1.0 is now available on PyPI!** - The first official release with stable PostgreSQL-based memory system and multi-LLM support.
 
 PersonaLab is a comprehensive AI memory and conversation management system that provides intelligent profile management, conversation recording, and advanced semantic search capabilities for AI agents. It combines persistent memory storage, conversation analysis, psychological modeling, and vector-based retrieval for building sophisticated AI applications.
 
-## ⚡ Quick Start
+## 📦 Installation
 
-### Installation
+### From PyPI (Recommended)
 
 ```bash
-pip install personalab[ai]  # Core AI features with OpenAI support
-# or
-pip install personalab[all]  # All features
+# Basic installation
+pip install personalab
+
+# With AI features (includes OpenAI support)
+pip install personalab[ai]
+
+# Full installation (all LLM providers and features)
+pip install personalab[all]
 ```
 
-> **Important Note**: All PersonaLab chat interactions require a `user_id` parameter to identify different users and maintain separate memory spaces for each user.
+### From Source (Development)
 
-### Usage (3 lines of code!)
+```bash
+git clone https://github.com/NevaMind-AI/PersonaLab.git
+cd PersonaLab
+pip install -e .
+
+# For development
+pip install -r requirements-dev.txt
+pre-commit install
+```
+
+## ⚡ Quick Start
+
+> **💡 Important**: All PersonaLab chat interactions require a `user_id` parameter to identify different users and maintain separate memory spaces for each user.
+
+### Simple 3-Line Setup
+
+```python
+from personalab import Persona
+
+# Create an AI persona with memory
+persona = Persona(agent_id="my_assistant")
+
+# Chat with persistent memory across sessions
+response = persona.chat("Hi, I'm learning Python", user_id="student_123")
+print(response)
+
+# Memory is automatically managed!
+```
+
+### Complete Example with Memory & LLM Configuration
 
 ```python
 from personalab import Persona
 from personalab.llm import OpenAIClient, AnthropicClient
 
-# Method 1: Pass llm_client directly
+# Configure your LLM client
 openai_client = OpenAIClient(api_key="your-key", model="gpt-4")
-persona = Persona(agent_id="my_ai_assistant", llm_client=openai_client)
 
-# Or with Anthropic
-anthropic_client = AnthropicClient(api_key="your-key")
-persona = Persona(agent_id="claude_assistant", llm_client=anthropic_client)
-
-# Method 2: Simple default usage (reads OPENAI_API_KEY from .env)
-persona = Persona(agent_id="my_ai_assistant")
-
-# Configure features
+# Create persona with full features
 persona = Persona(
-    agent_id="my_ai_assistant",
-    llm_client=openai_client,  # Pass your configured LLM client
-    personality="You are a helpful and friendly programming tutor.",  # 🎭 AI personality
+    agent_id="programming_tutor",
+    llm_client=openai_client,
+    personality="You are a helpful and friendly programming tutor.",
     use_memory=True,   # 🧠 Long-term memory (facts, preferences, events)
     use_memo=True      # 💬 Conversation history & semantic search
 )
 
-def chat_with_memories(message: str, user_id: str) -> str:
-    return persona.chat(message, user_id=user_id)
-
-# That's it! Your AI now has persistent memory and conversation retrieval
+# Chat with memory
 user_id = "student_123"
-print(chat_with_memories("Hi, I'm learning Python", user_id))
-print(chat_with_memories("What was I learning?", user_id))  # Remembers previous context
+response1 = persona.chat("I'm learning machine learning", user_id=user_id)
+response2 = persona.chat("What did I mention I was learning?", user_id=user_id)
 
-# Don't forget to call endsession to update memories
+# End session to update memories
 persona.endsession(user_id)
 
-# The conversations are automatically stored as events in memory
-# and recorded in memo for semantic search retrieval
+# Get stored memories
+memory_info = persona.get_memory(user_id)
+print(f"Profile: {memory_info['profile']}")
+print(f"Events: {len(memory_info['events'])} stored")
 ```
 
 ### Environment Setup
 
 ```bash
-# 1. Copy environment template
+# 1. Copy environment template (if using from source)
 cp .env.example .env
 
-# 2. Edit .env and add your API keys
-# OPENAI_API_KEY=your_openai_key_here
-# ANTHROPIC_API_KEY=your_anthropic_key_here
+# 2. Add your API keys to .env
+echo "OPENAI_API_KEY=your_openai_key_here" >> .env
+echo "ANTHROPIC_API_KEY=your_anthropic_key_here" >> .env
 
 # 3. Test configuration
-python setup_env.py
+python -c "from personalab import Persona; print('✅ PersonaLab ready!')"
 ```
-
----
 
 ## 🌟 Key Features
 
-### 💾 Core Memory Management
-- **Agent Memory**: Persistent profile and event storage for AI agents
-- **User Memory**: Individual memory spaces for different users  
-- **Profile Management**: Automatic profile updates based on conversations
-- **Event Tracking**: Comprehensive conversation and interaction history
-- **Theory of Mind**: Psychological analysis and behavioral insights
+### 💾 Intelligent Memory System
+- **🧠 Agent Memory**: Persistent profile and event storage for AI agents
+- **👤 User Memory**: Individual memory spaces for different users  
+- **📝 Profile Management**: Automatic profile updates based on conversations
+- **📚 Event Tracking**: Comprehensive conversation and interaction history
+- **🧠 Theory of Mind**: Psychological analysis and behavioral insights
 
-### 💬 Conversation Recording & Retrieval
-- **Conversation Storage**: Structured conversation recording with required fields (user_id, agent_id, created_at)
-- **Vector Embeddings**: High-quality semantic embeddings for conversations and messages
-- **Semantic Search**: Intelligent conversation retrieval based on semantic similarity
-- **Session Management**: Session-based conversation organization and tracking
-- **Multiple Providers**: Support for OpenAI and SentenceTransformers embedding models
+### 💬 Advanced Conversation Management
+- **📝 Conversation Storage**: Structured recording with metadata (user_id, agent_id, timestamps)
+- **🔍 Vector Embeddings**: High-quality semantic embeddings for intelligent search
+- **🎯 Semantic Search**: Retrieve relevant conversations based on meaning, not just keywords
+- **🔄 Session Management**: Organized conversation tracking and session handling
+- **⚡ Multiple Providers**: OpenAI, SentenceTransformers, and more embedding options
 
-### 🧠 LLM Integration
-- **Multiple LLM Providers**: OpenAI, Anthropic, Google Gemini, Azure OpenAI, Cohere, AWS Bedrock, Together AI, Replicate, Local LLMs
-- **Intelligent Search**: LLM-powered search decision making and content analysis
-- **Profile Updates**: AI-driven profile enhancement from conversation content
-- **XML Parsing**: Structured profile output with automatic parsing
+### 🤖 Multi-LLM Integration
+- **🌐 Multiple Providers**: OpenAI, Anthropic, Google Gemini, Azure OpenAI, Cohere, AWS Bedrock, Together AI, Replicate
+- **🔍 Intelligent Search**: LLM-powered decision making and content analysis
+- **📊 Profile Updates**: AI-driven profile enhancement from conversation content
+- **🔧 Flexible Configuration**: Easy switching between LLM providers and models
 
 ### 🔍 Advanced Search & Analysis
-- **LLM-Enhanced Search**: Semantic understanding and relevance scoring
-- **Vector Similarity Search**: Fast and accurate conversation retrieval
-- **Intent Analysis**: Intelligent extraction of search requirements
-- **Context-Aware Results**: Ranked results based on conversation context
+- **🧠 LLM-Enhanced Search**: Semantic understanding and relevance scoring
+- **⚡ Vector Similarity**: Fast and accurate conversation retrieval
+- **🎯 Intent Analysis**: Intelligent extraction of search requirements
+- **📊 Context-Aware Results**: Ranked results based on conversation context
 
-## 📦 Installation
+## 📋 Requirements
 
-```bash
-git clone https://github.com/NevaMind-AI/PersonaLab.git
-cd PersonaLab
-pip install -r requirements.txt
-```
+- **Python**: 3.8 or higher
+- **Database**: PostgreSQL (required for memory storage)
+- **LLM API Keys**: OpenAI, Anthropic, or other supported providers
 
-For development:
-```bash
-pip install -r requirements-dev.txt
-pre-commit install
-```
+### Database Setup
 
-### Optional: OpenAI Setup for Enhanced Embeddings
+PersonaLab requires PostgreSQL for memory storage. Quick setup:
 
 ```bash
-pip install openai
-export OPENAI_API_KEY="your-api-key-here"
+# Using Docker (recommended)
+docker run --name personalab-postgres -e POSTGRES_PASSWORD=your_password -p 5432:5432 -d postgres:14
+
+# Or install PostgreSQL locally
+# macOS: brew install postgresql
+# Ubuntu: sudo apt-get install postgresql
+# Windows: Download from https://www.postgresql.org/download/
 ```
 
-## 🚀 Quick Start
+## 💡 Advanced Usage Examples
 
-### Basic Memory Management
+### Memory & Conversation Integration
 
 ```python
 from personalab import Persona
-from personalab.llm import OpenAIClient
+from personalab.llm import OpenAIClient, AnthropicClient
 
-# Create persona with memory enabled
-persona = Persona(
-    agent_id="my_assistant",
+# Example 1: Educational Tutor with Memory
+tutor = Persona(
+    agent_id="math_tutor",
+    personality="You are a patient math tutor who tracks student progress.",
+    use_memory=True,  # Remember student profiles and learning history
+    use_memo=True,    # Search previous conversations for context
+    show_retrieval=True  # Show when retrieving relevant past conversations
+)
+
+student_id = "student_123"
+
+# First lesson
+response1 = tutor.chat("I'm struggling with algebra", user_id=student_id)
+response2 = tutor.chat("Can you explain linear equations?", user_id=student_id)
+
+# Later lesson - automatically retrieves relevant context
+response3 = tutor.chat("I forgot what we learned about equations", user_id=student_id)
+
+# Update student profile with progress
+tutor.endsession(student_id)
+
+# Example 2: Customer Support with Different LLM
+support = Persona(
+    agent_id="support_agent",
+    llm_client=AnthropicClient(api_key="your-key"),  # Using Claude
+    personality="You are a helpful customer support specialist.",
     use_memory=True,
     use_memo=True
 )
 
-# Chat with the AI
-user_id = "user_123"
-response1 = persona.chat("I'm learning machine learning", user_id=user_id)
-response2 = persona.chat("What specific areas should I focus on?", user_id=user_id)
+customer_id = "customer_456"
+support_response = support.chat("My account is locked", user_id=customer_id)
 
-# End session to update memories
-result = persona.endsession(user_id)
-print(f"Memory update result: {result}")
-
-# Get memory information
-memory_info = persona.get_memory(user_id)
-print(f"Profile: {memory_info['profile']}")
-print(f"Events: {len(memory_info['events'])} stored")
-print(f"Mind insights: {len(memory_info['mind'])} stored")
+# Search for similar support tickets
+similar_tickets = support.search("account locked", user_id=customer_id, top_k=3)
 ```
 
-### Conversation Recording & Semantic Search
+### Direct ConversationManager Usage
 
 ```python
-from personalab import Persona, ConversationManager
+from personalab.memo import ConversationManager
 
-# Method 1: Using Persona (recommended - automatic conversation management)
-persona = Persona(
-    agent_id="assistant_v1",
-    use_memo=True,  # Enable conversation recording
-    show_retrieval=True  # Show when relevant conversations are retrieved
-)
-
-user_id = "user_123"
-
-# Chat automatically records and retrieves relevant conversations
-response1 = persona.chat("How do I learn Python programming?", user_id=user_id)
-response2 = persona.chat("Any recommended resources?", user_id=user_id)
-
-# Search for similar conversations manually
-results = persona.search("Python tutorials", user_id=user_id, top_k=5)
-for result in results:
-    print(f"Found: {result.get('summary', 'No summary')}")
-
-# Method 2: Direct ConversationManager usage
+# Advanced conversation search and analysis
 manager = ConversationManager(
     enable_embeddings=True,
-    embedding_provider="auto"  # Automatically selects best available
+    embedding_provider="openai"  # Use OpenAI embeddings for better quality
 )
 
-# Search for similar conversations
+# Search across all conversations for an agent
 results = manager.search_similar_conversations(
-    agent_id="assistant_v1",
-    query="Python learning resources",
-    limit=5,
-    similarity_threshold=0.7
+    agent_id="support_agent",
+    query="billing issues and refunds",
+    limit=10,
+    similarity_threshold=0.75  # Higher threshold for more relevant results
 )
 
 for result in results:
-    print(f"Similarity: {result['similarity_score']:.3f}")
+    print(f"Score: {result['similarity_score']:.3f}")
+    print(f"User: {result['user_id']}")
     print(f"Summary: {result['summary']}")
     print("---")
 ```
-
-### User-Based Conversation Filtering
-
-```python
-# Using Persona for user-specific operations
-persona = Persona(agent_id="assistant_v1")
-user_id = "user_123"
-
-# Get session information for user
-session_info = persona.get_session_info(user_id)
-print(f"Messages in current session: {session_info['total_messages']}")
-
-# Search conversations for specific user
-user_results = persona.search("learning goals", user_id=user_id, top_k=10)
-
-# Using ConversationManager directly
-manager = ConversationManager()
-
-# Get conversation history for specific user
-user_conversations = manager.get_conversation_history(
-    agent_id="assistant_v1",
-    user_id="user_123",
-    limit=10
-)
-
-# Get conversations from specific session  
-session_conversations = manager.get_session_conversations(
-    agent_id="assistant_v1",
-    session_id="session_abc",
-    user_id="user_123"
-)
-```
-
-
 
 ## 🏗️ Architecture
 
@@ -370,14 +360,29 @@ results = manager.search_similar_conversations(
 
 ## 📚 Examples
 
-The `examples/` directory contains comprehensive usage examples:
+The [`examples/`](examples/) directory contains comprehensive usage examples:
 
-- **`memo_simple_example.py`**: Basic conversation recording and search
-- **`conversation_retrieval_example.py`**: Advanced semantic search demonstrations
-- **`simple_embedding_demo.py`**: Step-by-step embedding workflow
-- **`conversation_validation_example.py`**: Required field validation testing
-- **`quick_start.py`**: Integration of memory and memo systems
-- **`memo_openai_embedding_example.py`**: OpenAI embedding optimization
+- **[`memo_simple_example.py`](examples/memo_simple_example.py)**: Basic conversation recording and search
+- **[`conversation_retrieval_example.py`](examples/conversation_retrieval_example.py)**: Advanced semantic search demonstrations
+- **[`simple_embedding_demo.py`](examples/simple_embedding_demo.py)**: Step-by-step embedding workflow
+- **[`conversation_validation_example.py`](examples/conversation_validation_example.py)**: Required field validation testing
+- **[`quick_start.py`](examples/quick_start.py)**: Integration of memory and memo systems
+- **[`memo_openai_embedding_example.py`](examples/memo_openai_embedding_example.py)**: OpenAI embedding optimization
+
+### 🚀 Try the Examples
+```bash
+# Clone the repository to access examples
+git clone https://github.com/NevaMind-AI/PersonaLab.git
+cd PersonaLab
+
+# Set up environment
+cp .env.example .env  # Add your API keys
+pip install -e .
+
+# Run examples
+python examples/quick_start.py
+python examples/memo_simple_example.py
+```
 
 ## 🔍 Use Cases
 
@@ -502,16 +507,45 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
+## 📋 What's New in v0.1.0
+
+🎉 **First Official Release!** PersonaLab v0.1.0 brings stable, production-ready AI memory management:
+
+### ✨ Key Features
+- **🗄️ PostgreSQL-Only Architecture**: Removed all SQLite dependencies for production reliability
+- **🧠 Enhanced Memory System**: Improved profile updates and event tracking
+- **💬 Advanced Conversation Search**: Semantic search with multiple embedding providers
+- **🤖 Multi-LLM Support**: OpenAI, Anthropic, Google Gemini, and 8+ other providers
+- **📦 PyPI Package**: Easy installation with `pip install personalab`
+- **🔍 Better Documentation**: Comprehensive examples and usage guides
+- **⚡ Performance Optimizations**: Faster memory updates and conversation retrieval
+
+### 🛠️ Technical Improvements
+- **Python 3.8+ Compatibility**: Tested across Python 3.8-3.12
+- **Automated CI/CD**: GitHub Actions for testing and PyPI publishing
+- **Code Quality**: Black, isort, flake8, mypy formatting standards
+- **Comprehensive Testing**: Full test suite with PostgreSQL integration
+
+### 🚀 Migration from Pre-release
+If you're upgrading from development versions:
+```bash
+# Remove old development installation
+pip uninstall personalab
+
+# Install official release
+pip install personalab[all]
+```
+
+### 📅 Release History
+- **v0.1.0** (Current) - First official PyPI release with PostgreSQL-only architecture
+- **Pre-release** - Development versions with SQLite support (deprecated)
+
+### 🔗 Links
+- **PyPI Package**: https://pypi.org/project/personalab/
+- **GitHub Repository**: https://github.com/NevaMind-AI/PersonaLab
+- **Documentation**: [docs/](docs/) directory
+- **Examples**: [examples/](examples/) directory
+
+---
+
 **PersonaLab** - Building the memory foundation for next-generation AI agents 🧠✨ 
-
-## 🔄 CI/CD Status
-
-This project uses GitHub Actions for continuous integration and automated PyPI publishing.
-
-- **CI Workflow**: Runs on every push to `main` and `develop` branches
-- **Publish Workflow**: Runs on GitHub releases or manual trigger
-- **Code Quality**: Black, isort, flake8, mypy checks
-- **Testing**: Pytest with PostgreSQL integration
-
-[![CI](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/ci.yml/badge.svg)](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/ci.yml)
-[![Publish](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/publish.yml/badge.svg)](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/publish.yml) 

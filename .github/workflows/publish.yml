@@ -3,7 +3,6 @@ name: Publish to PyPI
 on:
   release:
     types: [published]  # Auto-publish to PyPI on release
-  workflow_dispatch:  # Allow manual trigger for Test PyPI
 
 jobs:
   test:
@@ -80,24 +79,4 @@ jobs:
       with:
         verbose: true
 
-  test-pypi:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    
-    permissions:
-      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
-      contents: read   # IMPORTANT: this permission is mandatory for trusted publishing
-    
-    steps:
-    - name: Download build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: dist
-        path: dist/
-    
-    - name: Publish to Test PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        repository-url: https://test.pypi.org/legacy/
-        verbose: true 
+ 
