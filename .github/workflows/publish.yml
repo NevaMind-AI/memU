@@ -1,6 +1,8 @@
 name: Publish to PyPI
 
 on:
+  push:
+    tags: ['v*']  # Auto-publish to PyPI on version tags
   release:
     types: [published]  # Auto-publish to PyPI on release
 
@@ -61,7 +63,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' && github.event.action == 'published'
+    if: (github.event_name == 'release' && github.event.action == 'published') || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/'))
     
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
