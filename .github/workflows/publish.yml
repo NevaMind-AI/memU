@@ -64,6 +64,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && github.event.action == 'published'
     
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+      contents: read   # IMPORTANT: this permission is mandatory for trusted publishing
+    
     steps:
     - name: Download build artifacts
       uses: actions/download-artifact@v4
@@ -74,14 +78,16 @@ jobs:
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        user: __token__
-        password: ${{ secrets.PYPI_API_TOKEN }}
         verbose: true
 
   test-pypi:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
+    
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+      contents: read   # IMPORTANT: this permission is mandatory for trusted publishing
     
     steps:
     - name: Download build artifacts
@@ -93,7 +99,5 @@ jobs:
     - name: Publish to Test PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        user: __token__
-        password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        repository_url: https://test.pypi.org/legacy/
+        repository-url: https://test.pypi.org/legacy/
         verbose: true 
