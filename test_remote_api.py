@@ -156,18 +156,18 @@ def test_persona_features():
         
         # Test memory operations
         try:
-            persona.add_memory("Test profile info", "test_user", "profile")
-            persona.add_memory("Test event info", "test_user", "events")
+                persona.update_memory("Test profile info", "test_user", "profile")
+    persona.update_memory("Test event info", "test_user", "events")
             print("✅ Memory addition successful")
         except Exception as e:
             print(f"⚠️ Memory addition failed: {e}")
         
-        # Test search
+        # Test search functionality removed - using get_memory instead
         try:
-            results = persona.search("test", "test_user")
-            print(f"✅ Search successful: {len(results)} results")
+            memory_info = persona.get_memory("test_user")
+            print(f"✅ Memory retrieval successful: {len(memory_info.get('events', []))} events")
         except Exception as e:
-            print(f"⚠️ Search failed: {e}")
+            print(f"⚠️ Memory retrieval failed: {e}")
         
         # Test memory retrieval
         try:

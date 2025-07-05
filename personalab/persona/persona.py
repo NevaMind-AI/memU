@@ -182,74 +182,31 @@ class Persona:
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
+        
+        # Add session history
+        if user_id in self.session_conversations:
+            for conv in self.session_conversations[user_id]:
+                messages.append({"role": "user", "content": conv["user_message"]})
+                messages.append({"role": "assistant", "content": conv["ai_response"]})
+        
         messages.append({"role": "user", "content": message})
 
         response = self.llm_client.chat_completion(messages)
         ai_response = response.content if hasattr(response, 'content') else str(response)
 
-        # 4. Store conversation in session buffer if learning is enabled
-        if learn:
-            self.session_conversations.setdefault(user_id, []).append({
-                "user_message": message,
-                "ai_response": ai_response
-            })
+        # 4. Store conversation in session buffer for context continuity
+        self.session_conversations.setdefault(user_id, []).append({
+            "user_message": message,
+            "ai_response": ai_response,
+            "learn": learn  # Track whether this conversation should be learned
+        })
 
         return ai_response
 
-    def search(self, query: str, user_id: str, top_k: int = 5) -> List[Dict]:
-        """Search for relevant memories and conversations
-
-        Args:
-            query: Search query
-            user_id: User identifier (required)
-            top_k: Number of results to return
-
-        Returns:
-            List of search results
-        """
-        # For now, return memory-based search results
-        # In the future, this could include conversation search via API
-        memory = self._get_or_create_memory(user_id)
-        if not memory:
-            return []
-
-        results = []
-        
-        # Search profile
-        profile = memory.get_profile()
-        if profile and any(query.lower() in p.lower() for p in profile):
-            results.append({
-                "type": "profile",
-                "content": profile,
-                "score": 0.9
-            })
-
-        # Search events
-        events = memory.get_events()
-        matching_events = [e for e in events if query.lower() in e.lower()]
-        for event in matching_events[:top_k]:
-            results.append({
-                "type": "event", 
-                "content": event,
-                "score": 0.8
-            })
-
-        # Search mind insights
-        mind = memory.get_mind()
-        matching_mind = [m for m in mind if query.lower() in m.lower()]
-        for insight in matching_mind[:top_k]:
-            results.append({
-                "type": "mind",
-                "content": insight,
-                "score": 0.7
-            })
-
-        return results[:top_k]
-
-    def add_memory(
+    def update_memory(
         self, content: str, user_id: str, memory_type: str = "profile"
     ) -> None:
-        """Add memory content via API
+        """Update memory content via API
 
         Args:
             content: Content to add
@@ -298,32 +255,48 @@ class Persona:
             print(f"📝 No conversations to process in this session for user {user_id}")
             return {"events": 0}
 
-        # Convert session conversations to API format
+        # Convert session conversations to API format (only learn=True conversations)
         conversation_for_api = []
+        learnable_count = 0
         for conv in self.session_conversations[user_id]:
-            conversation_for_api.extend([
-                {"role": "user", "content": conv["user_message"]},
-                {"role": "assistant", "content": conv["ai_response"]},
-            ])
+            if conv.get("learn", True):  # Default to True for backward compatibility
+                learnable_count += 1
+                conversation_for_api.extend([
+                    {"role": "user", "content": conv["user_message"]},
+                    {"role": "assistant", "content": conv["ai_response"]},
+                ])
+        
+        if learnable_count == 0:
+            print(f"📝 No learnable conversations to process in this session for user {user_id}")
+            # Clear session buffer
+            self.session_conversations[user_id].clear()
+            return {"events": 0}
 
         # Send conversation to API for memory update
         try:
-            updated_count = self.memory_client.update_memory_with_conversation(
+            success = self.memory_client.update_memory_with_conversation(
                 self.agent_id, user_id, conversation_for_api
             )
 
-            print(f"✅ Session ended: Memory updated via API for user {user_id}")
-            print(f"   - Conversations processed: {len(self.session_conversations[user_id])}")
-            print(f"   - Memories updated: {updated_count}")
+            if success:
+                print(f"✅ Session ended: Memory updated via API for user {user_id}")
+                print(f"   - Total conversations in session: {len(self.session_conversations[user_id])}")
+                print(f"   - Learnable conversations processed: {learnable_count}")
+                print(f"   - Memory update: successful")
 
-            # Clear cached memory to force reload
-            if user_id in self.memories:
-                del self.memories[user_id]
+                # Clear cached memory to force reload
+                if user_id in self.memories:
+                    del self.memories[user_id]
 
-            # Clear session buffer
-            self.session_conversations[user_id].clear()
+                # Clear session buffer
+                self.session_conversations[user_id].clear()
 
-            return {"events": updated_count, "profile_updated": 1 if updated_count > 0 else 0}
+                return {"events": learnable_count, "profile_updated": 1}
+            else:
+                print(f"❌ Failed to update memory via API for user {user_id}")
+                # Clear session buffer even on failure
+                self.session_conversations[user_id].clear()
+                return {"events": 0, "profile_updated": 0}
 
         except Exception as e:
             print(f"❌ Error updating memory via API: {e}")

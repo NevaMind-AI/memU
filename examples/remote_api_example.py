@@ -89,16 +89,16 @@ def main():
         
         # Add specific memory via API
         print(f"\n7. Adding specific memory for {user_id}")
-        persona.add_memory(
+        persona.update_memory(
             f"{user_id} prefers clean, well-documented code",
             user_id=user_id,
             memory_type="profile"
         )
         
-        # Search memories
-        print(f"\n8. Searching memories for {user_id}")
-        search_results = persona.search("Python", user_id=user_id)
-        print(f"Search results: {search_results}")
+        # Search memories (function removed - using get_memory instead)
+        print(f"\n8. Getting memory information for {user_id}")
+        memory_info = persona.get_memory(user_id)
+        print(f"Memory info: {memory_info}")
     
     # Test cross-user memory isolation
     print(f"\n{'='*20} Cross-User Test {'='*20}")
@@ -160,7 +160,7 @@ def test_memory_operations():
     try:
         # Test profile update
         print("\n1. Testing profile update")
-        persona.add_memory(
+        persona.update_memory(
             "Test user loves machine learning and AI research",
             user_id=user_id,
             memory_type="profile"
@@ -168,7 +168,7 @@ def test_memory_operations():
         
         # Test events update
         print("\n2. Testing events update")
-        persona.add_memory(
+        persona.update_memory(
             "User completed a machine learning course",
             user_id=user_id,
             memory_type="events"

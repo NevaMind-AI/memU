@@ -145,7 +145,7 @@ class MemoryClient:
 
     def update_memory_with_conversation(
         self, agent_id: str, user_id: str, conversation: List[Dict[str, str]]
-    ) -> int:
+    ) -> bool:
         """Update memory with a conversation via API
 
         Args:
@@ -154,7 +154,7 @@ class MemoryClient:
             conversation: List of conversation messages
 
         Returns:
-            Number of memories updated
+            True if update was successful, False otherwise
         """
         try:
             # Send conversation to API for processing
@@ -169,11 +169,11 @@ class MemoryClient:
             if key in self._memory_cache:
                 del self._memory_cache[key]
                 
-            return response.get("updated_count", 0)
+            return response.get("success", False)
             
         except Exception as e:
             print(f"Warning: Failed to update memory via API: {e}")
-            return 0
+            return False
 
     def clear_memory_cache(self, agent_id: str = None, user_id: str = None) -> None:
         """Clear memory cache
