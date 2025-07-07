@@ -123,26 +123,6 @@ class MemoryClient:
             self._memory_cache[key] = memory
             return memory
 
-    def save_memory(self, memory: "Memory") -> bool:
-        """Save memory via API
-
-        Args:
-            memory: Memory instance to save
-
-        Returns:
-            bool: Whether save was successful
-        """
-        # Import here to avoid circular imports
-        from .base import Memory
-        
-        if not isinstance(memory, Memory):
-            print("Warning: Can only save Memory instances")
-            return False
-            
-        # TODO: Implement API endpoint for memory saving
-        print("Info: Memory saving via API endpoint not yet implemented")
-        return True
-
     def update_memory_with_conversation(
         self, agent_id: str, user_id: str, conversation: List[Dict[str, str]]
     ) -> bool:
