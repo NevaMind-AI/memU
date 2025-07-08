@@ -92,9 +92,11 @@ response2 = persona.chat("What did I mention I was learning?", user_id=user_id)
 persona.endsession(user_id)
 
 # Get stored memories
-memory_info = persona.get_memory(user_id)
-print(f"Profile: {memory_info['profile']}")
-print(f"Events: {len(memory_info['events'])} stored")
+memory_info = persona.memory_client.get_memory_by_agent(persona.agent_id, user_id)
+profile = memory_info.get_profile()
+events = memory_info.get_events()
+print(f"Profile: {profile}")
+print(f"Events: {len(events)} stored")
 ```
 
 ### Environment Setup

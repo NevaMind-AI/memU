@@ -249,7 +249,7 @@ event2
         )
 
         return UpdateResult(
-            profile=ProfileMemory("\n".join(updated_profile)),
+            profile=ProfileMemory(updated_profile),
             events=updated_events,
             profile_updated=bool(updated_profile),
             raw_llm_response=response.content,

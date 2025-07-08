@@ -107,15 +107,18 @@ class InteractiveChatDemo:
             memory = self.persona.get_memory(self.user_id)
 
             print("\n=== Memory Status ===")
-            print(f"Profile: {memory['profile'] or 'No profile'}")
-            print(f"Events: {len(memory['events'])} events")
-            if memory["events"]:
-                for event in memory["events"][-3:]:  # Display recent 3 events
+            profile = memory.get_profile()
+            print(f"Profile: {profile or 'No profile'}")
+            events = memory.get_events()
+            print(f"Events: {len(events)} events")
+            if events:
+                for event in events[-3:]:  # Display recent 3 events
                     print(f"  - {event}")
 
-            print(f"Mind: {len(memory['mind'])} insights")
-            if memory["mind"]:
-                for insight in memory["mind"][-2:]:  # Display recent 2 insights
+            mind = memory.get_mind()
+            print(f"Mind: {len(mind)} insights")
+            if mind:
+                for insight in mind[-2:]:  # Display recent 2 insights
                     print(f"  - {insight}")
 
         except Exception as e:

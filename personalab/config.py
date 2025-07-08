@@ -15,6 +15,10 @@ try:
 except ImportError:
     DOTENV_AVAILABLE = False
 
+from personalab.utils import get_logger
+
+logger = get_logger(__name__)
+
 
 class Config:
     """Configuration class for PersonaLab settings"""
@@ -31,8 +35,8 @@ class Config:
     def _load_env_file(self, env_file: Optional[str] = None):
         """Load environment variables from .env file"""
         if not DOTENV_AVAILABLE:
-            print(
-                "Warning: python-dotenv not available. Install with: pip install python-dotenv"
+            logger.warning(
+                "python-dotenv not available. Install with: pip install python-dotenv"
             )
             return
 
@@ -51,9 +55,9 @@ class Config:
 
         if env_path and env_path.exists():
             load_dotenv(env_path)
-            print(f"Loaded environment variables from: {env_path}")
+            logger.info(f"Loaded environment variables from: {env_path}")
         else:
-            print("No .env file found. Create one from .env.example template")
+            logger.info("No .env file found. Create one from .env.example template")
 
     # OpenAI Configuration
     @property
@@ -357,16 +361,16 @@ def setup_env_file():
     example_path = Path(".env.example")
 
     if env_path.exists():
-        print("✓ .env file already exists")
+        logger.info("✓ .env file already exists")
         return
 
     if example_path.exists():
-        print("Setting up .env file from template...")
+        logger.info("Setting up .env file from template...")
         example_content = example_path.read_text()
         env_path.write_text(example_content)
-        print("✓ Created .env file from .env.example")
-        print("📝 Please edit .env file and add your actual API keys")
+        logger.info("✓ Created .env file from .env.example")
+        logger.info("📝 Please edit .env file and add your actual API keys")
     else:
-        print("❌ .env.example template not found")
-        print("💡 Run this to create a basic .env file:")
-        print("   echo 'OPENAI_API_KEY=your_api_key_here' > .env")
+        logger.warning("❌ .env.example template not found")
+        logger.info("💡 Run this to create a basic .env file:")
+        logger.info("   echo 'OPENAI_API_KEY=your_api_key_here' > .env")

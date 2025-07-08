@@ -21,6 +21,10 @@ from pgvector.psycopg2 import register_vector
 
 from ..memory.base import EventMemory, Memory, ProfileMemory
 from ..memo.models import Conversation, ConversationMessage
+from ..utils import get_logger
+from .utils import build_connection_string, test_database_connection, ensure_pgvector_extension
+
+logger = get_logger(__name__)
 
 
 class PostgreSQLStorageBase:
@@ -43,48 +47,37 @@ class PostgreSQLStorageBase:
             self.connection_string = connection_string
         else:
             # Build connection string from parameters or environment variables
-            self.connection_string = self._build_connection_string(**kwargs)
+            self.connection_string = build_connection_string(**kwargs)
 
         self._test_connection()
         self._init_database()
 
-    def _build_connection_string(self, **kwargs) -> str:
-        """Build connection string from parameters or environment variables."""
-        params = {
-            "host": kwargs.get("host", os.getenv("POSTGRES_HOST", "localhost")),
-            "port": kwargs.get("port", os.getenv("POSTGRES_PORT", "5432")),
-            "dbname": kwargs.get("dbname", os.getenv("POSTGRES_DB", "personalab")),
-            "user": kwargs.get("user", os.getenv("POSTGRES_USER", "postgres")),
-            "password": kwargs.get(
-                "password", os.getenv("POSTGRES_PASSWORD", "postgres")
-            ),
-        }
-
-        return f"postgresql://{params['user']}:{params['password']}@{params['host']}:{params['port']}/{params['dbname']}"
-
-    def _test_connection(self):
+    def _test_connection(self) -> None:
         """Test database connection."""
+        if not test_database_connection(self.connection_string):
+            raise ConnectionError("Failed to connect to PostgreSQL database")
+        logger.debug("Database connection test successful")
+
+    def _init_database(self) -> None:
+        """Initialize database with pgvector extension and create tables."""
         try:
+            # Ensure pgvector extension
+            if not ensure_pgvector_extension(self.connection_string):
+                logger.warning("pgvector extension may not be available")
+            
             with psycopg2.connect(self.connection_string) as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT 1")
+                    # Create tables specific to this storage type
+                    self._init_tables(cur)
+                    conn.commit()
+                    
+                    # Register pgvector types
+                    register_vector(conn)
+                    
+            logger.info("Database initialization completed")
         except Exception as e:
-            raise ConnectionError(f"Failed to connect to PostgreSQL: {e}")
-
-    def _init_database(self):
-        """Initialize database with pgvector extension and create tables."""
-        with psycopg2.connect(self.connection_string) as conn:
-            with conn.cursor() as cur:
-                # Enable pgvector extension
-                cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
-                
-                # Create tables specific to this storage type
-                self._init_tables(cur)
-                
-                conn.commit()
-                
-                # Register pgvector types
-                register_vector(conn)
+            logger.error(f"Database initialization failed: {e}")
+            raise
 
     def _init_tables(self, cur):
         """Initialize tables specific to the storage type. Override in subclasses."""
@@ -121,21 +114,13 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                 version INTEGER DEFAULT 3,
 
                 -- Embedded content for simplified access
-                profile_content TEXT,
+                profile_content JSONB,
                 event_content JSONB,
                 mind_content JSONB,
 
-                -- Theory of Mind analysis results
-                mind_metadata JSONB,
-                confidence_score REAL DEFAULT 0.0,
-
                 -- Memory statistics
                 profile_content_hash TEXT,
-                event_count INTEGER DEFAULT 0,
                 last_event_date TIMESTAMP,
-
-                -- Schema versioning for migrations
-                schema_version INTEGER DEFAULT 3,
 
                 -- Unique constraint for agent-user combination
                 UNIQUE(agent_id, user_id)
@@ -183,9 +168,6 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
             "CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)"
         )
         cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_memories_schema_version ON memories(schema_version)"
-        )
-        cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_memory_contents_memory_type ON memory_contents(memory_id, content_type)"
         )
         cur.execute(
@@ -203,6 +185,10 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
     def save_memory(self, memory: Memory) -> bool:
         """
         Save complete Memory object to database.
+        
+        Design: 
+        - memories table: metadata only (memory_id, agent_id, user_id, timestamps)
+        - memory_contents table: all content (profile, events, mind) with vectors
 
         Args:
             memory: Memory object
@@ -213,66 +199,83 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
         try:
             with psycopg2.connect(self.connection_string) as conn:
                 with conn.cursor() as cur:
-                    # 1. Save Memory basic information
+                    # 1. Save/update metadata in memories table (no content)
                     cur.execute(
                         """
                         INSERT INTO memories
-                        (memory_id, agent_id, user_id, created_at, updated_at, mind_metadata,
-                         profile_content_hash, event_count, last_event_date, profile_content,
-                         event_content, mind_content)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (memory_id) DO UPDATE SET
-                        updated_at = EXCLUDED.updated_at,
-                        mind_metadata = EXCLUDED.mind_metadata,
-                        profile_content_hash = EXCLUDED.profile_content_hash,
-                        event_count = EXCLUDED.event_count,
-                        last_event_date = EXCLUDED.last_event_date,
-                        profile_content = EXCLUDED.profile_content,
-                        event_content = EXCLUDED.event_content,
-                        mind_content = EXCLUDED.mind_content
-                    """,
+                        (memory_id, agent_id, user_id, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (agent_id, user_id) DO UPDATE SET
+                        memory_id = EXCLUDED.memory_id,
+                        updated_at = EXCLUDED.updated_at
+                        """,
                         (
                             memory.memory_id,
                             memory.agent_id,
                             memory.user_id,
                             memory.created_at,
                             memory.updated_at,
-                            (
-                                json.dumps(memory.mind_metadata)
-                                if memory.mind_metadata
-                                else None
-                            ),
-                            self._calculate_hash("\n".join(memory.get_profile_content())),
-                            len(memory.get_event_content()),
-                            datetime.now(),
-                            json.dumps(memory.get_profile_content()),
-                            json.dumps(memory.get_event_content()),
-                            json.dumps(memory.get_mind_content()),
                         ),
                     )
 
-                    # 2. Save ProfileMemory content
-                    if memory.get_profile_content():
-                        self._save_profile_content(
-                            cur, memory.memory_id, memory.profile_memory
-                        )
+                    # 2. Save content to memory_contents table
+                    profile_content = memory.get_profile()
+                    if profile_content:
+                        self._save_content(cur, memory.memory_id, 'profile', profile_content)
 
-                    # 3. Save EventMemory content
-                    if memory.get_event_content():
-                        self._save_event_content(
-                            cur, memory.memory_id, memory.event_memory
-                        )
+                    event_content = memory.get_events()
+                    if event_content:
+                        self._save_content(cur, memory.memory_id, 'event', event_content)
+
+                    mind_content = memory.get_mind()
+                    if mind_content:
+                        self._save_content(cur, memory.memory_id, 'mind', mind_content)
 
                     conn.commit()
                     return True
 
         except Exception as e:
-            print(f"Error saving memory: {e}")
+            logger.error(f"Error saving memory: {e}")
             return False
+
+    def _save_content(self, cur, memory_id: str, content_type: str, content: list):
+        """Save content to memory_contents table using consistent new format."""
+        # Use consistent new format: {"profile": [...], "event": [...], "mind": [...]}
+        content_data = {content_type: content}
+        content_id = f"{memory_id}_{content_type}"
+        content_text = "\n".join(content) if isinstance(content, list) else str(content)
+        content_hash = self._calculate_hash(content_text)
+
+        cur.execute(
+            """
+            INSERT INTO memory_contents
+            (content_id, memory_id, content_type, content_data, content_text, content_hash, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (memory_id, content_type) DO UPDATE SET
+            content_data = EXCLUDED.content_data,
+            content_text = EXCLUDED.content_text,
+            content_hash = EXCLUDED.content_hash,
+            updated_at = EXCLUDED.updated_at
+            """,
+            (
+                content_id,
+                memory_id,
+                content_type,
+                json.dumps(content_data),
+                content_text,
+                content_hash,
+                datetime.now(),
+                datetime.now(),
+            ),
+        )
 
     def load_memory(self, memory_id: str) -> Optional[Memory]:
         """
         Load complete Memory object from database.
+        
+        Design:
+        - Load metadata from memories table
+        - Load all content from memory_contents table
 
         Args:
             memory_id: Memory ID
@@ -283,7 +286,7 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
         try:
             with psycopg2.connect(self.connection_string) as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    # 1. Load Memory basic information
+                    # 1. Load metadata from memories table
                     cur.execute(
                         "SELECT * FROM memories WHERE memory_id = %s", (memory_id,)
                     )
@@ -292,39 +295,62 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                     if not memory_row:
                         return None
 
-                    # 2. Create Memory object
+                    # 2. Create Memory object with metadata
                     memory = Memory(
                         agent_id=memory_row["agent_id"],
                         user_id=memory_row.get("user_id", "default_user"),
+                        memory_client=None,  # No API client needed for database operations
                         memory_id=memory_id,
                     )
                     memory.created_at = memory_row["created_at"]
                     memory.updated_at = memory_row["updated_at"]
 
-                    if memory_row["mind_metadata"]:
-                        memory.mind_metadata = memory_row["mind_metadata"]
-
-                    # 3. Load ProfileMemory content
-                    profile_content = self._load_profile_content(cur, memory_id)
-                    if profile_content:
-                        memory.profile_memory = ProfileMemory(profile_content)
-
-                    # 4. Load EventMemory content
-                    event_content = self._load_event_content(cur, memory_id)
-                    if event_content:
-                        memory.event_memory = EventMemory(event_content)
+                    # 3. Load all content from memory_contents table
+                    cur.execute(
+                        """
+                        SELECT content_type, content_data 
+                        FROM memory_contents 
+                        WHERE memory_id = %s
+                        """, 
+                        (memory_id,)
+                    )
+                    
+                    content_rows = cur.fetchall()
+                    for row in content_rows:
+                        content_type = row["content_type"]
+                        content_data = row["content_data"]
+                        
+                        try:
+                            # Parse content_data JSON
+                            if isinstance(content_data, str):
+                                content_json = json.loads(content_data)
+                            else:
+                                content_json = content_data
+                            
+                            # Extract content using new unified format
+                            if content_type == 'profile' and 'profile' in content_json:
+                                memory.profile_memory = ProfileMemory(content_json['profile'])
+                            elif content_type == 'event' and 'event' in content_json:
+                                memory.event_memory = EventMemory(content_json['event'])
+                            elif content_type == 'mind' and 'mind' in content_json:
+                                memory.mind_content = content_json['mind']
+                                
+                        except (json.JSONDecodeError, TypeError, KeyError) as e:
+                            logger.warning(f"Error parsing {content_type} content: {e}")
 
                     return memory
 
         except Exception as e:
-            print(f"Error loading memory: {e}")
+            logger.error(f"Error loading memory: {e}")
             return None
 
-    def get_memory_by_agent_and_user(
-        self, agent_id: str, user_id: str
-    ) -> Optional[Memory]:
+    def get_memory_by_agent(self, agent_id: str, user_id: str) -> Optional[Memory]:
         """
-        Load Memory by Agent ID and User ID.
+        Get Memory by agent_id and user_id.
+        
+        Design:
+        - Query memories table by agent_id and user_id
+        - Load content from memory_contents table
 
         Args:
             agent_id: Agent ID
@@ -335,25 +361,22 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
         """
         try:
             with psycopg2.connect(self.connection_string) as conn:
-                with conn.cursor() as cur:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    # Find memory_id by agent_id and user_id
                     cur.execute(
-                        """
-                        SELECT memory_id FROM memories
-                        WHERE agent_id = %s AND user_id = %s
-                        ORDER BY updated_at DESC
-                        LIMIT 1
-                    """,
+                        "SELECT memory_id FROM memories WHERE agent_id = %s AND user_id = %s",
                         (agent_id, user_id),
                     )
+                    result = cur.fetchone()
 
-                    row = cur.fetchone()
-                    if row:
-                        return self.load_memory(row[0])
+                    if not result:
+                        return None
 
-                    return None
+                    # Load complete memory using memory_id
+                    return self.load_memory(result["memory_id"])
 
         except Exception as e:
-            print(f"Error loading memory by agent and user: {e}")
+            logger.error(f"Error getting memory by agent: {e}")
             return None
 
     def search_similar_memories(
@@ -418,7 +441,7 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                     return [dict(row) for row in results]
 
         except Exception as e:
-            print(f"Error searching similar memories: {e}")
+            logger.error(f"Error searching similar memories: {e}")
             return []
 
     def save_memory_embedding(
@@ -452,12 +475,12 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                     return cur.rowcount > 0
 
         except Exception as e:
-            print(f"Error saving memory embedding: {e}")
+            logger.error(f"Error saving memory embedding: {e}")
             return False
 
     def delete_memory(self, memory_id: str) -> bool:
         """
-        Delete Memory object with CASCADE handling.
+        Delete Memory and all its content from database.
 
         Args:
             memory_id: Memory ID
@@ -468,16 +491,14 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
         try:
             with psycopg2.connect(self.connection_string) as conn:
                 with conn.cursor() as cur:
-                    # Delete main memory record (CASCADE will handle related content)
-                    cur.execute(
-                        "DELETE FROM memories WHERE memory_id = %s", (memory_id,)
-                    )
+                    # Delete from memories table (cascade will handle related records)
+                    cur.execute("DELETE FROM memories WHERE memory_id = %s", (memory_id,))
 
                     conn.commit()
-                    return cur.rowcount > 0
+                    return True
 
         except Exception as e:
-            print(f"Error deleting memory: {e}")
+            logger.error(f"Error deleting memory: {e}")
             return False
 
     def get_memory_stats(self, agent_id: str) -> Dict[str, Any]:
@@ -497,8 +518,7 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                         """
                         SELECT
                             COUNT(*) as total_memories,
-                            MAX(updated_at) as last_updated,
-                            SUM(event_count) as total_events
+                            MAX(updated_at) as last_updated
                         FROM memories
                         WHERE agent_id = %s
                     """,
@@ -515,118 +535,11 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                             if stats_row["last_updated"]
                             else None
                         ),
-                        "total_events": stats_row["total_events"] or 0,
                     }
 
         except Exception as e:
-            print(f"Error getting memory stats: {e}")
+            logger.error(f"Error getting memory stats: {e}")
             return {}
-
-    def _save_profile_content(self, cur, memory_id: str, profile_memory: ProfileMemory):
-        """Save profile memory content."""
-        profile_items = profile_memory.get_content()
-        content_data = {"items": profile_items}
-
-        content_id = f"{memory_id}_profile"
-        content_text = "\n".join(profile_items)  # Combine items for text search
-        content_hash = self._calculate_hash(content_text)
-
-        cur.execute(
-            """
-            INSERT INTO memory_contents
-            (content_id, memory_id, content_type, content_data, content_text, content_hash, created_at, updated_at)
-            VALUES (%s, %s, 'profile', %s, %s, %s, %s, %s)
-            ON CONFLICT (memory_id, content_type) DO UPDATE SET
-            content_data = EXCLUDED.content_data,
-            content_text = EXCLUDED.content_text,
-            content_hash = EXCLUDED.content_hash,
-            updated_at = EXCLUDED.updated_at
-        """,
-            (
-                content_id,
-                memory_id,
-                json.dumps(content_data),
-                content_text,
-                content_hash,
-                datetime.now(),
-                datetime.now(),
-            ),
-        )
-
-    def _save_event_content(self, cur, memory_id: str, event_memory: EventMemory):
-        """Save event memory content."""
-        events = event_memory.get_content()
-        content_data = {"events": events}
-
-        content_id = f"{memory_id}_event"
-        content_text = "\n".join(events)  # Combine events for text search
-        content_hash = self._calculate_hash(content_text)
-
-        cur.execute(
-            """
-            INSERT INTO memory_contents
-            (content_id, memory_id, content_type, content_data, content_text, content_hash, created_at, updated_at)
-            VALUES (%s, %s, 'event', %s, %s, %s, %s, %s)
-            ON CONFLICT (memory_id, content_type) DO UPDATE SET
-            content_data = EXCLUDED.content_data,
-            content_text = EXCLUDED.content_text,
-            content_hash = EXCLUDED.content_hash,
-            updated_at = EXCLUDED.updated_at
-        """,
-            (
-                content_id,
-                memory_id,
-                json.dumps(content_data),
-                content_text,
-                content_hash,
-                datetime.now(),
-                datetime.now(),
-            ),
-        )
-
-    def _load_profile_content(self, cur, memory_id: str) -> Optional[List[str]]:
-        """Load profile memory content."""
-        cur.execute(
-            """
-            SELECT content_data FROM memory_contents
-            WHERE memory_id = %s AND content_type = 'profile'
-        """,
-            (memory_id,),
-        )
-
-        row = cur.fetchone()
-        if row:
-            content_data = row[0] if isinstance(row[0], dict) else json.loads(row[0])
-            
-            # Handle both new format (items) and old format (paragraph) for backward compatibility
-            if "items" in content_data:
-                return content_data["items"]
-            elif "paragraph" in content_data:
-                # Convert old string format to list
-                paragraph = content_data["paragraph"]
-                if paragraph.strip():
-                    return [item.strip() for item in paragraph.split('\n') if item.strip()]
-                else:
-                    return []
-            
-        return None
-
-    def _load_event_content(self, cur, memory_id: str) -> Optional[List[str]]:
-        """Load event memory content."""
-        cur.execute(
-            """
-            SELECT content_data FROM memory_contents
-            WHERE memory_id = %s AND content_type = 'event'
-        """,
-            (memory_id,),
-        )
-
-        row = cur.fetchone()
-        if row:
-            content_data = row[0] if isinstance(row[0], dict) else json.loads(row[0])
-            return content_data.get("events", [])
-
-        return None
 
 
 class PostgreSQLConversationDB(PostgreSQLStorageBase):
@@ -651,27 +564,7 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
                 pipeline_result JSONB,
                 memory_id TEXT,
                 session_id TEXT,
-                turn_count INTEGER DEFAULT 0,
-                summary TEXT,
                 conversation_vector vector(1536)  -- For conversation-level embeddings
-            )
-        """
-        )
-
-        # Create conversation_messages table
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS conversation_messages (
-                message_id TEXT PRIMARY KEY,
-                conversation_id TEXT NOT NULL,
-                role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
-                content TEXT NOT NULL,
-                message_index INTEGER NOT NULL,
-                created_at TIMESTAMP NOT NULL,
-                message_vector vector(1536),  -- For message-level embeddings
-
-                FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE,
-                UNIQUE(conversation_id, message_index)
             )
         """
         )
@@ -690,24 +583,11 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
             "CREATE INDEX IF NOT EXISTS idx_conversations_session_id ON conversations(session_id)"
         )
 
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON conversation_messages(conversation_id)"
-        )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_messages_role ON conversation_messages(role)"
-        )
-
-        # Create vector similarity search indexes using HNSW
+        # Create vector similarity search index using HNSW
         cur.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_conversations_vector_hnsw
             ON conversations USING hnsw (conversation_vector vector_cosine_ops)
-        """
-        )
-        cur.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_messages_vector_hnsw
-            ON conversation_messages USING hnsw (message_vector vector_cosine_ops)
         """
         )
 
@@ -729,15 +609,13 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
                         """
                         INSERT INTO conversations
                         (conversation_id, agent_id, user_id, created_at, conversation_data,
-                         pipeline_result, memory_id, session_id, turn_count, summary)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         pipeline_result, memory_id, session_id)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (conversation_id) DO UPDATE SET
                         conversation_data = EXCLUDED.conversation_data,
                         pipeline_result = EXCLUDED.pipeline_result,
                         memory_id = EXCLUDED.memory_id,
-                        session_id = EXCLUDED.session_id,
-                        turn_count = EXCLUDED.turn_count,
-                        summary = EXCLUDED.summary
+                        session_id = EXCLUDED.session_id
                     """,
                         [
                             conversation.conversation_id,
@@ -754,40 +632,14 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
                             ),
                             conversation.memory_id,
                             conversation.session_id,
-                            conversation.turn_count,
-                            conversation.summary,
                         ],
                     )
-
-                    # Delete existing messages for this conversation
-                    cur.execute(
-                        "DELETE FROM conversation_messages WHERE conversation_id = %s",
-                        [conversation.conversation_id],
-                    )
-
-                    # Save individual messages
-                    for message in conversation.messages:
-                        cur.execute(
-                            """
-                            INSERT INTO conversation_messages
-                            (message_id, conversation_id, role, content, message_index, created_at)
-                            VALUES (%s, %s, %s, %s, %s, %s)
-                        """,
-                            [
-                                message.message_id,
-                                conversation.conversation_id,
-                                message.role,
-                                message.content,
-                                message.message_index,
-                                message.created_at,
-                            ],
-                        )
 
                     conn.commit()
                     return True
 
         except Exception as e:
-            print(f"Error saving conversation: {e}")
+            logger.error(f"Error saving conversation: {e}")
             return False
 
     def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
@@ -813,29 +665,26 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
                     if not conv_row:
                         return None
 
-                    # Get messages
-                    cur.execute(
-                        """
-                        SELECT * FROM conversation_messages 
-                        WHERE conversation_id = %s 
-                        ORDER BY message_index
-                    """,
-                        [conversation_id],
-                    )
-
-                    message_rows = cur.fetchall()
-
-                    # Create ConversationMessage objects
+                    # Parse messages from conversation_data JSONB
                     messages = []
-                    for msg_row in message_rows:
-                        message = ConversationMessage(
-                            role=msg_row["role"],
-                            content=msg_row["content"],
-                            message_index=msg_row["message_index"],
-                            message_id=msg_row["message_id"],
-                            created_at=msg_row["created_at"],
-                        )
-                        messages.append(message)
+                    if conv_row["conversation_data"]:
+                        try:
+                            # conversation_data contains the list of message dictionaries
+                            message_data_list = conv_row["conversation_data"]
+                            if isinstance(message_data_list, str):
+                                message_data_list = json.loads(message_data_list)
+                            
+                            for msg_data in message_data_list:
+                                message = ConversationMessage(
+                                    role=msg_data["role"],
+                                    content=msg_data["content"],
+                                    message_index=msg_data.get("message_index", 0),
+                                    message_id=msg_data.get("message_id", ""),
+                                    created_at=msg_data.get("created_at"),
+                                )
+                                messages.append(message)
+                        except (json.JSONDecodeError, TypeError, KeyError) as e:
+                            logger.warning(f"Error parsing conversation data: {e}")
 
                     # Create Conversation object
                     conversation = Conversation(
@@ -852,15 +701,11 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
                         conversation.memory_id = conv_row["memory_id"]
                     if conv_row["session_id"]:
                         conversation.session_id = conv_row["session_id"]
-                    if conv_row["turn_count"]:
-                        conversation.turn_count = conv_row["turn_count"]
-                    if conv_row["summary"]:
-                        conversation.summary = conv_row["summary"]
 
                     return conversation
 
         except Exception as e:
-            print(f"Error getting conversation: {e}")
+            logger.error(f"Error getting conversation: {e}")
             return None
 
     def get_conversations_by_agent(
@@ -888,7 +733,7 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
                     # Build query with filters
                     query = """
                         SELECT conversation_id, agent_id, user_id, created_at, 
-                               memory_id, session_id, turn_count, summary
+                               memory_id, session_id
                         FROM conversations 
                         WHERE agent_id = %s
                     """
@@ -911,7 +756,7 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
                     return [dict(row) for row in results]
 
         except Exception as e:
-            print(f"Error getting conversations by agent: {e}")
+            logger.error(f"Error getting conversations by agent: {e}")
             return []
 
     def delete_conversation(self, conversation_id: str) -> bool:
@@ -937,7 +782,7 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
                     return cur.rowcount > 0
 
         except Exception as e:
-            print(f"Error deleting conversation: {e}")
+            logger.error(f"Error deleting conversation: {e}")
             return False
 
     def save_conversation_embedding(
@@ -960,47 +805,17 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
                     cur.execute(
                         """
                         UPDATE conversations 
-                        SET conversation_vector = %s::vector, summary = %s
+                        SET conversation_vector = %s::vector
                         WHERE conversation_id = %s
                     """,
-                        [str(vector), content_text, conversation_id],
+                        [str(vector), conversation_id],
                     )
 
                     conn.commit()
                     return cur.rowcount > 0
 
         except Exception as e:
-            print(f"Error saving conversation embedding: {e}")
-            return False
-
-    def save_message_embedding(self, message_id: str, vector: List[float]) -> bool:
-        """
-        Save message-level embedding.
-
-        Args:
-            message_id: Message ID
-            vector: Embedding vector
-
-        Returns:
-            bool: Whether save was successful
-        """
-        try:
-            with psycopg2.connect(self.connection_string) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        UPDATE conversation_messages 
-                        SET message_vector = %s::vector
-                        WHERE message_id = %s
-                    """,
-                        [str(vector), message_id],
-                    )
-
-                    conn.commit()
-                    return cur.rowcount > 0
-
-        except Exception as e:
-            print(f"Error saving message embedding: {e}")
+            logger.error(f"Error saving conversation embedding: {e}")
             return False
 
     def search_similar_conversations(
@@ -1034,8 +849,6 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
                             created_at,
                             memory_id,
                             session_id,
-                            turn_count,
-                            summary,
                             1 - (conversation_vector <=> %s::vector) as similarity
                         FROM conversations
                         WHERE agent_id = %s
@@ -1058,5 +871,5 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
                     return [dict(row) for row in results]
 
         except Exception as e:
-            print(f"Error searching similar conversations: {e}")
+            logger.error(f"Error searching similar conversations: {e}")
             return [] 

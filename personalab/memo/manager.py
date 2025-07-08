@@ -10,6 +10,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..db import DatabaseManager, get_database_manager
 from .embeddings import create_embedding_manager
 from .models import Conversation, ConversationMessage
+from ..utils import get_logger
+
+logger = get_logger(__name__)
 
 
 class ConversationManager:
@@ -118,19 +121,13 @@ class ConversationManager:
 
             # Generate message-level embeddings for substantial messages
             for message in conversation.messages:
-                if len(message.content) > 20:  # Only embed substantial messages
+                if len(message.content) > 20:  
                     msg_embedding = self.embedding_manager.provider.generate_embedding(
                         message.content
                     )
-
-                    # Save message embedding directly in message table
-                    if hasattr(self.db, "save_message_embedding"):
-                        self.db.save_message_embedding(
-                            message.message_id, msg_embedding
-                        )
-
+                    
         except Exception as e:
-            print(f"Error generating embeddings: {e}")
+            logger.error(f"Error generating embeddings: {e}")
 
     def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
         """
@@ -185,7 +182,7 @@ class ConversationManager:
             List[Dict]: Similar conversations with similarity scores
         """
         if not self.enable_embeddings or not self.embedding_manager:
-            print("Embeddings not enabled. Search functionality is not available.")
+            logger.warning("Embeddings not enabled. Search functionality is not available.")
             return []
 
         try:
@@ -213,9 +210,7 @@ class ConversationManager:
                                 if hasattr(conv["created_at"], "isoformat")
                                 else conv["created_at"]
                             ),
-                            "summary": conv.get("summary"),
                             "session_id": conv.get("session_id"),
-                            "turn_count": conv.get("turn_count"),
                             "similarity_score": conv["similarity_score"],
                             "matched_content": f"Conversation from {conv['created_at']}",
                         }
@@ -224,11 +219,11 @@ class ConversationManager:
                 return results
             else:
                 # Database doesn't support direct conversation vector search
-                print("Vector search not supported by current database configuration")
+                logger.warning("Vector search not supported by current database configuration")
                 return []
 
         except Exception as e:
-            print(f"Error in semantic search: {e}")
+            logger.error(f"Error in semantic search: {e}")
             return []
 
     def delete_conversation(self, conversation_id: str) -> bool:
@@ -291,7 +286,6 @@ class ConversationManager:
             return {
                 "total_conversations": 0,
                 "total_sessions": 0,
-                "total_turns": 0,
                 "embedding_enabled": self.enable_embeddings,
                 "embedding_model": (
                     self.embedding_manager.model_name
@@ -301,14 +295,11 @@ class ConversationManager:
             }
 
         # Calculate statistics
-        total_turns = sum(conv["turn_count"] for conv in recent_convs)
-        unique_sessions = len(set(conv["session_id"] for conv in recent_convs))
+        unique_sessions = len(set(conv["session_id"] for conv in recent_convs if conv.get("session_id")))
 
         return {
             "total_conversations": len(recent_convs),
             "total_sessions": unique_sessions,
-            "total_turns": total_turns,
-            "average_turns_per_conversation": total_turns / len(recent_convs),
             "embedding_enabled": self.enable_embeddings,
             "embedding_model": (
                 self.embedding_manager.model_name if self.embedding_manager else None

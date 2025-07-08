@@ -4,6 +4,7 @@ PersonaLab Database Module
 Centralized database management:
 - PostgreSQL storage implementations with pgvector support
 - Database configuration and connection management
+- Database utility functions and helpers
 """
 
 from .config import (
@@ -13,6 +14,16 @@ from .config import (
     setup_postgresql,
 )
 from .pg_storage import PostgreSQLMemoryDB, PostgreSQLConversationDB, PostgreSQLStorageBase
+from .utils import (
+    build_connection_string,
+    test_database_connection,
+    get_db_connection,
+    get_db_cursor,
+    database_operation,
+    safe_database_operation,
+    get_database_info,
+    ensure_pgvector_extension,
+)
 
 __all__ = [
     # Storage implementations
@@ -24,4 +35,13 @@ __all__ = [
     "DatabaseManager",
     "get_database_manager",
     "setup_postgresql",
+    # Database utilities
+    "build_connection_string",
+    "test_database_connection",
+    "get_db_connection",
+    "get_db_cursor",
+    "database_operation",
+    "safe_database_operation",
+    "get_database_info",
+    "ensure_pgvector_extension",
 ] 

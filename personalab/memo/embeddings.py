@@ -8,6 +8,10 @@ into vector representations for similarity search.
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union
 
+from ..utils import get_logger
+
+logger = get_logger(__name__)
+
 
 class EmbeddingProvider(ABC):
     """Abstract base class for embedding providers."""
@@ -75,7 +79,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             response = self.client.embeddings.create(model=self.model, input=text)
             return response.data[0].embedding
         except Exception as e:
-            print(f"Error generating OpenAI embedding: {e}")
+            logger.error(f"Error generating OpenAI embedding: {e}")
             raise RuntimeError(f"OpenAI embedding generation failed: {e}")
 
     @property
@@ -113,7 +117,7 @@ class SentenceTransformerProvider(EmbeddingProvider):
             embedding = self.model.encode(text)
             return embedding.tolist()
         except Exception as e:
-            print(f"Error generating sentence transformer embedding: {e}")
+            logger.error(f"Error generating sentence transformer embedding: {e}")
             raise RuntimeError(f"Sentence transformer embedding generation failed: {e}")
 
     @property
@@ -212,14 +216,14 @@ def create_embedding_manager(provider_type: str = "auto", **kwargs) -> Embedding
 
         try:
             provider = OpenAIEmbeddingProvider(**kwargs)
-            print(f"Using OpenAI embedding provider: {provider.model_name}")
+            logger.info(f"Using OpenAI embedding provider: {provider.model_name}")
             return EmbeddingManager(provider)
         except Exception as e:
             errors.append(f"OpenAI: {e}")
 
         try:
             provider = SentenceTransformerProvider(**kwargs)
-            print(f"Using Sentence Transformer provider: {provider.model_name}")
+            logger.info(f"Using Sentence Transformer provider: {provider.model_name}")
             return EmbeddingManager(provider)
         except Exception as e:
             errors.append(f"SentenceTransformer: {e}")

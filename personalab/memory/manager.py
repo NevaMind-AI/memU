@@ -11,6 +11,10 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 import requests
 
+from ..utils import get_logger
+
+logger = get_logger(__name__)
+
 
 class MemoryClient:
     """
@@ -22,21 +26,24 @@ class MemoryClient:
 
     def __init__(
         self,
-        api_url: str = "http://localhost:8000",
+        agent_id: str = None,
+        api_url: str = "http://localhost:8080",
         timeout: int = 30,
     ):
         """
         Initialize MemoryClient.
 
         Args:
-            api_url: Remote API URL for memory operations (e.g., "http://remote-server:8000")
+            agent_id: Agent ID (optional, but recommended for convenience)
+            api_url: Remote API URL for memory operations (e.g., "http://remote-server:8080")
             timeout: Request timeout in seconds
         """
+        self.agent_id = agent_id
         self.api_url = api_url.rstrip('/')
         self.timeout = timeout
         self._memory_cache = {}  # Cache for loaded memories
         
-        print(f"🌐 MemoryClient initialized with API: {self.api_url}")
+        logger.info(f"MemoryClient initialized with API: {self.api_url}, agent_id: {agent_id}")
 
     def _make_api_request(self, method: str, endpoint: str, data: dict = None, params: dict = None) -> dict:
         """Make HTTP request to remote API
@@ -68,16 +75,25 @@ class MemoryClient:
         except requests.exceptions.RequestException as e:
             raise Exception(f"API request failed: {e}")
 
-    def get_memory_by_agent(self, agent_id: str, user_id: str) -> "Memory":
+    def get_memory_by_agent(self, agent_id: str = None, user_id: str = None) -> "Memory":
         """Get memory instance by agent_id and user_id
 
         Args:
-            agent_id: Agent ID
+            agent_id: Agent ID (optional if set in constructor)
             user_id: User ID (required)
 
         Returns:
             Memory instance for the specified agent and user
         """
+        # Use provided agent_id or fallback to instance agent_id
+        if agent_id is None:
+            agent_id = self.agent_id
+        if agent_id is None:
+            raise ValueError("agent_id must be provided either in constructor or method call")
+        
+        if user_id is None:
+            raise ValueError("user_id is required")
+        
         # Import here to avoid circular imports
         from .base import Memory
         
@@ -123,22 +139,46 @@ class MemoryClient:
             self._memory_cache[key] = memory
             return memory
 
+    def get_memory(self, user_id: str) -> "Memory":
+        """Get memory instance for the configured agent and specified user
+        
+        Convenience method that uses the agent_id from constructor.
+
+        Args:
+            user_id: User ID (required)
+
+        Returns:
+            Memory instance for the configured agent and specified user
+        """
+        if self.agent_id is None:
+            raise ValueError("agent_id must be set in constructor to use this method")
+        return self.get_memory_by_agent(self.agent_id, user_id)
+
     def update_memory_with_conversation(
-        self, agent_id: str, user_id: str, conversation: List[Dict[str, str]]
+        self, agent_id: str = None, user_id: str = None, conversation: List[Dict[str, str]] = None
     ) -> bool:
         """Update memory with a conversation via API
 
         Args:
-            agent_id: Agent ID
+            agent_id: Agent ID (optional if set in constructor)
             user_id: User ID (required)
             conversation: List of conversation messages
 
         Returns:
             True if update was successful, False otherwise
         """
+        # Use provided agent_id or fallback to instance agent_id
+        if agent_id is None:
+            agent_id = self.agent_id
+        if agent_id is None:
+            raise ValueError("agent_id must be provided either in constructor or method call")
+            
+        if user_id is None:
+            raise ValueError("user_id is required")
+            
         try:
             # Send conversation to API for processing
-            response = self._make_api_request("POST", "memories/update-conversation", data={
+            response = self._make_api_request("POST", "memories/update-memory", data={
                 "agent_id": agent_id,
                 "user_id": user_id,
                 "conversation": conversation
@@ -179,16 +219,25 @@ class MemoryClient:
             # Clear all cache
             self._memory_cache.clear()
 
-    def get_memory_prompt(self, agent_id: str, user_id: str) -> str:
+    def get_memory_prompt(self, agent_id: str = None, user_id: str = None) -> str:
         """Get memory context as a prompt
 
         Args:
-            agent_id: Agent ID
+            agent_id: Agent ID (optional if set in constructor)
             user_id: User ID (required)
 
         Returns:
             Formatted memory prompt
         """
+        # Use provided agent_id or fallback to instance agent_id
+        if agent_id is None:
+            agent_id = self.agent_id
+        if agent_id is None:
+            raise ValueError("agent_id must be provided either in constructor or method call")
+            
+        if user_id is None:
+            raise ValueError("user_id is required")
+            
         memory = self.get_memory_by_agent(agent_id, user_id)
 
         prompt_parts = []
@@ -216,16 +265,25 @@ class MemoryClient:
 
         return "\n\n".join(prompt_parts) if prompt_parts else ""
 
-    def get_memory_info(self, agent_id: str, user_id: str) -> Dict[str, Any]:
-        """Get memory information and statistics
+    def get_memory_info(self, agent_id: str = None, user_id: str = None) -> Dict[str, Any]:
+        """Get detailed memory information
 
         Args:
-            agent_id: Agent ID
+            agent_id: Agent ID (optional if set in constructor)
             user_id: User ID (required)
 
         Returns:
-            Dictionary containing memory statistics and information
+            Dictionary with memory statistics and content
         """
+        # Use provided agent_id or fallback to instance agent_id
+        if agent_id is None:
+            agent_id = self.agent_id
+        if agent_id is None:
+            raise ValueError("agent_id must be provided either in constructor or method call")
+            
+        if user_id is None:
+            raise ValueError("user_id is required")
+            
         memory = self.get_memory_by_agent(agent_id, user_id)
 
         profile = memory.get_profile()
@@ -242,16 +300,25 @@ class MemoryClient:
             "memory_stats": memory.get_memory_stats(),
         }
 
-    def export_memory(self, agent_id: str, user_id: str) -> Dict[str, Any]:
-        """Export all memory data for an agent-user combination
+    def export_memory(self, agent_id: str = None, user_id: str = None) -> Dict[str, Any]:
+        """Export memory data for backup or migration
 
         Args:
-            agent_id: Agent ID
+            agent_id: Agent ID (optional if set in constructor)
             user_id: User ID (required)
 
         Returns:
-            Dictionary containing all memory data
+            Dictionary with complete memory data
         """
+        # Use provided agent_id or fallback to instance agent_id
+        if agent_id is None:
+            agent_id = self.agent_id
+        if agent_id is None:
+            raise ValueError("agent_id must be provided either in constructor or method call")
+            
+        if user_id is None:
+            raise ValueError("user_id is required")
+            
         memory = self.get_memory_by_agent(agent_id, user_id)
 
         return {
@@ -263,18 +330,26 @@ class MemoryClient:
             "metadata": memory.get_memory_stats(),
         }
 
-    def update_profile(self, agent_id: str, user_id: str, profile_info: str) -> bool:
-        """
-        Update profile information via API.
+    def update_profile(self, agent_id: str = None, user_id: str = None, profile_info: str = None) -> bool:
+        """Update profile information via API
 
         Args:
-            agent_id: Agent ID
-            user_id: User ID
-            profile_info: Profile information
+            agent_id: Agent ID (optional if set in constructor)
+            user_id: User ID (required)
+            profile_info: Profile information to add
 
         Returns:
-            bool: Whether update was successful
+            True if update was successful, False otherwise
         """
+        # Use provided agent_id or fallback to instance agent_id
+        if agent_id is None:
+            agent_id = self.agent_id
+        if agent_id is None:
+            raise ValueError("agent_id must be provided either in constructor or method call")
+            
+        if user_id is None:
+            raise ValueError("user_id is required")
+
         try:
             response = self._make_api_request("POST", "memories/update-profile", data={
                 "agent_id": agent_id,
@@ -289,21 +364,29 @@ class MemoryClient:
                 
             return response.get("success", False)
         except Exception as e:
-            print(f"Error updating profile via API: {e}")
+            logger.error(f"Error updating profile via API: {e}")
             return False
 
-    def update_events(self, agent_id: str, user_id: str, events: List[str]) -> bool:
-        """
-        Add events via API.
+    def update_events(self, agent_id: str = None, user_id: str = None, events: List[str] = None) -> bool:
+        """Update events information via API
 
         Args:
-            agent_id: Agent ID
-            user_id: User ID
-            events: Event list
+            agent_id: Agent ID (optional if set in constructor)
+            user_id: User ID (required)
+            events: List of events to add
 
         Returns:
-            bool: Whether addition was successful
+            True if update was successful, False otherwise
         """
+        # Use provided agent_id or fallback to instance agent_id
+        if agent_id is None:
+            agent_id = self.agent_id
+        if agent_id is None:
+            raise ValueError("agent_id must be provided either in constructor or method call")
+            
+        if user_id is None:
+            raise ValueError("user_id is required")
+
         try:
             response = self._make_api_request("POST", "memories/update-events", data={
                 "agent_id": agent_id,
@@ -318,21 +401,26 @@ class MemoryClient:
                 
             return response.get("success", False)
         except Exception as e:
-            print(f"Error adding events via API: {e}")
+            logger.error(f"Error adding events via API: {e}")
             return False
 
-    def get_memory_stats(self, agent_id: str) -> Dict[str, Any]:
-        """
-        Get Memory statistics via API.
+    def get_memory_stats(self, agent_id: str = None) -> Dict[str, Any]:
+        """Get memory statistics for an agent
 
         Args:
-            agent_id: Agent ID
+            agent_id: Agent ID (optional if set in constructor)
 
         Returns:
-            Dict: Statistics information
+            Dictionary with memory statistics
         """
+        # Use provided agent_id or fallback to instance agent_id
+        if agent_id is None:
+            agent_id = self.agent_id
+        if agent_id is None:
+            raise ValueError("agent_id must be provided either in constructor or method call")
+            
         try:
             return self._make_api_request("GET", f"memories/stats/{agent_id}")
         except Exception as e:
-            print(f"Error getting memory stats via API: {e}")
+            logger.error(f"Error getting memory stats via API: {e}")
             return {}

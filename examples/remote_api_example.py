@@ -83,9 +83,12 @@ def main():
         # Get memory information
         print(f"\n6. Memory information for {user_id}")
         memory_info = persona.get_memory(user_id)
-        print(f"Profile: {memory_info['profile']}")
-        print(f"Events: {memory_info['events']}")
-        print(f"Mind: {memory_info['mind']}")
+        profile = memory_info.get_profile()
+        events = memory_info.get_events()
+        mind = memory_info.get_mind()
+        print(f"Profile: {profile}")
+        print(f"Events: {events}")
+        print(f"Mind: {mind}")
         
         # Add specific memory via API
         print(f"\n7. Adding specific memory for {user_id}")
@@ -98,7 +101,12 @@ def main():
         # Search memories (function removed - using get_memory instead)
         print(f"\n8. Getting memory information for {user_id}")
         memory_info = persona.get_memory(user_id)
-        print(f"Memory info: {memory_info}")
+        memory_dict = {
+            'profile': memory_info.get_profile(),
+            'events': memory_info.get_events(),
+            'mind': memory_info.get_mind()
+        }
+        print(f"Memory info: {memory_dict}")
     
     # Test cross-user memory isolation
     print(f"\n{'='*20} Cross-User Test {'='*20}")
@@ -107,8 +115,8 @@ def main():
     alice_memory = persona.get_memory("alice")
     bob_memory = persona.get_memory("bob")
     
-    print(f"Alice memory count: {len(alice_memory['events'])}")
-    print(f"Bob memory count: {len(bob_memory['events'])}")
+    print(f"Alice memory count: {len(alice_memory.get_events())}")
+    print(f"Bob memory count: {len(bob_memory.get_events())}")
     print("✅ Memory is properly isolated between users")
     
     # Clean up
@@ -177,7 +185,12 @@ def test_memory_operations():
         # Get memory info
         print("\n3. Getting memory information")
         memory_info = persona.get_memory(user_id)
-        print(f"Memory info: {memory_info}")
+        memory_dict = {
+            'profile': memory_info.get_profile(),
+            'events': memory_info.get_events(),
+            'mind': memory_info.get_mind()
+        }
+        print(f"Memory info: {memory_dict}")
         
         # Test session info
         print("\n4. Getting session information")

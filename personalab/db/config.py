@@ -7,7 +7,7 @@ Supports PostgreSQL backend with pgvector extension for vector operations.
 import getpass
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union, ClassVar
 
 DatabaseBackend = "postgresql"
 
@@ -17,13 +17,16 @@ class DatabaseConfig:
     """Database configuration data class for PostgreSQL."""
 
     backend: str = "postgresql"
-    connection_params: Dict[str, Any] = None
+    connection_params: Optional[Dict[str, Any]] = None
+    
+    # Class variable for supported backends
+    SUPPORTED_BACKENDS: ClassVar[set[str]] = {"postgresql"}
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration after initialization."""
-        if self.backend != "postgresql":
+        if self.backend not in self.SUPPORTED_BACKENDS:
             raise ValueError(
-                f"Only PostgreSQL backend is supported, got: {self.backend}"
+                f"Only {', '.join(self.SUPPORTED_BACKENDS)} backend(s) supported, got: {self.backend}"
             )
         if self.connection_params is None:
             self.connection_params = {}
@@ -67,13 +70,26 @@ class DatabaseConfig:
     def create_postgresql(
         cls,
         host: str = "localhost",
-        port: str = "5432",
+        port: Union[str, int] = "5432",
         dbname: str = "personalab",
         user: Optional[str] = None,
         password: str = "",
         connection_string: Optional[str] = None,
     ) -> "DatabaseConfig":
-        """Create PostgreSQL database configuration."""
+        """
+        Create PostgreSQL database configuration.
+        
+        Args:
+            host: Database host
+            port: Database port (string or integer)
+            dbname: Database name
+            user: Database user (auto-detected if None)
+            password: Database password
+            connection_string: Direct connection string (overrides other params)
+            
+        Returns:
+            DatabaseConfig: Configured database config instance
+        """
         if connection_string:
             return cls(
                 backend="postgresql",
@@ -88,7 +104,7 @@ class DatabaseConfig:
             backend="postgresql",
             connection_params={
                 "host": host,
-                "port": port,
+                "port": str(port),  # Ensure port is string
                 "dbname": dbname,
                 "user": user,
                 "password": password,

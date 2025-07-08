@@ -1,0 +1,94 @@
+"""
+Logging configuration module for PersonaLab.
+
+Provides centralized logging configuration with consistent formatting and levels.
+"""
+
+import logging
+import sys
+from typing import Optional
+
+
+class ColoredFormatter(logging.Formatter):
+    """Colored log formatter for better readability."""
+    
+    # Color codes
+    COLORS = {
+        'DEBUG': '\033[36m',    # Cyan
+        'INFO': '\033[32m',     # Green
+        'WARNING': '\033[33m',  # Yellow
+        'ERROR': '\033[31m',    # Red
+        'CRITICAL': '\033[35m', # Magenta
+        'RESET': '\033[0m'      # Reset
+    }
+    
+    def format(self, record: logging.LogRecord) -> str:
+        """Format log record with colors."""
+        if hasattr(record, 'levelname'):
+            color = self.COLORS.get(record.levelname, self.COLORS['RESET'])
+            record.levelname = f"{color}{record.levelname}{self.COLORS['RESET']}"
+        return super().format(record)
+
+
+def setup_logging(
+    name: str = "personalab",
+    level: str = "INFO",
+    format_string: Optional[str] = None,
+    use_colors: bool = True
+) -> logging.Logger:
+    """
+    Setup logging configuration for PersonaLab.
+    
+    Args:
+        name: Logger name
+        level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        format_string: Custom format string
+        use_colors: Whether to use colored output
+        
+    Returns:
+        logging.Logger: Configured logger instance
+    """
+    logger = logging.getLogger(name)
+    
+    # Avoid duplicate handlers
+    if logger.handlers:
+        return logger
+        
+    # Set level
+    numeric_level = getattr(logging, level.upper(), logging.INFO)
+    logger.setLevel(numeric_level)
+    
+    # Create console handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(numeric_level)
+    
+    # Create formatter
+    if format_string is None:
+        format_string = '%(asctime)s | %(name)s | %(levelname)s | %(message)s'
+    
+    if use_colors and sys.stdout.isatty():
+        formatter = ColoredFormatter(format_string, datefmt='%Y-%m-%d %H:%M:%S')
+    else:
+        formatter = logging.Formatter(format_string, datefmt='%Y-%m-%d %H:%M:%S')
+    
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    return logger
+
+
+def get_logger(name: str = "personalab") -> logging.Logger:
+    """
+    Get or create a logger instance.
+    
+    Args:
+        name: Logger name
+        
+    Returns:
+        logging.Logger: Logger instance
+    """
+    return logging.getLogger(name)
+
+
+# Default logger instance
+default_logger = setup_logging() 

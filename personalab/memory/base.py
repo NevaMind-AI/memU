@@ -30,7 +30,7 @@ class Memory:
     Provides consistent interface regardless of backend implementation.
     """
     
-    def __init__(self, agent_id: str, user_id: str, memory_client: "MemoryClient", data: Optional[dict] = None, memory_id: Optional[str] = None):
+    def __init__(self, agent_id: str, user_id: str, memory_client: Optional["MemoryClient"] = None, data: Optional[dict] = None, memory_id: Optional[str] = None):
         """
         Initialize Memory.
         
@@ -189,22 +189,59 @@ class Memory:
     # Unified interface methods that delegate to API
     def update_events(self, events: List[str]) -> bool:
         """Update events via API"""
-        return self.memory_client.update_events(self.agent_id, self.user_id, events)
+        if self.memory_client:
+            return self.memory_client.update_events(self.agent_id, self.user_id, events)
+        else:
+            # Update local memory component if no API client
+            self.event_memory.set_content(events)
+            return True
 
     def update_profile(self, profile_info: Union[str, List[str]]) -> bool:
         """Update profile via API"""
-        if isinstance(profile_info, list):
-            # Convert list to string for API compatibility
-            profile_string = "\n".join(profile_info)
+        if self.memory_client:
+            if isinstance(profile_info, list):
+                # Convert list to string for API compatibility
+                profile_string = "\n".join(profile_info)
+            else:
+                profile_string = profile_info
+            return self.memory_client.update_profile(self.agent_id, self.user_id, profile_string)
         else:
-            profile_string = profile_info
-        return self.memory_client.update_profile(self.agent_id, self.user_id, profile_string)
+            # Update local memory component if no API client
+            if isinstance(profile_info, list):
+                self.profile_memory.set_content(profile_info)
+            else:
+                self.profile_memory.set_content([profile_info] if profile_info else [])
+            return True
 
     def update_mind(self, insights: List[str]) -> bool:
-        """Update mind via API (placeholder for future implementation)"""
-        # TODO: Implement API endpoint for mind updates
-        print("Info: Mind update via API endpoint not yet implemented")
-        return True
+        """
+        Update mind insights via API.
+        
+        Args:
+            insights: List of mind insights
+            
+        Returns:
+            bool: Whether update was successful
+        """
+        try:
+            # Implementation for mind updates via API
+            # This would require a corresponding API endpoint on the server
+            from ..utils import get_logger
+            logger = get_logger(__name__)
+            
+            # For now, update the local mind component
+            if hasattr(self, 'mind_memory'):
+                self.mind_memory.set_content(insights)
+                logger.info(f"Updated mind with {len(insights)} insights")
+                return True
+            else:
+                logger.warning("Mind memory component not available")
+                return False
+        except Exception as e:
+            from ..utils import get_logger
+            logger = get_logger(__name__)
+            logger.error(f"Error updating mind: {e}")
+            return False
 
     def clear_profile(self) -> bool:
         """Clear profile memory via API"""
