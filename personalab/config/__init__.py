@@ -1,11 +1,11 @@
 """Configuration module for PersonaLab"""
 
-# Import database configuration functions
+# Import database configuration functions from db module
 # Import original config for backward compatibility
 import importlib.util
 import os
 
-from .database import (
+from ..db import (
     DatabaseConfig,
     DatabaseManager,
     get_database_manager,

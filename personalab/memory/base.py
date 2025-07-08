@@ -87,8 +87,7 @@ class Memory:
 
     def get_profile(self) -> List[str]:
         """Get profile memory content as list"""
-        content = self.profile_memory.get_content()
-        return [content] if content else []
+        return self.profile_memory.get_content()
 
     def get_events(self) -> List[str]:
         """Get event memory content"""
@@ -98,9 +97,13 @@ class Memory:
         """Get mind memory content"""
         return self.mind_memory.get_content()
 
-    def get_profile_content(self) -> str:
-        """Get profile content as string"""
+    def get_profile_content(self) -> List[str]:
+        """Get profile content as list"""
         return self.profile_memory.get_content()
+
+    def get_profile_content_string(self) -> str:
+        """Get profile content as string for backward compatibility"""
+        return self.profile_memory.get_content_string()
 
     def get_event_content(self) -> List[str]:
         """Get event content as list"""
@@ -116,7 +119,7 @@ class Memory:
             "memory_id": self.memory_id,
             "agent_id": self.agent_id,
             "user_id": self.user_id,
-            "profile_length": len(self.get_profile_content()),
+            "profile_count": len(self.get_profile_content()),
             "event_count": len(self.get_event_content()),
             "mind_count": len(self.get_mind_content()),
             "created_at": self.created_at.isoformat(),
@@ -131,7 +134,9 @@ class Memory:
         profile_content = self.profile_memory.get_content()
         if profile_content:
             prompt += "## User Profile\n"
-            prompt += f"{profile_content}\n\n"
+            for profile_item in profile_content:
+                prompt += f"- {profile_item}\n"
+            prompt += "\n"
 
         # Add event memory
         event_content = self.event_memory.get_content()
@@ -165,7 +170,7 @@ class Memory:
             "updated_at": self.updated_at.isoformat(),
             "profile_memory": {
                 "content": self.profile_memory.get_content(),
-                "content_type": "paragraph",
+                "content_type": "list_of_items",
             },
             "event_memory": {
                 "content": self.event_memory.get_content(),
@@ -182,36 +187,24 @@ class Memory:
         pass
 
     # Unified interface methods that delegate to API
-    def add_events(self, events: List[str]) -> bool:
-        """Add events via API"""
-        return self.memory_client.update_events(self.agent_id, self.user_id, events)
-
-    def update_profile(self, profile_info: str) -> bool:
-        """Update profile via API"""
-        return self.memory_client.update_profile(self.agent_id, self.user_id, profile_info)
-
     def update_events(self, events: List[str]) -> bool:
         """Update events via API"""
         return self.memory_client.update_events(self.agent_id, self.user_id, events)
+
+    def update_profile(self, profile_info: Union[str, List[str]]) -> bool:
+        """Update profile via API"""
+        if isinstance(profile_info, list):
+            # Convert list to string for API compatibility
+            profile_string = "\n".join(profile_info)
+        else:
+            profile_string = profile_info
+        return self.memory_client.update_profile(self.agent_id, self.user_id, profile_string)
 
     def update_mind(self, insights: List[str]) -> bool:
         """Update mind via API (placeholder for future implementation)"""
         # TODO: Implement API endpoint for mind updates
         print("Info: Mind update via API endpoint not yet implemented")
         return True
-
-    def add_profile(self, profile_info: str) -> bool:
-        """Add profile information via API"""
-        current_profile = self.get_profile_content()
-        if current_profile:
-            updated_profile = f"{current_profile}\n{profile_info}"
-        else:
-            updated_profile = profile_info
-        return self.update_profile(updated_profile)
-
-    def add_mind(self, insights: List[str]) -> bool:
-        """Add mind/psychological insights via API"""
-        return self.update_mind(insights)
 
     def clear_profile(self) -> bool:
         """Clear profile memory via API"""
@@ -239,38 +232,88 @@ class ProfileMemory:
     Profile memory component.
 
     Component for storing user or agent profile information.
-    Storage format: Single paragraph form
+    Storage format: List of profile items
     """
 
-    def __init__(self, content: str = ""):
+    def __init__(self, content: Optional[List[str]] = None, max_items: int = 100):
         """
         Initialize ProfileMemory.
 
         Args:
-            content: Initial profile content
+            content: Initial profile content as list or single string
+            max_items: Maximum number of profile items
         """
-        self.content = content
+        if isinstance(content, str):
+            # Convert string to list for backward compatibility
+            if content.strip():
+                self.items = [item.strip() for item in content.split('\n') if item.strip()]
+            else:
+                self.items = []
+        else:
+            self.items = content or []
+        self.max_items = max_items
 
-    def get_content(self) -> str:
-        """Get profile content"""
-        return self.content
+    def get_content(self) -> List[str]:
+        """Get profile content as list"""
+        return self.items.copy()
 
-    def set_content(self, content: str):
+    def set_content(self, content: List[str]):
         """
-        Directly set profile content.
+        Set profile content.
 
         Args:
-            content: New profile content
+            content: New profile content as list
         """
-        self.content = content
+        self.items = content
+
+    def add_item(self, item: str):
+        """
+        Add a single profile item.
+
+        Args:
+            item: Profile item to add
+        """
+        if item.strip() and item not in self.items:
+            self.items.append(item.strip())
+            # Keep within max_items limit
+            if len(self.items) > self.max_items:
+                self.items = self.items[-self.max_items:]
+
+    def remove_item(self, item: str):
+        """
+        Remove a profile item.
+
+        Args:
+            item: Profile item to remove
+        """
+        if item in self.items:
+            self.items.remove(item)
+
+    def get_content_string(self) -> str:
+        """Get profile content as formatted string for backward compatibility"""
+        return "\n".join(self.items)
+
+    def to_prompt(self) -> str:
+        """Convert profile to prompt format"""
+        if not self.items:
+            return ""
+        return "\n".join(f"- {item}" for item in self.items)
 
     def is_empty(self) -> bool:
         """Check if profile memory is empty"""
-        return not self.content.strip()
+        return len(self.items) == 0
+
+    def get_item_count(self) -> int:
+        """Get profile item count"""
+        return len(self.items)
 
     def get_word_count(self) -> int:
         """Get word count of profile content"""
-        return len(self.content.split())
+        return sum(len(item.split()) for item in self.items)
+
+    def get_total_text_length(self) -> int:
+        """Get total text length of all profile items"""
+        return sum(len(item) for item in self.items)
 
 
 class EventMemory:

@@ -155,7 +155,7 @@ class MemoryUpdatePipeline:
         prompt = f"""Please analyze the following conversation content and extract user profile updates and important events.
 
 Current User Profile:
-{current_profile if current_profile else "None"}
+{self._format_profile(current_profile) if current_profile else "None"}
 
 Current Event Records:
 {self._format_events(current_events) if current_events else "None"}
@@ -200,7 +200,7 @@ events:
         prompt = f"""Please update the user profile based on new information.
 
 Current User Profile:
-{current_profile if current_profile else "None"}
+{self._format_profile(current_profile) if current_profile else "None"}
 
 Current Event Records:
 {self._format_events(current_events) if current_events else "None"}
@@ -218,13 +218,13 @@ Requirements:
 
 Please return the updated complete user profile directly in the following format:
 profile:
-- Update information 1
-- Update information 2
-- ...
+profile1
+profile2
+...
 events:
-- Event 1
-- Event 2
-- ...
+event1
+event2
+...
 """
 
         # Call LLM to update profile
@@ -269,7 +269,7 @@ events:
         """
         conversation_text = self._format_conversation(session_conversation)
         updated_memory_content = (
-            update_result.profile.get_content()
+            "\n".join(update_result.profile.get_content())
             + "\n"
             + "\n".join(update_result.events.get_content())
         )
@@ -408,3 +408,9 @@ Insights:
         return "\n".join(
             f"- {event}" for event in events[-5:]
         )  # Only show recent 5 events
+
+    def _format_profile(self, profile_items: List[str]) -> str:
+        """Format profile items for prompt"""
+        if not profile_items:
+            return "None"
+        return "\n".join(f"- {item}" for item in profile_items)

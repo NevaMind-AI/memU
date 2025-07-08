@@ -116,7 +116,7 @@ class DatabaseManager:
         """Get PostgreSQL memory database instance with pgvector support."""
         if self._memory_db is None:
             # Import here to avoid circular imports
-            from ..db.pg_storage import PostgreSQLMemoryDB
+            from .pg_storage import PostgreSQLMemoryDB
 
             self._memory_db = PostgreSQLMemoryDB(**self.config.connection_params)
         return self._memory_db
@@ -125,7 +125,7 @@ class DatabaseManager:
         """Get PostgreSQL conversation database instance with pgvector support."""
         if self._conversation_db is None:
             # Import here to avoid circular imports
-            from ..db.pg_storage import PostgreSQLConversationDB
+            from .pg_storage import PostgreSQLConversationDB
 
             self._conversation_db = PostgreSQLConversationDB(
                 **self.config.connection_params

@@ -11,7 +11,7 @@ Note: Only PostgreSQL with pgvector is supported.
 
 import os
 
-from ..config.database import get_database_manager
+from ..db import get_database_manager
 from .manager import ConversationManager
 from .models import Conversation, ConversationMessage
 
@@ -46,10 +46,10 @@ class Memo:
             db_manager = get_database_manager()
             self.manager = ConversationManager(db_manager=db_manager)
 
-    def add_conversation(
+    def update_conversation(
         self, user_message: str, ai_response: str, metadata: dict = None
     ):
-        """Add conversation"""
+        """Update conversation"""
         messages = [
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": ai_response},
@@ -58,7 +58,7 @@ class Memo:
             agent_id=self.agent_id,
             user_id=self.user_id,
             messages=messages,
-            pipeline_result=metadata,  # metadata passed as pipeline_result
+            pipeline_result=metadata, 
         )
 
     def search_similar_conversations(
@@ -89,5 +89,5 @@ __all__ = [
     "ConversationManager",
     "Conversation",
     "ConversationMessage",
-    "Memo",  # New concise API
+    "Memo",  
 ]

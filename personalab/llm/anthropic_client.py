@@ -99,7 +99,7 @@ class AnthropicClient(BaseLLMClient):
 
     def _get_default_model(self) -> str:
         """Get Anthropic default model"""
-        return "claude-3-sonnet-20240229"
+        return "claude-3-7-sonnet-latest"
 
     def _prepare_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """Preprocess Anthropic message format"""

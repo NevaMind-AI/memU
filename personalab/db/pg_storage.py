@@ -242,10 +242,10 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                                 if memory.mind_metadata
                                 else None
                             ),
-                            self._calculate_hash(memory.get_profile_content()),
+                            self._calculate_hash("\n".join(memory.get_profile_content())),
                             len(memory.get_event_content()),
                             datetime.now(),
-                            memory.get_profile_content(),
+                            json.dumps(memory.get_profile_content()),
                             json.dumps(memory.get_event_content()),
                             json.dumps(memory.get_mind_content()),
                         ),
@@ -524,10 +524,11 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
 
     def _save_profile_content(self, cur, memory_id: str, profile_memory: ProfileMemory):
         """Save profile memory content."""
-        content_data = {"paragraph": profile_memory.get_content()}
+        profile_items = profile_memory.get_content()
+        content_data = {"items": profile_items}
 
         content_id = f"{memory_id}_profile"
-        content_text = profile_memory.get_content()
+        content_text = "\n".join(profile_items)  # Combine items for text search
         content_hash = self._calculate_hash(content_text)
 
         cur.execute(
@@ -583,7 +584,7 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
             ),
         )
 
-    def _load_profile_content(self, cur, memory_id: str) -> Optional[str]:
+    def _load_profile_content(self, cur, memory_id: str) -> Optional[List[str]]:
         """Load profile memory content."""
         cur.execute(
             """
@@ -596,8 +597,18 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
         row = cur.fetchone()
         if row:
             content_data = row[0] if isinstance(row[0], dict) else json.loads(row[0])
-            return content_data.get("paragraph", "")
-
+            
+            # Handle both new format (items) and old format (paragraph) for backward compatibility
+            if "items" in content_data:
+                return content_data["items"]
+            elif "paragraph" in content_data:
+                # Convert old string format to list
+                paragraph = content_data["paragraph"]
+                if paragraph.strip():
+                    return [item.strip() for item in paragraph.split('\n') if item.strip()]
+                else:
+                    return []
+            
         return None
 
     def _load_event_content(self, cur, memory_id: str) -> Optional[List[str]]:

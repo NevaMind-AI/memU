@@ -7,7 +7,7 @@ Uses PostgreSQL backend with pgvector for vector operations.
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..config.database import DatabaseManager, get_database_manager
+from ..db import DatabaseManager, get_database_manager
 from .embeddings import create_embedding_manager
 from .models import Conversation, ConversationMessage
 

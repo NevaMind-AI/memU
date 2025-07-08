@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 from personalab.memo import ConversationManager
 from personalab.memory import Memory, MemoryClient
 
-from .config.database import get_database_manager
+from .db import get_database_manager
 
 
 def validate_conversation_data(messages: List[Dict[str, str]]) -> Dict[str, Any]:
@@ -110,7 +110,8 @@ def get_memory_context(memory_manager, agent_id: str) -> str:
     # Add user profile
     profile = memory.get_profile_content()
     if profile:
-        context_parts.append(f"user background: {profile}")
+        profile_text = "; ".join(profile)
+        context_parts.append(f"user background: {profile_text}")
 
     # Add important events
     events = memory.get_event_content()

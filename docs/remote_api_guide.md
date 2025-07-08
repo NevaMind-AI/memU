@@ -112,7 +112,7 @@ mind = memory.get_mind()
 
 # Direct API operations
 memory.update_profile("New profile")
-memory.add_events(["New event"])
+memory.update_events(["New event"])
 ```
 
 ## 🔄 Migration from Mixed Architecture

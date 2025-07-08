@@ -43,7 +43,7 @@ setup_postgres_env()
 # Add project root directory to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from personalab.config.database import get_database_manager
+from personalab.db import get_database_manager
 from personalab.memory.manager import MemoryClient
 from personalab.memo.manager import ConversationManager
 
@@ -229,7 +229,7 @@ async def get_memory_detail(memory_id: str):
             'user_id': memory.user_id,
             'created_at': memory.created_at,
             'updated_at': memory.updated_at,
-            'profile_content': memory.get_profile_content(),
+            'profile_content': "\n".join(memory.get_profile_content()) if memory.get_profile_content() else "",
             'event_content': memory.get_event_content(),
             'mind_content': memory.get_mind_content(),
             'mind_metadata': memory.mind_metadata
