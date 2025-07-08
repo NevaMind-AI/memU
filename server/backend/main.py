@@ -330,8 +330,28 @@ async def update_memory_with_conversation(request: UpdateConversationRequest):
             openai_config = llm_config_manager.get_provider_config("openai")
             
             if openai_config.get("api_key"):
-                llm_client = OpenAIClient(**openai_config)
-                pipeline = MemoryUpdatePipeline(llm_client=llm_client)
+                # Debug: print config parameters
+                print(f"DEBUG: OpenAI config parameters: {openai_config}")
+                
+                # Only keep parameters that OpenAIClient explicitly supports
+                allowed_params = ['api_key', 'base_url', 'model', 'temperature', 'max_tokens']
+                filtered_config = {k: v for k, v in openai_config.items() 
+                                 if k in allowed_params}
+                print(f"DEBUG: Filtered config: {filtered_config}")
+                
+                try:
+                    llm_client = OpenAIClient(**filtered_config)
+                    print(f"DEBUG: OpenAI client created successfully")
+                except Exception as client_error:
+                    print(f"DEBUG: Error creating OpenAI client: {client_error}")
+                    raise client_error
+                
+                try:
+                    pipeline = MemoryUpdatePipeline(llm_client=llm_client)
+                    print(f"DEBUG: Pipeline created successfully")
+                except Exception as pipeline_error:
+                    print(f"DEBUG: Error creating pipeline: {pipeline_error}")
+                    raise pipeline_error
                 
                 # Convert conversation format to match pipeline expectations
                 session_conversation = []
@@ -345,7 +365,15 @@ async def update_memory_with_conversation(request: UpdateConversationRequest):
                         session_conversation.append({"role": "assistant", "content": ai_response})
                 
                 # Process through pipeline
-                updated_memory, pipeline_result = pipeline.update_with_pipeline(memory, session_conversation)
+                try:
+                    print(f"DEBUG: Starting pipeline processing")
+                    updated_memory, pipeline_result = pipeline.update_with_pipeline(memory, session_conversation)
+                    print(f"DEBUG: Pipeline processing completed successfully")
+                except Exception as pipeline_run_error:
+                    print(f"DEBUG: Error during pipeline processing: {pipeline_run_error}")
+                    import traceback
+                    print(f"DEBUG: Full traceback: {traceback.format_exc()}")
+                    raise pipeline_run_error
                 
                 # Save the updated memory
                 memory_database.save_memory(updated_memory)

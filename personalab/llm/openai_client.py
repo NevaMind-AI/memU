@@ -51,9 +51,15 @@ class OpenAIClient(BaseLLMClient):
             try:
                 import openai
 
-                self._client = openai.OpenAI(
-                    api_key=self.api_key, base_url=self.base_url
-                )
+                # Create OpenAI client with only api_key and base_url
+                # Explicitly avoid passing any other parameters that might cause issues
+                client_params = {}
+                if self.api_key:
+                    client_params['api_key'] = self.api_key
+                if self.base_url:
+                    client_params['base_url'] = self.base_url
+                
+                self._client = openai.OpenAI(**client_params)
             except ImportError:
                 raise ImportError(
                     "OpenAI library is required. Install with: pip install openai>=1.0.0"
@@ -72,11 +78,16 @@ class OpenAIClient(BaseLLMClient):
         model = self.get_model(model)
 
         try:
+            # Debug: Log all incoming parameters
+            print(f"DEBUG OpenAI: chat_completion kwargs: {kwargs}")
+            print(f"DEBUG OpenAI: self.config: {self.config}")
+            
             # Preprocess messages
             processed_messages = self._prepare_messages(messages)
 
             # Filter out parameters that should not be passed to OpenAI API
             api_params = self._filter_api_params(kwargs)
+            print(f"DEBUG OpenAI: filtered api_params: {api_params}")
 
             # Call OpenAI API
             response = self.client.chat.completions.create(
@@ -101,22 +112,10 @@ class OpenAIClient(BaseLLMClient):
 
     def _filter_api_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Filter out parameters that should not be passed to OpenAI API"""
-        # List of parameters that should not be passed to OpenAI API
-        excluded_params = {
-            "api_key",
-            "base_url",
-            "provider_type",
-            "timeout",
-            "retry_count",
-        }
+        # Only exclude API client configuration parameters
+        excluded_params = {"api_key", "base_url"}
 
-        # Only keep parameters supported by OpenAI API
-        filtered = {}
-        for key, value in params.items():
-            if key not in excluded_params:
-                filtered[key] = value
-
-        return filtered
+        return {k: v for k, v in params.items() if k not in excluded_params}
 
     def _get_default_model(self) -> str:
         """Get OpenAI default model"""

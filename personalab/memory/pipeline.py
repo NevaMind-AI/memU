@@ -96,6 +96,12 @@ class MemoryUpdatePipeline:
                     **llm_config,
                 }
 
+    def _get_chat_params(self) -> dict:
+        """Filter LLM config to only include parameters supported by chat_completion"""
+        # Only keep parameters that are commonly supported by LLM chat_completion methods
+        allowed_params = ['temperature', 'max_tokens', 'top_p', 'frequency_penalty', 'presence_penalty']
+        return {k: v for k, v in self.llm_config.items() if k in allowed_params}
+
     def update_with_pipeline(
         self, previous_memory: Memory, session_conversation: List[Dict[str, str]]
     ) -> Tuple[Memory, PipelineResult]:
@@ -176,7 +182,8 @@ events:
         if self.llm_client is None:
             raise Exception("No LLM client provided")
 
-        response = self.llm_client.chat_completion(messages=messages, **self.llm_config)
+        chat_params = self._get_chat_params()
+        response = self.llm_client.chat_completion(messages=messages, **chat_params)
         print(response.content)
         if not response.success:
             raise Exception(f"LLM call failed: {response.error}")
@@ -233,7 +240,8 @@ event2
         if self.llm_client is None:
             raise Exception("No LLM client provided")
 
-        response = self.llm_client.chat_completion(messages=messages, **self.llm_config)
+        chat_params = self._get_chat_params()
+        response = self.llm_client.chat_completion(messages=messages, **chat_params)
 
         if not response.success:
             raise Exception(f"LLM update failed: {response.error}")
@@ -301,7 +309,8 @@ Insights:
         if self.llm_client is None:
             raise Exception("No LLM client provided")
 
-        response = self.llm_client.chat_completion(messages=messages, **self.llm_config)
+        chat_params = self._get_chat_params()
+        response = self.llm_client.chat_completion(messages=messages, **chat_params)
 
         if not response.success:
             raise Exception(f"LLM Mind analysis failed: {response.error}")
