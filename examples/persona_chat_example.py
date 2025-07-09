@@ -30,6 +30,31 @@ from personalab import Persona
 from personalab.llm import OpenAIClient
 
 
+def format_profile_display(profile, max_length=100):
+    """
+    Safely format profile data for display.
+    
+    Args:
+        profile: Profile data (can be list, string, or None)
+        max_length: Maximum length for display
+        
+    Returns:
+        str: Formatted profile string
+    """
+    if not profile:
+        return "No profile"
+    
+    if isinstance(profile, list):
+        profile_str = "\n   ".join(str(item) for item in profile)
+    else:
+        profile_str = str(profile)
+    
+    if len(profile_str) > max_length:
+        return profile_str[:max_length] + "..."
+    else:
+        return profile_str
+
+
 def create_ai_tutor() -> Optional[Persona]:
     """
     Create an AI tutor persona with memory capabilities.
@@ -136,7 +161,7 @@ def memory_demonstration(persona: Persona):
     memory_info = persona.get_memory(user_id)
     print(f"\n--- What the AI remembered about Bob ---")
     profile = memory_info.get_profile()
-    print(f"Profile: {profile if profile else 'No profile'}")
+    print(f"Profile: {format_profile_display(profile)}")
     events = memory_info.get_events()
     print(f"Events: {len(events)} events recorded")
     if events:
@@ -203,7 +228,7 @@ def multi_user_example(persona: Persona):
         memory = persona.get_memory(user_id)
         print(f"\n{user_info['name']}'s memory:")
         profile = memory.get_profile()
-        print(f"  Profile: {profile if profile else 'No profile'}")
+        print(f"  Profile: {format_profile_display(profile)}")
         events = memory.get_events()
         print(f"  Events: {len(events)} events")
 
@@ -247,7 +272,7 @@ def retrieval_demonstration(persona: Persona):
     print(f"\n📊 Memory Stored:")
     print(f"   Memory: {memory}")
     profile = memory.get_profile()
-    print(f"   Profile: {(profile[:100] + '...' if profile and len(str(profile)) > 100 else profile) if profile else 'No profile'}")
+    print(f"   Profile: {format_profile_display(profile)}")
     events = memory.get_events()
     print(f"   Events: {len(events)} events recorded")
     
@@ -333,7 +358,7 @@ def session_management_example(persona: Persona):
     events = final_memory.get_events()
     print(f"Total events recorded: {len(events)}")
     profile = final_memory.get_profile()
-    print(f"Profile: {profile if profile else 'No profile'}")
+    print(f"Profile: {format_profile_display(profile)}")
     mind = final_memory.get_mind()
     if mind:
         print(f"AI insights about Eve: {mind}")

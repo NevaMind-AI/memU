@@ -148,7 +148,7 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                 created_at TIMESTAMP NOT NULL,
                 updated_at TIMESTAMP NOT NULL,
 
-                FOREIGN KEY (memory_id) REFERENCES memories(memory_id) ON DELETE CASCADE,
+                FOREIGN KEY (memory_id) REFERENCES memories(memory_id) ON DELETE CASCADE ON UPDATE CASCADE,
                 UNIQUE(memory_id, content_type)
             )
         """
@@ -200,36 +200,52 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
             with psycopg2.connect(self.connection_string) as conn:
                 with conn.cursor() as cur:
                     # 1. Save/update metadata in memories table (no content)
+                    # Check if memory already exists for this agent-user combination
                     cur.execute(
-                        """
-                        INSERT INTO memories
-                        (memory_id, agent_id, user_id, created_at, updated_at)
-                        VALUES (%s, %s, %s, %s, %s)
-                        ON CONFLICT (agent_id, user_id) DO UPDATE SET
-                        memory_id = EXCLUDED.memory_id,
-                        updated_at = EXCLUDED.updated_at
-                        """,
-                        (
-                            memory.memory_id,
-                            memory.agent_id,
-                            memory.user_id,
-                            memory.created_at,
-                            memory.updated_at,
-                        ),
+                        "SELECT memory_id FROM memories WHERE agent_id = %s AND user_id = %s",
+                        (memory.agent_id, memory.user_id)
                     )
+                    existing_memory = cur.fetchone()
+                    
+                    if existing_memory:
+                        # Memory exists, just update timestamp and use existing memory_id
+                        existing_memory_id = existing_memory[0]
+                        cur.execute(
+                            "UPDATE memories SET updated_at = %s WHERE memory_id = %s",
+                            (memory.updated_at, existing_memory_id)
+                        )
+                        # Update the memory object to use the existing memory_id for content operations
+                        actual_memory_id = existing_memory_id
+                    else:
+                        # New memory, insert with new memory_id
+                        cur.execute(
+                            """
+                            INSERT INTO memories
+                            (memory_id, agent_id, user_id, created_at, updated_at)
+                            VALUES (%s, %s, %s, %s, %s)
+                            """,
+                            (
+                                memory.memory_id,
+                                memory.agent_id,
+                                memory.user_id,
+                                memory.created_at,
+                                memory.updated_at,
+                            ),
+                        )
+                        actual_memory_id = memory.memory_id
 
-                    # 2. Save content to memory_contents table
+                    # 2. Save content to memory_contents table using the actual memory_id
                     profile_content = memory.get_profile()
                     if profile_content:
-                        self._save_content(cur, memory.memory_id, 'profile', profile_content)
+                        self._save_content(cur, actual_memory_id, 'profile', profile_content)
 
                     event_content = memory.get_events()
                     if event_content:
-                        self._save_content(cur, memory.memory_id, 'event', event_content)
+                        self._save_content(cur, actual_memory_id, 'event', event_content)
 
                     mind_content = memory.get_mind()
                     if mind_content:
-                        self._save_content(cur, memory.memory_id, 'mind', mind_content)
+                        self._save_content(cur, actual_memory_id, 'mind', mind_content)
 
                     conn.commit()
                     return True

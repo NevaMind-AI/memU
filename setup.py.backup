@@ -57,6 +57,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/NevaMind-AI/PersonaLab",
+    license="Apache 2.0",
     project_urls={
         "Bug Tracker": "https://github.com/NevaMind-AI/PersonaLab/issues",
         "Documentation": "https://github.com/NevaMind-AI/PersonaLab#readme",

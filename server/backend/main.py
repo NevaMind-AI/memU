@@ -73,7 +73,7 @@ app.add_middleware(
 db_manager = get_database_manager()
 # Create a direct database memory client for the API endpoints
 memory_database = db_manager.get_memory_db()
-conversation_manager = ConversationManager(db_manager=db_manager)
+conversation_manager = ConversationManager(db_manager=db_manager, enable_embeddings=False)
 
 # Pydantic models
 class SystemStats(BaseModel):
