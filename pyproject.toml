@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=61.0,<70.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,7 +11,6 @@ authors = [
 description = "AI Memory and Conversation Management Framework - Simple as mem0, Powerful as PersonaLab"
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "Apache-2.0"}
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

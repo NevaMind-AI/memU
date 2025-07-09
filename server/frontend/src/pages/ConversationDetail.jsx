@@ -30,7 +30,7 @@ function MessageCard({ message }) {
         p: 2, 
         mb: 2,
         backgroundColor: isUser ? 'primary.light' : 
-                         isAssistant ? 'grey.100' : 'warning.light',
+                         isAssistant ? 'surface.main' : 'warning.light',
         color: isUser ? 'primary.contrastText' : 'text.primary'
       }}
     >

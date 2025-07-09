@@ -61,7 +61,7 @@ class Persona:
         agent_id: str,
         llm_client=None,
         personality: str = None,
-        api_url: str = "http://localhost:8080",
+        api_url: str = "http://localhost:8000",
         show_retrieval: bool = False,
         use_memory: bool = True,
         timeout: int = 30,
@@ -74,7 +74,7 @@ class Persona:
                        If None, will create default OpenAI client
             personality: Personality description for the AI (e.g. "You are a friendly and helpful coding assistant")
                         This will be included in the system prompt to define the AI's character
-            api_url: Remote API URL for memory operations (default: "http://localhost:8080")
+            api_url: Remote API URL for memory operations (default: "http://localhost:8000")
             show_retrieval: Whether to show retrieval process
             use_memory: Whether to enable Memory functionality (long-term memory)
             timeout: Request timeout in seconds for API calls
@@ -114,7 +114,7 @@ class Persona:
         self.personality = personality
         self.show_retrieval = show_retrieval
         self.use_memory = use_memory
-        self.api_url = api_url.rstrip('/') if api_url else "http://localhost:8080"
+        self.api_url = api_url.rstrip('/') if api_url else "http://localhost:8000"
 
         # Initialize Memory client (API-only)
         if self.use_memory:

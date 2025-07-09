@@ -27,7 +27,7 @@ class MemoryClient:
     def __init__(
         self,
         agent_id: str = None,
-        api_url: str = "http://localhost:8080",
+        api_url: str = "http://localhost:8000",
         timeout: int = 30,
     ):
         """
@@ -35,7 +35,7 @@ class MemoryClient:
 
         Args:
             agent_id: Agent ID (optional, but recommended for convenience)
-            api_url: Remote API URL for memory operations (e.g., "http://remote-server:8080")
+            api_url: Remote API URL for memory operations (e.g., "http://remote-server:8000")
             timeout: Request timeout in seconds
         """
         self.agent_id = agent_id

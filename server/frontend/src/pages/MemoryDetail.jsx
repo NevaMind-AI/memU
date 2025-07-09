@@ -176,7 +176,7 @@ function MemoryDetail() {
             </Typography>
           </AccordionSummary>
           <AccordionDetails>
-            <Paper sx={{ p: 2, backgroundColor: 'grey.50' }}>
+            <Paper sx={{ p: 2 }}>
               <Typography 
                 variant="body2" 
                 component="pre" 
@@ -200,7 +200,7 @@ function MemoryDetail() {
             </Typography>
           </AccordionSummary>
           <AccordionDetails>
-            <Paper sx={{ p: 2, backgroundColor: 'grey.50' }}>
+            <Paper sx={{ p: 2 }}>
               <Typography 
                 variant="body2" 
                 component="pre" 
@@ -224,7 +224,7 @@ function MemoryDetail() {
             </Typography>
           </AccordionSummary>
           <AccordionDetails>
-            <Paper sx={{ p: 2, backgroundColor: 'grey.50' }}>
+            <Paper sx={{ p: 2 }}>
               <Typography 
                 variant="body2" 
                 component="pre" 
@@ -249,7 +249,7 @@ function MemoryDetail() {
               </Typography>
             </AccordionSummary>
             <AccordionDetails>
-              <Paper sx={{ p: 2, backgroundColor: 'grey.50' }}>
+              <Paper sx={{ p: 2 }}>
                 <Typography 
                   variant="body2" 
                   component="pre" 

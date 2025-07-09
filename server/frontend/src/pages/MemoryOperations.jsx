@@ -175,7 +175,7 @@ function MemoryOperations() {
       </Box>
 
       {/* Operation Type Legend */}
-      <Paper sx={{ p: 2, mt: 3, backgroundColor: 'grey.50' }}>
+      <Paper sx={{ p: 2, mt: 3 }}>
         <Typography variant="h6" gutterBottom>
           Operation Type Legend
         </Typography>

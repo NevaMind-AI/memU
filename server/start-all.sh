@@ -78,8 +78,8 @@ start_backend() {
     BACKEND_PID=$!
     cd ..
     echo -e "${GREEN}✅ Backend server started (PID: $BACKEND_PID)${NC}"
-    echo -e "${GREEN}📍 API Interface: http://localhost:8080${NC}"
-    echo -e "${GREEN}📍 API Documentation: http://localhost:8080/docs${NC}"
+    echo -e "${GREEN}📍 API Interface: http://localhost:8000${NC}"
+echo -e "${GREEN}📍 API Documentation: http://localhost:8000/docs${NC}"
 }
 
 # Start frontend
@@ -112,7 +112,7 @@ cleanup() {
 wait_for_user() {
     echo -e "\n${GREEN}🎉 System startup completed!${NC}"
     echo -e "${BLUE}📱 Frontend Interface: http://localhost:5173${NC}"
-    echo -e "${BLUE}🔧 API Documentation: http://localhost:8080/docs${NC}"
+    echo -e "${BLUE}🔧 API Documentation: http://localhost:8000/docs${NC}"
     echo -e "\n${YELLOW}Press Ctrl+C to stop all services${NC}"
     
     # Wait for interrupt signal
