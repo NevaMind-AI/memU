@@ -33,83 +33,6 @@ os.environ.setdefault('POSTGRES_PASSWORD', '')
 from personalab import Persona
 
 
-def setup_diverse_conversations(persona: Persona, user_id: str) -> None:
-    """Setup diverse conversations across different topics for testing"""
-    print("📝 Setting up diverse conversations for comprehensive testing...")
-    
-    # Conversation Set 1: Python Programming
-    print("\n--- Conversation Set 1: Python Programming ---")
-    conversations = [
-        ("I'm learning Python programming. Can you help me understand lists?", "Lists are one of the most fundamental data structures in Python..."),
-        ("How do I append items to a list?", "You can use the append() method to add items to a list..."),
-        ("What's the difference between append and extend?", "Great question! append() adds a single item, while extend() adds multiple items..."),
-        ("Can you show me list comprehensions?", "List comprehensions are a powerful Python feature for creating lists concisely...")
-    ]
-    
-    for user_msg, expected_context in conversations:
-        response = persona.chat(user_msg, user_id)
-        print(f"User: {user_msg}")
-        print(f"Assistant: {response[:100]}...")
-    
-    persona.endsession(user_id)
-    print("✅ Python programming conversations saved")
-    time.sleep(1)
-    
-    # Conversation Set 2: Cooking & Recipes
-    print("\n--- Conversation Set 2: Cooking & Recipes ---")
-    conversations = [
-        ("I want to learn how to cook pasta. What's the best way?", "Cooking pasta is quite simple but there are important techniques..."),
-        ("What sauce goes well with spaghetti?", "There are many delicious sauces that pair well with spaghetti..."),
-        ("How do I make homemade tomato sauce?", "Making homemade tomato sauce is rewarding and not too difficult..."),
-        ("What's the secret to perfect risotto?", "Risotto requires patience and proper technique...")
-    ]
-    
-    for user_msg, expected_context in conversations:
-        response = persona.chat(user_msg, user_id)
-        print(f"User: {user_msg}")
-        print(f"Assistant: {response[:100]}...")
-    
-    persona.endsession(user_id)
-    print("✅ Cooking conversations saved")
-    time.sleep(1)
-    
-    # Conversation Set 3: Data Science & Machine Learning
-    print("\n--- Conversation Set 3: Data Science & Machine Learning ---")
-    conversations = [
-        ("Can you explain dictionaries in Python?", "Python dictionaries are key-value data structures..."),
-        ("How do I handle missing data in pandas?", "Handling missing data is crucial in data science..."),
-        ("What's the difference between supervised and unsupervised learning?", "This is a fundamental distinction in machine learning..."),
-        ("Can you explain neural networks simply?", "Neural networks are inspired by how the human brain works...")
-    ]
-    
-    for user_msg, expected_context in conversations:
-        response = persona.chat(user_msg, user_id)
-        print(f"User: {user_msg}")
-        print(f"Assistant: {response[:100]}...")
-    
-    persona.endsession(user_id)
-    print("✅ Data science conversations saved")
-    time.sleep(1)
-    
-    # Conversation Set 4: Travel & Culture
-    print("\n--- Conversation Set 4: Travel & Culture ---")
-    conversations = [
-        ("I'm planning a trip to Japan. What should I know?", "Japan is a fascinating country with rich culture..."),
-        ("What are the best places to visit in Tokyo?", "Tokyo offers incredible diversity in neighborhoods and attractions..."),
-        ("How do I use public transportation in Tokyo?", "Tokyo's public transportation system is extensive and efficient..."),
-        ("What's Japanese dining etiquette like?", "Japanese dining has many interesting customs and etiquette rules...")
-    ]
-    
-    for user_msg, expected_context in conversations:
-        response = persona.chat(user_msg, user_id)
-        print(f"User: {user_msg}")
-        print(f"Assistant: {response[:100]}...")
-    
-    persona.endsession(user_id)
-    print("✅ Travel conversations saved")
-    time.sleep(2)
-
-
 def test_basic_retrieval(persona: Persona, user_id: str) -> None:
     """Test basic conversation retrieval functionality"""
     print("\n" + "=" * 60)
@@ -402,7 +325,6 @@ def main():
     
     try:
         # Run comprehensive tests
-        # setup_diverse_conversations(persona, user_id)
         test_basic_retrieval(persona, user_id)
         test_threshold_sensitivity(persona, user_id)
         test_retrieval_limits(persona, user_id)

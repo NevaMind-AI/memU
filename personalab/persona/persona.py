@@ -214,12 +214,15 @@ class Persona:
                 similarity_threshold=self.conversation_similarity_threshold,
                 user_id=user_id  # Filter by user_id at database level for efficiency
             )
-            # Get full conversation details for each result
+            # Get full conversation details for each result using batch query
             user_conversations = []
+            conversation_ids = [conv["conversation_id"] for conv in similar_conversations]
+            
+            # Batch fetch all conversations in a single query
+            conversations_batch = self.conversation_manager.get_conversations_batch(conversation_ids)
+            
             for conv in similar_conversations:
-                conversation_details = self.conversation_manager.get_conversation(
-                    conv["conversation_id"]
-                )
+                conversation_details = conversations_batch.get(conv["conversation_id"])
                 
                 if conversation_details:
                     user_conversations.append({

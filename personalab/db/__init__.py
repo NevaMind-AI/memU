@@ -19,8 +19,6 @@ from .utils import (
     test_database_connection,
     get_db_connection,
     get_db_cursor,
-    database_operation,
-    safe_database_operation,
     get_database_info,
     ensure_pgvector_extension,
 )
@@ -40,8 +38,6 @@ __all__ = [
     "test_database_connection",
     "get_db_connection",
     "get_db_cursor",
-    "database_operation",
-    "safe_database_operation",
     "get_database_info",
     "ensure_pgvector_extension",
 ] 

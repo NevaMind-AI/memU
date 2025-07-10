@@ -13,10 +13,13 @@ import json
 import os
 import uuid
 from datetime import datetime
+from functools import wraps
 from typing import Any, Dict, List, Optional, Tuple
+from contextlib import contextmanager
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 from pgvector.psycopg2 import register_vector
 
 from ..memory.base import EventMemory, Memory, ProfileMemory
@@ -27,6 +30,36 @@ from .utils import build_connection_string, test_database_connection, ensure_pgv
 logger = get_logger(__name__)
 
 
+def retry_on_table_missing(max_retries: int = 1):
+    """
+    Decorator to retry database operations when tables are missing.
+    
+    Args:
+        max_retries: Maximum number of retries after the initial attempt
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            try:
+                return func(self, *args, **kwargs)
+            except psycopg2.errors.UndefinedTable:
+                logger.warning(f"Database tables missing in {func.__name__} - reinitializing and retrying")
+                self._init_database()
+                # Retry the operation once after re-initialization
+                for attempt in range(max_retries):
+                    try:
+                        return func(self, *args, **kwargs)
+                    except psycopg2.errors.UndefinedTable:
+                        if attempt == max_retries - 1:
+                            raise
+                        logger.warning(f"Retry {attempt + 1} failed in {func.__name__}, trying again")
+                        continue
+            except Exception:
+                raise
+        return wrapper
+    return decorator
+
+
 class PostgreSQLStorageBase:
     """
     Base class for PostgreSQL storage operations.
@@ -34,6 +67,9 @@ class PostgreSQLStorageBase:
     Provides common functionality for database connection, initialization,
     and utility methods shared by Memory and Conversation storage.
     """
+    
+    # Class-level connection pool shared across all instances
+    _connection_pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
 
     def __init__(self, connection_string: Optional[str] = None, **kwargs):
         """
@@ -49,8 +85,38 @@ class PostgreSQLStorageBase:
             # Build connection string from parameters or environment variables
             self.connection_string = build_connection_string(**kwargs)
 
+        # Initialize connection pool if not already created
+        if PostgreSQLStorageBase._connection_pool is None:
+            self._init_connection_pool()
+            
         self._test_connection()
         self._init_database()
+        
+    def _init_connection_pool(self):
+        """Initialize the connection pool."""
+        try:
+            PostgreSQLStorageBase._connection_pool = psycopg2.pool.ThreadedConnectionPool(
+                minconn=2,
+                maxconn=10,
+                dsn=self.connection_string
+            )
+            logger.info("Connection pool initialized with 2-10 connections")
+        except Exception as e:
+            logger.error(f"Failed to create connection pool: {e}")
+            raise
+            
+    @contextmanager
+    def get_connection(self):
+        """Get a connection from the pool."""
+        conn = None
+        try:
+            conn = PostgreSQLStorageBase._connection_pool.getconn()
+            # Register pgvector for this connection
+            register_vector(conn)
+            yield conn
+        finally:
+            if conn:
+                PostgreSQLStorageBase._connection_pool.putconn(conn)
 
     def _test_connection(self) -> None:
         """Test database connection."""
@@ -65,14 +131,11 @@ class PostgreSQLStorageBase:
             if not ensure_pgvector_extension(self.connection_string):
                 logger.warning("pgvector extension may not be available")
             
-            with psycopg2.connect(self.connection_string) as conn:
+            with self.get_connection() as conn:
                 with conn.cursor() as cur:
                     # Create tables specific to this storage type
                     self._init_tables(cur)
                     conn.commit()
-                    
-                    # Register pgvector types
-                    register_vector(conn)
                     
             logger.info("Database initialization completed")
         except Exception as e:
@@ -181,7 +244,23 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
             ON memory_contents USING hnsw (content_vector vector_cosine_ops)
         """
         )
+        
+        # Add composite indexes for common memory query patterns
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_memory_contents_type_vector_filtered
+            ON memory_contents (content_type, content_id) 
+            WHERE content_vector IS NOT NULL
+        """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_memories_agent_user_updated
+            ON memories (agent_id, user_id, updated_at DESC)
+        """
+        )
 
+    @retry_on_table_missing()
     def save_memory(self, memory: Memory) -> bool:
         """
         Save complete Memory object to database.
@@ -249,67 +328,6 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
 
                     conn.commit()
             return True
-        except psycopg2.errors.UndefinedTable:
-            # If tables were dropped (e.g., during cleanup), automatically recreate them and retry once
-            logger.warning("Database tables missing – reinitializing and retrying save_memory")
-            self._init_database()
-            # Retry the save once after re-initialization
-            try:
-                with psycopg2.connect(self.connection_string) as conn:
-                    with conn.cursor() as cur:
-                        # 1. Save/update metadata in memories table (no content)
-                        # Check if memory already exists for this agent-user combination
-                        cur.execute(
-                            "SELECT memory_id FROM memories WHERE agent_id = %s AND user_id = %s",
-                            (memory.agent_id, memory.user_id)
-                        )
-                        existing_memory = cur.fetchone()
-                        
-                        if existing_memory:
-                            # Memory exists, just update timestamp and use existing memory_id
-                            existing_memory_id = existing_memory[0]
-                            cur.execute(
-                                "UPDATE memories SET updated_at = %s WHERE memory_id = %s",
-                                (memory.updated_at, existing_memory_id)
-                            )
-                            # Update the memory object to use the existing memory_id for content operations
-                            actual_memory_id = existing_memory_id
-                        else:
-                            # New memory, insert with new memory_id
-                            cur.execute(
-                                """
-                                INSERT INTO memories
-                                (memory_id, agent_id, user_id, created_at, updated_at)
-                                VALUES (%s, %s, %s, %s, %s)
-                                """,
-                                (
-                                    memory.memory_id,
-                                    memory.agent_id,
-                                    memory.user_id,
-                                    memory.created_at,
-                                    memory.updated_at,
-                                ),
-                            )
-                            actual_memory_id = memory.memory_id
-
-                        # 2. Save content to memory_contents table using the actual memory_id
-                        profile_content = memory.get_profile()
-                        if profile_content:
-                            self._save_content(cur, actual_memory_id, 'profile', profile_content)
-
-                        event_content = memory.get_events()
-                        if event_content:
-                            self._save_content(cur, actual_memory_id, 'event', event_content)
-
-                        mind_content = memory.get_mind()
-                        if mind_content:
-                            self._save_content(cur, actual_memory_id, 'mind', mind_content)
-
-                        conn.commit()
-                return True
-            except Exception as retry_err:
-                logger.error(f"Retry after reinitialization failed: {retry_err}")
-                return False
         except Exception as e:
             logger.error(f"Error saving memory: {e}")
             return False
@@ -668,6 +686,28 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
             ON conversations USING hnsw (conversation_vector vector_cosine_ops)
         """
         )
+        
+        # Add composite indexes for common query patterns
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_conversations_agent_vector_filtered
+            ON conversations (agent_id, conversation_id) 
+            WHERE conversation_vector IS NOT NULL
+        """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_conversations_agent_user_created
+            ON conversations (agent_id, user_id, created_at DESC)
+        """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_conversations_session_created
+            ON conversations (session_id, created_at DESC)
+            WHERE session_id IS NOT NULL
+        """
+        )
 
     def save_conversation(self, conversation: Conversation) -> bool:
         """
@@ -731,7 +771,7 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
             Optional[Conversation]: Conversation object or None
         """
         try:
-            with psycopg2.connect(self.connection_string) as conn:
+            with self.get_connection() as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                     # Get conversation record
                     cur.execute(
@@ -785,6 +825,82 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
         except Exception as e:
             logger.error(f"Error getting conversation: {e}")
             return None
+
+    def get_conversations_batch(self, conversation_ids: List[str]) -> Dict[str, Optional[Conversation]]:
+        """
+        Get multiple conversations by their IDs in a single query.
+
+        Args:
+            conversation_ids: List of conversation IDs
+
+        Returns:
+            Dict mapping conversation_id to Conversation object (or None if not found)
+        """
+        if not conversation_ids:
+            return {}
+            
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    # Get all conversations in one query
+                    cur.execute(
+                        "SELECT * FROM conversations WHERE conversation_id = ANY(%s)",
+                        [conversation_ids],
+                    )
+
+                    rows = cur.fetchall()
+                    result = {}
+                    
+                    for conv_row in rows:
+                        # Parse messages from conversation_data JSONB
+                        messages = []
+                        if conv_row["conversation_data"]:
+                            try:
+                                # conversation_data contains the list of message dictionaries
+                                message_data_list = conv_row["conversation_data"]
+                                if isinstance(message_data_list, str):
+                                    message_data_list = json.loads(message_data_list)
+                                
+                                for msg_data in message_data_list:
+                                    message = ConversationMessage(
+                                        role=msg_data["role"],
+                                        content=msg_data["content"],
+                                        message_index=msg_data.get("message_index", 0),
+                                        message_id=msg_data.get("message_id", ""),
+                                        created_at=msg_data.get("created_at"),
+                                    )
+                                    messages.append(message)
+                            except (json.JSONDecodeError, TypeError, KeyError) as e:
+                                logger.warning(f"Error parsing conversation data: {e}")
+
+                        # Create Conversation object
+                        conversation = Conversation(
+                            messages=messages,
+                            agent_id=conv_row["agent_id"],
+                            user_id=conv_row["user_id"],
+                            conversation_id=conv_row["conversation_id"],
+                            created_at=conv_row["created_at"],
+                        )
+
+                        if conv_row["pipeline_result"]:
+                            conversation.pipeline_result = conv_row["pipeline_result"]
+                        if conv_row["memory_id"]:
+                            conversation.memory_id = conv_row["memory_id"]
+                        if conv_row["session_id"]:
+                            conversation.session_id = conv_row["session_id"]
+
+                        result[conv_row["conversation_id"]] = conversation
+
+                    # Add None for missing conversation IDs
+                    for conv_id in conversation_ids:
+                        if conv_id not in result:
+                            result[conv_id] = None
+
+                    return result
+
+        except Exception as e:
+            logger.error(f"Error getting conversations batch: {e}")
+            return {}
 
     def get_conversations_by_agent(
         self,

@@ -6,7 +6,7 @@ A Python framework for creating and managing AI personas and laboratory environm
 New version refactored based on STRUCTURE.md, adopting unified Memory architecture.
 """
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 __author__ = "PersonaLab Team"
 __email__ = "support@personalab.ai"
 
@@ -29,9 +29,9 @@ from .memo import ConversationManager
 from .memory import EventMemory  # Event memory component
 from .memory import Memory  # Unified Memory class
 from .memory import MemoryClient  # Memory client
-# MemoryUpdatePipeline removed in API-only architecture
+# Note: MemoryUpdatePipeline is still used in backend server for memory processing
 from .memory import MindMemory  # Mind memory component
-# PipelineResult removed in API-only architecture
+# Note: PipelineResult is still used in backend server for memory processing
 from .memory import ProfileMemory  # Memory components; Profile memory component
 
 # Persona API - Simple entry point
@@ -59,7 +59,9 @@ from .config import (
 
 # Backward compatibility (DEPRECATED - will be removed in future versions)
 try:
-
+    # Check if legacy components are available
+    # Note: Currently no legacy components need to be imported
+    # This is preserved for future backward compatibility needs
     _backward_compatibility_available = True
 except ImportError:
     _backward_compatibility_available = False
@@ -77,7 +79,7 @@ __all__ = [
     # Core Memory system
     "Memory",  # Unified Memory class
     "MemoryClient",  # Memory client
-    # "MemoryUpdatePipeline" and "PipelineResult" removed in API-only architecture
+    # Note: MemoryUpdatePipeline and PipelineResult are used in backend server but not exported in public API
     # Memory components
     "ProfileMemory",  # Profile memory component
     "EventMemory",  # Event memory component

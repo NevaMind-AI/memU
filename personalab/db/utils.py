@@ -147,64 +147,6 @@ def get_db_cursor(
             cursor.close()
 
 
-def database_operation(
-    connection_string: str,
-    use_dict_cursor: bool = False
-) -> Callable[[Callable[..., T]], Callable[..., Optional[T]]]:
-    """
-    Decorator for database operations with automatic error handling.
-    
-    Args:
-        connection_string: PostgreSQL connection string
-        use_dict_cursor: Whether to use DictCursor for results
-        
-    Returns:
-        Decorator function
-    """
-    def decorator(func: Callable[..., T]) -> Callable[..., Optional[T]]:
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> Optional[T]:
-            cursor_factory = psycopg2.extras.RealDictCursor if use_dict_cursor else None
-            
-            try:
-                with get_db_cursor(connection_string, cursor_factory) as cursor:
-                    return func(cursor, *args, **kwargs)
-            except Exception as e:
-                logger.error(f"Database operation '{func.__name__}' failed: {e}")
-                return None
-                
-        return wrapper
-    return decorator
-
-
-def safe_database_operation(
-    operation_name: str,
-    default_return: T = None
-) -> Callable[[Callable[..., T]], Callable[..., T]]:
-    """
-    Decorator for safe database operations with custom error handling.
-    
-    Args:
-        operation_name: Name of the operation for logging
-        default_return: Default return value on error
-        
-    Returns:
-        Decorator function
-    """
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> T:
-            try:
-                result = func(*args, **kwargs)
-                logger.debug(f"Database operation '{operation_name}' completed successfully")
-                return result
-            except Exception as e:
-                logger.error(f"Database operation '{operation_name}' failed: {e}")
-                return default_return
-                
-        return wrapper
-    return decorator
-
 
 def get_database_info(connection_string: str) -> Dict[str, Any]:
     """

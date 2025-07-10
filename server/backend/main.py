@@ -11,6 +11,7 @@ import time
 import traceback
 import uvicorn
 from datetime import datetime, timedelta
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 import psycopg2
@@ -64,6 +65,18 @@ setup_postgres_env()
 # Add project root directory to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
+# Cached configuration functions
+@lru_cache(maxsize=1)
+def get_cached_llm_config():
+    """Get cached LLM configuration."""
+    config_manager = get_llm_config_manager()
+    return config_manager.get_provider_config("openai")
+
+@lru_cache(maxsize=1)
+def get_cached_db_config():
+    """Get cached database configuration."""
+    return build_connection_string()
+
 # Initialize FastAPI app
 app = FastAPI(
     title="PersonaLab Backend Management System",
@@ -74,7 +87,7 @@ app = FastAPI(
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # Vite dev server
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -400,8 +413,7 @@ async def update_memory_with_conversation(request: UpdateConversationRequest):
         try:
             # Try to create OpenAI client for pipeline
             config_start = time.time()
-            llm_config_manager = get_llm_config_manager()
-            openai_config = llm_config_manager.get_provider_config("openai")
+            openai_config = get_cached_llm_config()
             config_time = time.time() - config_start
             
             logger.info(f"[MEMORY_UPDATE] Retrieved LLM config in {config_time:.3f}s")
@@ -660,13 +672,7 @@ async def get_users():
 def get_db_connection_string() -> Optional[str]:
     """Get database connection string from environment"""
     try:
-        return build_connection_string(
-            host=os.getenv('POSTGRES_HOST', 'localhost'),
-            port=int(os.getenv('POSTGRES_PORT', '5432')),
-            dbname=os.getenv('POSTGRES_DB', 'personalab'),
-            user=os.getenv('POSTGRES_USER', 'chenhong'),
-            password=os.getenv('POSTGRES_PASSWORD', '')
-        )
+        return get_cached_db_config()
     except Exception as e:
         logger.error(f"Error building connection string: {e}")
         return None
@@ -879,17 +885,6 @@ def get_unique_users():
     except Exception as e:
         logger.error(f"Error getting unique users: {e}")
         return []
-
-
-def parse_date(date_str):
-    """Parse date string to datetime object"""
-    try:
-        if isinstance(date_str, str):
-            return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-        return date_str
-    except Exception as e:
-        logger.error(f"Error parsing date: {e}")
-        return None
 
 
 if __name__ == "__main__":

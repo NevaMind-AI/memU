@@ -10,6 +10,7 @@ Provides Memory management interface through remote API:
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 import requests
+from cachetools import TTLCache
 
 from ..utils import get_logger
 
@@ -41,7 +42,7 @@ class MemoryClient:
         self.agent_id = agent_id
         self.api_url = api_url.rstrip('/')
         self.timeout = timeout
-        self._memory_cache = {}  # Cache for loaded memories
+        self._memory_cache = TTLCache(maxsize=100, ttl=3600)  # Cache for loaded memories (1 hour TTL)
         
         logger.info(f"MemoryClient initialized with API: {self.api_url}, agent_id: {agent_id}")
 

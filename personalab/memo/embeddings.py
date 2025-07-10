@@ -29,6 +29,21 @@ class EmbeddingProvider(ABC):
         """
         pass
 
+    def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate vector embeddings for multiple texts in batch.
+
+        Args:
+            texts: List of input texts
+
+        Returns:
+            List[List[float]]: List of vector embeddings
+
+        Note: Default implementation calls generate_embedding for each text.
+        Override in subclasses for more efficient batch processing.
+        """
+        return [self.generate_embedding(text) for text in texts]
+
     @property
     @abstractmethod
     def embedding_dimension(self) -> int:
@@ -81,6 +96,21 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         except Exception as e:
             logger.error(f"Error generating OpenAI embedding: {e}")
             raise RuntimeError(f"OpenAI embedding generation failed: {e}")
+
+    def generate_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """Generate OpenAI embeddings for multiple texts in batch."""
+        if not texts:
+            return []
+        
+        try:
+            # OpenAI supports batch embedding generation
+            response = self.client.embeddings.create(model=self.model, input=texts)
+            return [item.embedding for item in response.data]
+        except Exception as e:
+            logger.error(f"Error generating OpenAI batch embeddings: {e}")
+            # Fallback to individual embedding generation
+            logger.warning("Falling back to individual embedding generation")
+            return super().generate_embeddings_batch(texts)
 
     @property
     def embedding_dimension(self) -> int:
@@ -194,6 +224,40 @@ class EmbeddingManager:
             List[float]: Text embedding
         """
         return self.provider.generate_embedding(text)
+
+    def generate_conversation_embeddings_batch(self, conversations: List[List[Dict[str, str]]]) -> List[List[float]]:
+        """
+        Generate embeddings for multiple conversations in batch.
+
+        Args:
+            conversations: List of conversation message lists
+
+        Returns:
+            List[List[float]]: List of conversation embeddings
+        """
+        # Convert conversations to text strings
+        conversation_texts = []
+        for conversation in conversations:
+            text_parts = []
+            for message in conversation:
+                role = message.get("role", "")
+                content = message.get("content", "")
+                text_parts.append(f"{role}: {content}")
+            conversation_texts.append(" ".join(text_parts))
+        
+        return self.provider.generate_embeddings_batch(conversation_texts)
+
+    def generate_text_embeddings_batch(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate embeddings for multiple texts in batch.
+
+        Args:
+            texts: List of input texts
+
+        Returns:
+            List[List[float]]: List of text embeddings
+        """
+        return self.provider.generate_embeddings_batch(texts)
 
 
 def create_embedding_manager(provider_type: str = "auto", **kwargs) -> EmbeddingManager:

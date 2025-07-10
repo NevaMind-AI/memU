@@ -141,6 +141,18 @@ class ConversationManager:
         """
         return self.db.get_conversation(conversation_id)
 
+    def get_conversations_batch(self, conversation_ids: List[str]) -> Dict[str, Optional[Conversation]]:
+        """
+        Get multiple conversations by their IDs in a single query.
+
+        Args:
+            conversation_ids: List of conversation IDs
+
+        Returns:
+            Dict mapping conversation_id to Conversation object (or None if not found)
+        """
+        return self.db.get_conversations_batch(conversation_ids)
+
     def get_conversation_history(
         self,
         agent_id: str,

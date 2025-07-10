@@ -316,15 +316,6 @@ class ProfileMemory:
             if len(self.items) > self.max_items:
                 self.items = self.items[-self.max_items:]
 
-    def remove_item(self, item: str):
-        """
-        Remove a profile item.
-
-        Args:
-            item: Profile item to remove
-        """
-        if item in self.items:
-            self.items.remove(item)
 
     def get_content_string(self) -> str:
         """Get profile content as formatted string for backward compatibility"""
@@ -340,13 +331,6 @@ class ProfileMemory:
         """Check if profile memory is empty"""
         return len(self.items) == 0
 
-    def get_item_count(self) -> int:
-        """Get profile item count"""
-        return len(self.items)
-
-    def get_word_count(self) -> int:
-        """Get word count of profile content"""
-        return sum(len(item.split()) for item in self.items)
 
     def get_total_text_length(self) -> int:
         """Get total text length of all profile items"""
@@ -440,21 +424,6 @@ class MindMemory:
         """Set insights list"""
         self.insights = insights
 
-    def get_recent_insights(self, count: int = 10) -> List[str]:
-        """
-        Get recent insights
-
-        Args:
-            count: Number of insights to get
-
-        Returns:
-            List of recent insights
-        """
-        return self.insights[-count:] if count > 0 else []
-
-    def clear_insights(self):
-        """Clear all insights"""
-        self.insights = []
 
     def to_prompt(self) -> str:
         """Convert insights to prompt format"""
@@ -466,9 +435,6 @@ class MindMemory:
         """Check if mind memory is empty"""
         return len(self.insights) == 0
 
-    def get_insight_count(self) -> int:
-        """Get insight count"""
-        return len(self.insights)
 
     def get_total_text_length(self) -> int:
         """Get total text length of all insights"""

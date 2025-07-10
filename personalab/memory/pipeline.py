@@ -120,48 +120,48 @@ class MemoryUpdatePipeline:
         """
         pipeline_start_time = time.time()
         logger.info(f"[PIPELINE] Starting memory update pipeline for agent_id={previous_memory.agent_id}, user_id={previous_memory.user_id}")
-        logger.info(f"[PIPELINE] Processing {len(session_conversation)} conversation messages")
+        logger.debug(f"[PIPELINE] Processing {len(session_conversation)} conversation messages")
         
         # Log current memory state
         current_profile = previous_memory.get_profile_content()
         current_events = previous_memory.get_event_content()
         current_mind = previous_memory.get_mind_content()
-        logger.info(f"[PIPELINE] Current memory state: profile_items={len(current_profile)}, events={len(current_events)}, mind_insights={len(current_mind)}")
+        logger.debug(f"[PIPELINE] Current memory state: profile_items={len(current_profile)}, events={len(current_events)}, mind_insights={len(current_mind)}")
         
         # 1. LLM Modification stage: Analyze conversation and extract information
         stage1_start = time.time()
-        logger.info("[PIPELINE] Stage 1: Running LLM Modification stage...")
+        logger.debug("[PIPELINE] Stage 1: Running LLM Modification stage...")
         modification_result = self.llm_modification_stage(
             previous_memory, session_conversation
         )
         stage1_time = time.time() - stage1_start
-        logger.info(f"[PIPELINE] Stage 1 completed in {stage1_time:.3f}s: extracted {len(modification_result)} chars of analysis")
+        logger.debug(f"[PIPELINE] Stage 1 completed in {stage1_time:.3f}s: extracted {len(modification_result)} chars of analysis")
 
         # 2. LLM Update stage: Update profile and events
         stage2_start = time.time()
-        logger.info("[PIPELINE] Stage 2: Running LLM Update stage...")
+        logger.debug("[PIPELINE] Stage 2: Running LLM Update stage...")
         update_result = self.llm_update_stage(previous_memory, modification_result)
         stage2_time = time.time() - stage2_start
-        logger.info(f"[PIPELINE] Stage 2 completed in {stage2_time:.3f}s: profile_updated={update_result.profile_updated}")
+        logger.debug(f"[PIPELINE] Stage 2 completed in {stage2_time:.3f}s: profile_updated={update_result.profile_updated}")
 
         # 3. LLM Theory of Mind stage: Deep psychological analysis
         stage3_start = time.time()
-        logger.info("[PIPELINE] Stage 3: Running LLM Theory of Mind stage...")
+        logger.debug("[PIPELINE] Stage 3: Running LLM Theory of Mind stage...")
         mind_result = self.llm_theory_of_mind_stage(update_result, session_conversation)
         stage3_time = time.time() - stage3_start
-        logger.info(f"[PIPELINE] Stage 3 completed in {stage3_time:.3f}s: confidence={mind_result.confidence_score}")
+        logger.debug(f"[PIPELINE] Stage 3 completed in {stage3_time:.3f}s: confidence={mind_result.confidence_score}")
 
         # 4. Create new Memory object
         stage4_start = time.time()
-        logger.info("[PIPELINE] Stage 4: Creating updated Memory object...")
+        logger.debug("[PIPELINE] Stage 4: Creating updated Memory object...")
         new_memory = self._create_updated_memory(
             previous_memory, update_result, mind_result
         )
         stage4_time = time.time() - stage4_start
-        logger.info(f"[PIPELINE] Stage 4 completed in {stage4_time:.3f}s: Memory object created with ID={new_memory.memory_id}")
+        logger.debug(f"[PIPELINE] Stage 4 completed in {stage4_time:.3f}s: Memory object created with ID={new_memory.memory_id}")
 
         # 5. Build pipeline results
-        logger.info("[PIPELINE] Stage 5: Building pipeline results...")
+        logger.debug("[PIPELINE] Stage 5: Building pipeline results...")
         pipeline_result = PipelineResult(
             modification_result=modification_result,
             update_result=update_result,
