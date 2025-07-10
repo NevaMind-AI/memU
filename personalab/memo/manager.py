@@ -168,6 +168,7 @@ class ConversationManager:
         query: str,
         limit: int = 10,
         similarity_threshold: float = 0.7,
+        user_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search for similar conversations using semantic similarity.
@@ -177,14 +178,16 @@ class ConversationManager:
             query: Search query text
             limit: Maximum number of results
             similarity_threshold: Minimum similarity score
+            user_id: Optional user ID filter
 
         Returns:
             List[Dict]: Similar conversations with similarity scores
         """
+
         if not self.enable_embeddings or not self.embedding_manager:
             logger.warning("Embeddings not enabled. Search functionality is not available.")
             return []
-
+        
         try:
             # Generate query embedding
             query_embedding = self.embedding_manager.provider.generate_embedding(query)
@@ -196,6 +199,7 @@ class ConversationManager:
                     query_vector=query_embedding,
                     limit=limit,
                     similarity_threshold=similarity_threshold,
+                    user_id=user_id,
                 )
 
                 # Convert to expected format
@@ -205,13 +209,14 @@ class ConversationManager:
                         {
                             "conversation_id": conv["conversation_id"],
                             "agent_id": conv["agent_id"],
+                            "user_id": conv["user_id"],
                             "created_at": (
                                 conv["created_at"].isoformat()
                                 if hasattr(conv["created_at"], "isoformat")
                                 else conv["created_at"]
                             ),
                             "session_id": conv.get("session_id"),
-                            "similarity_score": conv["similarity_score"],
+                            "similarity_score": conv["similarity"],
                             "matched_content": f"Conversation from {conv['created_at']}",
                         }
                     )

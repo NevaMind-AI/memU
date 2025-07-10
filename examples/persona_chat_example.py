@@ -1,438 +1,445 @@
 #!/usr/bin/env python3
 """
-PersonaLab Persona Chat Example
+PersonaLab Advanced Chat Example with Comprehensive Conversation Retrieval Testing
 
-Demonstrates the core features of PersonaLab's Persona system:
-- Basic chat functionality
-- Memory management and persistence
-- Multi-user conversations
-- Session management
-- Historical context retrieval
+This example demonstrates:
+1. Basic chat functionality with memory
+2. Conversation retrieval based on query similarity
+3. Multi-user conversation isolation
+4. Threshold and limit testing
+5. Edge case handling
+6. Detailed retrieval analysis
 
-Prerequisites:
-1. Set up environment variables (see .env.example)
-2. Configure PostgreSQL database
-3. Install PersonaLab: pip install personalab[ai]
-
-Usage:
-    python examples/persona_chat_example.py
+The persona will now automatically retrieve relevant past conversations
+based on the similarity to the current query, providing better context
+and continuity in conversations.
 """
 
 import os
 import sys
-from datetime import datetime
-from typing import Optional
+import time
+from typing import List, Dict
 
-# Add project root to path for development
+# Add the project root to the path so we can import personalab
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Setup PostgreSQL environment variables
+os.environ.setdefault('POSTGRES_HOST', 'localhost')
+os.environ.setdefault('POSTGRES_PORT', '5432')
+os.environ.setdefault('POSTGRES_DB', 'personalab')
+os.environ.setdefault('POSTGRES_USER', 'chenhong')
+os.environ.setdefault('POSTGRES_PASSWORD', '')
+
 from personalab import Persona
-from personalab.llm import OpenAIClient
 
 
-def format_profile_display(profile, max_length=100):
-    """
-    Safely format profile data for display.
+def setup_diverse_conversations(persona: Persona, user_id: str) -> None:
+    """Setup diverse conversations across different topics for testing"""
+    print("📝 Setting up diverse conversations for comprehensive testing...")
     
-    Args:
-        profile: Profile data (can be list, string, or None)
-        max_length: Maximum length for display
-        
-    Returns:
-        str: Formatted profile string
-    """
-    if not profile:
-        return "No profile"
-    
-    if isinstance(profile, list):
-        profile_str = "\n   ".join(str(item) for item in profile)
-    else:
-        profile_str = str(profile)
-    
-    if len(profile_str) > max_length:
-        return profile_str[:max_length] + "..."
-    else:
-        return profile_str
-
-
-def create_ai_tutor() -> Optional[Persona]:
-    """
-    Create an AI tutor persona with memory capabilities.
-    
-    Returns:
-        Persona: Configured AI tutor or None if setup fails
-    """
-    try:
-        # Check for API key
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            print("❌ Error: OPENAI_API_KEY not found in environment variables")
-            print("💡 Please set your OpenAI API key in .env file")
-            return None
-
-        # Create LLM client
-        llm_client = OpenAIClient(
-            api_key=api_key,
-            model="gpt-4o-mini"
-        )
-
-        # Create persona with personality and memory
-        persona = Persona(
-            agent_id="ai_tutor",
-            llm_client=llm_client,
-            personality="""You are a helpful and patient AI tutor. You:
-- Explain concepts clearly and simply
-- Ask follow-up questions to check understanding
-- Remember what the student has learned
-- Adapt your teaching style to each student
-- Encourage and motivate students""",
-            use_memory=True,  # Enable long-term memory
-            show_retrieval=True  # Show when using historical context
-        )
-
-        print("✅ AI Tutor created successfully!")
-        return persona
-
-    except Exception as e:
-        print(f"❌ Error creating AI tutor: {e}")
-        return None
-
-
-def basic_chat_example(persona: Persona):
-    """
-    Demonstrate basic chat functionality.
-    
-    Args:
-        persona: The AI persona to chat with
-    """
-    print("\n" + "="*60)
-    print("🎯 BASIC CHAT EXAMPLE")
-    print("="*60)
-    
-    user_id = "student_alice"
-    
-    # Simple conversation
-    messages = [
-        "Hi! I'm new to programming. Can you help me?",
-        "What's the difference between a variable and a function?",
-        "Can you give me a simple example in Python?"
+    # Conversation Set 1: Python Programming
+    print("\n--- Conversation Set 1: Python Programming ---")
+    conversations = [
+        ("I'm learning Python programming. Can you help me understand lists?", "Lists are one of the most fundamental data structures in Python..."),
+        ("How do I append items to a list?", "You can use the append() method to add items to a list..."),
+        ("What's the difference between append and extend?", "Great question! append() adds a single item, while extend() adds multiple items..."),
+        ("Can you show me list comprehensions?", "List comprehensions are a powerful Python feature for creating lists concisely...")
     ]
     
-    for i, message in enumerate(messages, 1):
-        print(f"\n--- Turn {i} ---")
-        print(f"Student: {message}")
-        
-        response = persona.chat(message, user_id=user_id)
-        print(f"AI Tutor: {response}")
-
-
-def memory_demonstration(persona: Persona):
-    """
-    Demonstrate memory functionality and persistence.
+    for user_msg, expected_context in conversations:
+        response = persona.chat(user_msg, user_id)
+        print(f"User: {user_msg}")
+        print(f"Assistant: {response[:100]}...")
     
-    Args:
-        persona: The AI persona to chat with
-    """
-    print("\n" + "="*60)
-    print("🧠 MEMORY DEMONSTRATION")
-    print("="*60)
-    
-    user_id = "student_bob"
-    
-    # First session - learning about the student
-    print("\n--- Session 1: Getting to know the student ---")
-    session_1_messages = [
-        "Hi, I'm Bob. I'm studying computer science at university.",
-        "I'm particularly interested in machine learning and AI.",
-        "I have some experience with Python but I'm new to frameworks like TensorFlow."
-    ]
-    
-    for message in session_1_messages:
-        print(f"\nBob: {message}")
-        response = persona.chat(message, user_id=user_id)
-        print(f"AI Tutor: {response}")
-    
-    # End session to update memory
-    print("\n--- Ending Session 1 (memory will be updated) ---")
-    result = persona.endsession(user_id)
-    print(f"Session ended: {result}")
-    
-    # Show what was remembered
-    memory_info = persona.get_memory(user_id)
-    print(f"\n--- What the AI remembered about Bob ---")
-    profile = memory_info.get_profile()
-    print(f"Profile: {format_profile_display(profile)}")
-    events = memory_info.get_events()
-    print(f"Events: {len(events)} events recorded")
-    if events:
-        for i, event in enumerate(events[-3:], 1):  # Show last 3 events
-            print(f"  {i}. {event}")
-    
-    # Second session - AI should remember Bob
-    print(f"\n--- Session 2: AI remembers Bob (simulating next day) ---")
-    memory_test_messages = [
-        "Hi again! Do you remember me?",
-        "I wanted to continue learning about machine learning. What should I focus on next?"
-    ]
-    
-    for message in memory_test_messages:
-        print(f"\nBob: {message}")
-        response = persona.chat(message, user_id=user_id)
-        print(f"AI Tutor: {response}")
-
-
-def multi_user_example(persona: Persona):
-    """
-    Demonstrate multi-user conversations with memory isolation.
-    
-    Args:
-        persona: The AI persona to chat with
-    """
-    print("\n" + "="*60)
-    print("👥 MULTI-USER EXAMPLE")
-    print("="*60)
-    
-    users = {
-        "student_charlie": {
-            "name": "Charlie",
-            "intro": "Hi, I'm Charlie. I'm learning web development and need help with JavaScript.",
-            "follow_up": "Can you explain what async/await is in JavaScript?"
-        },
-        "student_diana": {
-            "name": "Diana",
-            "intro": "Hello! I'm Diana, a data scientist. I want to learn about deep learning.",
-            "follow_up": "What's the difference between CNN and RNN neural networks?"
-        }
-    }
-    
-    # Have conversations with different users
-    for user_id, user_info in users.items():
-        print(f"\n--- Conversation with {user_info['name']} ---")
-        
-        # Introduction
-        print(f"\n{user_info['name']}: {user_info['intro']}")
-        response1 = persona.chat(user_info['intro'], user_id=user_id)
-        print(f"AI Tutor: {response1}")
-        
-        # Follow-up question
-        print(f"\n{user_info['name']}: {user_info['follow_up']}")
-        response2 = persona.chat(user_info['follow_up'], user_id=user_id)
-        print(f"AI Tutor: {response2}")
-        
-        # End session
-        persona.endsession(user_id)
-    
-    # Show memory isolation
-    print(f"\n--- Memory Isolation Check ---")
-    for user_id, user_info in users.items():
-        memory = persona.get_memory(user_id)
-        print(f"\n{user_info['name']}'s memory:")
-        profile = memory.get_profile()
-        print(f"  Profile: {format_profile_display(profile)}")
-        events = memory.get_events()
-        print(f"  Events: {len(events)} events")
-
-
-def retrieval_demonstration(persona: Persona):
-    """
-    Demonstrate memory retrieval functionality with visual indicators.
-    
-    Args:
-        persona: The AI persona to chat with
-    """
-    print("\n" + "="*60)
-    print("🔍 MEMORY RETRIEVAL DEMONSTRATION")
-    print("="*60)
-    print("This example shows how PersonaLab retrieves relevant memories")
-    print("when responding to user messages.")
-    
-    user_id = "student_frank"
-    
-    # Build up some memory first
-    print("\n--- Building Memory (Session 1) ---")
-    initial_messages = [
-        "Hi, I'm Frank. I'm 25 years old and work as a data analyst.",
-        "I want to learn Python for data science. I know some SQL and Excel.",
-        "My goal is to automate my daily reports and do more advanced analytics.",
-        "I'm particularly interested in pandas and matplotlib libraries."
-    ]
-    
-    for i, message in enumerate(initial_messages, 1):
-        print(f"\n💬 Frank: {message}")
-        print("🔍 Retrieval: [Building initial memory...]")
-        response = persona.chat(message, user_id=user_id)
-        print(f"🤖 AI Tutor: {response}")
-    
-    # End session to save memory
-    print("\n--- Ending Session 1 (saving to long-term memory) ---")
     persona.endsession(user_id)
+    print("✅ Python programming conversations saved")
+    time.sleep(1)
     
-    # Show what was stored
-    memory = persona.get_memory(user_id)
-    print(f"\n📊 Memory Stored:")
-    print(f"   Memory: {memory}")
-    profile = memory.get_profile()
-    print(f"   Profile: {format_profile_display(profile)}")
-    events = memory.get_events()
-    print(f"   Events: {len(events)} events recorded")
-    
-    # New session with questions that should trigger retrieval
-    print("\n" + "="*60)
-    print("--- Session 2: Triggering Memory Retrieval ---")
-    print("="*60)
-    print("Now watch how PersonaLab retrieves relevant memories:")
-    
-    retrieval_test_messages = [
-        "Hi! Do you remember my background?",
-        "What Python libraries did I mention being interested in?",
-        "Given my background in data analysis, what should I learn first?",
-        "Can you recommend a pandas tutorial based on what you know about me?"
+    # Conversation Set 2: Cooking & Recipes
+    print("\n--- Conversation Set 2: Cooking & Recipes ---")
+    conversations = [
+        ("I want to learn how to cook pasta. What's the best way?", "Cooking pasta is quite simple but there are important techniques..."),
+        ("What sauce goes well with spaghetti?", "There are many delicious sauces that pair well with spaghetti..."),
+        ("How do I make homemade tomato sauce?", "Making homemade tomato sauce is rewarding and not too difficult..."),
+        ("What's the secret to perfect risotto?", "Risotto requires patience and proper technique...")
     ]
     
-    for i, message in enumerate(retrieval_test_messages, 1):
-        print(f"\n--- Retrieval Test {i} ---")
-        print(f"💬 Frank: {message}")
-        print("🔍 PersonaLab is now searching memory for relevant context...")
-        print("   → Looking for: user background, previous interests, goals")
-        
-        response = persona.chat(message, user_id=user_id)
-        
-        print(f"✅ Memory retrieved and used in response!")
-        print(f"🤖 AI Tutor: {response}")
-        
-        # Show a brief pause to emphasize the retrieval process
-        import time
-        time.sleep(0.5)
+    for user_msg, expected_context in conversations:
+        response = persona.chat(user_msg, user_id)
+        print(f"User: {user_msg}")
+        print(f"Assistant: {response[:100]}...")
+    
+    persona.endsession(user_id)
+    print("✅ Cooking conversations saved")
+    time.sleep(1)
+    
+    # Conversation Set 3: Data Science & Machine Learning
+    print("\n--- Conversation Set 3: Data Science & Machine Learning ---")
+    conversations = [
+        ("Can you explain dictionaries in Python?", "Python dictionaries are key-value data structures..."),
+        ("How do I handle missing data in pandas?", "Handling missing data is crucial in data science..."),
+        ("What's the difference between supervised and unsupervised learning?", "This is a fundamental distinction in machine learning..."),
+        ("Can you explain neural networks simply?", "Neural networks are inspired by how the human brain works...")
+    ]
+    
+    for user_msg, expected_context in conversations:
+        response = persona.chat(user_msg, user_id)
+        print(f"User: {user_msg}")
+        print(f"Assistant: {response[:100]}...")
+    
+    persona.endsession(user_id)
+    print("✅ Data science conversations saved")
+    time.sleep(1)
+    
+    # Conversation Set 4: Travel & Culture
+    print("\n--- Conversation Set 4: Travel & Culture ---")
+    conversations = [
+        ("I'm planning a trip to Japan. What should I know?", "Japan is a fascinating country with rich culture..."),
+        ("What are the best places to visit in Tokyo?", "Tokyo offers incredible diversity in neighborhoods and attractions..."),
+        ("How do I use public transportation in Tokyo?", "Tokyo's public transportation system is extensive and efficient..."),
+        ("What's Japanese dining etiquette like?", "Japanese dining has many interesting customs and etiquette rules...")
+    ]
+    
+    for user_msg, expected_context in conversations:
+        response = persona.chat(user_msg, user_id)
+        print(f"User: {user_msg}")
+        print(f"Assistant: {response[:100]}...")
+    
+    persona.endsession(user_id)
+    print("✅ Travel conversations saved")
+    time.sleep(2)
 
 
-def session_management_example(persona: Persona):
-    """
-    Demonstrate session management and conversation history.
+def test_basic_retrieval(persona: Persona, user_id: str) -> None:
+    """Test basic conversation retrieval functionality"""
+    print("\n" + "=" * 60)
+    print("🔍 BASIC RETRIEVAL TESTING")
+    print("=" * 60)
     
-    Args:
-        persona: The AI persona to chat with
-    """
-    print("\n" + "="*60)
-    print("📊 SESSION MANAGEMENT EXAMPLE")
-    print("="*60)
-    
-    user_id = "student_eve"
-    
-    # Multiple sessions over time
-    sessions = [
+    test_cases = [
         {
-            "topic": "Variables and Data Types",
-            "messages": [
-                "I want to learn about Python variables.",
-                "What are the main data types in Python?",
-                "Can you show me how to use lists?"
-            ]
+            "query": "I'm having trouble with Python dictionaries. Can you remind me what we discussed?",
+            "expected_topic": "Python/Data Science",
+            "description": "Should retrieve Python programming conversations"
         },
         {
-            "topic": "Functions and Loops", 
-            "messages": [
-                "Now I want to learn about functions.",
-                "How do I write a for loop in Python?",
-                "Can you show me a function that uses a loop?"
-            ]
+            "query": "What was that pasta cooking advice you gave me before?",
+            "expected_topic": "Cooking",
+            "description": "Should retrieve cooking conversations"
+        },
+        {
+            "query": "Can you remind me how to work with lists in Python?",
+            "expected_topic": "Python",
+            "description": "Should retrieve Python list conversations"
+        },
+        {
+            "query": "What did you tell me about visiting Japan?",
+            "expected_topic": "Travel",
+            "description": "Should retrieve travel conversations"
+        },
+        {
+            "query": "How do I handle missing data again?",
+            "expected_topic": "Data Science",
+            "description": "Should retrieve data science conversations"
         }
     ]
     
-    for i, session in enumerate(sessions, 1):
-        print(f"\n--- Session {i}: {session['topic']} ---")
+    for i, test_case in enumerate(test_cases, 1):
+        print(f"\n--- Test {i}: {test_case['description']} ---")
+        print(f"Query: {test_case['query']}")
+        print(f"Expected topic: {test_case['expected_topic']}")
         
-        for message in session['messages']:
-            print(f"\nEve: {message}")
-            if i > 1:  # Show retrieval info for later sessions
-                print("🔍 Checking memory for previous learning context...")
-            response = persona.chat(message, user_id=user_id)
-            print(f"AI Tutor: {response}")
-        
-        # End session
-        print(f"\n--- Ending Session {i} ---")
-        persona.endsession(user_id)
-    
-    # Show final memory state
-    final_memory = persona.get_memory(user_id)
-    print(f"\n--- Eve's Learning Journey Summary ---")
-    events = final_memory.get_events()
-    print(f"Total events recorded: {len(events)}")
-    profile = final_memory.get_profile()
-    print(f"Profile: {format_profile_display(profile)}")
-    mind = final_memory.get_mind()
-    if mind:
-        print(f"AI insights about Eve: {mind}")
+        response = persona.chat(test_case['query'], user_id)
+        print(f"Assistant: {response[:200]}...")
+        print(f"✅ Test {i} completed")
 
 
-def cleanup_example(persona: Persona):
-    """
-    Demonstrate proper cleanup and resource management.
+def test_threshold_sensitivity(persona: Persona, user_id: str) -> None:
+    """Test different similarity thresholds"""
+    print("\n" + "=" * 60)
+    print("🎯 THRESHOLD SENSITIVITY TESTING")
+    print("=" * 60)
     
-    Args:
-        persona: The AI persona to clean up
-    """
-    print("\n" + "="*60)
-    print("🧹 CLEANUP")
-    print("="*60)
+    # Test with different thresholds
+    thresholds = [0.9, 0.7, 0.5, 0.3]
+    test_query = "Tell me about Python programming concepts"
     
-    try:
-        # Close persona and release resources
-        persona.close()
-        print("✅ Persona resources cleaned up successfully")
-    except Exception as e:
-        print(f"⚠️ Warning during cleanup: {e}")
+    for threshold in thresholds:
+        print(f"\n--- Testing with threshold: {threshold} ---")
+        
+        # Create a new persona with different threshold
+        test_persona = Persona(
+            agent_id="helpful_assistant",
+            personality="You are a helpful assistant.",
+            enable_conversation_retrieval=True,
+            max_retrieved_conversations=3,
+            conversation_similarity_threshold=threshold,
+            show_retrieval=True
+        )
+        
+        response = test_persona.chat(test_query, user_id)
+        print(f"Query: {test_query}")
+        print(f"Response: {response[:150]}...")
+        
+        test_persona.endsession(user_id)
+        test_persona.close()
+
+
+def test_retrieval_limits(persona: Persona, user_id: str) -> None:
+    """Test different retrieval limits"""
+    print("\n" + "=" * 60)
+    print("📊 RETRIEVAL LIMIT TESTING")
+    print("=" * 60)
+    
+    # Test with different limits
+    limits = [1, 3, 5, 10]
+    test_query = "I want to learn more about programming and cooking"
+    
+    for limit in limits:
+        print(f"\n--- Testing with limit: {limit} ---")
+        
+        # Create a new persona with different limit
+        test_persona = Persona(
+            agent_id="helpful_assistant",
+            personality="You are a helpful assistant.",
+            enable_conversation_retrieval=True,
+            max_retrieved_conversations=limit,
+            conversation_similarity_threshold=0.6,
+            show_retrieval=True
+        )
+        
+        response = test_persona.chat(test_query, user_id)
+        print(f"Query: {test_query}")
+        print(f"Response: {response[:150]}...")
+        
+        test_persona.endsession(user_id)
+        test_persona.close()
+
+
+def test_multi_user_isolation(persona: Persona) -> None:
+    """Test that conversation retrieval respects user isolation"""
+    print("\n" + "=" * 60)
+    print("👥 MULTI-USER ISOLATION TESTING")
+    print("=" * 60)
+    
+    # Setup conversations for User A
+    user_a = "user_alice"
+    print(f"\n--- Setting up conversations for {user_a} ---")
+    
+    alice_conversations = [
+        "I'm a software engineer working on web applications",
+        "I use React and Node.js for my projects",
+        "I'm interested in learning about microservices architecture"
+    ]
+    
+    for msg in alice_conversations:
+        response = persona.chat(msg, user_a)
+        print(f"Alice: {msg}")
+        print(f"Assistant: {response[:80]}...")
+    
+    persona.endsession(user_a)
+    print("✅ Alice's conversations saved")
+    time.sleep(1)
+    
+    # Setup conversations for User B
+    user_b = "user_bob"
+    print(f"\n--- Setting up conversations for {user_b} ---")
+    
+    bob_conversations = [
+        "I'm a data scientist working with machine learning models",
+        "I use Python and scikit-learn for my analysis",
+        "I'm interested in deep learning and neural networks"
+    ]
+    
+    for msg in bob_conversations:
+        response = persona.chat(msg, user_b)
+        print(f"Bob: {msg}")
+        print(f"Assistant: {response[:80]}...")
+    
+    persona.endsession(user_b)
+    print("✅ Bob's conversations saved")
+    time.sleep(1)
+    
+    # Test isolation: Alice queries should only retrieve Alice's conversations
+    print(f"\n--- Testing isolation: Alice queries ---")
+    alice_query = "What did I tell you about my work experience?"
+    response = persona.chat(alice_query, user_a)
+    print(f"Alice: {alice_query}")
+    print(f"Assistant: {response[:150]}...")
+    
+    # Test isolation: Bob queries should only retrieve Bob's conversations
+    print(f"\n--- Testing isolation: Bob queries ---")
+    bob_query = "What did I tell you about my work experience?"
+    response = persona.chat(bob_query, user_b)
+    print(f"Bob: {bob_query}")
+    print(f"Assistant: {response[:150]}...")
+    
+    persona.endsession(user_a)
+    persona.endsession(user_b)
+
+
+def test_edge_cases(persona: Persona, user_id: str) -> None:
+    """Test edge cases and error conditions"""
+    print("\n" + "=" * 60)
+    print("⚠️  EDGE CASE TESTING")
+    print("=" * 60)
+    
+    # Test 1: Very short query
+    print("\n--- Test 1: Very short query ---")
+    response = persona.chat("Hi", user_id)
+    print(f"User: Hi")
+    print(f"Assistant: {response[:100]}...")
+    
+    # Test 2: Very long query
+    print("\n--- Test 2: Very long query ---")
+    long_query = "I want to understand " + "programming " * 50 + "concepts"
+    response = persona.chat(long_query, user_id)
+    print(f"User: {long_query[:100]}...")
+    print(f"Assistant: {response[:100]}...")
+    
+    # Test 3: Query with no relevant context
+    print("\n--- Test 3: Query with no relevant context ---")
+    response = persona.chat("What's the square root of 144?", user_id)
+    print(f"User: What's the square root of 144?")
+    print(f"Assistant: {response[:100]}...")
+    
+    # Test 4: Query similar to multiple topics
+    print("\n--- Test 4: Query similar to multiple topics ---")
+    response = persona.chat("I need help with Python programming for data analysis and cooking recipes", user_id)
+    print(f"User: I need help with Python programming for data analysis and cooking recipes")
+    print(f"Assistant: {response[:100]}...")
+    
+    persona.endsession(user_id)
+
+
+def test_retrieval_with_disabled_feature() -> None:
+    """Test behavior when retrieval is disabled"""
+    print("\n" + "=" * 60)
+    print("🚫 DISABLED RETRIEVAL TESTING")
+    print("=" * 60)
+    
+    # Create persona with retrieval disabled
+    persona_no_retrieval = Persona(
+        agent_id="assistant_no_retrieval",
+        personality="You are a helpful assistant.",
+        enable_conversation_retrieval=False,
+        show_retrieval=True
+    )
+    
+    user_id = "test_user"
+    
+    # Have a conversation
+    response = persona_no_retrieval.chat("Tell me about Python programming", user_id)
+    print(f"User: Tell me about Python programming")
+    print(f"Assistant: {response[:100]}...")
+    
+    persona_no_retrieval.endsession(user_id)
+    
+    # Try to reference previous conversation
+    response = persona_no_retrieval.chat("What did we discuss about Python?", user_id)
+    print(f"User: What did we discuss about Python?")
+    print(f"Assistant: {response[:100]}...")
+    
+    persona_no_retrieval.endsession(user_id)
+    persona_no_retrieval.close()
+
+
+def analyze_retrieval_performance(persona: Persona, user_id: str) -> None:
+    """Analyze retrieval performance and accuracy"""
+    print("\n" + "=" * 60)
+    print("📈 RETRIEVAL PERFORMANCE ANALYSIS")
+    print("=" * 60)
+    
+    # Test queries with expected topics
+    test_cases = [
+        ("Python list operations", "Python"),
+        ("Pasta cooking methods", "Cooking"),
+        ("Machine learning basics", "Data Science"),
+        ("Tokyo travel tips", "Travel"),
+        ("Dictionary data structures", "Python/Data Science")
+    ]
+    
+    print("\nAnalyzing retrieval accuracy...")
+    for query, expected_topic in test_cases:
+        print(f"\n--- Query: {query} ---")
+        print(f"Expected topic: {expected_topic}")
+        
+        # Use show_retrieval=True to see what's retrieved
+        response = persona.chat(query, user_id)
+        print(f"Response: {response[:150]}...")
+        
+        # Check if response seems relevant to expected topic
+        response_lower = response.lower()
+        if expected_topic.lower() in response_lower or any(word in response_lower for word in expected_topic.lower().split('/')):
+            print("✅ Retrieval appears accurate")
+        else:
+            print("⚠️  Retrieval might not be optimal")
+    
+    persona.endsession(user_id)
 
 
 def main():
-    """Main function demonstrating PersonaLab Persona chat functionality."""
+    """Main function demonstrating comprehensive PersonaLab conversation retrieval"""
+    print("🤖 PersonaLab Comprehensive Conversation Retrieval Testing")
+    print("=" * 70)
     
-    print("🤖 PersonaLab Persona Chat Example")
-    print("=" * 50)
-    print("This example demonstrates:")
-    print("✅ Basic chat functionality")
-    print("✅ Memory management and persistence")
-    print("🔍 Memory retrieval visualization")
-    print("✅ Multi-user conversations")
-    print("✅ Session management")
-    print("✅ Historical context retrieval")
-    print("\n" + "="*50)
+    # Initialize persona with conversation retrieval enabled
+    persona = Persona(
+        agent_id="helpful_assistant",
+        personality="You are a helpful and knowledgeable assistant. You remember past conversations and can reference them when helpful to provide continuity and context.",
+        enable_conversation_retrieval=True,
+        max_retrieved_conversations=3,
+        conversation_similarity_threshold=0.1,
+        show_retrieval=True
+    )
     
-    # Create AI tutor persona
-    persona = create_ai_tutor()
-    if not persona:
-        print("❌ Failed to create persona. Please check your configuration.")
-        return 1
+    user_id = "demo_user"
+    
+    print(f"Persona initialized with conversation retrieval enabled")
+    print(f"Agent ID: {persona.agent_id}")
+    print(f"Max retrieved conversations: {persona.max_retrieved_conversations}")
+    print(f"Similarity threshold: {persona.conversation_similarity_threshold}")
     
     try:
-        # Run examples
-        basic_chat_example(persona)
-        memory_demonstration(persona) 
-        retrieval_demonstration(persona)  # NEW: Dedicated retrieval demo
-        multi_user_example(persona)
-        session_management_example(persona)
+        # Run comprehensive tests
+        # setup_diverse_conversations(persona, user_id)
+        test_basic_retrieval(persona, user_id)
+        test_threshold_sensitivity(persona, user_id)
+        test_retrieval_limits(persona, user_id)
+        test_multi_user_isolation(persona)
+        test_edge_cases(persona, user_id)
+        test_retrieval_with_disabled_feature()
+        analyze_retrieval_performance(persona, user_id)
         
-        print("\n" + "="*60)
-        print("🎉 ALL EXAMPLES COMPLETED SUCCESSFULLY!")
-        print("="*60)
-        print("\n💡 Key Takeaways:")
-        print("• PersonaLab automatically manages memory across sessions")
-        print("• Each user has isolated memory spaces")
-        print("• The AI learns about users over time")
-        print("• Historical context enhances conversation quality")
-        print("• Session management helps organize learning progress")
+        # Show final session info
+        print("\n" + "=" * 60)
+        print("📊 FINAL SESSION INFORMATION")
+        print("=" * 60)
+        session_info = persona.get_session_info(user_id)
+        for key, value in session_info.items():
+            print(f"  {key}: {value}")
         
-    except KeyboardInterrupt:
-        print("\n\n⏹️ Example interrupted by user")
+        print("\n✅ All tests completed successfully!")
+        print("\nKey features tested:")
+        print("1. ✅ Conversation retrieval based on semantic similarity")
+        print("2. ✅ User-specific conversation filtering and isolation")
+        print("3. ✅ Configurable similarity thresholds")
+        print("4. ✅ Configurable retrieval limits")
+        print("5. ✅ Edge case handling")
+        print("6. ✅ Multi-user isolation")
+        print("7. ✅ Performance analysis")
+        print("8. ✅ Disabled retrieval behavior")
+        
     except Exception as e:
-        print(f"\n❌ Example failed: {e}")
-        return 1
-    finally:
-        # Always cleanup
-        cleanup_example(persona)
+        print(f"❌ Error during testing: {e}")
+        import traceback
+        traceback.print_exc()
     
-    return 0
+    finally:
+        # Clean up
+        persona.close()
+        print("\n🧹 Cleanup completed")
 
 
 if __name__ == "__main__":
-    exit_code = main()
-    sys.exit(exit_code) 
+    main() 

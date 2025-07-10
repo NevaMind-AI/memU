@@ -4,23 +4,36 @@ PersonaLab Backend Management System - FastAPI Backend
 Provides API interfaces for conversation, memory and memory operation records in the database
 """
 
+import json
 import os
 import sys
+import time
+import traceback
+import uvicorn
 from datetime import datetime, timedelta
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
+
+import psycopg2
+import psycopg2.extras
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import json
 
 # Add parent directory to path for PersonaLab imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from personalab.config import get_llm_config_manager
+from personalab.db import build_connection_string, get_database_manager
+from personalab.llm import OpenAIClient
+from personalab.memory.base import Memory
+from personalab.memory.manager import MemoryClient
+from personalab.memory.pipeline import MemoryUpdatePipeline
+from personalab.memo.manager import ConversationManager
 from personalab.utils import get_logger
-from personalab.db import build_connection_string
 
 logger = get_logger(__name__)
 
-# Set PostgreSQL environment variables (before importing PersonaLab modules)
+
 def setup_postgres_env():
     """Set PostgreSQL environment variables"""
     # Get default configuration from setup script
@@ -44,16 +57,14 @@ def setup_postgres_env():
     logger.info(f"   POSTGRES_USER: {os.getenv('POSTGRES_USER')}")
     logger.info(f"   POSTGRES_PASSWORD: {'*' * len(os.getenv('POSTGRES_PASSWORD', ''))}")
 
+
 # Set environment variables
 setup_postgres_env()
 
 # Add project root directory to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from personalab.db import get_database_manager
-from personalab.memory.manager import MemoryClient
-from personalab.memo.manager import ConversationManager
-
+# Initialize FastAPI app
 app = FastAPI(
     title="PersonaLab Backend Management System",
     description="Provides API interfaces for conversation, memory and memory operation records in the database",
@@ -73,7 +84,8 @@ app.add_middleware(
 db_manager = get_database_manager()
 # Create a direct database memory client for the API endpoints
 memory_database = db_manager.get_memory_db()
-conversation_manager = ConversationManager(db_manager=db_manager, enable_embeddings=False)
+conversation_manager = ConversationManager(db_manager=db_manager, enable_embeddings=True)
+
 
 # Pydantic models
 class SystemStats(BaseModel):
@@ -81,6 +93,7 @@ class SystemStats(BaseModel):
     memories: Dict[str, int]
     agents: Dict[str, int]
     users: Dict[str, int]
+
 
 class ConversationInfo(BaseModel):
     conversation_id: str
@@ -91,12 +104,14 @@ class ConversationInfo(BaseModel):
     session_id: Optional[str] = None
     memory_id: Optional[str] = None
 
+
 class MemoryInfo(BaseModel):
     memory_id: str
     agent_id: str
     user_id: str
     created_at: datetime
     updated_at: datetime
+
 
 class MemoryOperation(BaseModel):
     operation_id: str
@@ -107,15 +122,44 @@ class MemoryOperation(BaseModel):
     timestamp: datetime
     details: str
 
+
 class DeleteResponse(BaseModel):
     success: bool
     message: str
+
+
+class UpdateConversationRequest(BaseModel):
+    agent_id: str
+    user_id: str
+    conversation: List[Dict[str, str]]
+
+
+class UpdateProfileRequest(BaseModel):
+    agent_id: str
+    user_id: str
+    profile_info: str
+
+
+class UpdateEventsRequest(BaseModel):
+    agent_id: str
+    user_id: str
+    events: List[str]
+
+
+class SaveConversationRequest(BaseModel):
+    agent_id: str
+    user_id: str
+    messages: List[Dict[str, str]]
+    session_id: Optional[str] = None
+    memory_id: Optional[str] = None
+
 
 # API routes
 @app.get("/", response_model=Dict[str, str])
 async def root():
     """Health check"""
     return {"message": "PersonaLab Backend Management System API", "status": "running"}
+
 
 @app.get("/api/stats", response_model=SystemStats)
 async def get_stats():
@@ -125,6 +169,7 @@ async def get_stats():
         return SystemStats(**stats)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/conversations", response_model=List[ConversationInfo])
 async def get_conversations(
@@ -156,6 +201,7 @@ async def get_conversations(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/api/conversations/{conversation_id}")
 async def get_conversation_detail(conversation_id: str):
     """Get conversation details"""
@@ -186,6 +232,7 @@ async def get_conversation_detail(conversation_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.delete("/api/conversations/{conversation_id}", response_model=DeleteResponse)
 async def delete_conversation(conversation_id: str):
     """Delete conversation"""
@@ -197,6 +244,7 @@ async def delete_conversation(conversation_id: str):
             return DeleteResponse(success=False, message="Deletion failed")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/memories", response_model=List[MemoryInfo])
 async def get_memories(
@@ -217,6 +265,7 @@ async def get_memories(
         return [MemoryInfo(**memory) for memory in paginated_memories]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/memories/{memory_id}")
 async def get_memory_detail(memory_id: str):
@@ -249,14 +298,6 @@ async def get_memory_detail(memory_id: str):
             logger.warning(f"Error getting mind content: {e}")
             mind_content = []
         
-        # Note: mind_metadata is no longer stored in database table
-        # but may still be available on Memory objects
-        try:
-            mind_metadata = getattr(memory, 'mind_metadata', None)
-        except Exception as e:
-            logger.warning(f"Error getting mind metadata: {e}")
-            mind_metadata = None
-        
         return {
             'memory_id': memory.memory_id,
             'agent_id': memory.agent_id,
@@ -266,11 +307,12 @@ async def get_memory_detail(memory_id: str):
             'profile_content': profile_str,
             'event_content': event_content,
             'mind_content': mind_content,
-            'mind_metadata': mind_metadata
+            # mind_metadata removed (legacy compatibility eliminated)
         }
     except Exception as e:
         logger.error(f"Error getting memory detail for {memory_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.delete("/api/memories/{memory_id}", response_model=DeleteResponse)
 async def delete_memory(memory_id: str):
@@ -284,117 +326,207 @@ async def delete_memory(memory_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Additional Memory API endpoints needed by PersonaLab clients
 
-class UpdateConversationRequest(BaseModel):
-    agent_id: str
-    user_id: str
-    conversation: List[Dict[str, str]]
+@app.post("/api/conversations/save")
+async def save_conversation(request: SaveConversationRequest):
+    """Save conversation to database"""
+    try:
+        # Use the conversation manager to save conversation
+        conversation = conversation_manager.record_conversation(
+            agent_id=request.agent_id,
+            user_id=request.user_id,
+            messages=request.messages,
+            session_id=request.session_id,
+            memory_id=request.memory_id,
+            enable_vectorization=True
+        )
+        
+        logger.info(f"Saved conversation {conversation.conversation_id} for {request.agent_id}/{request.user_id}")
+        
+        return {
+            "success": True, 
+            "message": "Conversation saved successfully",
+            "conversation_id": conversation.conversation_id,
+            "session_id": conversation.session_id,
+            "created_at": conversation.created_at.isoformat(),
+            "message_count": len(conversation.messages)
+        }
+    except Exception as e:
+        logger.error(f"Error saving conversation: {e}")
+        return {"success": False, "error": str(e)}
 
-class UpdateProfileRequest(BaseModel):
-    agent_id: str
-    user_id: str
-    profile_info: str
-
-class UpdateEventsRequest(BaseModel):
-    agent_id: str
-    user_id: str
-    events: List[str]
 
 @app.post("/api/memories/update-memory")
 async def update_memory_with_conversation(request: UpdateConversationRequest):
     """Update memory with conversation data using MemoryUpdatePipeline"""
+    start_time = time.time()
+    
+    # Log incoming request details
+    logger.info(f"[MEMORY_UPDATE] Starting memory update for agent_id={request.agent_id}, user_id={request.user_id}")
+    logger.info(f"[MEMORY_UPDATE] Conversation contains {len(request.conversation)} turns")
+    
     try:
         # Get or create memory using direct database access
+        memory_lookup_start = time.time()
         existing_memory = memory_database.get_memory_by_agent(request.agent_id, request.user_id)
+        memory_lookup_time = time.time() - memory_lookup_start
+        
         if existing_memory:
             memory = existing_memory
+            logger.info(f"[MEMORY_UPDATE] Found existing memory (ID: {memory.memory_id}) in {memory_lookup_time:.3f}s")
+            
+            # Log current memory state
+            current_profile = memory.get_profile() if hasattr(memory, 'get_profile') else []
+            current_events = memory.get_events() if hasattr(memory, 'get_events') else []
+            current_mind = memory.get_mind() if hasattr(memory, 'get_mind') else []
+            
+            logger.info(f"[MEMORY_UPDATE] Current memory state - Profile items: {len(current_profile)}, Events: {len(current_events)}, Mind insights: {len(current_mind)}")
         else:
             # Create a new memory if none exists
-            from personalab.memory.base import Memory
             memory = Memory(
                 agent_id=request.agent_id,
                 user_id=request.user_id,
                 memory_client=None
             )
             memory_database.save_memory(memory)
+            logger.info(f"[MEMORY_UPDATE] Created new memory (ID: {memory.memory_id}) in {memory_lookup_time:.3f}s")
+            
+            # Initialize empty current state for new memory
+            current_profile = []
+            current_events = []
+            current_mind = []
         
         # Initialize MemoryUpdatePipeline
-        from personalab.memory.pipeline import MemoryUpdatePipeline
-        from personalab.llm import OpenAIClient
-        from personalab.config import get_llm_config_manager
-        
         try:
             # Try to create OpenAI client for pipeline
+            config_start = time.time()
             llm_config_manager = get_llm_config_manager()
             openai_config = llm_config_manager.get_provider_config("openai")
+            config_time = time.time() - config_start
+            
+            logger.info(f"[MEMORY_UPDATE] Retrieved LLM config in {config_time:.3f}s")
             
             if openai_config.get("api_key"):
-                # Debug: print config parameters
-                print(f"DEBUG: OpenAI config parameters: {openai_config}")
+                # Log config parameters (safely)
+                safe_config = {k: v for k, v in openai_config.items() if k != "api_key"}
+                safe_config["api_key"] = "***REDACTED***"
+                logger.info(f"[MEMORY_UPDATE] OpenAI config loaded: {safe_config}")
                 
-                # Only keep parameters that OpenAIClient explicitly supports
-                allowed_params = ['api_key', 'base_url', 'model', 'temperature', 'max_tokens']
-                filtered_config = {k: v for k, v in openai_config.items() 
-                                 if k in allowed_params}
-                print(f"DEBUG: Filtered config: {filtered_config}")
+                # Keep only the most basic parameters that OpenAI client needs
+                filtered_config = {}
+                if openai_config.get("api_key"):
+                    filtered_config["api_key"] = openai_config["api_key"]
+                if openai_config.get("base_url"):
+                    filtered_config["base_url"] = openai_config["base_url"]
+                if openai_config.get("model"):
+                    filtered_config["model"] = openai_config["model"]
+                
+                logger.info(f"[MEMORY_UPDATE] Using filtered config with model: {filtered_config.get('model', 'default')}")
                 
                 try:
+                    client_start = time.time()
                     llm_client = OpenAIClient(**filtered_config)
-                    print(f"DEBUG: OpenAI client created successfully")
+                    client_time = time.time() - client_start
+                    logger.info(f"[MEMORY_UPDATE] OpenAI client created successfully in {client_time:.3f}s")
                 except Exception as client_error:
-                    print(f"DEBUG: Error creating OpenAI client: {client_error}")
+                    logger.error(f"[MEMORY_UPDATE] Error creating OpenAI client: {client_error}")
+                    logger.error(f"[MEMORY_UPDATE] Attempted config: {filtered_config}")
                     raise client_error
                 
                 try:
+                    pipeline_start = time.time()
                     pipeline = MemoryUpdatePipeline(llm_client=llm_client)
-                    print(f"DEBUG: Pipeline created successfully")
+                    pipeline_time = time.time() - pipeline_start
+                    logger.info(f"[MEMORY_UPDATE] Pipeline created successfully in {pipeline_time:.3f}s")
                 except Exception as pipeline_error:
-                    print(f"DEBUG: Error creating pipeline: {pipeline_error}")
+                    logger.error(f"[MEMORY_UPDATE] Error creating pipeline: {pipeline_error}")
                     raise pipeline_error
                 
                 # Convert conversation format to match pipeline expectations
+                conversion_start = time.time()
                 session_conversation = []
-                for conv in request.conversation:
+                for i, conv in enumerate(request.conversation):
                     user_message = conv.get("user_message", "")
                     ai_response = conv.get("ai_response", "")
                     
                     if user_message:
                         session_conversation.append({"role": "user", "content": user_message})
+                        logger.debug(f"[MEMORY_UPDATE] Turn {i+1} - User message: {user_message[:100]}{'...' if len(user_message) > 100 else ''}")
                     if ai_response:
                         session_conversation.append({"role": "assistant", "content": ai_response})
+                        logger.debug(f"[MEMORY_UPDATE] Turn {i+1} - AI response: {ai_response[:100]}{'...' if len(ai_response) > 100 else ''}")
+                
+                conversion_time = time.time() - conversion_start
+                logger.info(f"[MEMORY_UPDATE] Converted {len(request.conversation)} conversation turns to {len(session_conversation)} messages in {conversion_time:.3f}s")
                 
                 # Process through pipeline
                 try:
-                    print(f"DEBUG: Starting pipeline processing")
+                    pipeline_processing_start = time.time()
+                    logger.info(f"[MEMORY_UPDATE] Starting pipeline processing with {len(session_conversation)} messages")
+                    
                     updated_memory, pipeline_result = pipeline.update_with_pipeline(memory, session_conversation)
-                    print(f"DEBUG: Pipeline processing completed successfully")
+                    
+                    pipeline_processing_time = time.time() - pipeline_processing_start
+                    logger.info(f"[MEMORY_UPDATE] Pipeline processing completed successfully in {pipeline_processing_time:.3f}s")
+                    
+                    # Log pipeline results
+                    logger.info(f"[MEMORY_UPDATE] Pipeline results:")
+                    logger.info(f"  - Profile updated: {pipeline_result.update_result.profile_updated}")
+                    logger.info(f"  - Modification stage: {len(pipeline_result.modification_result)} chars")
+                    logger.info(f"  - Mind insights: {len(pipeline_result.mind_result.insights)} chars")
+                    logger.info(f"  - Confidence score: {pipeline_result.mind_result.confidence_score}")
+                    
+                    # Log memory changes
+                    new_profile = updated_memory.get_profile() if hasattr(updated_memory, 'get_profile') else []
+                    new_events = updated_memory.get_events() if hasattr(updated_memory, 'get_events') else []
+                    new_mind = updated_memory.get_mind() if hasattr(updated_memory, 'get_mind') else []
+                    
+                    logger.info(f"[MEMORY_UPDATE] Memory changes:")
+                    logger.info(f"  - Profile items: {len(current_profile) if existing_memory else 0} -> {len(new_profile)}")
+                    logger.info(f"  - Events: {len(current_events) if existing_memory else 0} -> {len(new_events)}")
+                    logger.info(f"  - Mind insights: {len(current_mind) if existing_memory else 0} -> {len(new_mind)}")
+                    
                 except Exception as pipeline_run_error:
-                    print(f"DEBUG: Error during pipeline processing: {pipeline_run_error}")
-                    import traceback
-                    print(f"DEBUG: Full traceback: {traceback.format_exc()}")
+                    logger.error(f"[MEMORY_UPDATE] Error during pipeline processing: {pipeline_run_error}")
+                    logger.error(f"[MEMORY_UPDATE] Full traceback: {traceback.format_exc()}")
                     raise pipeline_run_error
                 
                 # Save the updated memory
+                save_start = time.time()
                 memory_database.save_memory(updated_memory)
+                save_time = time.time() - save_start
                 
-                logger.info(f"Updated memory for {request.agent_id}/{request.user_id} using MemoryUpdatePipeline")
+                total_time = time.time() - start_time
+                logger.info(f"[MEMORY_UPDATE] Memory saved to database in {save_time:.3f}s")
+                logger.info(f"[MEMORY_UPDATE] Total processing time: {total_time:.3f}s")
+                logger.info(f"[MEMORY_UPDATE] Successfully updated memory for {request.agent_id}/{request.user_id}")
+                
                 return {
                     "success": True, 
                     "message": f"Memory updated via pipeline", 
-                    "pipeline_metadata": pipeline_result.pipeline_metadata
+                    "pipeline_metadata": pipeline_result.pipeline_metadata,
+                    "processing_time": total_time,
+                    "memory_changes": {
+                        "profile_items": len(new_profile),
+                        "events": len(new_events),
+                        "mind_insights": len(new_mind)
+                    }
                 }
             else:
                 # Fallback to simple processing if no LLM available
-                logger.warning("No OpenAI API key found, falling back to simple event processing")
+                logger.warning("[MEMORY_UPDATE] No OpenAI API key found, falling back to simple event processing")
                 raise Exception("No LLM client available")
                 
         except Exception as llm_error:
+            logger.error(f"[MEMORY_UPDATE] LLM processing failed: {llm_error}")
             return {"success": False, "message": f"LLM processing failed: {llm_error}"}
         
     except Exception as e:
-        logger.error(f"Error updating memory with conversation: {e}")
+        total_time = time.time() - start_time
+        logger.error(f"[MEMORY_UPDATE] Error updating memory with conversation after {total_time:.3f}s: {e}")
+        logger.error(f"[MEMORY_UPDATE] Full error traceback: {traceback.format_exc()}")
         return {"success": False, "error": str(e)}
+
 
 @app.post("/api/memories/update-profile")
 async def update_memory_profile(request: UpdateProfileRequest):
@@ -406,7 +538,6 @@ async def update_memory_profile(request: UpdateProfileRequest):
             memory = existing_memory
         else:
             # Create a new memory if none exists
-            from personalab.memory.base import Memory
             memory = Memory(
                 agent_id=request.agent_id,
                 user_id=request.user_id,
@@ -425,7 +556,9 @@ async def update_memory_profile(request: UpdateProfileRequest):
         return {"success": True, "message": "Profile updated"}
     except Exception as e:
         logger.error(f"Error updating memory profile: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return {"success": False, "error": str(e)}
+
 
 @app.post("/api/memories/update-events")
 async def update_memory_events(request: UpdateEventsRequest):
@@ -437,7 +570,6 @@ async def update_memory_events(request: UpdateEventsRequest):
             memory = existing_memory
         else:
             # Create a new memory if none exists
-            from personalab.memory.base import Memory
             memory = Memory(
                 agent_id=request.agent_id,
                 user_id=request.user_id,
@@ -458,27 +590,32 @@ async def update_memory_events(request: UpdateEventsRequest):
         logger.error(f"Error updating memory events: {e}")
         return {"success": False, "error": str(e)}
 
+
 @app.get("/api/memories/stats/{agent_id}")
 async def get_memory_stats(agent_id: str):
     """Get memory statistics for an agent"""
     try:
-        # Return basic stats
-        stats = {
+        # Get basic memory count
+        memories_data = get_all_memories(agent_id=agent_id, user_id='', limit=1000)
+        memory_count = len(memories_data)
+        
+        # Get user count for this agent
+        users_data = get_unique_users()
+        agent_users = [user for user in users_data if any(
+            memory.get('agent_id') == agent_id 
+            for memory in memories_data 
+            if memory.get('user_id') == user
+        )]
+        
+        return {
             "agent_id": agent_id,
-            "total_memories": 0,
-            "total_profiles": 0,
-            "total_events": 0,
-            "total_mind_entries": 0
+            "memory_count": memory_count,
+            "user_count": len(agent_users),
+            "users": agent_users
         }
-        
-        # Get actual stats from database if possible
-        memories = get_all_memories(agent_id=agent_id, limit=1000)
-        stats["total_memories"] = len(memories)
-        
-        return stats
     except Exception as e:
-        logger.error(f"Error getting memory stats: {e}")
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/memory-operations", response_model=List[MemoryOperation])
 async def get_memory_operations(
@@ -498,118 +635,120 @@ async def get_memory_operations(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/api/agents", response_model=List[str])
 async def get_agents():
-    """Get all unique agent list"""
+    """Get list of all agents"""
     try:
-        return get_unique_agents()
+        agents = get_unique_agents()
+        return agents
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/users", response_model=List[str])
 async def get_users():
-    """Get all unique user list"""
+    """Get list of all users"""
     try:
-        return get_unique_users()
+        users = get_unique_users()
+        return users
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Helper functions
+
+# Utility functions
 def get_db_connection_string() -> Optional[str]:
-    """
-    Get database connection string.
-    
-    Returns:
-        Optional[str]: PostgreSQL connection string or None if error
-    """
+    """Get database connection string from environment"""
     try:
-        # Build connection_string from connection_params
-        params = db_manager.config.connection_params
-        
-        # Check if connection_string already exists
-        if 'connection_string' in params:
-            return params['connection_string']
-        
-        # Use the centralized connection string builder
-        return build_connection_string(**params)
+        return build_connection_string(
+            host=os.getenv('POSTGRES_HOST', 'localhost'),
+            port=int(os.getenv('POSTGRES_PORT', '5432')),
+            dbname=os.getenv('POSTGRES_DB', 'personalab'),
+            user=os.getenv('POSTGRES_USER', 'chenhong'),
+            password=os.getenv('POSTGRES_PASSWORD', '')
+        )
     except Exception as e:
-        logger.error(f"Error getting database config: {e}")
+        logger.error(f"Error building connection string: {e}")
         return None
+
 
 def get_system_stats():
     """Get system statistics"""
-    stats = {
-        'conversations': {
-            'total': 0,
-            'today': 0,
-            'this_week': 0
-        },
-        'memories': {
-            'total': 0,
-            'updated_today': 0,
-            'updated_this_week': 0
-        },
-        'agents': {
-            'total': 0,
-            'active_today': 0
-        },
-        'users': {
-            'total': 0,
-            'active_today': 0
-        }
-    }
-    
     try:
-        # Get conversation statistics
-        all_conversations = get_all_conversations(limit=1000)
-        stats['conversations']['total'] = len(all_conversations)
+        connection_string = get_db_connection_string()
+        if not connection_string:
+            return {
+                "conversations": {"total": 0, "today": 0, "this_week": 0, "this_month": 0},
+                "memories": {"total": 0, "today": 0, "this_week": 0, "this_month": 0},
+                "agents": {"total": 0, "active_today": 0, "active_this_week": 0, "active_this_month": 0},
+                "users": {"total": 0, "active_today": 0, "active_this_week": 0, "active_this_month": 0}
+            }
         
-        today = datetime.now().date()
-        week_ago = today - timedelta(days=7)
-        
-        today_conversations = [c for c in all_conversations 
-                             if parse_date(c.get('created_at', '')).date() == today]
-        stats['conversations']['today'] = len(today_conversations)
-        
-        week_conversations = [c for c in all_conversations 
-                            if parse_date(c.get('created_at', '')).date() >= week_ago]
-        stats['conversations']['this_week'] = len(week_conversations)
-        
-        # Get memory statistics
-        all_memories = get_all_memories(limit=1000)
-        stats['memories']['total'] = len(all_memories)
-        
-        today_memories = [m for m in all_memories 
-                        if parse_date(m.get('updated_at', '')).date() == today]
-        stats['memories']['updated_today'] = len(today_memories)
-        
-        week_memories = [m for m in all_memories 
-                       if parse_date(m.get('updated_at', '')).date() >= week_ago]
-        stats['memories']['updated_this_week'] = len(week_memories)
-        
-        # Get agent and user statistics
-        agents = get_unique_agents()
-        users = get_unique_users()
-        stats['agents']['total'] = len(agents)
-        stats['users']['total'] = len(users)
-        
-        # Active agents and users today
-        active_agents_today = set(c.get('agent_id') for c in today_conversations)
-        active_users_today = set(c.get('user_id') for c in today_conversations)
-        stats['agents']['active_today'] = len(active_agents_today)
-        stats['users']['active_today'] = len(active_users_today)
-        
+        with psycopg2.connect(connection_string) as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Get conversation statistics
+                cur.execute("""
+                    SELECT 
+                        COUNT(*) as total,
+                        COUNT(CASE WHEN created_at >= CURRENT_DATE THEN 1 END) as today,
+                        COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as this_week,
+                        COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as this_month
+                    FROM conversations
+                """)
+                conv_stats = cur.fetchone()
+                
+                # Get memory statistics
+                cur.execute("""
+                    SELECT 
+                        COUNT(*) as total,
+                        COUNT(CASE WHEN updated_at >= CURRENT_DATE THEN 1 END) as today,
+                        COUNT(CASE WHEN updated_at >= CURRENT_DATE - INTERVAL '7 days' THEN 1 END) as this_week,
+                        COUNT(CASE WHEN updated_at >= CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as this_month
+                    FROM memories
+                """)
+                mem_stats = cur.fetchone()
+                
+                # Get agent statistics
+                cur.execute("""
+                    SELECT 
+                        COUNT(DISTINCT agent_id) as total,
+                        COUNT(DISTINCT CASE WHEN updated_at >= CURRENT_DATE THEN agent_id END) as active_today,
+                        COUNT(DISTINCT CASE WHEN updated_at >= CURRENT_DATE - INTERVAL '7 days' THEN agent_id END) as active_this_week,
+                        COUNT(DISTINCT CASE WHEN updated_at >= CURRENT_DATE - INTERVAL '30 days' THEN agent_id END) as active_this_month
+                    FROM memories
+                """)
+                agent_stats = cur.fetchone()
+                
+                # Get user statistics
+                cur.execute("""
+                    SELECT 
+                        COUNT(DISTINCT user_id) as total,
+                        COUNT(DISTINCT CASE WHEN updated_at >= CURRENT_DATE THEN user_id END) as active_today,
+                        COUNT(DISTINCT CASE WHEN updated_at >= CURRENT_DATE - INTERVAL '7 days' THEN user_id END) as active_this_week,
+                        COUNT(DISTINCT CASE WHEN updated_at >= CURRENT_DATE - INTERVAL '30 days' THEN user_id END) as active_this_month
+                    FROM memories
+                """)
+                user_stats = cur.fetchone()
+                
+                return {
+                    "conversations": dict(conv_stats),
+                    "memories": dict(mem_stats),
+                    "agents": dict(agent_stats),
+                    "users": dict(user_stats)
+                }
     except Exception as e:
-        print(f"Error getting stats: {e}")
-    
-    return stats
+        logger.error(f"Error getting system stats: {e}")
+        return {
+            "conversations": {"total": 0, "today": 0, "this_week": 0, "this_month": 0},
+            "memories": {"total": 0, "today": 0, "this_week": 0, "this_month": 0},
+            "agents": {"total": 0, "active_today": 0, "active_this_week": 0, "active_this_month": 0},
+            "users": {"total": 0, "active_today": 0, "active_this_week": 0, "active_this_month": 0}
+        }
+
 
 def get_all_conversations(limit=100):
     """Get basic information of all conversations"""
     try:
-        import psycopg2
-        import psycopg2.extras
-        
         connection_string = get_db_connection_string()
         if not connection_string:
             return []
@@ -626,55 +765,52 @@ def get_all_conversations(limit=100):
                 rows = cur.fetchall()
                 return [dict(row) for row in rows]
     except Exception as e:
-        print(f"Error getting conversations: {e}")
+        logger.error(f"Error getting conversations: {e}")
         return []
+
 
 def get_all_memories(agent_id='', user_id='', limit=100):
     """Get basic information of all memories"""
     try:
-        import psycopg2
-        import psycopg2.extras
-        
-        query = """
-            SELECT memory_id, agent_id, user_id, created_at, updated_at
-            FROM memories 
-        """
-        params = []
-        conditions = []
-        
-        if agent_id:
-            conditions.append("agent_id = %s")
-            params.append(agent_id)
-        
-        if user_id:
-            conditions.append("user_id = %s")
-            params.append(user_id)
-        
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
-        
-        query += " ORDER BY updated_at DESC LIMIT %s"
-        params.append(limit)
-        
         connection_string = get_db_connection_string()
         if not connection_string:
             return []
         
         with psycopg2.connect(connection_string) as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Build query with optional filters
+                query = """
+                    SELECT memory_id, agent_id, user_id, created_at, updated_at
+                    FROM memories
+                """
+                params = []
+                conditions = []
+                
+                if agent_id:
+                    conditions.append("agent_id = %s")
+                    params.append(agent_id)
+                
+                if user_id:
+                    conditions.append("user_id = %s")
+                    params.append(user_id)
+                
+                if conditions:
+                    query += " WHERE " + " AND ".join(conditions)
+                
+                query += " ORDER BY updated_at DESC LIMIT %s"
+                params.append(limit)
+                
                 cur.execute(query, params)
                 rows = cur.fetchall()
                 return [dict(row) for row in rows]
     except Exception as e:
-        print(f"Error getting memories: {e}")
+        logger.error(f"Error getting memories: {e}")
         return []
+
 
 def get_memory_operations(limit=100):
     """Get memory operation records"""
     try:
-        import psycopg2
-        import psycopg2.extras
-        
         connection_string = get_db_connection_string()
         if not connection_string:
             return []
@@ -707,73 +843,54 @@ def get_memory_operations(limit=100):
                 
                 return operations
     except Exception as e:
-        print(f"Error getting memory operations: {e}")
+        logger.error(f"Error getting memory operations: {e}")
         return []
+
 
 def get_unique_agents():
-    """Get all unique agent list"""
+    """Get list of unique agents"""
     try:
-        import psycopg2
-        
-        agents = set()
-        
         connection_string = get_db_connection_string()
         if not connection_string:
             return []
         
         with psycopg2.connect(connection_string) as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT DISTINCT agent_id FROM conversations WHERE agent_id IS NOT NULL")
-                agents.update(row[0] for row in cur.fetchall())
-                
-                cur.execute("SELECT DISTINCT agent_id FROM memories WHERE agent_id IS NOT NULL")
-                agents.update(row[0] for row in cur.fetchall())
-        
-        return sorted(list(agents))
+                cur.execute("SELECT DISTINCT agent_id FROM memories ORDER BY agent_id")
+                rows = cur.fetchall()
+                return [row[0] for row in rows]
     except Exception as e:
-        print(f"Error getting agents: {e}")
+        logger.error(f"Error getting unique agents: {e}")
         return []
+
 
 def get_unique_users():
-    """Get all unique user list"""
+    """Get list of unique users"""
     try:
-        import psycopg2
-        
-        users = set()
-        
         connection_string = get_db_connection_string()
         if not connection_string:
             return []
         
         with psycopg2.connect(connection_string) as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT DISTINCT user_id FROM conversations WHERE user_id IS NOT NULL")
-                users.update(row[0] for row in cur.fetchall())
-                
-                cur.execute("SELECT DISTINCT user_id FROM memories WHERE user_id IS NOT NULL")
-                users.update(row[0] for row in cur.fetchall())
-        
-        return sorted(list(users))
+                cur.execute("SELECT DISTINCT user_id FROM memories ORDER BY user_id")
+                rows = cur.fetchall()
+                return [row[0] for row in rows]
     except Exception as e:
-        print(f"Error getting users: {e}")
+        logger.error(f"Error getting unique users: {e}")
         return []
 
+
 def parse_date(date_str):
-    """Parse date string"""
+    """Parse date string to datetime object"""
     try:
-        if isinstance(date_str, datetime):
-            return date_str
         if isinstance(date_str, str):
-            # Try multiple date formats
-            for fmt in ['%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d']:
-                try:
-                    return datetime.strptime(date_str.split('.')[0], fmt)
-                except ValueError:
-                    continue
-        return datetime.now()
-    except:
-        return datetime.now()
+            return datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        return date_str
+    except Exception as e:
+        logger.error(f"Error parsing date: {e}")
+        return None
+
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000) 

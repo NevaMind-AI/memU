@@ -240,31 +240,6 @@ function MemoryDetail() {
           </AccordionDetails>
         </Accordion>
 
-        {/* Mind Metadata */}
-        {memory.mind_metadata && (
-          <Accordion>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography variant="h6">
-                Mind Metadata
-              </Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Paper sx={{ p: 2 }}>
-                <Typography 
-                  variant="body2" 
-                  component="pre" 
-                  sx={{ 
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    fontFamily: 'monospace'
-                  }}
-                >
-                  {formatJson(memory.mind_metadata)}
-                </Typography>
-              </Paper>
-            </AccordionDetails>
-          </Accordion>
-        )}
       </Box>
 
       {/* Statistics */}
@@ -303,7 +278,7 @@ function MemoryDetail() {
                 Metadata Field Count
               </Typography>
               <Typography variant="h6">
-                {memory.mind_metadata ? Object.keys(memory.mind_metadata).length : 0}
+                0
               </Typography>
             </Grid>
           </Grid>

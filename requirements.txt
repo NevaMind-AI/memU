@@ -2,7 +2,13 @@
 requests>=2.31.0
 python-dotenv>=0.19.0
 json5>=0.9.0
-httpx>=0.24.0
+# Updated versions for compatibility
+openai>=1.60.0
+httpx>=0.23,<0.28
+pydantic>=2.7.5
+starlette>=0.40.0
+fastapi>=0.115.2
+anthropic>=0.54.0
 psycopg2-binary>=2.9.9
 
 # For full LLM support, install with: pip install personalab[llm]

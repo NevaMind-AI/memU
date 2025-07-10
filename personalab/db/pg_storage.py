@@ -248,8 +248,68 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                         self._save_content(cur, actual_memory_id, 'mind', mind_content)
 
                     conn.commit()
-                    return True
+            return True
+        except psycopg2.errors.UndefinedTable:
+            # If tables were dropped (e.g., during cleanup), automatically recreate them and retry once
+            logger.warning("Database tables missing – reinitializing and retrying save_memory")
+            self._init_database()
+            # Retry the save once after re-initialization
+            try:
+                with psycopg2.connect(self.connection_string) as conn:
+                    with conn.cursor() as cur:
+                        # 1. Save/update metadata in memories table (no content)
+                        # Check if memory already exists for this agent-user combination
+                        cur.execute(
+                            "SELECT memory_id FROM memories WHERE agent_id = %s AND user_id = %s",
+                            (memory.agent_id, memory.user_id)
+                        )
+                        existing_memory = cur.fetchone()
+                        
+                        if existing_memory:
+                            # Memory exists, just update timestamp and use existing memory_id
+                            existing_memory_id = existing_memory[0]
+                            cur.execute(
+                                "UPDATE memories SET updated_at = %s WHERE memory_id = %s",
+                                (memory.updated_at, existing_memory_id)
+                            )
+                            # Update the memory object to use the existing memory_id for content operations
+                            actual_memory_id = existing_memory_id
+                        else:
+                            # New memory, insert with new memory_id
+                            cur.execute(
+                                """
+                                INSERT INTO memories
+                                (memory_id, agent_id, user_id, created_at, updated_at)
+                                VALUES (%s, %s, %s, %s, %s)
+                                """,
+                                (
+                                    memory.memory_id,
+                                    memory.agent_id,
+                                    memory.user_id,
+                                    memory.created_at,
+                                    memory.updated_at,
+                                ),
+                            )
+                            actual_memory_id = memory.memory_id
 
+                        # 2. Save content to memory_contents table using the actual memory_id
+                        profile_content = memory.get_profile()
+                        if profile_content:
+                            self._save_content(cur, actual_memory_id, 'profile', profile_content)
+
+                        event_content = memory.get_events()
+                        if event_content:
+                            self._save_content(cur, actual_memory_id, 'event', event_content)
+
+                        mind_content = memory.get_mind()
+                        if mind_content:
+                            self._save_content(cur, actual_memory_id, 'mind', mind_content)
+
+                        conn.commit()
+                return True
+            except Exception as retry_err:
+                logger.error(f"Retry after reinitialization failed: {retry_err}")
+                return False
         except Exception as e:
             logger.error(f"Error saving memory: {e}")
             return False
@@ -349,7 +409,9 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                             elif content_type == 'event' and 'event' in content_json:
                                 memory.event_memory = EventMemory(content_json['event'])
                             elif content_type == 'mind' and 'mind' in content_json:
-                                memory.mind_content = content_json['mind']
+                                # Import MindMemory here to avoid circular imports
+                                from ..memory.base import MindMemory
+                                memory.mind_memory = MindMemory(content_json['mind'])
                                 
                         except (json.JSONDecodeError, TypeError, KeyError) as e:
                             logger.warning(f"Error parsing {content_type} content: {e}")
@@ -840,6 +902,7 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
         query_vector: List[float],
         limit: int = 10,
         similarity_threshold: float = 0.7,
+        user_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search for similar conversations using vector similarity.
@@ -849,6 +912,7 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
             query_vector: Query vector for similarity search
             limit: Maximum number of results
             similarity_threshold: Minimum similarity score
+            user_id: Optional user ID filter
 
         Returns:
             List[Dict]: List of similar conversations with metadata
@@ -856,8 +920,8 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
         try:
             with psycopg2.connect(self.connection_string) as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    cur.execute(
-                        """
+                    # Base query
+                    query = """
                         SELECT 
                             conversation_id,
                             agent_id,
@@ -870,19 +934,28 @@ class PostgreSQLConversationDB(PostgreSQLStorageBase):
                         WHERE agent_id = %s
                         AND conversation_vector IS NOT NULL
                         AND (1 - (conversation_vector <=> %s::vector)) >= %s
+                    """
+                    
+                    params = [
+                        str(query_vector),
+                        agent_id,
+                        str(query_vector),
+                        similarity_threshold,
+                    ]
+                    
+                    # Add user_id filter if provided
+                    if user_id:
+                        query += " AND user_id = %s"
+                        params.append(user_id)
+                    
+                    # Add ordering and limit
+                    query += """
                         ORDER BY conversation_vector <=> %s::vector
                         LIMIT %s
-                    """,
-                        [
-                            str(query_vector),
-                            agent_id,
-                            str(query_vector),
-                            similarity_threshold,
-                            str(query_vector),
-                            limit,
-                        ],
-                    )
+                    """
+                    params.extend([str(query_vector), limit])
 
+                    cur.execute(query, params)
                     results = cur.fetchall()
                     return [dict(row) for row in results]
 

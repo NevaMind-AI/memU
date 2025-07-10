@@ -8,17 +8,23 @@ This module provides sophisticated memory processing through a three-stage pipel
 - Theory of Mind: Generate psychological insights and behavioral analysis
 """
 
+import re
+import time
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..llm import BaseLLMClient
+from ..utils import get_logger
 from .base import EventMemory, Memory, ProfileMemory
 
 try:
     from ..config import get_llm_config_manager
 except ImportError:
     get_llm_config_manager = None
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -79,28 +85,25 @@ class MemoryUpdatePipeline:
         # Use unified configuration manager if provided
         if llm_config_manager is not None:
             self.llm_config_manager = llm_config_manager
-            self.llm_config = self.llm_config_manager.get_pipeline_config(**llm_config)
+            # Only use basic config - api_key and model
+            basic_config = self.llm_config_manager.get_provider_config()
+            self.llm_config = {k: v for k, v in basic_config.items() if k in ['api_key', 'model']}
+            logger.info(f"[PIPELINE] Initialized with provided config manager, model: {self.llm_config.get('model', 'unknown')}")
         else:
             # Fallback to old behavior for backward compatibility
             if get_llm_config_manager is not None:
                 self.llm_config_manager = get_llm_config_manager()
-                self.llm_config = self.llm_config_manager.get_pipeline_config(
-                    **llm_config
-                )
+                basic_config = self.llm_config_manager.get_provider_config()
+                self.llm_config = {k: v for k, v in basic_config.items() if k in ['api_key', 'model']}
+                logger.info(f"[PIPELINE] Initialized with fallback config manager, model: {self.llm_config.get('model', 'unknown')}")
             else:
                 # Legacy fallback
                 self.llm_config_manager = None
-                self.llm_config = {
-                    "temperature": 0.3,  # Lower temperature for consistent results
-                    "max_tokens": 2000,
-                    **llm_config,
-                }
+                self.llm_config = {}
+                logger.warning("[PIPELINE] Initialized without config manager - using legacy fallback")
+        
+        logger.info(f"[PIPELINE] MemoryUpdatePipeline initialized with LLM client: {type(self.llm_client).__name__ if self.llm_client else 'None'}")
 
-    def _get_chat_params(self) -> dict:
-        """Filter LLM config to only include parameters supported by chat_completion"""
-        # Only keep parameters that are commonly supported by LLM chat_completion methods
-        allowed_params = ['temperature', 'max_tokens', 'top_p', 'frequency_penalty', 'presence_penalty']
-        return {k: v for k, v in self.llm_config.items() if k in allowed_params}
 
     def update_with_pipeline(
         self, previous_memory: Memory, session_conversation: List[Dict[str, str]]
@@ -115,23 +118,50 @@ class MemoryUpdatePipeline:
         Returns:
             Tuple[Updated Memory object, Pipeline execution results]
         """
+        pipeline_start_time = time.time()
+        logger.info(f"[PIPELINE] Starting memory update pipeline for agent_id={previous_memory.agent_id}, user_id={previous_memory.user_id}")
+        logger.info(f"[PIPELINE] Processing {len(session_conversation)} conversation messages")
+        
+        # Log current memory state
+        current_profile = previous_memory.get_profile_content()
+        current_events = previous_memory.get_event_content()
+        current_mind = previous_memory.get_mind_content()
+        logger.info(f"[PIPELINE] Current memory state: profile_items={len(current_profile)}, events={len(current_events)}, mind_insights={len(current_mind)}")
+        
         # 1. LLM Modification stage: Analyze conversation and extract information
+        stage1_start = time.time()
+        logger.info("[PIPELINE] Stage 1: Running LLM Modification stage...")
         modification_result = self.llm_modification_stage(
             previous_memory, session_conversation
         )
+        stage1_time = time.time() - stage1_start
+        logger.info(f"[PIPELINE] Stage 1 completed in {stage1_time:.3f}s: extracted {len(modification_result)} chars of analysis")
 
         # 2. LLM Update stage: Update profile and events
+        stage2_start = time.time()
+        logger.info("[PIPELINE] Stage 2: Running LLM Update stage...")
         update_result = self.llm_update_stage(previous_memory, modification_result)
+        stage2_time = time.time() - stage2_start
+        logger.info(f"[PIPELINE] Stage 2 completed in {stage2_time:.3f}s: profile_updated={update_result.profile_updated}")
 
         # 3. LLM Theory of Mind stage: Deep psychological analysis
+        stage3_start = time.time()
+        logger.info("[PIPELINE] Stage 3: Running LLM Theory of Mind stage...")
         mind_result = self.llm_theory_of_mind_stage(update_result, session_conversation)
+        stage3_time = time.time() - stage3_start
+        logger.info(f"[PIPELINE] Stage 3 completed in {stage3_time:.3f}s: confidence={mind_result.confidence_score}")
 
         # 4. Create new Memory object
+        stage4_start = time.time()
+        logger.info("[PIPELINE] Stage 4: Creating updated Memory object...")
         new_memory = self._create_updated_memory(
             previous_memory, update_result, mind_result
         )
+        stage4_time = time.time() - stage4_start
+        logger.info(f"[PIPELINE] Stage 4 completed in {stage4_time:.3f}s: Memory object created with ID={new_memory.memory_id}")
 
         # 5. Build pipeline results
+        logger.info("[PIPELINE] Stage 5: Building pipeline results...")
         pipeline_result = PipelineResult(
             modification_result=modification_result,
             update_result=update_result,
@@ -145,6 +175,19 @@ class MemoryUpdatePipeline:
             },
         )
 
+        # Log final results
+        new_profile = new_memory.get_profile_content()
+        new_events = new_memory.get_event_content()
+        new_mind = new_memory.get_mind_content()
+        
+        total_pipeline_time = time.time() - pipeline_start_time
+        
+        logger.info(f"[PIPELINE] ✅ Pipeline completed successfully!")
+        logger.info(f"[PIPELINE] Performance summary: total_time={total_pipeline_time:.3f}s, stage1={stage1_time:.3f}s, stage2={stage2_time:.3f}s, stage3={stage3_time:.3f}s, stage4={stage4_time:.3f}s")
+        logger.info(f"[PIPELINE] Final memory state: profile_items={len(new_profile)}, events={len(new_events)}, mind_insights={len(new_mind)}")
+        logger.info(f"[PIPELINE] Memory changes: profile_delta={len(new_profile)-len(current_profile)}, events_delta={len(new_events)-len(current_events)}, mind_delta={len(new_mind)-len(current_mind)}")
+        logger.info(f"[PIPELINE] Model used: {getattr(self.llm_client, 'model_name', 'unknown')}, Total stages: 5")
+        
         return new_memory, pipeline_result
 
     def llm_modification_stage(
@@ -153,10 +196,16 @@ class MemoryUpdatePipeline:
         """
         LLM Modification stage: Analyze conversation and extract relevant information
         """
+        logger.info("[PIPELINE] [MOD] Analyzing conversation and extracting information...")
+        
         # Build LLM prompt
         conversation_text = self._format_conversation(session_conversation)
         current_profile = previous_memory.get_profile_content()
         current_events = previous_memory.get_event_content()
+        
+        logger.info(f"[PIPELINE] [MOD] Input analysis: profile_items={len(current_profile) if current_profile else 0}, events={len(current_events) if current_events else 0}")
+        logger.info(f"[PIPELINE] [MOD] Conversation text length: {len(conversation_text)} chars")
+        logger.debug(f"[PIPELINE] [MOD] Conversation content: {conversation_text[:200]}{'...' if len(conversation_text) > 200 else ''}")
 
         prompt = f"""Please analyze the following conversation content and extract user profile updates and important events.
 
@@ -169,25 +218,44 @@ Current Event Records:
 Current Conversation Content:
 {conversation_text}
 
-Return the updated profile and events suggestion directly in the following format:
-profile:
-[profile update suggestion]
-events:
-[event update suggestion]
+Return the updated profile and events suggestion directly in the following XML format:
+<analysis>
+<profile>
+<item>profile update suggestion 1</item>
+<item>profile update suggestion 2</item>
+</profile>
+<events>
+<item>event update suggestion 1</item>
+<item>event update suggestion 2</item>
+</events>
+</analysis>
 """
 
         # Call LLM
         messages = [{"role": "user", "content": prompt}]
 
         if self.llm_client is None:
+            logger.error("[PIPELINE] [MOD] No LLM client provided for modification stage")
             raise Exception("No LLM client provided")
 
-        chat_params = self._get_chat_params()
-        response = self.llm_client.chat_completion(messages=messages, **chat_params)
-        print(response.content)
+        logger.info("[PIPELINE] [MOD] Calling LLM for conversation analysis...")
+        logger.debug(f"[PIPELINE] [MOD] LLM prompt length: {len(prompt)} chars")
+        
+        response = self.llm_client.chat_completion(messages=messages)
         if not response.success:
+            logger.error(f"[PIPELINE] [MOD] LLM call failed: {response.error}")
             raise Exception(f"LLM call failed: {response.error}")
 
+        logger.info(f"[PIPELINE] [MOD] LLM analysis completed: {len(response.content)} chars generated")
+        logger.debug(f"[PIPELINE] [MOD] LLM response preview: {response.content[:200]}{'...' if len(response.content) > 200 else ''}")
+        
+        # Log the full LLM response
+        logger.info(f"[PIPELINE] [MOD] Full LLM response:")
+        logger.info(f"[PIPELINE] [MOD] Response content: {response.content}")
+        
+        if hasattr(response, 'usage') and response.usage:
+            logger.info(f"[PIPELINE] [MOD] LLM usage: {response.usage}")
+        
         return response.content
 
     def llm_update_stage(
@@ -196,6 +264,8 @@ events:
         """
         LLM Update stage: Update user profile using LLM analysis
         """
+        logger.info("[PIPELINE] [UPD] Updating user profile and events...")
+        
         # Parse modification_result to extract profile and events information
         profile_updates, events_updates = self._parse_modification_result(
             modification_result
@@ -203,6 +273,10 @@ events:
 
         current_profile = previous_memory.get_profile_content()
         current_events = previous_memory.get_event_content()
+        
+        logger.info(f"[PIPELINE] [UPD] Extracted updates: profile_items={len(profile_updates)}, events={len(events_updates)}")
+        logger.debug(f"[PIPELINE] [UPD] Profile updates: {profile_updates}")
+        logger.debug(f"[PIPELINE] [UPD] Event updates: {events_updates}")
         # Build profile update prompt
         prompt = f"""Please update the user profile based on new information.
 
@@ -223,33 +297,50 @@ Requirements:
 4. Use third-person description
 5. Keep it concise and clear
 
-Please return the updated complete user profile directly in the following format:
-profile:
-profile1
-profile2
-...
-events:
-event1
-event2
-...
+Please return the updated complete user profile directly in the following XML format:
+<update>
+<profile>
+<item>profile item 1</item>
+<item>profile item 2</item>
+</profile>
+<events>
+<item>event 1</item>
+<item>event 2</item>
+</events>
+</update>
 """
 
         # Call LLM to update profile
         messages = [{"role": "user", "content": prompt}]
 
         if self.llm_client is None:
+            logger.error("[PIPELINE] [UPD] No LLM client provided for update stage")
             raise Exception("No LLM client provided")
 
-        chat_params = self._get_chat_params()
-        response = self.llm_client.chat_completion(messages=messages, **chat_params)
+        logger.info("[PIPELINE] [UPD] Calling LLM for profile and events update...")
+        logger.debug(f"[PIPELINE] [UPD] Update prompt length: {len(prompt)} chars")
+        
+        response = self.llm_client.chat_completion(messages=messages)
 
         if not response.success:
+            logger.error(f"[PIPELINE] [UPD] LLM update failed: {response.error}")
             raise Exception(f"LLM update failed: {response.error}")
+
+        # Log the full LLM response
+        logger.info(f"[PIPELINE] [UPD] Full LLM response:")
+        logger.info(f"[PIPELINE] [UPD] Response content: {response.content}")
 
         # Parse LLM results and separate profile and events
         updated_profile, updated_events = self._parse_modification_result(
             response.content
         )
+        
+        logger.info(f"[PIPELINE] [UPD] Generated updates: profile_items={len(updated_profile)}, events={len(updated_events)}")
+        logger.debug(f"[PIPELINE] [UPD] Updated profile content: {updated_profile}")
+        logger.debug(f"[PIPELINE] [UPD] Updated events content: {updated_events}")
+        
+        if hasattr(response, 'usage') and response.usage:
+            logger.info(f"[PIPELINE] [UPD] LLM usage: {response.usage}")
 
         # Create updated EventMemory with the combined event list
         updated_events = EventMemory(
@@ -275,12 +366,18 @@ event2
         """
         LLM Theory of Mind stage: Let LLM perform deep psychological analysis
         """
+        logger.info("[PIPELINE] [MIND] Performing Theory of Mind analysis...")
+        
         conversation_text = self._format_conversation(session_conversation)
         updated_memory_content = (
             "\n".join(update_result.profile.get_content())
             + "\n"
             + "\n".join(update_result.events.get_content())
         )
+        
+        logger.info(f"[PIPELINE] [MIND] Analysis input: memory_content={len(updated_memory_content)} chars, conversation={len(conversation_text)} chars")
+        logger.debug(f"[PIPELINE] [MIND] Memory content preview: {updated_memory_content[:200]}{'...' if len(updated_memory_content) > 200 else ''}")
+        logger.debug(f"[PIPELINE] [MIND] Conversation preview: {conversation_text[:200]}{'...' if len(conversation_text) > 200 else ''}")
 
         prompt = f"""Please conduct a Theory of Mind analysis on the following conversation to deeply understand the user's psychological state and behavioral patterns.
 
@@ -295,28 +392,42 @@ Please analyze the conversation and extract:
 3. User's communication style and engagement patterns
 4. User's knowledge level and learning tendencies
 
-
-Please return the insights directly in the following format:
-Insights:
-- Insight 1
-- Insight 2
-- ...
+Please return the insights directly in the following XML format:
+<insights>
+<item>Insight 1</item>
+<item>Insight 2</item>
+<item>Insight 3</item>
+</insights>
 """
 
         # Call LLM for Mind analysis
         messages = [{"role": "user", "content": prompt}]
 
         if self.llm_client is None:
+            logger.error("[PIPELINE] [MIND] No LLM client provided for mind analysis stage")
             raise Exception("No LLM client provided")
 
-        chat_params = self._get_chat_params()
-        response = self.llm_client.chat_completion(messages=messages, **chat_params)
+        logger.info("[PIPELINE] [MIND] Calling LLM for psychological analysis...")
+        logger.debug(f"[PIPELINE] [MIND] Analysis prompt length: {len(prompt)} chars")
+        
+        response = self.llm_client.chat_completion(messages=messages)
 
         if not response.success:
+            logger.error(f"[PIPELINE] [MIND] LLM Mind analysis failed: {response.error}")
             raise Exception(f"LLM Mind analysis failed: {response.error}")
+
+        # Log the full LLM response
+        logger.info(f"[PIPELINE] [MIND] Full LLM response:")
+        logger.info(f"[PIPELINE] [MIND] Response content: {response.content}")
 
         # Store insights directly as string
         insights = response.content
+        
+        logger.info(f"[PIPELINE] [MIND] Psychological analysis completed: {len(insights)} chars generated")
+        logger.debug(f"[PIPELINE] [MIND] Insights preview: {insights[:200]}{'...' if len(insights) > 200 else ''}")
+        
+        if hasattr(response, 'usage') and response.usage:
+            logger.info(f"[PIPELINE] [MIND] LLM usage: {response.usage}")
 
         return MindResult(
             insights=insights,
@@ -336,11 +447,19 @@ Insights:
         mind_result: MindResult,
     ) -> Memory:
         """Create updated Memory object"""
+        logger.info("[PIPELINE] [CREATE] Creating updated Memory object...")
+        logger.debug(f"[PIPELINE] [CREATE] Memory ID: {previous_memory.memory_id}")
+        
         new_memory = Memory(
             agent_id=previous_memory.agent_id,
             user_id=previous_memory.user_id,
+            memory_client=previous_memory.memory_client,
             memory_id=previous_memory.memory_id,
         )
+        
+        # Preserve timestamps from previous memory
+        new_memory.created_at = previous_memory.created_at
+        new_memory.updated_at = datetime.now()
 
         # Set updated components
         new_memory.profile_memory = update_result.profile
@@ -349,31 +468,30 @@ Insights:
         # Set Theory of Mind memory, parse insights text to list
         insights_text = mind_result.insights
         if insights_text:
-            # Parse insights text, extract list items
-            insights_list = []
-            lines = insights_text.strip().split("\n")
-            for line in lines:
-                line = line.strip()
-                if line.startswith("- "):
-                    insights_list.append(line[2:].strip())
-                elif line and not line.startswith("Insights:"):
-                    insights_list.append(line)
+            # Parse insights using XML parsing with text fallback
+            insights_list = self._parse_insights_content(insights_text)
 
-            new_memory.update_mind(insights_list)
+            # Create MindMemory component directly instead of calling update_mind
+            from .base import MindMemory
+            new_memory.mind_memory = MindMemory(insights_list)
+            
+            logger.info(f"[PIPELINE] [CREATE] Mind insights parsed: {len(insights_list)} items")
+            logger.debug(f"[PIPELINE] [CREATE] Mind insights content: {insights_list}")
+        else:
+            # Create empty MindMemory if no insights
+            from .base import MindMemory  
+            new_memory.mind_memory = MindMemory([])
 
-        # Save original metadata to mind_metadata (backward compatibility)
-        new_memory.mind_metadata = {
-            "insights": mind_result.insights,
-            "confidence_score": mind_result.confidence_score,
-            "analysis_metadata": mind_result.metadata,
-            "raw_llm_response": mind_result.raw_llm_response,
-        }
-
+        # Get insights count for logging
+        insights_count = len(new_memory.mind_memory.get_content()) if new_memory.mind_memory else 0
+        logger.info(f"[PIPELINE] [CREATE] Memory object created with components: profile={len(update_result.profile.get_content())}, events={len(update_result.events.get_content())}, mind_insights={insights_count}")
+        logger.debug(f"[PIPELINE] [CREATE] Created memory ID: {new_memory.memory_id}")
         return new_memory
 
     def _parse_modification_result(self, content: str) -> Tuple[List[str], List[str]]:
         """
         Parse LLM returned content, extract profile and events
+        Uses XML parsing for accurate extraction
 
         Returns:
             Tuple[profile_updates, events_updates]
@@ -381,25 +499,193 @@ Insights:
         profile_updates = []
         events_updates = []
 
-        lines = content.strip().split("\n")
-        current_section = None
+        try:
+            # First try XML parsing
+            logger.info("[PIPELINE] [PARSE] Attempting XML parsing...")
+            
+            # Clean the content and extract XML
+            xml_content = self._extract_xml_content(content)
+            if xml_content:
+                logger.debug(f"[PIPELINE] [PARSE] Extracted XML: {xml_content}")
+                
+                # Parse XML
+                root = ET.fromstring(xml_content)
+                
+                # Extract profile items
+                for profile_section in root.findall('.//profile'):
+                    for item in profile_section.findall('item'):
+                        if item.text and item.text.strip():
+                            profile_updates.append(item.text.strip())
+                
+                # Extract events items
+                for events_section in root.findall('.//events'):
+                    for item in events_section.findall('item'):
+                        if item.text and item.text.strip():
+                            events_updates.append(item.text.strip())
+                
+                logger.info(f"[PIPELINE] [PARSE] XML parsing successful: {len(profile_updates)} profile items, {len(events_updates)} events")
+                logger.debug(f"[PIPELINE] [PARSE] Profile content: {profile_updates}")
+                logger.debug(f"[PIPELINE] [PARSE] Events content: {events_updates}")
+                
+                return profile_updates, events_updates
+            
+            # Fallback to text parsing if XML parsing fails
+            logger.warning("[PIPELINE] [PARSE] XML parsing failed, falling back to text parsing...")
+            return self._parse_text_format(content)
+            
+        except Exception as e:
+            logger.error(f"[PIPELINE] [PARSE] XML parsing error: {e}")
+            logger.debug(f"[PIPELINE] [PARSE] Content that failed to parse: {content[:500]}{'...' if len(content) > 500 else ''}")
+            
+            # Fallback to text parsing
+            return self._parse_text_format(content)
+    
+    def _extract_xml_content(self, content: str) -> str:
+        """Extract XML content from LLM response"""
+        try:
+            # Look for XML tags in the content
+            xml_patterns = [
+                r'<analysis>.*?</analysis>',
+                r'<update>.*?</update>',
+                r'<insights>.*?</insights>'
+            ]
+            
+            for pattern in xml_patterns:
+                match = re.search(pattern, content, re.DOTALL)
+                if match:
+                    return match.group(0)
+            
+            return None
+        except Exception as e:
+            logger.error(f"[PIPELINE] [PARSE] Error extracting XML: {e}")
+            return None
+    
+    def _parse_text_format(self, content: str) -> Tuple[List[str], List[str]]:
+        """Fallback text parsing for non-XML content"""
+        profile_updates = []
+        events_updates = []
 
-        for line in lines:
-            line = line.strip()
-            if line.lower().startswith("profile:"):
-                current_section = "profile"
-                continue
-            elif line.lower().startswith("events:"):
-                current_section = "events"
-                continue
-            elif line.startswith("- ") and current_section:
-                item = line[2:].strip()
+        try:
+            lines = content.strip().split("\n")
+            current_section = None
+
+            for line in lines:
+                line = line.strip()
+                
+                # Skip empty lines
+                if not line:
+                    continue
+                    
+                # Detect section headers (case insensitive)
+                if line.lower().startswith("profile:"):
+                    current_section = "profile"
+                    # Check if there's content after "profile:" on the same line
+                    profile_text = line[8:].strip()
+                    if profile_text:
+                        profile_updates.append(profile_text)
+                    continue
+                elif line.lower().startswith("events:"):
+                    current_section = "events"
+                    # Check if there's content after "events:" on the same line
+                    events_text = line[7:].strip()
+                    if events_text:
+                        events_updates.append(events_text)
+                    continue
+                elif line.lower().startswith("insights:"):
+                    # Skip insights section for this function
+                    current_section = "insights"
+                    continue
+                
+                # Add content to current section - each line becomes an item
                 if current_section == "profile":
-                    profile_updates.append(item)
+                    # Remove "- " prefix if present, but keep the content
+                    clean_line = line[2:].strip() if line.startswith("- ") else line
+                    if clean_line:
+                        profile_updates.append(clean_line)
                 elif current_section == "events":
-                    events_updates.append(item)
+                    # Remove "- " prefix if present, but keep the content
+                    clean_line = line[2:].strip() if line.startswith("- ") else line
+                    if clean_line:
+                        events_updates.append(clean_line)
 
-        return profile_updates, events_updates
+            logger.info(f"[PIPELINE] [PARSE] Text parsing successful: {len(profile_updates)} profile items, {len(events_updates)} events")
+            logger.debug(f"[PIPELINE] [PARSE] Profile content: {profile_updates}")
+            logger.debug(f"[PIPELINE] [PARSE] Events content: {events_updates}")
+            return profile_updates, events_updates
+        
+        except Exception as e:
+            logger.error(f"[PIPELINE] [PARSE] Text parsing error: {e}")
+            logger.debug(f"[PIPELINE] [PARSE] Content that failed to parse: {content[:500]}{'...' if len(content) > 500 else ''}")
+            return [], []
+    
+    def _parse_insights_content(self, content: str) -> List[str]:
+        """Parse insights content using XML parsing with text fallback"""
+        insights_list = []
+        
+        try:
+            # First try XML parsing
+            logger.info("[PIPELINE] [PARSE] Attempting XML parsing for insights...")
+            
+            # Extract XML content
+            xml_content = self._extract_xml_content(content)
+            if xml_content:
+                logger.debug(f"[PIPELINE] [PARSE] Extracted insights XML: {xml_content}")
+                
+                # Parse XML
+                root = ET.fromstring(xml_content)
+                
+                # Extract insights items
+                for item in root.findall('.//item'):
+                    if item.text and item.text.strip():
+                        insights_list.append(item.text.strip())
+                
+                logger.info(f"[PIPELINE] [PARSE] XML parsing successful for insights: {len(insights_list)} items")
+                logger.debug(f"[PIPELINE] [PARSE] Insights content: {insights_list}")
+                
+                return insights_list
+            
+            # Fallback to text parsing if XML parsing fails
+            logger.warning("[PIPELINE] [PARSE] XML parsing failed for insights, falling back to text parsing...")
+            return self._parse_insights_text_format(content)
+            
+        except Exception as e:
+            logger.error(f"[PIPELINE] [PARSE] XML parsing error for insights: {e}")
+            logger.debug(f"[PIPELINE] [PARSE] Content that failed to parse: {content[:500]}{'...' if len(content) > 500 else ''}")
+            
+            # Fallback to text parsing
+            return self._parse_insights_text_format(content)
+    
+    def _parse_insights_text_format(self, content: str) -> List[str]:
+        """Fallback text parsing for insights"""
+        insights_list = []
+        
+        try:
+            lines = content.strip().split("\n")
+            
+            for line in lines:
+                line = line.strip()
+                
+                # Skip empty lines
+                if not line:
+                    continue
+                    
+                # Skip section headers like "Insights:"
+                if line.lower().startswith("insights:"):
+                    continue
+                    
+                # Remove "- " prefix if present, but keep the content
+                clean_line = line[2:].strip() if line.startswith("- ") else line
+                if clean_line:
+                    insights_list.append(clean_line)
+            
+            logger.info(f"[PIPELINE] [PARSE] Text parsing successful for insights: {len(insights_list)} items")
+            logger.debug(f"[PIPELINE] [PARSE] Insights content: {insights_list}")
+            return insights_list
+            
+        except Exception as e:
+            logger.error(f"[PIPELINE] [PARSE] Text parsing error for insights: {e}")
+            logger.debug(f"[PIPELINE] [PARSE] Content that failed to parse: {content[:500]}{'...' if len(content) > 500 else ''}")
+            return []
 
     def _format_conversation(self, conversation: List[Dict[str, str]]) -> str:
         """Format conversation content"""

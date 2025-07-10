@@ -13,7 +13,7 @@ class AnthropicClient(BaseLLMClient):
     """Anthropic Claude Client Implementation"""
 
     def __init__(
-        self, api_key: str = None, model: str = "claude-3-sonnet-20240229", **kwargs
+        self, api_key: str = None, model: str = "claude-3-7-sonnet-latest", **kwargs
     ):
         """
         Initialize Anthropic Client

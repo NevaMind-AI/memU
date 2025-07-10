@@ -68,7 +68,7 @@ class Config:
     @property
     def openai_model(self) -> str:
         """Get OpenAI model name"""
-        return os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
+        return os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 
     @property
     def openai_base_url(self) -> str:
@@ -201,27 +201,18 @@ class LLMConfigManager:
             "api_key": self.config.openai_api_key,
             "model": self.config.openai_model,
             "base_url": self.config.openai_base_url,
-            "temperature": self.config.default_temperature,
-            "max_tokens": self.config.default_max_tokens,
-            "provider_type": "openai",
         }
 
         # Anthropic Configuration
         self._provider_configs["anthropic"] = {
             "api_key": self.config.anthropic_api_key,
-            "model": "claude-3-sonnet-20240229",  # Default model
-            "temperature": self.config.default_temperature,
-            "max_tokens": self.config.default_max_tokens,
-            "provider_type": "anthropic",
+            "model": "claude-3-7-sonnet-latest", 
         }
 
         # Azure OpenAI Configuration
         self._provider_configs["azure"] = {
             "api_key": self.config.azure_openai_api_key,
-            "endpoint": self.config.azure_openai_endpoint,
-            "temperature": self.config.default_temperature,
-            "max_tokens": self.config.default_max_tokens,
-            "provider_type": "azure",
+            "model": "gpt-3.5-turbo",  
         }
 
     def get_provider_config(self, provider: str = None) -> dict:
@@ -290,17 +281,8 @@ class LLMConfigManager:
         """
         base_config = self.get_provider_config(provider)
 
-        # Pipeline-specific defaults
-        pipeline_defaults = {
-            "temperature": 0.3,  # Lower for consistency
-            "max_tokens": 2000,
-            "timeout": 30,
-            "retry_count": 3,
-        }
-
-        # Merge: base_config -> pipeline_defaults -> overrides
-        result = {**base_config, **pipeline_defaults, **overrides}
-        return result
+        # Only return basic config with overrides
+        return {**base_config, **overrides}
 
     def list_providers(self) -> list:
         """List all supported providers"""

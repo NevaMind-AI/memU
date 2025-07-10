@@ -16,7 +16,7 @@ class OpenAIClient(BaseLLMClient):
         self,
         api_key: str = None,
         base_url: str = None,
-        model: str = "gpt-3.5-turbo",
+        model: str = "gpt-4.1-mini",
         **kwargs,
     ):
         """
@@ -31,9 +31,8 @@ class OpenAIClient(BaseLLMClient):
         super().__init__(model=model, **kwargs)
 
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self.base_url = base_url or os.getenv(
-            "OPENAI_BASE_URL", "https://api.openai.com/v1"
-        )
+        # Only use custom base_url if explicitly provided (env or param)
+        self.base_url = base_url or os.getenv("OPENAI_BASE_URL")
 
         if not self.api_key:
             raise ValueError(
@@ -56,8 +55,11 @@ class OpenAIClient(BaseLLMClient):
                 client_params = {}
                 if self.api_key:
                     client_params['api_key'] = self.api_key
+                # Only set base_url if provided
                 if self.base_url:
                     client_params['base_url'] = self.base_url
+                
+                # Debug prints removed for production use
                 
                 self._client = openai.OpenAI(**client_params)
             except ImportError:
@@ -78,24 +80,17 @@ class OpenAIClient(BaseLLMClient):
         model = self.get_model(model)
 
         try:
-            # Debug: Log all incoming parameters
-            print(f"DEBUG OpenAI: chat_completion kwargs: {kwargs}")
-            print(f"DEBUG OpenAI: self.config: {self.config}")
+            # Debug prints removed
             
             # Preprocess messages
             processed_messages = self._prepare_messages(messages)
-
-            # Filter out parameters that should not be passed to OpenAI API
-            api_params = self._filter_api_params(kwargs)
-            print(f"DEBUG OpenAI: filtered api_params: {api_params}")
 
             # Call OpenAI API
             response = self.client.chat.completions.create(
                 model=model,
                 messages=processed_messages,
                 temperature=temperature,
-                max_tokens=max_tokens,
-                **api_params,
+                max_tokens=max_tokens
             )
 
             # Build response
@@ -110,16 +105,10 @@ class OpenAIClient(BaseLLMClient):
             logging.error(f"OpenAI API call failed: {e}")
             return self._handle_error(e, model)
 
-    def _filter_api_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Filter out parameters that should not be passed to OpenAI API"""
-        # Only exclude API client configuration parameters
-        excluded_params = {"api_key", "base_url"}
-
-        return {k: v for k, v in params.items() if k not in excluded_params}
 
     def _get_default_model(self) -> str:
         """Get OpenAI default model"""
-        return "gpt-3.5-turbo"
+        return "gpt-4.1-mini"
 
     def _prepare_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """Preprocess OpenAI message format"""

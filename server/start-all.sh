@@ -74,12 +74,18 @@ start_backend() {
     echo -e "${BLUE}🔧 Starting backend server...${NC}"
     cd backend
     source venv/bin/activate
-    python start.py &
+    
+    # Create log file if it doesn't exist
+    touch server.log
+    
+    # Start backend with logging to both file and stdout
+    python start.py > >(tee -a server.log) 2>&1 &
     BACKEND_PID=$!
     cd ..
     echo -e "${GREEN}✅ Backend server started (PID: $BACKEND_PID)${NC}"
     echo -e "${GREEN}📍 API Interface: http://localhost:8000${NC}"
-echo -e "${GREEN}📍 API Documentation: http://localhost:8000/docs${NC}"
+    echo -e "${GREEN}📍 API Documentation: http://localhost:8000/docs${NC}"
+    echo -e "${GREEN}📋 Backend logs: server/backend/server.log${NC}"
 }
 
 # Start frontend
@@ -113,6 +119,8 @@ wait_for_user() {
     echo -e "\n${GREEN}🎉 System startup completed!${NC}"
     echo -e "${BLUE}📱 Frontend Interface: http://localhost:5173${NC}"
     echo -e "${BLUE}🔧 API Documentation: http://localhost:8000/docs${NC}"
+    echo -e "\n${YELLOW}💡 To view enhanced logging in real-time:${NC}"
+    echo -e "${YELLOW}   tail -f server/backend/server.log | grep 'MEMORY_UPDATE'${NC}"
     echo -e "\n${YELLOW}Press Ctrl+C to stop all services${NC}"
     
     # Wait for interrupt signal
