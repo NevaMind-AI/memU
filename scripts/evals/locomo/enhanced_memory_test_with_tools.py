@@ -1,11 +1,11 @@
 """
-Enhanced Memory Test with Function Tools
+Enhanced Memory Test with Dual Agents
 
-This test uses the MemoryAgentTools to:
-1. Process each session sequentially in order
+This test uses RecallAgent and ManageAgent to:
+1. Process each session sequentially using ManageAgent
 2. For each session:
-   - Update character memory using function tools
-3. Use memory tools for QA testing with category statistics
+   - Update character memory using memory management tools
+3. Use RecallAgent for QA testing with category statistics
 """
 
 import json
@@ -24,7 +24,8 @@ if not hasattr(sys, '_stdout_line_buffering_set'):
     sys.stdout.reconfigure(line_buffering=True)
     sys._stdout_line_buffering_set = True
 
-from memory_agent_tools import MemoryAgentTools
+from recall_agent import RecallAgent
+from manage_agent import ManageAgent
 from personalab.utils import get_logger, setup_logging
 
 # 设置带有flush的logger
@@ -35,9 +36,9 @@ class ToolBasedMemoryTester:
     """
     Tool-based Memory Tester
     
-    Uses MemoryAgentTools for processing Locomo data:
-    1. Process sessions sequentially using update_character_memory tool
-    2. Answer QA questions using answer_with_memory tool
+    Uses RecallAgent and ManageAgent for processing Locomo data:
+    1. Process sessions sequentially using ManageAgent
+    2. Answer QA questions using RecallAgent
     3. Display category-based accuracy statistics
     """
     
@@ -51,7 +52,17 @@ class ToolBasedMemoryTester:
         memory_dir: str = "memory"
     ):
         """Initialize Tool-based Memory Tester"""
-        self.memory_tools = MemoryAgentTools(
+        # Initialize both agents
+        self.recall_agent = RecallAgent(
+            azure_endpoint=azure_endpoint,
+            api_key=api_key,
+            chat_deployment=chat_deployment,
+            use_entra_id=use_entra_id,
+            api_version=api_version,
+            memory_dir=memory_dir
+        )
+        
+        self.manage_agent = ManageAgent(
             azure_endpoint=azure_endpoint,
             api_key=api_key,
             chat_deployment=chat_deployment,
@@ -63,7 +74,7 @@ class ToolBasedMemoryTester:
         self.results = []
         self.processing_time = 0.0
         
-        logger.info("Tool-based Memory Tester initialized")
+        logger.info("Tool-based Memory Tester initialized with RecallAgent and ManageAgent")
     
     def _extract_session_data(self, conversation_data: Dict) -> List[Tuple[str, List[Dict], str]]:
         """Extract session information from conversation data"""
@@ -110,8 +121,8 @@ class ToolBasedMemoryTester:
     def _evaluate_answer(self, question: str, generated_answer: str, standard_answer: str) -> Dict:
         """Evaluate if generated answer contains standard answer content (using function calling)"""
         try:
-            # Use the evaluate_answer tool from memory tools
-            result = self.memory_tools.evaluate_answer(question, generated_answer, standard_answer)
+            # Use the evaluate_answer tool from recall agent
+            result = self.recall_agent.evaluate_answer(question, generated_answer, standard_answer)
             
             if result["success"]:
                 return {
@@ -153,7 +164,7 @@ class ToolBasedMemoryTester:
         logger.info(f"Characters: {characters}")
         
         # Step 1: Check existing memory files
-        char_list_result = self.memory_tools.list_available_characters()
+        char_list_result = self.recall_agent.list_available_characters()
         existing_characters = char_list_result.get("characters", []) if char_list_result["success"] else []
         
         characters_have_memory = all(char.lower() in [c.lower() for c in existing_characters] for char in characters)
@@ -165,7 +176,7 @@ class ToolBasedMemoryTester:
             logger.info("Step 1: Memory files incomplete, clearing and processing all sessions")
             
             # Clear existing memory
-            clear_result = self.memory_tools.clear_character_memory(characters)
+            clear_result = self.manage_agent.clear_character_memory(characters)
             if not clear_result["success"]:
                 logger.warning(f"Failed to clear memory: {clear_result['error']}")
             
@@ -191,7 +202,7 @@ class ToolBasedMemoryTester:
                 session_summary = f"Session {session_name} on {session_date} with {len(utterances)} utterances between {', '.join(characters)}"
                 utterances_text = "\n".join([f"**{ut['speaker']}**: {ut['text']}" for ut in utterances])
                 
-                # Use agent to process session
+                # Use manage agent to process session
                 agent_request = f"""Please update character memory for the following conversation session:
 
 {session_summary}
@@ -204,7 +215,7 @@ Session date: {session_date}
 
 Please update the memory files for all characters based on this conversation."""
                 
-                execute_result = self.memory_tools.execute(
+                execute_result = self.manage_agent.execute(
                     user_message=agent_request,
                     max_iterations=10
                 )
@@ -242,11 +253,11 @@ Please update the memory files for all characters based on this conversation."""
             
             logger.info(f"  Question {i}/{len(qa_data)}: {question[:50]}...")
             
-            # Answer question using memory tools
+            # Answer question using recall agent
             qa_start_time = time.time()
             
             # Use execute method for recursive function calling
-            execute_result = self.memory_tools.execute(
+            execute_result = self.recall_agent.execute(
                 user_message=f"Answer this question: {question}\n\nCharacters involved: {', '.join(characters)}",
                 max_iterations=10
             )
