@@ -69,7 +69,76 @@ class ToolBasedMemoryTester:
         self.processing_time = 0.0
         self.memory_dir = Path(memory_dir)
         
+        # Initialize error log file
+        self.error_log_file = f"qa_error_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        self._init_error_log()
+        
         logger.info(f"Tool-based Memory Tester initialized with unified MemAgent (max_workers={max_workers})")
+        logger.info(f"QA error log file: {self.error_log_file}")
+
+    def _init_error_log(self):
+        """Initialize error log file with header"""
+        try:
+            with open(self.error_log_file, 'w', encoding='utf-8') as f:
+                f.write(f"QA Error Log - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("=" * 80 + "\n")
+                f.write("This log contains detailed information for incorrectly answered QA questions.\n\n")
+        except Exception as e:
+            logger.error(f"Failed to initialize error log file: {e}")
+
+    def _log_qa_error(self, qa_index: int, question: str, generated_answer: str, standard_answer: str, 
+                     category: str, retrieved_content: str = "", evidence: str = "", explanation: str = "", 
+                     session_context: str = ""):
+        """Log detailed information for incorrect QA answers"""
+        try:
+            with open(self.error_log_file, 'a', encoding='utf-8') as f:
+                f.write(f"\n{'='*80}\n")
+                f.write(f"QA INDEX: {qa_index + 1}\n")
+                f.write(f"CATEGORY: {category}\n")
+                f.write(f"TIMESTAMP: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"{'='*80}\n\n")
+                
+                f.write(f"QUESTION:\n{question}\n\n")
+                
+                f.write(f"EVIDENCE (Referenced Conversations):\n{evidence if evidence else 'No evidence provided'}\n\n")
+                
+                f.write(f"RETRIEVED CONTENT (From Memory):\n{retrieved_content if retrieved_content else 'No content retrieved'}\n\n")
+                
+                f.write(f"GENERATED ANSWER:\n{generated_answer}\n\n")
+                
+                f.write(f"STANDARD ANSWER:\n{standard_answer}\n\n")
+                
+                f.write(f"EVALUATION EXPLANATION:\n{explanation}\n\n")
+                
+                f.write(f"{'='*80}\n")
+                
+        except Exception as e:
+            logger.error(f"Failed to write to error log: {e}")
+
+    def _get_session_context(self, conversation_data: Dict) -> str:
+        """Get session context information (dates and speakers)"""
+        try:
+            context_lines = []
+            speaker_a = conversation_data.get('speaker_a', 'Speaker A')
+            speaker_b = conversation_data.get('speaker_b', 'Speaker B')
+            
+            context_lines.append(f"Speakers: {speaker_a} and {speaker_b}")
+            
+            # Find all sessions and their dates
+            session_keys = [key for key in conversation_data.keys() if key.startswith('session_') and not key.endswith('_date_time')]
+            session_keys.sort(key=lambda x: int(x.split('_')[1]) if x.split('_')[1].isdigit() else 0)
+            
+            for session_key in session_keys:
+                date_key = f"{session_key}_date_time"
+                session_date = conversation_data.get(date_key, "Unknown Date")
+                session_data = conversation_data.get(session_key, [])
+                utterance_count = len(session_data) if session_data else 0
+                context_lines.append(f"{session_key}: {session_date} ({utterance_count} utterances)")
+            
+            return "\n".join(context_lines)
+            
+        except Exception as e:
+            return f"Error extracting session context: {e}"
 
     def _check_memory_exists(self, characters: List[str]) -> Dict[str, bool]:
         """Check if memory files exist and are non-empty for given characters"""
@@ -176,7 +245,7 @@ class ToolBasedMemoryTester:
         
         return session_results
 
-    def _process_single_qa(self, qa_data: Tuple[str, str, str, int], characters: List[str]) -> Dict:
+    def _process_single_qa(self, qa_data: Tuple[str, str, str, int], characters: List[str], evidence_content: str = "", conversation_data: Dict = None) -> Dict:
         """Process a single QA question using MemAgent"""
         question, answer, category, qa_index = qa_data
         
@@ -191,15 +260,79 @@ class ToolBasedMemoryTester:
             Question: {question}
             Characters to search: {characters}
             
-            Please provide a comprehensive answer based on the memory information.
+            Please provide a concise and direct answer based on the memory information.
+            Keep your answer brief and focused - avoid lengthy explanations unless specifically needed.
             """
             
             answer_result = self.mem_agent.execute(answer_prompt)
             
+            # Extract detailed information from the result
+            messages = answer_result.get("messages", [])
+            retrieved_contents = []
+            tool_executions = []
+            
+            for message in messages:
+                if message.get("role") == "tool" and message.get("content"):
+                    try:
+                        tool_result_content = message["content"]
+                        # Try to parse as JSON to get structured tool result
+                        if tool_result_content.startswith('{') and tool_result_content.endswith('}'):
+                            tool_result = json.loads(tool_result_content)
+                            
+                            # Extract different types of tool results
+                            if tool_result.get("success", False):
+                                # For search_relevant_events results
+                                if "relevant_events" in tool_result:
+                                    events = tool_result["relevant_events"]
+                                    if events:
+                                        events_text = "\n".join([f"Event: {event}" for event in events])
+                                        retrieved_contents.append(f"Relevant Events:\n{events_text}")
+                                        tool_executions.append("search_relevant_events")
+                                
+                                # For read_character_profile results  
+                                elif "profile_content" in tool_result:
+                                    profile = tool_result["profile_content"]
+                                    if profile:
+                                        retrieved_contents.append(f"Character Profile:\n{profile}")
+                                        tool_executions.append("read_character_profile")
+                                
+                                # For read_character_events results
+                                elif "events_content" in tool_result:
+                                    events = tool_result["events_content"]
+                                    if events:
+                                        retrieved_contents.append(f"Character Events:\n{events}")
+                                        tool_executions.append("read_character_events")
+                                
+                                # For any other successful tool result, capture the full content
+                                elif any(key in tool_result for key in ["content", "result", "data"]):
+                                    content = tool_result.get("content") or tool_result.get("result") or tool_result.get("data")
+                                    if content:
+                                        retrieved_contents.append(f"Tool Result:\n{content}")
+                                        tool_executions.append("unknown_tool")
+                            else:
+                                # Tool failed, but still capture the error for context
+                                error_msg = tool_result.get("error", "Unknown tool error")
+                                retrieved_contents.append(f"Tool Error:\n{error_msg}")
+                        else:
+                            # Non-JSON content, treat as plain text result
+                            retrieved_contents.append(f"Tool Output:\n{tool_result_content}")
+                            
+                    except json.JSONDecodeError:
+                        # Content is not JSON, treat as plain text
+                        retrieved_contents.append(f"Tool Output:\n{tool_result_content}")
+                    except Exception as e:
+                        logger.warning(f"Failed to parse tool result: {e}")
+                        retrieved_contents.append(f"Tool Output (parse error):\n{tool_result_content}")
+            
+            # Combine all retrieved content
+            retrieved_content = "\n\n---\n\n".join(retrieved_contents) if retrieved_contents else "No content retrieved from tools"
+            
             if answer_result.get("success", False):
                 generated_answer = answer_result.get("final_response", "No answer generated")
             else:
-                generated_answer = f"Error: {answer_result.get('error', 'Failed to generate answer')}"
+                error_msg = answer_result.get('error', 'Failed to generate answer')
+                generated_answer = f"Error: {error_msg}"
+                retrieved_content = f"Error occurred during retrieval: {error_msg}"
             
             # Evaluate the answer
             evaluation = self._evaluate_answer(question, generated_answer, answer)
@@ -211,8 +344,26 @@ class ToolBasedMemoryTester:
                 'standard_answer': answer,
                 'category': category,
                 'is_correct': evaluation['is_correct'],
-                'explanation': evaluation['explanation']
+                'explanation': evaluation['explanation'],
+                'retrieved_content': retrieved_content,
+                'evidence': evidence_content
             }
+            
+            # Log error details if answer is incorrect
+            if not evaluation['is_correct']:
+                session_context = self._get_session_context(conversation_data) if conversation_data else ""
+                self._log_qa_error(
+                    qa_index=qa_index,
+                    question=question,
+                    generated_answer=generated_answer,
+                    standard_answer=answer,
+                    category=category,
+                    retrieved_content=retrieved_content,
+                    evidence=evidence_content,
+                    explanation=evaluation['explanation'],
+                    session_context=session_context
+                )
+                logger.warning(f"[QA {qa_index+1}] ✗ Incorrect answer logged to error file")
             
             status = "✓" if evaluation['is_correct'] else "✗"
             logger.info(f"[QA {qa_index+1}] {status} Question completed (Category: {category})")
@@ -221,17 +372,78 @@ class ToolBasedMemoryTester:
             
         except Exception as e:
             logger.error(f"[QA {qa_index+1}] Exception processing question: {e}")
-            return {
+            
+            # Log exception details
+            error_result = {
                 'qa_index': qa_index,
                 'question': question,
                 'generated_answer': f"Error: {e}",
                 'standard_answer': answer,
                 'category': category,
                 'is_correct': False,
-                'explanation': f"Processing failed: {e}"
+                'explanation': f"Processing failed: {e}",
+                'retrieved_content': f"Exception prevented retrieval: {e}",
+                'evidence': evidence_content
             }
+            
+            session_context = self._get_session_context(conversation_data) if conversation_data else ""
+            self._log_qa_error(
+                qa_index=qa_index,
+                question=question,
+                generated_answer=f"Error: {e}",
+                standard_answer=answer,
+                category=category,
+                retrieved_content=f"Exception prevented retrieval: {e}",
+                evidence=evidence_content,
+                explanation=f"Processing failed: {e}",
+                session_context=session_context
+            )
+            
+            return error_result
 
-    def _process_qa_parallel(self, qa_data: List[Dict], characters: List[str], max_workers: int = 3) -> List[Dict]:
+    def _map_evidence_to_conversation(self, evidence_refs: List[str], conversation_data: Dict) -> str:
+        """Map evidence references (like 'D1:3') to actual conversation content"""
+        evidence_conversations = []
+        
+        for ref in evidence_refs:
+            try:
+                # Parse reference like 'D1:3' -> day=1, utterance=3
+                if ':' in ref and ref.startswith('D'):
+                    parts = ref.split(':')
+                    day_part = parts[0][1:]  # Remove 'D' prefix
+                    utterance_id = int(parts[1])
+                    
+                    # Find the session data
+                    session_key = f"session_{day_part}"
+                    if session_key in conversation_data:
+                        session_data = conversation_data[session_key]
+                        
+                        # Get session date/time for context
+                        date_key = f"{session_key}_date_time"
+                        session_time = conversation_data.get(date_key, "Unknown Date")
+                        
+                        # Find the utterance with matching dia_id
+                        target_dia_id = ref
+                        for utterance in session_data:
+                            if isinstance(utterance, dict) and utterance.get('dia_id') == target_dia_id:
+                                speaker = utterance.get('speaker', 'Unknown')
+                                text = utterance.get('text', '')
+                                # Include session time in evidence
+                                evidence_conversations.append(f"[{session_time}] {speaker}: {text}")
+                                break
+                        else:
+                            evidence_conversations.append(f"[Evidence {ref} not found in {session_time}]")
+                    else:
+                        evidence_conversations.append(f"[Session {session_key} not found]")
+                else:
+                    evidence_conversations.append(f"[Invalid evidence format: {ref}]")
+                    
+            except Exception as e:
+                evidence_conversations.append(f"[Error parsing evidence {ref}: {e}]")
+        
+        return "\n".join(evidence_conversations) if evidence_conversations else "No evidence provided"
+
+    def _process_qa_parallel(self, qa_data: List[Dict], characters: List[str], conversation_data: Dict = None, max_workers: int = 3) -> List[Dict]:
         """Process multiple QA questions in parallel"""
         if not qa_data:
             return []
@@ -247,7 +459,13 @@ class ToolBasedMemoryTester:
         skipped_count = 0
         for i, qa_item in enumerate(qa_data):
             if 'question' in qa_item and 'answer' in qa_item:
-                qa_items.append((qa_item['question'], qa_item['answer'], qa_item.get('category', 'Unknown'), i))
+                # Extract evidence and map to conversation content
+                evidence_refs = qa_item.get('evidence', [])
+                evidence_content = ""
+                if evidence_refs and conversation_data:
+                    evidence_content = self._map_evidence_to_conversation(evidence_refs, conversation_data)
+                
+                qa_items.append((qa_item['question'], qa_item['answer'], qa_item.get('category', 'Unknown'), i, evidence_content))
             else:
                 skipped_count += 1
                 logger.warning(f"Skipping QA item {i}: missing required fields (question or answer)")
@@ -261,15 +479,28 @@ class ToolBasedMemoryTester:
         
         # Use ThreadPoolExecutor for parallel processing
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # Submit all QA processing tasks
-            future_to_qa = {
-                executor.submit(self._process_single_qa, qa_item, characters): qa_item[3] 
-                for qa_item in qa_items
-            }
+            # Submit all QA processing tasks and store qa_item info for exception handling
+            future_to_qa_info = {}
+            for qa_item in qa_items:
+                future = executor.submit(self._process_single_qa_with_evidence, qa_item, characters, conversation_data)
+                qa_index = qa_item[3]  # qa_index is at position 3
+                evidence_content = qa_item[4]  # evidence_content is at position 4
+                question = qa_item[0]  # question is at position 0
+                answer = qa_item[1]  # answer is at position 1
+                category = qa_item[2]  # category is at position 2
+                
+                future_to_qa_info[future] = {
+                    'qa_index': qa_index,
+                    'question': question,
+                    'answer': answer,
+                    'category': category,
+                    'evidence': evidence_content
+                }
             
             # Collect results as they complete
-            for future in as_completed(future_to_qa):
-                qa_index = future_to_qa[future]
+            for future in as_completed(future_to_qa_info):
+                qa_info = future_to_qa_info[future]
+                qa_index = qa_info['qa_index']
                 completed_count += 1
                 
                 try:
@@ -281,12 +512,14 @@ class ToolBasedMemoryTester:
                     logger.error(f"[{completed_count}/{len(qa_items)}] ✗ QA {qa_index+1} generated exception: {e}")
                     question_results.append({
                         'qa_index': qa_index,
-                        'question': f"Question {qa_index+1}",
+                        'question': qa_info['question'],
                         'generated_answer': f"Error: {e}",
-                        'standard_answer': "",
-                        'category': 'Unknown',
+                        'standard_answer': qa_info['answer'],
+                        'category': qa_info['category'],
                         'is_correct': False,
-                        'explanation': f"Exception: {e}"
+                        'explanation': f"Exception: {e}",
+                        'retrieved_content': f"Exception: {e}",
+                        'evidence': qa_info['evidence']
                     })
         
         # Sort results by qa_index for consistent output
@@ -297,6 +530,13 @@ class ToolBasedMemoryTester:
         logger.info(f"Parallel QA processing completed: {successful_qa}/{processed_qa} questions answered correctly")
         
         return question_results
+
+    def _process_single_qa_with_evidence(self, qa_data: Tuple[str, str, str, int, str], characters: List[str], conversation_data: Dict = None) -> Dict:
+        """Process a single QA question with evidence content"""
+        question, answer, category, qa_index, evidence_content = qa_data
+        
+        # Call the processing method with evidence content and conversation data
+        return self._process_single_qa((question, answer, category, qa_index), characters, evidence_content, conversation_data)
 
     def _extract_session_data(self, conversation_data: Dict) -> List[Tuple[str, List[Dict], str]]:
         """Extract session information from conversation data"""
@@ -420,7 +660,7 @@ class ToolBasedMemoryTester:
                     })
             
             # Answer QA questions in parallel
-            question_results = self._process_qa_parallel(qa_data, characters, self.max_workers)
+            question_results = self._process_qa_parallel(qa_data, characters, conversation_data, self.max_workers)
             
             # Calculate category statistics
             category_stats = {}
@@ -575,6 +815,9 @@ class ToolBasedMemoryTester:
         
         overall_accuracy = total_correct / total_questions if total_questions > 0 else 0.0
         
+        # Calculate incorrect answers count
+        total_incorrect = total_questions - total_correct
+        
         # Aggregate category statistics
         category_stats = {}
         for result in self.results:
@@ -594,6 +837,7 @@ class ToolBasedMemoryTester:
         print(f"Sessions skipped (memory exists): {sessions_skipped}")
         print(f"Total questions: {total_questions}")
         print(f"Total correct: {total_correct}")
+        print(f"Total incorrect: {total_incorrect}")
         print(f"Overall accuracy: {overall_accuracy:.2%}")
         print(f"Total processing time: {self.processing_time:.2f}s")
         print(f"Average time per sample: {self.processing_time / total_samples:.2f}s")
@@ -605,7 +849,27 @@ class ToolBasedMemoryTester:
         for category in sorted(category_stats.keys()):
             stats = category_stats[category]
             accuracy = stats['correct'] / stats['total'] if stats['total'] > 0 else 0.0
-            print(f"{category:30} {stats['correct']:3}/{stats['total']:3} ({accuracy:.1%})")
+            incorrect_count = stats['total'] - stats['correct']
+            print(f"{category:30} {stats['correct']:3}/{stats['total']:3} ({accuracy:.1%}) [{incorrect_count} errors]")
+        
+        print(f"\n{'='*60}")
+        
+        # Add error log information
+        if total_incorrect > 0:
+            print(f"ERROR LOG INFORMATION")
+            print(f"{'='*60}")
+            print(f"Total incorrect answers: {total_incorrect}")
+            print(f"Detailed error information saved to: {self.error_log_file}")
+            print(f"The error log contains:")
+            print(f"  - Original questions")
+            print(f"  - Retrieved content from memory")
+            print(f"  - Evidence used for answering")
+            print(f"  - Generated answers")
+            print(f"  - Standard (correct) answers")
+            print(f"  - Evaluation explanations")
+            print(f"\nPlease review the error log to analyze failure patterns and improve memory retrieval.")
+        else:
+            print(f"🎉 All questions answered correctly! No error log entries generated.")
         
         print(f"\n{'='*60}")
 
@@ -644,8 +908,22 @@ def main():
             json.dump(results, f, indent=2, ensure_ascii=False)
         
         logger.info(f"Detailed results saved to: {output_file}")
+        
+        # Calculate and report error statistics
+        total_questions = results['summary'].get('total_questions', 0)
+        total_correct = results['summary'].get('total_correct', 0)
+        total_incorrect = total_questions - total_correct
+        
+        if total_incorrect > 0:
+            logger.info(f"Error analysis: {total_incorrect} incorrect answers logged to: {tester.error_log_file}")
+            logger.info("Review the error log to identify patterns in failed questions and improve memory retrieval.")
+        else:
+            logger.info("🎉 Perfect score! All questions answered correctly.")
+            
     else:
         logger.error(f"Test failed: {results.get('error', 'Unknown error')}")
+        # Even if test failed, there might be some error log entries
+        logger.info(f"Check error log for any partial results: {tester.error_log_file}")
 
 
 if __name__ == "__main__":
