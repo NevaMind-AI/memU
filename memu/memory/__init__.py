@@ -1,23 +1,28 @@
 """
 MemU Memory Module
 
-Core Memory system with API-based remote operations:
-- Memory: Unified API-based memory management class
-- MemoryClient: API client for remote memory operations
-- Memory component classes: ProfileMemory, EventMemory, MindMemory
+Hybrid memory system supporting both file-based and database storage:
+- MemoryAgent: Agent-based memory management with LLM tools
+- Memory: Simple file-based memory management class
+- MemoryFileManager: File operations for memory storage
+- MemoryDatabaseManager: Database operations with PostgreSQL + pgvector
+- EmbeddingClient: Vector embedding generation for semantic search
 
-Architecture: Client -> API -> Backend -> Database
-All memory operations are performed through remote API calls for consistent
-and scalable memory management.
+Architecture: 
+- File mode: Agent -> File Manager -> .md files
+- Database mode: Agent -> Database Manager -> PostgreSQL + pgvector
 
-Note: Only API-based memory operations are supported.
-The Memory class internally uses ProfileMemory, EventMemory, and MindMemory 
-components for code organization while all data operations go through remote API.
+The MemoryAgent provides LLM-powered tools for analyzing conversations
+and updating character memories. In database mode, it supports vector
+similarity search for enhanced memory retrieval.
 """
 
 # Main Memory classes
-from .base import Memory, ProfileMemory, EventMemory, MindMemory
-from .manager import MemoryClient
+from .base import Memory, ProfileMemory, EventMemory
+from .agent import MemoryAgent
+from .file_manager import MemoryFileManager
+from .db_manager import MemoryDatabaseManager
+from .embeddings import EmbeddingClient, create_embedding_client, get_default_embedding_client
 
 # LLM interface
 from ..llm import BaseLLMClient
@@ -25,11 +30,17 @@ from ..llm import BaseLLMClient
 __all__ = [
     # Main classes
     "Memory",
-    "MemoryClient", 
+    "MemoryAgent",
+    # Storage managers
+    "MemoryFileManager", 
+    "MemoryDatabaseManager",
     # Memory components
     "ProfileMemory",
-    "EventMemory", 
-    "MindMemory",
+    "EventMemory",
+    # Embedding support
+    "EmbeddingClient",
+    "create_embedding_client", 
+    "get_default_embedding_client",
     # LLM interface
     "BaseLLMClient",
 ]

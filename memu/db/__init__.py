@@ -13,7 +13,8 @@ from .config import (
     get_database_manager,
     setup_postgresql,
 )
-from .pg_storage import PostgreSQLMemoryDB, PostgreSQLConversationDB, PostgreSQLStorageBase
+from .pg_storage import PostgreSQLMemoryDB, PostgreSQLStorageBase
+# from .pg_storage import PostgreSQLConversationDB  # Removed - depends on memo module
 from .utils import (
     build_connection_string,
     test_database_connection,
@@ -26,7 +27,7 @@ from .utils import (
 __all__ = [
     # Storage implementations
     "PostgreSQLMemoryDB",
-    "PostgreSQLConversationDB", 
+    # "PostgreSQLConversationDB",  # Removed - depends on memo module
     "PostgreSQLStorageBase",
     # Configuration and management
     "DatabaseConfig",
