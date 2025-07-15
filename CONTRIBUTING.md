@@ -1,6 +1,6 @@
-# Contributing to PersonaLab
+# Contributing to MemU
 
-Thank you for your interest in contributing to PersonaLab! This document provides guidelines for contributing to the project.
+Thank you for your interest in contributing to MemU! This document provides guidelines for contributing to the project.
 
 ## Development Setup
 
@@ -13,8 +13,8 @@ Thank you for your interest in contributing to PersonaLab! This document provide
 
 1. **Fork and clone the repository**
    ```bash
-   git clone https://github.com/your-username/PersonaLab.git
-   cd PersonaLab
+   git clone https://github.com/your-username/MemU.git
+   cd MemU
    ```
 
 2. **Create a virtual environment**
@@ -85,7 +85,7 @@ docs(readme): update installation instructions
 python -m pytest
 
 # Run with coverage
-python -m pytest --cov=personalab
+python -m pytest --cov=memu
 
 # Run specific test
 python -m pytest tests/test_memory.py
@@ -192,4 +192,4 @@ Instances of unacceptable behavior may be reported to the project maintainers.
 - Join our discussions for general questions
 - Check existing issues before creating new ones
 
-Thank you for contributing to PersonaLab! 🚀 
+Thank you for contributing to MemU! 🚀 

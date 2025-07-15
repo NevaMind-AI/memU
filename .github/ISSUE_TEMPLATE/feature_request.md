@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea for PersonaLab
+about: Suggest an idea for MemU
 title: '[FEATURE] '
 labels: enhancement
 assignees: ''
@@ -21,7 +21,7 @@ Describe your specific use case and how this feature would help:
 
 ```python
 # Example of how you'd like to use this feature
-from personalab import Persona
+from memu import Persona
 
 persona = Persona(agent_id="assistant")
 # Your desired functionality here
@@ -35,7 +35,7 @@ Add any other context, screenshots, or examples about the feature request here.
 
 **Priority**
 How important is this feature to you?
-- [ ] Critical - Blocking my use of PersonaLab
+- [ ] Critical - Blocking my use of MemU
 - [ ] High - Would significantly improve my workflow
 - [ ] Medium - Nice to have
 - [ ] Low - Minor improvement 

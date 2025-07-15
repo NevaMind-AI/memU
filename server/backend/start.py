@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Backend startup script for PersonaLab
+Backend startup script for MemU
 """
 
 if __name__ == "__main__":
     import uvicorn
     from main import app
     
-    print("🚀 Starting PersonaLab Backend Server...")
+    print("🚀 Starting MemU Backend Server...")
     print("📍 API Interface: http://localhost:8000")
 print("📍 API Documentation: http://localhost:8000/docs")
 

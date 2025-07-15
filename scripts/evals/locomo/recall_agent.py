@@ -20,8 +20,8 @@ from rank_bm25 import BM25Okapi
 import dotenv
 dotenv.load_dotenv()
 
-from personalab.llm import AzureOpenAIClient
-from personalab.utils import get_logger, setup_logging
+from memu.llm import AzureOpenAIClient
+from memu.utils import get_logger, setup_logging
 
 # Add prompts directory to path and import prompt loader
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'prompts'))

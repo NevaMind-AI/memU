@@ -1,5 +1,5 @@
 """
-PersonaLab Backend Management System - FastAPI Backend
+MemU Backend Management System - FastAPI Backend
 
 Provides API interfaces for conversation, memory and memory operation records in the database
 """
@@ -20,17 +20,17 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# Add parent directory to path for PersonaLab imports
+# Add parent directory to path for MemU imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from personalab.config import get_llm_config_manager
-from personalab.db import build_connection_string, get_database_manager
-from personalab.llm import OpenAIClient
-from personalab.memory.base import Memory
-from personalab.memory.manager import MemoryClient
-from personalab.memory.pipeline import MemoryUpdatePipeline
-from personalab.memo.manager import ConversationManager
-from personalab.utils import get_logger
+from memu.config import get_llm_config_manager
+from memu.db import build_connection_string, get_database_manager
+from memu.llm import OpenAIClient
+from memu.memory.base import Memory
+from memu.memory.manager import MemoryClient
+from memu.memory.pipeline import MemoryUpdatePipeline
+from memu.memo.manager import ConversationManager
+from memu.utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -41,7 +41,7 @@ def setup_postgres_env():
     default_config = {
         'POSTGRES_HOST': 'localhost',
         'POSTGRES_PORT': '5432',
-        'POSTGRES_DB': 'personalab',
+        'POSTGRES_DB': 'memu',
         'POSTGRES_USER': 'chenhong',
         'POSTGRES_PASSWORD': ''
     }
@@ -79,7 +79,7 @@ def get_cached_db_config():
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="PersonaLab Backend Management System",
+    title="MemU Backend Management System",
     description="Provides API interfaces for conversation, memory and memory operation records in the database",
     version="1.0.0"
 )
@@ -171,7 +171,7 @@ class SaveConversationRequest(BaseModel):
 @app.get("/", response_model=Dict[str, str])
 async def root():
     """Health check"""
-    return {"message": "PersonaLab Backend Management System API", "status": "running"}
+    return {"message": "MemU Backend Management System API", "status": "running"}
 
 
 @app.get("/api/stats", response_model=SystemStats)

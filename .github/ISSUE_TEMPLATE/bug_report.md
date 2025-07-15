@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Create a report to help us improve PersonaLab
+about: Create a report to help us improve MemU
 title: '[BUG] '
 labels: bug
 assignees: ''
@@ -23,7 +23,7 @@ A clear and concise description of what you expected to happen.
 Please provide a minimal code example that reproduces the issue:
 
 ```python
-from personalab import Persona
+from memu import Persona
 
 # Your code here
 ```
@@ -38,7 +38,7 @@ Paste error output here
 **Environment (please complete the following information):**
  - OS: [e.g. macOS, Ubuntu 22.04]
  - Python version: [e.g. 3.9.7]
- - PersonaLab version: [e.g. 1.0.0]
+ - MemU version: [e.g. 1.0.0]
  - Database: [e.g. PostgreSQL 14.5]
  - LLM Provider: [e.g. OpenAI, Anthropic]
 

@@ -1,12 +1,12 @@
-# PersonaLab PostgreSQL Configuration Guide
+# MemU PostgreSQL Configuration Guide
 
 ## Problem Resolution ✅
 
-PersonaLab is configured to use PostgreSQL database for production-ready deployment.
+MemU is configured to use PostgreSQL database for production-ready deployment.
 
 ## Root Cause Analysis
 
-PersonaLab's database selection logic is located in `personalab/config/database.py`:
+MemU's database selection logic is located in `memu/config/database.py`:
 
 ```python
 @classmethod
@@ -31,7 +31,7 @@ def from_env(cls) -> "DatabaseConfig":
 ```bash
 export POSTGRES_HOST=localhost
 export POSTGRES_PORT=5432
-export POSTGRES_DB=personalab
+export POSTGRES_DB=memu
 export POSTGRES_USER=chenhong
 export POSTGRES_PASSWORD=""
 ```
@@ -48,7 +48,7 @@ export POSTGRES_PASSWORD=""
 # Set environment variables
 source setup_postgres_env.sh
 
-# Use PersonaLab
+# Use MemU
 python your_script.py
 ```
 
@@ -59,7 +59,7 @@ Add environment variables to your `~/.zshrc` file:
 # Add to the end of ~/.zshrc file
 export POSTGRES_HOST=localhost
 export POSTGRES_PORT=5432
-export POSTGRES_DB=personalab
+export POSTGRES_DB=memu
 export POSTGRES_USER=chenhong
 export POSTGRES_PASSWORD=""
 
@@ -108,7 +108,7 @@ brew services list | grep postgres
 
 ### Connect to Database
 ```bash
-psql -d personalab
+psql -d memu
 ```
 
 ### View Table Structure
@@ -122,7 +122,7 @@ psql -d personalab
 
 ### Backup Database
 ```bash
-pg_dump personalab > personalab_backup.sql
+pg_dump memu > memu_backup.sql
 ```
 
 ## Troubleshooting
@@ -139,7 +139,7 @@ brew services list | grep postgres
 ### 2. Connection Permission Issues
 ```bash
 # Ensure user has permission to access database
-psql -d postgres -c "GRANT ALL PRIVILEGES ON DATABASE personalab TO chenhong;"
+psql -d postgres -c "GRANT ALL PRIVILEGES ON DATABASE memu TO chenhong;"
 ```
 
 ### 3. Environment Variables Not Set
@@ -168,4 +168,4 @@ PostgreSQL provides enterprise-grade features:
 
 ## Summary
 
-PersonaLab is configured to use PostgreSQL database for optimal performance and scalability. Simply ensure the correct environment variables are set before use. 
+MemU is configured to use PostgreSQL database for optimal performance and scalability. Simply ensure the correct environment variables are set before use. 

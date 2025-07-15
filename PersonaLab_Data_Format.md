@@ -1,4 +1,4 @@
-# PersonaLab 数据格式规范
+# MemU 数据格式规范
 
 ## 目录
 
@@ -30,7 +30,7 @@
 
 ## 概述
 
-PersonaLab 使用 JSON 格式来处理和存储记忆（Memory）和对话（Conversation）数据。本文档详细描述了这两种数据结构的格式规范。
+MemU 使用 JSON 格式来处理和存储记忆（Memory）和对话（Conversation）数据。本文档详细描述了这两种数据结构的格式规范。
 
 ## 1. Memory JSON 格式
 
@@ -363,7 +363,7 @@ Conversation 包含对话元数据和消息列表：
 ### 4.1 创建 Memory 对象
 
 ```python
-from personalab.memory.base import Memory
+from memu.memory.base import Memory
 
 memory = Memory(
     agent_id="agent_001",
@@ -383,7 +383,7 @@ memory = Memory(
 ### 4.2 创建 Conversation 对象
 
 ```python
-from personalab.memo.models import Conversation
+from memu.memo.models import Conversation
 
 conversation = Conversation(
     agent_id="agent_001",
@@ -398,7 +398,7 @@ conversation = Conversation(
 ### 4.3 保存对话到数据库
 
 ```python
-from personalab.memo.manager import ConversationManager
+from memu.memo.manager import ConversationManager
 
 manager = ConversationManager()
 conversation = manager.record_conversation(

@@ -26,7 +26,7 @@ if not hasattr(sys, '_stdout_line_buffering_set'):
 
 from recall_agent import RecallAgent
 from manage_agent import ManageAgent
-from personalab.utils import get_logger, setup_logging
+from memu.utils import get_logger, setup_logging
 
 # 设置带有flush的logger
 logger = setup_logging(__name__, enable_flush=True)

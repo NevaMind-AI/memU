@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PersonaLab Advanced Chat Example with Comprehensive Conversation Retrieval Testing
+MemU Advanced Chat Example with Comprehensive Conversation Retrieval Testing
 
 This example demonstrates:
 1. Basic chat functionality with memory
@@ -20,17 +20,17 @@ import sys
 import time
 from typing import List, Dict
 
-# Add the project root to the path so we can import personalab
+# Add the project root to the path so we can import memu
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Setup PostgreSQL environment variables
 os.environ.setdefault('POSTGRES_HOST', 'localhost')
 os.environ.setdefault('POSTGRES_PORT', '5432')
-os.environ.setdefault('POSTGRES_DB', 'personalab')
+os.environ.setdefault('POSTGRES_DB', 'memu')
 os.environ.setdefault('POSTGRES_USER', 'chenhong')
 os.environ.setdefault('POSTGRES_PASSWORD', '')
 
-from personalab import Persona
+from memu import Persona
 
 
 def test_basic_retrieval(persona: Persona, user_id: str) -> None:
@@ -302,8 +302,8 @@ def analyze_retrieval_performance(persona: Persona, user_id: str) -> None:
 
 
 def main():
-    """Main function demonstrating comprehensive PersonaLab conversation retrieval"""
-    print("🤖 PersonaLab Comprehensive Conversation Retrieval Testing")
+    """Main function demonstrating comprehensive MemU conversation retrieval"""
+    print("🤖 MemU Comprehensive Conversation Retrieval Testing")
     print("=" * 70)
     
     # Initialize persona with conversation retrieval enabled

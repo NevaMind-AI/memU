@@ -1,6 +1,6 @@
-# PersonaLab Function Definitions Report
+# MemU Function Definitions Report
 
-This report contains all function definitions (both regular `def` and `async def`) found in the PersonaLab project's main code directories: `personalab/`, `server/backend/`, and `examples/`.
+This report contains all function definitions (both regular `def` and `async def`) found in the MemU project's main code directories: `memu/`, `server/backend/`, and `examples/`.
 
 ## Summary Statistics
 - Total Python files analyzed: 27
@@ -19,10 +19,10 @@ This report contains all function definitions (both regular `def` and `async def
 - `analyze_retrieval_performance` (line 347)
 - `main` (line 381)
 
-### 2. personalab/__init__.py
+### 2. memu/__init__.py
 - `__getattr__` (line 114)
 
-### 3. personalab/config.py
+### 3. memu/config.py
 #### Module-level functions:
 - `load_config` (line 314)
 - `get_llm_config_manager` (line 330)
@@ -55,7 +55,7 @@ This report contains all function definitions (both regular `def` and `async def
 - `list_providers` (line 287)
 - `get_provider_status` (line 291)
 
-### 4. personalab/db/config.py
+### 4. memu/db/config.py
 #### DatabaseConfig class methods:
 - `__post_init__` (line 25)
 - `from_env` (line 35) @classmethod
@@ -74,7 +74,7 @@ This report contains all function definitions (both regular `def` and `async def
 - `configure_database` (line 209)
 - `setup_postgresql` (line 223)
 
-### 5. personalab/db/pg_storage.py
+### 5. memu/db/pg_storage.py
 #### PostgreSQLStorage class methods:
 - `__init__` (line 38)
 - `_test_connection` (line 55)
@@ -83,7 +83,7 @@ This report contains all function definitions (both regular `def` and `async def
 - `_calculate_hash` (line 86)
 - `close` (line 90)
 
-### 6. personalab/db/utils.py
+### 6. memu/db/utils.py
 - `build_connection_string` (line 21)
 - `test_database_connection` (line 71)
 - `get_db_connection` (line 93)
@@ -97,10 +97,10 @@ This report contains all function definitions (both regular `def` and `async def
 - `get_database_info` (line 209)
 - `ensure_pgvector_extension` (line 252)
 
-### 7. personalab/llm/__init__.py
+### 7. memu/llm/__init__.py
 (No functions defined in this file)
 
-### 8. personalab/llm/anthropic_client.py
+### 8. memu/llm/anthropic_client.py
 #### AnthropicClient class methods:
 - `__init__` (line 15)
 - `client` (line 40) @property
@@ -110,7 +110,7 @@ This report contains all function definitions (both regular `def` and `async def
 - `from_env` (line 128) @classmethod
 - `__str__` (line 132)
 
-### 9. personalab/llm/base.py
+### 9. memu/llm/base.py
 #### LLMResponse class methods:
 - `__bool__` (line 20)
 - `__str__` (line 24)
@@ -124,7 +124,7 @@ This report contains all function definitions (both regular `def` and `async def
 - `_prepare_messages` (line 91)
 - `_handle_error` (line 95)
 
-### 10. personalab/llm/custom_client.py
+### 10. memu/llm/custom_client.py
 #### CustomLLMClient class methods:
 - `__init__` (line 22)
 - `chat_completion` (line 58)
@@ -136,7 +136,7 @@ This report contains all function definitions (both regular `def` and `async def
 #### Module-level functions:
 - `create_simple_client` (line 149)
 
-### 11. personalab/llm/openai_client.py
+### 11. memu/llm/openai_client.py
 #### OpenAIClient class methods:
 - `__init__` (line 15)
 - `client` (line 47) @property
@@ -146,12 +146,12 @@ This report contains all function definitions (both regular `def` and `async def
 - `from_env` (line 126) @classmethod
 - `__str__` (line 130)
 
-### 12. personalab/memo/__init__.py
+### 12. memu/memo/__init__.py
 #### MemoManager class methods:
 - `conversations` (line 76) @property
 - `close` (line 82)
 
-### 13. personalab/memo/embeddings.py
+### 13. memu/memo/embeddings.py
 #### EmbeddingProvider (ABC) methods:
 - `generate_embedding` (line 20) @abstractmethod
 - `embedding_dimension` (line 34) @property @abstractmethod
@@ -180,7 +180,7 @@ This report contains all function definitions (both regular `def` and `async def
 #### Module-level functions:
 - `create_embedding_manager` (line 199)
 
-### 14. personalab/memo/manager.py
+### 14. memu/memo/manager.py
 #### ConversationManager class methods:
 - `__init__` (line 29)
 - `record_conversation` (line 55)
@@ -193,13 +193,13 @@ This report contains all function definitions (both regular `def` and `async def
 - `get_conversation_stats` (line 277)
 - `close` (line 317)
 
-### 15. personalab/memo/models.py
+### 15. memu/memo/models.py
 (No functions defined - contains dataclass definitions)
 
-### 16. personalab/memory/__init__.py
+### 16. memu/memory/__init__.py
 (No functions defined in this file)
 
-### 17. personalab/memory/base.py
+### 17. memu/memory/base.py
 #### Memory class methods:
 - `__init__` (line 33)
 - `_init_memory_components` (line 68)
@@ -258,7 +258,7 @@ This report contains all function definitions (both regular `def` and `async def
 - `get_insight_count` (line 469)
 - `get_total_text_length` (line 473)
 
-### 18. personalab/memory/manager.py
+### 18. memu/memory/manager.py
 #### MemoryClient class methods:
 - `__init__` (line 27)
 - `_make_api_request` (line 48)
@@ -273,7 +273,7 @@ This report contains all function definitions (both regular `def` and `async def
 - `update_events` (line 370)
 - `get_memory_stats` (line 407)
 
-### 19. personalab/memory/pipeline.py
+### 19. memu/memory/pipeline.py
 #### LLMMemoryPipeline class methods:
 - `__init__` (line 72)
 - `update_with_pipeline` (line 108)
@@ -290,10 +290,10 @@ This report contains all function definitions (both regular `def` and `async def
 - `_format_events` (line 699)
 - `_format_profile` (line 707)
 
-### 20. personalab/persona/__init__.py
+### 20. memu/persona/__init__.py
 (No functions defined in this file)
 
-### 21. personalab/persona/persona.py
+### 21. memu/persona/persona.py
 #### Persona class methods:
 - `__init__` (line 70)
 - `_create_default_openai_client` (line 179)
@@ -308,10 +308,10 @@ This report contains all function definitions (both regular `def` and `async def
 - `_get_or_create_memory` (line 501)
 - `_get_memory_context` (line 513)
 
-### 22. personalab/utils/__init__.py
+### 22. memu/utils/__init__.py
 (No functions defined in this file)
 
-### 23. personalab/utils/logging.py
+### 23. memu/utils/logging.py
 #### ColoredFormatter class methods:
 - `format` (line 25)
 

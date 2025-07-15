@@ -1,6 +1,6 @@
-# PersonaLab API-Only Architecture Guide
+# MemU API-Only Architecture Guide
 
-PersonaLab has been redesigned with a **clean API-only architecture** where all memory operations are performed through remote API calls. This provides better scalability, consistency, and separation of concerns.
+MemU has been redesigned with a **clean API-only architecture** where all memory operations are performed through remote API calls. This provides better scalability, consistency, and separation of concerns.
 
 ## 🏗️ Architecture Overview
 
@@ -31,10 +31,10 @@ docker-compose up
 
 The server will run at `http://localhost:8000` by default.
 
-### 2. Use PersonaLab (API-Only)
+### 2. Use MemU (API-Only)
 
 ```python
-from personalab import Persona
+from memu import Persona
 
 # Create Persona (automatically uses API)
 persona = Persona(
@@ -59,7 +59,7 @@ print(f"Memory updated: {result}")
 The `Persona` class is now **API-only** by default:
 
 ```python
-from personalab import Persona
+from memu import Persona
 
 # All these create API-only Personas
 persona1 = Persona(agent_id="assistant1")  # Uses default API URL
@@ -80,7 +80,7 @@ persona3 = Persona(agent_id="assistant3", api_url="http://remote-server:8000")
 The `MemoryClient` is now a **pure API client**:
 
 ```python
-from personalab.memory import MemoryClient
+from memu.memory import MemoryClient
 
 # Create API-only memory client
 client = MemoryClient(api_url="http://localhost:8000")
@@ -168,7 +168,7 @@ client = MemoryClient(api_url="http://localhost:8000")  # Always API
 ## 🔧 Configuration
 
 ### Default API URL
-By default, PersonaLab uses `http://localhost:8000`:
+By default, MemU uses `http://localhost:8000`:
 
 ```python
 # These are equivalent
@@ -188,7 +188,7 @@ persona = Persona(
 
 ### Timeout Configuration
 ```python
-from personalab.memory import MemoryClient
+from memu.memory import MemoryClient
 
 client = MemoryClient(
     api_url="http://localhost:8000",
@@ -198,7 +198,7 @@ client = MemoryClient(
 
 ## 📋 API Endpoints Used
 
-PersonaLab clients use these API endpoints:
+MemU clients use these API endpoints:
 
 - `GET /api/memories` - List memories
 - `GET /api/memories/{memory_id}` - Get specific memory

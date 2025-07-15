@@ -1,23 +1,23 @@
 <div align="center">
 
-![PersonaLab Banner](assets/banner.png)
+![MemU Banner](assets/banner.png)
   
-# PersonaLab
+# MemU
 
-🧠 **AI Memory and Conversation Management Framework** - Simple as mem0, Powerful as PersonaLab
+🧠 **AI Memory and Conversation Management Framework** - Simple as mem0, Powerful as MemU
 
-[![PyPI version](https://badge.fury.io/py/personalab.svg)](https://badge.fury.io/py/personalab)
+[![PyPI version](https://badge.fury.io/py/memu.svg)](https://badge.fury.io/py/memu)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![CI](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/ci.yml/badge.svg)](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/ci.yml)
-[![Publish](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/publish.yml/badge.svg)](https://github.com/NevaMind-AI/PersonaLab/actions/workflows/publish.yml)
+[![CI](https://github.com/NevaMind-AI/MemU/actions/workflows/ci.yml/badge.svg)](https://github.com/NevaMind-AI/MemU/actions/workflows/ci.yml)
+[![Publish](https://github.com/NevaMind-AI/MemU/actions/workflows/publish.yml/badge.svg)](https://github.com/NevaMind-AI/MemU/actions/workflows/publish.yml)
 
 </div>
 
-> 🎉 **PersonaLab v0.1.0 is now available on PyPI!** - The first official release with stable PostgreSQL-based memory system and multi-LLM support.
+> 🎉 **MemU v0.1.0 is now available on PyPI!** - The first official release with stable PostgreSQL-based memory system and multi-LLM support.
 
-PersonaLab is a comprehensive AI memory and conversation management system that provides intelligent profile management, conversation recording, and advanced semantic search capabilities for AI agents. It combines persistent memory storage, conversation analysis, psychological modeling, and vector-based retrieval for building sophisticated AI applications.
+MemU is a comprehensive AI memory and conversation management system that provides intelligent profile management, conversation recording, and advanced semantic search capabilities for AI agents. It combines persistent memory storage, conversation analysis, psychological modeling, and vector-based retrieval for building sophisticated AI applications.
 
 ## 📦 Installation
 
@@ -25,20 +25,20 @@ PersonaLab is a comprehensive AI memory and conversation management system that 
 
 ```bash
 # Basic installation
-pip install personalab
+pip install memu
 
 # With AI features (includes OpenAI support)
-pip install personalab[ai]
+pip install memu[ai]
 
 # Full installation (all LLM providers and features)
-pip install personalab[all]
+pip install memu[all]
 ```
 
 ### From Source (Development)
 
 ```bash
-git clone https://github.com/NevaMind-AI/PersonaLab.git
-cd PersonaLab
+git clone https://github.com/NevaMind-AI/MemU.git
+cd MemU
 pip install -e .
 
 # For development
@@ -48,12 +48,12 @@ pre-commit install
 
 ## ⚡ Quick Start
 
-> **💡 Important**: All PersonaLab chat interactions require a `user_id` parameter to identify different users and maintain separate memory spaces for each user.
+> **💡 Important**: All MemU chat interactions require a `user_id` parameter to identify different users and maintain separate memory spaces for each user.
 
 ### Simple 3-Line Setup
 
 ```python
-from personalab import Persona
+from memu import Persona
 
 # Create an AI persona with memory
 persona = Persona(agent_id="my_assistant")
@@ -68,8 +68,8 @@ print(response)
 ### Complete Example with Memory & LLM Configuration
 
 ```python
-from personalab import Persona
-from personalab.llm import OpenAIClient, AnthropicClient
+from memu import Persona
+from memu.llm import OpenAIClient, AnthropicClient
 
 # Configure your LLM client
 openai_client = OpenAIClient(api_key="your-key", model="gpt-4")
@@ -110,7 +110,7 @@ echo "OPENAI_API_KEY=your_openai_key_here" >> .env
 echo "ANTHROPIC_API_KEY=your_anthropic_key_here" >> .env
 
 # 3. Test configuration
-python -c "from personalab import Persona; print('✅ PersonaLab ready!')"
+python -c "from memu import Persona; print('✅ MemU ready!')"
 ```
 
 ## 🌟 Key Features
@@ -149,11 +149,11 @@ python -c "from personalab import Persona; print('✅ PersonaLab ready!')"
 
 ### Database Setup
 
-PersonaLab requires PostgreSQL for memory storage. Quick setup:
+MemU requires PostgreSQL for memory storage. Quick setup:
 
 ```bash
 # Using Docker (recommended)
-docker run --name personalab-postgres -e POSTGRES_PASSWORD=your_password -p 5432:5432 -d postgres:14
+docker run --name memu-postgres -e POSTGRES_PASSWORD=your_password -p 5432:5432 -d postgres:14
 
 # Or install PostgreSQL locally
 # macOS: brew install postgresql
@@ -166,8 +166,8 @@ docker run --name personalab-postgres -e POSTGRES_PASSWORD=your_password -p 5432
 ### Memory & Conversation Integration
 
 ```python
-from personalab import Persona
-from personalab.llm import OpenAIClient, AnthropicClient
+from memu import Persona
+from memu.llm import OpenAIClient, AnthropicClient
 
 # Example 1: Educational Tutor with Memory
 tutor = Persona(
@@ -209,7 +209,7 @@ similar_tickets = support.search("account locked", user_id=customer_id, top_k=3)
 ### Direct ConversationManager Usage
 
 ```python
-from personalab.memo import ConversationManager
+from memu.memo import ConversationManager
 
 # Advanced conversation search and analysis
 manager = ConversationManager(
@@ -236,8 +236,8 @@ for result in results:
 
 ### Project Structure
 ```
-PersonaLab/
-├── personalab/
+MemU/
+├── memu/
 │   ├── __init__.py          # Main exports
 │   ├── config.py            # Configuration management
 │   ├── llm.py               # LLM integration
@@ -262,13 +262,13 @@ PersonaLab/
 
 ### Core Components
 
-#### Memory Module (`personalab.memory`)
+#### Memory Module (`memu.memory`)
 - **Memory**: Unified memory class with ProfileMemory, EventMemory, and MindMemory
 - **MemoryClient**: Complete memory lifecycle management
 - **MemoryUpdatePipeline**: Three-stage LLM-driven update process
 - **MemoryDB**: PostgreSQL-based persistent storage
 
-#### Memo Module (`personalab.memo`)
+#### Memo Module (`memu.memo`)
 - **ConversationManager**: High-level conversation recording and search
 - **ConversationDB**: Database operations for conversations and vectors
 - **Conversation/ConversationMessage**: Data models with required fields
@@ -283,7 +283,7 @@ All conversations must include these mandatory fields:
 
 ### Embedding Providers
 
-PersonaLab supports multiple embedding providers with automatic fallback:
+MemU supports multiple embedding providers with automatic fallback:
 
 1. **OpenAI** (Premium): `text-embedding-ada-002` (1536 dimensions)
 2. **SentenceTransformers** (Free): Local models like `all-MiniLM-L6-v2` (384 dimensions)
@@ -318,7 +318,7 @@ manager = ConversationManager(enable_embeddings=False)
 
 ```python
 # Custom persona setup with specific LLM configuration
-from personalab.llm import OpenAIClient
+from memu.llm import OpenAIClient
 
 custom_llm = OpenAIClient(
     api_key="your-key",
@@ -374,8 +374,8 @@ The [`examples/`](examples/) directory contains comprehensive usage examples:
 ### 🚀 Try the Examples
 ```bash
 # Clone the repository to access examples
-git clone https://github.com/NevaMind-AI/PersonaLab.git
-cd PersonaLab
+git clone https://github.com/NevaMind-AI/MemU.git
+cd MemU
 
 # Set up environment
 cp .env.example .env  # Add your API keys
@@ -470,7 +470,7 @@ python -m pytest tests/test_memory.py
 python -m pytest tests/test_memo.py
 
 # Run with coverage
-python -m pytest --cov=personalab tests/
+python -m pytest --cov=memu tests/
 ```
 
 ## 📖 Documentation
@@ -503,22 +503,22 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/NevaMind-AI/PersonaLab/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/NevaMind-AI/PersonaLab/discussions)
+- **Issues**: [GitHub Issues](https://github.com/NevaMind-AI/MemU/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/NevaMind-AI/MemU/discussions)
 - **Documentation**: [docs/](docs/) directory
 
 ---
 
 ## 📋 What's New in v0.1.0
 
-🎉 **First Official Release!** PersonaLab v0.1.0 brings stable, production-ready AI memory management:
+🎉 **First Official Release!** MemU v0.1.0 brings stable, production-ready AI memory management:
 
 ### ✨ Key Features
 - **🗄️ PostgreSQL-Only Architecture**: Removed all SQLite dependencies for production reliability
 - **🧠 Enhanced Memory System**: Improved profile updates and event tracking
 - **💬 Advanced Conversation Search**: Semantic search with multiple embedding providers
 - **🤖 Multi-LLM Support**: OpenAI, Anthropic, Google Gemini, and 8+ other providers
-- **📦 PyPI Package**: Easy installation with `pip install personalab`
+- **📦 PyPI Package**: Easy installation with `pip install memu`
 - **🔍 Better Documentation**: Comprehensive examples and usage guides
 - **⚡ Performance Optimizations**: Faster memory updates and conversation retrieval
 
@@ -532,10 +532,10 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 If you're upgrading from development versions:
 ```bash
 # Remove old development installation
-pip uninstall personalab
+pip uninstall memu
 
 # Install official release
-pip install personalab[all]
+pip install memu[all]
 ```
 
 ### 📅 Release History
@@ -543,11 +543,11 @@ pip install personalab[all]
 - **Pre-release** - Development versions with SQLite support (deprecated)
 
 ### 🔗 Links
-- **PyPI Package**: https://pypi.org/project/personalab/
-- **GitHub Repository**: https://github.com/NevaMind-AI/PersonaLab
+- **PyPI Package**: https://pypi.org/project/memu/
+- **GitHub Repository**: https://github.com/NevaMind-AI/MemU
 - **Documentation**: [docs/](docs/) directory
 - **Examples**: [examples/](examples/) directory
 
 ---
 
-**PersonaLab** - Building the memory foundation for next-generation AI agents 🧠✨ 
+**MemU** - Building the memory foundation for next-generation AI agents 🧠✨ 

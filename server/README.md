@@ -1,6 +1,6 @@
-# PersonaLab Backend Management System (React + Vite + FastAPI)
+# MemU Backend Management System (React + Vite + FastAPI)
 
-Modern PersonaLab backend management system with separated frontend and backend architecture, providing complete database management functionality.
+Modern MemU backend management system with separated frontend and backend architecture, providing complete database management functionality.
 
 ## 🏗️ Architecture Overview
 
@@ -65,7 +65,7 @@ server/
 - Python 3.8+
 - Node.js 16+
 - PostgreSQL 12+ with pgvector extension
-- PersonaLab project environment
+- MemU project environment
 
 ### 1. Install Backend Dependencies
 
@@ -83,12 +83,12 @@ npm install
 
 ### 3. Environment Configuration
 
-Ensure the following environment variables are set (or in `.env` file in PersonaLab root directory):
+Ensure the following environment variables are set (or in `.env` file in MemU root directory):
 
 ```bash
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
-POSTGRES_DB=personalab
+POSTGRES_DB=memu
 POSTGRES_USER=chenhong
 POSTGRES_PASSWORD=
 ```
@@ -158,7 +158,7 @@ All APIs support pagination and filter parameters. Detailed API documentation ca
 
 ### Database
 
-- Compatible with existing PersonaLab database structure
+- Compatible with existing MemU database structure
 - Support pgvector vector search functionality
 - Direct SQL queries provide optimal performance
 
@@ -169,7 +169,7 @@ All APIs support pagination and filter parameters. Detailed API documentation ca
 Backend automatically sets PostgreSQL environment variables with default configuration:
 - Host: localhost
 - Port: 5432
-- Database: personalab
+- Database: memu
 - User: chenhong
 - Password: empty
 
@@ -212,8 +212,8 @@ Frontend API client configuration is in `src/api/client.js`, defaults to connect
 
 ## 📄 License
 
-This project is part of PersonaLab and follows the same license terms.
+This project is part of MemU and follows the same license terms.
 
 ## 🤝 Contributing
 
-Please follow the PersonaLab contribution guidelines for development and submission. 
+Please follow the MemU contribution guidelines for development and submission. 

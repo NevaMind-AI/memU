@@ -3,12 +3,12 @@ requires = ["setuptools>=61.0,<70.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "personalab"
+name = "memu"
 version = "0.1.3"
 authors = [
-    {name = "PersonaLab Team", email = "support@personalab.ai"},
+    {name = "MemU Team", email = "support@memu.ai"},
 ]
-description = "AI Memory and Conversation Management Framework - Simple as mem0, Powerful as PersonaLab"
+description = "AI Memory and Conversation Management Framework - Simple as mem0, Powerful as MemU"
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
@@ -83,16 +83,16 @@ all = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/NevaMind-AI/PersonaLab"
-"Bug Tracker" = "https://github.com/NevaMind-AI/PersonaLab/issues"
-"Documentation" = "https://github.com/NevaMind-AI/PersonaLab#readme"
+"Homepage" = "https://github.com/NevaMind-AI/MemU"
+"Bug Tracker" = "https://github.com/NevaMind-AI/MemU/issues"
+"Documentation" = "https://github.com/NevaMind-AI/MemU#readme"
 
 # [project.scripts]
-# personalab = "personalab.cli:main"  # CLI module not implemented yet
+# memu = "memu.cli:main"  # CLI module not implemented yet
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["personalab*"]
+include = ["memu*"]
 
 [tool.black]
 line-length = 88
@@ -110,7 +110,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--cov=personalab --cov-report=term-missing --cov-report=html"
+addopts = "--cov=memu --cov-report=term-missing --cov-report=html"
 
 [tool.isort]
 profile = "black"

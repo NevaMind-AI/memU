@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-We provide security updates for the following versions of PersonaLab:
+We provide security updates for the following versions of MemU:
 
 | Version | Supported          |
 | ------- | ------------------ |
@@ -11,12 +11,12 @@ We provide security updates for the following versions of PersonaLab:
 
 ## Reporting a Vulnerability
 
-We take the security of PersonaLab seriously. If you discover a security vulnerability, please follow these steps:
+We take the security of MemU seriously. If you discover a security vulnerability, please follow these steps:
 
 ### How to Report
 
 1. **Do not create a public issue** for security vulnerabilities
-2. Send an email to [security@personalab.ai] with the following information:
+2. Send an email to [security@memu.ai] with the following information:
    - Description of the vulnerability
    - Steps to reproduce the issue
    - Potential impact assessment
@@ -31,7 +31,7 @@ We take the security of PersonaLab seriously. If you discover a security vulnera
 
 ### Security Best Practices
 
-When using PersonaLab, please follow these security guidelines:
+When using MemU, please follow these security guidelines:
 
 #### API Key Management
 - Never commit API keys to version control
@@ -75,7 +75,7 @@ Security updates will be released as:
 ### Contact
 
 For security-related questions or concerns:
-- Email: security@personalab.ai
+- Email: security@memu.ai
 - For general issues: Create an issue on GitHub (non-security only)
 
-Thank you for helping keep PersonaLab secure! 
+Thank you for helping keep MemU secure! 
