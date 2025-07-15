@@ -1,11 +1,11 @@
 """
-Enhanced Memory Test with Dual Agents
+Enhanced Memory Test with Unified MemAgent
 
-This test uses RecallAgent and ManageAgent to:
-1. Process each session sequentially using ManageAgent
+This test uses MemAgent to:
+1. Process each session sequentially using memory management tools
 2. For each session:
    - Update character memory using memory management tools
-3. Use RecallAgent for QA testing with category statistics
+3. Use MemAgent for QA testing with category statistics
 """
 
 import json
@@ -15,6 +15,8 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import time
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 import dotenv
 dotenv.load_dotenv()
@@ -24,8 +26,7 @@ if not hasattr(sys, '_stdout_line_buffering_set'):
     sys.stdout.reconfigure(line_buffering=True)
     sys._stdout_line_buffering_set = True
 
-from recall_agent import RecallAgent
-from manage_agent import ManageAgent
+from mem_agent import MemAgent
 from memu.utils import get_logger, setup_logging
 
 # 设置带有flush的logger
@@ -36,9 +37,9 @@ class ToolBasedMemoryTester:
     """
     Tool-based Memory Tester
     
-    Uses RecallAgent and ManageAgent for processing Locomo data:
-    1. Process sessions sequentially using ManageAgent
-    2. Answer QA questions using RecallAgent
+    Uses unified MemAgent for processing Locomo data:
+    1. Process sessions sequentially using MemAgent
+    2. Answer QA questions using MemAgent
     3. Display category-based accuracy statistics
     """
     
@@ -49,11 +50,12 @@ class ToolBasedMemoryTester:
         chat_deployment: str = "gpt-4.1-mini",
         use_entra_id: bool = False,
         api_version: str = "2024-02-01",
-        memory_dir: str = "memory"
+        memory_dir: str = "memory",
+        max_workers: int = 3
     ):
         """Initialize Tool-based Memory Tester"""
-        # Initialize both agents
-        self.recall_agent = RecallAgent(
+        # Initialize unified MemAgent
+        self.mem_agent = MemAgent(
             azure_endpoint=azure_endpoint,
             api_key=api_key,
             chat_deployment=chat_deployment,
@@ -62,20 +64,103 @@ class ToolBasedMemoryTester:
             memory_dir=memory_dir
         )
         
-        self.manage_agent = ManageAgent(
-            azure_endpoint=azure_endpoint,
-            api_key=api_key,
-            chat_deployment=chat_deployment,
-            use_entra_id=use_entra_id,
-            api_version=api_version,
-            memory_dir=memory_dir
-        )
-        
+        self.max_workers = max_workers
         self.results = []
         self.processing_time = 0.0
         
-        logger.info("Tool-based Memory Tester initialized with RecallAgent and ManageAgent")
-    
+        logger.info(f"Tool-based Memory Tester initialized with unified MemAgent (max_workers={max_workers})")
+
+    def _process_single_session(self, session_data: Tuple[str, List[Dict], str], characters: List[str]) -> Dict:
+        """Process a single session using MemAgent"""
+        session_key, session_utterances, session_date = session_data
+        
+        try:
+            logger.info(f"Processing {session_key} with {len(session_utterances)} utterances on {session_date}")
+            
+            # Execute through MemAgent with function calling
+            execute_result = self.mem_agent.execute(
+                f"Please update character memory for the conversation session. "
+                f"Use the update_character_memory function with the following data: "
+                f"session_data={json.dumps(session_utterances)}, "
+                f"session_date='{session_date}', "
+                f"characters={json.dumps(characters)}"
+            )
+            
+            if execute_result.get("success", False):
+                logger.info(f"Successfully processed {session_key}")
+                return {
+                    'session_key': session_key,
+                    'success': True,
+                    'utterances_count': len(session_utterances),
+                    'session_date': session_date
+                }
+            else:
+                error_msg = execute_result.get('error', 'Unknown error')
+                logger.error(f"Failed to process {session_key}: {error_msg}")
+                return {
+                    'session_key': session_key,
+                    'success': False,
+                    'error': error_msg,
+                    'utterances_count': len(session_utterances),
+                    'session_date': session_date
+                }
+                
+        except Exception as e:
+            logger.error(f"Exception processing {session_key}: {e}")
+            return {
+                'session_key': session_key,
+                'success': False,
+                'error': str(e),
+                'utterances_count': len(session_utterances) if session_utterances else 0,
+                'session_date': session_date
+            }
+
+    def _process_sessions_parallel(self, sessions: List[Tuple[str, List[Dict], str]], characters: List[str], max_workers: int = 3) -> List[Dict]:
+        """Process multiple sessions in parallel"""
+        if not sessions:
+            return []
+        
+        session_results = []
+        completed_count = 0
+        total_sessions = len(sessions)
+        
+        logger.info(f"Starting parallel processing of {total_sessions} sessions with {max_workers} workers")
+        
+        # Use ThreadPoolExecutor for parallel processing
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all session processing tasks
+            future_to_session = {
+                executor.submit(self._process_single_session, session, characters): session[0] 
+                for session in sessions
+            }
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_session):
+                session_key = future_to_session[future]
+                completed_count += 1
+                
+                try:
+                    result = future.result()
+                    session_results.append(result)
+                    status = "✓" if result['success'] else "✗"
+                    logger.info(f"[{completed_count}/{total_sessions}] {status} {session_key} completed")
+                except Exception as e:
+                    logger.error(f"[{completed_count}/{total_sessions}] ✗ {session_key} generated exception: {e}")
+                    session_results.append({
+                        'session_key': session_key,
+                        'success': False,
+                        'error': str(e),
+                        'utterances_count': 0,
+                        'session_date': 'Unknown'
+                    })
+        
+        # Sort results by session key for consistent output
+        session_results.sort(key=lambda x: x['session_key'])
+        
+        logger.info(f"Parallel processing completed: {sum(1 for r in session_results if r['success'])}/{total_sessions} sessions successful")
+        
+        return session_results
+
     def _extract_session_data(self, conversation_data: Dict) -> List[Tuple[str, List[Dict], str]]:
         """Extract session information from conversation data"""
         sessions = []
@@ -121,8 +206,8 @@ class ToolBasedMemoryTester:
     def _evaluate_answer(self, question: str, generated_answer: str, standard_answer: str) -> Dict:
         """Evaluate if generated answer contains standard answer content (using function calling)"""
         try:
-            # Use the evaluate_answer tool from recall agent
-            result = self.recall_agent.evaluate_answer(question, generated_answer, standard_answer)
+            # Use the evaluate_answer tool from MemAgent
+            result = self.mem_agent.evaluate_answer(question, generated_answer, standard_answer)
             
             if result["success"]:
                 return {
@@ -150,380 +235,274 @@ class ToolBasedMemoryTester:
         """Process one sample using function tools"""
         start_time = time.time()
         
-        sample_id = sample.get('sample_id', 'unknown')
-        conversation_data = sample.get('conversation', {})
-        qa_data = sample.get('qa', [])
-        
-        logger.info(f"=== Processing sample: {sample_id} ===")
-        
-        # Extract character names
-        speaker_a = conversation_data.get('speaker_a', 'Speaker A')
-        speaker_b = conversation_data.get('speaker_b', 'Speaker B')
-        characters = [speaker_a, speaker_b]
-        
-        logger.info(f"Characters: {characters}")
-        
-        # Step 1: Check existing memory files
-        char_list_result = self.recall_agent.list_available_characters()
-        existing_characters = char_list_result.get("characters", []) if char_list_result["success"] else []
-        
-        characters_have_memory = all(char.lower() in [c.lower() for c in existing_characters] for char in characters)
-        
-        if characters_have_memory:
-            logger.info("Step 1: Found existing memory files for all characters, skipping session processing")
-            session_processing_details = []
-        else:
-            logger.info("Step 1: Memory files incomplete, clearing and processing all sessions")
+        try:
+            conversation_data = sample['conversation']
+            qa_data = sample.get('QA', [])
             
-            # Clear existing memory
-            clear_result = self.manage_agent.clear_character_memory(characters)
-            if not clear_result["success"]:
-                logger.warning(f"Failed to clear memory: {clear_result['error']}")
+            # Extract characters from conversation data
+            characters = []
+            speaker_a = conversation_data.get('speaker_a', 'Speaker A')
+            speaker_b = conversation_data.get('speaker_b', 'Speaker B')
+            if speaker_a and speaker_a not in characters:
+                characters.append(speaker_a)
+            if speaker_b and speaker_b not in characters:
+                characters.append(speaker_b)
             
-            # Step 2: Extract and sort session data
+            # Clear existing memory for these characters
+            clear_result = self.mem_agent.clear_character_memory(characters)
+            if not clear_result.get("success", False):
+                logger.warning(f"Failed to clear memory: {clear_result.get('error', 'Unknown error')}")
+            
+            # Extract and process sessions in parallel
             sessions = self._extract_session_data(conversation_data)
-            logger.info(f"Step 2: Found {len(sessions)} sessions, processing in order")
             
-            # Step 3: Process sessions using memory tools
-            session_processing_details = []
+            logger.info(f"Processing {len(sessions)} sessions for characters: {characters}")
             
-            for i, (session_name, utterances, session_date) in enumerate(sessions, 1):
-                if not utterances:
-                    logger.info(f"Skipping empty session: {session_name}")
-                    continue
-                    
-                logger.info(f"--- Step 3.{i}: Processing {session_name} (Date: {session_date}) ---")
-                logger.info(f"  Utterances: {len(utterances)}")
+            # Process sessions in parallel using MemAgent
+            session_results = self._process_sessions_parallel(sessions, characters, self.max_workers)
+            
+            # Log results
+            successful_sessions = sum(1 for result in session_results if result.get('success', False))
+            logger.info(f"Successfully processed {successful_sessions}/{len(sessions)} sessions")
+            
+            # Answer QA questions
+            category_stats = {}
+            question_results = []
+            
+            for qa_item in qa_data:
+                question = qa_item['question']
+                answer = qa_item['answer']
+                category = qa_item.get('category', 'Unknown')
                 
-                # Process session using agent execute method
-                session_start_time = time.time()
+                logger.info(f"Answering question in category '{category}': {question[:100]}...")
                 
-                # Format session data for agent
-                session_summary = f"Session {session_name} on {session_date} with {len(utterances)} utterances between {', '.join(characters)}"
-                utterances_text = "\n".join([f"**{ut['speaker']}**: {ut['text']}" for ut in utterances])
+                # Use MemAgent to answer the question with memory context
+                answer_prompt = f"""
+                Please answer the following question using the available character memory.
+                Use the search_relevant_events and read_character_profile functions to gather relevant information.
                 
-                # Use manage agent to process session
-                agent_request = f"""Please update character memory for the following conversation session:
-
-{session_summary}
-
-Conversation:
-{utterances_text}
-
-Characters involved: {', '.join(characters)}
-Session date: {session_date}
-
-Please update the memory files for all characters based on this conversation."""
+                Question: {question}
+                Characters to search: {characters}
                 
-                execute_result = self.manage_agent.execute(
-                    user_message=agent_request,
-                    max_iterations=10
-                )
-                session_processing_time = time.time() - session_start_time
+                Please provide a comprehensive answer based on the memory information.
+                """
                 
-                # Record processing details
-                session_detail = {
-                    'session_name': session_name,
-                    'session_date': session_date,
-                    'utterances_count': len(utterances),
-                    'processing_time': session_processing_time,
-                    'update_success': execute_result["success"],
-                    'tool_calls_made': execute_result.get("tool_calls_made", 0)
-                }
+                answer_result = self.mem_agent.execute(answer_prompt)
                 
-                if execute_result["success"]:
-                    session_detail['agent_response'] = execute_result["response"]
-                    logger.info(f"  {session_name} processed successfully by agent, time: {session_processing_time:.2f}s")
-                    logger.info(f"    Tool calls made: {execute_result.get('tool_calls_made', 0)}")
+                if answer_result.get("success", False):
+                    generated_answer = answer_result.get("final_response", "No answer generated")
                 else:
-                    session_detail['error'] = execute_result.get("error", "Unknown error")
-                    logger.error(f"  {session_name} processing failed: {execute_result.get('error', 'Unknown error')}")
+                    generated_answer = f"Error: {answer_result.get('error', 'Failed to generate answer')}"
                 
-                session_processing_details.append(session_detail)
-        
-        # Step 4: Process QA questions using answer_with_memory tool
-        logger.info(f"--- Step 4: Processing {len(qa_data)} QA questions ---")
-        
-        qa_results = []
-        for i, qa_item in enumerate(qa_data, 1):
-            question = qa_item.get('question', '')
-            standard_answer = qa_item.get('answer', '')
-            category = qa_item.get('category', 0)
-            evidence = qa_item.get('evidence', [])
-            
-            logger.info(f"  Question {i}/{len(qa_data)}: {question[:50]}...")
-            
-            # Answer question using recall agent
-            qa_start_time = time.time()
-            
-            # Use execute method for recursive function calling
-            execute_result = self.recall_agent.execute(
-                user_message=f"Answer this question: {question}\n\nCharacters involved: {', '.join(characters)}",
-                max_iterations=10
-            )
-            qa_processing_time = time.time() - qa_start_time
-            
-            if execute_result["success"]:
-                generated_answer = execute_result["response"]
-                tool_calls_made = execute_result.get("tool_calls_made", 0)
+                # Evaluate the answer
+                evaluation = self._evaluate_answer(question, generated_answer, answer)
                 
-                # Evaluate answer
-                evaluation = self._evaluate_answer(question, generated_answer, standard_answer)
-                
-                # Create QA result
-                qa_result = {
-                    'question_id': i,
+                question_results.append({
                     'question': question,
-                    'category': category,
-                    'evidence': evidence,
-                    'standard_answer': standard_answer,
                     'generated_answer': generated_answer,
-                    'evaluation': evaluation,
-                    'processing_time': qa_processing_time,
-                    'tool_calls_made': tool_calls_made
-                }
-                
-                # Log result with category stats
-                status = "✓" if evaluation['is_correct'] else "✗"
-                logger.info(f"    {status} {'Correct' if evaluation['is_correct'] else 'Incorrect'} | Current accuracy: {sum(1 for r in qa_results if r['evaluation']['is_correct']) + (1 if evaluation['is_correct'] else 0)}/{i} ({((sum(1 for r in qa_results if r['evaluation']['is_correct']) + (1 if evaluation['is_correct'] else 0))/i)*100:.1f}%)")
-                
-                # Calculate and display current category statistics
-                qa_results.append(qa_result)
-                category_stats = {}
-                for result in qa_results:
-                    cat = result['category']
-                    if cat not in category_stats:
-                        category_stats[cat] = {'correct': 0, 'total': 0}
-                    category_stats[cat]['total'] += 1
-                    if result['evaluation']['is_correct']:
-                        category_stats[cat]['correct'] += 1
-                
-                # Display category stats
-                stats_parts = []
-                for cat in sorted(category_stats.keys()):
-                    stats = category_stats[cat]
-                    rate = (stats['correct'] / stats['total']) * 100 if stats['total'] > 0 else 0
-                    stats_parts.append(f"Cat{cat}: {stats['correct']}/{stats['total']}({rate:.1f}%)")
-                
-                logger.info(f"    Current category stats: {' | '.join(stats_parts)}")
-                
-            else:
-                # Handle execution failure
-                qa_result = {
-                    'question_id': i,
-                    'question': question,
+                    'standard_answer': answer,
                     'category': category,
-                    'evidence': evidence,
-                    'standard_answer': standard_answer,
-                    'generated_answer': '',
-                    'evaluation': {'is_correct': False, 'explanation': 'Function calling execution failed'},
-                    'processing_time': qa_processing_time,
-                    'error': execute_result.get('error', 'Unknown error'),
-                    'tool_calls_made': 0
-                }
+                    'is_correct': evaluation['is_correct'],
+                    'explanation': evaluation['explanation']
+                })
                 
-                logger.error(f"    ✗ QA execution failed: {execute_result.get('error', 'Unknown error')}")
-                qa_results.append(qa_result)
-        
-        # Calculate statistics
-        total_qa = len(qa_results)
-        correct_qa = sum(1 for result in qa_results if result['evaluation']['is_correct'])
-        
-        # Calculate category statistics
-        category_stats = {}
-        for result in qa_results:
-            category = result['category']
-            if category not in category_stats:
-                category_stats[category] = {'total': 0, 'correct': 0}
-            category_stats[category]['total'] += 1
-            if result['evaluation']['is_correct']:
-                category_stats[category]['correct'] += 1
-        
-        # Calculate category rates
-        for category in category_stats:
-            total = category_stats[category]['total']
-            correct = category_stats[category]['correct']
-            category_stats[category]['rate'] = correct / total if total > 0 else 0
-        
-        processing_time = time.time() - start_time
-        
-        # Generate sample result
-        sample_result = {
-            'sample_id': sample_id,
-            'characters': characters,
-            'sessions_processed': len([s for s in session_processing_details if s.get('update_success', False)]),
-            'session_processing_details': session_processing_details,
-            'total_qa': total_qa,
-            'correct_qa': correct_qa,
-            'correctness_rate': correct_qa / total_qa if total_qa > 0 else 0,
-            'category_stats': category_stats,
-            'processing_time': processing_time,
-            'qa_results': qa_results
-        }
-        
-        # Output sample summary
-        logger.info(f"=== Sample {sample_id} completed ===")
-        logger.info(f"  Sessions processed: {len(session_processing_details)}")
-        logger.info(f"  QA total: {total_qa}")
-        logger.info(f"  Correct answers: {correct_qa}/{total_qa} ({correct_qa/total_qa*100:.1f}%)")
-        
-        # Display category statistics
-        logger.info(f"  Category statistics:")
-        for category in sorted(category_stats.keys()):
-            stats = category_stats[category]
-            logger.info(f"    Category {category}: {stats['correct']}/{stats['total']} ({stats['rate']*100:.1f}%)")
-        
-        logger.info(f"  Total processing time: {processing_time:.2f}s")
-        
-        return sample_result
-    
-    def run_test(self, data_file: str) -> Dict:
-        """Run complete test using function tools"""
-        logger.info(f"Starting tool-based memory test: {data_file}")
-        
-        # Load data
-        with open(data_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        logger.info(f"Loaded {len(data)} samples")
-        
+                # Update category statistics
+                if category not in category_stats:
+                    category_stats[category] = {'total': 0, 'correct': 0}
+                category_stats[category]['total'] += 1
+                if evaluation['is_correct']:
+                    category_stats[category]['correct'] += 1
+            
+            processing_time = time.time() - start_time
+            
+            return {
+                'characters': characters,
+                'sessions_processed': len(sessions),
+                'questions_answered': len(qa_data),
+                'question_results': question_results,
+                'category_stats': category_stats,
+                'processing_time': processing_time,
+                'success': True
+            }
+            
+        except Exception as e:
+            processing_time = time.time() - start_time
+            logger.error(f"Failed to process sample: {e}")
+            return {
+                'characters': [],
+                'sessions_processed': 0,
+                'questions_answered': 0,
+                'question_results': [],
+                'category_stats': {},
+                'processing_time': processing_time,
+                'success': False,
+                'error': str(e)
+            }
+
+    def run_test(self, data_file: str, sample_limit: Optional[int] = None) -> Dict:
+        """Run the memory test on the dataset"""
         start_time = time.time()
         
-        # Process each sample
-        sample_results = []
-        for i, sample in enumerate(data):
-            logger.info(f"=== Processing sample {i+1}/{len(data)} ===")
+        try:
+            # Load the data
+            with open(data_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
             
-            result = self.process_sample(sample)
-            sample_results.append(result)
+            if sample_limit:
+                data = data[:sample_limit]
             
-            # Save intermediate results
-            if (i + 1) % 5 == 0:
-                self._save_intermediate_results(sample_results, i + 1)
-                sys.stdout.flush()
-        
-        total_time = time.time() - start_time
+            logger.info(f"Starting test with {len(data)} samples")
+            
+            # Process each sample
+            all_results = []
+            overall_category_stats = {}
+            total_questions = 0
+            total_correct = 0
+            
+            for i, sample in enumerate(data, 1):
+                logger.info(f"\n=== Processing Sample {i}/{len(data)} ===")
+                
+                result = self.process_sample(sample)
+                all_results.append(result)
+                
+                if result['success']:
+                    # Aggregate category statistics
+                    for category, stats in result['category_stats'].items():
+                        if category not in overall_category_stats:
+                            overall_category_stats[category] = {'total': 0, 'correct': 0}
+                        overall_category_stats[category]['total'] += stats['total']
+                        overall_category_stats[category]['correct'] += stats['correct']
+                    
+                    total_questions += result['questions_answered']
+                    total_correct += sum(1 for qr in result['question_results'] if qr['is_correct'])
+                
+                logger.info(f"Sample {i} completed in {result['processing_time']:.2f}s")
+            
+            total_time = time.time() - start_time
+            
+            # Calculate overall accuracy
+            overall_accuracy = total_correct / total_questions if total_questions > 0 else 0.0
+            
+            # Calculate category accuracies
+            category_accuracies = {}
+            for category, stats in overall_category_stats.items():
+                accuracy = stats['correct'] / stats['total'] if stats['total'] > 0 else 0.0
+                category_accuracies[category] = accuracy
+            
+            # Create summary
+            summary = {
+                'total_samples': len(data),
+                'successful_samples': sum(1 for r in all_results if r['success']),
+                'total_questions': total_questions,
+                'total_correct': total_correct,
+                'overall_accuracy': overall_accuracy,
+                'category_stats': overall_category_stats,
+                'category_accuracies': category_accuracies,
+                'total_time': total_time,
+                'avg_time_per_sample': total_time / len(data) if data else 0.0
+            }
+            
+            self.results = all_results
+            self.processing_time = total_time
+            
+            return {
+                'success': True,
+                'summary': summary,
+                'detailed_results': all_results
+            }
+            
+        except Exception as e:
+            logger.error(f"Test run failed: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'summary': {},
+                'detailed_results': []
+            }
+
+    def print_results(self):
+        """Print detailed test results"""
+        if not self.results:
+            print("No results to display")
+            return
         
         # Calculate overall statistics
-        total_qa = sum(result['total_qa'] for result in sample_results)
-        total_correct = sum(result['correct_qa'] for result in sample_results)
-        overall_correctness = total_correct / total_qa if total_qa > 0 else 0
+        total_samples = len(self.results)
+        successful_samples = sum(1 for r in self.results if r['success'])
+        total_questions = sum(r['questions_answered'] for r in self.results if r['success'])
+        total_correct = sum(sum(1 for qr in r['question_results'] if qr['is_correct']) 
+                          for r in self.results if r['success'])
         
-        # Merge category statistics
-        overall_category_stats = {}
-        for result in sample_results:
-            for category, stats in result['category_stats'].items():
-                if category not in overall_category_stats:
-                    overall_category_stats[category] = {'total': 0, 'correct': 0}
-                overall_category_stats[category]['total'] += stats['total']
-                overall_category_stats[category]['correct'] += stats['correct']
+        overall_accuracy = total_correct / total_questions if total_questions > 0 else 0.0
         
-        # Calculate overall category rates
-        for category in overall_category_stats:
-            total = overall_category_stats[category]['total']
-            correct = overall_category_stats[category]['correct']
-            overall_category_stats[category]['rate'] = correct / total if total > 0 else 0
+        # Aggregate category statistics
+        category_stats = {}
+        for result in self.results:
+            if result['success']:
+                for category, stats in result['category_stats'].items():
+                    if category not in category_stats:
+                        category_stats[category] = {'total': 0, 'correct': 0}
+                    category_stats[category]['total'] += stats['total']
+                    category_stats[category]['correct'] += stats['correct']
         
-        avg_processing_time = sum(result['processing_time'] for result in sample_results) / len(sample_results) if sample_results else 0
+        print(f"\n{'='*60}")
+        print(f"ENHANCED MEMORY TEST RESULTS - UNIFIED MEMAGENT")
+        print(f"{'='*60}")
+        print(f"Samples processed: {successful_samples}/{total_samples}")
+        print(f"Total questions: {total_questions}")
+        print(f"Total correct: {total_correct}")
+        print(f"Overall accuracy: {overall_accuracy:.2%}")
+        print(f"Total processing time: {self.processing_time:.2f}s")
+        print(f"Average time per sample: {self.processing_time / total_samples:.2f}s")
         
-        # Generate final results
-        final_results = {
-            'test_info': {
-                'test_type': 'tool_based_memory_test',
-                'data_file': data_file,
-                'total_samples': len(data),
-                'total_time': total_time,
-                'timestamp': datetime.now().isoformat()
-            },
-            'overall_statistics': {
-                'total_qa': total_qa,
-                'correct_qa': total_correct,
-                'correctness_rate': overall_correctness,
-                'category_stats': overall_category_stats,
-                'avg_processing_time': avg_processing_time
-            },
-            'sample_results': sample_results
-        }
+        print(f"\n{'='*60}")
+        print(f"CATEGORY-WISE ACCURACY")
+        print(f"{'='*60}")
         
-        # Save final results
-        self._save_final_results(final_results)
+        for category in sorted(category_stats.keys()):
+            stats = category_stats[category]
+            accuracy = stats['correct'] / stats['total'] if stats['total'] > 0 else 0.0
+            print(f"{category:30} {stats['correct']:3}/{stats['total']:3} ({accuracy:.1%})")
         
-        logger.info("=== Test completed ===")
-        logger.info(f"Total samples: {len(data)}")
-        logger.info(f"Total QA: {total_qa}")
-        logger.info(f"Accuracy: {total_correct}/{total_qa} ({overall_correctness*100:.1f}%)")
-        
-        # Display overall category statistics
-        logger.info(f"Overall category statistics:")
-        for category in sorted(overall_category_stats.keys()):
-            stats = overall_category_stats[category]
-            logger.info(f"  Category {category}: {stats['correct']}/{stats['total']} ({stats['rate']*100:.1f}%)")
-        
-        logger.info(f"Average processing time: {avg_processing_time:.2f}s/sample")
-        logger.info(f"Total time: {total_time:.2f}s")
-        
-        return final_results
-    
-    def _save_intermediate_results(self, results: List[Dict], processed_count: int):
-        """Save intermediate results"""
-        filename = f"tool_based_memory_test_intermediate_{processed_count}.json"
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
-        logger.info(f"Saved intermediate results: {filename}")
-    
-    def _save_final_results(self, results: Dict):
-        """Save final results"""
-        filename = f"tool_based_memory_test_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
-        logger.info(f"Saved final results: {filename}")
+        print(f"\n{'='*60}")
 
 
 def main():
-    """Main function"""
-    # Configuration parameters
-    config = {
-        'azure_endpoint': os.getenv('AZURE_OPENAI_ENDPOINT'),
-        'api_key': os.getenv('AZURE_OPENAI_API_KEY'),
-        'chat_deployment': os.getenv('AZURE_OPENAI_CHAT_DEPLOYMENT', 'gpt-4.1-mini'),
-        'use_entra_id': os.getenv('USE_ENTRA_ID', 'false').lower() == 'true',
-        'api_version': os.getenv('AZURE_OPENAI_API_VERSION', '2024-02-01'),
-        'memory_dir': 'memory'
-    }
+    """Main function to run the enhanced memory test"""
+    import argparse
     
-    # Data file
-    data_file = 'data/locomo10.json'
+    parser = argparse.ArgumentParser(description='Enhanced Memory Test with Unified MemAgent')
+    parser.add_argument('--data-file', default='data/locomo10.json', help='Path to test data file')
+    parser.add_argument('--sample-limit', type=int, help='Limit number of samples to process')
+    parser.add_argument('--memory-dir', default='memory', help='Directory for memory files')
+    parser.add_argument('--chat-deployment', default='gpt-4o-mini', help='Azure OpenAI chat deployment')
+    parser.add_argument('--max-workers', type=int, default=3, help='Maximum number of parallel workers for session processing')
     
-    if not os.path.exists(data_file):
-        logger.error(f"Data file not found: {data_file}")
-        return
+    args = parser.parse_args()
     
-    print("🚀 Starting Tool-based Locomo QA test...", flush=True)
-    
-    # Create tester
-    tester = ToolBasedMemoryTester(**config)
+    # Initialize tester
+    tester = ToolBasedMemoryTester(
+        memory_dir=args.memory_dir,
+        chat_deployment=args.chat_deployment,
+        max_workers=args.max_workers
+    )
     
     # Run test
-    results = tester.run_test(data_file)
+    logger.info("Starting Enhanced Memory Test with Unified MemAgent")
+    results = tester.run_test(args.data_file, args.sample_limit)
     
-    # Display results summary
-    print("\n" + "="*50, flush=True)
-    print("Test Results Summary", flush=True)
-    print("="*50, flush=True)
-    print(f"Total samples: {results['test_info']['total_samples']}", flush=True)
-    print(f"Total QA: {results['overall_statistics']['total_qa']}", flush=True)
-    print(f"Accuracy: {results['overall_statistics']['correctness_rate']:.1%}", flush=True)
-    
-    # Display category statistics
-    print("Category statistics:", flush=True)
-    category_stats = results['overall_statistics']['category_stats']
-    for category in sorted(category_stats.keys()):
-        stats = category_stats[category]
-        print(f"  Category {category}: {stats['correct']}/{stats['total']} ({stats['rate']*100:.1f}%)", flush=True)
-    
-    print(f"Average processing time: {results['overall_statistics']['avg_processing_time']:.2f}s/sample", flush=True)
-    print(f"Total time: {results['test_info']['total_time']:.2f}s", flush=True)
-    print("="*50, flush=True)
+    if results['success']:
+        # Print results
+        tester.print_results()
+        
+        # Save detailed results
+        output_file = f"enhanced_memory_test_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Detailed results saved to: {output_file}")
+    else:
+        logger.error(f"Test failed: {results.get('error', 'Unknown error')}")
 
 
 if __name__ == "__main__":

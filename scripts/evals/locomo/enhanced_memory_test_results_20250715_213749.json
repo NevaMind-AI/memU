@@ -1,0 +1,136 @@
+{
+  "success": true,
+  "summary": {
+    "total_samples": 10,
+    "successful_samples": 10,
+    "total_questions": 0,
+    "total_correct": 0,
+    "overall_accuracy": 0.0,
+    "category_stats": {},
+    "category_accuracies": {},
+    "total_time": 0.03870105743408203,
+    "avg_time_per_sample": 0.003870105743408203
+  },
+  "detailed_results": [
+    {
+      "characters": [
+        "Caroline",
+        "Melanie"
+      ],
+      "sessions_processed": 19,
+      "questions_answered": 0,
+      "question_results": [],
+      "category_stats": {},
+      "processing_time": 0.002643108367919922,
+      "success": true
+    },
+    {
+      "characters": [
+        "Jon",
+        "Gina"
+      ],
+      "sessions_processed": 19,
+      "questions_answered": 0,
+      "question_results": [],
+      "category_stats": {},
+      "processing_time": 0.0023009777069091797,
+      "success": true
+    },
+    {
+      "characters": [
+        "John",
+        "Maria"
+      ],
+      "sessions_processed": 32,
+      "questions_answered": 0,
+      "question_results": [],
+      "category_stats": {},
+      "processing_time": 0.003520965576171875,
+      "success": true
+    },
+    {
+      "characters": [
+        "Joanna",
+        "Nate"
+      ],
+      "sessions_processed": 29,
+      "questions_answered": 0,
+      "question_results": [],
+      "category_stats": {},
+      "processing_time": 0.0035839080810546875,
+      "success": true
+    },
+    {
+      "characters": [
+        "Tim",
+        "John"
+      ],
+      "sessions_processed": 29,
+      "questions_answered": 0,
+      "question_results": [],
+      "category_stats": {},
+      "processing_time": 0.0036630630493164062,
+      "success": true
+    },
+    {
+      "characters": [
+        "Audrey",
+        "Andrew"
+      ],
+      "sessions_processed": 28,
+      "questions_answered": 0,
+      "question_results": [],
+      "category_stats": {},
+      "processing_time": 0.0035779476165771484,
+      "success": true
+    },
+    {
+      "characters": [
+        "James",
+        "John"
+      ],
+      "sessions_processed": 31,
+      "questions_answered": 0,
+      "question_results": [],
+      "category_stats": {},
+      "processing_time": 0.003386974334716797,
+      "success": true
+    },
+    {
+      "characters": [
+        "Deborah",
+        "Jolene"
+      ],
+      "sessions_processed": 30,
+      "questions_answered": 0,
+      "question_results": [],
+      "category_stats": {},
+      "processing_time": 0.0031769275665283203,
+      "success": true
+    },
+    {
+      "characters": [
+        "Evan",
+        "Sam"
+      ],
+      "sessions_processed": 25,
+      "questions_answered": 0,
+      "question_results": [],
+      "category_stats": {},
+      "processing_time": 0.0032660961151123047,
+      "success": true
+    },
+    {
+      "characters": [
+        "Calvin",
+        "Dave"
+      ],
+      "sessions_processed": 30,
+      "questions_answered": 0,
+      "question_results": [],
+      "category_stats": {},
+      "processing_time": 0.0037200450897216797,
+      "success": true
+    }
+  ]
+}
