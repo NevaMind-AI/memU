@@ -3,13 +3,16 @@
   "summary": {
     "total_samples": 10,
     "successful_samples": 10,
+    "total_sessions": 272,
+    "sessions_processed": 272,
+    "sessions_skipped": 0,
     "total_questions": 0,
     "total_correct": 0,
     "overall_accuracy": 0.0,
     "category_stats": {},
     "category_accuracies": {},
-    "total_time": 0.03870105743408203,
-    "avg_time_per_sample": 0.003870105743408203
+    "total_time": 2814.401715993881,
+    "avg_time_per_sample": 281.4401715993881
   },
   "detailed_results": [
     {
@@ -17,11 +20,18 @@
         "Caroline",
         "Melanie"
       ],
+      "characters_with_existing_memory": [],
+      "characters_without_memory": [
+        "Caroline",
+        "Melanie"
+      ],
+      "sessions_total": 19,
       "sessions_processed": 19,
+      "sessions_skipped": 0,
       "questions_answered": 0,
       "question_results": [],
       "category_stats": {},
-      "processing_time": 0.002643108367919922,
+      "processing_time": 115.76866221427917,
       "success": true
     },
     {
@@ -29,11 +39,18 @@
         "Jon",
         "Gina"
       ],
+      "characters_with_existing_memory": [],
+      "characters_without_memory": [
+        "Jon",
+        "Gina"
+      ],
+      "sessions_total": 19,
       "sessions_processed": 19,
+      "sessions_skipped": 0,
       "questions_answered": 0,
       "question_results": [],
       "category_stats": {},
-      "processing_time": 0.0023009777069091797,
+      "processing_time": 92.19125604629517,
       "success": true
     },
     {
@@ -41,11 +58,18 @@
         "John",
         "Maria"
       ],
+      "characters_with_existing_memory": [],
+      "characters_without_memory": [
+        "John",
+        "Maria"
+      ],
+      "sessions_total": 32,
       "sessions_processed": 32,
+      "sessions_skipped": 0,
       "questions_answered": 0,
       "question_results": [],
       "category_stats": {},
-      "processing_time": 0.003520965576171875,
+      "processing_time": 162.18930888175964,
       "success": true
     },
     {
@@ -53,11 +77,18 @@
         "Joanna",
         "Nate"
       ],
+      "characters_with_existing_memory": [],
+      "characters_without_memory": [
+        "Joanna",
+        "Nate"
+      ],
+      "sessions_total": 29,
       "sessions_processed": 29,
+      "sessions_skipped": 0,
       "questions_answered": 0,
       "question_results": [],
       "category_stats": {},
-      "processing_time": 0.0035839080810546875,
+      "processing_time": 141.42474913597107,
       "success": true
     },
     {
@@ -65,11 +96,19 @@
         "Tim",
         "John"
       ],
+      "characters_with_existing_memory": [
+        "John"
+      ],
+      "characters_without_memory": [
+        "Tim"
+      ],
+      "sessions_total": 29,
       "sessions_processed": 29,
+      "sessions_skipped": 0,
       "questions_answered": 0,
       "question_results": [],
       "category_stats": {},
-      "processing_time": 0.0036630630493164062,
+      "processing_time": 139.0189459323883,
       "success": true
     },
     {
@@ -77,11 +116,18 @@
         "Audrey",
         "Andrew"
       ],
+      "characters_with_existing_memory": [],
+      "characters_without_memory": [
+        "Audrey",
+        "Andrew"
+      ],
+      "sessions_total": 28,
       "sessions_processed": 28,
+      "sessions_skipped": 0,
       "questions_answered": 0,
       "question_results": [],
       "category_stats": {},
-      "processing_time": 0.0035779476165771484,
+      "processing_time": 1010.0112791061401,
       "success": true
     },
     {
@@ -89,11 +135,19 @@
         "James",
         "John"
       ],
+      "characters_with_existing_memory": [
+        "John"
+      ],
+      "characters_without_memory": [
+        "James"
+      ],
+      "sessions_total": 31,
       "sessions_processed": 31,
+      "sessions_skipped": 0,
       "questions_answered": 0,
       "question_results": [],
       "category_stats": {},
-      "processing_time": 0.003386974334716797,
+      "processing_time": 133.60645580291748,
       "success": true
     },
     {
@@ -101,11 +155,18 @@
         "Deborah",
         "Jolene"
       ],
+      "characters_with_existing_memory": [],
+      "characters_without_memory": [
+        "Deborah",
+        "Jolene"
+      ],
+      "sessions_total": 30,
       "sessions_processed": 30,
+      "sessions_skipped": 0,
       "questions_answered": 0,
       "question_results": [],
       "category_stats": {},
-      "processing_time": 0.0031769275665283203,
+      "processing_time": 194.99286484718323,
       "success": true
     },
     {
@@ -113,11 +174,18 @@
         "Evan",
         "Sam"
       ],
+      "characters_with_existing_memory": [],
+      "characters_without_memory": [
+        "Evan",
+        "Sam"
+      ],
+      "sessions_total": 25,
       "sessions_processed": 25,
+      "sessions_skipped": 0,
       "questions_answered": 0,
       "question_results": [],
       "category_stats": {},
-      "processing_time": 0.0032660961151123047,
+      "processing_time": 161.83331823349,
       "success": true
     },
     {
@@ -125,11 +193,18 @@
         "Calvin",
         "Dave"
       ],
+      "characters_with_existing_memory": [],
+      "characters_without_memory": [
+        "Calvin",
+        "Dave"
+      ],
+      "sessions_total": 30,
       "sessions_processed": 30,
+      "sessions_skipped": 0,
       "questions_answered": 0,
       "question_results": [],
       "category_stats": {},
-      "processing_time": 0.0037200450897216797,
+      "processing_time": 663.3577809333801,
       "success": true
     }
   ]

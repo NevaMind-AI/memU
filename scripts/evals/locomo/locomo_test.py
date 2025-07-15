@@ -67,8 +67,25 @@ class ToolBasedMemoryTester:
         self.max_workers = max_workers
         self.results = []
         self.processing_time = 0.0
+        self.memory_dir = Path(memory_dir)
         
         logger.info(f"Tool-based Memory Tester initialized with unified MemAgent (max_workers={max_workers})")
+
+    def _check_memory_exists(self, characters: List[str]) -> Dict[str, bool]:
+        """Check if memory files exist and are non-empty for given characters"""
+        memory_status = {}
+        
+        for character in characters:
+            profile_path = self.memory_dir / f"{character}_profile.txt"
+            events_path = self.memory_dir / f"{character}_events.txt"
+            
+            profile_exists = profile_path.exists() and profile_path.stat().st_size > 0
+            events_exists = events_path.exists() and events_path.stat().st_size > 0
+            
+            # Character has memory if either profile or events exist and are non-empty
+            memory_status[character] = profile_exists or events_exists
+        
+        return memory_status
 
     def _process_single_session(self, session_data: Tuple[str, List[Dict], str], characters: List[str]) -> Dict:
         """Process a single session using MemAgent"""
@@ -77,16 +94,14 @@ class ToolBasedMemoryTester:
         try:
             logger.info(f"Processing {session_key} with {len(session_utterances)} utterances on {session_date}")
             
-            # Execute through MemAgent with function calling
-            execute_result = self.mem_agent.execute(
-                f"Please update character memory for the conversation session. "
-                f"Use the update_character_memory function with the following data: "
-                f"session_data={json.dumps(session_utterances)}, "
-                f"session_date='{session_date}', "
-                f"characters={json.dumps(characters)}"
+            # Directly call update_character_memory function
+            update_result = self.mem_agent.update_character_memory(
+                session_data=session_utterances,
+                session_date=session_date,
+                characters=characters
             )
             
-            if execute_result.get("success", False):
+            if update_result.get("success", False):
                 logger.info(f"Successfully processed {session_key}")
                 return {
                     'session_key': session_key,
@@ -95,7 +110,7 @@ class ToolBasedMemoryTester:
                     'session_date': session_date
                 }
             else:
-                error_msg = execute_result.get('error', 'Unknown error')
+                error_msg = update_result.get('error', 'Unknown error')
                 logger.error(f"Failed to process {session_key}: {error_msg}")
                 return {
                     'session_key': session_key,
@@ -160,6 +175,128 @@ class ToolBasedMemoryTester:
         logger.info(f"Parallel processing completed: {sum(1 for r in session_results if r['success'])}/{total_sessions} sessions successful")
         
         return session_results
+
+    def _process_single_qa(self, qa_data: Tuple[str, str, str, int], characters: List[str]) -> Dict:
+        """Process a single QA question using MemAgent"""
+        question, answer, category, qa_index = qa_data
+        
+        try:
+            logger.info(f"[QA {qa_index+1}] Answering question in category '{category}': {question[:100]}...")
+            
+            # Use MemAgent to answer the question with memory context
+            answer_prompt = f"""
+            Please answer the following question using the available character memory.
+            Use the search_relevant_events and read_character_profile functions to gather relevant information.
+            
+            Question: {question}
+            Characters to search: {characters}
+            
+            Please provide a comprehensive answer based on the memory information.
+            """
+            
+            answer_result = self.mem_agent.execute(answer_prompt)
+            
+            if answer_result.get("success", False):
+                generated_answer = answer_result.get("final_response", "No answer generated")
+            else:
+                generated_answer = f"Error: {answer_result.get('error', 'Failed to generate answer')}"
+            
+            # Evaluate the answer
+            evaluation = self._evaluate_answer(question, generated_answer, answer)
+            
+            result = {
+                'qa_index': qa_index,
+                'question': question,
+                'generated_answer': generated_answer,
+                'standard_answer': answer,
+                'category': category,
+                'is_correct': evaluation['is_correct'],
+                'explanation': evaluation['explanation']
+            }
+            
+            status = "✓" if evaluation['is_correct'] else "✗"
+            logger.info(f"[QA {qa_index+1}] {status} Question completed (Category: {category})")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"[QA {qa_index+1}] Exception processing question: {e}")
+            return {
+                'qa_index': qa_index,
+                'question': question,
+                'generated_answer': f"Error: {e}",
+                'standard_answer': answer,
+                'category': category,
+                'is_correct': False,
+                'explanation': f"Processing failed: {e}"
+            }
+
+    def _process_qa_parallel(self, qa_data: List[Dict], characters: List[str], max_workers: int = 3) -> List[Dict]:
+        """Process multiple QA questions in parallel"""
+        if not qa_data:
+            return []
+        
+        question_results = []
+        completed_count = 0
+        total_questions = len(qa_data)
+        
+        logger.info(f"Starting parallel processing of {total_questions} QA questions with {max_workers} workers")
+        
+        # Prepare QA items with index for processing, skip items missing required fields
+        qa_items = []
+        skipped_count = 0
+        for i, qa_item in enumerate(qa_data):
+            if 'question' in qa_item and 'answer' in qa_item:
+                qa_items.append((qa_item['question'], qa_item['answer'], qa_item.get('category', 'Unknown'), i))
+            else:
+                skipped_count += 1
+                logger.warning(f"Skipping QA item {i}: missing required fields (question or answer)")
+        
+        if skipped_count > 0:
+            logger.info(f"Skipped {skipped_count} QA items due to missing fields, processing {len(qa_items)} valid items")
+        
+        if not qa_items:
+            logger.warning("No valid QA items to process")
+            return []
+        
+        # Use ThreadPoolExecutor for parallel processing
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all QA processing tasks
+            future_to_qa = {
+                executor.submit(self._process_single_qa, qa_item, characters): qa_item[3] 
+                for qa_item in qa_items
+            }
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_qa):
+                qa_index = future_to_qa[future]
+                completed_count += 1
+                
+                try:
+                    result = future.result()
+                    question_results.append(result)
+                    status = "✓" if result['is_correct'] else "✗"
+                    logger.info(f"[{completed_count}/{len(qa_items)}] {status} QA {qa_index+1} completed - Category: {result['category']}")
+                except Exception as e:
+                    logger.error(f"[{completed_count}/{len(qa_items)}] ✗ QA {qa_index+1} generated exception: {e}")
+                    question_results.append({
+                        'qa_index': qa_index,
+                        'question': f"Question {qa_index+1}",
+                        'generated_answer': f"Error: {e}",
+                        'standard_answer': "",
+                        'category': 'Unknown',
+                        'is_correct': False,
+                        'explanation': f"Exception: {e}"
+                    })
+        
+        # Sort results by qa_index for consistent output
+        question_results.sort(key=lambda x: x['qa_index'])
+        
+        successful_qa = sum(1 for r in question_results if r['is_correct'])
+        processed_qa = len(question_results)
+        logger.info(f"Parallel QA processing completed: {successful_qa}/{processed_qa} questions answered correctly")
+        
+        return question_results
 
     def _extract_session_data(self, conversation_data: Dict) -> List[Tuple[str, List[Dict], str]]:
         """Extract session information from conversation data"""
@@ -237,7 +374,7 @@ class ToolBasedMemoryTester:
         
         try:
             conversation_data = sample['conversation']
-            qa_data = sample.get('QA', [])
+            qa_data = sample.get('qa', [])
             
             # Extract characters from conversation data
             characters = []
@@ -248,76 +385,66 @@ class ToolBasedMemoryTester:
             if speaker_b and speaker_b not in characters:
                 characters.append(speaker_b)
             
-            # Clear existing memory for these characters
-            clear_result = self.mem_agent.clear_character_memory(characters)
-            if not clear_result.get("success", False):
-                logger.warning(f"Failed to clear memory: {clear_result.get('error', 'Unknown error')}")
+            # Check if memory files already exist for these characters
+            memory_status = self._check_memory_exists(characters)
+            characters_with_memory = [char for char, has_memory in memory_status.items() if has_memory]
+            characters_without_memory = [char for char, has_memory in memory_status.items() if not has_memory]
             
-            # Extract and process sessions in parallel
+            if characters_with_memory:
+                logger.info(f"Memory files already exist for characters: {characters_with_memory}, skipping session processing")
+            
+            session_results = []
             sessions = self._extract_session_data(conversation_data)
             
-            logger.info(f"Processing {len(sessions)} sessions for characters: {characters}")
+            # Only process sessions for characters without existing memory
+            if characters_without_memory:
+                logger.info(f"Processing {len(sessions)} sessions for characters without memory: {characters_without_memory}")
+                
+                # Process sessions in parallel using MemAgent
+                session_results = self._process_sessions_parallel(sessions, characters_without_memory, self.max_workers)
+                
+                # Log results
+                successful_sessions = sum(1 for result in session_results if result.get('success', False))
+                logger.info(f"Successfully processed {successful_sessions}/{len(sessions)} sessions")
+            else:
+                logger.info("All characters already have memory files, skipping session processing entirely")
+                # Create placeholder session results
+                for i, session in enumerate(sessions):
+                    session_results.append({
+                        'session_key': session[0],
+                        'success': True,
+                        'utterances_count': len(session[1]),
+                        'session_date': session[2],
+                        'skipped': True,
+                        'reason': 'Memory already exists'
+                    })
             
-            # Process sessions in parallel using MemAgent
-            session_results = self._process_sessions_parallel(sessions, characters, self.max_workers)
+            # Answer QA questions in parallel
+            question_results = self._process_qa_parallel(qa_data, characters, self.max_workers)
             
-            # Log results
-            successful_sessions = sum(1 for result in session_results if result.get('success', False))
-            logger.info(f"Successfully processed {successful_sessions}/{len(sessions)} sessions")
-            
-            # Answer QA questions
+            # Calculate category statistics
             category_stats = {}
-            question_results = []
-            
-            for qa_item in qa_data:
-                question = qa_item['question']
-                answer = qa_item['answer']
-                category = qa_item.get('category', 'Unknown')
-                
-                logger.info(f"Answering question in category '{category}': {question[:100]}...")
-                
-                # Use MemAgent to answer the question with memory context
-                answer_prompt = f"""
-                Please answer the following question using the available character memory.
-                Use the search_relevant_events and read_character_profile functions to gather relevant information.
-                
-                Question: {question}
-                Characters to search: {characters}
-                
-                Please provide a comprehensive answer based on the memory information.
-                """
-                
-                answer_result = self.mem_agent.execute(answer_prompt)
-                
-                if answer_result.get("success", False):
-                    generated_answer = answer_result.get("final_response", "No answer generated")
-                else:
-                    generated_answer = f"Error: {answer_result.get('error', 'Failed to generate answer')}"
-                
-                # Evaluate the answer
-                evaluation = self._evaluate_answer(question, generated_answer, answer)
-                
-                question_results.append({
-                    'question': question,
-                    'generated_answer': generated_answer,
-                    'standard_answer': answer,
-                    'category': category,
-                    'is_correct': evaluation['is_correct'],
-                    'explanation': evaluation['explanation']
-                })
-                
-                # Update category statistics
+            for result in question_results:
+                category = result['category']
                 if category not in category_stats:
                     category_stats[category] = {'total': 0, 'correct': 0}
                 category_stats[category]['total'] += 1
-                if evaluation['is_correct']:
+                if result['is_correct']:
                     category_stats[category]['correct'] += 1
             
             processing_time = time.time() - start_time
             
+            # Calculate skipped sessions count
+            sessions_skipped = sum(1 for result in session_results if result.get('skipped', False))
+            sessions_actually_processed = len(session_results) - sessions_skipped
+            
             return {
                 'characters': characters,
-                'sessions_processed': len(sessions),
+                'characters_with_existing_memory': characters_with_memory,
+                'characters_without_memory': characters_without_memory,
+                'sessions_total': len(sessions),
+                'sessions_processed': sessions_actually_processed,
+                'sessions_skipped': sessions_skipped,
                 'questions_answered': len(qa_data),
                 'question_results': question_results,
                 'category_stats': category_stats,
@@ -389,10 +516,18 @@ class ToolBasedMemoryTester:
                 accuracy = stats['correct'] / stats['total'] if stats['total'] > 0 else 0.0
                 category_accuracies[category] = accuracy
             
+            # Calculate session statistics
+            total_sessions = sum(r.get('sessions_total', 0) for r in all_results if r['success'])
+            sessions_processed = sum(r.get('sessions_processed', 0) for r in all_results if r['success'])
+            sessions_skipped = sum(r.get('sessions_skipped', 0) for r in all_results if r['success'])
+            
             # Create summary
             summary = {
                 'total_samples': len(data),
                 'successful_samples': sum(1 for r in all_results if r['success']),
+                'total_sessions': total_sessions,
+                'sessions_processed': sessions_processed,
+                'sessions_skipped': sessions_skipped,
                 'total_questions': total_questions,
                 'total_correct': total_correct,
                 'overall_accuracy': overall_accuracy,
@@ -433,6 +568,11 @@ class ToolBasedMemoryTester:
         total_correct = sum(sum(1 for qr in r['question_results'] if qr['is_correct']) 
                           for r in self.results if r['success'])
         
+        # Calculate session statistics
+        total_sessions = sum(r.get('sessions_total', 0) for r in self.results if r['success'])
+        sessions_processed = sum(r.get('sessions_processed', 0) for r in self.results if r['success'])
+        sessions_skipped = sum(r.get('sessions_skipped', 0) for r in self.results if r['success'])
+        
         overall_accuracy = total_correct / total_questions if total_questions > 0 else 0.0
         
         # Aggregate category statistics
@@ -449,6 +589,9 @@ class ToolBasedMemoryTester:
         print(f"ENHANCED MEMORY TEST RESULTS - UNIFIED MEMAGENT")
         print(f"{'='*60}")
         print(f"Samples processed: {successful_samples}/{total_samples}")
+        print(f"Total sessions: {total_sessions}")
+        print(f"Sessions processed: {sessions_processed}")
+        print(f"Sessions skipped (memory exists): {sessions_skipped}")
         print(f"Total questions: {total_questions}")
         print(f"Total correct: {total_correct}")
         print(f"Overall accuracy: {overall_accuracy:.2%}")

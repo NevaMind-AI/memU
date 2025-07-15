@@ -83,6 +83,93 @@ class MemAgent:
         
         logger.info(f"MemAgent initialized with memory directory: {self.memory_dir}")
 
+    def _safe_json_parse(self, json_string: str) -> Dict[str, Any]:
+        """Safely parse JSON string with error handling and fixing"""
+        if not json_string or not isinstance(json_string, str):
+            logger.warning(f"Invalid JSON input: {type(json_string)}")
+            return {}
+        
+        # Try direct parsing first
+        try:
+            return json.loads(json_string)
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON parse error: {e}")
+            
+            # Try to fix common JSON issues
+            try:
+                # Remove potential trailing commas
+                fixed_json = json_string.strip()
+                
+                # Fix unterminated strings by finding the last complete JSON structure
+                if "Unterminated string" in str(e):
+                    # Find the last valid opening brace
+                    last_brace = fixed_json.rfind('{')
+                    if last_brace != -1:
+                        # Try to find a matching closing brace or add one
+                        brace_count = 0
+                        valid_end = len(fixed_json)
+                        
+                        for i in range(last_brace, len(fixed_json)):
+                            if fixed_json[i] == '{':
+                                brace_count += 1
+                            elif fixed_json[i] == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    valid_end = i + 1
+                                    break
+                        
+                        if brace_count > 0:
+                            # Add missing closing braces
+                            fixed_json = fixed_json[:valid_end] + '}' * brace_count
+                
+                # Try parsing the fixed JSON
+                return json.loads(fixed_json)
+                
+            except Exception as fix_error:
+                logger.error(f"Failed to fix JSON: {fix_error}")
+                
+                # Last resort: try to extract key-value pairs manually
+                try:
+                    return self._extract_json_manually(json_string)
+                except Exception as manual_error:
+                    logger.error(f"Manual JSON extraction failed: {manual_error}")
+                    return {}
+
+    def _extract_json_manually(self, json_string: str) -> Dict[str, Any]:
+        """Manually extract key-value pairs from malformed JSON"""
+        result = {}
+        
+        # Look for common patterns like "key": "value"
+        import re
+        
+        # Pattern for string values
+        string_pattern = r'"(\w+)"\s*:\s*"([^"]*)"'
+        matches = re.findall(string_pattern, json_string)
+        for key, value in matches:
+            result[key] = value
+        
+        # Pattern for array values
+        array_pattern = r'"(\w+)"\s*:\s*\[(.*?)\]'
+        array_matches = re.findall(array_pattern, json_string)
+        for key, array_content in array_matches:
+            try:
+                # Try to parse the array content
+                array_value = json.loads(f'[{array_content}]')
+                result[key] = array_value
+            except:
+                # Split by comma as fallback
+                items = [item.strip().strip('"') for item in array_content.split(',')]
+                result[key] = items
+        
+        # Pattern for number values
+        number_pattern = r'"(\w+)"\s*:\s*(\d+)'
+        number_matches = re.findall(number_pattern, json_string)
+        for key, value in number_matches:
+            result[key] = int(value)
+        
+        logger.info(f"Manually extracted JSON: {result}")
+        return result
+
     def _init_llm_client(self):
         """Initialize the LLM client"""
         try:
@@ -657,7 +744,7 @@ class MemAgent:
         )
         
         messages = [{"role": "user", "content": events_prompt}]
-        llm_response = self.llm_client.chat_completion(messages, max_tokens=1000, temperature=0.3)
+        llm_response = self.llm_client.chat_completion(messages, max_tokens=4000, temperature=0.3)
         
         if not llm_response.success:
             raise Exception(f"LLM events analysis failed: {llm_response.error}")
@@ -675,7 +762,7 @@ class MemAgent:
         )
         
         messages = [{"role": "user", "content": profile_prompt}]
-        llm_response = self.llm_client.chat_completion(messages, max_tokens=1500, temperature=0.3)
+        llm_response = self.llm_client.chat_completion(messages, max_tokens=4000, temperature=0.3)
         
         if not llm_response.success:
             raise Exception(f"LLM profile analysis failed: {llm_response.error}")
@@ -728,7 +815,7 @@ class MemAgent:
                 llm_response = self.llm_client.chat_completion(
                     messages=messages,
                     tools=tools,
-                    max_tokens=2000,
+                    max_tokens=4000,
                     temperature=0.1
                 )
                 
@@ -738,35 +825,67 @@ class MemAgent:
                 
                 # Convert LLMResponse to dict format expected by the rest of the code
                 response = {
-                    "content": llm_response.content,
-                    "tool_calls": llm_response.tool_calls or []
+                    "content": llm_response.content or "",
+                    "tool_calls": llm_response.tool_calls if llm_response.tool_calls else None
                 }
                 
                 # Add assistant message
-                messages.append({
+                assistant_message = {
                     "role": "assistant", 
-                    "content": response.get("content", ""),
-                    "tool_calls": response.get("tool_calls", [])
-                })
+                    "content": response.get("content", "")
+                }
+                
+                # Only add tool_calls if they exist and are not empty
+                if response.get("tool_calls"):
+                    assistant_message["tool_calls"] = response["tool_calls"]
+                
+                messages.append(assistant_message)
                 
                 # Process tool calls if any
                 if response.get("tool_calls"):
-                    for tool_call in response["tool_calls"]:
+                    tool_calls_count = len(response['tool_calls'])
+                    logger.info(f"Processing {tool_calls_count} tool calls")
+                    
+                    tools_processed = 0
+                    for i, tool_call in enumerate(response["tool_calls"]):
+                        tool_call_id = None
                         try:
                             # Handle different possible tool call formats
                             if hasattr(tool_call, 'function'):
                                 # OpenAI API format
                                 tool_name = tool_call.function.name
-                                arguments = json.loads(tool_call.function.arguments)
+                                arguments = self._safe_json_parse(tool_call.function.arguments)
                                 tool_call_id = tool_call.id
                             elif isinstance(tool_call, dict):
                                 # Dict format
                                 tool_name = tool_call["function"]["name"]
-                                arguments = json.loads(tool_call["function"]["arguments"])
+                                arguments = self._safe_json_parse(tool_call["function"]["arguments"])
                                 tool_call_id = tool_call["id"]
                             else:
                                 logger.error(f"Unknown tool call format: {type(tool_call)}")
+                                # Even for unknown format, try to extract tool_call_id to respond
+                                if hasattr(tool_call, 'id'):
+                                    tool_call_id = tool_call.id
+                                elif isinstance(tool_call, dict) and 'id' in tool_call:
+                                    tool_call_id = tool_call['id']
+                                
+                                if tool_call_id:
+                                    # Add error response for unknown format
+                                    messages.append({
+                                        "role": "tool",
+                                        "tool_call_id": tool_call_id,
+                                        "content": json.dumps({
+                                            "success": False,
+                                            "error": f"Unknown tool call format: {type(tool_call)}"
+                                        }, indent=2)
+                                    })
+                                    tools_processed += 1
                                 continue
+                            
+                            # Check if arguments parsing was successful
+                            if not arguments:
+                                logger.warning(f"Failed to parse arguments for tool {tool_name}, using empty arguments")
+                                arguments = {}
                             
                             # Execute tool
                             result = self.execute_tool(tool_name, **arguments)
@@ -777,9 +896,47 @@ class MemAgent:
                                 "tool_call_id": tool_call_id,
                                 "content": json.dumps(result, indent=2)
                             })
+                            tools_processed += 1
+                            
                         except Exception as e:
                             logger.error(f"Error processing tool call: {e}")
-                            continue
+                            
+                            # Always add a response for the tool call, even if it failed
+                            if tool_call_id:
+                                messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tool_call_id,
+                                    "content": json.dumps({
+                                        "success": False,
+                                        "error": f"Tool execution failed: {str(e)}"
+                                    }, indent=2)
+                                })
+                                tools_processed += 1
+                            else:
+                                # Try to extract tool_call_id even from exception case
+                                try:
+                                    if hasattr(tool_call, 'id'):
+                                        emergency_id = tool_call.id
+                                    elif isinstance(tool_call, dict) and 'id' in tool_call:
+                                        emergency_id = tool_call['id']
+                                    else:
+                                        emergency_id = f"unknown_tool_call_{len(messages)}"
+                                    
+                                    messages.append({
+                                        "role": "tool",
+                                        "tool_call_id": emergency_id,
+                                        "content": json.dumps({
+                                            "success": False,
+                                            "error": f"Tool execution failed: {str(e)}"
+                                        }, indent=2)
+                                    })
+                                    tools_processed += 1
+                                except:
+                                    logger.error(f"Could not add tool response for failed tool call: {e}")
+                    
+                    # Log tool processing summary
+                    logger.info(f"Processed {tools_processed}/{tool_calls_count} tool calls successfully")
+                    
                 else:
                     # No more tool calls, we're done
                     break

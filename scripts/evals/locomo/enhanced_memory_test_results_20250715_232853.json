@@ -1,0 +1,29 @@
+{
+  "success": true,
+  "summary": {
+    "total_samples": 1,
+    "successful_samples": 0,
+    "total_sessions": 0,
+    "sessions_processed": 0,
+    "sessions_skipped": 0,
+    "total_questions": 0,
+    "total_correct": 0,
+    "overall_accuracy": 0.0,
+    "category_stats": {},
+    "category_accuracies": {},
+    "total_time": 0.009291887283325195,
+    "avg_time_per_sample": 0.009291887283325195
+  },
+  "detailed_results": [
+    {
+      "characters": [],
+      "sessions_processed": 0,
+      "questions_answered": 0,
+      "question_results": [],
+      "category_stats": {},
+      "processing_time": 0.00015783309936523438,
+      "success": false,
+      "error": "'answer'"
+    }
+  ]
+}
