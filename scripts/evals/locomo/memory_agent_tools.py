@@ -794,6 +794,7 @@ When you have completed the task, provide your final response directly."""
                     else:
                         # LLM provided final response
                         final_response = response.content.strip()
+                        print(f"LLM provided final response after {iteration-1} tool calls: {final_response}")
                         logger.info(f"LLM provided final response after {iteration-1} tool calls")
                         
                         return {

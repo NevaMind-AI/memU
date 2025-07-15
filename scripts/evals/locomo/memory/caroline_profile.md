@@ -1,24 +1,28 @@
 ### Caroline's Basic Information
 
 - **Personal Information**
-  - **Name:** Caroline
-  - **Age:** Not specified
-  - **Occupation:** Not currently specified, but interested in pursuing counseling or work in mental health
-  - **Location:** Not specified
-  - **Family:** Not mentioned
+  - **Name**: Caroline
+  - **Age**: Not specified
+  - **Occupation**: Not specified (interested in pursuing counseling or mental health)
+  - **Location**: Not specified
+  - **Family**: Not specified
 
 - **Personality & Characteristics**
-  - **Traits:** Empathetic, understanding, courageous, appreciative of support
-  - **Self-acceptance:** Feels accepted and empowered through participation in the LGBTQ support group
+  - Empathetic
+  - Courageous
+  - Open-minded and accepting
+  - Supportive of others
 
 - **Relationships**
-  - **Friend:** Melanie (has a supportive friendship and engages in meaningful conversations)
+  - **Friend**: Melanie (has a supportive friendship)
 
 - **Interests & Activities**
-  - **Support Groups:** Attends LGBTQ support groups
-  - **Education:** Interested in continuing her education
-  - **Career Aspirations:** Keen on pursuing counseling or mental health to help others
-  - **Art Appreciation:** Expresses admiration for Melanie's painting, indicating an appreciation for creative outlets
+  - Attended an LGBTQ support group (May 7, 2023)
+  - Interested in counseling and mental health
+  - Engaged in self-exploration and personal growth
+  - Values creative expression and relaxation
 
 - **Life Situation**
-  - **Current Activities:** Engaged in research related to her career interests following her attendance at the support group.
+  - Currently exploring educational opportunities
+  - Motivated to support others facing similar issues as herself
+  - Feels accepted and empowered after attending the support group
