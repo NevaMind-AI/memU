@@ -16,6 +16,7 @@ class LLMResponse:
     model: str
     success: bool
     error: Optional[str] = None
+    tool_calls: Optional[List[Any]] = None  # Support for function calling
 
     def __bool__(self) -> bool:
         """Enable response object to be used as boolean value"""

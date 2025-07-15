@@ -11,6 +11,9 @@ fastapi>=0.115.2
 anthropic>=0.54.0
 psycopg2-binary>=2.9.9
 cachetools>=5.0.0
+rank-bm25>=0.2.2
+scikit-learn>=1.3.0
+numpy>=1.24.0
 
 # For full LLM support, install with: pip install personalab[llm]
 # For AI features, install with: pip install personalab[ai]

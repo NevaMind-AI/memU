@@ -68,7 +68,7 @@ class Config:
     @property
     def openai_model(self) -> str:
         """Get OpenAI model name"""
-        return os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+        return os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
     @property
     def openai_base_url(self) -> str:

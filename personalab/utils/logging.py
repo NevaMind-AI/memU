@@ -9,6 +9,21 @@ import sys
 from typing import Optional
 
 
+class FlushingStreamHandler(logging.StreamHandler):
+    """Stream handler that flushes after each log record."""
+    
+    def emit(self, record):
+        """Emit a record, ensuring the stream is flushed."""
+        try:
+            super().emit(record)
+            self.flush()
+            # 确保立即刷新到终端
+            if hasattr(self.stream, 'flush'):
+                self.stream.flush()
+        except Exception:
+            self.handleError(record)
+
+
 class ColoredFormatter(logging.Formatter):
     """Colored log formatter for better readability."""
     
@@ -34,7 +49,8 @@ def setup_logging(
     name: str = "personalab",
     level: str = "INFO",
     format_string: Optional[str] = None,
-    use_colors: bool = True
+    use_colors: bool = True,
+    enable_flush: bool = True
 ) -> logging.Logger:
     """
     Setup logging configuration for PersonaLab.
@@ -44,6 +60,7 @@ def setup_logging(
         level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         format_string: Custom format string
         use_colors: Whether to use colored output
+        enable_flush: Whether to enable auto-flush for real-time output
         
     Returns:
         logging.Logger: Configured logger instance
@@ -58,8 +75,11 @@ def setup_logging(
     numeric_level = getattr(logging, level.upper(), logging.INFO)
     logger.setLevel(numeric_level)
     
-    # Create console handler
-    console_handler = logging.StreamHandler(sys.stdout)
+    # Create console handler with optional auto-flush
+    if enable_flush:
+        console_handler = FlushingStreamHandler(sys.stdout)
+    else:
+        console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(numeric_level)
     
     # Create formatter

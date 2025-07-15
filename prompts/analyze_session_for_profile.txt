@@ -1,0 +1,19 @@
+Extract and update basic character information for {character_name}.
+
+Current Session:
+{conversation}
+
+Event Records:
+{events}
+
+Existing Profile:
+{existing_profile}
+
+Task: Extract {character_name}'s basic information:
+- Personal Information (name, age, occupation, location, family)
+- Personality & Characteristics
+- Relationships
+- Interests & Activities
+- Life Situation
+
+Use structured markdown format with bullet points. Only include information mentioned in conversations. 

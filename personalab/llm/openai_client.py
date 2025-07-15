@@ -16,7 +16,7 @@ class OpenAIClient(BaseLLMClient):
         self,
         api_key: str = None,
         base_url: str = None,
-        model: str = "gpt-4.1-mini",
+        model: str = "gpt-4o-mini",
         **kwargs,
     ):
         """
@@ -80,8 +80,7 @@ class OpenAIClient(BaseLLMClient):
         model = self.get_model(model)
 
         try:
-            # Debug prints removed
-            
+
             # Preprocess messages
             processed_messages = self._prepare_messages(messages)
 
@@ -108,7 +107,7 @@ class OpenAIClient(BaseLLMClient):
 
     def _get_default_model(self) -> str:
         """Get OpenAI default model"""
-        return "gpt-4.1-mini"
+        return "gpt-4o-mini"
 
     def _prepare_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """Preprocess OpenAI message format"""

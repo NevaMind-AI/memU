@@ -1,0 +1,12 @@
+Check if the generated answer contains the content from the standard answer.
+
+Question: {question}
+
+Generated Answer: {generated_answer}
+
+Standard Answer: {standard_answer}
+
+Task: Determine if the generated answer contains the key information and core content from the standard answer.
+
+Output Format:
+Answer: [yes/no] 

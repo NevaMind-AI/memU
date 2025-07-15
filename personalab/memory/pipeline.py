@@ -218,17 +218,22 @@ Current Event Records:
 Current Conversation Content:
 {conversation_text}
 
+Note:
+1. the profile must be factual and accurate.
+2. the profile must be very concise and clear.
+3. the events must be very concise and clear.
+4. the profile and events must be updated based on the conversation content.
+
 Return the updated profile and events suggestion directly in the following XML format:
-<analysis>
-<profile>
-<item>profile update suggestion 1</item>
-<item>profile update suggestion 2</item>
-</profile>
-<events>
-<item>event update suggestion 1</item>
-<item>event update suggestion 2</item>
-</events>
-</analysis>
+<update>
+Add: profile [new profile item]
+Delete: profile [profile item to remove]
+Update: profile [profile item to update] -> profile [new profile item]
+Add: event [new event item]
+Delete: event [event item to remove]
+Update: event [event item to update] -> event [new event item]
+...
+</update>
 """
 
         # Call LLM
@@ -291,23 +296,24 @@ Update Suggestion:
 
 Please integrate the new information into the user profile to generate a complete, coherent user profile description.
 Requirements:
-1. Maintain accuracy of existing information
-2. Naturally incorporate new information
-3. Avoid duplication and redundancy
-4. Use third-person description
-5. Keep it concise and clear
+1. Based on the update suggestion, update the user profile and event records.
+2. must follow the update suggestion.
+3. all suggestions should be followed.
+4. the profile must be factual and accurate.
+5. the profile must be very concise and clear.
+6. the events must be very concise and clear.
 
 Please return the updated complete user profile directly in the following XML format:
-<update>
+<memory>
 <profile>
 <item>profile item 1</item>
 <item>profile item 2</item>
 </profile>
 <events>
-<item>event 1</item>
-<item>event 2</item>
+<item>event item 1</item>
+<item>event item 2</item>
 </events>
-</update>
+</memory>
 """
 
         # Call LLM to update profile
@@ -391,6 +397,7 @@ Please analyze the conversation and extract:
 2. User's emotional states and changes
 3. User's communication style and engagement patterns
 4. User's knowledge level and learning tendencies
+5. should be concise and clear
 
 Please return the insights directly in the following XML format:
 <insights>
@@ -511,17 +518,67 @@ Please return the insights directly in the following XML format:
                 # Parse XML
                 root = ET.fromstring(xml_content)
                 
-                # Extract profile items
-                for profile_section in root.findall('.//profile'):
-                    for item in profile_section.findall('item'):
-                        if item.text and item.text.strip():
-                            profile_updates.append(item.text.strip())
+                # Handle <memory> format (from update stage)
+                if root.tag == 'memory':
+                    # Extract profile items
+                    for profile_section in root.findall('.//profile'):
+                        for item in profile_section.findall('item'):
+                            if item.text and item.text.strip():
+                                profile_updates.append(item.text.strip())
+                    
+                    # Extract events items
+                    for events_section in root.findall('.//events'):
+                        for item in events_section.findall('item'):
+                            if item.text and item.text.strip():
+                                events_updates.append(item.text.strip())
                 
-                # Extract events items
-                for events_section in root.findall('.//events'):
-                    for item in events_section.findall('item'):
-                        if item.text and item.text.strip():
-                            events_updates.append(item.text.strip())
+                # Handle <update> format (from modification stage) - parse text instructions
+                elif root.tag == 'update':
+                    text_content = root.text if root.text else ""
+                    for child in root:
+                        if child.text:
+                            text_content += child.text
+                        if child.tail:
+                            text_content += child.tail
+                    
+                    # Parse Add/Update/Remove instructions
+                    lines = text_content.split('\n')
+                    for line in lines:
+                        line = line.strip()
+                        if line.startswith('Add: profile '):
+                            item = line.replace('Add: profile ', '').strip('[]"')
+                            if item:
+                                profile_updates.append(item)
+                        elif line.startswith('Update: profile '):
+                            # Extract the new profile item after '->'
+                            if ' -> profile ' in line:
+                                item = line.split(' -> profile ')[1].strip('[]"')
+                                if item:
+                                    profile_updates.append(item)
+                        elif line.startswith('Add: event '):
+                            item = line.replace('Add: event ', '').strip('[]"')
+                            if item:
+                                events_updates.append(item)
+                        elif line.startswith('Update: event '):
+                            # Extract the new event item after '->'
+                            if ' -> event ' in line:
+                                item = line.split(' -> event ')[1].strip('[]"')
+                                if item:
+                                    events_updates.append(item)
+                
+                # Handle <analysis> format (legacy)
+                elif root.tag == 'analysis':
+                    # Extract profile items
+                    for profile_section in root.findall('.//profile'):
+                        for item in profile_section.findall('item'):
+                            if item.text and item.text.strip():
+                                profile_updates.append(item.text.strip())
+                    
+                    # Extract events items
+                    for events_section in root.findall('.//events'):
+                        for item in events_section.findall('item'):
+                            if item.text and item.text.strip():
+                                events_updates.append(item.text.strip())
                 
                 logger.info(f"[PIPELINE] [PARSE] XML parsing successful: {len(profile_updates)} profile items, {len(events_updates)} events")
                 logger.debug(f"[PIPELINE] [PARSE] Profile content: {profile_updates}")
@@ -545,8 +602,9 @@ Please return the insights directly in the following XML format:
         try:
             # Look for XML tags in the content
             xml_patterns = [
-                r'<analysis>.*?</analysis>',
                 r'<update>.*?</update>',
+                r'<memory>.*?</memory>',
+                r'<analysis>.*?</analysis>',
                 r'<insights>.*?</insights>'
             ]
             
