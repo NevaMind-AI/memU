@@ -1,0 +1,11 @@
+Record NEW event details for {character_name} from the conversation session.
+
+Conversation:
+{conversation}
+
+Existing Events:
+{existing_events}
+
+Task: Record ALL details from the conversation for {character_name} from {session_date}. Group related content into coherent paragraphs. Start each paragraph with "{session_date}: "
+
+Only output the NEW session records:

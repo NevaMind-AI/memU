@@ -21,6 +21,10 @@ dotenv.load_dotenv()
 from personalab.llm import AzureOpenAIClient
 from personalab.utils import get_logger, setup_logging
 
+# Add prompts directory to path and import prompt loader
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'prompts'))
+from prompt_loader import get_prompt_loader
+
 logger = setup_logging(__name__, enable_flush=True)
 
 
@@ -58,6 +62,9 @@ class MemoryAgentTools:
         
         # Initialize LLM client
         self._init_llm_client()
+        
+        # Initialize prompt loader
+        self.prompt_loader = get_prompt_loader(self.memory_dir.parent / "prompts")
         
         logger.info(f"Memory Agent Tools initialized, memory directory: {self.memory_dir}")
     
@@ -482,19 +489,13 @@ class MemoryAgentTools:
     def analyze_session_for_events(self, character_name: str, conversation: str, session_date: str, existing_events: str) -> Dict[str, Any]:
         """Tool: Analyze session for events"""
         try:
-            prompt = f"""
-Record NEW event details for {character_name} from the conversation session.
-
-Conversation:
-{conversation}
-
-Existing Events:
-{existing_events}
-
-Task: Record ALL details from the conversation for {character_name} from {session_date}. Group related content into coherent paragraphs. Start each paragraph with "{session_date}: "
-
-Only output the NEW session records:
-"""
+            prompt = self.prompt_loader.format_prompt(
+                "analyze_session_for_events",
+                character_name=character_name,
+                conversation=conversation,
+                session_date=session_date,
+                existing_events=existing_events
+            )
             
             response = self.llm_client.simple_chat(prompt, max_tokens=16000)
             new_events = response.strip()
@@ -516,27 +517,13 @@ Only output the NEW session records:
     def analyze_session_for_profile(self, character_name: str, conversation: str, existing_profile: str, events: str) -> Dict[str, Any]:
         """Tool: Analyze session for profile updates"""
         try:
-            prompt = f"""
-Extract and update basic character information for {character_name}.
-
-Current Session:
-{conversation}
-
-Event Records:
-{events}
-
-Existing Profile:
-{existing_profile}
-
-Task: Extract {character_name}'s basic information:
-- Personal Information (name, age, occupation, location, family)
-- Personality & Characteristics
-- Relationships
-- Interests & Activities
-- Life Situation
-
-Use structured markdown format with bullet points. Only include information mentioned in conversations.
-"""
+            prompt = self.prompt_loader.format_prompt(
+                "analyze_session_for_profile",
+                character_name=character_name,
+                conversation=conversation,
+                existing_profile=existing_profile,
+                events=events
+            )
             
             response = self.llm_client.simple_chat(prompt, max_tokens=16000)
             updated_profile = response.strip()
@@ -557,20 +544,12 @@ Use structured markdown format with bullet points. Only include information ment
     def evaluate_answer(self, question: str, generated_answer: str, standard_answer: str) -> Dict[str, Any]:
         """Tool: Evaluate answer correctness"""
         try:
-            prompt = f"""
-Check if the generated answer contains the content from the standard answer.
-
-Question: {question}
-
-Generated Answer: {generated_answer}
-
-Standard Answer: {standard_answer}
-
-Task: Determine if the generated answer contains the key information and core content from the standard answer.
-
-Output Format:
-Answer: [yes/no]
-"""
+            prompt = self.prompt_loader.format_prompt(
+                "evaluate_answer",
+                question=question,
+                generated_answer=generated_answer,
+                standard_answer=standard_answer
+            )
             
             response = self.llm_client.simple_chat(prompt, max_tokens=16000)
             is_correct = "yes" in response.split("Answer:")[1].split("\n")[0].lower() if "Answer:" in response else False
@@ -680,27 +659,11 @@ Answer: [yes/no]
             tools = self.get_available_tools()
             
             # Initialize conversation
+            system_message = self.prompt_loader.load_prompt("system_message")
             messages = [
                 {
                     "role": "system",
-                    "content": """You are a memory management assistant with access to character memory tools.
-
-You can use the following tools to help users manage and query character memories:
-- read_character_profile: Read complete profile information for a character
-- read_character_events: Read all event records for a character  
-- search_relevant_events: Search for events relevant to a query
-- update_character_memory: Update character memory from conversation data
-- list_available_characters: List all available characters
-- clear_character_memory: Clear memory files for characters
-
-When a user asks a question or makes a request:
-1. Use appropriate tools to gather necessary information
-2. Process the request step by step
-3. Provide a comprehensive response
-
-If you need to answer a question about characters, first gather relevant profiles and events.
-If you need to process conversation data, use the update_character_memory tool.
-When you have completed the task, provide your final response directly."""
+                    "content": system_message
                 },
                 {
                     "role": "user", 
