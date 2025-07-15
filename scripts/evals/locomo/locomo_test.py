@@ -706,6 +706,46 @@ class ToolBasedMemoryTester:
                 'error': str(e)
             }
 
+    def _print_realtime_category_stats(self, all_results: List[Dict], current_sample: int, total_samples: int):
+        """Print real-time category statistics after each sample"""
+        # Calculate current accumulated statistics
+        overall_category_stats = {}
+        total_questions = 0
+        total_correct = 0
+        
+        for result in all_results:
+            if result['success']:
+                # Aggregate category statistics
+                for category, stats in result['category_stats'].items():
+                    if category not in overall_category_stats:
+                        overall_category_stats[category] = {'total': 0, 'correct': 0}
+                    overall_category_stats[category]['total'] += stats['total']
+                    overall_category_stats[category]['correct'] += stats['correct']
+                
+                total_questions += result['questions_answered']
+                total_correct += sum(1 for qr in result['question_results'] if qr['is_correct'])
+        
+        # Print current statistics
+        overall_accuracy = total_correct / total_questions if total_questions > 0 else 0.0
+        
+        print(f"\n{'='*60}")
+        print(f"REAL-TIME RESULTS - Sample {current_sample}/{total_samples}")
+        print(f"{'='*60}")
+        print(f"Total questions answered: {total_questions}")
+        print(f"Overall accuracy: {total_correct}/{total_questions} ({overall_accuracy:.1%})")
+        
+        if overall_category_stats:
+            print(f"\nCategory-wise accuracy:")
+            print(f"{'Category':<20} {'Correct/Total':<12} {'Accuracy':<10}")
+            print(f"{'-'*45}")
+            
+            for category in sorted(overall_category_stats.keys()):
+                stats = overall_category_stats[category]
+                accuracy = stats['correct'] / stats['total'] if stats['total'] > 0 else 0.0
+                print(f"{str(category):<20} {stats['correct']:3}/{stats['total']:<3} {accuracy:>10.1%}")
+        
+        print(f"{'='*60}\n")
+
     def run_test(self, data_file: str, sample_limit: Optional[int] = None) -> Dict:
         """Run the memory test on the dataset"""
         start_time = time.time()
@@ -744,6 +784,9 @@ class ToolBasedMemoryTester:
                     total_correct += sum(1 for qr in result['question_results'] if qr['is_correct'])
                 
                 logger.info(f"Sample {i} completed in {result['processing_time']:.2f}s")
+                
+                # Print real-time category statistics after each sample
+                self._print_realtime_category_stats(all_results, i, len(data))
             
             total_time = time.time() - start_time
             
