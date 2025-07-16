@@ -1,52 +1,69 @@
 ## Personal Information
 - Name: Jolene
-- Occupation: Engineering student
+- Age: Not specified
+- Occupation: Electrical Engineer (interning at a well-known engineering firm)
 - Location: Not specified
-- Family: Not specified
+- Family: Mother (deceased, passed away in 2022)
 
 ## Personality & Characteristics
-- Creative and problem-solver
-- Experiences a mix of excitement and nervousness when faced with new challenges
-- Enjoys the process of working on projects, likening it to solving a puzzle
-- Engaged and satisfied with her current robotics project, which she describes as "tough but also really cool to watch it take shape"
-- Values companionship and shared activities, as seen in her gaming with her partner
-- Expresses enthusiasm for new experiences, such as trying yoga on the beach
-- Currently feeling overwhelmed due to exams and deadlines
-- Aware of the importance of self-care and mental health, seeking to be more mindful of stress levels
-- Incorporating workouts into her studying schedule, which she describes as "tough but fun"
-- Recently started using a bullet journal for time management, finding it helpful for organization and task tracking
-- Currently making strides toward her goals, stating that life has been hectic but satisfying
-- Recently developed an interest in yoga, particularly after a trip to Rio de Janeiro where she explored different styles
-- Recently attended a meditation retreat in Phuket, which helped her find inner peace and emphasized the importance of relaxation, self-care, and balance in her life
-- Enjoys reconnecting with nature, planning to get out in nature again next month
+- Hardworking and dedicated, currently managing an internship and other commitments
+- Values memories and connections to family
+- Reflective and supportive in conversations
+- Creative problem-solver, enhanced by current projects
+- Engaged in emotional well-being practices, such as yoga and meditation
+- Recently experienced stress from losing work files but found clarity through meditation
+- Enjoys socializing with friends and values comforting food
+- Currently feeling overwhelmed with her busy schedule but remains determined to succeed
+- Actively seeking to improve time management skills, currently trying the Pomodoro Technique and exploring the Eisenhower Matrix for task prioritization
+- Feels relaxed during yoga and enjoys creating a serene space with soothing scents like lavender and rosemary
+- Prioritizing self-care through yoga and meditation
+- Recently started using a bullet journal for time management and organization, finding it satisfying to track and complete tasks
+- Recently acknowledged the importance of balance between hobbies and studies
+- Practicing yoga for 3 years, with a favorite pose being savasana (corpse pose), which she finds calming
+- Recently expressed interest in mindfulness practices as a means of destressing and achieving calm
+- Currently studying hard for finals, indicating a strong commitment to her education
+- Appreciates the small things in life, which help her remember that even during tough times, there is always something positive to hold onto.
 
 ## Relationships
-- Close friend: Deborah
-- Romantic partner: Engaged in gaming activities together, providing support and motivation
-- Notable interactions with Deborah regarding personal experiences and emotional support
+- Close friend: Deborah (shared experiences of loss and support)
+- Partner: Engaged in shared activities, such as gaming and yoga; met in an engineering class in college
+- New colleagues: Currently interning at a well-known engineering firm
+- Pet: Susie (a pet snake, adopted two years ago)
 
 ## Interests & Activities
-- Robotics and engineering
-- Enjoys creative problem-solving
-- Interested in yoga and mindfulness practices, eager to explore these for stress relief
-- Enjoys playing video games, particularly with her partner
-  - Recent games played: "Detroit"
-  - Upcoming game: "Walking Dead"
-  - Favorite game with partner: "It Takes Two"
-- Pet owner: Has two snakes, Susie and Seraphim
-  - Seraphim was purchased a year ago in Paris
-- Enjoys comforting foods, with lasagna being a favorite
-- Enjoys nature walks and photography, appreciating tranquil spots like a hidden lake
-- Recently acquired a new plant as a reminder to nurture herself and embrace fresh starts
-- Expressed excitement about playing a card game about cats with Deborah
-- Recently attended a yoga retreat that provided a peaceful experience and a connection to nature
+- Enjoys reading, currently into "Sapiens" and recently read "Avalanche" by Neal Stephenson
+- Enjoys playing video games with her partner, particularly "It Takes Two" (recently played "Detroit" and plans to play "Walking Dead")
+- Recently recommended video games: "Zelda BOTW for Switch," "Animal Crossing: New Horizons," and "Overcooked 2"
+- Aspires to learn surfing; has been gathering information, watching videos, and acquired a beginners' guide to surfing
+- Has two pet snakes: Susie (calming presence, adopted two years ago) and Seraphim (acquired a year ago in Paris)
+- Values jewelry with personal significance (has a pendant given by her mother in 2010 in Paris, symbolizing freedom)
+- Interested in engineering projects, specifically sustainable solutions (recently designed and built a sustainable water purifier for a rural community)
+- Proposed a volunteer program to teach STEM to underprivileged kids, planning to collaborate with local schools and centers
+- Interested in trying yoga on the beach, inspired by Deborah's experience in Bali
+- Enjoys listening to calming music during yoga, specifically mentioning artists Nils Frahm and Olafur Arnalds
+- Favorite comfort food: Lasagna
+- Recently trying to add workouts into her studying schedule, describing it as "tough but fun."
+- Recently designed notebooks inspired by her love for space and engines, featuring elements like galaxies and circuitry
+- Recently received a new game for the console, "Battlefield 1," indicating her continued interest in gaming
+- Recently signed up for a meditation course at a retreat near a lake, expressing excitement about the experience and eagerness to share it with her partner.
+- Plans to meet with Deborah for coffee on Friday at 5 pm, indicating her social engagement
+- Recently tried scuba diving, expressing excitement about the experience and potential to become a certified diver
+- Plans to try surfing with Deborah next month, indicating her eagerness to explore new activities
+- Recently returned from a trip to a yoga retreat, where she felt incredibly peaceful and connected to nature.
 
 ## Life Situation
-- Currently working on a challenging robotics project that is pushing her creative limits
-- Balancing academic responsibilities with personal interests and social connections
-- Engages in activities that bring her joy and comfort, such as caring for her pets and gaming with her partner
-- Recently took her snake, Seraphim, to the park, indicating an active lifestyle
-- Managing stress and seeking strategies for better time management and study habits
-- Expressed feelings of being overwhelmed while trying to balance her engineering studies, relationship, and personal growth
-- Recently presented at a virtual conference and received positive feedback, confirming she is on the right track toward her goals
-- Currently focusing on studying and gaining more experience, considering more internships to enhance her skills
+- Currently navigating the emotional impact of her mother's passing and cherishing memories associated with her mother's house
+- Finds comfort in her pets and engages in activities that promote emotional well-being
+- Recently returned from a trip to Rio de Janeiro, where she explored various yoga classes and enjoyed delicious cafes, expressing her appreciation for different types of yoga and their backgrounds
+- Recently visited an old temple during her trip to Rio de Janeiro, highlighting her enthusiasm for exploring historical sites
+- Recently acquired a new plant as a reminder to nurture herself and embrace fresh starts
+- Currently solidifying plans for a volunteer program aimed at helping underprivileged children through STEM education
+- Planning a potential trip to Bali for yoga, expressing enthusiasm for the activity and location
+- Currently struggling with time management related to her engineering assignments and seeking support from friends
+- Recently had a breakthrough with her engineering project, feeling great to see her hard work paying off
+- Currently interning at a well-known engineering firm, applying what she learned in school to real projects, and feeling fulfilled by her ideas coming to life
+- Finding work-life balance during her internship has been tough, but she is trying to incorporate relaxation techniques such as yoga into her routine
+- Currently working on a prototype aimed at revolutionizing aerial surveillance, with goals to create a more productive and affordable system for emergency response and environmental monitoring
+- Recently expressed her commitment to incorporating values from her loved ones into her engineering projects, focusing on helping others and making a positive impact
+- Plans to work on projects related to renewable energy and clean water supply, aligning with her beliefs about sustainability and assisting those in need
+- Currently preparing for finals, indicating a busy academic schedule and a focus on education.

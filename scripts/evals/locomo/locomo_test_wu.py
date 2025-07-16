@@ -650,7 +650,8 @@ Keep your answer brief and focused - avoid lengthy explanations unless specifica
                 logger.info(f"Processing {len(sessions)} sessions for characters without memory: {characters_without_memory}")
                 
                 # Process sessions in parallel using MemAgent
-                session_results = self._process_sessions_parallel(sessions, characters_without_memory, self.max_workers)
+                # session_results = self._process_sessions_parallel(sessions, characters_without_memory, self.max_workers)
+                session_results = self._process_sessions_parallel(sessions, characters_without_memory, max_workers=1)
                 
                 # Log results
                 successful_sessions = sum(1 for result in session_results if result.get('success', False))
@@ -937,7 +938,7 @@ def main():
     # parser.add_argument('--memory-dir', default='memory', help='Directory for memory files')
     parser.add_argument('--memory-dir', default='memory_debug', help='Directory for memory files')
     parser.add_argument('--chat-deployment', default='gpt-4o-mini', help='Azure OpenAI chat deployment')
-    parser.add_argument('--max-workers', type=int, default=1, help='Maximum number of parallel workers for session processing')
+    parser.add_argument('--max-workers', type=int, default=3, help='Maximum number of parallel workers for session processing')
     
     args = parser.parse_args()
     

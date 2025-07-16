@@ -1,49 +1,76 @@
 ## Personal Information
 - Name: James
-- Age: Not specified
-- Occupation: Student (currently taking a course in gaming and programming)
-- Location: Not specified
-- Family: Enjoys spending time with family and has three dogs
+- Occupation: Programmer
+- Location: Stamford
+- Family: 
+  - Sister (name not mentioned)
+  - Three dogs: Daisy (a Labrador), two shepherds, and a newly adopted pup named Ned
+  - Dog named Max
+  - Mother (visited recently with her army friend)
 
 ## Personality & Characteristics
-- Enthusiastic about learning new skills
-- Motivated by setting small goals and tracking progress
-- Enjoys connecting with friends who share similar interests
-- Values teamwork and communication in gaming
-- Appreciates nature and the outdoors, finding peace in hiking and exploring
-- Passionate about football, particularly a supporter of Liverpool FC
-- Demonstrates perseverance and patience in projects, as shown in his game development experience
-- Recently inspired by positive feedback from the gaming community after streaming a game
-- Excited about creating enjoyable experiences for players
+- Motivated by creating and seeing projects come to life
+- Enjoys writing down goals in a notebook and finds satisfaction in checking them off
+- Passionate about combining gaming and storytelling in projects
+- Communicates in a friendly and enthusiastic manner
+- Finds gaming to be a refuge during tough times, describing it as therapeutic
+- Currently learning a new instrument, which he finds tough but rewarding
+- Values spending time in nature and enjoys hiking with his dogs
+- Appreciates quiet moments in nature, often bringing a book to read during walks
+- Recently expressed excitement about winning an online gaming tournament, which motivated him to keep improving
+- Enjoys photography, particularly capturing memorable moments
+- Recently developed an interest in cooking, signing up for a cooking class to learn new skills
 
 ## Relationships
-- Close friend: John
-- Romantic interest: Samantha (met at the beach on 9 August 2022)
+- Close friend: John (engages in discussions about gaming and programming)
+- Romantic interest: Samantha (met at the beach, recently asked her to be his girlfriend; they decided to move in together)
+- Plans to collaborate with John on a mobile application for dog walking and pet care
+- Offers to help John find a pet in the future
+- Expressed interest in traveling with John next year
+- Supports John's charitable activities and expresses pride in his accomplishments
+- Encouraged John in his recent volunteer work and expressed admiration for his contributions
+- Has a support system of at least two people who help him during tough times
+- Close bond with his sister and dogs, often spending quality time together
 
 ## Interests & Activities
-- Currently taking a course that combines gaming and programming
-- Recently completed a Unity strategy game inspired by strategy games like Civilization and Total War
-- Working on a football simulator project, focusing on collecting player databases
-- Playing video games on a new cutting-edge gaming system with incredible graphics
-- Enjoys playing his favorite game, **Apex Legends**
-- Exploring different types of games, specifically **RPGs** and **MOBAs**
-- Recently won an online gaming tournament (July 2022)
-- Recently became interested in extreme sports, including:
-  - Rope jumping (highest jump: 150 meters)
-  - Surfing
-- Enjoys reading, especially on cold winter days
-- Enjoys hiking with his dogs
-- Took his three dogs to the beach on 9 August 2022
-- Expressed interest in John's upcoming mobile game, a 2D adventure with puzzles and exploration
-- Recently made and released his first game for the gaming community, inspired by **The Witcher 3**
-- Recently started exploring the sports genre of gaming, specifically FIFA 23, and committed to practicing it
+- Enjoys video games, currently exploring different styles including RPGs and MOBAs
+- Recently completed a Unity strategy game, inspired by his love for strategy games like Civilization and Total War
+- Recently participated in an online gaming tournament where he won, describing it as "such an exciting experience"
+- Has been playing his favorite game, Apex Legends, describing it as "intense" with impressive graphics and fast-paced gameplay
+- Recently acquired a cutting-edge gaming system with incredible graphics
+- Loves bowling; recently achieved two strikes in a game
+- Engaged in VR gaming and finds it immersive
+- Actively shares tips, strategies, and stories with other gamers
+- Has experience in programming languages, specifically Python and C++
+- Worked on projects including a website and game mods
+- Recently created a game character inspired by a stranger he encountered while walking his dogs
+- Enjoys hiking with his dogs, appreciating nature and fresh air
+- Currently playing Civilization VI, a high-quality turn-based strategy game that challenges his strategic thinking and problem-solving skills
+- Loves pizza, particularly pepperoni, cheese, and prosciutto varieties
+- Recently visited an amusement park where he rode roller coasters, a Ferris wheel, electric cars, and buggies
+- Recently started a course that combines his passion for gaming and programming, which he describes as "fun and challenging"
+- Currently working on a new part of a football simulator, specifically focusing on collecting player databases
+- Interested in reading sci-fi and fantasy books, specifically "The Stormlight Archive," "Kingkiller Chronicle," and "The Expanse" series
+- Recently became interested in extreme sports, including rope jumping (highest jump of 150 meters) and surfing
+- Enjoys chess as a strategic game
+- Recently signed up for a cooking class, where he has made dishes like omelettes and meringue
+- Made sketches and notes from a vivid dream about a medieval castle with a labyrinth full of puzzles and traps
+- Recently started streaming games and received positive feedback from the gaming community, which inspired him to continue
+- Recently expressed excitement about his new video card and is particularly interested in playing RPGs, including Cyberpunk 2077.
+- Recently expressed interest in trying out FIFA 23, a football game that John recommended, and planned to practice before playing with him.
 
 ## Life Situation
-- Currently learning a new instrument and practicing daily
-- Excited about exploring new game genres and keeping friends updated on his gaming adventures
-- Recently participated in an online gaming tournament, winning several rounds and describing it as an exciting experience
-- Plans to travel to Toronto and Vancouver, leaving on July 11, 2022, and returning on July 20, 2022
-- Promised to bring back a souvenir for John from his trip
-- Offers support to friends, as seen in his conversation with John regarding work challenges
-- Expresses pride in his friends' achievements and community service efforts
-- Considering asking Samantha out on a date after meeting her at the beach
+- Recently adopted a puppy named Ned, which has significantly increased his happiness
+- Currently working on a personal game project inspired by childhood sketches
+- Excited about the challenge of creating his own game
+- Looking forward to future collaborations and gaming experiences with friends
+- Finds joy in connecting with others in the gaming community, emphasizing the importance of shared interests and backgrounds
+- Practices the new instrument daily and is seeing improvements
+- Visited Italy, Turkey, and Mexico; interested in future travel plans with friends
+- Recently took his dogs out for a hike, enjoying the adventure and the beautiful trails
+- Encountered a significant challenge with a project due to a bug in the code, which he resolved with the help of friends
+- Achieved a personal milestone last month by finishing a big project that involved learning a new language and handling many details, which has boosted his confidence for future projects
+- Expressed a strong passion for football, particularly supporting Liverpool, and does not miss a single match of theirs
+- Recently traveled to Nuuk, where he enjoyed the experience and brought back souvenirs for friends
+- Recently experienced a power outage in his apartment, which interrupted his gaming progress, leading him to learn the importance of saving his game frequently.
+- Recently decided to move in with Samantha, renting an apartment not far from McGee's bar, a place they both enjoy visiting.
