@@ -1094,9 +1094,6 @@ class MemAgent:
                     max_tokens=4000,
                     temperature=0.1
                 )
-                
-                print(iteration, repr(llm_response))
-                print(">"*100)
 
                 # Check if LLM response was successful
                 if not llm_response.success:

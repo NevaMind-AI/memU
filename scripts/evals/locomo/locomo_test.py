@@ -641,7 +641,8 @@ class ToolBasedMemoryTester:
                 logger.info(f"Processing {len(sessions)} sessions for characters without memory: {characters_without_memory}")
                 
                 # Process sessions in parallel using MemAgent
-                session_results = self._process_sessions_parallel(sessions, characters_without_memory, self.max_workers)
+                # session_results = self._process_sessions_parallel(sessions, characters_without_memory, self.max_workers)
+                session_results = self._process_sessions_parallel(sessions, characters_without_memory, max_workers=1)
                 
                 # Log results
                 successful_sessions = sum(1 for result in session_results if result.get('success', False))
