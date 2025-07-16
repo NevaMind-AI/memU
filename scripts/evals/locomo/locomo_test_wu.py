@@ -27,6 +27,7 @@ if not hasattr(sys, '_stdout_line_buffering_set'):
     sys._stdout_line_buffering_set = True
 
 from mem_agent import MemAgent
+from evaluate_agent import EvaluateAgent
 from memu.utils import get_logger, setup_logging
 
 # 设置带有flush的logger
@@ -64,6 +65,15 @@ class ToolBasedMemoryTester:
             memory_dir=memory_dir
         )
         
+        # Initialize EvaluateAgent for answer evaluation
+        self.evaluate_agent = EvaluateAgent(
+            azure_endpoint=azure_endpoint,
+            api_key=api_key,
+            chat_deployment=chat_deployment,
+            use_entra_id=use_entra_id,
+            api_version=api_version
+        )
+        
         self.max_workers = max_workers
         self.results = []
         self.processing_time = 0.0
@@ -88,8 +98,8 @@ class ToolBasedMemoryTester:
 
     def _log_qa_error(self, qa_index: int, question: str, generated_answer: str, standard_answer: str, 
                      category: str, retrieved_content: str = "", evidence: str = "", explanation: str = "", 
-                     session_context: str = ""):
-        """Log detailed information for incorrect QA answers"""
+                     session_context: str = "", evaluation_details: Dict = None, retrieved_events: List = None):
+        """Log detailed information for incorrect QA answers with comprehensive evaluation"""
         try:
             with open(self.error_log_file, 'a', encoding='utf-8') as f:
                 f.write(f"\n{'='*80}\n")
@@ -108,7 +118,51 @@ class ToolBasedMemoryTester:
                 
                 f.write(f"STANDARD ANSWER:\n{standard_answer}\n\n")
                 
-                f.write(f"EVALUATION EXPLANATION:\n{explanation}\n\n")
+                f.write(f"BASIC EVALUATION EXPLANATION:\n{explanation}\n\n")
+                
+                # Add comprehensive evaluation details if available
+                if evaluation_details:
+                    f.write(f"{'='*60}\n")
+                    f.write(f"COMPREHENSIVE EVALUATION RESULTS\n")
+                    f.write(f"{'='*60}\n\n")
+                    
+                    # Answer accuracy details
+                    if evaluation_details.get('answer_accuracy'):
+                        acc = evaluation_details['answer_accuracy']
+                        f.write(f"ANSWER ACCURACY:\n")
+                        f.write(f"  ✓ Correct: {acc.get('is_correct', False)}\n")
+                        f.write(f"  📝 Detailed Explanation: {acc.get('explanation', 'N/A')}\n\n")
+                    
+                    # Events evaluation details
+                    if evaluation_details.get('events_evaluation') and evaluation_details['events_evaluation'].get('success'):
+                        events_eval = evaluation_details['events_evaluation']
+                        f.write(f"RETRIEVED EVENTS EVALUATION:\n")
+                        f.write(f"  📊 Total Events: {events_eval.get('total_events', 0)}\n")
+                        f.write(f"  ✅ Relevant Events: {events_eval.get('relevant_count', 0)}\n")
+                        f.write(f"  ❌ Irrelevant Events: {events_eval.get('irrelevant_count', 0)}\n")
+                        f.write(f"  📈 Relevance Rate: {events_eval.get('relevance_rate', 0):.2%}\n\n")
+                        
+                        # Individual event relevance details
+                        event_details = events_eval.get('event_details', [])
+                        if event_details:
+                            f.write(f"  EVENT-BY-EVENT ANALYSIS:\n")
+                            for i, event_detail in enumerate(event_details[:5], 1):  # Show top 5
+                                relevance_icon = "✅" if event_detail.get('is_relevant') else "❌"
+                                f.write(f"    {relevance_icon} Event {i} (Rank {event_detail.get('rank', i)}):\n")
+                                f.write(f"      Character: {event_detail.get('character', 'Unknown')}\n")
+                                f.write(f"      Event: {event_detail.get('event', '')[:100]}...\n")
+                                f.write(f"      Relevant: {event_detail.get('is_relevant', False)}\n")
+                                f.write(f"      Explanation: {event_detail.get('explanation', 'N/A')}\n\n")
+                    
+                    # Error analysis details
+                    if evaluation_details.get('error_analysis') and evaluation_details['error_analysis'].get('performed'):
+                        error_analysis = evaluation_details['error_analysis']
+                        f.write(f"ERROR ANALYSIS:\n")
+                        f.write(f"  🔍 Error Type: {error_analysis.get('error_type', 'Unknown')}\n")
+                        f.write(f"  ⚠️ Specific Issues: {error_analysis.get('specific_issues', 'N/A')}\n")
+                        f.write(f"  🔎 Root Cause: {error_analysis.get('root_cause', 'N/A')}\n")
+                        f.write(f"  📋 Missing Information: {error_analysis.get('missing_information', 'N/A')}\n")
+                        f.write(f"  💡 Recommendations: {error_analysis.get('recommendations', 'N/A')}\n\n")
                 
                 f.write(f"{'='*80}\n")
                 
@@ -273,6 +327,7 @@ Keep your answer brief and focused - avoid lengthy explanations unless specifica
             messages = answer_result.get("messages", [])
             retrieved_contents = []
             tool_executions = []
+            search_results_for_eval = []  # Capture search results for comprehensive evaluation
             
             for message in messages:
                 if message.get("role") == "tool" and message.get("content"):
@@ -288,10 +343,19 @@ Keep your answer brief and focused - avoid lengthy explanations unless specifica
                             # Extract different types of tool results
                             if tool_result.get("success", False):
                                 # For search_relevant_events results
-                                if "relevant_events" in tool_result:
-                                    events = tool_result["relevant_events"]
+                                if "relevant_events" in tool_result or "combined_results" in tool_result:
+                                    # Store the full search result for comprehensive evaluation
+                                    search_results_for_eval.append(tool_result)
+                                    
+                                    # Extract events for display
+                                    events = tool_result.get("relevant_events") or tool_result.get("combined_results", [])
                                     if events:
-                                        events_text = "\n".join([f"Event: {event}" for event in events])
+                                        if isinstance(events, list) and events and isinstance(events[0], dict):
+                                            # New format with structured events
+                                            events_text = "\n".join([f"Event from {event.get('character', 'Unknown')}: {event.get('event', '')}" for event in events])
+                                        else:
+                                            # Old format with simple event strings
+                                            events_text = "\n".join([f"Event: {event}" for event in events])
                                         retrieved_contents.append(f"Relevant Events:\n{events_text}")
                                         tool_executions.append("search_relevant_events")
                                 
@@ -357,6 +421,36 @@ Keep your answer brief and focused - avoid lengthy explanations unless specifica
             
             # Log error details if answer is incorrect
             if not evaluation['is_correct']:
+                # Perform comprehensive evaluation for detailed error analysis
+                comprehensive_evaluation = None
+                try:
+                    # Get retrieved events from captured search results for evaluation
+                    retrieved_events_for_eval = []
+                    for search_result in search_results_for_eval:
+                        if search_result.get('success'):
+                            # Get events from combined_results or relevant_events
+                            events = search_result.get('combined_results') or search_result.get('relevant_events', [])
+                            if isinstance(events, list):
+                                retrieved_events_for_eval.extend(events)
+                    
+                    # Perform comprehensive evaluation using EvaluateAgent
+                    comprehensive_evaluation = self.evaluate_agent.comprehensive_evaluation(
+                        question=question,
+                        generated_answer=generated_answer,
+                        standard_answer=answer,
+                        retrieved_events=retrieved_events_for_eval
+                    )
+                    
+                    if comprehensive_evaluation.get('success'):
+                        logger.info(f"[QA {qa_index+1}] Comprehensive evaluation completed for error analysis")
+                    else:
+                        logger.warning(f"[QA {qa_index+1}] Comprehensive evaluation failed: {comprehensive_evaluation.get('error', 'Unknown error')}")
+                        comprehensive_evaluation = None
+                        
+                except Exception as e:
+                    logger.error(f"[QA {qa_index+1}] Failed to perform comprehensive evaluation: {e}")
+                    comprehensive_evaluation = None
+                
                 session_context = self._get_session_context(conversation_data) if conversation_data else ""
                 self._log_qa_error(
                     qa_index=qa_index,
@@ -367,9 +461,11 @@ Keep your answer brief and focused - avoid lengthy explanations unless specifica
                     retrieved_content=retrieved_content,
                     evidence=evidence_content,
                     explanation=evaluation['explanation'],
-                    session_context=session_context
+                    session_context=session_context,
+                    evaluation_details=comprehensive_evaluation,
+                    retrieved_events=retrieved_events_for_eval if 'retrieved_events_for_eval' in locals() else None
                 )
-                logger.warning(f"[QA {qa_index+1}] ✗ Incorrect answer logged to error file")
+                logger.warning(f"[QA {qa_index+1}] ✗ Incorrect answer logged to error file with comprehensive evaluation")
             
             status = "✓" if evaluation['is_correct'] else "✗"
             logger.info(f"[QA {qa_index+1}] {status} Question completed (Category: {category})")
@@ -402,7 +498,9 @@ Keep your answer brief and focused - avoid lengthy explanations unless specifica
                 retrieved_content=f"Exception prevented retrieval: {e}",
                 evidence=evidence_content,
                 explanation=f"Processing failed: {e}",
-                session_context=session_context
+                session_context=session_context,
+                evaluation_details=None,  # No evaluation details for exceptions
+                retrieved_events=None
             )
             
             return error_result
@@ -590,10 +688,10 @@ Keep your answer brief and focused - avoid lengthy explanations unless specifica
         return sessions
     
     def _evaluate_answer(self, question: str, generated_answer: str, standard_answer: str) -> Dict:
-        """Evaluate if generated answer contains standard answer content (using function calling)"""
+        """Evaluate if generated answer contains standard answer content (using EvaluateAgent)"""
         try:
-            # Use the evaluate_answer tool from MemAgent
-            result = self.mem_agent.evaluate_answer(question, generated_answer, standard_answer)
+            # Use the evaluate_answer_accuracy tool from EvaluateAgent
+            result = self.evaluate_agent.evaluate_answer_accuracy(question, generated_answer, standard_answer)
             
             if result["success"]:
                 return {

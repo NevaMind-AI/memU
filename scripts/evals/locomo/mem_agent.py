@@ -46,7 +46,6 @@ class MemAgent:
     - read_character_profile: Read complete character profile
     - read_character_events: Read character event records  
     - search_relevant_events: Search for events relevant to a query
-    - evaluate_answer: Evaluate answers using memory context
     - list_available_characters: List all available characters
     
     Memory Management:
@@ -309,31 +308,7 @@ class MemAgent:
                     }
                 }
             },
-            {
-                "type": "function",
-                "function": {
-                    "name": "evaluate_answer",
-                    "description": "Evaluate if a generated answer contains the key information from the standard answer",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "question": {
-                                "type": "string",
-                                "description": "The original question being answered"
-                            },
-                            "generated_answer": {
-                                "type": "string",
-                                "description": "The AI-generated answer to evaluate"
-                            },
-                            "standard_answer": {
-                                "type": "string",
-                                "description": "The reference/standard answer to compare against"
-                            }
-                        },
-                        "required": ["question", "generated_answer", "standard_answer"]
-                    }
-                }
-            },
+
             {
                 "type": "function",
                 "function": {
@@ -870,62 +845,7 @@ class MemAgent:
                 "updated_profile": existing_profile
             }
 
-    def evaluate_answer(self, question: str, generated_answer: str, standard_answer: str) -> Dict[str, Any]:
-        """Evaluate if a generated answer contains the key information from the standard answer"""
-        try:
-            # Load evaluation prompt
-            evaluation_prompt = self.prompt_loader.format_prompt(
-                "evaluate_answer",
-                question=question,
-                generated_answer=generated_answer,
-                standard_answer=standard_answer
-            )
-            
-            # Get evaluation from LLM
-            messages = [{"role": "user", "content": evaluation_prompt}]
-            llm_response = self.llm_client.chat_completion(messages, max_tokens=500, temperature=0.1)
-            
-            if not llm_response.success:
-                raise Exception(f"LLM evaluation failed: {llm_response.error}")
-                
-            evaluation_text = llm_response.content.strip()
-            
-            # Parse the evaluation result - look for yes/no
-            is_correct = False
-            explanation = evaluation_text
-            
-            # Simple yes/no parsing
-            text_lower = evaluation_text.lower()
-            if "yes" in text_lower:
-                is_correct = True
-            elif "no" in text_lower:
-                is_correct = False
-            else:
-                # Fallback: if neither yes nor no found, assume no
-                is_correct = False
-            
-            return {
-                "success": True,
-                "question": question,
-                "generated_answer": generated_answer,
-                "standard_answer": standard_answer,
-                "is_correct": is_correct,
-                "explanation": explanation,
-                "evaluation_text": evaluation_text
-            }
-            
-        except Exception as e:
-            logger.error(f"Failed to evaluate answer: {e}")
-            return {
-                "success": False,
-                "error": str(e),
-                "question": question,
-                "generated_answer": generated_answer,
-                "standard_answer": standard_answer,
-                "is_correct": False,
-                "explanation": f"Evaluation failed: {e}",
-                "evaluation_text": ""
-            }
+
 
     def clear_character_memory(self, characters: List[str]) -> Dict[str, Any]:
         """Clear all memory files for specified characters"""
@@ -1054,7 +974,6 @@ class MemAgent:
             "update_character_memory": self.update_character_memory,
             "analyze_session_for_events": self.analyze_session_for_events,
             "analyze_session_for_profile": self.analyze_session_for_profile,
-            "evaluate_answer": self.evaluate_answer,
             "clear_character_memory": self.clear_character_memory,
             "list_available_characters": self.list_available_characters
         }
