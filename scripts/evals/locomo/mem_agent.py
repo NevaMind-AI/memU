@@ -18,12 +18,15 @@ import re
 from pathlib import Path
 import numpy as np
 from rank_bm25 import BM25Okapi
+from difflib import SequenceMatcher
+from collections import defaultdict
 
 import dotenv
 dotenv.load_dotenv()
 
 from memu.llm import AzureOpenAIClient
 from memu.utils import get_logger, setup_logging
+from memu.memory.embeddings import get_default_embedding_client
 
 # Add prompts directory to path and import prompt loader
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'prompts'))
@@ -81,7 +84,14 @@ class MemAgent:
         # Initialize LLM client
         self.llm_client = self._init_llm_client()
         
+        # Initialize embedding client for semantic search
+        self.embedding_client = self._init_embedding_client()
+        
         logger.info(f"MemAgent initialized with memory directory: {self.memory_dir}")
+        if self.embedding_client:
+            logger.info("Embedding client initialized for semantic search")
+        else:
+            logger.warning("No embedding client available - semantic search will be skipped")
 
     def _safe_json_parse(self, json_string: str) -> Dict[str, Any]:
         """Safely parse JSON string with error handling and fixing"""
@@ -183,6 +193,20 @@ class MemAgent:
         except Exception as e:
             logger.error(f"Failed to initialize LLM client: {e}")
             raise
+
+    def _init_embedding_client(self):
+        """Initialize the embedding client for semantic search"""
+        try:
+            # Try to get default embedding client (checks environment variables)
+            embedding_client = get_default_embedding_client()
+            if embedding_client:
+                return embedding_client
+            else:
+                logger.warning("No embedding client configuration found - semantic search will be unavailable")
+                return None
+        except Exception as e:
+            logger.warning(f"Failed to initialize embedding client: {e} - semantic search will be unavailable")
+            return None
 
     def get_available_tools(self) -> List[Dict[str, Any]]:
         """Get list of available function tools"""
@@ -355,6 +379,260 @@ class MemAgent:
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(content, encoding='utf-8')
 
+    def _search_with_bm25(self, query: str, all_events: List[str], character_event_map: Dict[int, str], top_k: int = 10) -> List[Dict[str, Any]]:
+        """Search events using BM25 ranking"""
+        try:
+            # Tokenize for BM25
+            tokenized_events = [event.lower().split() for event in all_events]
+            tokenized_query = query.lower().split()
+            
+            # Initialize BM25
+            bm25 = BM25Okapi(tokenized_events)
+            
+            # Get BM25 scores
+            bm25_scores = bm25.get_scores(tokenized_query)
+            
+            # Get top results with scores and character info
+            event_scores = [(i, score) for i, score in enumerate(bm25_scores)]
+            event_scores.sort(key=lambda x: x[1], reverse=True)
+            
+            # Format results
+            results = []
+            for i, (event_idx, score) in enumerate(event_scores[:top_k]):
+                results.append({
+                    "rank": i + 1,
+                    "character": character_event_map[event_idx],
+                    "event": all_events[event_idx],
+                    "score": float(score),
+                    "method": "bm25",
+                    "relevance": "high" if score > 1.0 else "medium" if score > 0.5 else "low"
+                })
+            
+            return results
+        except Exception as e:
+            logger.error(f"BM25 search failed: {e}")
+            return []
+
+    def _search_with_string_matching(self, query: str, all_events: List[str], character_event_map: Dict[int, str], top_k: int = 10) -> List[Dict[str, Any]]:
+        """Search events using string similarity and substring matching"""
+        try:
+            query_lower = query.lower()
+            event_scores = []
+            
+            for i, event in enumerate(all_events):
+                event_lower = event.lower()
+                
+                # Calculate similarity score using multiple methods
+                similarity_scores = []
+                
+                # 1. Exact substring match (highest weight)
+                if query_lower in event_lower:
+                    substring_score = len(query_lower) / len(event_lower)
+                    similarity_scores.append(substring_score * 2.0)  # Double weight for exact matches
+                
+                # 2. Sequence matcher similarity
+                seq_similarity = SequenceMatcher(None, query_lower, event_lower).ratio()
+                similarity_scores.append(seq_similarity)
+                
+                # 3. Word overlap score
+                query_words = set(query_lower.split())
+                event_words = set(event_lower.split())
+                if query_words and event_words:
+                    overlap_score = len(query_words.intersection(event_words)) / len(query_words.union(event_words))
+                    similarity_scores.append(overlap_score)
+                
+                # 4. Individual word substring matches
+                word_match_score = 0
+                for word in query_words:
+                    if len(word) > 2:  # Only consider words longer than 2 characters
+                        for event_word in event_words:
+                            if word in event_word or event_word in word:
+                                word_match_score += 1
+                if query_words:
+                    word_match_score = word_match_score / len(query_words)
+                similarity_scores.append(word_match_score)
+                
+                # Final score is the maximum of all similarity methods
+                final_score = max(similarity_scores) if similarity_scores else 0.0
+                
+                event_scores.append((i, final_score))
+            
+            # Sort by score
+            event_scores.sort(key=lambda x: x[1], reverse=True)
+            
+            # Format results
+            results = []
+            for i, (event_idx, score) in enumerate(event_scores[:top_k]):
+                if score > 0:  # Only include events with some similarity
+                    results.append({
+                        "rank": i + 1,
+                        "character": character_event_map[event_idx],
+                        "event": all_events[event_idx],
+                        "score": float(score),
+                        "method": "string_match",
+                        "relevance": "high" if score > 0.7 else "medium" if score > 0.4 else "low"
+                    })
+            
+            return results
+        except Exception as e:
+            logger.error(f"String matching search failed: {e}")
+            return []
+
+    def _search_with_embeddings(self, query: str, all_events: List[str], character_event_map: Dict[int, str], top_k: int = 10) -> List[Dict[str, Any]]:
+        """Search events using embedding-based semantic similarity"""
+        try:
+            if not self.embedding_client:
+                logger.warning("No embedding client available for semantic search")
+                return []
+            
+            # Generate query embedding
+            query_embedding = self.embedding_client.embed(query)
+            if not query_embedding:
+                logger.warning("Failed to generate query embedding")
+                return []
+            
+            # Generate embeddings for all events
+            event_embeddings = []
+            for event in all_events:
+                try:
+                    event_embedding = self.embedding_client.embed(event)
+                    if event_embedding:
+                        event_embeddings.append(event_embedding)
+                    else:
+                        event_embeddings.append([0.0] * len(query_embedding))  # Zero vector fallback
+                except Exception as e:
+                    logger.warning(f"Failed to embed event: {e}")
+                    event_embeddings.append([0.0] * len(query_embedding))  # Zero vector fallback
+            
+            # Calculate cosine similarities
+            query_vector = np.array(query_embedding)
+            similarities = []
+            
+            for i, event_embedding in enumerate(event_embeddings):
+                try:
+                    event_vector = np.array(event_embedding)
+                    
+                    # Calculate cosine similarity
+                    query_norm = np.linalg.norm(query_vector)
+                    event_norm = np.linalg.norm(event_vector)
+                    
+                    if query_norm > 0 and event_norm > 0:
+                        similarity = np.dot(query_vector, event_vector) / (query_norm * event_norm)
+                        similarities.append((i, float(similarity)))
+                    else:
+                        similarities.append((i, 0.0))
+                except Exception as e:
+                    logger.warning(f"Failed to calculate similarity for event {i}: {e}")
+                    similarities.append((i, 0.0))
+            
+            # Sort by similarity
+            similarities.sort(key=lambda x: x[1], reverse=True)
+            
+            # Format results
+            results = []
+            for i, (event_idx, similarity) in enumerate(similarities[:top_k]):
+                if similarity > 0.1:  # Only include events with reasonable similarity
+                    results.append({
+                        "rank": i + 1,
+                        "character": character_event_map[event_idx],
+                        "event": all_events[event_idx],
+                        "score": float(similarity),
+                        "method": "embedding",
+                        "relevance": "high" if similarity > 0.8 else "medium" if similarity > 0.6 else "low"
+                    })
+            
+            return results
+        except Exception as e:
+            logger.error(f"Embedding search failed: {e}")
+            return []
+
+    def _combine_search_results(self, result_lists: List[List[Dict[str, Any]]], top_k: int = 10) -> List[Dict[str, Any]]:
+        """Combine and deduplicate results from multiple search methods"""
+        try:
+            # Use event text as key for deduplication
+            seen_events = set()
+            combined_results = []
+            
+            # Create a scoring system that considers both score and method diversity
+            event_aggregated_scores = defaultdict(list)
+            event_info = {}
+            
+            # Collect all results and aggregate scores by event
+            for method_results in result_lists:
+                for result in method_results:
+                    event_text = result["event"]
+                    event_key = (event_text, result["character"])
+                    
+                    # Store event info (use the first occurrence)
+                    if event_key not in event_info:
+                        event_info[event_key] = {
+                            "character": result["character"],
+                            "event": result["event"]
+                        }
+                    
+                    # Aggregate scores by method
+                    method = result["method"]
+                    score = result["score"]
+                    event_aggregated_scores[event_key].append({
+                        "method": method,
+                        "score": score,
+                        "rank": result["rank"]
+                    })
+            
+            # Calculate final scores for each unique event
+            final_scores = []
+            for event_key, method_scores in event_aggregated_scores.items():
+                # Calculate weighted average score
+                total_score = 0
+                method_count = len(method_scores)
+                
+                # Bonus for appearing in multiple methods
+                diversity_bonus = 0.1 * (method_count - 1)  # Bonus for each additional method
+                
+                for method_score in method_scores:
+                    # Weight different methods slightly differently
+                    method_weight = {
+                        "bm25": 1.0,
+                        "string_match": 1.1,  # Slightly prefer exact matches
+                        "embedding": 1.2       # Slightly prefer semantic matches
+                    }.get(method_score["method"], 1.0)
+                    
+                    total_score += method_score["score"] * method_weight
+                
+                # Final score is average + diversity bonus
+                final_score = (total_score / method_count) + diversity_bonus
+                
+                final_scores.append((event_key, final_score, method_scores))
+            
+            # Sort by final score
+            final_scores.sort(key=lambda x: x[1], reverse=True)
+            
+            # Format final results
+            for i, (event_key, final_score, method_scores) in enumerate(final_scores[:top_k]):
+                methods_used = [ms["method"] for ms in method_scores]
+                avg_score = sum(ms["score"] for ms in method_scores) / len(method_scores)
+                
+                combined_results.append({
+                    "rank": i + 1,
+                    "character": event_info[event_key]["character"],
+                    "event": event_info[event_key]["event"],
+                    "score": float(final_score),
+                    "avg_score": float(avg_score),
+                    "methods": methods_used,
+                    "method_count": len(methods_used),
+                    "method": "combined",
+                    "relevance": "high" if final_score > 1.0 else "medium" if final_score > 0.6 else "low"
+                })
+            
+            return combined_results
+        except Exception as e:
+            logger.error(f"Failed to combine search results: {e}")
+            # Fallback: just return first method's results
+            for result_list in result_lists:
+                if result_list:
+                    return result_list[:top_k]
+            return []
+
     def read_character_profile(self, character_name: str) -> Dict[str, Any]:
         """Read the complete character profile from memory files"""
         try:
@@ -400,7 +678,7 @@ class MemAgent:
             }
 
     def search_relevant_events(self, query: str, characters: List[str], top_k: int = 10) -> Dict[str, Any]:
-        """Search for events relevant to a query across specified characters using BM25 and semantic matching"""
+        """Search for events relevant to a query across specified characters using BM25, string matching, and embedding search"""
         try:
             all_events = []
             character_event_map = {}
@@ -421,40 +699,34 @@ class MemAgent:
                 return {
                     "success": True,
                     "query": query,
-                    "relevant_events": [],
+                    "bm25_results": [],
+                    "string_match_results": [],
+                    "embedding_results": [],
+                    "combined_results": [],
                     "total_events_searched": 0,
                     "characters_searched": characters
                 }
             
-            # Tokenize for BM25
-            tokenized_events = [event.lower().split() for event in all_events]
-            tokenized_query = query.lower().split()
+            # Method 1: BM25 Search (10 results)
+            bm25_results = self._search_with_bm25(query, all_events, character_event_map, 10)
             
-            # Initialize BM25
-            bm25 = BM25Okapi(tokenized_events)
+            # Method 2: String Matching Search (10 results) 
+            string_results = self._search_with_string_matching(query, all_events, character_event_map, 10)
             
-            # Get BM25 scores
-            bm25_scores = bm25.get_scores(tokenized_query)
+            # Method 3: Embedding Search (10 results)
+            embedding_results = self._search_with_embeddings(query, all_events, character_event_map, 10)
             
-            # Get top results with scores and character info
-            event_scores = [(i, score) for i, score in enumerate(bm25_scores)]
-            event_scores.sort(key=lambda x: x[1], reverse=True)
-            
-            # Format results
-            relevant_events = []
-            for i, (event_idx, score) in enumerate(event_scores[:top_k]):
-                relevant_events.append({
-                    "rank": i + 1,
-                    "character": character_event_map[event_idx],
-                    "event": all_events[event_idx],
-                    "score": float(score),
-                    "relevance": "high" if score > 1.0 else "medium" if score > 0.5 else "low"
-                })
+            # Combine and deduplicate results
+            combined_results = self._combine_search_results([bm25_results, string_results, embedding_results], top_k)
             
             return {
                 "success": True,
                 "query": query,
-                "relevant_events": relevant_events,
+                "bm25_results": bm25_results,
+                "string_match_results": string_results,
+                "embedding_results": embedding_results,
+                "combined_results": combined_results,
+                "relevant_events": combined_results,  # For backward compatibility
                 "total_events_searched": len(all_events),
                 "characters_searched": characters
             }
@@ -465,6 +737,10 @@ class MemAgent:
                 "success": False,
                 "error": str(e),
                 "query": query,
+                "bm25_results": [],
+                "string_match_results": [],
+                "embedding_results": [],
+                "combined_results": [],
                 "relevant_events": [],
                 "total_events_searched": 0,
                 "characters_searched": characters
@@ -609,25 +885,19 @@ class MemAgent:
                 
             evaluation_text = llm_response.content.strip()
             
-            # Parse the evaluation result
+            # Parse the evaluation result - look for yes/no
             is_correct = False
             explanation = evaluation_text
             
-            # Look for explicit judgment
-            if "CORRECT" in evaluation_text.upper():
+            # Simple yes/no parsing
+            text_lower = evaluation_text.lower()
+            if "yes" in text_lower:
                 is_correct = True
-            elif "INCORRECT" in evaluation_text.upper():
+            elif "no" in text_lower:
                 is_correct = False
             else:
-                # Fallback: look for positive/negative indicators
-                positive_indicators = ["yes", "contains", "accurate", "correct", "appropriate"]
-                negative_indicators = ["no", "missing", "incorrect", "inaccurate", "inappropriate"]
-                
-                text_lower = evaluation_text.lower()
-                positive_count = sum(1 for indicator in positive_indicators if indicator in text_lower)
-                negative_count = sum(1 for indicator in negative_indicators if indicator in text_lower)
-                
-                is_correct = positive_count > negative_count
+                # Fallback: if neither yes nor no found, assume no
+                is_correct = False
             
             return {
                 "success": True,

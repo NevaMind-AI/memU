@@ -1,11 +1,30 @@
-Record NEW event details for {character_name} from the conversation session.
+Task: Record NEW event details for {character_name} from the conversation session.
 
-Conversation:
+Instructions:
+1. Analyze the conversation to identify ALL new events, activities, and interactions involving {character_name}
+2. Group related content into coherent paragraphs for better readability
+3. Start each paragraph with the date prefix "{session_date}: "
+4. Focus only on NEW information not already present in existing events
+5. Include specific details: who, what, when, where, why
+6. Preserve exact quotes when they reveal important information
+
+Input:
+- Conversation: 
 {conversation}
-
-Existing Events:
+- Existing Events: 
 {existing_events}
+- Character: 
+{character_name}
+- Session Date: 
+{session_date}
 
-Task: Record ALL details from the conversation for {character_name} from {session_date}. Group related content into coherent paragraphs. Start each paragraph with "{session_date}: "
+Example Output:
+{session_date}: Had lunch with Sarah at the Italian restaurant downtown. Discussed the upcoming project deadline and agreed to meet again on Thursday to finalize the presentation. Sarah mentioned she might bring her colleague Mark to get his input.
 
-Only output the NEW session records:
+{session_date}: Completed the marathon training run of 15 miles despite the rain. Felt strong throughout but experienced some knee pain in the last 3 miles. Planning to rest tomorrow and see the physiotherapist on Wednesday if the pain persists.
+
+Notes:
+- Only output the NEW session records, no headers or explanations
+- Be comprehensive - capture all events, no matter how minor they seem
+- Maintain chronological order within the session
+- Use third-person perspective consistently
