@@ -1,0 +1,62 @@
+{
+  "success": true,
+  "summary": {
+    "total_samples": 1,
+    "successful_samples": 1,
+    "total_sessions": 19,
+    "sessions_processed": 0,
+    "sessions_skipped": 19,
+    "total_questions": 199,
+    "total_correct": 1,
+    "overall_accuracy": 0.005025125628140704,
+    "category_stats": {
+      "2": {
+        "total": 1,
+        "correct": 1
+      }
+    },
+    "category_accuracies": {
+      "2": 1.0
+    },
+    "total_time": 45.357086181640625,
+    "avg_time_per_sample": 45.357086181640625
+  },
+  "detailed_results": [
+    {
+      "characters": [
+        "Caroline",
+        "Melanie"
+      ],
+      "characters_with_existing_memory": [
+        "Caroline",
+        "Melanie"
+      ],
+      "characters_without_memory": [],
+      "sessions_total": 19,
+      "sessions_processed": 0,
+      "sessions_skipped": 19,
+      "questions_answered": 199,
+      "question_results": [
+        {
+          "qa_index": 0,
+          "question": "When did Caroline go to the LGBTQ support group?",
+          "generated_answer": "Caroline attended the LGBTQ support group on **7 May 2023**. She described the experience as \"so powerful\" and was particularly moved by the inspiring transgender stories shared during the session.",
+          "standard_answer": "7 May 2023",
+          "category": 2,
+          "is_correct": true,
+          "explanation": "Answer: yes",
+          "retrieved_content": "Relevant Events:\nEvent: {'rank': 1, 'character': 'Melanie', 'event': '1:33 pm on 25 August, 2023: Melanie expressed her excitement about Caroline\\'s upcoming LGBTQ art show, saying, \"Can\\'t wait to see your show - the LGBTQ community needs more platforms like this!\" This demonstrates her support for Caroline\\'s artistic endeavors and advocacy for the community.', 'score': 4.395005389518611, 'avg_score': 4.395005389518611, 'methods': ['bm25'], 'method_count': 1, 'method': 'combined', 'relevance': 'high'}\nEvent: {'rank': 2, 'character': 'Melanie', 'event': '2:31 pm on 17 July, 2023: During her conversation with Caroline, Melanie expressed enthusiasm for Caroline\\'s involvement in a mentorship program for LGBTQ youth, stating, \"Wow, Caroline! It\\'s great that you\\'re helping out.\" This highlights her support for Caroline\\'s advocacy work.', 'score': 3.644404673704677, 'avg_score': 3.644404673704677, 'methods': ['bm25'], 'method_count': 1, 'method': 'combined', 'relevance': 'high'}\nEvent: {'rank': 3, 'character': 'Caroline', 'event': '1:56 pm on 8 May, 2023: Caroline attended an LGBTQ support group on 7 May, 2023, which she described as \"so powerful.\" She was particularly moved by the inspiring transgender stories shared during the session, expressing her happiness and gratitude for the support she received.', 'score': 3.3088385351366822, 'avg_score': 3.018563289239458, 'methods': ['bm25', 'string_match', 'embedding'], 'method_count': 3, 'method': 'combined', 'relevance': 'high'}\nEvent: {'rank': 4, 'character': 'Caroline', 'event': '1:33 pm on 25 August, 2023: Caroline expressed her excitement about an upcoming LGBTQ art show next month where she will showcase her paintings. She is \"super stoked\" about featuring LGBTQ artists and their talents, aiming to spread understanding and acceptance through the event.', 'score': 3.215902062551165, 'avg_score': 3.215902062551165, 'methods': ['bm25'], 'method_count': 1, 'method': 'combined', 'relevance': 'high'}\nEvent: {'rank': 5, 'character': 'Caroline', 'event': '2:24 pm on 14 August, 2023: Caroline expressed her gratitude for the opportunity to share her experiences through art, highlighting its healing power and the connection it fosters with her identity. She appreciated Melanie\\'s support and interest in her work, saying, \"Thanks, Melanie. It means a lot to share this with you.\"\\n1:50 pm on 17 August, 2023: Caroline reflected on a recent hiking experience where she encountered a group of religious conservatives who upset her with their closed-mindedness. This incident made her realize the ongoing work needed for LGBTQ rights, but she expressed gratitude for the supportive people in her life, stating, \"It\\'s been so helpful to have people around me who accept and support me, so I know I\\'ll be ok!\"', 'score': 3.085559007359883, 'avg_score': 2.918892340693216, 'methods': ['bm25', 'string_match'], 'method_count': 2, 'method': 'combined', 'relevance': 'high'}\nEvent: {'rank': 6, 'character': 'Caroline', 'event': \"8:56 pm on 20 July, 2023: Caroline shared that her group has regular meetings where they plan events and campaigns to support each other and advocate for rights. She emphasized the importance of having their own platform to be themselves and support others' rights.\", 'score': 3.048445548742342, 'avg_score': 2.8664393043718093, 'methods': ['bm25', 'embedding'], 'method_count': 2, 'method': 'combined', 'relevance': 'high'}\nEvent: {'rank': 7, 'character': 'Caroline', 'event': '1:56 pm on 8 May, 2023: Caroline mentioned that the support group has made her feel accepted and has given her the courage to embrace herself. This experience has motivated her to continue her education and explore career options, which she finds \"pretty exciting.\"', 'score': 2.8321872535591774, 'avg_score': 2.6488456661968693, 'methods': ['bm25', 'embedding'], 'method_count': 2, 'method': 'combined', 'relevance': 'high'}\nEvent: {'rank': 8, 'character': 'Caroline', 'event': '2:31 pm on 17 July, 2023: Caroline is excited about an upcoming LGBTQ art show next month where she will showcase her paintings. She shared a preview of her artwork, explaining that it was inspired by a visit to an LGBTQ center, aiming to capture \"everyone\\'s unity and strength.\"\\n8:56 pm on 20 July, 2023: Caroline joined a new LGBTQ activist group called \\'Connected LGBTQ Activists\\' last Tuesday. She expressed excitement about meeting \"so many cool people who are as passionate as I am about rights and community support.\" Caroline feels that she is giving her voice and making a real difference, stating, \"It\\'s just great, you know?\"', 'score': 2.673361064087547, 'avg_score': 2.3854514554772095, 'methods': ['bm25', 'string_match', 'embedding'], 'method_count': 3, 'method': 'combined', 'relevance': 'high'}\nEvent: {'rank': 9, 'character': 'Caroline', 'event': '1:50 pm on 17 August, 2023: Caroline and Melanie discussed planning a special outing for the summer, suggesting it would be a great opportunity for the two of them to catch up and explore nature together. Caroline expressed enthusiasm about creating memories, stating, \"Life\\'s all about creating memories. Can\\'t wait for the trip!\"\\n3:31 pm on 23 August, 2023: Caroline took a significant step towards her dream of becoming a mom by applying to adoption agencies this week. She expressed her excitement and nervousness about this big decision, stating, \"It\\'s a big decision, but I think I\\'m ready to give all my love to a child.\" Caroline received valuable support from an adoption advice and assistance group she attended, which she described as \"great.\"', 'score': 2.1680564570611423, 'avg_score': 2.0013897903944757, 'methods': ['bm25', 'string_match'], 'method_count': 2, 'method': 'combined', 'relevance': 'high'}\nEvent: {'rank': 10, 'character': 'Caroline', 'event': '8:18 pm on 6 July, 2023: Caroline shared that her friends and family have been instrumental in her transition, providing her with love, guidance, and acceptance. She expressed her gratitude, stating, \"I couldn\\'t have done it without them,\" emphasizing the importance of her support network during this time.\\n4:33 pm on 12 July, 2023: Caroline attended an LGBTQ conference two days ago, describing it as \"really special.\" She had the opportunity to meet and connect with individuals who have gone through similar journeys, appreciating the welcoming environment that made her feel \"totally accepted.\" This experience reinforced her gratitude for the LGBTQ community and highlighted the importance of fighting for trans rights and spreading awareness.', 'score': 2.114782040190894, 'avg_score': 1.933299956160237, 'methods': ['bm25', 'embedding'], 'method_count': 2, 'method': 'combined', 'relevance': 'high'}",
+          "evidence": "[1:56 pm on 8 May, 2023] Caroline: I went to a LGBTQ support group yesterday and it was so powerful."
+        }
+      ],
+      "category_stats": {
+        "2": {
+          "total": 1,
+          "correct": 1
+        }
+      },
+      "processing_time": 45.32591104507446,
+      "success": true
+    }
+  ]
+}

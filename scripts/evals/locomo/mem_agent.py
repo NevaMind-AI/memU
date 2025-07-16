@@ -12,6 +12,7 @@ Combines all memory operations in a single agent:
 import json
 import os
 import sys
+import threading
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 import re
@@ -77,6 +78,9 @@ class MemAgent:
         
         # Ensure memory directory exists
         self.memory_dir.mkdir(exist_ok=True)
+        
+        # Initialize thread lock for file operations
+        self._file_lock = threading.Lock()
         
         # Initialize prompt loader
         self.prompt_loader = get_prompt_loader()
@@ -374,10 +378,11 @@ class MemAgent:
         return ""
 
     def _write_memory_file(self, character_name: str, memory_type: str, content: str):
-        """Write content to a character's memory file"""
+        """Write content to a character's memory file (thread-safe)"""
         file_path = self._get_memory_file_path(character_name, memory_type)
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        file_path.write_text(content, encoding='utf-8')
+        with self._file_lock:
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(content, encoding='utf-8')
 
     def _search_with_bm25(self, query: str, all_events: List[str], character_event_map: Dict[int, str], top_k: int = 10) -> List[Dict[str, Any]]:
         """Search events using BM25 ranking"""
@@ -775,7 +780,7 @@ class MemAgent:
                         
                         # Update events file
                         if new_events.strip():
-                            updated_events = existing_events + "\n" + new_events if existing_events.strip() else new_events
+                            updated_events = existing_events + "\n\n" + new_events if existing_events.strip() else new_events
                             self._write_memory_file(character_name, "events", updated_events)
                             
                             # Analyze session for profile updates
@@ -935,13 +940,14 @@ class MemAgent:
                     profile_deleted = False
                     events_deleted = False
                     
-                    if profile_path.exists():
-                        profile_path.unlink()
-                        profile_deleted = True
-                    
-                    if events_path.exists():
-                        events_path.unlink()
-                        events_deleted = True
+                    with self._file_lock:
+                        if profile_path.exists():
+                            profile_path.unlink()
+                            profile_deleted = True
+                        
+                        if events_path.exists():
+                            events_path.unlink()
+                            events_deleted = True
                     
                     clear_results[character_name] = {
                         "success": True,
@@ -1089,6 +1095,9 @@ class MemAgent:
                     temperature=0.1
                 )
                 
+                print(iteration, repr(llm_response))
+                print(">"*100)
+
                 # Check if LLM response was successful
                 if not llm_response.success:
                     raise Exception(f"LLM call failed: {llm_response.error}")
