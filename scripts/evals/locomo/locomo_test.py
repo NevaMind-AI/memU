@@ -1,11 +1,14 @@
 """
-Enhanced Memory Test with Unified MemAgent
+Enhanced Memory Test with Specialized Agents
 
-This test uses MemAgent to:
-1. Process each session sequentially using memory management tools
-2. For each session:
-   - Update character memory using memory management tools
-3. Use MemAgent for QA testing with category statistics
+This test uses specialized agents:
+1. MemAgent for memory management:
+   - Process each session sequentially using memory management tools
+   - Update character memory from conversation sessions
+2. ResponseAgent for question answering:
+   - Answer QA questions using character memory data
+   - Provide comprehensive responses with context information
+3. Display category-based accuracy statistics
 """
 
 import json
@@ -27,6 +30,7 @@ if not hasattr(sys, '_stdout_line_buffering_set'):
     sys._stdout_line_buffering_set = True
 
 from mem_agent import MemAgent
+from response_agent import ResponseAgent
 from evaluate_agent import EvaluateAgent
 from memu.utils import get_logger, setup_logging
 
@@ -55,8 +59,18 @@ class ToolBasedMemoryTester:
         max_workers: int = 3
     ):
         """Initialize Tool-based Memory Tester"""
-        # Initialize unified MemAgent
+        # Initialize MemAgent for memory management
         self.mem_agent = MemAgent(
+            azure_endpoint=azure_endpoint,
+            api_key=api_key,
+            chat_deployment=chat_deployment,
+            use_entra_id=use_entra_id,
+            api_version=api_version,
+            memory_dir=memory_dir
+        )
+        
+        # Initialize ResponseAgent for question answering
+        self.response_agent = ResponseAgent(
             azure_endpoint=azure_endpoint,
             api_key=api_key,
             chat_deployment=chat_deployment,
@@ -83,7 +97,7 @@ class ToolBasedMemoryTester:
         self.error_log_file = f"qa_error_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         self._init_error_log()
         
-        logger.info(f"Tool-based Memory Tester initialized with unified MemAgent (max_workers={max_workers})")
+        logger.info(f"Tool-based Memory Tester initialized with MemAgent (memory) and ResponseAgent (QA) (max_workers={max_workers})")
         logger.info(f"QA error log file: {self.error_log_file}")
 
     def _init_error_log(self):
@@ -300,103 +314,52 @@ class ToolBasedMemoryTester:
         return session_results
 
     def _process_single_qa(self, qa_data: Tuple[str, str, str, int], characters: List[str], evidence_content: str = "", conversation_data: Dict = None) -> Dict:
-        """Process a single QA question using MemAgent"""
+        """Process a single QA question using ResponseAgent"""
         question, answer, category, qa_index = qa_data
         
         try:
             logger.info(f"[QA {qa_index+1}] Answering question in category '{category}': {question[:100]}...")
             
-            # Use MemAgent to answer the question with memory context
-            answer_prompt = f"""
-            Please answer the following question using the available character memory.
-            Use the search_relevant_events and read_character_profile functions to gather relevant information.
+            # Use ResponseAgent to answer the question directly
+            answer_result = self.response_agent.execute_tool("answer_question", 
+                                                           question=question,
+                                                           characters=characters)
             
-            Question: {question}
-            Characters to search: {characters}
-            
-            Please provide a concise and direct answer based on the memory information.
-            Keep your answer brief and focused - avoid lengthy explanations unless specifically needed.
-            """
-            
-            answer_result = self.mem_agent.execute(answer_prompt)
-            
-            # Extract detailed information from the result
-            messages = answer_result.get("messages", [])
-            retrieved_contents = []
-            tool_executions = []
-            search_results_for_eval = []  # Capture search results for comprehensive evaluation
-            
-            for message in messages:
-                if message.get("role") == "tool" and message.get("content"):
-                    try:
-                        tool_result_content = message["content"]
-                        # Try to parse as JSON to get structured tool result
-                        if tool_result_content.startswith('{') and tool_result_content.endswith('}'):
-                            tool_result = json.loads(tool_result_content)
-                            
-                            # Extract different types of tool results
-                            if tool_result.get("success", False):
-                                # For search_relevant_events results
-                                if "relevant_events" in tool_result or "combined_results" in tool_result:
-                                    # Store the full search result for comprehensive evaluation
-                                    search_results_for_eval.append(tool_result)
-                                    
-                                    # Extract events for display
-                                    events = tool_result.get("relevant_events") or tool_result.get("combined_results", [])
-                                    if events:
-                                        if isinstance(events, list) and events and isinstance(events[0], dict):
-                                            # New format with structured events
-                                            events_text = "\n".join([f"Event from {event.get('character', 'Unknown')}: {event.get('event', '')}" for event in events])
-                                        else:
-                                            # Old format with simple event strings
-                                            events_text = "\n".join([f"Event: {event}" for event in events])
-                                        retrieved_contents.append(f"Relevant Events:\n{events_text}")
-                                        tool_executions.append("search_relevant_events")
-                                
-                                # For read_character_profile results  
-                                elif "profile_content" in tool_result:
-                                    profile = tool_result["profile_content"]
-                                    if profile:
-                                        retrieved_contents.append(f"Character Profile:\n{profile}")
-                                        tool_executions.append("read_character_profile")
-                                
-                                # For read_character_events results
-                                elif "events_content" in tool_result:
-                                    events = tool_result["events_content"]
-                                    if events:
-                                        retrieved_contents.append(f"Character Events:\n{events}")
-                                        tool_executions.append("read_character_events")
-                                
-                                # For any other successful tool result, capture the full content
-                                elif any(key in tool_result for key in ["content", "result", "data"]):
-                                    content = tool_result.get("content") or tool_result.get("result") or tool_result.get("data")
-                                    if content:
-                                        retrieved_contents.append(f"Tool Result:\n{content}")
-                                        tool_executions.append("unknown_tool")
-                            else:
-                                # Tool failed, but still capture the error for context
-                                error_msg = tool_result.get("error", "Unknown tool error")
-                                retrieved_contents.append(f"Tool Error:\n{error_msg}")
-                        else:
-                            # Non-JSON content, treat as plain text result
-                            retrieved_contents.append(f"Tool Output:\n{tool_result_content}")
-                            
-                    except json.JSONDecodeError:
-                        # Content is not JSON, treat as plain text
-                        retrieved_contents.append(f"Tool Output:\n{tool_result_content}")
-                    except Exception as e:
-                        logger.warning(f"Failed to parse tool result: {e}")
-                        retrieved_contents.append(f"Tool Output (parse error):\n{tool_result_content}")
-            
-            # Combine all retrieved content
-            retrieved_content = "\n\n---\n\n".join(retrieved_contents) if retrieved_contents else "No content retrieved from tools"
-            
+            # Extract information from ResponseAgent result
             if answer_result.get("success", False):
-                generated_answer = answer_result.get("final_response", "No answer generated")
+                generated_answer = answer_result.get("answer", "No answer generated")
+                context_used = answer_result.get("context_used", {})
+                
+                # Build retrieved content summary from context used
+                retrieved_contents = []
+                
+                characters_searched = context_used.get("characters_searched", [])
+                profiles_found = context_used.get("profiles_found", [])
+                events_count = context_used.get("events_count", 0)
+                search_keywords = context_used.get("search_keywords", [])
+                
+                if profiles_found:
+                    retrieved_contents.append(f"Character Profiles Used: {', '.join(profiles_found)}")
+                
+                if events_count > 0:
+                    retrieved_contents.append(f"Relevant Events Found: {events_count} events")
+                    if search_keywords:
+                        retrieved_contents.append(f"Search Keywords: {', '.join(search_keywords)}")
+                
+                if characters_searched:
+                    retrieved_contents.append(f"Characters Searched: {', '.join(characters_searched)}")
+                
+                retrieved_content = "\n".join(retrieved_contents) if retrieved_contents else "ResponseAgent provided direct answer"
+                
+                # For comprehensive evaluation, we need to get the actual events
+                # This is a simplified approach - we could enhance this by having ResponseAgent return more details
+                search_results_for_eval = []
+                
             else:
                 error_msg = answer_result.get('error', 'Failed to generate answer')
                 generated_answer = f"Error: {error_msg}"
-                retrieved_content = f"Error occurred during retrieval: {error_msg}"
+                retrieved_content = f"Error occurred during answer generation: {error_msg}"
+                search_results_for_eval = []
             
             # Evaluate the answer
             evaluation = self._evaluate_answer(question, generated_answer, answer)
@@ -415,34 +378,25 @@ class ToolBasedMemoryTester:
             
             # Log error details if answer is incorrect
             if not evaluation['is_correct']:
-                # Perform comprehensive evaluation for detailed error analysis
+                # For comprehensive evaluation, we'll use basic error analysis
+                # Since ResponseAgent abstracts the detailed retrieval process
                 comprehensive_evaluation = None
                 try:
-                    # Get retrieved events from captured search results for evaluation
-                    retrieved_events_for_eval = []
-                    for search_result in search_results_for_eval:
-                        if search_result.get('success'):
-                            # Get events from combined_results or relevant_events
-                            events = search_result.get('combined_results') or search_result.get('relevant_events', [])
-                            if isinstance(events, list):
-                                retrieved_events_for_eval.extend(events)
-                    
-                    # Perform comprehensive evaluation using EvaluateAgent
-                    comprehensive_evaluation = self.evaluate_agent.comprehensive_evaluation(
+                    # Perform basic error analysis using EvaluateAgent
+                    comprehensive_evaluation = self.evaluate_agent.analyze_answer_errors(
                         question=question,
                         generated_answer=generated_answer,
-                        standard_answer=answer,
-                        retrieved_events=retrieved_events_for_eval
+                        standard_answer=answer
                     )
                     
                     if comprehensive_evaluation.get('success'):
-                        logger.info(f"[QA {qa_index+1}] Comprehensive evaluation completed for error analysis")
+                        logger.info(f"[QA {qa_index+1}] Error analysis completed")
                     else:
-                        logger.warning(f"[QA {qa_index+1}] Comprehensive evaluation failed: {comprehensive_evaluation.get('error', 'Unknown error')}")
+                        logger.warning(f"[QA {qa_index+1}] Error analysis failed: {comprehensive_evaluation.get('error', 'Unknown error')}")
                         comprehensive_evaluation = None
                         
                 except Exception as e:
-                    logger.error(f"[QA {qa_index+1}] Failed to perform comprehensive evaluation: {e}")
+                    logger.error(f"[QA {qa_index+1}] Failed to perform error analysis: {e}")
                     comprehensive_evaluation = None
                 
                 session_context = self._get_session_context(conversation_data) if conversation_data else ""

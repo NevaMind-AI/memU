@@ -1,12 +1,15 @@
 """
-MemAgent - Unified Memory Agent
+MemAgent - Memory Management Agent
 
-This implementation provides comprehensive memory management capabilities through function tools
-that can be used by AI agents to maintain, query, and analyze character memories.
+This implementation provides memory management capabilities through function tools
+that can be used by AI agents to maintain and store character memories.
 
-Combines all memory operations in a single agent:
-- Memory Retrieval: read profiles, events, search, evaluate answers
-- Memory Management: update memories, analyze conversations, clear data
+Focuses on memory storage and management operations:
+- Memory Storage: update character memories from conversation sessions
+- Memory Management: clear memory data when needed
+- Memory Analysis: analyze conversations to extract events and profile updates
+
+Note: For memory retrieval and question answering, use ResponseAgent instead.
 """
 
 import json
@@ -38,24 +41,22 @@ logger = setup_logging(__name__, enable_flush=True)
 
 class MemAgent:
     """
-    Unified Memory Agent
+    Memory Management Agent
     
-    Provides comprehensive memory management capabilities through callable functions:
-    
-    Memory Retrieval:
-    - read_character_profile: Read complete character profile
-    - read_character_events: Read character event records  
-    - search_relevant_events: Search for events relevant to a query
-    - list_available_characters: List all available characters
+    Provides memory management capabilities through callable functions:
     
     Memory Management:
-    - update_character_memory: Update memory files from conversation
-    - analyze_session_for_events: Extract events from conversations
-    - analyze_session_for_profile: Update profile from conversations
+    - update_character_memory: Update memory files from conversation sessions
     - clear_character_memory: Clear memory files for characters
     
+    Internal Memory Processing:
+    - analyze_session_for_events: Extract events from conversations
+    - analyze_session_for_profile: Update profile from conversations
+    
     Agent Execution:
-    - execute: Process user messages with function calling
+    - execute: Process user messages with function calling for memory management tasks
+    
+    Note: For memory retrieval and question answering, use ResponseAgent instead.
     """
     
     def __init__(
@@ -212,69 +213,8 @@ class MemAgent:
             return None
 
     def get_available_tools(self) -> List[Dict[str, Any]]:
-        """Get list of available function tools"""
+        """Get list of available memory management tools"""
         return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "read_character_profile",
-                    "description": "Read the complete character profile from memory files",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "character_name": {
-                                "type": "string",
-                                "description": "Name of the character to read profile for"
-                            }
-                        },
-                        "required": ["character_name"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "read_character_events",
-                    "description": "Read the character's event records from memory files",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "character_name": {
-                                "type": "string",
-                                "description": "Name of the character to read events for"
-                            }
-                        },
-                        "required": ["character_name"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "search_relevant_events",
-                    "description": "Search for events relevant to a query across specified characters using BM25 and semantic matching",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "Search query to find relevant events"
-                            },
-                            "characters": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "List of character names to search through"
-                            },
-                            "top_k": {
-                                "type": "integer",
-                                "description": "Number of most relevant events to return",
-                                "default": 10
-                            }
-                        },
-                        "required": ["query", "characters"]
-                    }
-                }
-            },
             {
                 "type": "function",
                 "function": {
@@ -308,7 +248,6 @@ class MemAgent:
                     }
                 }
             },
-
             {
                 "type": "function",
                 "function": {
@@ -324,18 +263,6 @@ class MemAgent:
                             }
                         },
                         "required": ["characters"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "list_available_characters",
-                    "description": "List all characters that have memory files available",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
                     }
                 }
             }
@@ -966,16 +893,12 @@ class MemAgent:
         return llm_response.content.strip()
 
     def execute_tool(self, tool_name: str, **kwargs) -> Dict[str, Any]:
-        """Execute a specific tool by name"""
+        """Execute a specific memory management tool by name"""
         tool_methods = {
-            "read_character_profile": self.read_character_profile,
-            "read_character_events": self.read_character_events,
-            "search_relevant_events": self.search_relevant_events,
             "update_character_memory": self.update_character_memory,
             "analyze_session_for_events": self.analyze_session_for_events,
             "analyze_session_for_profile": self.analyze_session_for_profile,
-            "clear_character_memory": self.clear_character_memory,
-            "list_available_characters": self.list_available_characters
+            "clear_character_memory": self.clear_character_memory
         }
         
         if tool_name not in tool_methods:
@@ -1000,7 +923,18 @@ class MemAgent:
         """Execute user message with function calling support"""
         try:
             tools = self.get_available_tools()
-            messages = [{"role": "user", "content": user_message}]
+            
+            # Load the memory system message
+            try:
+                system_message = self.prompt_loader.get_prompt("memory_system_prompt")
+            except:
+                # Fallback if memory_system_prompt doesn't exist
+                system_message = "You are a memory management assistant. Use the available tools to update and manage character memory data."
+            
+            messages = [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message}
+            ]
             
             iteration = 0
             while iteration < max_iterations:
