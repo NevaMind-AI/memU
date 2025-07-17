@@ -14,6 +14,7 @@ This test uses specialized agents:
 import json
 import os
 import sys
+import ast
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import time
@@ -37,6 +38,7 @@ from memu.utils import get_logger, setup_logging
 # 设置带有flush的logger
 logger = setup_logging(__name__, enable_flush=True)
 
+args_global = None
 
 class ToolBasedMemoryTester:
     """
@@ -415,7 +417,7 @@ class ToolBasedMemoryTester:
             }
             
             # Log error details if answer is incorrect
-            if not evaluation['is_correct']:
+            if not evaluation['is_correct'] or getattr(args_global, 'always_analyze', False):
                 # For comprehensive evaluation, we'll use the full comprehensive evaluation
                 # Since ResponseAgent abstracts the detailed retrieval process
                 comprehensive_evaluation = None
@@ -716,13 +718,22 @@ class ToolBasedMemoryTester:
             if speaker_b and speaker_b not in characters:
                 characters.append(speaker_b)
             
-            # Check if memory files already exist for these characters
-            memory_status = self._check_memory_exists(characters)
-            characters_with_memory = [char for char, has_memory in memory_status.items() if has_memory]
-            characters_without_memory = [char for char, has_memory in memory_status.items() if not has_memory]
+
+            if getattr(args_global, 'force_resum', False):
+                logger.info("Force redo the memory summarization")
+                self.mem_agent.clear_character_memory(characters)
+
+                characters_with_memory = []
+                characters_without_memory = characters
+            else:
+
+                # Check if memory files already exist for these characters
+                memory_status = self._check_memory_exists(characters)
+                characters_with_memory = [char for char, has_memory in memory_status.items() if has_memory]
+                characters_without_memory = [char for char, has_memory in memory_status.items() if not has_memory]
             
-            if characters_with_memory:
-                logger.info(f"Memory files already exist for characters: {characters_with_memory}, skipping session processing")
+                if characters_with_memory:
+                    logger.info(f"Memory files already exist for characters: {characters_with_memory}, skipping session processing")
             
             session_results = []
             sessions = self._extract_session_data(conversation_data)
@@ -750,6 +761,11 @@ class ToolBasedMemoryTester:
                         'skipped': True,
                         'reason': 'Memory already exists'
                     })
+
+
+            if getattr(args_global, 'no_eval', False):
+                assert False
+
             
             # Answer QA questions in parallel
             question_results = self._process_qa_parallel(qa_data, characters, conversation_data, self.max_workers)
@@ -838,7 +854,7 @@ class ToolBasedMemoryTester:
         
         print(f"{'='*60}\n")
 
-    def run_test(self, data_file: str, sample_limit: Optional[int] = None) -> Dict:
+    def run_test(self, data_file: str, sample_use: Optional[str] = None) -> Dict:
         """Run the memory test on the dataset"""
         start_time = time.time()
         
@@ -847,8 +863,44 @@ class ToolBasedMemoryTester:
             with open(data_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            if sample_limit:
-                data = data[:sample_limit]
+            # Filter data based on sample_use indices
+            if sample_use:
+                try:
+                    # Parse the string as either a number or a list of indices
+                    parsed_value = ast.literal_eval(sample_use)
+                    
+                    if isinstance(parsed_value, int):
+                        # Single number: use first N samples (like original sample_limit)
+                        if parsed_value <= 0:
+                            raise ValueError("sample_use number must be positive")
+                        
+                        sample_count = min(parsed_value, len(data))
+                        data = data[:sample_count]
+                        logger.info(f"Using first {sample_count} samples (indices 0-{sample_count-1})")
+                        
+                        if parsed_value > len(data):
+                            logger.warning(f"Requested {parsed_value} samples but only {len(data)} available")
+                            
+                    elif isinstance(parsed_value, list):
+                        # List of indices: use specific samples
+                        sample_indices = parsed_value
+                        
+                        # Filter valid indices and select corresponding samples
+                        valid_indices = [i for i in sample_indices if isinstance(i, int) and 0 <= i < len(data)]
+                        data = [data[i] for i in valid_indices]
+                        
+                        logger.info(f"Using samples at specific indices: {valid_indices}")
+                        if len(valid_indices) < len(sample_indices):
+                            invalid_indices = [i for i in sample_indices if i not in valid_indices]
+                            logger.warning(f"Ignored invalid/out-of-range indices: {invalid_indices}")
+                    else:
+                        raise ValueError("sample_use must be either an integer or a list of integers")
+                        
+                except Exception as e:
+                    logger.error(f"Failed to parse sample_use '{sample_use}': {e}")
+                    logger.info("Using all samples instead")
+            else:
+                logger.info("No sample_use specified, using all samples")
             
             logger.info(f"Starting test with {len(data)} samples")
             
@@ -1015,12 +1067,20 @@ def main():
     
     parser = argparse.ArgumentParser(description='Enhanced Memory Test with Unified MemAgent')
     parser.add_argument('--data-file', default='data/locomo10.json', help='Path to test data file')
-    parser.add_argument('--sample-limit', type=int, help='Limit number of samples to process')
+    parser.add_argument('--sample-use', type=str, help='Sample indices to use. Can be a single number (e.g., "5" for first 5 samples) or a list (e.g., "[0, 1, 3, 5]" for specific indices). If not provided, use all samples.')
     parser.add_argument('--memory-dir', default='memory', help='Directory for memory files')
-    parser.add_argument('--chat-deployment', default='gpt-4.1-mini-2', help='Azure OpenAI chat deployment')
-    parser.add_argument('--max-workers', type=int, default=3, help='Maximum number of parallel workers for session processing')
+    # parser.add_argument('--chat-deployment', default='gpt-4.1-mini-2', help='Azure OpenAI chat deployment')
+    parser.add_argument('--chat-deployment', default='DeepSeek-V3-0324', help='Azure OpenAI chat deployment')
+    parser.add_argument('--max-workers', type=int, default=5, help='Maximum number of parallel workers for session processing')
+
+    parser.add_argument('--force-resum', action='store_true', help='Force to redo the memory summarization')
+    parser.add_argument('--no-eval', action='store_true', help='Do not evaluate the results')
+    parser.add_argument('--always-analyze', action='store_true', help='Always run result analysis')
     
     args = parser.parse_args()
+
+    global args_global
+    args_global = args
     
     # Initialize tester
     tester = ToolBasedMemoryTester(
@@ -1031,7 +1091,7 @@ def main():
     
     # Run test
     logger.info("Starting Enhanced Memory Test with Unified MemAgent")
-    results = tester.run_test(args.data_file, args.sample_limit)
+    results = tester.run_test(args.data_file, args.sample_use)
     
     if results['success']:
         # Print results

@@ -31,6 +31,7 @@ dotenv.load_dotenv()
 from memu.llm import AzureOpenAIClient
 from memu.utils import get_logger, setup_logging
 from memu.memory.embeddings import get_default_embedding_client
+from llm_factory import create_llm_client
 
 # Add prompts directory to path and import prompt loader
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'prompts'))
@@ -187,10 +188,10 @@ class MemAgent:
     def _init_llm_client(self):
         """Initialize the LLM client"""
         try:
-            return AzureOpenAIClient(
+            return create_llm_client(
+                chat_deployment=self.chat_deployment,
                 azure_endpoint=self.azure_endpoint,
                 api_key=self.api_key,
-                chat_deployment=self.chat_deployment,
                 use_entra_id=self.use_entra_id,
                 api_version=self.api_version
             )
@@ -674,11 +675,22 @@ class MemAgent:
                     
                     # Analyze session for new events
                     events_result = self.analyze_session_for_events(
-                        character_name, conversation, session_date, existing_events
+                        # character_name, conversation, session_date, existing_events
+                        character_name, conversation, session_date, ""
                     )
                     
                     if events_result["success"]:
                         new_events = events_result["new_events"]
+
+
+
+                        print('>'*100)
+                        print(new_events)
+                        print('<'*100)
+
+
+
+
                         
                         # Update events file
                         if new_events.strip():
@@ -866,6 +878,10 @@ class MemAgent:
             existing_events=existing_events
         )
         
+        print('>'*100)
+        print(events_prompt)
+        print('<'*100)
+
         messages = [{"role": "user", "content": events_prompt}]
         llm_response = self.llm_client.chat_completion(messages, max_tokens=4000, temperature=0.3)
         

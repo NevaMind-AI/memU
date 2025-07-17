@@ -25,6 +25,7 @@ dotenv.load_dotenv()
 
 from memu.llm import AzureOpenAIClient
 from memu.utils import get_logger, setup_logging
+from llm_factory import create_llm_client
 
 # Add prompts directory to path and import prompt loader
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'prompts'))
@@ -75,10 +76,10 @@ class ResponseAgent:
     def _init_llm_client(self):
         """Initialize the LLM client"""
         try:
-            return AzureOpenAIClient(
+            return create_llm_client(
+                chat_deployment=self.chat_deployment,
                 azure_endpoint=self.azure_endpoint,
                 api_key=self.api_key,
-                chat_deployment=self.chat_deployment,
                 use_entra_id=self.use_entra_id,
                 api_version=self.api_version
             )
@@ -697,6 +698,7 @@ Instructions:
    - Note any gaps or limitations in the available information
    - Plan your approach to answering
    - **IMPORTANT**: Look for multiple answers that may be scattered across different events
+   - **IMPORTANT**: Think of the time carefully, the time of an event can be relative to when it is mentioned by the speaker, you need to find out the real time of the event
 
 2. Then, provide your final answer using <result>...</result> tags:
    - Give a complete, accurate answer based on the available information
