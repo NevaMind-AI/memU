@@ -44,46 +44,56 @@ Star MemU to get notified about new releases and join our growing community of A
 
 ---
 
+## 📈 Performance Benchmark
+
+MemU outperforms other memory solutions in multiple reasoning tasks.
+
+| Model       | Avg. Score | Multi-Hop | Open Domain | Single-Hop | Temporal Reasoning |
+|-------------|------------|-----------|-------------|------------|---------------------|
+| **OpenAI**  | 0.5275     | 0.6028    | 0.3299      | 0.6183     | 0.2825              |
+| **MemOS**   | **0.7331** | **0.6430** | **0.5521**   | **0.7844** | **0.7321**          |
+| **Improvement** | **+38.98%** | **+6.67%** | **+67.35%** | **+26.86%** | **+159.15%**       |
+
+
+---
+
 ## ✨ Key Features
 
 <div align="center">
 
-### 🧠 **Intelligent Memory System**
+### 🧠 **Specialized for AI companion**
 ![Memory Demo](assets/memory-demo.gif)
 *Automatic profile updates and event tracking across conversations*
+#### user reminder
+#### important event
+#### user profile
+#### memory ranking
+#### forget memory
 
-### 🤖 **Multi-LLM Integration** 
-![LLM Integration](assets/llm-integration.gif)
-*Support for 10+ providers: OpenAI, Anthropic, Google Gemini, Azure OpenAI, and more*
 
-### 🔍 **Advanced Semantic Search**
+
+
+
+### 🔍 **Retrieval Fast**
 ![Search Demo](assets/search-demo.gif)
-*Vector-based conversation retrieval with intelligent context understanding*
 
-### 🎯 **Psychological Modeling**
+
+### 🎯 **Extension Framework**
 ![Psychology Demo](assets/psychology-demo.gif)
-*Theory of Mind analysis and behavioral insights for sophisticated AI interactions*
+
+
+
+
+### **Self Evolvement**
+
 
 </div>
+
+
 
 ---
-
-## 📊 Feature Comparison
-
-<div align="center">
-
-| Feature | **MemU** | mem0 | LangChain Memory | Custom Memory |
-|---------|----------|------|------------------|---------------|
-| 🎯 **Programming Approach** | API + Framework | API-oriented | Code-based | Custom Implementation |
-| 🤖 **Multi-LLM Support** | **10+ Providers** | Limited | Framework Dependent | Manual Integration |
-| 🔍 **Semantic Search** | ✅ **Advanced** | ✅ Basic | ❌ | Manual |
-| 👤 **Profile Management** | ✅ **Automatic** | ✅ Basic | ❌ | Manual |
-| 📚 **Event Tracking** | ✅ **Comprehensive** | ❌ | ❌ | Manual |
-| 🧠 **Psychological Modeling** | ✅ **Theory of Mind** | ❌ | ❌ | Manual |
-| 🗄️ **Production Database** | **PostgreSQL** | Multiple Options | Framework Dependent | Custom |
-| ⚡ **Easy Setup** | ✅ **pip install** | ✅ | Framework Setup | Complex |
-
-</div>
+## 🤖 **Memory as documents** 
+![LLM Integration](assets/llm-integration.gif)
 
 ---
 
@@ -95,7 +105,7 @@ Star MemU to get notified about new releases and join our growing community of A
 
 ```bash
 # Install MemU with all features
-pip install memu[all]
+pip install memu-py
 ```
 
 ### **3-Line Demo**
