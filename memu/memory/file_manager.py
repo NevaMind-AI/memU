@@ -2,7 +2,13 @@
 File Manager for Memory Operations
 
 This module provides file-based memory management for character profiles and events.
-Supports reading from and writing to profile.md and event.md files.
+Supports reading from and writing to multiple memory file types:
+- profile.md: Character profile information  
+- event.md: Character event records
+- reminder.md: Important reminders and todo items
+- important_event.md: Significant life events and milestones
+- interests.md: Hobbies, interests, and preferences
+- study.md: Learning goals, courses, and educational content
 """
 
 import os
@@ -19,10 +25,24 @@ class MemoryFileManager:
     """
     File-based memory management for character profiles and events.
     
-    Manages reading/writing of:
+    Manages reading/writing of multiple memory file types:
     - profile.md: Character profile information  
     - event.md: Character event records
+    - reminder.md: Important reminders and todo items
+    - important_event.md: Significant life events and milestones
+    - interests.md: Hobbies, interests, and preferences
+    - study.md: Learning goals, courses, and educational content
     """
+    
+    # Define all supported memory types
+    MEMORY_TYPES = [
+        "profile",
+        "event", 
+        "reminder",
+        "important_event",
+        "interests",
+        "study"
+    ]
     
     def __init__(self, memory_dir: str = "memory"):
         """
@@ -36,124 +56,169 @@ class MemoryFileManager:
         self.memory_dir.mkdir(exist_ok=True)
         
         logger.info(f"MemoryFileManager initialized, memory directory: {self.memory_dir}")
+        logger.info(f"Supported memory types: {', '.join(self.MEMORY_TYPES)}")
     
     def _get_memory_file_path(self, character_name: str, memory_type: str) -> Path:
         """Get memory file path for a character and memory type"""
         return self.memory_dir / f"{character_name.lower()}_{memory_type}.md"
     
+    def _validate_memory_type(self, memory_type: str) -> bool:
+        """Validate if memory type is supported"""
+        return memory_type in self.MEMORY_TYPES
+    
+    def read_memory_file(self, character_name: str, memory_type: str) -> str:
+        """
+        Generic method to read any memory file type
+        
+        Args:
+            character_name: Name of the character
+            memory_type: Type of memory file (profile, event, reminder, etc.)
+            
+        Returns:
+            Memory content as string
+        """
+        if not self._validate_memory_type(memory_type):
+            logger.error(f"Invalid memory type: {memory_type}. Supported types: {self.MEMORY_TYPES}")
+            return ""
+            
+        try:
+            file_path = self._get_memory_file_path(character_name, memory_type)
+            if file_path.exists():
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                logger.debug(f"Read {memory_type} for {character_name}: {len(content)} chars")
+                return content
+            else:
+                logger.debug(f"No {memory_type} file found for {character_name}")
+                return ""
+        except Exception as e:
+            logger.error(f"Error reading {memory_type} for {character_name}: {e}")
+            return ""
+
+    def write_memory_file(self, character_name: str, memory_type: str, content: str) -> bool:
+        """
+        Generic method to write any memory file type
+        
+        Args:
+            character_name: Name of the character
+            memory_type: Type of memory file (profile, event, reminder, etc.)
+            content: Content to write
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._validate_memory_type(memory_type):
+            logger.error(f"Invalid memory type: {memory_type}. Supported types: {self.MEMORY_TYPES}")
+            return False
+            
+        try:
+            file_path = self._get_memory_file_path(character_name, memory_type)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            logger.info(f"Updated {memory_type} for {character_name}: {len(content)} chars")
+            return True
+        except Exception as e:
+            logger.error(f"Error writing {memory_type} for {character_name}: {e}")
+            return False
+
+    def append_memory_file(self, character_name: str, memory_type: str, new_content: str) -> bool:
+        """
+        Generic method to append content to any memory file type
+        
+        Args:
+            character_name: Name of the character
+            memory_type: Type of memory file (profile, event, reminder, etc.)
+            new_content: New content to append
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._validate_memory_type(memory_type):
+            logger.error(f"Invalid memory type: {memory_type}. Supported types: {self.MEMORY_TYPES}")
+            return False
+            
+        try:
+            existing_content = self.read_memory_file(character_name, memory_type)
+            if existing_content.strip():
+                combined_content = existing_content + "\n\n" + new_content
+            else:
+                combined_content = new_content
+            
+            return self.write_memory_file(character_name, memory_type, combined_content)
+        except Exception as e:
+            logger.error(f"Error appending {memory_type} for {character_name}: {e}")
+            return False
+
+    # Legacy methods for backward compatibility
     def read_profile(self, character_name: str) -> str:
-        """
-        Read character profile from profile.md file
-        
-        Args:
-            character_name: Name of the character
-            
-        Returns:
-            Profile content as string
-        """
-        try:
-            file_path = self._get_memory_file_path(character_name, "profile")
-            if file_path.exists():
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read().strip()
-                logger.debug(f"Read profile for {character_name}: {len(content)} chars")
-                return content
-            else:
-                logger.debug(f"No profile file found for {character_name}")
-                return ""
-        except Exception as e:
-            logger.error(f"Error reading profile for {character_name}: {e}")
-            return ""
-    
+        """Read character profile from profile.md file"""
+        return self.read_memory_file(character_name, "profile")
+
     def write_profile(self, character_name: str, content: str) -> bool:
-        """
-        Write character profile to profile.md file
-        
-        Args:
-            character_name: Name of the character
-            content: Profile content to write
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            file_path = self._get_memory_file_path(character_name, "profile")
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            logger.info(f"Updated profile for {character_name}: {len(content)} chars")
-            return True
-        except Exception as e:
-            logger.error(f"Error writing profile for {character_name}: {e}")
-            return False
-    
+        """Write character profile to profile.md file"""
+        return self.write_memory_file(character_name, "profile", content)
+
     def read_events(self, character_name: str) -> str:
-        """
-        Read character events from event.md file
-        
-        Args:
-            character_name: Name of the character
-            
-        Returns:
-            Events content as string
-        """
-        try:
-            file_path = self._get_memory_file_path(character_name, "event")
-            if file_path.exists():
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read().strip()
-                logger.debug(f"Read events for {character_name}: {len(content)} chars")
-                return content
-            else:
-                logger.debug(f"No events file found for {character_name}")
-                return ""
-        except Exception as e:
-            logger.error(f"Error reading events for {character_name}: {e}")
-            return ""
-    
+        """Read character events from event.md file"""
+        return self.read_memory_file(character_name, "event")
+
     def write_events(self, character_name: str, content: str) -> bool:
-        """
-        Write character events to event.md file
-        
-        Args:
-            character_name: Name of the character
-            content: Events content to write
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            file_path = self._get_memory_file_path(character_name, "event")
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-            logger.info(f"Updated events for {character_name}: {len(content)} chars")
-            return True
-        except Exception as e:
-            logger.error(f"Error writing events for {character_name}: {e}")
-            return False
-    
+        """Write character events to event.md file"""
+        return self.write_memory_file(character_name, "event", content)
+
     def append_events(self, character_name: str, new_events: str) -> bool:
-        """
-        Append new events to existing event.md file
-        
-        Args:
-            character_name: Name of the character
-            new_events: New events content to append
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            existing_events = self.read_events(character_name)
-            if existing_events.strip():
-                combined_events = existing_events + "\n\n" + new_events
-            else:
-                combined_events = new_events
-            
-            return self.write_events(character_name, combined_events)
-        except Exception as e:
-            logger.error(f"Error appending events for {character_name}: {e}")
-            return False
-    
+        """Append new events to existing event.md file"""
+        return self.append_memory_file(character_name, "event", new_events)
+
+    # New methods for additional memory types
+    def read_reminders(self, character_name: str) -> str:
+        """Read character reminders from reminder.md file"""
+        return self.read_memory_file(character_name, "reminder")
+
+    def write_reminders(self, character_name: str, content: str) -> bool:
+        """Write character reminders to reminder.md file"""
+        return self.write_memory_file(character_name, "reminder", content)
+
+    def append_reminders(self, character_name: str, new_reminders: str) -> bool:
+        """Append new reminders to existing reminder.md file"""
+        return self.append_memory_file(character_name, "reminder", new_reminders)
+
+    def read_important_events(self, character_name: str) -> str:
+        """Read character important events from important_event.md file"""
+        return self.read_memory_file(character_name, "important_event")
+
+    def write_important_events(self, character_name: str, content: str) -> bool:
+        """Write character important events to important_event.md file"""
+        return self.write_memory_file(character_name, "important_event", content)
+
+    def append_important_events(self, character_name: str, new_events: str) -> bool:
+        """Append new important events to existing important_event.md file"""
+        return self.append_memory_file(character_name, "important_event", new_events)
+
+    def read_interests(self, character_name: str) -> str:
+        """Read character interests from interests.md file"""
+        return self.read_memory_file(character_name, "interests")
+
+    def write_interests(self, character_name: str, content: str) -> bool:
+        """Write character interests to interests.md file"""
+        return self.write_memory_file(character_name, "interests", content)
+
+    def append_interests(self, character_name: str, new_interests: str) -> bool:
+        """Append new interests to existing interests.md file"""
+        return self.append_memory_file(character_name, "interests", new_interests)
+
+    def read_study(self, character_name: str) -> str:
+        """Read character study information from study.md file"""
+        return self.read_memory_file(character_name, "study")
+
+    def write_study(self, character_name: str, content: str) -> bool:
+        """Write character study information to study.md file"""
+        return self.write_memory_file(character_name, "study", content)
+
+    def append_study(self, character_name: str, new_study: str) -> bool:
+        """Append new study information to existing study.md file"""
+        return self.append_memory_file(character_name, "study", new_study)
+
     def list_characters(self) -> List[str]:
         """
         List all characters that have memory files
@@ -189,7 +254,7 @@ class MemoryFileManager:
         """
         results = {}
         
-        for memory_type in ["profile", "event"]:
+        for memory_type in self.MEMORY_TYPES:
             try:
                 file_path = self._get_memory_file_path(character_name, memory_type)
                 if file_path.exists():
@@ -216,29 +281,47 @@ class MemoryFileManager:
             Dict with character information
         """
         try:
-            profile_path = self._get_memory_file_path(character_name, "profile")
-            event_path = self._get_memory_file_path(character_name, "event")
-            
             info = {
                 "character_name": character_name,
-                "has_profile": profile_path.exists() and profile_path.stat().st_size > 0,
-                "has_events": event_path.exists() and event_path.stat().st_size > 0,
-                "profile_size": profile_path.stat().st_size if profile_path.exists() else 0,
-                "events_size": event_path.stat().st_size if event_path.exists() else 0,
             }
             
-            # Add modification times if files exist
-            if profile_path.exists():
-                info["profile_modified"] = datetime.fromtimestamp(profile_path.stat().st_mtime).isoformat()
-            if event_path.exists():
-                info["events_modified"] = datetime.fromtimestamp(event_path.stat().st_mtime).isoformat()
+            # Check each memory type
+            for memory_type in self.MEMORY_TYPES:
+                file_path = self._get_memory_file_path(character_name, memory_type)
+                has_file = file_path.exists() and file_path.stat().st_size > 0
+                file_size = file_path.stat().st_size if file_path.exists() else 0
+                
+                info[f"has_{memory_type}"] = has_file
+                info[f"{memory_type}_size"] = file_size
+                
+                # Add modification time if file exists
+                if file_path.exists():
+                    info[f"{memory_type}_modified"] = datetime.fromtimestamp(file_path.stat().st_mtime).isoformat()
             
             return info
         except Exception as e:
             logger.error(f"Error getting info for {character_name}: {e}")
-            return {
+            error_info = {
                 "character_name": character_name,
-                "has_profile": False,
-                "has_events": False,
                 "error": str(e)
-            } 
+            }
+            # Add default values for all memory types
+            for memory_type in self.MEMORY_TYPES:
+                error_info[f"has_{memory_type}"] = False
+                error_info[f"{memory_type}_size"] = 0
+            return error_info
+
+    def get_all_memory_content(self, character_name: str) -> Dict[str, str]:
+        """
+        Get all memory content for a character
+        
+        Args:
+            character_name: Name of the character
+            
+        Returns:
+            Dict with all memory content by type
+        """
+        content = {}
+        for memory_type in self.MEMORY_TYPES:
+            content[memory_type] = self.read_memory_file(character_name, memory_type)
+        return content 

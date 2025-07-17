@@ -22,15 +22,14 @@ from .llm import LLMResponse  # LLM response object
 from .llm import OpenAIClient  # OpenAI implementation
 
 # Core Memory system - Hybrid storage (file + database)
-from .memory import EventMemory  # Event memory component
-from .memory import Memory  # Simple file-based Memory class
-from .memory import MemoryAgent  # Agent-based memory management
-from .memory import MemoryFileManager  # File operations for memory
-from .memory import MemoryDatabaseManager  # Database operations with PostgreSQL + pgvector
-from .memory import ProfileMemory  # Profile memory component
-from .memory import EmbeddingClient  # Vector embedding client
-from .memory import create_embedding_client  # Embedding client factory
-from .memory import get_default_embedding_client  # Default embedding client getter
+from .memory import ProfileMemory, EventMemory  
+from .memory.base import Memory, ProfileMemory, EventMemory, ReminderMemory, ImportantEventMemory, InterestsMemory, StudyMemory 
+from .memory import MemoryAgent 
+from .memory import MemoryFileManager 
+from .memory import MemoryDatabaseManager 
+from .memory import EmbeddingClient
+from .memory import create_embedding_client  
+from .memory import get_default_embedding_client 
 
 # Prompts system
 from .prompts import PromptLoader  # Prompt loading utilities
@@ -81,6 +80,10 @@ __all__ = [
     # Memory components
     "ProfileMemory",  # Profile memory component
     "EventMemory",  # Event memory component
+    "ReminderMemory",  # Reminder memory component
+    "ImportantEventMemory",  # Important event memory component
+    "InterestsMemory",  # Interests memory component
+    "StudyMemory",  # Study memory component
     # Embedding support
     "EmbeddingClient",  # Vector embedding client
     "create_embedding_client",  # Embedding client factory

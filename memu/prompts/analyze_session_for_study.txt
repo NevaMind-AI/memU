@@ -1,0 +1,62 @@
+Task: Extract and organize learning goals, educational activities, courses, and study-related information for {character_name} from the conversation session.
+
+Instructions:
+1. Analyze the conversation to identify NEW learning goals, educational activities, and study information involving {character_name}
+2. Focus on formal and informal learning, skill development, and educational pursuits
+3. Include specific courses, certifications, books, or learning platforms when mentioned
+4. Only include NEW study information not already present in existing study records
+5. Organize information in a structured format showing learning progress and goals
+
+Types of study information to extract:
+- Current courses and educational programs
+- Learning goals and objectives
+- Books and educational materials being studied
+- Certifications and credentials pursued
+- Skills being developed or practiced
+- Online learning platforms and courses
+- Study schedules and learning habits
+- Educational achievements and progress
+- Mentorship and learning relationships
+- Professional development activities
+- Research interests and projects
+
+Input:
+- Conversation: 
+{conversation}
+- Existing Study Information: 
+{existing_study}
+- Character: 
+{character_name}
+- Session Date: 
+{session_date}
+
+Example Output:
+## Current Learning Goals
+- Complete AWS Solutions Architect certification by June 2024
+- Learn advanced React patterns and state management
+- Study machine learning algorithms and implementation
+
+## Courses & Certifications
+- Enrolled in "Deep Learning Specialization" on Coursera (Progress: 40%)
+- AWS Certified Developer Associate exam scheduled for May 15th
+- Taking "Advanced Python Programming" at local community college
+
+## Books & Resources
+- Currently reading "Clean Architecture" by Robert Martin
+- Using "Hands-On Machine Learning" textbook for ML concepts
+- Following online tutorials on Kubernetes deployment
+
+## Study Schedule & Habits
+- Daily coding practice: 1 hour every morning
+- Weekend project work: building portfolio applications
+- Monthly study group meetings with colleagues
+
+Output Format:
+- Use clear category headers with ## when applicable
+- Use bullet points starting with "- " for each study item
+- Include progress indicators, dates, or timeframes when mentioned
+- Group related learning activities under appropriate categories
+- Be specific about courses, books, platforms, or methods mentioned
+- If no new study information is found, return an empty response
+
+New Study Information: 

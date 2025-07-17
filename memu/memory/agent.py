@@ -11,10 +11,14 @@ This agent handles memory management operations through function tools:
 import json
 import os
 import sys
+import threading
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 import numpy as np
 from rank_bm25 import BM25Okapi
+import re
+from difflib import SequenceMatcher
+from collections import defaultdict
 
 from ..llm import BaseLLMClient
 from ..utils import get_logger
@@ -62,6 +66,9 @@ class MemoryAgent:
         self.memory_dir = Path(memory_dir)
         self.use_database = use_database
         
+        # Initialize thread lock for file operations
+        self._file_lock = threading.Lock()
+        
         # Initialize storage manager
         if use_database:
             self.storage_manager = MemoryDatabaseManager(**db_kwargs)
@@ -88,9 +95,96 @@ class MemoryAgent:
         logger.info(f"Memory Agent initialized with {storage_type} storage")
         logger.info(f"Prompts directory: {prompts_dir}")
     
+    def _safe_json_parse(self, json_string: str) -> Dict[str, Any]:
+        """Safely parse JSON string with error handling and fixing"""
+        if not json_string or not isinstance(json_string, str):
+            logger.warning(f"Invalid JSON input: {type(json_string)}")
+            return {}
+        
+        # Try direct parsing first
+        try:
+            return json.loads(json_string)
+        except json.JSONDecodeError as e:
+            logger.warning(f"JSON parse error: {e}")
+            
+            # Try to fix common JSON issues
+            try:
+                # Remove potential trailing commas
+                fixed_json = json_string.strip()
+                
+                # Fix unterminated strings by finding the last complete JSON structure
+                if "Unterminated string" in str(e):
+                    # Find the last valid opening brace
+                    last_brace = fixed_json.rfind('{')
+                    if last_brace != -1:
+                        # Try to find a matching closing brace or add one
+                        brace_count = 0
+                        valid_end = len(fixed_json)
+                        
+                        for i in range(last_brace, len(fixed_json)):
+                            if fixed_json[i] == '{':
+                                brace_count += 1
+                            elif fixed_json[i] == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    valid_end = i + 1
+                                    break
+                        
+                        if brace_count > 0:
+                            # Add missing closing braces
+                            fixed_json = fixed_json[:valid_end] + '}' * brace_count
+                
+                # Try parsing the fixed JSON
+                return json.loads(fixed_json)
+                
+            except Exception as fix_error:
+                logger.error(f"Failed to fix JSON: {fix_error}")
+                
+                # Last resort: try to extract key-value pairs manually
+                try:
+                    return self._extract_json_manually(json_string)
+                except Exception as manual_error:
+                    logger.error(f"Manual JSON extraction failed: {manual_error}")
+                    return {}
+
+    def _extract_json_manually(self, json_string: str) -> Dict[str, Any]:
+        """Manually extract key-value pairs from malformed JSON"""
+        result = {}
+        
+        # Look for common patterns like "key": "value"
+        import re
+        
+        # Pattern for string values
+        string_pattern = r'"(\w+)"\s*:\s*"([^"]*)"'
+        matches = re.findall(string_pattern, json_string)
+        for key, value in matches:
+            result[key] = value
+        
+        # Pattern for array values
+        array_pattern = r'"(\w+)"\s*:\s*\[(.*?)\]'
+        array_matches = re.findall(array_pattern, json_string)
+        for key, array_content in array_matches:
+            try:
+                # Try to parse the array content
+                array_value = json.loads(f'[{array_content}]')
+                result[key] = array_value
+            except:
+                # Split by comma as fallback
+                items = [item.strip().strip('"') for item in array_content.split(',')]
+                result[key] = items
+        
+        # Pattern for number values
+        number_pattern = r'"(\w+)"\s*:\s*(\d+)'
+        number_matches = re.findall(number_pattern, json_string)
+        for key, value in number_matches:
+            result[key] = int(value)
+        
+        logger.info(f"Manually extracted JSON: {result}")
+        return result
+    
     def get_available_tools(self) -> List[Dict[str, Any]]:
         """Get list of available memory tools"""
-        return [
+        tools = [
             {
                 "type": "function",
                 "function": {
@@ -128,6 +222,96 @@ class MemoryAgent:
             {
                 "type": "function",
                 "function": {
+                    "name": "read_character_reminders",
+                    "description": "Read all reminders and todo items for a character",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "character_name": {
+                                "type": "string",
+                                "description": "Name of the character to read reminders for"
+                            }
+                        },
+                        "required": ["character_name"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_character_important_events",
+                    "description": "Read important life events and milestones for a character",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "character_name": {
+                                "type": "string",
+                                "description": "Name of the character to read important events for"
+                            }
+                        },
+                        "required": ["character_name"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_character_interests",
+                    "description": "Read interests, hobbies, and preferences for a character",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "character_name": {
+                                "type": "string",
+                                "description": "Name of the character to read interests for"
+                            }
+                        },
+                        "required": ["character_name"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_character_study",
+                    "description": "Read study information, learning goals, and educational content for a character",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "character_name": {
+                                "type": "string",
+                                "description": "Name of the character to read study information for"
+                            }
+                        },
+                        "required": ["character_name"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "read_memory_file",
+                    "description": "Read any memory file type for a character (profile, event, reminder, important_event, interests, study)",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "character_name": {
+                                "type": "string",
+                                "description": "Name of the character"
+                            },
+                            "memory_type": {
+                                "type": "string",
+                                "description": "Type of memory file to read",
+                                "enum": ["profile", "event", "reminder", "important_event", "interests", "study"]
+                            }
+                        },
+                        "required": ["character_name", "memory_type"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "update_character_memory",
                     "description": "Update character memory files from conversation session",
                     "parameters": {
@@ -148,6 +332,37 @@ class MemoryAgent:
                             }
                         },
                         "required": ["character_name", "conversation"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "update_memory_file",
+                    "description": "Update a specific memory file type for a character",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "character_name": {
+                                "type": "string",
+                                "description": "Name of the character"
+                            },
+                            "memory_type": {
+                                "type": "string",
+                                "description": "Type of memory file to update",
+                                "enum": ["profile", "event", "reminder", "important_event", "interests", "study"]
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "New content to write to the file"
+                            },
+                            "append": {
+                                "type": "boolean",
+                                "description": "Whether to append to existing content (true) or replace it (false)",
+                                "default": False
+                            }
+                        },
+                        "required": ["character_name", "memory_type", "content"]
                     }
                 }
             },
@@ -195,7 +410,7 @@ class MemoryAgent:
                 "type": "function",
                 "function": {
                     "name": "clear_character_memory",
-                    "description": "Clear memory files for a specific character",
+                    "description": "Clear all memory files for a character",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -226,8 +441,8 @@ class MemoryAgent:
                 }
             }
         ]
-        
-        # Add vector search tool if using database storage
+
+        # Add database-specific tools if using database storage
         if self.use_database:
             tools.append({
                 "type": "function",
@@ -237,14 +452,24 @@ class MemoryAgent:
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "query": {"type": "string", "description": "Search query text"},
-                            "content_type": {
-                                "type": "string", 
-                                "description": "Filter by content type",
-                                "enum": ["profile", "event", "mind"]
+                            "query": {
+                                "type": "string",
+                                "description": "Search query"
                             },
-                            "character_name": {"type": "string", "description": "Filter by character name"},
-                            "limit": {"type": "integer", "description": "Maximum number of results", "default": 10}
+                            "content_type": {
+                                "type": "string",
+                                "description": "Type of content to search (optional)",
+                                "enum": ["profile", "event", "reminder", "important_event", "interests", "study"]
+                            },
+                            "character_name": {
+                                "type": "string",
+                                "description": "Character name to limit search to (optional)"
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Maximum number of results",
+                                "default": 10
+                            }
                         },
                         "required": ["query"]
                     }
@@ -288,7 +513,125 @@ class MemoryAgent:
                 "error": str(e),
                 "character_name": character_name
             }
-    
+
+    def read_character_reminders(self, character_name: str) -> Dict[str, Any]:
+        """Tool: Read character reminders and todo items"""
+        try:
+            if hasattr(self.storage_manager, 'read_reminders'):
+                reminders_content = self.storage_manager.read_reminders(character_name)
+            else:
+                # Fallback for database storage
+                reminders_content = self.storage_manager.read_memory_file(character_name, "reminder")
+            return {
+                "success": True,
+                "character_name": character_name,
+                "reminders_content": reminders_content,
+                "has_reminders": bool(reminders_content.strip())
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "character_name": character_name
+            }
+
+    def read_character_important_events(self, character_name: str) -> Dict[str, Any]:
+        """Tool: Read character important events and milestones"""
+        try:
+            if hasattr(self.storage_manager, 'read_important_events'):
+                important_events_content = self.storage_manager.read_important_events(character_name)
+            else:
+                # Fallback for database storage
+                important_events_content = self.storage_manager.read_memory_file(character_name, "important_event")
+            return {
+                "success": True,
+                "character_name": character_name,
+                "important_events_content": important_events_content,
+                "has_important_events": bool(important_events_content.strip())
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "character_name": character_name
+            }
+
+    def read_character_interests(self, character_name: str) -> Dict[str, Any]:
+        """Tool: Read character interests, hobbies, and preferences"""
+        try:
+            if hasattr(self.storage_manager, 'read_interests'):
+                interests_content = self.storage_manager.read_interests(character_name)
+            else:
+                # Fallback for database storage
+                interests_content = self.storage_manager.read_memory_file(character_name, "interests")
+            return {
+                "success": True,
+                "character_name": character_name,
+                "interests_content": interests_content,
+                "has_interests": bool(interests_content.strip())
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "character_name": character_name
+            }
+
+    def read_character_study(self, character_name: str) -> Dict[str, Any]:
+        """Tool: Read character study information, learning goals, and educational content"""
+        try:
+            if hasattr(self.storage_manager, 'read_study'):
+                study_content = self.storage_manager.read_study(character_name)
+            else:
+                # Fallback for database storage
+                study_content = self.storage_manager.read_memory_file(character_name, "study")
+            return {
+                "success": True,
+                "character_name": character_name,
+                "study_content": study_content,
+                "has_study": bool(study_content.strip())
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "character_name": character_name
+            }
+
+    def read_memory_file(self, character_name: str, memory_type: str) -> Dict[str, Any]:
+        """Tool: Read any memory file type for a character"""
+        try:
+            if hasattr(self.storage_manager, 'read_memory_file'):
+                content = self.storage_manager.read_memory_file(character_name, memory_type)
+            else:
+                # Fallback to specific methods based on memory type
+                if memory_type == "profile":
+                    content = self.storage_manager.read_profile(character_name)
+                elif memory_type == "event":
+                    content = self.storage_manager.read_events(character_name)
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Memory type '{memory_type}' not supported by storage manager",
+                        "character_name": character_name,
+                        "memory_type": memory_type
+                    }
+            
+            return {
+                "success": True,
+                "character_name": character_name,
+                "memory_type": memory_type,
+                "content": content,
+                "has_content": bool(content.strip())
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "character_name": character_name,
+                "memory_type": memory_type
+            }
+
     def update_character_memory(self, character_name: str, conversation: str, session_date: str = "") -> Dict[str, Any]:
         """Tool: Update character memory from conversation"""
         try:
@@ -299,36 +642,128 @@ class MemoryAgent:
                     "character_name": character_name
                 }
             
-            # Read existing memory
+            # Read existing memory for all file types
             existing_profile = self.storage_manager.read_profile(character_name)
             existing_events = self.storage_manager.read_events(character_name)
             
-            # Update events first
+            # Read existing memory for new file types (with fallback for compatibility)
+            existing_reminders = ""
+            existing_important_events = ""
+            existing_interests = ""
+            existing_study = ""
+            
+            if hasattr(self.storage_manager, 'read_reminders'):
+                existing_reminders = self.storage_manager.read_reminders(character_name)
+                existing_important_events = self.storage_manager.read_important_events(character_name)
+                existing_interests = self.storage_manager.read_interests(character_name)
+                existing_study = self.storage_manager.read_study(character_name)
+            elif hasattr(self.storage_manager, 'read_memory_file'):
+                existing_reminders = self.storage_manager.read_memory_file(character_name, "reminder")
+                existing_important_events = self.storage_manager.read_memory_file(character_name, "important_event")
+                existing_interests = self.storage_manager.read_memory_file(character_name, "interests")
+                existing_study = self.storage_manager.read_memory_file(character_name, "study")
+            
+            # Analyze conversation for all memory types
             new_events = self._analyze_session_for_events(
                 character_name, conversation, session_date, existing_events
             )
             
-            success_events = True
-            if new_events.strip():
-                success_events = self.storage_manager.append_events(character_name, new_events)
-                
-            # Update profile based on conversation and new events
+            new_reminders = self._analyze_session_for_reminders(
+                character_name, conversation, session_date, existing_reminders
+            )
+            
+            new_important_events = self._analyze_session_for_important_events(
+                character_name, conversation, session_date, existing_important_events
+            )
+            
+            new_interests = self._analyze_session_for_interests(
+                character_name, conversation, session_date, existing_interests
+            )
+            
+            new_study = self._analyze_session_for_study(
+                character_name, conversation, session_date, existing_study
+            )
+            
+            # Update profile based on conversation and new information
             updated_profile = self._analyze_session_for_profile(
                 character_name, conversation, existing_profile, new_events
             )
             
+            # Update all memory files
+            success_results = {}
+            
+            # Update events
+            success_events = True
+            if new_events.strip():
+                success_events = self.storage_manager.append_events(character_name, new_events)
+            success_results["events"] = success_events
+                
+            # Update profile
             success_profile = True
             if updated_profile.strip() and updated_profile != existing_profile:
                 success_profile = self.storage_manager.write_profile(character_name, updated_profile)
+            success_results["profile"] = success_profile
+            
+            # Update new memory types if storage manager supports them
+            if hasattr(self.storage_manager, 'append_reminders') or hasattr(self.storage_manager, 'append_memory_file'):
+                # Update reminders
+                success_reminders = True
+                if new_reminders.strip():
+                    if hasattr(self.storage_manager, 'append_reminders'):
+                        success_reminders = self.storage_manager.append_reminders(character_name, new_reminders)
+                    else:
+                        success_reminders = self.storage_manager.append_memory_file(character_name, "reminder", new_reminders)
+                success_results["reminders"] = success_reminders
+                
+                # Update important events
+                success_important_events = True
+                if new_important_events.strip():
+                    if hasattr(self.storage_manager, 'append_important_events'):
+                        success_important_events = self.storage_manager.append_important_events(character_name, new_important_events)
+                    else:
+                        success_important_events = self.storage_manager.append_memory_file(character_name, "important_event", new_important_events)
+                success_results["important_events"] = success_important_events
+                
+                # Update interests
+                success_interests = True
+                if new_interests.strip():
+                    if hasattr(self.storage_manager, 'append_interests'):
+                        success_interests = self.storage_manager.append_interests(character_name, new_interests)
+                    else:
+                        success_interests = self.storage_manager.append_memory_file(character_name, "interests", new_interests)
+                success_results["interests"] = success_interests
+                
+                # Update study information
+                success_study = True
+                if new_study.strip():
+                    if hasattr(self.storage_manager, 'append_study'):
+                        success_study = self.storage_manager.append_study(character_name, new_study)
+                    else:
+                        success_study = self.storage_manager.append_memory_file(character_name, "study", new_study)
+                success_results["study"] = success_study
+            
+            # Calculate overall success
+            overall_success = all(success_results.values())
             
             return {
-                "success": success_events and success_profile,
+                "success": overall_success,
                 "character_name": character_name,
                 "session_date": session_date,
+                "update_results": success_results,
                 "profile_updated": success_profile and updated_profile != existing_profile,
                 "events_updated": success_events and bool(new_events.strip()),
-                "new_events": new_events,
-                "updated_profile": updated_profile if updated_profile != existing_profile else ""
+                "reminders_updated": success_results.get("reminders", False) and bool(new_reminders.strip()),
+                "important_events_updated": success_results.get("important_events", False) and bool(new_important_events.strip()),
+                "interests_updated": success_results.get("interests", False) and bool(new_interests.strip()),
+                "study_updated": success_results.get("study", False) and bool(new_study.strip()),
+                "new_content": {
+                    "events": new_events,
+                    "reminders": new_reminders,
+                    "important_events": new_important_events,
+                    "interests": new_interests,
+                    "study": new_study,
+                    "updated_profile": updated_profile if updated_profile != existing_profile else ""
+                }
             }
             
         except Exception as e:
@@ -336,6 +771,47 @@ class MemoryAgent:
                 "success": False,
                 "error": str(e),
                 "character_name": character_name
+            }
+    
+    def update_memory_file(self, character_name: str, memory_type: str, content: str, append: bool = False) -> Dict[str, Any]:
+        """Tool: Update a specific memory file type for a character"""
+        try:
+            if hasattr(self.storage_manager, 'write_memory_file') and hasattr(self.storage_manager, 'append_memory_file'):
+                # Use generic methods if available
+                if append:
+                    success = self.storage_manager.append_memory_file(character_name, memory_type, content)
+                else:
+                    success = self.storage_manager.write_memory_file(character_name, memory_type, content)
+            else:
+                # Fallback to specific methods based on memory type
+                if memory_type == "profile":
+                    success = self.storage_manager.write_profile(character_name, content)
+                elif memory_type == "event":
+                    if append:
+                        success = self.storage_manager.append_events(character_name, content)
+                    else:
+                        success = self.storage_manager.write_events(character_name, content)
+                else:
+                    return {
+                        "success": False,
+                        "error": f"Memory type '{memory_type}' not supported by storage manager",
+                        "character_name": character_name,
+                        "memory_type": memory_type
+                    }
+
+            return {
+                "success": success,
+                "character_name": character_name,
+                "memory_type": memory_type,
+                "content_length": len(content),
+                "operation": "append" if append else "write"
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "character_name": character_name,
+                "memory_type": memory_type
             }
     
     def search_relevant_events(self, query: str, characters: List[str] = None, top_k: int = 10) -> Dict[str, Any]:
@@ -537,6 +1013,106 @@ class MemoryAgent:
         except Exception as e:
             logger.error(f"Error analyzing profile for {character_name}: {e}")
             return existing_profile
+
+    def _analyze_session_for_reminders(
+        self, character_name: str, conversation: str, session_date: str, existing_reminders: str
+    ) -> str:
+        """Analyze conversation session to extract new reminders"""
+        if not self.llm_client:
+            logger.error("No LLM client available for reminder analysis")
+            return ""
+        
+        try:
+            # Use prompt template from file
+            prompt_template = self.prompt_loader.load_prompt("analyze_session_for_reminders")
+            prompt = prompt_template.format(
+                character_name=character_name,
+                conversation=conversation,
+                existing_reminders=existing_reminders if existing_reminders.strip() else "None",
+                session_date=session_date if session_date else "Not specified"
+            )
+
+            response = self.llm_client.simple_chat(prompt, max_tokens=2000)
+            return response.strip() if response else ""
+            
+        except Exception as e:
+            logger.error(f"Error analyzing reminders for {character_name}: {e}")
+            return ""
+
+    def _analyze_session_for_important_events(
+        self, character_name: str, conversation: str, session_date: str, existing_important_events: str
+    ) -> str:
+        """Analyze conversation session to extract new important events"""
+        if not self.llm_client:
+            logger.error("No LLM client available for important events analysis")
+            return ""
+        
+        try:
+            # Use prompt template from file
+            prompt_template = self.prompt_loader.load_prompt("analyze_session_for_important_events")
+            prompt = prompt_template.format(
+                character_name=character_name,
+                conversation=conversation,
+                existing_important_events=existing_important_events if existing_important_events.strip() else "None",
+                session_date=session_date if session_date else "Not specified"
+            )
+
+            response = self.llm_client.simple_chat(prompt, max_tokens=2000)
+            return response.strip() if response else ""
+            
+        except Exception as e:
+            logger.error(f"Error analyzing important events for {character_name}: {e}")
+            return ""
+
+    def _analyze_session_for_interests(
+        self, character_name: str, conversation: str, session_date: str, existing_interests: str
+    ) -> str:
+        """Analyze conversation session to extract new interests"""
+        if not self.llm_client:
+            logger.error("No LLM client available for interests analysis")
+            return ""
+        
+        try:
+            # Use prompt template from file
+            prompt_template = self.prompt_loader.load_prompt("analyze_session_for_interests")
+            prompt = prompt_template.format(
+                character_name=character_name,
+                conversation=conversation,
+                existing_interests=existing_interests if existing_interests.strip() else "None",
+                session_date=session_date if session_date else "Not specified"
+            )
+
+            response = self.llm_client.simple_chat(prompt, max_tokens=2000)
+            return response.strip() if response else ""
+            
+        except Exception as e:
+            logger.error(f"Error analyzing interests for {character_name}: {e}")
+            return ""
+
+    def _analyze_session_for_study(
+        self, character_name: str, conversation: str, session_date: str, existing_study: str
+    ) -> str:
+        """Analyze conversation session to extract new study information"""
+        if not self.llm_client:
+            logger.error("No LLM client available for study analysis")
+            return ""
+        
+        try:
+            # Use prompt template from file
+            prompt_template = self.prompt_loader.load_prompt("analyze_session_for_study")
+            prompt = prompt_template.format(
+                character_name=character_name,
+                conversation=conversation,
+                existing_study=existing_study if existing_study.strip() else "None",
+                session_date=session_date if session_date else "Not specified"
+            )
+
+            response = self.llm_client.simple_chat(prompt, max_tokens=2000)
+            return response.strip() if response else ""
+            
+        except Exception as e:
+            logger.error(f"Error analyzing study information for {character_name}: {e}")
+            return ""
     
     def execute_tool(self, tool_name: str, **kwargs) -> Dict[str, Any]:
         """Execute a specific tool by name"""

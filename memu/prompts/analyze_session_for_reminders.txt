@@ -1,0 +1,45 @@
+Task: Extract and organize reminder items, todo tasks, and scheduled actions for {character_name} from the conversation session.
+
+Instructions:
+1. Analyze the conversation to identify NEW reminders, todo items, and scheduled tasks involving {character_name}
+2. Focus on actionable items that need follow-up or completion
+3. Include deadlines, dates, or timeframes when mentioned
+4. Exclude items that are already completed or resolved
+5. Only include NEW items not already present in existing reminders
+6. Format each item as a clear, actionable statement
+
+Types of reminders to extract:
+- Tasks and todo items mentioned
+- Appointments and scheduled events
+- Deadlines and important dates
+- Follow-up actions required
+- Items to remember or purchase
+- Goals or commitments made
+- Promises to others
+
+Input:
+- Conversation: 
+{conversation}
+- Existing Reminders: 
+{existing_reminders}
+- Character: 
+{character_name}
+- Session Date: 
+{session_date}
+
+Example Output:
+- Submit quarterly report by March 31st
+- Schedule doctor appointment for annual checkup
+- Buy birthday gift for Sarah (birthday March 15th)
+- Follow up with client about project proposal next week
+- Renew car insurance before expiration date
+- Call mom this weekend to discuss vacation plans
+
+Output Format:
+- Use bullet points starting with "- "
+- Each reminder should be a single, clear action item
+- Include specific dates or timeframes when mentioned
+- Keep items concise but informative
+- If no new reminders are found, return an empty response
+
+New Reminders: 

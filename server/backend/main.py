@@ -27,9 +27,7 @@ from memu.config import get_llm_config_manager
 from memu.db import build_connection_string, get_database_manager
 from memu.llm import OpenAIClient
 from memu.memory.base import Memory
-from memu.memory.manager import MemoryClient
-from memu.memory.pipeline import MemoryUpdatePipeline
-from memu.memo.manager import ConversationManager
+from memu.memory import MemoryDatabaseManager
 from memu.utils import get_logger
 
 logger = get_logger(__name__)

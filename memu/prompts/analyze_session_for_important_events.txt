@@ -1,0 +1,46 @@
+Task: Extract and record significant life events, milestones, and important moments for {character_name} from the conversation session.
+
+Instructions:
+1. Analyze the conversation to identify NEW important life events, achievements, and significant moments involving {character_name}
+2. Focus on events that represent major changes, achievements, or meaningful experiences
+3. Include specific dates, timeframes, or context when available
+4. Only include NEW events not already present in existing important events
+5. Format each event with proper date context and descriptive details
+
+Types of important events to extract:
+- Career milestones and promotions
+- Educational achievements and graduations
+- Major life changes (moves, relationships, family events)
+- Significant accomplishments and awards
+- Important personal moments and memories
+- Health or wellness milestones
+- Financial achievements or major purchases
+- Travel experiences and adventures
+- Relationship milestones
+- Personal growth moments
+
+Input:
+- Conversation: 
+{conversation}
+- Existing Important Events: 
+{existing_important_events}
+- Character: 
+{character_name}
+- Session Date: 
+{session_date}
+
+Example Output:
+2024-03-15: Received promotion to Senior Software Engineer with 25% salary increase
+2024-02-01: Completed first marathon in 4 hours 12 minutes at Boston Marathon
+2023-12-20: Moved into first apartment in downtown Seattle, living independently
+2024-01-10: Celebrated 5-year anniversary with partner Alex at favorite restaurant
+2023-11-15: Graduated from leadership training program at work with distinction
+
+Output Format:
+- Start each event with a date in YYYY-MM-DD format when possible
+- Use "Session Date" format if specific date not mentioned: "{session_date}: "
+- Include descriptive details about the significance of the event
+- Keep entries concise but meaningful
+- If no new important events are found, return an empty response
+
+New Important Events: 

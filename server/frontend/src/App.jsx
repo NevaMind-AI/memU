@@ -8,6 +8,8 @@ import ConversationDetail from './pages/ConversationDetail'
 import Memories from './pages/Memories'
 import MemoryDetail from './pages/MemoryDetail'
 import MemoryOperations from './pages/MemoryOperations'
+import FileMemories from './pages/FileMemories'
+import FileMemoryDetail from './pages/FileMemoryDetail'
 
 const theme = createTheme({
   palette: {
@@ -477,13 +479,15 @@ function App() {
       <CssBaseline />
       <Router>
         <Layout>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/conversations" element={<Conversations />} />
-            <Route path="/conversations/:id" element={<ConversationDetail />} />
-            <Route path="/memories" element={<Memories />} />
-            <Route path="/memories/:id" element={<MemoryDetail />} />
-            <Route path="/memory-operations" element={<MemoryOperations />} />
+                      <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/conversations" element={<Conversations />} />
+              <Route path="/conversations/:id" element={<ConversationDetail />} />
+              <Route path="/memories" element={<Memories />} />
+              <Route path="/memories/:id" element={<MemoryDetail />} />
+              <Route path="/memory-operations" element={<MemoryOperations />} />
+              <Route path="/file-memories" element={<FileMemories />} />
+              <Route path="/file-memory/:character/:memoryType" element={<FileMemoryDetail />} />
           </Routes>
         </Layout>
       </Router>

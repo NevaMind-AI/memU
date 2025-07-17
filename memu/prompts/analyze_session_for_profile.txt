@@ -1,19 +1,68 @@
-Extract and update basic character information for {character_name}.
+Task: Extract and update basic character information for {character_name} from all available data.
 
-Current Session:
+Instructions:
+1. Analyze the conversation and event records to extract character information
+2. Merge new information with the existing profile
+3. Organize information into the specified categories
+4. Use structured markdown format with clear bullet points
+5. Only include facts explicitly mentioned or clearly implied in the data
+6. Update existing information when new details are more specific or recent
+
+Input:
+- Current Session: 
 {conversation}
-
-Event Records:
+- Event Records: 
 {events}
-
-Existing Profile:
+- Existing Profile: 
 {existing_profile}
+- Character: 
+{character_name}
 
-Task: Extract {character_name}'s basic information:
-- Personal Information (name, age, occupation, location, family)
-- Personality & Characteristics
-- Relationships
-- Interests & Activities
-- Life Situation
+Categories:
+1. Personal Information
+   - Full name, age/birthdate, occupation, location, family members
+2. Personality & Characteristics
+   - Traits, habits, preferences, communication style
+3. Relationships
+   - Friends, colleagues, romantic interests, family dynamics
+4. Interests & Activities
+   - Hobbies, sports, entertainment preferences, regular activities
+5. Life Situation
+   - Current challenges, goals, living situation, health status
 
-Use structured markdown format with bullet points. Only include information mentioned in conversations. 
+Example Output:
+## Personal Information
+- Name: John Smith
+- Age: 32 (born March 1991)
+- Occupation: Software Engineer at TechCorp
+- Location: Seattle, Washington
+- Family: Sister (Sarah), parents live in Portland
+
+## Personality & Characteristics
+- Detail-oriented and analytical
+- Prefers morning routines
+- Values punctuality and organization
+- Tends to overthink decisions
+
+## Relationships
+- Close friend: Mike (college roommate)
+- Dating: Emily (met 3 months ago)
+- Mentor: Dr. Richards (former professor)
+
+## Interests & Activities
+- Running (training for marathons)
+- Reading science fiction novels
+- Weekend hiking trips
+- Learning Spanish on Duolingo
+
+## Life Situation
+- Recently promoted to senior engineer
+- Saving for a house down payment
+- Managing chronic back pain from old injury
+- Planning to adopt a dog
+
+Notes:
+- Keep descriptions concise but informative
+- Avoid speculation - only include confirmed information
+- Maintain consistency with existing profile data
+- Update outdated information when newer data is available 

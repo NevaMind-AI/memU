@@ -27,7 +27,8 @@ import {
   Menu as MenuIcon,
   Settings as SettingsIcon,
   TrendingUp as TrendingIcon,
-  Circle as StatusIcon
+  Circle as StatusIcon,
+  FolderOpen as FileMemoryIcon
 } from '@mui/icons-material'
 
 const drawerWidth = 280
@@ -50,6 +51,12 @@ const navigation = [
     path: '/memories', 
     icon: MemoryIcon,
     description: 'Agent memory system'
+  },
+  { 
+    title: 'File Memories', 
+    path: '/file-memories', 
+    icon: FileMemoryIcon,
+    description: 'File-based memory management'
   },
   { 
     title: 'Operations', 
