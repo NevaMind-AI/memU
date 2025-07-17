@@ -140,52 +140,16 @@ Try MemU instantly in your browser: [**🔗 Interactive Demo**](https://demo.nev
 <tr>
 <td width="33%" align="center">
 
-**🎯 Educational AI**
-```python
-tutor = Persona(
-    agent_id="math_tutor",
-    use_memory=True
-)
-tutor.chat("Help with algebra", user_id="student")
-```
-
-</td>
-<td width="33%" align="center">
-
-**🛠️ Customer Support**
-```python
-support = Persona(
-    agent_id="support_bot",
-    use_memory=True
-)
-support.chat("Account issue", user_id="customer")
-```
-
-</td>
-<td width="33%" align="center">
 
 **🤖 Personal Assistant**
-```python
-assistant = Persona(
-    agent_id="personal_ai",
-    use_memory=True
-)
-assistant.chat("Plan vacation", user_id="user")
-```
 
-</td>
-</tr>
-</table>
+**🎯 Role play**
 
-### 📊 **Research Highlights**
+**🎯 Educational AI**
 
-- **🧠 Memory Retention**: 95% accuracy in long-term profile consistency
-- **⚡ Search Performance**: Sub-100ms semantic search across 10M+ conversations  
-- **🔄 Multi-Modal**: Support for text, voice, and structured data inputs
-- **🌐 Scalability**: Production-tested with 1M+ users and 100M+ conversations
+**🛠️ Customer Support**
 
-</div>
-
+**Creation Support**
 ---
 
 ## 🤝 Contributing
