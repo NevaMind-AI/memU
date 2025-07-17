@@ -574,15 +574,6 @@ class ResponseAgent:
             for iteration in range(max_iterations):
                 logger.info(f"Iteration {iteration + 1}/{max_iterations}: Searching with query '{search_query}'")
                 
-                # Collect character profiles (only on first iteration)
-                if iteration == 0:
-                    character_profiles = {}
-                    for character in characters:
-                        profile = self._read_memory_file(character, "profile")
-                        if "No profile file found" not in profile and "Error reading" not in profile:
-                            character_profiles[character] = profile
-                            all_retrieved_content.append(f"Profile - {character}: {profile}")
-                
                 # Search for relevant events
                 events_result = self.search_character_events(search_query, characters)
                 current_events = []
@@ -635,7 +626,6 @@ class ResponseAgent:
             # Generate final answer using all collected content
             final_context_data = {
                 "question": question,
-                "character_profiles": character_profiles if 'character_profiles' in locals() else {},
                 "relevant_events": deduplicated_events,
                 "all_content": deduplicated_content
             }
@@ -649,7 +639,6 @@ class ResponseAgent:
                 "iteration_log": iteration_log,
                 "context_used": {
                     "characters_searched": characters,
-                    "profiles_found": list(character_profiles.keys()) if 'character_profiles' in locals() else [],
                     "total_events_found": len(deduplicated_events),
                     "content_pieces": len(deduplicated_content)
                 },
@@ -670,20 +659,14 @@ class ResponseAgent:
         try:
             # Prepare context for the LLM
             question = context_data["question"]
-            profiles = context_data.get("character_profiles", {})
             events = context_data.get("relevant_events", [])
             all_content = context_data.get("all_content", [])
             
-            # Build context string
+            # Build context string - only use events, not profiles
             context_parts = []
             
-            if profiles:
-                context_parts.append("CHARACTER PROFILES:")
-                for character, profile in profiles.items():
-                    context_parts.append(f"\n{character}:\n{profile}\n")
-            
             if events:
-                context_parts.append("\nRELEVANT EVENTS:")
+                context_parts.append("RELEVANT EVENTS:")
                 for i, event in enumerate(events, 1):
                     event_text = event.get('event', event.get('text', str(event)))
                     character = event.get('character', 'Unknown')
@@ -713,14 +696,17 @@ Instructions:
    - Consider different perspectives or interpretations
    - Note any gaps or limitations in the available information
    - Plan your approach to answering
+   - **IMPORTANT**: Look for multiple answers that may be scattered across different events
 
 2. Then, provide your final answer using <result>...</result> tags:
    - Give a complete, accurate answer based on the available information
+   - **IMPORTANT**: If there are multiple answers to the question found in different events, include ALL of them
    - Include specific details and examples from the context when relevant
    - If information is insufficient, clearly state what is missing
    - Be factual and avoid speculation beyond what the context supports
    - Reference specific characters and events when applicable
    - Synthesize information from multiple sources when available
+   - Ensure completeness - don't miss any relevant answers from the provided events
 
 Format:
 <thinking>

@@ -330,24 +330,63 @@ class ToolBasedMemoryTester:
                 generated_answer = answer_result.get("answer", "No answer generated")
                 context_used = answer_result.get("context_used", {})
                 
-                # Build retrieved content summary from context used
+                # Build detailed retrieved content from context used
                 retrieved_contents = []
                 
                 characters_searched = context_used.get("characters_searched", [])
-                profiles_found = context_used.get("profiles_found", [])
-                events_count = context_used.get("events_count", 0)
                 search_keywords = context_used.get("search_keywords", [])
                 
-                if profiles_found:
-                    retrieved_contents.append(f"Character Profiles Used: {', '.join(profiles_found)}")
+                # Get actual retrieved content details from ResponseAgent
+                final_content = answer_result.get("final_content", [])
+                retrieved_events = answer_result.get("retrieved_events", [])
+                iteration_log = answer_result.get("iteration_log", [])
+                total_events_found = context_used.get("total_events_found", 0)
+                content_pieces = context_used.get("content_pieces", 0)
                 
-                if events_count > 0:
-                    retrieved_contents.append(f"Relevant Events Found: {events_count} events")
+                # Add summary information (no profiles, events only)
+                
+                if total_events_found > 0:
+                    retrieved_contents.append(f"Relevant Events Found: {total_events_found} events")
                     if search_keywords:
                         retrieved_contents.append(f"Search Keywords: {', '.join(search_keywords)}")
                 
                 if characters_searched:
                     retrieved_contents.append(f"Characters Searched: {', '.join(characters_searched)}")
+                
+                if content_pieces > 0:
+                    retrieved_contents.append(f"Content Pieces Retrieved: {content_pieces}")
+                
+                # Add actual retrieved content from final_content
+                if final_content:
+                    retrieved_contents.append("\n--- ACTUAL RETRIEVED CONTENT ---")
+                    for i, content in enumerate(final_content[:20], 1):  # Show top 20 content pieces
+                        if isinstance(content, dict):
+                            content_text = content.get('text', content.get('event', str(content)))
+                            character = content.get('character', 'Unknown')
+                            retrieved_contents.append(f"\n{i}. [{character}] {content_text}")
+                        else:
+                            retrieved_contents.append(f"\n{i}. {content}")
+                
+                # Add actual retrieved events content
+                if retrieved_events:
+                    retrieved_contents.append("\n--- ACTUAL RETRIEVED EVENTS ---")
+                    for i, event in enumerate(retrieved_events[:15], 1):  # Show top 15 events
+                        if isinstance(event, dict):
+                            event_text = event.get('event', event.get('text', str(event)))
+                            character = event.get('character', 'Unknown')
+                            retrieved_contents.append(f"\nEvent {i}: [{character}] {event_text}")
+                        else:
+                            retrieved_contents.append(f"\nEvent {i}: {event}")
+                
+                # Add iteration log for debugging retrieval process
+                if iteration_log:
+                    retrieved_contents.append("\n--- RETRIEVAL ITERATIONS ---")
+                    for i, iteration in enumerate(iteration_log, 1):
+                        if isinstance(iteration, dict):
+                            iteration_summary = iteration.get('summary', str(iteration))
+                            retrieved_contents.append(f"\nIteration {i}: {iteration_summary}")
+                        else:
+                            retrieved_contents.append(f"\nIteration {i}: {iteration}")
                 
                 retrieved_content = "\n".join(retrieved_contents) if retrieved_contents else "ResponseAgent provided direct answer"
                 
