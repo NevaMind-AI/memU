@@ -217,29 +217,45 @@ class EvaluateAgent:
         ]
 
     def evaluate_answer_accuracy(self, question: str, generated_answer: str, standard_answer: str) -> Dict[str, Any]:
-        """Evaluate if a generated answer matches the standard answer (yes/no evaluation)"""
+        """Evaluate if a generated answer matches the standard answer using locomo_grader format"""
         try:
-            # Create evaluation prompt
-            evaluation_prompt = f"""You are an expert evaluator. Your task is to determine if a generated answer contains the key information from a standard answer.
+            # System prompt
+            system_prompt = """
+            You are an expert grader that determines if answers to questions match a gold standard answer
+            """
 
+            # Accuracy evaluation prompt
+            accuracy_prompt = f"""
+Your task is to label an answer to a question as 'CORRECT' or 'WRONG'. You will be given the following data:
+    (1) a question (posed by one user to another user),
+    (2) a 'gold' (ground truth) answer,
+    (3) a generated answer
+which you will score as CORRECT/WRONG.
+
+The point of the question is to ask about something one user should know about the other user based on their prior conversations.
+The gold answer will usually be a concise and short answer that includes the referenced topic, for example:
+Question: Do you remember what I got the last time I went to Hawaii?
+Gold answer: A shell necklace
+The generated answer might be much longer, but you should be generous with your grading - as long as it touches on the same topic as the gold answer, it should be counted as CORRECT.
+
+For time related questions, the gold answer will be a specific date, month, year, etc. The generated answer might be much longer or use relative time references (like "last Tuesday" or "next month"), but you should be generous with your grading - as long as it refers to the same date or time period as the gold answer, it should be counted as CORRECT. Even if the format differs (e.g., "May 7th" vs "7 May"), consider it CORRECT if it's the same date.
+
+Now it's time for the real question:
 Question: {question}
+Gold answer: {standard_answer}
+Generated answer: {generated_answer}
 
-Generated Answer: {generated_answer}
+First, provide a short (one sentence) explanation of your reasoning, then finish with CORRECT or WRONG.
+Do NOT include both CORRECT and WRONG in your response, or it will break the evaluation script.
 
-Standard Answer: {standard_answer}
+Just return the label CORRECT or WRONG in a json format with the key as "label".
+"""
 
-Instructions:
-1. Compare the generated answer with the standard answer
-2. Determine if the generated answer contains the essential information from the standard answer
-3. Answer with "YES" if the generated answer is correct/adequate, "NO" if it's incorrect/inadequate
-4. Provide a brief explanation of your reasoning
-
-Response format:
-Decision: [YES/NO]
-Explanation: [Your reasoning]"""
-
-            # Get evaluation from LLM
-            messages = [{"role": "user", "content": evaluation_prompt}]
+            # Get evaluation from LLM with system message
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": accuracy_prompt}
+            ]
             llm_response = self.llm_client.chat_completion(messages, max_tokens=500, temperature=0.1)
             
             if not llm_response.success:
@@ -247,37 +263,45 @@ Explanation: [Your reasoning]"""
                 
             evaluation_text = llm_response.content.strip()
             
-            # Parse the evaluation result
+            # Parse the JSON response
             is_correct = False
             explanation = evaluation_text
             
-            # Look for decision
-            lines = evaluation_text.split('\n')
-            for line in lines:
-                if line.strip().startswith('Decision:'):
-                    decision_text = line.split(':', 1)[1].strip().upper()
-                    is_correct = 'YES' in decision_text
-                    break
-            else:
-                # Fallback: look for yes/no in text
-                text_lower = evaluation_text.lower()
-                if "yes" in text_lower and "no" not in text_lower:
+            try:
+                # Try to parse as JSON
+                import json
+                # Look for JSON content
+                if "{" in evaluation_text and "}" in evaluation_text:
+                    json_start = evaluation_text.find("{")
+                    json_end = evaluation_text.rfind("}") + 1
+                    json_text = evaluation_text[json_start:json_end]
+                    result = json.loads(json_text)
+                    label = result.get("label", "").upper()
+                    is_correct = label == "CORRECT"
+                    
+                    # Extract explanation from text before JSON
+                    explanation_part = evaluation_text[:json_start].strip()
+                    if explanation_part:
+                        explanation = explanation_part
+                    else:
+                        explanation = f"Evaluation result: {label}"
+                else:
+                    # Fallback: look for CORRECT/WRONG in text
+                    text_upper = evaluation_text.upper()
+                    if "CORRECT" in text_upper and "WRONG" not in text_upper:
+                        is_correct = True
+                    elif "WRONG" in text_upper:
+                        is_correct = False
+                    explanation = evaluation_text
+                    
+            except json.JSONDecodeError:
+                # Fallback: look for CORRECT/WRONG in text
+                text_upper = evaluation_text.upper()
+                if "CORRECT" in text_upper and "WRONG" not in text_upper:
                     is_correct = True
-                elif "no" in text_lower:
+                elif "WRONG" in text_upper:
                     is_correct = False
-            
-            # Extract explanation
-            explanation_lines = []
-            capture_explanation = False
-            for line in lines:
-                if line.strip().startswith('Explanation:'):
-                    explanation_lines.append(line.split(':', 1)[1].strip())
-                    capture_explanation = True
-                elif capture_explanation:
-                    explanation_lines.append(line.strip())
-            
-            if explanation_lines:
-                explanation = ' '.join(explanation_lines)
+                explanation = evaluation_text
             
             return {
                 "success": True,
