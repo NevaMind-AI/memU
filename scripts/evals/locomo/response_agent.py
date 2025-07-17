@@ -653,7 +653,8 @@ class ResponseAgent:
                     "total_events_found": len(deduplicated_events),
                     "content_pieces": len(deduplicated_content)
                 },
-                "final_content": deduplicated_content
+                "final_content": deduplicated_content,
+                "retrieved_events": deduplicated_events  # Add detailed events for evaluation
             }
 
         except Exception as e:
@@ -696,7 +697,7 @@ class ResponseAgent:
             
             context_text = "\n".join(context_parts)
             
-            # Create prompt for answer generation
+            # Create prompt for answer generation with reasoning
             prompt = f"""You are a knowledgeable assistant with access to character information and event records. 
 Answer the following question comprehensively based on the provided context.
 
@@ -706,24 +707,56 @@ Context:
 {context_text}
 
 Instructions:
-- Provide a complete, accurate answer based on the available information
-- Include specific details and examples from the context when relevant
-- If the information is insufficient, clearly state what is missing
-- Be factual and avoid speculation beyond what the context supports
-- Reference specific characters and events when applicable
-- Synthesize information from multiple sources when available
+1. First, use <thinking>...</thinking> tags to analyze the question and available information:
+   - Break down what the question is asking
+   - Identify relevant information from the context
+   - Consider different perspectives or interpretations
+   - Note any gaps or limitations in the available information
+   - Plan your approach to answering
 
-Answer:"""
+2. Then, provide your final answer using <result>...</result> tags:
+   - Give a complete, accurate answer based on the available information
+   - Include specific details and examples from the context when relevant
+   - If information is insufficient, clearly state what is missing
+   - Be factual and avoid speculation beyond what the context supports
+   - Reference specific characters and events when applicable
+   - Synthesize information from multiple sources when available
+
+Format:
+<thinking>
+[Your step-by-step reasoning process here]
+</thinking>
+
+<result>
+[Your final comprehensive answer here, the result should be concise and to the query, no more than 20 words]
+</result>"""
 
             # Get response from LLM
             response = self.llm_client.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=1000,
+                max_tokens=8000, 
                 temperature=0.2
             )
 
             if response.success:
-                return response.content.strip()
+                raw_response = response.content.strip()
+                
+                # Extract the final answer from <result> tags
+                result_match = re.search(r'<result>(.*?)</result>', raw_response, re.DOTALL)
+                if result_match:
+                    final_answer = result_match.group(1).strip()
+                    
+                    # Also extract thinking for potential logging/debugging
+                    thinking_match = re.search(r'<thinking>(.*?)</thinking>', raw_response, re.DOTALL)
+                    if thinking_match:
+                        thinking_content = thinking_match.group(1).strip()
+                        logger.info(f"LLM Reasoning: {thinking_content[:200]}...")  # Log first 200 chars
+                    
+                    return final_answer
+                else:
+                    # Fallback: if no <result> tags found, return the full response
+                    logger.warning("No <result> tags found in LLM response, returning full content")
+                    return raw_response
             else:
                 logger.error(f"LLM call failed: {response.error}")
                 return f"I'm unable to generate a response at the moment due to a technical issue: {response.error}"

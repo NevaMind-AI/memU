@@ -351,9 +351,8 @@ class ToolBasedMemoryTester:
                 
                 retrieved_content = "\n".join(retrieved_contents) if retrieved_contents else "ResponseAgent provided direct answer"
                 
-                # For comprehensive evaluation, we need to get the actual events
-                # This is a simplified approach - we could enhance this by having ResponseAgent return more details
-                search_results_for_eval = []
+                # For comprehensive evaluation, get the actual retrieved events
+                search_results_for_eval = answer_result.get("retrieved_events", [])
                 
             else:
                 error_msg = answer_result.get('error', 'Failed to generate answer')
@@ -378,15 +377,16 @@ class ToolBasedMemoryTester:
             
             # Log error details if answer is incorrect
             if not evaluation['is_correct']:
-                # For comprehensive evaluation, we'll use basic error analysis
+                # For comprehensive evaluation, we'll use the full comprehensive evaluation
                 # Since ResponseAgent abstracts the detailed retrieval process
                 comprehensive_evaluation = None
                 try:
-                    # Perform basic error analysis using EvaluateAgent
-                    comprehensive_evaluation = self.evaluate_agent.analyze_answer_errors(
+                    # Perform comprehensive evaluation using EvaluateAgent
+                    comprehensive_evaluation = self.evaluate_agent.comprehensive_evaluation(
                         question=question,
                         generated_answer=generated_answer,
-                        standard_answer=answer
+                        standard_answer=answer,
+                        retrieved_events=search_results_for_eval
                     )
                     
                     if comprehensive_evaluation.get('success'):
@@ -411,7 +411,7 @@ class ToolBasedMemoryTester:
                     explanation=evaluation['explanation'],
                     session_context=session_context,
                     evaluation_details=comprehensive_evaluation,
-                    retrieved_events=retrieved_events_for_eval if 'retrieved_events_for_eval' in locals() else None
+                    retrieved_events=search_results_for_eval
                 )
                 logger.warning(f"[QA {qa_index+1}] ✗ Incorrect answer logged to error file with comprehensive evaluation")
             
