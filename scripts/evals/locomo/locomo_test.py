@@ -52,7 +52,7 @@ class ToolBasedMemoryTester:
         self,
         azure_endpoint: str = None,
         api_key: str = None,
-        chat_deployment: str = "gpt-4.1-mini",
+        chat_deployment: str = "gpt-4.1-mini-2",
         use_entra_id: bool = False,
         api_version: str = "2024-02-01",
         memory_dir: str = "memory",
@@ -978,7 +978,7 @@ def main():
     parser.add_argument('--data-file', default='data/locomo10.json', help='Path to test data file')
     parser.add_argument('--sample-limit', type=int, help='Limit number of samples to process')
     parser.add_argument('--memory-dir', default='memory', help='Directory for memory files')
-    parser.add_argument('--chat-deployment', default='gpt-4o-mini', help='Azure OpenAI chat deployment')
+    parser.add_argument('--chat-deployment', default='gpt-4.1-mini-2', help='Azure OpenAI chat deployment')
     parser.add_argument('--max-workers', type=int, default=3, help='Maximum number of parallel workers for session processing')
     
     args = parser.parse_args()
