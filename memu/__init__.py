@@ -25,6 +25,8 @@ from .llm import OpenAIClient  # OpenAI implementation
 from .memory import ProfileMemory, EventMemory  
 from .memory.base import Memory, ProfileMemory, EventMemory, ReminderMemory, ImportantEventMemory, InterestsMemory, StudyMemory 
 from .memory import MemoryAgent 
+from .memory import MetaAgent
+from .memory import AgentRegistry, AgentConfig, get_agent_registry
 from .memory import MemoryFileManager 
 from .memory import MemoryDatabaseManager 
 from .memory import EmbeddingClient
@@ -75,8 +77,13 @@ __all__ = [
     # Core Memory system
     "Memory",  # Simple file-based Memory class
     "MemoryAgent",  # Agent-based memory management with LLM tools
+    "MetaAgent",  # Meta agent for orchestrating conversation processing
     "MemoryFileManager",  # File operations for memory storage
     "MemoryDatabaseManager",  # Database operations with PostgreSQL + pgvector
+    # Agent system
+    "AgentRegistry",  # Agent registration and management
+    "AgentConfig",  # Agent configuration class
+    "get_agent_registry",  # Get agent registry instance
     # Memory components
     "ProfileMemory",  # Profile memory component
     "EventMemory",  # Event memory component

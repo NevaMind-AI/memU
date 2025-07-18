@@ -226,17 +226,12 @@ git push origin feature/amazing-feature
   <img src="https://contrib.rocks/image?repo=NevaMind-AI/MemU" />
 </a>
 
-### **⭐ Star History**
-
-[![Star History Chart](https://api.star-history.com/svg?repos=NevaMind-AI/MemU&type=Date)](https://star-history.com/#NevaMind-AI/MemU&Date)
-
----
 
 ### **🔒 Security & License**
 
 Report security issues to [security@nevamind.ai](mailto:security@nevamind.ai)
 
-Licensed under [Apache License 2.0](LICENSE) - Free for commercial use
+Licensed under [Apache License 2.0](LICENSE)
 
 </div>
 

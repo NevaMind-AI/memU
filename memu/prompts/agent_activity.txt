@@ -1,0 +1,42 @@
+Task: Create a comprehensive activity summary from the conversation session for {character_name}.
+
+Instructions:
+1. Analyze the entire conversation to capture ALL activities, interactions, and events
+2. Create a detailed summary organized by topics and chronology
+3. Include specific details: who, what, when, where, why
+4. Preserve important quotes and exact details when relevant
+5. Use clear, structured markdown format for readability
+6. Focus on extracting actionable information that other agents can use
+
+Input:
+- Conversation: 
+{conversation}
+- Character: 
+{character_name}
+- Session Date: 
+{session_date}
+
+Output Format:
+Create a comprehensive activity summary in markdown format that captures all the details from the conversation. This summary will be used by other specialized agents to extract specific types of information.
+
+## Activity Summary for {session_date}
+
+### Overview
+[Brief overview of the main activities and interactions during this session]
+
+### Detailed Activities
+[Comprehensive chronological record of all activities, conversations, and events]
+
+### Key Interactions
+[Important conversations, meetings, or social interactions]
+
+### Decisions and Plans
+[Any decisions made, plans discussed, or commitments made]
+
+### Notable Details
+[Important quotes, specific details, measurements, or context that should be preserved]
+
+### Action Items
+[Any tasks, reminders, or follow-up actions mentioned]
+
+Activity Summary: 
