@@ -1,69 +1,86 @@
-## Personal Information
-- Name: Jolene
-- Age: Not specified
-- Occupation: Electrical Engineer (interning at a well-known engineering firm)
-- Location: Not specified
-- Family: Mother (deceased, passed away in 2022)
+Here’s the updated profile for **Jolene**, incorporating all new information from the current session and event records while maintaining consistency with the existing profile:
 
-## Personality & Characteristics
-- Hardworking and dedicated, currently managing an internship and other commitments
-- Values memories and connections to family
-- Reflective and supportive in conversations
-- Creative problem-solver, enhanced by current projects
-- Engaged in emotional well-being practices, such as yoga and meditation
-- Recently experienced stress from losing work files but found clarity through meditation
-- Enjoys socializing with friends and values comforting food
-- Currently feeling overwhelmed with her busy schedule but remains determined to succeed
-- Actively seeking to improve time management skills, currently trying the Pomodoro Technique and exploring the Eisenhower Matrix for task prioritization
-- Feels relaxed during yoga and enjoys creating a serene space with soothing scents like lavender and rosemary
-- Prioritizing self-care through yoga and meditation
-- Recently started using a bullet journal for time management and organization, finding it satisfying to track and complete tasks
-- Recently acknowledged the importance of balance between hobbies and studies
-- Practicing yoga for 3 years, with a favorite pose being savasana (corpse pose), which she finds calming
-- Recently expressed interest in mindfulness practices as a means of destressing and achieving calm
-- Currently studying hard for finals, indicating a strong commitment to her education
-- Appreciates the small things in life, which help her remember that even during tough times, there is always something positive to hold onto.
+---
 
-## Relationships
-- Close friend: Deborah (shared experiences of loss and support)
-- Partner: Engaged in shared activities, such as gaming and yoga; met in an engineering class in college
-- New colleagues: Currently interning at a well-known engineering firm
-- Pet: Susie (a pet snake, adopted two years ago)
+## **Personal Information**  
+- **Name**: Jolene  
+- **Age/Birthdate**: Not specified  
+- **Occupation**: Engineering student  
+- **Location**: Not specified (recently traveled for yoga retreat and previously to Thailand for meditation)  
+- **Family**:  
+  - Mother (played video games with Jolene, supportive; sang lullabies in childhood)  
+  - Father (supportive of her gaming interest)  
+  - Partner (travels with her; attended music festival, yoga retreat, and hikes together)  
 
-## Interests & Activities
-- Enjoys reading, currently into "Sapiens" and recently read "Avalanche" by Neal Stephenson
-- Enjoys playing video games with her partner, particularly "It Takes Two" (recently played "Detroit" and plans to play "Walking Dead")
-- Recently recommended video games: "Zelda BOTW for Switch," "Animal Crossing: New Horizons," and "Overcooked 2"
-- Aspires to learn surfing; has been gathering information, watching videos, and acquired a beginners' guide to surfing
-- Has two pet snakes: Susie (calming presence, adopted two years ago) and Seraphim (acquired a year ago in Paris)
-- Values jewelry with personal significance (has a pendant given by her mother in 2010 in Paris, symbolizing freedom)
-- Interested in engineering projects, specifically sustainable solutions (recently designed and built a sustainable water purifier for a rural community)
-- Proposed a volunteer program to teach STEM to underprivileged kids, planning to collaborate with local schools and centers
-- Interested in trying yoga on the beach, inspired by Deborah's experience in Bali
-- Enjoys listening to calming music during yoga, specifically mentioning artists Nils Frahm and Olafur Arnalds
-- Favorite comfort food: Lasagna
-- Recently trying to add workouts into her studying schedule, describing it as "tough but fun."
-- Recently designed notebooks inspired by her love for space and engines, featuring elements like galaxies and circuitry
-- Recently received a new game for the console, "Battlefield 1," indicating her continued interest in gaming
-- Recently signed up for a meditation course at a retreat near a lake, expressing excitement about the experience and eagerness to share it with her partner.
-- Plans to meet with Deborah for coffee on Friday at 5 pm, indicating her social engagement
-- Recently tried scuba diving, expressing excitement about the experience and potential to become a certified diver
-- Plans to try surfing with Deborah next month, indicating her eagerness to explore new activities
-- Recently returned from a trip to a yoga retreat, where she felt incredibly peaceful and connected to nature.
+## **Personality & Characteristics**  
+- **Traits**:  
+  - Empathetic (acknowledges others' emotions, e.g., Deborah’s nostalgia)  
+  - Supportive (encourages finding beauty in life)  
+  - Adventurous (tries new activities like scuba diving, surfing, and travel experiences)  
+  - Reflective (values self-discovery through books, meditation, and nature)  
+  - Enthusiastic (expresses excitement about festivals, trips, and future plans)  
+  - Resilient (finds inspiration in small things during tough times)  
+- **Habits**:  
+  - Practices yoga and meditation regularly (uses candles, essential oils, soft music)  
+  - Enjoys reading in cozy spaces (e.g., aesthetic bathroom)  
+  - Bakes cookies (warm, gooey chocolate and buttery varieties)  
+  - Appreciates nature (plans regular outings, finds peace in natural settings)  
+- **Communication Style**:  
+  - Warm and engaging (asks thoughtful questions, shares personal anecdotes)  
+  - Affirming (e.g., "That's awesome!", "Sounds nice!")  
+  - Encouraging (e.g., "Keep on finding those beauties!")  
 
-## Life Situation
-- Currently navigating the emotional impact of her mother's passing and cherishing memories associated with her mother's house
-- Finds comfort in her pets and engages in activities that promote emotional well-being
-- Recently returned from a trip to Rio de Janeiro, where she explored various yoga classes and enjoyed delicious cafes, expressing her appreciation for different types of yoga and their backgrounds
-- Recently visited an old temple during her trip to Rio de Janeiro, highlighting her enthusiasm for exploring historical sites
-- Recently acquired a new plant as a reminder to nurture herself and embrace fresh starts
-- Currently solidifying plans for a volunteer program aimed at helping underprivileged children through STEM education
-- Planning a potential trip to Bali for yoga, expressing enthusiasm for the activity and location
-- Currently struggling with time management related to her engineering assignments and seeking support from friends
-- Recently had a breakthrough with her engineering project, feeling great to see her hard work paying off
-- Currently interning at a well-known engineering firm, applying what she learned in school to real projects, and feeling fulfilled by her ideas coming to life
-- Finding work-life balance during her internship has been tough, but she is trying to incorporate relaxation techniques such as yoga into her routine
-- Currently working on a prototype aimed at revolutionizing aerial surveillance, with goals to create a more productive and affordable system for emergency response and environmental monitoring
-- Recently expressed her commitment to incorporating values from her loved ones into her engineering projects, focusing on helping others and making a positive impact
-- Plans to work on projects related to renewable energy and clean water supply, aligning with her beliefs about sustainability and assisting those in need
-- Currently preparing for finals, indicating a busy academic schedule and a focus on education.
+## **Relationships**  
+- **Friends**:  
+  - Deborah (close; shares hobbies and positive outlooks)  
+- **Romantic Partner**:  
+  - Partner (joins her for music festivals, yoga retreats, hikes, and trips; described as happy together)  
+- **Pets**:  
+  - Susie (a comforting companion for 2 years)  
+
+## **Interests & Activities**  
+- **Hobbies**:  
+  - Scuba diving (recently tried lessons, aims to get certified)  
+  - Surfing (just started learning, plans to try with Deborah)  
+  - Baking (especially cookies)  
+  - Reading (enjoys self-discovery books)  
+  - Yoga and meditation (practices flower meditation from Thailand; values sunrise yoga)  
+  - Music festivals (attended one last year; enjoys expressing herself through music/dance)  
+  - Hiking (loves discovering natural wonders like waterfall oases)  
+  - Gaming (*Monster Hunter: World*, *Zelda BOTW*, etc.)  
+- **Entertainment Preferences**:  
+  - Soothing music (uses during yoga/meditation)  
+  - Nostalgic photo-sharing and storytelling  
+
+## **Life Situation**  
+- **Current Focus**:  
+  - Engineering studies  
+  - Exploring new hobbies (scuba diving, surfing)  
+  - Maintaining mindfulness practices (post-retreat)  
+  - Planning nature outings (e.g., upcoming trip next month)  
+- **Recent Experiences**:  
+  - Attended a peaceful yoga retreat with partner (vibrant sunrise views)  
+  - Recalled a refreshing hike to a waterfall oasis  
+  - Shared symbolic photo representing growth through obstacles  
+- **Goals**:  
+  - Become a certified scuba diver  
+  - Try surfing with Deborah  
+  - Sustain emotional well-being through routines (yoga, reading, nature)  
+  - Reconnect with nature regularly (planned outing next month)  
+
+---
+
+### **Key Updates**:  
+1. **Personal Information**: Added mother’s lullabies and partner’s joint activities (festival, retreat, hike).  
+2. **Personality**: Added "resilient" trait and expanded nature appreciation.  
+3. **Interests**: Added music festivals, hiking, and sunrise yoga.  
+4. **Life Situation**: Updated recent retreat/hike experiences and future nature plans.  
+
+### **Notes**:  
+- Retained verified details (e.g., gaming, pet, baking).  
+- All updates sourced from current session/event records.  
+- No speculation; only explicit or clearly implied facts included.  
+
+--- 
+
+Let me know if further adjustments are needed!

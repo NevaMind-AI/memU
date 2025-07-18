@@ -33,26 +33,69 @@ def create_llm_client(
         BaseLLMClient: Appropriate LLM client instance
     """
     
+    # Get the appropriate endpoint based on model name
+    if not azure_endpoint:
+        azure_endpoint = _get_endpoint_for_model(chat_deployment)
+    
     # Check if it's a DeepSeek model
     if "deepseek" in chat_deployment.lower():
+        # Ensure we have valid endpoint for DeepSeek
+        deepseek_endpoint = azure_endpoint or os.getenv("DEEPSEEK_ENDPOINT")
+        if not deepseek_endpoint:
+            raise ValueError("DeepSeek endpoint is required")
+        
         # Use DeepSeek client
-        return DeepSeekClient(
-            api_key=api_key or os.getenv("DEEPSEEK_API_KEY"),
-            endpoint=azure_endpoint or os.getenv("DEEPSEEK_ENDPOINT"),
-            model_name=chat_deployment,
-            api_version="2024-05-01-preview",  # DeepSeek uses different API version
+        client_params = {
+            "endpoint": deepseek_endpoint,
+            "model_name": chat_deployment,
+            "api_version": "2024-05-01-preview",  # DeepSeek uses different API version
             **kwargs
-        )
+        }
+        if api_key is not None:
+            client_params["api_key"] = api_key
+        
+        return DeepSeekClient(**client_params)
     else:
+        # Ensure we have valid endpoint for Azure OpenAI
+        azure_openai_endpoint = azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
+        if not azure_openai_endpoint:
+            raise ValueError("Azure OpenAI endpoint is required")
+        
         # Use Azure OpenAI client (default)
-        return AzureOpenAIClient(
-            azure_endpoint=azure_endpoint,
-            api_key=api_key,
-            deployment_name=chat_deployment,
-            use_entra_id=use_entra_id,
-            api_version=api_version,
+        client_params = {
+            "azure_endpoint": azure_openai_endpoint,
+            "deployment_name": chat_deployment,
+            "use_entra_id": use_entra_id,
+            "api_version": api_version,
             **kwargs
-        )
+        }
+        if api_key is not None:
+            client_params["api_key"] = api_key
+        
+        return AzureOpenAIClient(**client_params)
+
+
+def _get_endpoint_for_model(chat_deployment: str) -> Optional[str]:
+    """
+    Get the appropriate endpoint based on the specific model name
+    
+    Args:
+        chat_deployment: Model/deployment name
+        
+    Returns:
+        str: Appropriate endpoint URL
+    """
+    # Model-specific endpoint routing
+    if chat_deployment == "gpt-4.1-mini-2":
+        return os.getenv("AZURE_OPENAI_ENDPOINT_1")
+    elif chat_deployment == "DeepSeek-V3-0324":
+        return os.getenv("DEEPSEEK_ENDPOINT_2")
+    elif "deepseek" in chat_deployment.lower():
+        # Fallback for other DeepSeek models
+        return os.getenv("DEEPSEEK_ENDPOINT") or os.getenv("DEEPSEEK_ENDPOINT_2")
+    else:
+        # Fallback for other Azure OpenAI models
+        return os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_OPENAI_ENDPOINT_1")
 
 
 def is_deepseek_model(chat_deployment: str) -> bool:

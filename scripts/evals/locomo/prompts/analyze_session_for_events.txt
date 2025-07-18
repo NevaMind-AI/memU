@@ -9,6 +9,7 @@ Instructions:
 6. Preserve exact quotes when they reveal important information
 7. If the character mentions experiences that happened in the past, you should also record them in forms like "{character_name} mentioned that ..."
 8. You should also include events related to people who are close to {character_name}, such as their parents, children, etc.
+9. If the character mentions an exact or relative (e.g., last weekend) time, keep the time information, and don't replace them with ambiguous expressions like "recently"
 9. Ensure that the information from every message is included in at least one output paragraph, unless the message is purely a greeting, such as "Hello"
 
 Input:

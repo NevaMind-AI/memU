@@ -263,6 +263,11 @@ Just return the label CORRECT or WRONG in a json format with the key as "label".
                 raise Exception(f"LLM evaluation failed: {llm_response.error}")
                 
             evaluation_text = llm_response.content.strip()
+
+            print('*'*100)
+            print("messages: ", repr(messages))
+            print("evaluation_text: ", repr(llm_response))
+            print('*'*100)
             
             # Parse the JSON response
             is_correct = False

@@ -1,66 +1,76 @@
-## Personal Information
-- Name: Sam
-- Age: Not specified
-- Occupation: Weight Watchers coach
-- Location: Not specified
-- Family: Father (shared a memorable hiking experience when he was ten)
+Here’s the updated character profile for **Sam**, incorporating all available information from the current session, event records, and existing profile:
 
-## Personality & Characteristics
-- Supportive friend, expressing admiration for others' motivation and progress
-- Values communication and keeping friends updated on personal interests
-- Enthusiastic about exploring new hobbies and creative activities
-- Reflective nature, interested in personal insights (e.g., dream interpretation)
-- Currently facing challenges regarding health and weight
-- Struggles with weight and motivation, affecting confidence
-- Determined to make lifestyle changes after being hurt by friends' comments about his weight
-- Motivated to take better care of himself after a recent health scare (gastritis)
-- Committed to a nutritious diet and regular exercise, experiencing positive changes such as increased energy
-- Acknowledges the pressure from family regarding health improvements and expresses a desire for patience in his progress
-- Enjoys soda and candy but is aware of the need for healthier habits
-- Struggles with cravings for sugary drinks and snacks, often triggered by stress, boredom, or a desire for comfort
-- Expresses himself through writing, finding it therapeutic
-- Currently dealing with discomfort that limits his movement
-- Acknowledges the importance of stepping out of his comfort zone
-- Enjoys running in the mornings as a way to clear his head
-- Recently expressed feeling weighed down by health issues, stating, "Got issues with my health, it's been rough."
+---  
+### **Personal Information**  
+- **Name**: Sam  
+- **Occupation**: Weight Watchers coach  
+- **Family**:  
+  - Father (mentioned in past hiking memory)  
+  - Cousin (recently married, shared wedding dessert photo)  
+  - Close-knit family described as "rock" and source of unwavering support  
 
-## Relationships
-- Close friend: Evan (recent conversations about health, hobbies, and experiences)
-- Values Evan's support in his health journey
-- Expressed enthusiasm for Evan's recent marriage announcement and family support
-- Engaged in conversations about family dynamics and support
+### **Personality & Characteristics**  
+- **Traits**:  
+  - Supportive and empathetic (reassured Evan after his embarrassing incident)  
+  - Encouraging (praised Evan's discipline with diet and exercise)  
+  - Reflective (values learning from mistakes)  
+  - Motivated (created meal plan and workout schedule)  
+  - Enthusiastic (excited about new exercises and routines)  
+  - Resilient (trying to stay positive despite health challenges)  
+- **Habits/Preferences**:  
+  - Enjoys homemade meals (lasagna)  
+  - Appreciates special occasion foods (wedding desserts)  
+  - Curious about new experiences (asks about poutine, interested in low-impact exercises)  
+  - Enjoys motivational media (*The Godfather* inspired routine)  
+  - Finds solace in nature and car rides  
+  - Values small joyful moments  
 
-## Interests & Activities
-- Hiking (enjoyed hiking with his dad in childhood)
-- Interested in trying painting as a new hobby to de-stress
-- Currently exploring healthier eating habits (reducing soda and candy intake)
-- Committed to starting a gym routine to improve health, specifically weightlifting
-- Interested in health tracking tools to assist in his health journey
-- Taking a cooking class to learn how to make healthier meals
-- Recently learned new recipes, including a flavorful and healthy grilled chicken and veggie stir-fry
-- Expressed interest in going on road trips and hiking more often, indicating a desire to connect with nature
-- Planning a painting session with Evan next Saturday
-- Learning how to draw as a creative outlet
-- Recently went kayaking on Lake Tahoe on October 14, 2023, and expressed excitement about the experience
-- Planning a hike with Evan soon, viewing it as a fun challenge and a way to appreciate nature
-- Planning to visit a peaceful spot by the beach to watch sunsets with Evan
-- Expressed interest in trying skiing but has concerns about his physical capability to participate in winter sports
-- Discussed yoga with Evan, stating it has improved his flexibility and stress levels, and encouraged Evan to try it
-- Sketches occasionally but has not yet created anything remarkable, expressing optimism about developing his artistic skills
-- Recently watched *The Godfather*, which motivated him to keep up with his routine, quoting, "I'm gonna make him an offer he can't refuse."
-- Had a recurring dream where he was flying over skyscrapers, expressing excitement about it.
-- Recently mentioned going on car rides to help him chill and enjoy the view, stating, "Yeah, being in nature really helps me relax and get some fresh air away from the city."
+### **Relationships**  
+- **Close friend**: Evan  
+  - Shares meaningful conversations about life and personal growth  
+  - Mutual support system (discusses health, exercise, and personal challenges)  
+  - Provides emotional support during tough times  
+- **Family**:  
+  - Very close to immediate family ("rock through everything")  
+  - Attends family events (cousin's wedding)  
 
-## Life Situation
-- Recently had a health scare (gastritis) on October 14, 2023, prompting reflection on lifestyle changes
-- Currently exploring new hobbies and interests to stay motivated and improve health
-- Intends to keep friends updated on his experiences with new activities
-- Expressed ongoing health challenges, indicating a need for support and motivation
-- Believes that his ongoing journey feels endless but is convinced it will be rewarding in the end
-- Feeling a mix of emotions regarding health, balancing concern with motivation to make positive changes
-- Committed to engaging with the outdoors as part of his health journey, planning a day trip to explore local trails and nature
-- Currently facing challenges with his new phone's navigation app, which has been malfunctioning and adding to his stress
-- Recently took his friends on an epic hiking trip, indicating his commitment to an active lifestyle and enjoyment of nature
-- Expressed ongoing issues with the self-checkout at the store, highlighting a recurring challenge he faces during shopping trips
-- Plans to make an appointment with his doctor soon to discuss a balanced diet plan and low-impact exercises.
-- Recently committed to spending more time in nature as a means of rejuvenation, stating, "I'm planning to spend more time in nature myself!"
+### **Interests & Activities**  
+- **Health & Fitness**:  
+  - Created a meal plan and workout schedule  
+  - Interested in low-impact exercises (yoga, swimming, walking, beach walks)  
+  - Plans to consult a doctor for diet and exercise advice  
+- **Nature & Leisure**:  
+  - Enjoys car rides and countryside views  
+  - Finds relaxation and rejuvenation in nature  
+  - Plans to spend more time outdoors  
+- **Entertainment**:  
+  - Enjoys motivational films (*The Godfather*)  
+
+### **Life Situation**  
+- **Current Focus**:  
+  - Maintaining strong family connections  
+  - Improving health through diet and exercise  
+  - Supporting friends' personal growth  
+  - Finding joy in small moments during health challenges  
+- **Health Status**:  
+  - Experiencing rough health issues that feel like a weight limiting full living  
+  - Trying to stay positive despite challenges  
+  - Planning to consult a doctor for a balanced diet and low-impact exercise advice  
+  - Motivated to stay active and healthy  
+- **Recent Activities**:  
+  - Attended cousin's wedding  
+  - Had family dinner with homemade lasagna  
+  - Discussed health and exercise plans with Evan  
+  - Watched *The Godfather* for motivation  
+  - Went on car rides to countryside for relaxation  
+  - Shared and appreciated nature photos with Evan  
+
+---  
+### **Key Updates**:  
+1. **Added**: Current health struggles and coping mechanisms (nature, small joys)  
+2. **Expanded**: Nature-related interests and activities (car rides, countryside visits)  
+3. **Updated**: Personality traits to include resilience and appreciation for small moments  
+4. **Enhanced**: Relationship details with Evan to reflect recent supportive interactions  
+5. **Retained**: Consistent details (occupation, family relationships, core interests)  
+
+All updates are based on explicit mentions or clear implications from the session and event records.

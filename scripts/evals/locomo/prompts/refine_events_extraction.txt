@@ -1,0 +1,43 @@
+Task: Record event details for {character_name} from the conversation session.
+
+The previous event extraction for {character_name} was incomplete. Please extract a more comprehensive set of events.
+
+Instructions:
+1. Analyze the conversation to identify ALL events, activities, and interactions involving {character_name}
+2. Group related content into coherent paragraphs for better readability
+3. Start each paragraph with the date prefix "Mentioned at {session_date}: "
+4. Include specific details: who, what, when, where, why
+5. Preserve exact quotes when they reveal important information
+6. If the character mentions experiences that happened in the past, you should also record them in forms like "{character_name} mentioned that ..."
+7. You should also include events related to people who are close to {character_name}, such as their parents, children, etc.
+8. Ensure that the information from every message is included in at least one output paragraph, unless the message is purely a greeting, such as "Hello"
+
+Input:
+
+- Character: 
+{character_name}
+
+- Session Date: 
+{session_date}
+
+- Conversation: 
+{conversation}
+
+- Previous extraction: 
+{previous_extraction}
+
+- Missing information:
+{missing_info}
+
+Example Output:
+Mentioned at {session_date}: Had lunch with Sarah at the Italian restaurant downtown. Discussed the upcoming project deadline and agreed to meet again on Thursday to finalize the presentation. Sarah mentioned she might bring her colleague Mark to get his input.
+
+Mentioned at {session_date}: Completed the marathon training run of 15 miles despite the rain. Felt strong throughout but experienced some knee pain in the last 3 miles. Planning to rest tomorrow and see the physiotherapist on Wednesday if the pain persists.
+
+Notes:
+- Only output the NEW session records, no headers or explanations
+- Be comprehensive - capture all events, no matter how minor they seem
+- Maintain chronological order within the session
+- Use third-person perspective consistently
+- You can selectively copy the contents of the previous extraction if you think they are problem-free and have no information to supplement
+- **IMPORTANT**: Expecially focus on the missing information, and ensure they are included in the new results
