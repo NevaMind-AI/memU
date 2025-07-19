@@ -3,6 +3,7 @@ File Manager for Memory Operations
 
 This module provides file-based memory management for character profiles and events.
 Supports reading from and writing to multiple memory file types:
+- activity.md: Activity summaries from conversations (input for other agents)
 - profile.md: Character profile information  
 - event.md: Character event records
 - reminder.md: Important reminders and todo items
@@ -26,6 +27,7 @@ class MemoryFileManager:
     File-based memory management for character profiles and events.
     
     Manages reading/writing of multiple memory file types:
+    - activity.md: Activity summaries from conversations (input for other agents)
     - profile.md: Character profile information  
     - event.md: Character event records
     - reminder.md: Important reminders and todo items
@@ -36,6 +38,7 @@ class MemoryFileManager:
     
     # Define all supported memory types
     MEMORY_TYPES = [
+        "activity",      # Activity summaries (input for other agents)
         "profile",
         "event", 
         "reminder",

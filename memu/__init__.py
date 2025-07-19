@@ -21,12 +21,12 @@ from .llm import CustomLLMClient  # Custom LLM support
 from .llm import LLMResponse  # LLM response object
 from .llm import OpenAIClient  # OpenAI implementation
 
-# Core Memory system - Hybrid storage (file + database)
+# Core Memory system - Modular agent architecture
 from .memory import ProfileMemory, EventMemory  
 from .memory.base import Memory, ProfileMemory, EventMemory, ReminderMemory, ImportantEventMemory, InterestsMemory, StudyMemory 
-from .memory import MemoryAgent 
-from .memory import MetaAgent
-from .memory import AgentRegistry, AgentConfig, get_agent_registry
+from .memory import MetaAgent, BaseAgent
+from .memory import ActivityAgent, ProfileAgent, EventAgent, ReminderAgent, InterestAgent, StudyAgent
+from .memory import create_agent, get_available_agents
 from .memory import MemoryFileManager 
 from .memory import MemoryDatabaseManager 
 from .memory import EmbeddingClient
@@ -76,14 +76,21 @@ except ImportError:
 __all__ = [
     # Core Memory system
     "Memory",  # Simple file-based Memory class
-    "MemoryAgent",  # Agent-based memory management with LLM tools
     "MetaAgent",  # Meta agent for orchestrating conversation processing
+    "BaseAgent",  # Base class for specialized agents
     "MemoryFileManager",  # File operations for memory storage
     "MemoryDatabaseManager",  # Database operations with PostgreSQL + pgvector
-    # Agent system
-    "AgentRegistry",  # Agent registration and management
-    "AgentConfig",  # Agent configuration class
-    "get_agent_registry",  # Get agent registry instance
+    
+    # Specialized Agents
+    "ActivityAgent",  # Activity summarization agent
+    "ProfileAgent",  # Character profile management agent
+    "EventAgent",  # Event recording agent
+    "ReminderAgent",  # Reminders and todos agent
+    "InterestAgent",  # Interests and hobbies agent
+    "StudyAgent",  # Learning and education agent
+    "create_agent",  # Agent factory function
+    "get_available_agents",  # List available agent types
+    
     # Memory components
     "ProfileMemory",  # Profile memory component
     "EventMemory",  # Event memory component
@@ -91,25 +98,30 @@ __all__ = [
     "ImportantEventMemory",  # Important event memory component
     "InterestsMemory",  # Interests memory component
     "StudyMemory",  # Study memory component
+    
     # Embedding support
     "EmbeddingClient",  # Vector embedding client
     "create_embedding_client",  # Embedding client factory
     "get_default_embedding_client",  # Default embedding client getter
+    
     # LLM system
     "BaseLLMClient",  # Base LLM client
     "LLMResponse",  # LLM response object
     "OpenAIClient",  # OpenAI implementation
     "AnthropicClient",  # Anthropic implementation
     "CustomLLMClient",  # Custom LLM support
+    
     # Prompts system
     "PromptLoader",  # Prompt loading utilities
     "get_prompt_loader",  # Get prompt loader instance
+    
     # Configuration
     "config",  # Global config instance
     "load_config",  # Config loader
     "setup_env_file",  # Environment setup helper
     "LLMConfigManager",  # Unified LLM config manager
     "get_llm_config_manager",  # Global LLM config getter
+    
     # Database configuration (optional)
     "setup_postgresql",  # PostgreSQL setup
     "get_database_manager",  # Global database manager
@@ -137,13 +149,13 @@ def __getattr__(name):
 
         return llm
     
-    if name in ["Persona", "ConversationManager", "MemoryClient", "MindMemory"]:
+    if name in ["Persona", "ConversationManager", "MemoryClient", "MindMemory", "MemoryAgent", "AgentRegistry", "AgentConfig"]:
         import warnings
         warnings.warn(
-            f"'{name}' has been removed. Please use the new MemoryAgent-based API.",
+            f"'{name}' has been removed. Please use the new specialized agent architecture with MetaAgent.",
             DeprecationWarning,
             stacklevel=2,
         )
-        raise AttributeError(f"'{name}' is no longer available. Use MemoryAgent instead.")
+        raise AttributeError(f"'{name}' is no longer available. Use MetaAgent and specialized agents instead.")
 
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

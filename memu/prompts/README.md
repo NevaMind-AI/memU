@@ -104,4 +104,4 @@ prompts/
 
 ## Integration
 
-The prompt loader is integrated into `MemoryAgentTools` and automatically initializes when the tools are created. All methods that previously used inline prompts now use the prompt loader system. 
+The prompt loader is integrated into the specialized agents and automatically initializes when the agents are created. All agents now use the prompt loader system to access their specific prompt templates. 

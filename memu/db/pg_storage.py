@@ -164,55 +164,56 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
     """
 
     def _init_tables(self, cur):
-        """Initialize memory-specific database tables."""
-        # Create main memories table
+        """Initialize unified memory table."""
+        # Create unified memories table
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS memories (
-                memory_id TEXT PRIMARY KEY,
+                id TEXT PRIMARY KEY,
                 agent_id TEXT NOT NULL,
                 user_id TEXT NOT NULL,
-                created_at TIMESTAMP NOT NULL,
-                updated_at TIMESTAMP NOT NULL,
-                version INTEGER DEFAULT 3,
-
-                -- Embedded content for simplified access
-                profile_content JSONB,
-                event_content JSONB,
-                mind_content JSONB,
-
-                -- Memory statistics
-                profile_content_hash TEXT,
-                last_event_date TIMESTAMP,
-
-                -- Unique constraint for agent-user combination
-                UNIQUE(agent_id, user_id)
+                category TEXT,
+                content TEXT,
+                embedding vector(1536),  -- Default OpenAI embedding dimension
+                links JSONB,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                happened_at TIMESTAMP
             )
         """
         )
 
-        # Create memory_contents table with vector support
+        # Create memory history table
         cur.execute(
             """
-            CREATE TABLE IF NOT EXISTS memory_contents (
-                content_id TEXT PRIMARY KEY,
+            CREATE TABLE IF NOT EXISTS memory_history (
+                id TEXT PRIMARY KEY,
                 memory_id TEXT NOT NULL,
-                content_type TEXT NOT NULL CHECK (content_type IN ('profile', 'event', 'mind')),
+                agent_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                section TEXT,
+                content TEXT,
+                links JSONB
+            )
+        """
+        )
 
-                -- Content data
-                content_data JSONB NOT NULL,
-                content_text TEXT,
-                content_hash TEXT,
-
-                -- Vector embedding for semantic search
-                content_vector vector(1536),  -- Default OpenAI embedding dimension
-
-                -- Metadata
-                created_at TIMESTAMP NOT NULL,
-                updated_at TIMESTAMP NOT NULL,
-
-                FOREIGN KEY (memory_id) REFERENCES memories(memory_id) ON DELETE CASCADE ON UPDATE CASCADE,
-                UNIQUE(memory_id, content_type)
+        # Create conversations table
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversations (
+                id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                title TEXT,
+                summary TEXT,
+                status TEXT DEFAULT 'active',
+                metadata JSONB,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ended_at TIMESTAMP
             )
         """
         )
@@ -228,46 +229,237 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
             "CREATE INDEX IF NOT EXISTS idx_memories_agent_user ON memories(agent_id, user_id)"
         )
         cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memories_created_at ON memories(created_at)"
+        )
+        cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)"
         )
         cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_memory_contents_memory_type ON memory_contents(memory_id, content_type)"
-        )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_memory_contents_hash ON memory_contents(content_hash)"
+            "CREATE INDEX IF NOT EXISTS idx_memories_happened_at ON memories(happened_at)"
         )
 
         # Create vector similarity search index using HNSW
         cur.execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_memory_contents_vector_hnsw
-            ON memory_contents USING hnsw (content_vector vector_cosine_ops)
+            CREATE INDEX IF NOT EXISTS idx_memories_vector_hnsw
+            ON memories USING hnsw (embedding vector_cosine_ops)
         """
+        )
+        
+        # JSONB indexes for links
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memories_links_gin ON memories USING gin (links)"
         )
         
         # Add composite indexes for common memory query patterns
         cur.execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_memory_contents_type_vector_filtered
-            ON memory_contents (content_type, content_id) 
-            WHERE content_vector IS NOT NULL
+            CREATE INDEX IF NOT EXISTS idx_memories_agent_user_category
+            ON memories (agent_id, user_id, category)
         """
         )
         cur.execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_memories_agent_user_updated
-            ON memories (agent_id, user_id, updated_at DESC)
+            CREATE INDEX IF NOT EXISTS idx_memories_category_happened
+            ON memories (category, happened_at)
         """
         )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_memories_embedding_filtered
+            ON memories (category) 
+            WHERE embedding IS NOT NULL
+        """
+        )
+
+        # Create indexes for memory_history table
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_memory_id ON memory_history(memory_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_agent_id ON memory_history(agent_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_user_id ON memory_history(user_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_action ON memory_history(action)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_timestamp ON memory_history(timestamp)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_section ON memory_history(section)"
+        )
+
+        # JSONB indexes for history links
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_links_gin ON memory_history USING gin (links)"
+        )
+
+        # Composite indexes for history queries
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_memory_history_memory_timestamp
+            ON memory_history (memory_id, timestamp DESC)
+        """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_memory_history_agent_user_timestamp
+            ON memory_history (agent_id, user_id, timestamp DESC)
+        """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_memory_history_action_timestamp
+            ON memory_history (action, timestamp DESC)
+        """
+        )
+
+        # Create indexes for conversations table
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_agent_id ON conversations(agent_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_agent_user ON conversations(agent_id, user_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_ended_at ON conversations(ended_at)"
+        )
+
+        # JSONB indexes for conversation metadata
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_metadata_gin ON conversations USING gin (metadata)"
+        )
+
+        # Composite indexes for conversation queries
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_conversations_agent_user_status
+            ON conversations (agent_id, user_id, status)
+        """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_conversations_status_updated
+            ON conversations (status, updated_at DESC)
+        """
+        )
+
+    @retry_on_table_missing()
+    def save_memory_content(self, agent_id: str, user_id: str, category: str = None, content: str = None, links: dict = None, happened_at: datetime = None) -> str:
+        """
+        Save memory content to unified memories table.
+
+        Args:
+            agent_id: Agent identifier
+            user_id: User identifier
+            category: Optional category for organization
+            content: The actual content text
+            links: Optional links/references in dict format
+            happened_at: Optional timestamp when the event happened
+
+        Returns:
+            str: The memory ID if successful, None if failed
+        """
+        try:
+            with psycopg2.connect(self.connection_string) as conn:
+                with conn.cursor() as cur:
+                    # Insert memory content
+                    memory_id = str(uuid.uuid4())
+                    cur.execute(
+                        """
+                        INSERT INTO memories
+                        (id, agent_id, user_id, category, content, links, 
+                         created_at, updated_at, happened_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            memory_id,
+                            agent_id,
+                            user_id,
+                            category,
+                            content,
+                            json.dumps(links) if links else None,
+                            datetime.now(),
+                            datetime.now(),
+                            happened_at
+                        ),
+                    )
+                    
+                    # Log the CREATE action to history
+                    self._log_history_action(
+                        cur, memory_id, agent_id, user_id, "CREATE", 
+                        section="full", content=content, links=links
+                    )
+                    
+                    conn.commit()
+            return memory_id
+        except Exception as e:
+            logger.error(f"Error saving memory content: {e}")
+            return None
+
+    def _log_history_action(self, cur, memory_id: str, agent_id: str, user_id: str, action: str,
+                           section: str = None, content: str = None, links: dict = None):
+        """
+        Internal method to log history action within existing transaction.
+        
+        Args:
+            cur: Database cursor (must be within a transaction)
+            memory_id: ID of the memory that was acted upon
+            agent_id: Agent identifier
+            user_id: User identifier
+            action: Action type (CREATE, UPDATE, DELETE, READ, SEARCH, EMBED)
+            section: Section that was affected
+            content: Content involved in the action
+            links: Links data involved in the action
+        """
+        try:
+            history_id = str(uuid.uuid4())
+            cur.execute(
+                """
+                INSERT INTO memory_history
+                (id, memory_id, agent_id, user_id, action, timestamp, section, content, links)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    history_id,
+                    memory_id,
+                    agent_id,
+                    user_id,
+                    action,
+                    datetime.now(),
+                    section,
+                    content,
+                    json.dumps(links) if links else None
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log history action: {e}")
+            # Don't fail the main operation if history logging fails
 
     @retry_on_table_missing()
     def save_memory(self, memory: Memory) -> bool:
         """
         Save complete Memory object to database.
         
-        Design: 
-        - memories table: metadata only (memory_id, agent_id, user_id, timestamps)
-        - memory_contents table: all content (profile, events, mind) with vectors
+        Legacy method that adapts to new unified table structure.
 
         Args:
             memory: Memory object
@@ -276,100 +468,75 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
             bool: Whether save was successful
         """
         try:
-            with psycopg2.connect(self.connection_string) as conn:
-                with conn.cursor() as cur:
-                    # 1. Save/update metadata in memories table (no content)
-                    # Check if memory already exists for this agent-user combination
-                    cur.execute(
-                        "SELECT memory_id FROM memories WHERE agent_id = %s AND user_id = %s",
-                        (memory.agent_id, memory.user_id)
-                    )
-                    existing_memory = cur.fetchone()
-                    
-                    if existing_memory:
-                        # Memory exists, just update timestamp and use existing memory_id
-                        existing_memory_id = existing_memory[0]
-                        cur.execute(
-                            "UPDATE memories SET updated_at = %s WHERE memory_id = %s",
-                            (memory.updated_at, existing_memory_id)
-                        )
-                        # Update the memory object to use the existing memory_id for content operations
-                        actual_memory_id = existing_memory_id
-                    else:
-                        # New memory, insert with new memory_id
-                        cur.execute(
-                            """
-                            INSERT INTO memories
-                            (memory_id, agent_id, user_id, created_at, updated_at)
-                            VALUES (%s, %s, %s, %s, %s)
-                            """,
-                            (
-                                memory.memory_id,
-                                memory.agent_id,
-                                memory.user_id,
-                                memory.created_at,
-                                memory.updated_at,
-                            ),
-                        )
-                        actual_memory_id = memory.memory_id
+            # Extract content from memory object and save each type
+            profile_content = memory.get_profile()
+            if profile_content:
+                self.save_memory_content(
+                    memory.agent_id, memory.user_id, 'profile', 
+                    '\n'.join(profile_content), 'personal'
+                )
 
-                    # 2. Save content to memory_contents table using the actual memory_id
-                    profile_content = memory.get_profile()
-                    if profile_content:
-                        self._save_content(cur, actual_memory_id, 'profile', profile_content)
+            event_content = memory.get_events()
+            if event_content:
+                self.save_memory_content(
+                    memory.agent_id, memory.user_id, 'event', 
+                    '\n'.join(event_content), 'daily'
+                )
 
-                    event_content = memory.get_events()
-                    if event_content:
-                        self._save_content(cur, actual_memory_id, 'event', event_content)
-
-                    mind_content = memory.get_mind()
-                    if mind_content:
-                        self._save_content(cur, actual_memory_id, 'mind', mind_content)
-
-                    conn.commit()
             return True
         except Exception as e:
             logger.error(f"Error saving memory: {e}")
             return False
 
-    def _save_content(self, cur, memory_id: str, content_type: str, content: list):
-        """Save content to memory_contents table using consistent new format."""
-        # Use consistent new format: {"profile": [...], "event": [...], "mind": [...]}
-        content_data = {content_type: content}
-        content_id = f"{memory_id}_{content_type}"
-        content_text = "\n".join(content) if isinstance(content, list) else str(content)
-        content_hash = self._calculate_hash(content_text)
+    @retry_on_table_missing()
+    def get_memory_content(self, agent_id: str, user_id: str, category: str = None) -> List[Dict]:
+        """
+        Get memory content from unified memories table.
 
-        cur.execute(
-            """
-            INSERT INTO memory_contents
-            (content_id, memory_id, content_type, content_data, content_text, content_hash, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (memory_id, content_type) DO UPDATE SET
-            content_data = EXCLUDED.content_data,
-            content_text = EXCLUDED.content_text,
-            content_hash = EXCLUDED.content_hash,
-            updated_at = EXCLUDED.updated_at
-            """,
-            (
-                content_id,
-                memory_id,
-                content_type,
-                json.dumps(content_data),
-                content_text,
-                content_hash,
-                datetime.now(),
-                datetime.now(),
-            ),
-        )
+        Args:
+            agent_id: Agent identifier
+            user_id: User identifier 
+            category: Optional category filter
+
+        Returns:
+            List[Dict]: List of memory records
+        """
+        try:
+            with psycopg2.connect(self.connection_string) as conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    if category:
+                        cur.execute(
+                            """
+                            SELECT id, agent_id, user_id, category, content, links, 
+                                   created_at, updated_at, happened_at
+                            FROM memories 
+                            WHERE agent_id = %s AND user_id = %s AND category = %s
+                            ORDER BY updated_at DESC
+                            """,
+                            (agent_id, user_id, category)
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            SELECT id, agent_id, user_id, category, content, links,
+                                   created_at, updated_at, happened_at
+                            FROM memories 
+                            WHERE agent_id = %s AND user_id = %s
+                            ORDER BY category, updated_at DESC
+                            """,
+                            (agent_id, user_id)
+                        )
+                    
+                    results = cur.fetchall()
+                    return [dict(row) for row in results]
+                    
+        except Exception as e:
+            logger.error(f"Error getting memory content: {e}")
+            return []
 
     def load_memory(self, memory_id: str) -> Optional[Memory]:
         """
-        Load complete Memory object from database.
-        
-        Design:
-        - Load metadata from memories table
-        - Load all content from memory_contents table
+        Load complete Memory object from unified table.
 
         Args:
             memory_id: Memory ID
@@ -380,16 +547,16 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
         try:
             with psycopg2.connect(self.connection_string) as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                    # 1. Load metadata from memories table
+                    # Load specific memory record
                     cur.execute(
-                        "SELECT * FROM memories WHERE memory_id = %s", (memory_id,)
+                        "SELECT * FROM memories WHERE id = %s", (memory_id,)
                     )
                     memory_row = cur.fetchone()
 
                     if not memory_row:
                         return None
 
-                    # 2. Create Memory object with metadata
+                    # Create Memory object with the specific content
                     memory = Memory(
                         agent_id=memory_row["agent_id"],
                         user_id=memory_row.get("user_id", "default_user"),
@@ -399,45 +566,69 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                     memory.created_at = memory_row["created_at"]
                     memory.updated_at = memory_row["updated_at"]
 
-                    # 3. Load all content from memory_contents table
-                    cur.execute(
-                        """
-                        SELECT content_type, content_data 
-                        FROM memory_contents 
-                        WHERE memory_id = %s
-                        """, 
-                        (memory_id,)
-                    )
+                    # Parse the content based on type
+                    content_type = memory_row["category"] # Changed from content_type to category
+                    content_text = memory_row["content"]
                     
-                    content_rows = cur.fetchall()
-                    for row in content_rows:
-                        content_type = row["content_type"]
-                        content_data = row["content_data"]
+                    if content_text:
+                        content_list = [line.strip() for line in content_text.split('\n') if line.strip()]
                         
-                        try:
-                            # Parse content_data JSON
-                            if isinstance(content_data, str):
-                                content_json = json.loads(content_data)
-                            else:
-                                content_json = content_data
-                            
-                            # Extract content using new unified format
-                            if content_type == 'profile' and 'profile' in content_json:
-                                memory.profile_memory = ProfileMemory(content_json['profile'])
-                            elif content_type == 'event' and 'event' in content_json:
-                                memory.event_memory = EventMemory(content_json['event'])
-                            elif content_type == 'mind' and 'mind' in content_json:
-                                # Import MindMemory here to avoid circular imports
-                                from ..memory.base import MindMemory
-                                memory.mind_memory = MindMemory(content_json['mind'])
-                                
-                        except (json.JSONDecodeError, TypeError, KeyError) as e:
-                            logger.warning(f"Error parsing {content_type} content: {e}")
+                        if content_type == 'profile':
+                            memory.profile_memory = ProfileMemory(content_list)
+                        elif content_type == 'event':
+                            memory.event_memory = EventMemory(content_list)
 
                     return memory
 
         except Exception as e:
             logger.error(f"Error loading memory: {e}")
+            return None
+
+    def load_agent_memories(self, agent_id: str, user_id: str = "default") -> Optional[Memory]:
+        """
+        Load all memories for an agent-user combination and create a unified Memory object.
+
+        Args:
+            agent_id: Agent identifier
+            user_id: User identifier
+
+        Returns:
+            Optional[Memory]: Combined Memory object with all content types
+        """
+        try:
+            memories = self.get_memory_content(agent_id, user_id)
+            if not memories:
+                return None
+
+            # Create a unified Memory object
+            memory = Memory(
+                agent_id=agent_id,
+                user_id=user_id,
+                memory_client=None,
+                memory_id=str(uuid.uuid4()),  # Generate a new ID for the combined object
+            )
+
+            # Process each memory type
+            for mem in memories:
+                content_type = mem["category"] # Changed from content_type to category
+                content_text = mem["content"]
+                
+                if content_text:
+                    content_list = [line.strip() for line in content_text.split('\n') if line.strip()]
+                    
+                    if content_type == 'profile':
+                        memory.profile_memory = ProfileMemory(content_list)
+                    elif content_type == 'event':
+                        memory.event_memory = EventMemory(content_list)
+
+                # Use the most recent update time
+                if mem["updated_at"] > memory.updated_at:
+                    memory.updated_at = mem["updated_at"]
+
+            return memory
+
+        except Exception as e:
+            logger.error(f"Error loading agent memories: {e}")
             return None
 
     def get_memory_by_agent(self, agent_id: str, user_id: str) -> Optional[Memory]:
@@ -460,7 +651,7 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                     # Find memory_id by agent_id and user_id
                     cur.execute(
-                        "SELECT memory_id FROM memories WHERE agent_id = %s AND user_id = %s",
+                        "SELECT id FROM memories WHERE agent_id = %s AND user_id = %s",
                         (agent_id, user_id),
                     )
                     result = cur.fetchone()
@@ -469,7 +660,7 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                         return None
 
                     # Load complete memory using memory_id
-                    return self.load_memory(result["memory_id"])
+                    return self.load_memory(result["id"])
 
         except Exception as e:
             logger.error(f"Error getting memory by agent: {e}")
@@ -480,6 +671,7 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
         agent_id: str,
         query_vector: List[float],
         content_type: Optional[str] = None,
+        category: Optional[str] = None,
         limit: int = 10,
         similarity_threshold: float = 0.7,
     ) -> List[Dict[str, Any]]:
@@ -489,7 +681,8 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
         Args:
             agent_id: Agent ID
             query_vector: Query vector for similarity search
-            content_type: Content type filter ('profile', 'event', 'mind')
+            content_type: Content type filter (e.g., 'activity', 'profile', 'event', 'reminder', etc.)
+            category: Category filter (e.g., 'personal', 'work', 'hobby', 'important')
             limit: Maximum number of results
             similarity_threshold: Minimum similarity score
 
@@ -502,31 +695,35 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
                     # Base query for vector similarity search
                     query = """
                         SELECT 
-                            mc.memory_id,
-                            mc.content_type,
-                            mc.content_data,
-                            mc.content_text,
-                            m.agent_id,
-                            m.user_id,
-                            m.updated_at,
-                            1 - (mc.content_vector <=> %s::vector) as similarity
-                        FROM memory_contents mc
-                        JOIN memories m ON mc.memory_id = m.memory_id
-                        WHERE m.agent_id = %s
-                        AND mc.content_vector IS NOT NULL
+                            id,
+                            agent_id,
+                            user_id,
+                            category,
+                            content,
+                            created_at,
+                            updated_at,
+                            1 - (embedding <=> %s::vector) as similarity
+                        FROM memories
+                        WHERE agent_id = %s
+                        AND embedding IS NOT NULL
                     """
 
                     params = [str(query_vector), agent_id]
 
                     # Add content type filter if specified
                     if content_type:
-                        query += " AND mc.content_type = %s"
+                        query += " AND category = %s"
                         params.append(content_type)
+                    
+                    # Add category filter if specified
+                    if category:
+                        query += " AND category = %s"
+                        params.append(category)
 
                     # Add similarity threshold and ordering
                     query += """
-                        AND (1 - (mc.content_vector <=> %s::vector)) >= %s
-                        ORDER BY mc.content_vector <=> %s::vector
+                        AND (1 - (embedding <=> %s::vector)) >= %s
+                        ORDER BY embedding <=> %s::vector
                         LIMIT %s
                     """
                     params.extend([str(query_vector), similarity_threshold, str(query_vector), limit])
@@ -541,16 +738,17 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
             return []
 
     def save_memory_embedding(
-        self, memory_id: str, content_type: str, vector: List[float], content_text: str
+        self, agent_id: str, user_id: str, category: str, vector: List[float], content_text: str = None
     ) -> bool:
         """
-        Save memory content embedding vector.
+        Save memory embedding vector for unified table.
 
         Args:
-            memory_id: Memory ID
-            content_type: Content type ('profile', 'event', 'mind')
+            agent_id: Agent identifier
+            user_id: User identifier
+            category: Category (e.g., 'activity', 'profile', 'event', 'reminder', etc.)
             vector: Embedding vector
-            content_text: Content text for the vector
+            content_text: Optional content text to update
 
         Returns:
             bool: Whether save was successful
@@ -558,14 +756,53 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
         try:
             with psycopg2.connect(self.connection_string) as conn:
                 with conn.cursor() as cur:
+                    # Get memory_id first
                     cur.execute(
-                        """
-                        UPDATE memory_contents 
-                        SET content_vector = %s::vector, content_text = %s, updated_at = %s
-                        WHERE memory_id = %s AND content_type = %s
-                    """,
-                        (str(vector), content_text, datetime.now(), memory_id, content_type),
+                        "SELECT id FROM memories WHERE agent_id = %s AND user_id = %s AND category = %s",
+                        (agent_id, user_id, category)
                     )
+                    result = cur.fetchone()
+                    
+                    if not result:
+                        logger.warning(f"No memory found for embedding update: {agent_id}/{user_id}/{category}")
+                        return False
+                    
+                    memory_id = result[0]
+                    
+                    if content_text:
+                        cur.execute(
+                            """
+                            UPDATE memories 
+                            SET embedding = %s::vector, content = %s, updated_at = %s
+                            WHERE agent_id = %s AND user_id = %s AND category = %s
+                        """,
+                            (str(vector), content_text, datetime.now(), agent_id, user_id, category),
+                        )
+                        
+                        # Log both content and embedding update
+                        self._log_history_action(
+                            cur, memory_id, agent_id, user_id, "UPDATE",
+                            section="content", content=content_text
+                        )
+                        self._log_history_action(
+                            cur, memory_id, agent_id, user_id, "EMBED",
+                            section="embedding"
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            UPDATE memories 
+                            SET embedding = %s::vector, updated_at = %s
+                            WHERE agent_id = %s AND user_id = %s AND category = %s
+                        """,
+                            (str(vector), datetime.now(), agent_id, user_id, category),
+                        )
+                        
+                        # Log embedding update only
+                        self._log_history_action(
+                            cur, memory_id, agent_id, user_id, "EMBED",
+                            section="embedding"
+                        )
 
                     conn.commit()
                     return cur.rowcount > 0
@@ -576,7 +813,7 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
 
     def delete_memory(self, memory_id: str) -> bool:
         """
-        Delete Memory and all its content from database.
+        Delete a memory by ID.
 
         Args:
             memory_id: Memory ID
@@ -587,55 +824,250 @@ class PostgreSQLMemoryDB(PostgreSQLStorageBase):
         try:
             with psycopg2.connect(self.connection_string) as conn:
                 with conn.cursor() as cur:
-                    # Delete from memories table (cascade will handle related records)
-                    cur.execute("DELETE FROM memories WHERE memory_id = %s", (memory_id,))
-
+                    # First, get the memory details for history logging
+                    cur.execute(
+                        "SELECT agent_id, user_id, category, content, links FROM memories WHERE id = %s",
+                        (memory_id,)
+                    )
+                    memory_data = cur.fetchone()
+                    
+                    if memory_data:
+                        agent_id, user_id, category, content, links = memory_data
+                        
+                        # Log the DELETE action to history before deletion
+                        self._log_history_action(
+                            cur, memory_id, agent_id, user_id, "DELETE",
+                            section="full", content=content, links=json.loads(links) if links else None
+                        )
+                    
+                    # Delete the memory
+                    cur.execute("DELETE FROM memories WHERE id = %s", (memory_id,))
                     conn.commit()
-                    return True
+                    return cur.rowcount > 0
 
         except Exception as e:
             logger.error(f"Error deleting memory: {e}")
             return False
 
-    def get_memory_stats(self, agent_id: str) -> Dict[str, Any]:
+    def delete_agent_memories(self, agent_id: str, user_id: str = "default", content_type: str = None) -> bool:
         """
-        Get Memory statistics.
+        Delete memories for an agent-user combination.
 
         Args:
-            agent_id: Agent ID
+            agent_id: Agent identifier
+            user_id: User identifier
+            content_type: Optional content type filter
 
         Returns:
-            Dict: Statistics information
+            bool: Whether deletion was successful
+        """
+        try:
+            with psycopg2.connect(self.connection_string) as conn:
+                with conn.cursor() as cur:
+                    if content_type:
+                        cur.execute(
+                            "DELETE FROM memories WHERE agent_id = %s AND user_id = %s AND category = %s",
+                            (agent_id, user_id, content_type)
+                        )
+                    else:
+                        cur.execute(
+                            "DELETE FROM memories WHERE agent_id = %s AND user_id = %s",
+                            (agent_id, user_id)
+                        )
+                    
+                    conn.commit()
+                    return cur.rowcount > 0
+
+        except Exception as e:
+            logger.error(f"Error deleting agent memories: {e}")
+            return False
+
+    def clear_agent_memories(self, agent_id: str, user_id: str, category: str = None) -> bool:
+        """
+        Clear all memories for an agent.
+
+        Args:
+            agent_id: Agent identifier
+            user_id: User identifier
+            category: Optional specific category to clear
+
+        Returns:
+            bool: Whether deletion was successful
+        """
+        try:
+            with psycopg2.connect(self.connection_string) as conn:
+                with conn.cursor() as cur:
+                    if category:
+                        cur.execute(
+                            "DELETE FROM memories WHERE agent_id = %s AND user_id = %s AND category = %s",
+                            (agent_id, user_id, category)
+                        )
+                    else:
+                        cur.execute(
+                            "DELETE FROM memories WHERE agent_id = %s AND user_id = %s",
+                            (agent_id, user_id)
+                        )
+                    
+                    conn.commit()
+                    return cur.rowcount > 0
+
+        except Exception as e:
+            logger.error(f"Error clearing agent memories: {e}")
+            return False
+
+    def get_memory_stats(self, agent_id: str, user_id: str = "default") -> Dict[str, Any]:
+        """
+        Get comprehensive memory statistics for an agent.
+
+        Args:
+            agent_id: Agent identifier
+            user_id: User identifier
+
+        Returns:
+            Dict with memory statistics
         """
         try:
             with psycopg2.connect(self.connection_string) as conn:
                 with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    # Get basic stats
                     cur.execute(
                         """
                         SELECT
-                            COUNT(*) as total_memories,
+                            category,
+                            COUNT(*) as count,
                             MAX(updated_at) as last_updated
                         FROM memories
-                        WHERE agent_id = %s
+                        WHERE agent_id = %s AND user_id = %s
+                        GROUP BY category
+                        ORDER BY count DESC
                     """,
-                        (agent_id,),
+                        (agent_id, user_id),
                     )
 
-                    stats_row = cur.fetchone()
+                    stats = {}
+                    total_memories = 0
+                    
+                    for row in cur.fetchall():
+                        category_stats = dict(row)
+                        stats[row["category"]] = category_stats
+                        total_memories += row["count"]
 
                     return {
                         "agent_id": agent_id,
-                        "total_memories": stats_row["total_memories"],
-                        "last_updated": (
-                            stats_row["last_updated"].isoformat()
-                            if stats_row["last_updated"]
-                            else None
-                        ),
+                        "user_id": user_id,
+                        "total_memories": total_memories,
+                        "categories": stats,
                     }
 
         except Exception as e:
             logger.error(f"Error getting memory stats: {e}")
-            return {}
+            return {"error": str(e)}
+
+    def log_memory_action(self, memory_id: str, agent_id: str, user_id: str, action: str, 
+                         section: str = None, content: str = None, links: dict = None) -> bool:
+        """
+        Log an action to the memory history table.
+
+        Args:
+            memory_id: ID of the memory that was acted upon
+            agent_id: Agent identifier
+            user_id: User identifier
+            action: Action type (CREATE, UPDATE, DELETE, READ, SEARCH, EMBED)
+            section: Section that was affected (content, links, category, etc.)
+            content: Content involved in the action
+            links: Links data involved in the action
+
+        Returns:
+            bool: Whether the log entry was successfully created
+        """
+        try:
+            with psycopg2.connect(self.connection_string) as conn:
+                with conn.cursor() as cur:
+                    history_id = str(uuid.uuid4())
+                    cur.execute(
+                        """
+                        INSERT INTO memory_history
+                        (id, memory_id, agent_id, user_id, action, timestamp, section, content, links)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            history_id,
+                            memory_id,
+                            agent_id,
+                            user_id,
+                            action,
+                            datetime.now(),
+                            section,
+                            content,
+                            json.dumps(links) if links else None
+                        )
+                    )
+                    conn.commit()
+                    return True
+
+        except Exception as e:
+            logger.error(f"Error logging memory action: {e}")
+            return False
+
+    def get_memory_history(self, memory_id: str = None, agent_id: str = None, user_id: str = None, 
+                          action: str = None, limit: int = 100) -> List[Dict]:
+        """
+        Get memory history records with optional filtering.
+
+        Args:
+            memory_id: Filter by specific memory ID
+            agent_id: Filter by agent ID
+            user_id: Filter by user ID
+            action: Filter by action type
+            limit: Maximum number of records to return
+
+        Returns:
+            List of history records
+        """
+        try:
+            with psycopg2.connect(self.connection_string) as conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    # Build dynamic query
+                    where_conditions = []
+                    params = []
+
+                    if memory_id:
+                        where_conditions.append("memory_id = %s")
+                        params.append(memory_id)
+                    
+                    if agent_id:
+                        where_conditions.append("agent_id = %s")
+                        params.append(agent_id)
+                    
+                    if user_id:
+                        where_conditions.append("user_id = %s")
+                        params.append(user_id)
+                    
+                    if action:
+                        where_conditions.append("action = %s")
+                        params.append(action)
+
+                    params.append(limit)
+
+                    where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
+                    
+                    query = f"""
+                        SELECT id, memory_id, agent_id, user_id, action, timestamp, 
+                               section, content, links
+                        FROM memory_history
+                        WHERE {where_clause}
+                        ORDER BY timestamp DESC
+                        LIMIT %s
+                    """
+
+                    cur.execute(query, params)
+                    results = cur.fetchall()
+                    
+                    return [dict(row) for row in results]
+
+        except Exception as e:
+            logger.error(f"Error getting memory history: {e}")
+            return []
 
 
 # PostgreSQLConversationDB class removed - depends on deleted memo module

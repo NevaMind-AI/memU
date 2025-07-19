@@ -48,55 +48,21 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
         logger.info("MemoryDatabaseManager initialized with PostgreSQL + pgvector")
     
     def _init_tables(self, cur):
-        """Initialize memory-specific database tables."""
-        # Create main memories table
+        """Initialize unified memory table."""
+        # Create unified memories table
         cur.execute(
             """
             CREATE TABLE IF NOT EXISTS memories (
-                memory_id TEXT PRIMARY KEY,
+                id TEXT PRIMARY KEY,
                 agent_id TEXT NOT NULL,
                 user_id TEXT NOT NULL,
-                created_at TIMESTAMP NOT NULL,
-                updated_at TIMESTAMP NOT NULL,
-                version INTEGER DEFAULT 3,
-
-                -- Embedded content for simplified access
-                profile_content JSONB,
-                event_content JSONB,
-                mind_content JSONB,
-
-                -- Memory statistics
-                profile_content_hash TEXT,
-                last_event_date TIMESTAMP,
-
-                -- Unique constraint for agent-user combination
-                UNIQUE(agent_id, user_id)
-            )
-        """
-        )
-
-        # Create memory_contents table with vector support
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS memory_contents (
-                content_id TEXT PRIMARY KEY,
-                memory_id TEXT NOT NULL,
-                content_type TEXT NOT NULL CHECK (content_type IN ('profile', 'event', 'mind')),
-
-                -- Content data
-                content_data JSONB NOT NULL,
-                content_text TEXT,
-                content_hash TEXT,
-
-                -- Vector embedding for semantic search
-                content_vector vector(1536),  -- Default OpenAI embedding dimension
-
-                -- Metadata
-                created_at TIMESTAMP NOT NULL,
-                updated_at TIMESTAMP NOT NULL,
-
-                FOREIGN KEY (memory_id) REFERENCES memories(memory_id) ON DELETE CASCADE ON UPDATE CASCADE,
-                UNIQUE(memory_id, content_type)
+                category TEXT,
+                content TEXT,
+                embedding vector(1536),  -- Default OpenAI embedding dimension
+                links JSONB,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                happened_at TIMESTAMP
             )
         """
         )
@@ -112,35 +78,171 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
             "CREATE INDEX IF NOT EXISTS idx_memories_agent_user ON memories(agent_id, user_id)"
         )
         cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(category)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memories_created_at ON memories(created_at)"
+        )
+        cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)"
         )
         cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_memory_contents_memory_type ON memory_contents(memory_id, content_type)"
-        )
-        cur.execute(
-            "CREATE INDEX IF NOT EXISTS idx_memory_contents_hash ON memory_contents(content_hash)"
+            "CREATE INDEX IF NOT EXISTS idx_memories_happened_at ON memories(happened_at)"
         )
 
         # Create vector similarity search index using HNSW
         cur.execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_memory_contents_vector_hnsw
-            ON memory_contents USING hnsw (content_vector vector_cosine_ops)
+            CREATE INDEX IF NOT EXISTS idx_memories_vector_hnsw
+            ON memories USING hnsw (embedding vector_cosine_ops)
         """
+        )
+        
+        # JSONB indexes for links
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memories_links_gin ON memories USING gin (links)"
         )
         
         # Add composite indexes for common memory query patterns
         cur.execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_memory_contents_type_vector_filtered
-            ON memory_contents (content_type, content_id) 
-            WHERE content_vector IS NOT NULL
+            CREATE INDEX IF NOT EXISTS idx_memories_agent_user_category
+            ON memories (agent_id, user_id, category)
         """
         )
         cur.execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_memories_agent_user_updated
-            ON memories (agent_id, user_id, updated_at DESC)
+            CREATE INDEX IF NOT EXISTS idx_memories_category_happened
+            ON memories (category, happened_at)
+        """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_memories_embedding_filtered
+            ON memories (category) 
+            WHERE embedding IS NOT NULL
+        """
+        )
+
+        # Create memory history table
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS memory_history (
+                id TEXT PRIMARY KEY,
+                memory_id TEXT NOT NULL,
+                agent_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                section TEXT,
+                content TEXT,
+                links JSONB
+            )
+        """
+        )
+
+        # Create conversations table
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversations (
+                id TEXT PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                title TEXT,
+                summary TEXT,
+                status TEXT DEFAULT 'active',
+                metadata JSONB,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ended_at TIMESTAMP
+            )
+        """
+        )
+
+        # Create indexes for memory_history table
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_memory_id ON memory_history(memory_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_agent_id ON memory_history(agent_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_user_id ON memory_history(user_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_action ON memory_history(action)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_timestamp ON memory_history(timestamp)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_section ON memory_history(section)"
+        )
+
+        # JSONB indexes for history links
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_memory_history_links_gin ON memory_history USING gin (links)"
+        )
+
+        # Composite indexes for history queries
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_memory_history_memory_timestamp
+            ON memory_history (memory_id, timestamp DESC)
+        """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_memory_history_agent_user_timestamp
+            ON memory_history (agent_id, user_id, timestamp DESC)
+        """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_memory_history_action_timestamp
+            ON memory_history (action, timestamp DESC)
+        """
+        )
+
+        # Create indexes for conversations table
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_agent_id ON conversations(agent_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_agent_user ON conversations(agent_id, user_id)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_created_at ON conversations(created_at)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_ended_at ON conversations(ended_at)"
+        )
+
+        # JSONB indexes for conversation metadata
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_metadata_gin ON conversations USING gin (metadata)"
+        )
+
+        # Composite indexes for conversation queries
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_conversations_agent_user_status
+            ON conversations (agent_id, user_id, status)
+        """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_conversations_status_updated
+            ON conversations (status, updated_at DESC)
         """
         )
     
@@ -150,153 +252,18 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
         logger.info("Embedding client set for vector generation")
     
     def _generate_embedding(self, text: str) -> Optional[List[float]]:
-        """Generate embedding vector for text content"""
+        """Generate embedding for text using the embedding client"""
         if not self.embedding_client:
-            logger.warning("No embedding client set, skipping vector generation")
+            logger.warning("No embedding client set, skipping embedding generation")
             return None
-        
+            
         try:
-            # Assume embedding client has an embed method
-            if hasattr(self.embedding_client, 'embed'):
-                embedding = self.embedding_client.embed(text)
-                return embedding if isinstance(embedding, list) else embedding.tolist()
-            elif hasattr(self.embedding_client, 'get_embedding'):
-                embedding = self.embedding_client.get_embedding(text)
-                return embedding if isinstance(embedding, list) else embedding.tolist()
-            else:
-                logger.error("Embedding client does not have embed() or get_embedding() method")
-                return None
+            embedding = self.embedding_client.get_embedding(text)
+            return embedding
         except Exception as e:
-            logger.error(f"Failed to generate embedding: {e}")
+            logger.error(f"Error generating embedding: {e}")
             return None
-    
-    def _get_memory_id(self, character_name: str) -> str:
-        """Get or create memory_id for a character"""
-        # Use character name as agent_id, and default user for simplicity
-        agent_id = character_name.lower()
-        user_id = "default"
-        
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                # Check if memory exists
-                cur.execute(
-                    "SELECT memory_id FROM memories WHERE agent_id = %s AND user_id = %s",
-                    (agent_id, user_id)
-                )
-                result = cur.fetchone()
-                
-                if result:
-                    return result[0]
-                
-                # Create new memory record
-                memory_id = str(uuid.uuid4())
-                cur.execute(
-                    """
-                    INSERT INTO memories (memory_id, agent_id, user_id, created_at, updated_at, version)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (memory_id, agent_id, user_id, datetime.now(), datetime.now(), 3)
-                )
-                conn.commit()  # Commit the transaction
-                return memory_id
-    
-    def _content_hash(self, content: str) -> str:
-        """Generate hash for content to detect changes"""
-        return hashlib.md5(content.encode('utf-8')).hexdigest()
-    
-    def _save_content(self, memory_id: str, content_type: str, content: str) -> bool:
-        """Save content to memory_contents table with embedding"""
-        try:
-            content_hash = self._content_hash(content)
-            content_vector = self._generate_embedding(content)
-            
-            with self.get_connection() as conn:
-                with conn.cursor() as cur:
-                    # Check if content already exists and hasn't changed
-                    cur.execute(
-                        """
-                        SELECT content_hash FROM memory_contents 
-                        WHERE memory_id = %s AND content_type = %s
-                        """,
-                        (memory_id, content_type)
-                    )
-                    existing = cur.fetchone()
-                    
-                    if existing and existing[0] == content_hash:
-                        logger.debug(f"Content unchanged for {content_type}, skipping save")
-                        return True
-                    
-                    # Prepare content data
-                    content_data = {
-                        "content": content,
-                        "updated_at": datetime.now().isoformat()
-                    }
-                    
-                    # Insert or update content
-                    cur.execute(
-                        """
-                        INSERT INTO memory_contents 
-                        (content_id, memory_id, content_type, content_data, content_text, 
-                         content_hash, content_vector, created_at, updated_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (memory_id, content_type) 
-                        DO UPDATE SET
-                            content_data = EXCLUDED.content_data,
-                            content_text = EXCLUDED.content_text,
-                            content_hash = EXCLUDED.content_hash,
-                            content_vector = EXCLUDED.content_vector,
-                            updated_at = EXCLUDED.updated_at
-                        """,
-                        (
-                            str(uuid.uuid4()),
-                            memory_id,
-                            content_type,
-                            json.dumps(content_data),
-                            content,
-                            content_hash,
-                            content_vector,
-                            datetime.now(),
-                            datetime.now()
-                        )
-                    )
-                    
-                    # Update memories table timestamp
-                    cur.execute(
-                        "UPDATE memories SET updated_at = %s WHERE memory_id = %s",
-                        (datetime.now(), memory_id)
-                    )
-                    
-                    conn.commit()  # Explicitly commit the transaction
-                    
-            logger.debug(f"Saved {content_type} content for memory {memory_id}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error saving {content_type} content: {e}")
-            return False
-    
-    def _load_content(self, memory_id: str, content_type: str) -> str:
-        """Load content from memory_contents table"""
-        try:
-            with self.get_connection() as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        SELECT content_text FROM memory_contents 
-                        WHERE memory_id = %s AND content_type = %s
-                        """,
-                        (memory_id, content_type)
-                    )
-                    result = cur.fetchone()
-                    
-                    if result:
-                        return result[0] or ""
-                    return ""
-                    
-        except Exception as e:
-            logger.error(f"Error loading {content_type} content: {e}")
-            return ""
-    
+
     def read_profile(self, character_name: str) -> str:
         """
         Read character profile from database
@@ -305,17 +272,32 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
             character_name: Name of the character
             
         Returns:
-            str: Profile content in markdown format
+            str: Profile content or empty string if not found
         """
         try:
-            memory_id = self._get_memory_id(character_name)
-            content = self._load_content(memory_id, "profile")
-            logger.debug(f"Read profile for {character_name}: {len(content)} chars")
-            return content
+            agent_id = character_name.lower()
+            user_id = "default"
+            category = "profile"
+            
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT content FROM memories 
+                        WHERE agent_id = %s AND user_id = %s AND category = %s
+                        """,
+                        (agent_id, user_id, category)
+                    )
+                    result = cur.fetchone()
+                    
+                    if result:
+                        return result[0] or ""
+                    return ""
+                    
         except Exception as e:
             logger.error(f"Error reading profile for {character_name}: {e}")
             return ""
-    
+
     def write_profile(self, character_name: str, content: str) -> bool:
         """
         Write character profile to database with embedding
@@ -331,81 +313,58 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
             # Use agent_id and user_id
             agent_id = character_name.lower()
             user_id = "default"
+            category = "profile"
             
-            content_hash = self._content_hash(content)
-            content_vector = self._generate_embedding(content)
+            content_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
+            memory_embedding = self._generate_embedding(content)
             
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
-                    # Get or create memory
+                    # Check if profile already exists
                     cur.execute(
-                        "SELECT memory_id FROM memories WHERE agent_id = %s AND user_id = %s",
-                        (agent_id, user_id)
+                        "SELECT id FROM memories WHERE agent_id = %s AND user_id = %s AND category = %s",
+                        (agent_id, user_id, category)
                     )
                     result = cur.fetchone()
                     
                     if result:
-                        memory_id = result[0]
+                        # Update existing record
+                        cur.execute(
+                            """
+                            UPDATE memories
+                            SET content = %s, embedding = %s, updated_at = %s
+                            WHERE id = %s
+                            """,
+                            (content, memory_embedding, datetime.now(), result[0])
+                        )
                     else:
-                        # Create new memory record
+                        # Insert new record
                         memory_id = str(uuid.uuid4())
                         cur.execute(
                             """
-                            INSERT INTO memories (memory_id, agent_id, user_id, created_at, updated_at, version)
-                            VALUES (%s, %s, %s, %s, %s, %s)
+                            INSERT INTO memories
+                            (id, agent_id, user_id, category, content, embedding, 
+                             created_at, updated_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                             """,
-                            (memory_id, agent_id, user_id, datetime.now(), datetime.now(), 3)
+                            (
+                                memory_id,
+                                agent_id,
+                                user_id,
+                                category,
+                                content,
+                                memory_embedding,
+                                datetime.now(),
+                                datetime.now()
+                            )
                         )
-                    
-                    # Save content
-                    content_data = {
-                        "content": content,
-                        "updated_at": datetime.now().isoformat()
-                    }
-                    
-                    cur.execute(
-                        """
-                        INSERT INTO memory_contents 
-                        (content_id, memory_id, content_type, content_data, content_text, 
-                         content_hash, content_vector, created_at, updated_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (memory_id, content_type) 
-                        DO UPDATE SET
-                            content_data = EXCLUDED.content_data,
-                            content_text = EXCLUDED.content_text,
-                            content_hash = EXCLUDED.content_hash,
-                            content_vector = EXCLUDED.content_vector,
-                            updated_at = EXCLUDED.updated_at
-                        """,
-                        (
-                            str(uuid.uuid4()),
-                            memory_id,
-                            "profile",
-                            json.dumps(content_data),
-                            content,
-                            content_hash,
-                            content_vector,
-                            datetime.now(),
-                            datetime.now()
-                        )
-                    )
-                    
-                    # Update memories table timestamp
-                    cur.execute(
-                        "UPDATE memories SET updated_at = %s WHERE memory_id = %s",
-                        (datetime.now(), memory_id)
-                    )
-                    
                     conn.commit()
-            
-            logger.info(f"Profile written for {character_name}: {len(content)} chars")
             return True
-            
         except Exception as e:
             logger.error(f"Error writing profile for {character_name}: {e}")
             return False
-    
-    def read_events(self, character_name: str) -> str:
+
+    def read_event(self, character_name: str) -> str:
         """
         Read character events from database
         
@@ -413,24 +372,42 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
             character_name: Name of the character
             
         Returns:
-            str: Events content in markdown format
+            str: Combined events content or empty string if not found
         """
         try:
-            memory_id = self._get_memory_id(character_name)
-            content = self._load_content(memory_id, "event")
-            logger.debug(f"Read events for {character_name}: {len(content)} chars")
-            return content
+            agent_id = character_name.lower()
+            user_id = "default"
+            category = "event"
+            
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT content FROM memories 
+                        WHERE agent_id = %s AND user_id = %s AND category = %s
+                        ORDER BY created_at ASC
+                        """,
+                        (agent_id, user_id, category)
+                    )
+                    results = cur.fetchall()
+                    
+                    if results:
+                        # Combine all event contents
+                        events = [result[0] for result in results if result[0]]
+                        return "\n\n".join(events)
+                    return ""
+                    
         except Exception as e:
             logger.error(f"Error reading events for {character_name}: {e}")
             return ""
-    
-    def write_events(self, character_name: str, content: str) -> bool:
+
+    def write_event(self, character_name: str, content: str) -> bool:
         """
-        Write character events to database with embedding
+        Write character event to database with embedding
         
         Args:
             character_name: Name of the character
-            content: Events content in markdown format
+            content: Event content in markdown format
             
         Returns:
             bool: Whether write was successful
@@ -439,80 +416,40 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
             # Use agent_id and user_id
             agent_id = character_name.lower()
             user_id = "default"
+            category = "event"
             
-            content_hash = self._content_hash(content)
-            content_vector = self._generate_embedding(content)
+            content_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
+            memory_embedding = self._generate_embedding(content)
             
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
-                    # Get or create memory
-                    cur.execute(
-                        "SELECT memory_id FROM memories WHERE agent_id = %s AND user_id = %s",
-                        (agent_id, user_id)
-                    )
-                    result = cur.fetchone()
-                    
-                    if result:
-                        memory_id = result[0]
-                    else:
-                        # Create new memory record
-                        memory_id = str(uuid.uuid4())
-                        cur.execute(
-                            """
-                            INSERT INTO memories (memory_id, agent_id, user_id, created_at, updated_at, version)
-                            VALUES (%s, %s, %s, %s, %s, %s)
-                            """,
-                            (memory_id, agent_id, user_id, datetime.now(), datetime.now(), 3)
-                        )
-                    
-                    # Save content
-                    content_data = {
-                        "content": content,
-                        "updated_at": datetime.now().isoformat()
-                    }
-                    
+                    # Check if event already exists (though events typically accumulate)
+                    # For events, we usually want to append/insert new ones rather than update
+                    memory_id = str(uuid.uuid4())
                     cur.execute(
                         """
-                        INSERT INTO memory_contents 
-                        (content_id, memory_id, content_type, content_data, content_text, 
-                         content_hash, content_vector, created_at, updated_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (memory_id, content_type) 
-                        DO UPDATE SET
-                            content_data = EXCLUDED.content_data,
-                            content_text = EXCLUDED.content_text,
-                            content_hash = EXCLUDED.content_hash,
-                            content_vector = EXCLUDED.content_vector,
-                            updated_at = EXCLUDED.updated_at
+                        INSERT INTO memories
+                        (id, agent_id, user_id, category, content, embedding, 
+                         created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                         """,
                         (
-                            str(uuid.uuid4()),
                             memory_id,
-                            "event",
-                            json.dumps(content_data),
+                            agent_id,
+                            user_id,
+                            category,
                             content,
-                            content_hash,
-                            content_vector,
+                            memory_embedding,
                             datetime.now(),
                             datetime.now()
                         )
                     )
-                    
-                    # Update memories table timestamp
-                    cur.execute(
-                        "UPDATE memories SET updated_at = %s WHERE memory_id = %s",
-                        (datetime.now(), memory_id)
-                    )
-                    
                     conn.commit()
-            
-            logger.info(f"Events written for {character_name}: {len(content)} chars")
             return True
-            
         except Exception as e:
-            logger.error(f"Error writing events for {character_name}: {e}")
+            logger.error(f"Error writing event for {character_name}: {e}")
             return False
-    
+
     def append_events(self, character_name: str, new_events: str) -> bool:
         """
         Append new events to existing events in database
@@ -525,18 +462,18 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
             bool: Whether append was successful
         """
         try:
-            existing_events = self.read_events(character_name)
+            existing_events = self.read_event(character_name)
             if existing_events:
                 combined_events = existing_events + "\n\n" + new_events
             else:
                 combined_events = new_events
             
-            return self.write_events(character_name, combined_events)
+            return self.write_event(character_name, combined_events)
             
         except Exception as e:
             logger.error(f"Error appending events for {character_name}: {e}")
             return False
-    
+
     def list_characters(self) -> List[str]:
         """
         List all characters in database
@@ -561,7 +498,7 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
         except Exception as e:
             logger.error(f"Error listing characters: {e}")
             return []
-    
+
     def clear_character_memory(self, character_name: str) -> bool:
         """
         Clear all memory for a character from database
@@ -595,16 +532,16 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
         except Exception as e:
             logger.error(f"Error clearing memory for {character_name}: {e}")
             return False
-    
+
     def get_character_info(self, character_name: str) -> Dict[str, Any]:
         """
-        Get character memory information from database
+        Get detailed information about a character's memory
         
         Args:
             character_name: Name of the character
             
         Returns:
-            Dict with character memory information
+            Dictionary with character memory information
         """
         try:
             agent_id = character_name.lower()
@@ -612,57 +549,54 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
             
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
-                    # Get memory metadata
+                    # Get character memory stats
                     cur.execute(
                         """
-                        SELECT memory_id, created_at, updated_at 
+                        SELECT category,
+                               COUNT(*) as count,
+                               MAX(created_at) as created_at,
+                               MAX(updated_at) as updated_at,
+                               SUM(CASE WHEN embedding IS NOT NULL THEN 1 ELSE 0 END) as has_embedding_count
+                        FROM memories 
+                        WHERE agent_id = %s AND user_id = %s
+                        GROUP BY category
+                        ORDER BY category
+                        """,
+                        (agent_id, user_id)
+                    )
+                    category_results = cur.fetchall()
+                    
+                    category_info = {}
+                    for row in category_results:
+                        category_info[row[0]] = {
+                            "count": row[1],
+                            "created_at": row[2].isoformat() if row[2] else None,
+                            "updated_at": row[3].isoformat() if row[3] else None,
+                            "has_embedding": row[4] > 0
+                        }
+                    
+                    # Get overall stats
+                    cur.execute(
+                        """
+                        SELECT COUNT(*) as total_count,
+                               MIN(created_at) as first_created,
+                               MAX(updated_at) as last_updated
                         FROM memories 
                         WHERE agent_id = %s AND user_id = %s
                         """,
                         (agent_id, user_id)
                     )
-                    memory_result = cur.fetchone()
+                    overall_result = cur.fetchone()
                     
-                    if not memory_result:
-                        return {
-                            "character_name": character_name,
-                            "exists": False
-                        }
-                    
-                    memory_id = memory_result[0]
-                    created_at = memory_result[1]
-                    updated_at = memory_result[2]
-                    
-                    # Get content info
-                    cur.execute(
-                        """
-                        SELECT content_type, 
-                               LENGTH(content_text) as content_length,
-                               updated_at as content_updated,
-                               (content_vector IS NOT NULL) as has_embedding
-                        FROM memory_contents 
-                        WHERE memory_id = %s
-                        ORDER BY content_type
-                        """,
-                        (memory_id,)
-                    )
-                    content_results = cur.fetchall()
-                    
-                    content_info = {}
-                    for row in content_results:
-                        content_info[row[0]] = {
-                            "length": row[1],
-                            "updated_at": row[2].isoformat() if row[2] else None,
-                            "has_embedding": row[3]
-                        }
+                    exists = overall_result[0] > 0 if overall_result else False
                     
                     return {
                         "character_name": character_name,
-                        "exists": True,
-                        "memory_id": memory_id,
-                        "created_at": created_at.isoformat() if created_at else None,
-                        "updated_at": updated_at.isoformat() if updated_at else None,
-                        "content": content_info
+                        "exists": exists,
+                        "total_memories": overall_result[0] if overall_result else 0,
+                        "first_created": overall_result[1].isoformat() if overall_result and overall_result[1] else None,
+                        "last_updated": overall_result[2].isoformat() if overall_result and overall_result[2] else None,
+                        "categories": category_info
                     }
                     
         except Exception as e:
@@ -672,15 +606,15 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
                 "exists": False,
                 "error": str(e)
             }
-    
-    def search_similar_content(self, query: str, content_type: Optional[str] = None, 
+
+    def search_similar_content(self, query: str, category: Optional[str] = None, 
                              character_name: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
         """
         Search for similar content using vector similarity
         
         Args:
             query: Search query text
-            content_type: Filter by content type ('profile', 'event', 'mind')
+            category: Filter by category (e.g., 'activity', 'profile', 'event', 'reminder', etc.)
             character_name: Filter by character name
             limit: Maximum number of results
             
@@ -692,36 +626,35 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
             query_vector = self._generate_embedding(query)
             if not query_vector:
                 logger.warning("Could not generate embedding for query, falling back to text search")
-                return self._text_search(query, content_type, character_name, limit)
+                return self._text_search(query, category, character_name, limit)
             
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
                     # Build query with optional filters
-                    where_conditions = ["mc.content_vector IS NOT NULL"]
+                    where_conditions = ["embedding IS NOT NULL"]
                     params = [query_vector, limit]
                     
-                    if content_type:
-                        where_conditions.append("mc.content_type = %s")
-                        params.insert(-1, content_type)
+                    if category:
+                        where_conditions.append("category = %s")
+                        params.insert(-1, category)
                     
                     if character_name:
-                        where_conditions.append("m.agent_id = %s")
+                        where_conditions.append("agent_id = %s")
                         params.insert(-1, character_name.lower())
                     
                     where_clause = " AND ".join(where_conditions)
                     
                     query_sql = f"""
                         SELECT 
-                            m.agent_id as character_name,
-                            mc.content_type,
-                            mc.content_text,
-                            mc.updated_at,
-                            (mc.content_vector <=> %s) as similarity_distance,
-                            (1 - (mc.content_vector <=> %s)) as similarity_score
-                        FROM memories m
-                        JOIN memory_contents mc ON m.memory_id = mc.memory_id
+                            agent_id as character_name,
+                            category,
+                            content,
+                            updated_at,
+                            (embedding <=> %s) as similarity_distance,
+                            (1 - (embedding <=> %s)) as similarity_score
+                        FROM memories
                         WHERE {where_clause}
-                        ORDER BY mc.content_vector <=> %s
+                        ORDER BY embedding <=> %s
                         LIMIT %s
                     """
                     
@@ -735,51 +668,59 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
                     for row in results:
                         formatted_results.append({
                             "character_name": row[0],
-                            "content_type": row[1],
-                            "content": row[2][:500] + "..." if len(row[2]) > 500 else row[2],
+                            "category": row[1],
+                            "content": row[2],
                             "updated_at": row[3].isoformat() if row[3] else None,
                             "similarity_distance": float(row[4]),
                             "similarity_score": float(row[5])
                         })
                     
-                    logger.debug(f"Vector search found {len(formatted_results)} similar content items")
                     return formatted_results
                     
         except Exception as e:
-            logger.error(f"Error in vector similarity search: {e}")
-            # Fallback to text search
-            return self._text_search(query, content_type, character_name, limit)
-    
-    def _text_search(self, query: str, content_type: Optional[str] = None, 
+            logger.error(f"Error in similarity search: {e}")
+            return []
+
+    def _text_search(self, query: str, category: Optional[str] = None, 
                     character_name: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
-        """Fallback text search when vector search is not available"""
+        """
+        Fallback text search when vector search is not available
+        
+        Args:
+            query: Search query text
+            category: Filter by category
+            character_name: Filter by character name
+            limit: Maximum number of results
+            
+        Returns:
+            List of text search results
+        """
         try:
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
-                    where_conditions = ["mc.content_text ILIKE %s"]
-                    params = [f"%{query}%"]
+                    # Build query with optional filters
+                    where_conditions = ["content ILIKE %s"]
+                    params = [f"%{query}%", limit]
                     
-                    if content_type:
-                        where_conditions.append("mc.content_type = %s")
-                        params.append(content_type)
+                    if category:
+                        where_conditions.append("category = %s")
+                        params.insert(-1, category)
                     
                     if character_name:
-                        where_conditions.append("m.agent_id = %s")
-                        params.append(character_name.lower())
+                        where_conditions.append("agent_id = %s")
+                        params.insert(-1, character_name.lower())
                     
-                    params.append(limit)
                     where_clause = " AND ".join(where_conditions)
                     
                     query_sql = f"""
                         SELECT 
-                            m.agent_id as character_name,
-                            mc.content_type,
-                            mc.content_text,
-                            mc.updated_at
-                        FROM memories m
-                        JOIN memory_contents mc ON m.memory_id = mc.memory_id
+                            agent_id as character_name,
+                            category,
+                            content,
+                            updated_at
+                        FROM memories
                         WHERE {where_clause}
-                        ORDER BY mc.updated_at DESC
+                        ORDER BY updated_at DESC
                         LIMIT %s
                     """
                     
@@ -790,13 +731,12 @@ class MemoryDatabaseManager(PostgreSQLStorageBase):
                     for row in results:
                         formatted_results.append({
                             "character_name": row[0],
-                            "content_type": row[1],
-                            "content": row[2][:500] + "..." if len(row[2]) > 500 else row[2],
+                            "category": row[1],
+                            "content": row[2],
                             "updated_at": row[3].isoformat() if row[3] else None,
-                            "similarity_score": 0.0  # Text search doesn't provide similarity score
+                            "similarity_score": 0.5  # Default score for text search
                         })
                     
-                    logger.debug(f"Text search found {len(formatted_results)} matching content items")
                     return formatted_results
                     
         except Exception as e:

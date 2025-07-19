@@ -111,13 +111,14 @@ pip install memu-py
 ### **3-Line Demo**
 
 ```python
-from memu import Persona
+from memu import MetaAgent
+from memu.llm import OpenAIClient
 
 # Create AI agent with memory
-persona = Persona(agent_id="my_assistant")
+meta_agent = MetaAgent(llm_client=OpenAIClient(), memory_dir="memory")
 
-# Chat with persistent memory
-response = persona.chat("Hi, I'm learning Python", user_id="student_123")
+# Process conversation with persistent memory
+results = meta_agent.process_conversation("Hi, I'm learning Python", "student_123")
 ```
 
 ![Quick Start Demo](assets/quickstart-demo.gif)

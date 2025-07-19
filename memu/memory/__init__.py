@@ -1,59 +1,77 @@
 """
-MemU Memory Module
+MemU Memory Module - Clean Modular Architecture
 
-Hybrid memory system supporting both file-based and database storage:
-- MemoryAgent: Agent-based memory management with LLM tools
-- MetaAgent: Meta agent for orchestrating conversation processing pipeline
-- AgentRegistry: System for registering and managing agents
-- Memory: Simple file-based memory management class
-- MemoryFileManager: File operations for memory storage
+Modern memory system with specialized independent agents:
+
+CORE ARCHITECTURE:
+- BaseAgent: Abstract base class for all specialized agents
+- Specialized Agents: ActivityAgent, ProfileAgent, EventAgent, ReminderAgent, InterestAgent, StudyAgent
+- MetaAgent: Coordinator for orchestrating specialized agents
+
+STORAGE SUPPORT:
+- MemoryFileManager: File operations for memory storage (.md files)
 - MemoryDatabaseManager: Database operations with PostgreSQL + pgvector
 - EmbeddingClient: Vector embedding generation for semantic search
 
-Architecture: 
-- File mode: Agent -> File Manager -> .md files
-- Database mode: Agent -> Database Manager -> PostgreSQL + pgvector
-- Meta Agent Pipeline: Conversation -> Activity Summary -> Sub Agents -> Embeddings
+ARCHITECTURE FLOW:
+1. Raw Conversation → ActivityAgent → activity.md
+2. activity.md → Specialized Agents (parallel) → memory files
+3. All agents have complete independence with their own LLM processing and storage
 
-The MemoryAgent provides LLM-powered tools for analyzing conversations
-and updating character memories. In database mode, it supports vector
-similarity search for enhanced memory retrieval.
-
-The MetaAgent orchestrates the complete workflow from conversation analysis
-to memory updates across all registered agents.
+BENEFITS:
+- True modularity: Each agent is independent and complete
+- Easy extension: Add new agent types without changing existing code
+- Better performance: Agents can run in parallel
+- Clean separation: Each agent handles one memory type
+- No legacy code: Simple, focused architecture
 """
 
-# Main Memory classes
+# Core Memory classes
 from .base import Memory, ProfileMemory, EventMemory
-from .agent import MemoryAgent
 from .meta_agent import MetaAgent
-from .agent_registry import AgentRegistry, AgentConfig, get_agent_registry
+from .base_agent import BaseAgent
+from .specialized_agents import (
+    ActivityAgent, ProfileAgent, EventAgent, ReminderAgent, 
+    InterestAgent, StudyAgent, create_agent, get_available_agents
+)
+
+# Storage managers
 from .file_manager import MemoryFileManager
 from .db_manager import MemoryDatabaseManager
+
+# Embedding support
 from .embeddings import EmbeddingClient, create_embedding_client, get_default_embedding_client
 
 # LLM interface
 from ..llm import BaseLLMClient
 
 __all__ = [
-    # Main classes
+    # Core memory classes
     "Memory",
-    "MemoryAgent",
-    "MetaAgent",
-    # Agent system
-    "AgentRegistry",
-    "AgentConfig", 
-    "get_agent_registry",
-    # Storage managers
-    "MemoryFileManager", 
-    "MemoryDatabaseManager",
-    # Memory components
-    "ProfileMemory",
+    "ProfileMemory", 
     "EventMemory",
+    
+    # Agent architecture
+    "MetaAgent",        # Main coordinator
+    "BaseAgent",        # Base class for agents
+    "ActivityAgent",    # Activity summarization
+    "ProfileAgent",     # Character profile management
+    "EventAgent",       # Event recording
+    "ReminderAgent",    # Reminders and todos
+    "InterestAgent",    # Interests and hobbies
+    "StudyAgent",       # Learning and education
+    "create_agent",     # Agent factory function
+    "get_available_agents",  # List available agent types
+    
+    # Storage systems
+    "MemoryFileManager",     # File-based storage
+    "MemoryDatabaseManager", # Database storage with vectors
+    
     # Embedding support
     "EmbeddingClient",
     "create_embedding_client", 
     "get_default_embedding_client",
+    
     # LLM interface
     "BaseLLMClient",
 ]
