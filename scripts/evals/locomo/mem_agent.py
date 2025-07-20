@@ -16,7 +16,7 @@ import json
 import os
 import sys
 import threading
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Union
 from datetime import datetime
 import re
 from pathlib import Path
@@ -31,6 +31,7 @@ dotenv.load_dotenv()
 from memu.llm import AzureOpenAIClient
 from memu.utils import get_logger, setup_logging
 from memu.memory.embeddings import get_default_embedding_client
+from llm_factory import create_llm_client
 
 # Add prompts directory to path and import prompt loader
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'prompts'))
@@ -46,7 +47,7 @@ class MemAgent:
     Provides memory management capabilities through callable functions:
     
     Memory Management:
-    - update_character_memory: Update memory files from conversation sessions
+    - update_character_memory: Update memory files from conversation session data
     - clear_character_memory: Clear memory files for characters
     
     Internal Memory Processing:
@@ -61,8 +62,8 @@ class MemAgent:
     
     def __init__(
         self,
-        azure_endpoint: str = None,
-        api_key: str = None,
+        azure_endpoint: Optional[str] = None,
+        api_key: Optional[str] = None,
         chat_deployment: str = "gpt-4.1-mini",
         use_entra_id: bool = False,
         api_version: str = "2024-02-15-preview",
@@ -187,10 +188,10 @@ class MemAgent:
     def _init_llm_client(self):
         """Initialize the LLM client"""
         try:
-            return AzureOpenAIClient(
+            return create_llm_client(
+                chat_deployment=self.chat_deployment,
                 azure_endpoint=self.azure_endpoint,
                 api_key=self.api_key,
-                chat_deployment=self.chat_deployment,
                 use_entra_id=self.use_entra_id,
                 api_version=self.api_version
             )
@@ -286,6 +287,17 @@ class MemAgent:
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content, encoding='utf-8')
 
+    def _append_memory_file(self, character_name: str, memory_type: str, content: str):
+        """Append content to a character's memory file (thread-safe)"""
+        file_path = self._get_memory_file_path(character_name, memory_type)
+        with self._file_lock:
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(file_path, 'a', encoding='utf-8') as f:
+                # Add newlines for proper separation if file isn't empty
+                if file_path.exists() and file_path.stat().st_size > 0:
+                    f.write('\n\n')
+                f.write(content)
+
     def _search_with_bm25(self, query: str, all_events: List[str], character_event_map: Dict[int, str], top_k: int = 10) -> List[Dict[str, Any]]:
         """Search events using BM25 ranking"""
         try:
@@ -300,7 +312,7 @@ class MemAgent:
             bm25_scores = bm25.get_scores(tokenized_query)
             
             # Get top results with scores and character info
-            event_scores = [(i, score) for i, score in enumerate(bm25_scores)]
+            event_scores = [(i, float(score)) for i, score in enumerate(bm25_scores)]
             event_scores.sort(key=lambda x: x[1], reverse=True)
             
             # Format results
@@ -653,8 +665,107 @@ class MemAgent:
                 "characters_searched": characters
             }
 
-    def update_character_memory(self, session_data: List[Dict], session_date: str, characters: List[str]) -> Dict[str, Any]:
-        """Update character memory files from conversation session data"""
+    def _check_events_completeness(self, character_name: str, conversation: str, extracted_events: str) -> Dict[str, Any]:
+        """Check if extracted events are sufficient and complete"""
+        try:
+            sufficiency_prompt = f"""You are inspecting whether the events about a speaker as they mentioned in the conversation are summarized into the extracted events with no omission.
+
+Speaker: {character_name}
+
+Conversation:
+{conversation}
+
+Extracted events:
+{extracted_events}
+
+Please compare the conversation and the extracted events, and determine whether all the events about the speaker included in the extracted events without omission.
+
+Consider about:
+1. Are all events involving {character_name}, no matter how minor, captured?
+2. Are any important details (who, what, when, where, why, how) missing?
+3. Are the events about people who are close to {character_name}, such as their family, also captured?
+
+Respond with a JSON object containing:
+- "sufficient": true/false - whether the information is sufficient
+- "missing_info": string - what specific information is missing (if any). You can copy the original conversation texts if they are missing in the extracted events.
+- "confidence": number between 0-1 - confidence in the completeness assessment
+
+JSON Response:"""
+
+            print('>'*100)
+            print(sufficiency_prompt)
+            print('<'*100)
+            
+            response = self.llm_client.chat_completion(
+                messages=[{"role": "user", "content": sufficiency_prompt}],
+                max_tokens=1000,
+                temperature=0.1
+            )
+            
+            if response.success:
+                try:
+                    # Try to extract JSON from response
+                    content = response.content.strip()
+                    if content.startswith("```json"):
+                        content = content.replace("```json", "").replace("```", "").strip()
+                    elif content.startswith("```"):
+                        content = content.replace("```", "").strip()
+                    
+                    result = json.loads(content)
+                    return result
+                except json.JSONDecodeError:
+                    # Fallback: try to extract basic assessment
+                    content_lower = response.content.lower()
+                    if "sufficient" in content_lower and "true" in content_lower:
+                        return {"sufficient": True, "missing_info": "", "confidence": 0.7}
+                    else:
+                        return {"sufficient": False, "missing_info": "Could not determine missing information", "confidence": 0.5}
+            else:
+                logger.warning(f"Events completeness check failed: {response.error}")
+                return {"sufficient": True, "missing_info": "", "confidence": 0.5}
+
+        except Exception as e:
+            logger.error(f"Failed to check events completeness: {e}")
+            return {"sufficient": True, "missing_info": "", "confidence": 0.5}
+
+    def _refine_events_analysis(self, character_name: str, conversation: str, previous_extraction: str, missing_info: str, session_date: str) -> Dict[str, Any]:
+        """Refine the events analysis based on what was missing"""
+        try:
+            refinement_prompt = self.prompt_loader.format_prompt(
+                "refine_events_extraction",
+                character_name=character_name,
+                conversation=conversation,
+                session_date=session_date,
+                previous_extraction=previous_extraction,
+                missing_info=missing_info
+            )
+            
+            messages = [{"role": "user", "content": refinement_prompt}]
+            llm_response = self.llm_client.chat_completion(messages, max_tokens=4000, temperature=0.3)
+            
+            if not llm_response.success:
+                return {
+                    "success": False,
+                    "error": f"LLM refinement failed: {llm_response.error}",
+                    "refined_events": previous_extraction
+                }
+            
+            return {
+                "success": True,
+                "refined_events": llm_response.content.strip(),
+                "method": "refined_analysis"
+            }            
+            
+        except Exception as e:
+            logger.error(f"Failed to refine events analysis: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "refined_events": previous_extraction
+            }
+
+    def update_character_memory(self, session_data: List[Dict], session_date: str, characters: List[str], max_iterations: int = 3) -> Dict[str, Any]:
+        """Update character memory files from conversation session data with iterative self-checking"""
         try:
             # Convert session data to conversation string
             conversation = ""
@@ -672,45 +783,129 @@ class MemAgent:
                     existing_events = self._read_memory_file(character_name, "events")
                     existing_profile = self._read_memory_file(character_name, "profile")
                     
-                    # Analyze session for new events
-                    events_result = self.analyze_session_for_events(
-                        character_name, conversation, session_date, existing_events
-                    )
+                    # Iterative event extraction with self-checking
+                    current_events = ""
+                    iteration_log = []
                     
-                    if events_result["success"]:
-                        new_events = events_result["new_events"]
+                    for iteration in range(max_iterations):
+                        logger.info(f"Character {character_name} - Iteration {iteration + 1}/{max_iterations}: Extracting events")
                         
-                        # Update events file
-                        if new_events.strip():
-                            updated_events = existing_events + "\n\n" + new_events if existing_events.strip() else new_events
-                            self._write_memory_file(character_name, "events", updated_events)
-                            
-                            # Analyze session for profile updates
-                            profile_result = self.analyze_session_for_profile(
-                                character_name, conversation, existing_profile, new_events
+                        # Analyze session for new events
+                        if iteration == 0:
+                            # First iteration: standard analysis
+                            events_result = self.analyze_session_for_events(
+                                # character_name, conversation, session_date, existing_events
+                                character_name, conversation, session_date, "None"
+                            )
+                        else:
+                            # Subsequent iterations: refined analysis based on missing info
+                            missing_info = iteration_log[-1].get("missing_info", "")
+                            previous_extraction = iteration_log[-1].get("events", "")
+                            refinement_result = self._refine_events_analysis(
+                                character_name, conversation, previous_extraction, missing_info, session_date
                             )
                             
-                            if profile_result["success"]:
-                                updated_profile = profile_result["updated_profile"]
-                                if updated_profile.strip():
-                                    self._write_memory_file(character_name, "profile", updated_profile)
+                            events_result = {
+                                "success": refinement_result["success"],
+                                "new_events": refinement_result.get("refined_events", ""),
+                                "error": refinement_result.get("error", "")
+                            }
+                        
+                        if not events_result["success"]:
+                            logger.warning(f"Events analysis failed for {character_name} at iteration {iteration + 1}: {events_result.get('error')}")
+                            iteration_log.append({
+                                "iteration": iteration + 1,
+                                "success": False,
+                                "error": events_result.get("error"),
+                                "score": 0.0
+                            })
+                            continue
+                        
+                        current_events = events_result["new_events"]
+                        
+                        # Check sufficiency of extracted events
+                        completeness_result = self._check_events_completeness(character_name, conversation, current_events)
+                        print("*"*100)
+                        print(repr(completeness_result))
+                        print("*"*100)
+                        
+                        if completeness_result.get("sufficient", False):
+                            logger.info(f"Character {character_name} - Sufficient events captured after {iteration + 1} iterations")
+                            break
+                        
+                        iteration_log.append({
+                            "iteration": iteration + 1,
+                            "success": True,
+                            "events": current_events,
+                            "score": completeness_result.get("confidence", 0.0),
+                            "sufficient": completeness_result.get("sufficient", False),
+                            "missing_info": completeness_result.get("missing_info", ""),
+                        })
+                        
+                        logger.info(f"Character {character_name} - Iteration {iteration + 1}: Sufficient: {completeness_result.get('sufficient', False)}")
+                        
+                        # If sufficient, we can stop early
+                        if completeness_result.get("sufficient", False):
+                            logger.info(f"Character {character_name} - Sufficient events found after {iteration + 1} iterations")
+                            break
+                        
+                        # If this is the last iteration, log that we reached max iterations
+                        if iteration == max_iterations - 1:
+                            logger.info(f"Character {character_name} - Reached maximum iterations ({max_iterations})")
+                    
+                    new_events = current_events
+                    # Use the best events found across all iterations
+                    if new_events.strip():
+                        print('>'*100)
+                        print(new_events)
+                        print('<'*100)
+                        
+                        # Update events file
+                        if existing_events.strip():
+                            # updated_events = existing_events + "\n\n" + new_events
+                            # self._write_memory_file(character_name, "events", updated_events)
+                            self._append_memory_file(character_name, "events", new_events)
+                        else:
+                            self._append_memory_file(character_name, "events", new_events)
+                        
+                        # Analyze session for profile updates
+                        profile_result = self.analyze_session_for_profile(
+                            character_name, conversation, existing_profile, new_events
+                        )
+                        
+                        profile_updated = False
+                        if profile_result["success"]:
+                            updated_profile = profile_result["updated_profile"]
+                            if updated_profile.strip():
+                                self._write_memory_file(character_name, "profile", updated_profile)
+                                profile_updated = True
                         
                         update_results[character_name] = {
                             "success": True,
-                            "events_updated": bool(new_events.strip()),
-                            "profile_updated": profile_result.get("success", False) if new_events.strip() else False
+                            "events_updated": True,
+                            "profile_updated": profile_updated,
+                            "iterations": len([log for log in iteration_log if log["success"]]),
+                            "iteration_log": iteration_log
                         }
                     else:
                         update_results[character_name] = {
                             "success": False,
-                            "error": events_result.get("error", "Failed to analyze events")
+                            "error": "No events extracted after all iterations",
+                            "events_updated": False,
+                            "profile_updated": False,
+                            "iterations": len([log for log in iteration_log if log["success"]]),
+                            "iteration_log": iteration_log
                         }
                         
                 except Exception as e:
                     logger.error(f"Failed to update memory for {character_name}: {e}")
                     update_results[character_name] = {
                         "success": False,
-                        "error": str(e)
+                        "error": str(e),
+                        "events_updated": False,
+                        "profile_updated": False,
+                        "iterations": 0,
+                        "iteration_log": []
                     }
             
             return {
@@ -866,6 +1061,10 @@ class MemAgent:
             existing_events=existing_events
         )
         
+        print('>'*100)
+        print(events_prompt)
+        print('<'*100)
+
         messages = [{"role": "user", "content": events_prompt}]
         llm_response = self.llm_client.chat_completion(messages, max_tokens=4000, temperature=0.3)
         
@@ -1045,7 +1244,7 @@ class MemAgent:
                                 # Try to extract tool_call_id even from exception case
                                 try:
                                     if hasattr(tool_call, 'id'):
-                                        emergency_id = tool_call.id
+                                        emergency_id = getattr(tool_call, 'id', f"unknown_tool_call_{len(messages)}")
                                     elif isinstance(tool_call, dict) and 'id' in tool_call:
                                         emergency_id = tool_call['id']
                                     else:

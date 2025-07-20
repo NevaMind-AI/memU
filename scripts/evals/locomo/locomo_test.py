@@ -14,7 +14,8 @@ This test uses specialized agents:
 import json
 import os
 import sys
-from typing import Dict, List, Optional, Tuple
+import ast
+from typing import Dict, List, Optional, Tuple, Union
 from datetime import datetime
 import time
 from pathlib import Path
@@ -26,8 +27,13 @@ dotenv.load_dotenv()
 
 # 确保标准输出unbuffered
 if not hasattr(sys, '_stdout_line_buffering_set'):
-    sys.stdout.reconfigure(line_buffering=True)
-    sys._stdout_line_buffering_set = True
+    try:
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(line_buffering=True)  # type: ignore
+    except (AttributeError, TypeError):
+        # Fallback for older Python versions or different stdout types
+        pass
+    sys._stdout_line_buffering_set = True  # type: ignore
 
 from mem_agent import MemAgent
 from response_agent import ResponseAgent
@@ -37,6 +43,7 @@ from memu.utils import get_logger, setup_logging
 # 设置带有flush的logger
 logger = setup_logging(__name__, enable_flush=True)
 
+args_global = None
 
 class ToolBasedMemoryTester:
     """
@@ -50,13 +57,14 @@ class ToolBasedMemoryTester:
     
     def __init__(
         self,
-        azure_endpoint: str = None,
-        api_key: str = None,
+        azure_endpoint: Optional[str] = None,
+        api_key: Optional[str] = None,
         chat_deployment: str = "gpt-4.1-mini-2",
         use_entra_id: bool = False,
         api_version: str = "2024-02-01",
         memory_dir: str = "memory",
-        max_workers: int = 3
+        max_workers: int = 3,
+        category_filter: Optional[List[str]] = None
     ):
         """Initialize Tool-based Memory Tester"""
         # Initialize MemAgent for memory management
@@ -80,15 +88,22 @@ class ToolBasedMemoryTester:
         )
         
         # Initialize EvaluateAgent for answer evaluation
+        # Ensure azure_endpoint and api_key are not None for EvaluateAgent
+        eval_azure_endpoint = azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT") or ""
+        eval_api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY") or ""
+        
         self.evaluate_agent = EvaluateAgent(
-            azure_endpoint=azure_endpoint,
-            api_key=api_key,
-            chat_deployment=chat_deployment,
+            azure_endpoint=eval_azure_endpoint,
+            api_key=eval_api_key,
+            # chat_deployment=chat_deployment,
+            chat_deployment="gpt-4.1",
             use_entra_id=use_entra_id,
             api_version=api_version
+            # api_version="2025-01-01-preview"
         )
         
         self.max_workers = max_workers
+        self.category_filter = category_filter
         self.results = []
         self.processing_time = 0.0
         self.memory_dir = Path(memory_dir)
@@ -98,6 +113,8 @@ class ToolBasedMemoryTester:
         self._init_error_log()
         
         logger.info(f"Tool-based Memory Tester initialized with MemAgent (memory) and ResponseAgent (QA) (max_workers={max_workers})")
+        if category_filter:
+            logger.info(f"Category filter enabled: {category_filter}")
         logger.info(f"QA error log file: {self.error_log_file}")
 
     def _init_error_log(self):
@@ -112,7 +129,7 @@ class ToolBasedMemoryTester:
 
     def _log_qa_error(self, qa_index: int, question: str, generated_answer: str, standard_answer: str, 
                      category: str, retrieved_content: str = "", evidence: str = "", explanation: str = "", 
-                     session_context: str = "", evaluation_details: Dict = None, retrieved_events: List = None):
+                     session_context: str = "", evaluation_details: Optional[Dict] = None, retrieved_events: Optional[List] = None):
         """Log detailed information for incorrect QA answers with comprehensive evaluation"""
         try:
             with open(self.error_log_file, 'a', encoding='utf-8') as f:
@@ -313,7 +330,7 @@ class ToolBasedMemoryTester:
         
         return session_results
 
-    def _process_single_qa(self, qa_data: Tuple[str, str, str, int], characters: List[str], evidence_content: str = "", conversation_data: Dict = None) -> Dict:
+    def _process_single_qa(self, qa_data: Tuple[str, str, str, int], characters: List[str], evidence_content: str = "", conversation_data: Optional[Dict] = None) -> Dict:
         """Process a single QA question using ResponseAgent"""
         question, answer, category, qa_index = qa_data
         
@@ -415,7 +432,8 @@ class ToolBasedMemoryTester:
             }
             
             # Log error details if answer is incorrect
-            if not evaluation['is_correct']:
+            analyze_on = getattr(args_global, 'analyze_on', "wrong")
+            if analyze_on == "all" or (analyze_on == "wrong" and not evaluation['is_correct']):
                 # For comprehensive evaluation, we'll use the full comprehensive evaluation
                 # Since ResponseAgent abstracts the detailed retrieval process
                 comprehensive_evaluation = None
@@ -534,7 +552,7 @@ class ToolBasedMemoryTester:
         
         return "\n".join(evidence_conversations) if evidence_conversations else "No evidence provided"
 
-    def _process_qa_parallel(self, qa_data: List[Dict], characters: List[str], conversation_data: Dict = None, max_workers: int = 3) -> List[Dict]:
+    def _process_qa_parallel(self, qa_data: List[Dict], characters: List[str], conversation_data: Optional[Dict] = None, max_workers: int = 3) -> List[Dict]:
         """Process multiple QA questions in parallel"""
         if not qa_data:
             return []
@@ -548,8 +566,16 @@ class ToolBasedMemoryTester:
         # Prepare QA items with index for processing, skip items missing required fields
         qa_items = []
         skipped_count = 0
+        category_filtered_count = 0
         for i, qa_item in enumerate(qa_data):
             if 'question' in qa_item and 'answer' in qa_item:
+                # Check category filter
+                if self.category_filter:
+                    item_category = str(qa_item.get('category', 'Unknown'))
+                    if item_category not in self.category_filter:
+                        category_filtered_count += 1
+                        continue
+                
                 # Extract evidence and map to conversation content
                 evidence_refs = qa_item.get('evidence', [])
                 evidence_content = ""
@@ -563,6 +589,9 @@ class ToolBasedMemoryTester:
         
         if skipped_count > 0:
             logger.info(f"Skipped {skipped_count} QA items due to missing fields, processing {len(qa_items)} valid items")
+        
+        if category_filtered_count > 0:
+            logger.info(f"Filtered out {category_filtered_count} QA items due to category filter {self.category_filter}, processing {len(qa_items)} items")
         
         if not qa_items:
             logger.warning("No valid QA items to process")
@@ -622,7 +651,7 @@ class ToolBasedMemoryTester:
         
         return question_results
 
-    def _process_single_qa_with_evidence(self, qa_data: Tuple[str, str, str, int, str], characters: List[str], conversation_data: Dict = None) -> Dict:
+    def _process_single_qa_with_evidence(self, qa_data: Tuple[str, str, str, int, str], characters: List[str], conversation_data: Optional[Dict] = None) -> Dict:
         """Process a single QA question with evidence content"""
         question, answer, category, qa_index, evidence_content = qa_data
         
@@ -716,13 +745,22 @@ class ToolBasedMemoryTester:
             if speaker_b and speaker_b not in characters:
                 characters.append(speaker_b)
             
-            # Check if memory files already exist for these characters
-            memory_status = self._check_memory_exists(characters)
-            characters_with_memory = [char for char, has_memory in memory_status.items() if has_memory]
-            characters_without_memory = [char for char, has_memory in memory_status.items() if not has_memory]
+
+            if getattr(args_global, 'force_resum', False):
+                logger.info("Force redo the memory summarization")
+                self.mem_agent.clear_character_memory(characters)
+
+                characters_with_memory = []
+                characters_without_memory = characters
+            else:
+
+                # Check if memory files already exist for these characters
+                memory_status = self._check_memory_exists(characters)
+                characters_with_memory = [char for char, has_memory in memory_status.items() if has_memory]
+                characters_without_memory = [char for char, has_memory in memory_status.items() if not has_memory]
             
-            if characters_with_memory:
-                logger.info(f"Memory files already exist for characters: {characters_with_memory}, skipping session processing")
+                if characters_with_memory:
+                    logger.info(f"Memory files already exist for characters: {characters_with_memory}, skipping session processing")
             
             session_results = []
             sessions = self._extract_session_data(conversation_data)
@@ -732,8 +770,8 @@ class ToolBasedMemoryTester:
                 logger.info(f"Processing {len(sessions)} sessions for characters without memory: {characters_without_memory}")
                 
                 # Process sessions in parallel using MemAgent
-                # session_results = self._process_sessions_parallel(sessions, characters_without_memory, self.max_workers)
-                session_results = self._process_sessions_parallel(sessions, characters_without_memory, max_workers=1)
+                session_results = self._process_sessions_parallel(sessions, characters_without_memory, self.max_workers)
+                # session_results = self._process_sessions_parallel(sessions, characters_without_memory, max_workers=1)
                 
                 # Log results
                 successful_sessions = sum(1 for result in session_results if result.get('success', False))
@@ -750,6 +788,11 @@ class ToolBasedMemoryTester:
                         'skipped': True,
                         'reason': 'Memory already exists'
                     })
+
+
+            if getattr(args_global, 'no_eval', False):
+                assert False
+
             
             # Answer QA questions in parallel
             question_results = self._process_qa_parallel(qa_data, characters, conversation_data, self.max_workers)
@@ -838,7 +881,7 @@ class ToolBasedMemoryTester:
         
         print(f"{'='*60}\n")
 
-    def run_test(self, data_file: str, sample_limit: Optional[int] = None) -> Dict:
+    def run_test(self, data_file: str, sample_use: Optional[str] = None) -> Dict:
         """Run the memory test on the dataset"""
         start_time = time.time()
         
@@ -847,8 +890,44 @@ class ToolBasedMemoryTester:
             with open(data_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            if sample_limit:
-                data = data[:sample_limit]
+            # Filter data based on sample_use indices
+            if sample_use:
+                try:
+                    # Parse the string as either a number or a list of indices
+                    parsed_value = ast.literal_eval(sample_use)
+                    
+                    if isinstance(parsed_value, int):
+                        # Single number: use first N samples (like original sample_limit)
+                        if parsed_value <= 0:
+                            raise ValueError("sample_use number must be positive")
+                        
+                        sample_count = min(parsed_value, len(data))
+                        data = data[:sample_count]
+                        logger.info(f"Using first {sample_count} samples (indices 0-{sample_count-1})")
+                        
+                        if parsed_value > len(data):
+                            logger.warning(f"Requested {parsed_value} samples but only {len(data)} available")
+                            
+                    elif isinstance(parsed_value, list):
+                        # List of indices: use specific samples
+                        sample_indices = parsed_value
+                        
+                        # Filter valid indices and select corresponding samples
+                        valid_indices = [i for i in sample_indices if isinstance(i, int) and 0 <= i < len(data)]
+                        data = [data[i] for i in valid_indices]
+                        
+                        logger.info(f"Using samples at specific indices: {valid_indices}")
+                        if len(valid_indices) < len(sample_indices):
+                            invalid_indices = [i for i in sample_indices if i not in valid_indices]
+                            logger.warning(f"Ignored invalid/out-of-range indices: {invalid_indices}")
+                    else:
+                        raise ValueError("sample_use must be either an integer or a list of integers")
+                        
+                except Exception as e:
+                    logger.error(f"Failed to parse sample_use '{sample_use}': {e}")
+                    logger.info("Using all samples instead")
+            else:
+                logger.info("No sample_use specified, using all samples")
             
             logger.info(f"Starting test with {len(data)} samples")
             
@@ -966,6 +1045,8 @@ class ToolBasedMemoryTester:
         print(f"\n{'='*60}")
         print(f"ENHANCED MEMORY TEST RESULTS - UNIFIED MEMAGENT")
         print(f"{'='*60}")
+        if self.category_filter:
+            print(f"Category filter applied: {self.category_filter}")
         print(f"Samples processed: {successful_samples}/{total_samples}")
         print(f"Total sessions: {total_sessions}")
         print(f"Sessions processed: {sessions_processed}")
@@ -1015,23 +1096,48 @@ def main():
     
     parser = argparse.ArgumentParser(description='Enhanced Memory Test with Unified MemAgent')
     parser.add_argument('--data-file', default='data/locomo10.json', help='Path to test data file')
-    parser.add_argument('--sample-limit', type=int, help='Limit number of samples to process')
+    parser.add_argument('--sample-use', type=str, help='Sample indices to use. Can be a single number (e.g., "5" for first 5 samples) or a list (e.g., "[0, 1, 3, 5]" for specific indices). If not provided, use all samples.')
     parser.add_argument('--memory-dir', default='memory', help='Directory for memory files')
     parser.add_argument('--chat-deployment', default='gpt-4.1-mini-2', help='Azure OpenAI chat deployment')
-    parser.add_argument('--max-workers', type=int, default=3, help='Maximum number of parallel workers for session processing')
+    # parser.add_argument('--chat-deployment', default='DeepSeek-V3-0324', help='Azure OpenAI chat deployment')
+    parser.add_argument('--max-workers', type=int, default=5, help='Maximum number of parallel workers for session processing')
+    parser.add_argument('--category', type=str, help='Filter questions by category. Can be a single category (e.g., "1") or comma-separated categories (e.g., "0,2,3"). If not provided, use all categories.')
+
+    parser.add_argument('--force-resum', action='store_true', help='Force to redo the memory summarization')
+    parser.add_argument('--no-eval', action='store_true', help='Do not evaluate the results')
+    parser.add_argument('--analyze-on', type=str, default="wrong", help='Do detailed analysis on "all", "wrong", or "none"')
     
     args = parser.parse_args()
+
+    global args_global
+    args_global = args
+    
+    # Parse category filter
+    category_filter = None
+    if args.category:
+        try:
+            # Handle comma-separated values
+            if ',' in args.category:
+                category_filter = [cat.strip() for cat in args.category.split(',')]
+            else:
+                # Single category
+                category_filter = [args.category.strip()]
+        except Exception as e:
+            logger.error(f"Failed to parse category filter '{args.category}': {e}")
+            logger.info("Using all categories instead")
+            category_filter = None
     
     # Initialize tester
     tester = ToolBasedMemoryTester(
         memory_dir=args.memory_dir,
         chat_deployment=args.chat_deployment,
-        max_workers=args.max_workers
+        max_workers=args.max_workers,
+        category_filter=category_filter
     )
     
     # Run test
     logger.info("Starting Enhanced Memory Test with Unified MemAgent")
-    results = tester.run_test(args.data_file, args.sample_limit)
+    results = tester.run_test(args.data_file, args.sample_use)
     
     if results['success']:
         # Print results

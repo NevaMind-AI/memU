@@ -8,6 +8,7 @@ from .anthropic_client import AnthropicClient
 from .azure_openai_client import AzureOpenAIClient
 from .base import BaseLLMClient, LLMResponse
 from .custom_client import CustomLLMClient
+from .deepseek_client import DeepSeekClient
 from .openai_client import OpenAIClient
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     "AzureOpenAIClient",
     "AnthropicClient",
     "CustomLLMClient",
+    "DeepSeekClient",
 ]

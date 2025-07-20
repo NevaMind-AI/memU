@@ -20,6 +20,7 @@ dotenv.load_dotenv()
 
 from memu.llm import AzureOpenAIClient
 from memu.utils import get_logger, setup_logging
+from llm_factory import create_llm_client
 
 # Add prompts directory to path and import prompt loader
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'prompts'))
@@ -65,10 +66,10 @@ class EvaluateAgent:
     def _init_llm_client(self):
         """Initialize the LLM client"""
         try:
-            return AzureOpenAIClient(
+            return create_llm_client(
+                chat_deployment=self.chat_deployment,
                 azure_endpoint=self.azure_endpoint,
                 api_key=self.api_key,
-                chat_deployment=self.chat_deployment,
                 use_entra_id=self.use_entra_id,
                 api_version=self.api_version
             )
@@ -262,6 +263,11 @@ Just return the label CORRECT or WRONG in a json format with the key as "label".
                 raise Exception(f"LLM evaluation failed: {llm_response.error}")
                 
             evaluation_text = llm_response.content.strip()
+
+            print('*'*100)
+            print("messages: ", repr(messages))
+            print("evaluation_text: ", repr(llm_response))
+            print('*'*100)
             
             # Parse the JSON response
             is_correct = False

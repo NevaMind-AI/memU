@@ -19,12 +19,15 @@ import math
 from collections import Counter, defaultdict
 import difflib
 import numpy as np
+import threading
 
 import dotenv
 dotenv.load_dotenv()
 
 from memu.llm import AzureOpenAIClient
 from memu.utils import get_logger, setup_logging
+from memu.memory.embeddings import get_default_embedding_client
+from llm_factory import create_llm_client
 
 # Add prompts directory to path and import prompt loader
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'prompts'))
@@ -46,8 +49,8 @@ class ResponseAgent:
     
     def __init__(
         self,
-        azure_endpoint: str = None,
-        api_key: str = None,
+        azure_endpoint: Optional[str] = None,
+        api_key: Optional[str] = None,
         chat_deployment: str = "gpt-4.1-mini",
         use_entra_id: bool = False,
         api_version: str = "2024-02-15-preview",
@@ -64,27 +67,55 @@ class ResponseAgent:
         # Ensure memory directory exists
         self.memory_dir.mkdir(exist_ok=True)
         
+        # Initialize thread lock for file operations and cache access
+        self._file_lock = threading.Lock()
+        self._cache_lock = threading.Lock()
+        
         # Initialize prompt loader
         self.prompt_loader = get_prompt_loader()
         
         # Initialize LLM client
         self.llm_client = self._init_llm_client()
         
+        # Initialize embedding client for semantic search
+        self.embedding_client = self._init_embedding_client()
+        
+        # Initialize embedding cache for events to prevent repeated API calls
+        self.event_embedding_cache = {}
+        
+        if self.embedding_client:
+            logger.info("Embedding client initialized for semantic search")
+        else:
+            logger.warning("No embedding client available - semantic search will use fallback method")
+        
         logger.info(f"ResponseAgent initialized with memory directory: {self.memory_dir}")
 
     def _init_llm_client(self):
         """Initialize the LLM client"""
         try:
-            return AzureOpenAIClient(
+            return create_llm_client(
+                chat_deployment=self.chat_deployment,
                 azure_endpoint=self.azure_endpoint,
                 api_key=self.api_key,
-                chat_deployment=self.chat_deployment,
                 use_entra_id=self.use_entra_id,
                 api_version=self.api_version
             )
         except Exception as e:
             logger.error(f"Failed to initialize LLM client: {e}")
             raise
+
+    def _init_embedding_client(self):
+        """Initialize the embedding client for semantic search"""
+        try:
+            # Try to get default embedding client (checks environment variables)
+            embedding_client = get_default_embedding_client()
+            if embedding_client:
+                return embedding_client
+        except Exception as e:
+            logger.warning(f"Failed to initialize embedding client: {e} - semantic search will use fallback method")
+        
+        logger.warning("No embedding client configuration found - semantic search will use fallback method")
+        return None
 
     def get_available_tools(self) -> List[Dict[str, Any]]:
         """Get list of available response tools"""
@@ -202,21 +233,36 @@ class ResponseAgent:
             logger.error(f"Error getting available characters: {e}")
             return []
 
+    def clear_embedding_cache(self):
+        """Clear the event embedding cache"""
+        with self._cache_lock:
+            cache_size = len(self.event_embedding_cache)
+            self.event_embedding_cache.clear()
+        logger.info(f"Cleared event embedding cache (removed {cache_size} entries)")
 
-    def _multi_modal_search(self, query: str, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def get_cache_stats(self) -> Dict[str, int]:
+        """Get statistics about the embedding cache"""
+        with self._cache_lock:
+            cache_size = len(self.event_embedding_cache)
+        return {
+            "cache_size": cache_size,
+            "cached_events": cache_size
+        }
+
+
+    def _multi_modal_search(self, original_query: str, processed_query: str, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Perform multi-modal search combining semantic search, BM25, and string matching
         """
         if not events:
             return []
         
-        query_processed = query.lower().strip()
         results = []
         
-        # Calculate scores using different methods
-        string_scores = self._string_match_search(query_processed, events)
-        bm25_scores = self._bm25_search(query_processed, events)
-        semantic_scores = self._semantic_search(query_processed, events)
+        # Calculate scores using different methods with appropriate queries
+        string_scores = self._string_match_search(processed_query, events)
+        bm25_scores = self._bm25_search(processed_query, events)
+        semantic_scores = self._semantic_search(original_query, events)  # Use original query for semantic search
         
         # Combine scores for each event
         for i, event in enumerate(events):
@@ -225,11 +271,11 @@ class ResponseAgent:
             bm25_score = bm25_scores.get(event["id"], 0.0)
             semantic_score = semantic_scores.get(event["id"], 0.0)
             
-            # Weighted combination of scores
+            # Weighted combination of scores - prioritizing semantic search
             combined_score = (
-                0.4 * string_score +    # String matching - high weight for exact matches
-                0.35 * bm25_score +     # BM25 - balanced relevance scoring
-                0.25 * semantic_score   # Semantic - contextual understanding
+                0.3 * string_score +    # String matching - disabled when semantic is primary
+                0.3 * bm25_score +      # BM25 - disabled when semantic is primary  
+                1.0 * semantic_score    # Semantic - primary scoring method using embeddings
             )
             
             # Only include events with non-zero scores
@@ -355,62 +401,98 @@ class ResponseAgent:
         return scores
 
     def _semantic_search(self, query: str, events: List[Dict[str, Any]]) -> Dict[str, float]:
-        """Simple semantic similarity using word overlap and context"""
+        """Embedding-based semantic similarity using the original query (not processed keywords)"""
         scores = {}
         
-        # For now, implement a simple semantic approach without heavy dependencies
-        # This could be enhanced with actual embeddings (e.g., sentence-transformers)
-        
-        query_words = set(query.split())
-        
-        # Create semantic word groups (simple thesaurus-like approach)
-        semantic_groups = {
-            'emotions': {'happy', 'sad', 'angry', 'excited', 'disappointed', 'joy', 'fear', 'love', 'hate'},
-            'actions': {'went', 'came', 'did', 'made', 'said', 'talked', 'walked', 'ran', 'worked'},
-            'time': {'today', 'yesterday', 'tomorrow', 'morning', 'evening', 'night', 'day', 'week', 'month'},
-            'places': {'home', 'work', 'school', 'restaurant', 'store', 'park', 'office', 'room'},
-            'people': {'friend', 'family', 'colleague', 'boss', 'parent', 'child', 'partner', 'spouse'}
-        }
+        try:
+            if not self.embedding_client:
+                logger.warning("No embedding client available, using fallback semantic search")
+                return self._fallback_semantic_search(query, events)
+            
+            # Generate query embedding using original query (not keywords)
+            query_embedding = self.embedding_client.embed(query)
+            if not query_embedding:
+                logger.warning("Failed to generate query embedding, using fallback")
+                return self._fallback_semantic_search(query, events)
+            
+            # Generate embeddings for all events (with caching)
+            event_embeddings = {}
+            cache_hits = 0
+            cache_misses = 0
+            
+            for event in events:
+                try:
+                    event_text = event["text"]
+                    
+                    # Thread-safe cache access
+                    with self._cache_lock:
+                        # Check cache first
+                        if event_text in self.event_embedding_cache:
+                            event_embeddings[event["id"]] = self.event_embedding_cache[event_text]
+                            cache_hits += 1
+                            continue
+                    
+                    # Generate new embedding (outside lock to avoid blocking other threads)
+                    event_embedding = self.embedding_client.embed(event_text)
+                    if event_embedding:
+                        event_embeddings[event["id"]] = event_embedding
+                        # Cache the embedding for future use (thread-safe)
+                        with self._cache_lock:
+                            # Double-check pattern: another thread might have added it while we were computing
+                            if event_text not in self.event_embedding_cache:
+                                self.event_embedding_cache[event_text] = event_embedding
+                        cache_misses += 1
+                    else:
+                        event_embeddings[event["id"]] = [0.0] * len(query_embedding)  # Zero vector fallback
+                        cache_misses += 1
+                except Exception as e:
+                    logger.warning(f"Failed to embed event {event['id']}: {e}")
+                    event_embeddings[event["id"]] = [0.0] * len(query_embedding)  # Zero vector fallback
+                    cache_misses += 1
+            
+            logger.debug(f"Event embedding cache: {cache_hits} hits, {cache_misses} misses, cache size: {len(self.event_embedding_cache)}")
+            
+            # Calculate cosine similarities
+            query_vector = np.array(query_embedding)
+            
+            for event in events:
+                try:
+                    event_vector = np.array(event_embeddings[event["id"]])
+                    
+                    # Calculate cosine similarity
+                    query_norm = np.linalg.norm(query_vector)
+                    event_norm = np.linalg.norm(event_vector)
+                    
+                    if query_norm > 0 and event_norm > 0:
+                        similarity = np.dot(query_vector, event_vector) / (query_norm * event_norm)
+                        scores[event["id"]] = float(max(0, similarity))  # Ensure non-negative
+                    else:
+                        scores[event["id"]] = 0.0
+                except Exception as e:
+                    logger.warning(f"Failed to calculate similarity for event {event['id']}: {e}")
+                    scores[event["id"]] = 0.0
+            
+            return scores
+            
+        except Exception as e:
+            logger.error(f"Embedding search failed: {e}, using fallback")
+            return self._fallback_semantic_search(query, events)
+
+    def _fallback_semantic_search(self, query: str, events: List[Dict[str, Any]]) -> Dict[str, float]:
+        """Fallback semantic search when embedding client is not available"""
+        scores = {}
+        query_words = set(query.lower().split())
         
         for event in events:
             event_text = event["text"].lower()
             event_words = set(event_text.split())
             
-            # Direct word overlap (already covered in string matching, but with semantic boost)
-            direct_overlap = len(query_words.intersection(event_words))
-            direct_score = direct_overlap / len(query_words) if query_words else 0
-            
-            # Semantic group overlap
-            semantic_score = 0
-            for group_name, group_words in semantic_groups.items():
-                query_in_group = query_words.intersection(group_words)
-                event_in_group = event_words.intersection(group_words)
-                
-                if query_in_group and event_in_group:
-                    # Boost score if both query and event have words in same semantic group
-                    semantic_score += 0.5
-            
-            # Context similarity (simple co-occurrence)
-            context_score = 0
-            for query_word in query_words:
-                for event_word in event_words:
-                    # Simple character-level similarity for related words
-                    if len(query_word) > 3 and len(event_word) > 3:
-                        if query_word in event_word or event_word in query_word:
-                            context_score += 0.3
-                        elif difflib.SequenceMatcher(None, query_word, event_word).ratio() > 0.7:
-                            context_score += 0.2
-            
-            context_score = min(context_score, 1.0)  # Cap at 1.0
-            
-            # Combine semantic components
-            final_semantic_score = (
-                0.5 * direct_score +
-                0.3 * semantic_score +
-                0.2 * context_score
-            )
-            
-            scores[event["id"]] = final_semantic_score
+            # Simple word overlap scoring
+            if query_words:
+                overlap = len(query_words.intersection(event_words))
+                scores[event["id"]] = overlap / len(query_words)
+            else:
+                scores[event["id"]] = 0.0
         
         return scores
 
@@ -446,7 +528,7 @@ class ResponseAgent:
                 "profile": None
             }
 
-    def search_character_events(self, query: str, characters: List[str], top_k: int = 10) -> Dict[str, Any]:
+    def search_character_events(self, query: str, characters: List[str], top_k: int = 10, processed_query: Optional[str] = None) -> Dict[str, Any]:
         """Search for events using multi-modal approach: semantic search, BM25, and string matching"""
         try:
             all_events = []
@@ -472,8 +554,18 @@ class ResponseAgent:
                     "message": "No events found for the specified characters"
                 }
 
+            # If no processed query provided, create keywords for string/BM25 search
+            if processed_query is None:
+                # Simple keyword extraction - remove common stop words
+                stop_words = {'what', 'where', 'when', 'who', 'why', 'how', 'is', 'are', 'was', 'were', 
+                             'do', 'does', 'did', 'can', 'could', 'would', 'should', 'about', 'the', 
+                             'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with'}
+                words = re.findall(r'\b\w+\b', query.lower())
+                keywords = [word for word in words if word not in stop_words and len(word) > 2]
+                processed_query = " ".join(keywords)
+
             # Multi-modal search and scoring
-            search_results = self._multi_modal_search(query, all_events)
+            search_results = self._multi_modal_search(query, processed_query, all_events)
             
             # Filter out zero-score results
             search_results = [r for r in search_results if r.get("combined_score", 0) > 0]
@@ -491,7 +583,7 @@ class ResponseAgent:
                 "events": top_events,
                 "total_found": len(search_results),
                 "search_method": "multi_modal",
-                "query_processed": query.lower().strip(),
+                "query_processed": processed_query,
                 "characters_searched": characters
             }
 
@@ -562,20 +654,14 @@ class ResponseAgent:
             all_events = []
             iteration_log = []
             
-            # Initial search using keywords from question
-            # Simple keyword extraction - remove common stop words
-            stop_words = {'what', 'where', 'when', 'who', 'why', 'how', 'is', 'are', 'was', 'were', 
-                         'do', 'does', 'did', 'can', 'could', 'would', 'should', 'about', 'the', 
-                         'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with'}
-            words = re.findall(r'\b\w+\b', question.lower())
-            current_keywords = [word for word in words if word not in stop_words and len(word) > 2]
-            search_query = " ".join(current_keywords)
+            # Start with the original question for initial search
+            current_search_query = question
             
             for iteration in range(max_iterations):
-                logger.info(f"Iteration {iteration + 1}/{max_iterations}: Searching with query '{search_query}'")
+                logger.info(f"Iteration {iteration + 1}/{max_iterations}: Searching with query '{current_search_query}'")
                 
-                # Search for relevant events
-                events_result = self.search_character_events(search_query, characters)
+                # Search for relevant events using the current search query
+                events_result = self.search_character_events(current_search_query, characters)
                 current_events = []
                 if events_result.get("success"):
                     current_events = events_result.get("events", [])
@@ -587,9 +673,9 @@ class ResponseAgent:
                 
                 iteration_log.append({
                     "iteration": iteration + 1,
-                    "query": search_query,
+                    "query": current_search_query,
                     "events_found": len(current_events),
-                    "keywords": current_keywords
+                    "is_original_question": iteration == 0
                 })
                 
                 # Check if we have sufficient information to answer the question
@@ -606,12 +692,11 @@ class ResponseAgent:
                     new_query_result = self._generate_new_query(question, missing_info, current_content)
                     
                     if new_query_result.get("success"):
-                        search_query = new_query_result.get("new_query", search_query)
-                        current_keywords = new_query_result.get("keywords", current_keywords)
-                        logger.info(f"Generated new query for iteration {iteration + 2}: '{search_query}'")
+                        current_search_query = new_query_result.get("new_query", current_search_query)
+                        logger.info(f"Generated new query for iteration {iteration + 2}: '{current_search_query}'")
                         
                         iteration_log[-1]["missing_info"] = missing_info
-                        iteration_log[-1]["new_query_generated"] = search_query
+                        iteration_log[-1]["new_query_generated"] = current_search_query
                     else:
                         logger.warning(f"Failed to generate new query: {new_query_result.get('error')}")
                         break
@@ -697,6 +782,7 @@ Instructions:
    - Note any gaps or limitations in the available information
    - Plan your approach to answering
    - **IMPORTANT**: Look for multiple answers that may be scattered across different events
+   - **IMPORTANT**: Think of the time carefully, the time of an event can be relative to when it is mentioned by the speaker, you need to find out the real time of the event
 
 2. Then, provide your final answer using <result>...</result> tags:
    - Give a complete, accurate answer based on the available information
@@ -728,7 +814,8 @@ Format:
                 raw_response = response.content.strip()
                 
                 # Extract the final answer from <result> tags
-                result_match = re.search(r'<result>(.*?)</result>', raw_response, re.DOTALL)
+                # result_match = re.search(r'<result>(.*?)</result>', raw_response, re.DOTALL)
+                result_match = re.search(r'<result>(.*?)(?:</result>|$)', raw_response, re.DOTALL)
                 if result_match:
                     final_answer = result_match.group(1).strip()
                     

@@ -1,60 +1,89 @@
-## Personal Information
-- Name: Joanna
-- Age: 30 (implied from the screenplay character's age)
-- Occupation: Screenwriter
-- Location: Not specified
-- Family: Close family members (picture on cork board serves as a reminder of their love and encouragement)
+Here’s the updated profile for Joanna, incorporating all new information from the current session and event records:
 
-## Personality & Characteristics
-- Enjoys writing and expressing herself through stories
-- Communicates in a friendly and engaging manner
-- Values emotional depth in storytelling
-- Experiences a mix of emotions (relief, excitement, anxiety) upon completing projects
-- Has dietary restrictions (lactose intolerant)
-- Passionate about cooking and baking, particularly dairy-free desserts
-- Inspired by nature and personal experiences, finding it calming and a way to reset
-- Recently described herself as feeling like an "expert hiker"
-- Writing has become an escape and a way to express her feelings, noting that "words just have a magical way of healing."
-- Values self-care and balance in her life, emphasizing the importance of taking breaks for inspiration and mental health
-- Enjoys mixing and matching flavors in cooking, particularly in her dairy-free recipes
-- Recently expressed interest in attending a writing convention
+---
+## **Personal Information**  
+- **Full Name**: Joanna  
+- **Age/Birthdate**: Not specified  
+- **Occupation**: Screenwriter and aspiring filmmaker  
+- **Location**: Near Fort Wayne (based on hiking reference)  
+- **Family Members**:  
+  - Brother (wrote her childhood notes)  
 
-## Relationships
-- Close friend: Nate (friendly relationship)
-- Expressed gratitude for Nate's support throughout her creative journey, stating, "Thanks, Nate! Your support and encouragement mean a lot."
+## **Personality & Characteristics**  
+- **Traits**:  
+  - Supportive and encouraging (consistently motivates Nate)  
+  - Hardworking and persistent ("won't give up" attitude)  
+  - Highly creative (multiple active writing projects)  
+  - Sentimental (values nature photography, childhood keepsakes)  
+  - Optimistic (focuses on positive outcomes)  
+  - Enthusiastic and expressive (reacts excitedly to achievements and others' stories)  
+- **Habits/Preferences**:  
+  - Documents experiences through writing and photography  
+  - Enjoys outdoor activities (hiking)  
+  - Allergic to turtles (must observe from distance)  
+  - Appreciates creative and visually appealing food (e.g., colorful coconut milk ice cream)  
+- **Communication Style**:  
+  - Warm and expressive  
+  - Gives practical advice (e.g., YouTube research tips)  
+  - Shares personal achievements openly  
 
-## Interests & Activities
-- Hobbies: Writing, reading, hiking, hanging out with friends, DIY projects
-- Writing genre: Drama and romance
-- Currently working on a script about love, filled with challenges, which she got the idea for from a dream
-- Recently started on a book featuring dialogues exploring loss, redemption, and forgiveness, which she is excited about as it might be her first attempt at publishing
-- Enjoys creating "wild worlds with awesome characters"
-- Prefers dramas and emotionally-driven films
-- Recently expressed interest in trying new dairy-free dessert flavors, specifically experimenting with chocolate, raspberry, and coconut
-- Keen on trying new recipes, particularly desserts (eager to try Nate's dairy-free ice cream recipe)
-- Actively researching and networking for her script
-- Uses specific places for writing inspiration to stay sharp and motivated
-- Recently discovered a gorgeous hiking trail in her hometown, including a location called Whispering Falls, which she finds inspiring and calming
-- Enjoys taking photos during hikes, capturing serene landscapes
-- Plans to go hiking with friends to check out a new trail featuring a "rad waterfall"
-- Recently shared that she wrote a few bits for a screenplay that appeared on the big screen, describing the experience as "nerve-wracking but so inspiring to see my words come alive!"
-- Received a letter from a reader who found comfort in her online blog post about a challenging moment in her life, reinforcing her belief in the power of her writing.
-- Recommends finding a fantasy book series to read for relaxation
-- Enjoys making dairy-free desserts, including a chocolate raspberry tart and a chocolate cake with raspberries
-- Recently created a cute little bookmark for a member of her writing club, showcasing her love for DIY projects
-- Currently working on a suspenseful thriller set in a small Midwestern town, describing it as a great creative outlet for her
+## **Relationships**  
+- **Friends**:  
+  - **Nate**: Close friend; exchanges creative support and personal updates  
+- **Professional**:  
+  - Pitches scripts to producers  
+  - Receiving positive industry feedback (actor praised her script)  
 
-## Life Situation
-- Recently finished her writing for her book, putting in a ton of late nights and edits, and expressed pride in her accomplishment
-- Managing severe allergies to most reptiles and animals with fur (causes puffy and itchy reactions)
-- Expresses a strong passion for writing and plans to continue pursuing it as a career
-- Enjoys recommending movies, recently recommended "Little Women" as a must-see film
-- Currently focused on her writing projects, which are consuming her time, and is hoping for good news soon regarding her work
-- Recently joined a writers group, feeling motivated and supported by the inspirational people there
-- Reflected on the tough times she faced while finishing her screenplay, realizing that "it's those moments that bring joy and make the journey worth it."
-- Recently received a rejection letter from a major company after finishing her screenplay, which she described as "really bummed me out." This experience has been disheartening for her, especially since the letter was generic and lacked feedback, making her feel uncertain about what went wrong.
-- Expressed admiration for Spider-Man, stating, "Spider-Man has always been a favorite of mine - I mean, who doesn't love Peter Parker's struggles between being a hero and being a person?"
-- Recently submitted her screenplay to a film contest, expressing her eagerness to see how others might respond to it.
-- Recently acquired an external drive for backups after losing all her work due to a laptop crash, emphasizing her determination to avoid similar situations in the future.
-- Recently celebrated the third time her script was shown on the big screen, describing the experience as "surreal" and rewarding.
-- Currently filming her own movie based on her road-trip script, expressing excitement about seeing her vision come alive and feeling validated by an actor's compliment on her script.
+## **Interests & Activities**  
+- **Writing**:  
+  - Screenwriting (expanding into thriller genre)  
+  - Current projects:  
+    - Suspenseful thriller set in Midwestern town  
+    - Previously mentioned love story script  
+    - **Filming her own movie based on her road-trip script** (active project as of November 2022)  
+  - Creative process involves extensive planning  
+- **Outdoor Activities**:  
+  - Hiking and nature photography  
+- **Entertainment**:  
+  - Enjoys movies (potential viewing plans with Nate)  
+  - Discusses gaming culture through Nate's experiences  
+- **Food/Cooking**:  
+  - Shows interest in unique recipes (e.g., colorful coconut milk ice cream)  
+
+## **Life Situation**  
+- **Current Projects**:  
+  - **Filming her own movie based on her road-trip script** (excited about daily potential on set)  
+  - Developing thriller screenplay (November 2022)  
+  - Recently pitched movie script to producers  
+  - Maintaining prolific writing output  
+- **Goals**:  
+  - Produce third published movie  
+  - Continue professional growth in film industry  
+- **Health**:  
+  - Turtle allergy (prevents direct interaction)  
+- **Recent Achievements**:  
+  - Successful producer pitch meeting  
+  - Completed detailed script development plan  
+  - **Actor praised her script on set (memorable moment)**  
+
+**Key Updates**:  
+1. Added **filming her own movie** as a current project.  
+2. Included **actor's praise for her script** as a recent achievement.  
+3. Added **interest in creative food** (coconut milk ice cream).  
+4. Noted **enthusiastic reactions** to Nate's stories (turtles, ice cream).  
+
+**Consistent with Existing Profile**:  
+- Maintained core writing focus and creative aspirations.  
+- Kept supportive friendship dynamics with Nate.  
+- Retained optimistic and expressive communication style.  
+
+**Omissions**:  
+- No recent mentions of book writing.  
+- Cooking interests were only mentioned in passing (no deeper details).  
+
+**Notes**:  
+- Professional focus remains on screenwriting and filmmaking.  
+- New data shows excitement about her script coming to life on set.  
+- All updates based on direct conversation evidence.  
+
+---

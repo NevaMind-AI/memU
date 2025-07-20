@@ -12,7 +12,7 @@ from typing import Dict, Optional
 class PromptLoader:
     """Prompt loader for managing prompts from text files"""
     
-    def __init__(self, prompts_dir: str = None):
+    def __init__(self, prompts_dir: Optional[str] = None):
         """
         Initialize prompt loader
         
@@ -20,8 +20,9 @@ class PromptLoader:
             prompts_dir: Directory containing prompt files (defaults to current directory)
         """
         if prompts_dir is None:
-            prompts_dir = Path(__file__).parent
-        self.prompts_dir = Path(prompts_dir)
+            self.prompts_dir = Path(__file__).parent
+        else:
+            self.prompts_dir = Path(prompts_dir)
         self._cached_prompts = {}
     
     def load_prompt(self, prompt_name: str) -> str:
@@ -62,6 +63,18 @@ class PromptLoader:
         prompt_template = self.load_prompt(prompt_name)
         return prompt_template.format(**kwargs)
     
+    def get_prompt(self, prompt_name: str) -> str:
+        """
+        Alias for load_prompt for compatibility
+        
+        Args:
+            prompt_name: Name of the prompt file (without .txt extension)
+            
+        Returns:
+            Prompt content as string
+        """
+        return self.load_prompt(prompt_name)
+    
     def list_available_prompts(self) -> list:
         """
         List all available prompt files
@@ -81,7 +94,7 @@ class PromptLoader:
 _prompt_loader = None
 
 
-def get_prompt_loader(prompts_dir: str = None) -> PromptLoader:
+def get_prompt_loader(prompts_dir: Optional[str] = None) -> PromptLoader:
     """
     Get the global prompt loader instance
     
@@ -97,7 +110,7 @@ def get_prompt_loader(prompts_dir: str = None) -> PromptLoader:
     return _prompt_loader
 
 
-def load_prompt(prompt_name: str, prompts_dir: str = None) -> str:
+def load_prompt(prompt_name: str, prompts_dir: Optional[str] = None) -> str:
     """
     Convenience function to load a prompt
     
@@ -112,7 +125,7 @@ def load_prompt(prompt_name: str, prompts_dir: str = None) -> str:
     return loader.load_prompt(prompt_name)
 
 
-def format_prompt(prompt_name: str, prompts_dir: str = None, **kwargs) -> str:
+def format_prompt(prompt_name: str, prompts_dir: Optional[str] = None, **kwargs) -> str:
     """
     Convenience function to load and format a prompt
     
