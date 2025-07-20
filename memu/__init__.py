@@ -22,14 +22,10 @@ from .llm import LLMResponse  # LLM response object
 from .llm import OpenAIClient  # OpenAI implementation
 
 # Core Memory system - Unified Memory Agent
-from .memory import ProfileMemory, EventMemory  
-from .memory.base import Memory, ProfileMemory, EventMemory, ReminderMemory, ImportantEventMemory, InterestsMemory, StudyMemory 
 from .memory import MemoryAgent  # Unified memory agent
 from .memory import MemoryFileManager 
  
-from .memory import EmbeddingClient
-from .memory import create_embedding_client  
-from .memory import get_default_embedding_client 
+from .memory import get_default_embedding_client
 
 # Prompts system - 现在从动态配置文件夹读取
 # from .config.prompts import PromptLoader  # Prompt loading utilities

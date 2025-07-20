@@ -103,32 +103,32 @@ class DeleteMemoryAction(BaseAction):
         except Exception as e:
             return self._handle_error(e)
     
-    def _delete_embeddings(self, character_name: str, memory_type: str) -> int:
-        """Delete embeddings for a memory type"""
+    def _delete_embeddings(self, character_name: str, category: str) -> int:
+        """Delete embeddings for a category"""
         try:
             char_embeddings_dir = self.embeddings_dir / character_name
-            embeddings_file = char_embeddings_dir / f"{memory_type}_embeddings.json"
+            embeddings_file = char_embeddings_dir / f"{category}_embeddings.json"
             
             deleted_count = 0
             if embeddings_file.exists():
                 # Get count before deletion
-                deleted_count = self._count_embeddings(character_name, memory_type)
+                deleted_count = self._count_embeddings(character_name, category)
                 embeddings_file.unlink()
-                logger.debug(f"Deleted {deleted_count} embeddings for {character_name}:{memory_type}")
+                logger.debug(f"Deleted {deleted_count} embeddings for {character_name}:{category}")
             
             return deleted_count
             
         except Exception as e:
-            logger.warning(f"Failed to delete embeddings for {character_name}:{memory_type}: {e}")
+            logger.warning(f"Failed to delete embeddings for {character_name}:{category}: {e}")
             return 0
     
-    def _count_embeddings(self, character_name: str, memory_type: str) -> int:
-        """Count embeddings for a specific memory type"""
+    def _count_embeddings(self, character_name: str, category: str) -> int:
+        """Count embeddings for a specific category"""
         try:
             import json
             
             char_embeddings_dir = self.embeddings_dir / character_name
-            embeddings_file = char_embeddings_dir / f"{memory_type}_embeddings.json"
+            embeddings_file = char_embeddings_dir / f"{category}_embeddings.json"
             
             if embeddings_file.exists():
                 with open(embeddings_file, 'r', encoding='utf-8') as f:

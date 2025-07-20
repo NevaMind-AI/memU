@@ -49,96 +49,96 @@ class MemoryFileManager:
         self.memory_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"MemoryFileManager initialized with directory: {self.memory_dir}")
     
-    def _get_memory_file_path(self, character_name: str, memory_type: str) -> Path:
+    def _get_memory_file_path(self, character_name: str, category: str) -> Path:
         """Get the file path for a character's memory file"""
-        extension = self.MEMORY_TYPES.get(memory_type, ".md")
-        filename = f"{character_name}_{memory_type}{extension}"
+        extension = self.MEMORY_TYPES.get(category, ".md")
+        filename = f"{character_name}_{category}{extension}"
         return self.memory_dir / filename
     
-    def read_memory_file(self, character_name: str, memory_type: str) -> str:
+    def read_memory_file(self, character_name: str, category: str) -> str:
         """
         Read content from a character's memory file
         
         Args:
             character_name: Name of the character
-            memory_type: Type of memory to read
+            category: Category to read
             
         Returns:
             str: File content or empty string if not found
         """
         try:
-            file_path = self._get_memory_file_path(character_name, memory_type)
+            file_path = self._get_memory_file_path(character_name, category)
             if file_path.exists():
                 return file_path.read_text(encoding='utf-8')
             return ""
         except Exception as e:
-            logger.error(f"Error reading {memory_type} for {character_name}: {e}")
+            logger.error(f"Error reading {category} for {character_name}: {e}")
             return ""
     
-    def write_memory_file(self, character_name: str, memory_type: str, content: str) -> bool:
+    def write_memory_file(self, character_name: str, category: str, content: str) -> bool:
         """
         Write content to a character's memory file
         
         Args:
             character_name: Name of the character
-            memory_type: Type of memory to write
+            category: Category to write
             content: Content to write
             
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            file_path = self._get_memory_file_path(character_name, memory_type)
+            file_path = self._get_memory_file_path(character_name, category)
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content, encoding='utf-8')
-            logger.debug(f"Written {memory_type} for {character_name}")
+            logger.debug(f"Written {category} for {character_name}")
             return True
         except Exception as e:
-            logger.error(f"Error writing {memory_type} for {character_name}: {e}")
+            logger.error(f"Error writing {category} for {character_name}: {e}")
             return False
     
-    def append_memory_file(self, character_name: str, memory_type: str, content: str) -> bool:
+    def append_memory_file(self, character_name: str, category: str, content: str) -> bool:
         """
         Append content to a character's memory file
         
         Args:
             character_name: Name of the character
-            memory_type: Type of memory to append to
+            category: Category to append to
             content: Content to append
             
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            existing_content = self.read_memory_file(character_name, memory_type)
+            existing_content = self.read_memory_file(character_name, category)
             if existing_content:
                 new_content = existing_content + "\n\n" + content
             else:
                 new_content = content
-            return self.write_memory_file(character_name, memory_type, new_content)
+            return self.write_memory_file(character_name, category, new_content)
         except Exception as e:
-            logger.error(f"Error appending {memory_type} for {character_name}: {e}")
+            logger.error(f"Error appending {category} for {character_name}: {e}")
             return False
     
-    def delete_memory_file(self, character_name: str, memory_type: str) -> bool:
+    def delete_memory_file(self, character_name: str, category: str) -> bool:
         """
         Delete a character's memory file
         
         Args:
             character_name: Name of the character
-            memory_type: Type of memory to delete
+            category: Category to delete
             
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            file_path = self._get_memory_file_path(character_name, memory_type)
+            file_path = self._get_memory_file_path(character_name, category)
             if file_path.exists():
                 file_path.unlink()
-                logger.debug(f"Deleted {memory_type} for {character_name}")
+                logger.debug(f"Deleted {category} for {character_name}")
             return True
         except Exception as e:
-            logger.error(f"Error deleting {memory_type} for {character_name}: {e}")
+            logger.error(f"Error deleting {category} for {character_name}: {e}")
             return False
     
     def list_character_files(self, character_name: str) -> List[str]:
@@ -149,31 +149,31 @@ class MemoryFileManager:
             character_name: Name of the character
             
         Returns:
-            List[str]: List of memory types that exist for the character
+            List[str]: List of categories that exist for the character
         """
-        existing_types = []
-        for memory_type in self.MEMORY_TYPES:
-            file_path = self._get_memory_file_path(character_name, memory_type)
+        existing_categories = []
+        for category in self.MEMORY_TYPES:
+            file_path = self._get_memory_file_path(character_name, category)
             if file_path.exists():
-                existing_types.append(memory_type)
-        return existing_types
+                existing_categories.append(category)
+        return existing_categories
     
-    def get_file_info(self, character_name: str, memory_type: str) -> Dict[str, Any]:
+    def get_file_info(self, character_name: str, category: str) -> Dict[str, Any]:
         """
         Get information about a memory file
         
         Args:
             character_name: Name of the character
-            memory_type: Type of memory
+            category: Category name
             
         Returns:
             Dict containing file information
         """
-        file_path = self._get_memory_file_path(character_name, memory_type)
+        file_path = self._get_memory_file_path(character_name, category)
         
         if file_path.exists():
             stat = file_path.stat()
-            content = self.read_memory_file(character_name, memory_type)
+            content = self.read_memory_file(character_name, category)
             return {
                 "exists": True,
                 "file_size": stat.st_size,

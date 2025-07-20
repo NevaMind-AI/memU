@@ -4,8 +4,10 @@ Base Action Class for Memory Operations
 Defines the interface and common functionality for all memory actions.
 """
 
+import uuid
+import re
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 from datetime import datetime
 
 from ...utils import get_logger
@@ -122,51 +124,185 @@ class BaseAction(ABC):
         logger.error(f"Action {self.action_name} failed: {error}")
         return error_result
     
+    # ================================
+    # Memory ID Utilities
+    # ================================
+    
+    def _generate_memory_id(self) -> str:
+        short_uuid = str(uuid.uuid4())[:6]
+        return f"{short_uuid}"
+    
+    def _add_memory_ids_to_content(self, content: str) -> str:
+        """
+        Add memory IDs to content lines
+        
+        Args:
+            content: Raw content
+            
+        Returns:
+            Content with memory IDs added to each line
+        """
+        if not content.strip():
+            return content
+        
+        lines = content.split('\n')
+        processed_lines = []
+        
+        for line in lines:
+            line = line.strip()
+            if line:  # Only process non-empty lines
+                if not self._has_memory_id(line):
+                    # Add memory ID if not already present
+                    memory_id = self._generate_memory_id()
+                    processed_lines.append(f"[{memory_id}] {line}")
+                else:
+                    # Keep existing line with memory ID
+                    processed_lines.append(line)
+            else:
+                # Keep empty lines as is
+                processed_lines.append("")
+        
+        return '\n'.join(processed_lines)
+    
+    def _has_memory_id(self, line: str) -> bool:
+        """
+        Check if a line already has a memory ID
+        
+        Args:
+            line: Line to check
+            
+        Returns:
+            True if line starts with [memory_id] format
+        """
+        pattern = r'^\[[\w\d_]+\]\s+'
+        return bool(re.match(pattern, line.strip()))
+    
+    def _extract_memory_id(self, line: str) -> Tuple[str, str]:
+        """
+        Extract memory ID and content from a line
+        
+        Args:
+            line: Line with memory ID format: [memory_id] content
+            
+        Returns:
+            Tuple of (memory_id, content)
+        """
+        line = line.strip()
+        pattern = r'^\[([\w\d_]+)\]\s*(.*)'
+        match = re.match(pattern, line)
+        
+        if match:
+            memory_id = match.group(1)
+            content = match.group(2)
+            return memory_id, content
+        else:
+            # If no memory ID found, return empty ID and full line as content
+            return "", line
+    
+    def _extract_content_without_ids(self, content: str) -> str:
+        """
+        Extract pure content without memory IDs for embedding generation
+        
+        Args:
+            content: Content with memory IDs
+            
+        Returns:
+            Content without memory IDs
+        """
+        if not content.strip():
+            return content
+        
+        lines = content.split('\n')
+        clean_lines = []
+        
+        for line in lines:
+            if line.strip():
+                _, clean_content = self._extract_memory_id(line)
+                if clean_content:
+                    clean_lines.append(clean_content)
+            else:
+                clean_lines.append("")
+        
+        return '\n'.join(clean_lines)
+    
+    def _parse_memory_items(self, content: str) -> List[Dict[str, Any]]:
+        """
+        Parse content into memory items with IDs
+        
+        Args:
+            content: Content with memory IDs
+            
+        Returns:
+            List of memory items with metadata
+        """
+        if not content.strip():
+            return []
+        
+        lines = content.split('\n')
+        items = []
+        
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if line:  # Only process non-empty lines
+                memory_id, clean_content = self._extract_memory_id(line)
+                if clean_content:
+                    items.append({
+                        "memory_id": memory_id,
+                        "content": clean_content,
+                        "full_line": line,
+                        "line_number": i + 1
+                    })
+        
+        return items
+    
+    # ================================
     # Common utility methods that actions can use
+    # ================================
+    
     def _load_existing_memory(self, character_name: str) -> Dict[str, str]:
-        """Load existing memory content for all types"""
+        """Load existing memory content for all categories"""
         existing_memory = {}
         
-        for memory_type in self.memory_types:
+        for category in self.memory_types:
             try:
-                content = self._read_memory_content(character_name, memory_type)
-                existing_memory[memory_type] = content if isinstance(content, str) else ""
+                content = self._read_memory_content(character_name, category)
+                existing_memory[category] = content if isinstance(content, str) else ""
             except Exception as e:
-                logger.warning(f"Failed to load existing {memory_type} for {character_name}: {e}")
-                existing_memory[memory_type] = ""
+                logger.warning(f"Failed to load existing {category} for {character_name}: {e}")
+                existing_memory[category] = ""
         
         return existing_memory
     
-    def _read_memory_content(self, character_name: str, memory_type: str) -> str:
+    def _read_memory_content(self, character_name: str, category: str) -> str:
         """Read memory content from storage"""
         try:
             if hasattr(self.storage_manager, 'read_memory_file'):
-                return self.storage_manager.read_memory_file(character_name, memory_type)
+                return self.storage_manager.read_memory_file(character_name, category)
             else:
-                method_name = f"read_{memory_type}"
+                method_name = f"read_{category}"
                 if hasattr(self.storage_manager, method_name):
                     return getattr(self.storage_manager, method_name)(character_name)
                 else:
-                    logger.warning(f"No read method available for {memory_type}")
+                    logger.warning(f"No read method available for {category}")
                     return ""
         except Exception as e:
-            logger.warning(f"Failed to read {memory_type} for {character_name}: {e}")
+            logger.warning(f"Failed to read {category} for {character_name}: {e}")
             return ""
     
-    def _save_memory_content(self, character_name: str, memory_type: str, content: str) -> bool:
+    def _save_memory_content(self, character_name: str, category: str, content: str) -> bool:
         """Save memory content to storage"""
         try:
             if hasattr(self.storage_manager, 'write_memory_file'):
-                return self.storage_manager.write_memory_file(character_name, memory_type, content)
+                return self.storage_manager.write_memory_file(character_name, category, content)
             else:
-                method_name = f"write_{memory_type}"
+                method_name = f"write_{category}"
                 if hasattr(self.storage_manager, method_name):
                     return getattr(self.storage_manager, method_name)(character_name, content)
                 else:
-                    logger.error(f"No write method available for {memory_type}")
+                    logger.error(f"No write method available for {category}")
                     return False
         except Exception as e:
-            logger.error(f"Failed to save {memory_type} for {character_name}: {e}")
+            logger.error(f"Failed to save {category} for {character_name}: {e}")
             return False
     
     def _convert_conversation_to_text(self, conversation: List[Dict]) -> str:

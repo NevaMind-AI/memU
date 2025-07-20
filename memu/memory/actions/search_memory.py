@@ -37,10 +37,10 @@ class SearchMemoryAction(BaseAction):
                         "type": "string",
                         "description": "Search query"
                     },
-                    "memory_types": {
+                    "categories": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Specific memory types to search (optional, searches all if not specified)"
+                        "description": "Specific categories to search (optional, searches all if not specified)"
                     },
                     "limit": {
                         "type": "integer",
@@ -61,7 +61,7 @@ class SearchMemoryAction(BaseAction):
         self,
         character_name: str,
         query: str,
-        memory_types: Optional[List[str]] = None,
+        categories: Optional[List[str]] = None,
         limit: int = 5,
         use_embeddings: bool = True
     ) -> Dict[str, Any]:
@@ -71,7 +71,7 @@ class SearchMemoryAction(BaseAction):
         Args:
             character_name: Name of the character
             query: Search query
-            memory_types: Specific memory types to search (None for all)
+            categories: Specific categories to search (None for all)
             limit: Maximum number of results
             use_embeddings: Whether to use embedding-based semantic search
             
@@ -79,30 +79,30 @@ class SearchMemoryAction(BaseAction):
             Dict containing search results with similarity scores
         """
         try:
-            search_types = memory_types or list(self.memory_types.keys())
+            search_categories = categories or list(self.memory_types.keys())
             
-            # Validate memory types
-            invalid_types = [t for t in search_types if t not in self.memory_types]
-            if invalid_types:
+            # Validate categories
+            invalid_categories = [t for t in search_categories if t not in self.memory_types]
+            if invalid_categories:
                 return self._add_metadata({
                     "success": False,
-                    "error": f"Invalid memory types: {invalid_types}. Available: {list(self.memory_types.keys())}"
+                    "error": f"Invalid categories: {invalid_categories}. Available: {list(self.memory_types.keys())}"
                 })
             
             results = []
             
             if use_embeddings and self.embeddings_enabled:
                 # Use embedding-based semantic search
-                results = self._semantic_memory_search(character_name, query, search_types, limit)
+                results = self._semantic_memory_search(character_name, query, search_categories, limit)
             else:
                 # Fallback to text-based search
-                for memory_type in search_types:
-                    content = self._read_memory_content(character_name, memory_type)
+                for category in search_categories:
+                    content = self._read_memory_content(character_name, category)
                     if isinstance(content, str) and content and query.lower() in content.lower():
                         results.append({
                             "content": content,
                             "similarity": 1.0,
-                            "type": memory_type,
+                            "type": category,
                             "character": character_name,
                             "search_method": "text_matching"
                         })
@@ -120,7 +120,7 @@ class SearchMemoryAction(BaseAction):
         except Exception as e:
             return self._handle_error(e)
     
-    def _semantic_memory_search(self, character_name: str, query: str, memory_types: List[str], limit: int) -> List[Dict]:
+    def _semantic_memory_search(self, character_name: str, query: str, categories: List[str], limit: int) -> List[Dict]:
         """Perform semantic search using stored embeddings - searches individual memory items (lines)"""
         try:
             if not self.embeddings_enabled or not self.embedding_client:
@@ -135,8 +135,8 @@ class SearchMemoryAction(BaseAction):
             if not char_embeddings_dir.exists():
                 return []
             
-            for memory_type in memory_types:
-                embeddings_file = char_embeddings_dir / f"{memory_type}_embeddings.json"
+            for category in categories:
+                embeddings_file = char_embeddings_dir / f"{category}_embeddings.json"
                 
                 if embeddings_file.exists():
                     try:
@@ -150,7 +150,7 @@ class SearchMemoryAction(BaseAction):
                                 results.append({
                                     "content": emb_data["text"],
                                     "similarity": similarity,
-                                    "type": memory_type,
+                                    "type": category,
                                     "character": character_name,
                                     "search_method": "semantic_embedding",
                                     "item_id": emb_data.get("item_id", ""),
@@ -159,7 +159,7 @@ class SearchMemoryAction(BaseAction):
                                 })
                     
                     except Exception as e:
-                        logger.warning(f"Failed to load embeddings for {memory_type}: {e}")
+                        logger.warning(f"Failed to load embeddings for {category}: {e}")
             
             # Sort by similarity and return top results
             results.sort(key=lambda x: x["similarity"], reverse=True)

@@ -6,19 +6,25 @@ Modern memory management system with **action-based architecture** for maximum m
 
 The new MemoryAgent uses an **action-based architecture** where each memory operation is implemented as a separate, independent module:
 
+**Available Actions:**
+- **add_memory**: Add new memory content  
+- **read_memory**: Read memory content
+- **search_memory**: Search memory using embeddings
+- **update_memory**: Update specific memory item by ID
+- **delete_memory**: Delete memory content
+- **get_available_categories**: Get available categories
+
 ```
 memory/
 ├── memory_agent.py        # Main agent orchestrator  
 ├── actions/               # Individual action modules
 │   ├── __init__.py       # Action registry
 │   ├── base_action.py    # Base class for all actions
-│   ├── process_conversation.py
 │   ├── add_memory.py
 │   ├── read_memory.py
 │   ├── search_memory.py
 │   ├── update_memory.py
 │   ├── delete_memory.py
-│   ├── get_memory_status.py
 │   └── get_available_categories.py
 └── embeddings/            # Per-line embedding storage
 ```
@@ -49,7 +55,7 @@ memory_agent = MemoryAgent(
 # Get available actions
 actions = memory_agent.get_function_list()
 print(f"Available actions: {actions}")
-# Output: ['process_conversation', 'add_memory', 'read_memory', 'search_memory', ...]
+# Output: ['add_memory', 'read_memory', 'search_memory', 'update_memory', 'delete_memory', 'get_available_categories']
 ```
 
 ### Function Calling with LLM
@@ -83,18 +89,7 @@ if response.choices[0].message.tool_calls:
 
 ## 🔧 Available Actions
 
-### 1. **process_conversation** - Process conversations into memory
-```python
-result = memory_agent.call_function("process_conversation", {
-    "conversation": [
-        {"role": "user", "content": "Hi! I'm Alice, I love cooking"},
-        {"role": "assistant", "content": "Nice to meet you Alice!"}
-    ],
-    "character_name": "Alice"
-})
-```
-
-### 2. **add_memory** - Add new memory content
+### 1. **add_memory** - Add new memory content
 ```python
 result = memory_agent.call_function("add_memory", {
     "character_name": "Alice",
@@ -105,7 +100,7 @@ result = memory_agent.call_function("add_memory", {
 })
 ```
 
-### 3. **search_memory** - Semantic search across memories
+### 2. **search_memory** - Semantic search across memories
 ```python
 result = memory_agent.call_function("search_memory", {
     "character_name": "Alice",
@@ -115,13 +110,12 @@ result = memory_agent.call_function("search_memory", {
 })
 ```
 
-### 4. **read_memory** - Read specific or all memory categories
+### 3. **read_memory** - Read specific or all memory categories
 ```python
 # Read specific category
 result = memory_agent.call_function("read_memory", {
     "character_name": "Alice",
-    "memory_type": "profile",
-    "include_embeddings": True
+    "category": "profile"
 })
 
 # Read all categories
@@ -130,17 +124,19 @@ result = memory_agent.call_function("read_memory", {
 })
 ```
 
-### 5. **update_memory** - Update existing memory
+### 4. **update_memory** - Update specific memory item by ID
 ```python
 result = memory_agent.call_function("update_memory", {
     "character_name": "Alice",
     "category": "profile",
+    "memory_id": "a34a5f",  # ID of the memory item to update
     "new_content": "Updated profile information...",
     "regenerate_embeddings": True
 })
+# The old memory item is deleted and new content is added at the end with a new ID
 ```
 
-### 6. **delete_memory** - Delete memory content
+### 5. **delete_memory** - Delete memory content
 ```python
 # Delete specific category
 result = memory_agent.call_function("delete_memory", {
@@ -155,15 +151,7 @@ result = memory_agent.call_function("delete_memory", {
 })
 ```
 
-### 7. **get_memory_status** - Get comprehensive status
-```python
-result = memory_agent.call_function("get_memory_status", {
-    "character_name": "Alice",
-    "include_embedding_stats": True
-})
-```
-
-### 8. **get_available_categories** - Get all available categories
+### 6. **get_available_categories** - Get all available categories
 ```python
 result = memory_agent.call_function("get_available_categories", {})
 ```
@@ -347,9 +335,9 @@ if action:
 ### Batch Operations
 ```python
 operations = [
-    {"name": "add_memory", "args": {...}},
-    {"name": "search_memory", "args": {...}},
-    {"name": "get_memory_status", "args": {...}}
+    {"name": "add_memory", "args": {"character_name": "Alice", "category": "profile", "content": "Loves music"}},
+    {"name": "search_memory", "args": {"character_name": "Alice", "query": "music"}},
+    {"name": "read_memory", "args": {"character_name": "Alice", "category": "profile"}}
 ]
 
 results = []

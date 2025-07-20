@@ -76,13 +76,11 @@ class MemoryAgent:
     Modern Memory Agent with Action-Based Architecture
     
     Uses independent action modules for each memory operation:
-    - process_conversation: Process conversations into memory types
     - add_memory: Add new memory content  
     - read_memory: Read memory content
     - search_memory: Search memory using embeddings
     - update_memory: Update existing memory
     - delete_memory: Delete memory content
-    - get_memory_status: Get memory status
     - get_available_categories: Get available categories
     
     Each action is implemented as a separate module in the actions/ directory.
@@ -222,21 +220,6 @@ class MemoryAgent:
     # Direct Method Access (Compatibility)
     # ================================
 
-    def process_conversation(
-        self,
-        conversation: List[Dict],
-        character_name: str,
-        session_date: str = "",
-        selected_types: List[str] = None
-    ) -> Dict[str, Any]:
-        """Process a conversation into memory types"""
-        return self.actions["process_conversation"].execute(
-            conversation=conversation,
-            character_name=character_name,
-            session_date=session_date,
-            selected_types=selected_types
-        )
-
     def add_memory(
         self,
         character_name: str,
@@ -257,21 +240,19 @@ class MemoryAgent:
     def read_memory(
         self,
         character_name: str,
-        memory_type: str = None,
-        include_embeddings: bool = False
+        category: str = None
     ) -> Dict[str, Any]:
         """Read memory content"""
         return self.actions["read_memory"].execute(
             character_name=character_name,
-            memory_type=memory_type,
-            include_embeddings=include_embeddings
+            category=category
         )
 
     def search_memory(
         self,
         character_name: str,
         query: str,
-        memory_types: List[str] = None,
+        categories: List[str] = None,
         limit: int = 5,
         use_embeddings: bool = True
     ) -> Dict[str, Any]:
@@ -279,7 +260,7 @@ class MemoryAgent:
         return self.actions["search_memory"].execute(
             character_name=character_name,
             query=query,
-            memory_types=memory_types,
+            categories=categories,
             limit=limit,
             use_embeddings=use_embeddings
         )
@@ -288,13 +269,15 @@ class MemoryAgent:
         self,
         character_name: str,
         category: str,
+        memory_id: str,
         new_content: str,
         regenerate_embeddings: bool = True
     ) -> Dict[str, Any]:
-        """Update existing memory content"""
+        """Update existing memory content by memory ID"""
         return self.actions["update_memory"].execute(
             character_name=character_name,
             category=category,
+            memory_id=memory_id,
             new_content=new_content,
             regenerate_embeddings=regenerate_embeddings
         )
@@ -310,17 +293,6 @@ class MemoryAgent:
             character_name=character_name,
             category=category,
             delete_embeddings=delete_embeddings
-        )
-
-    def get_memory_status(
-        self,
-        character_name: str,
-        include_embedding_stats: bool = True
-    ) -> Dict[str, Any]:
-        """Get memory status"""
-        return self.actions["get_memory_status"].execute(
-            character_name=character_name,
-            include_embedding_stats=include_embedding_stats
         )
 
     def get_available_categories(self) -> Dict[str, Any]:
