@@ -1,10 +1,10 @@
 """
-MemU Memory Module - Clean Two-Agent Architecture
+MemU Memory Module - Function Calling Architecture
 
-Simplified memory system with specialized agents:
+Modern memory system with function calling interface:
 
 CORE ARCHITECTURE:
-- MemoryAgent: LLM-based conversation processing with session splitting
+- MemoryAgent: Function calling interface for LLM agents (主要接口)
 - RecallAgent: File system operations and content retrieval
 
 STORAGE:
@@ -12,9 +12,10 @@ STORAGE:
 - EmbeddingClient: Vector embedding generation for semantic search
 
 WORKFLOW:
-1. Conversation → LLM Session Splitting → Session Embeddings → Memory Types
-2. Memory stored as markdown files with embeddings for semantic retrieval
+1. LLM Agent → Function Calling → Memory Operations → Markdown Files
+2. Memory stored with embeddings for semantic retrieval (per-line basis)
 3. RecallAgent provides file system scanning and content search capabilities
+4. All memory operations exposed as standardized function calls
 """
 
 from .memory_agent import MemoryAgent
@@ -23,7 +24,7 @@ from .file_manager import MemoryFileManager
 from .embeddings import get_default_embedding_client
 
 __all__ = [
-    "MemoryAgent",
+    "MemoryAgent",          # Function calling interface
     "RecallAgent", 
     "MemoryFileManager",
     "get_default_embedding_client"
