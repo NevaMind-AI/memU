@@ -111,14 +111,14 @@ pip install memu-py
 ### **3-Line Demo**
 
 ```python
-from memu import MetaAgent
+from memu.memory import MemoryAgent
 from memu.llm import OpenAIClient
 
-# Create AI agent with memory
-meta_agent = MetaAgent(llm_client=OpenAIClient(), memory_dir="memory")
+# Create AI agent with unified memory
+memory_agent = MemoryAgent(llm_client=OpenAIClient(), memory_dir="memory")
 
 # Process conversation with persistent memory
-results = meta_agent.process_conversation("Hi, I'm learning Python", "student_123")
+results = memory_agent.process_conversation("Hi, I'm learning Python", "student_123")
 ```
 
 ![Quick Start Demo](assets/quickstart-demo.gif)

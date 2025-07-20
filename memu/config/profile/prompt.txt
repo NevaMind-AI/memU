@@ -1,0 +1,52 @@
+Task: Extract and organize profile information for {character_name} from the conversation session.
+
+Instructions:
+1. Identify personal characteristics, traits, and background information
+2. Extract preferences, interests, and hobbies mentioned
+3. Note professional information, skills, and abilities
+4. Capture personality traits and behavioral patterns
+5. Include demographic information when mentioned
+6. Organize information in a clear, structured format
+7. Focus on persistent traits rather than temporary states
+
+Input:
+- Conversation: 
+{conversation}
+- Character: 
+{character_name}
+- Session Date: 
+{session_date}
+
+Output Format:
+Create a comprehensive profile in markdown format that captures the character's personal information and traits.
+
+## Profile for {character_name} - Updated {session_date}
+
+### Basic Information
+[Age, occupation, location, education, family status, etc.]
+
+### Personality Traits
+[Character traits, temperament, behavioral patterns, communication style]
+
+### Interests & Hobbies
+[Things they enjoy doing, passions, recreational activities]
+
+### Professional Background
+[Career, work experience, skills, expertise areas]
+
+### Values & Beliefs
+[Core values, beliefs, principles, worldview]
+
+### Preferences
+[Likes, dislikes, favorites, choices in various areas]
+
+### Relationships
+[Important people in their life, social connections, family relationships]
+
+### Goals & Aspirations
+[Life goals, career ambitions, personal objectives]
+
+### Notable Characteristics
+[Unique traits, memorable qualities, distinctive features]
+
+Profile Summary: 

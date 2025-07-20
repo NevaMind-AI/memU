@@ -1,15 +1,20 @@
 """Configuration module for MemU"""
 
-# Import database configuration functions from db module
 # Import original config for backward compatibility
 import importlib.util
 import os
 
-from ..db import (
-    DatabaseConfig,
-    DatabaseManager,
-    get_database_manager,
-    setup_postgresql,
+# Import markdown configuration
+from .markdown_config import (
+    get_config_manager,
+    detect_file_type,
+    MarkdownConfigManager,
+    MarkdownFileConfig,
+    # 简化配置API
+    get_required_files,
+    get_optional_files,
+    get_simple_summary,
+    get_all_file_configs
 )
 
 _config_file_path = os.path.join(
@@ -29,11 +34,16 @@ LLMConfigManager = _config_module.LLMConfigManager
 get_llm_config_manager = _config_module.get_llm_config_manager
 
 __all__ = [
-    # Database configuration
-    "DatabaseConfig",
-    "DatabaseManager",
-    "setup_postgresql",
-    "get_database_manager",
+    # Markdown configuration
+    "get_config_manager",
+    "detect_file_type",
+    "MarkdownConfigManager",
+    "MarkdownFileConfig",
+    # 简化配置API
+    "get_required_files",
+    "get_optional_files", 
+    "get_simple_summary",
+    "get_all_file_configs",
     # LLM configuration (backward compatibility)
     "config",
     "load_config",

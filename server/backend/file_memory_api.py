@@ -23,7 +23,7 @@ from pydantic import BaseModel
 # Import MemU components
 from memu import MemoryFileManager
 try:
-    from memu import MetaAgent
+    from memu.memory import MemoryAgent
     MEMORY_AGENT_AVAILABLE = True
 except ImportError:
     MEMORY_AGENT_AVAILABLE = False
@@ -127,11 +127,11 @@ def get_memory_agent() -> Optional[Any]:
                 return None
             
             memory_dir = os.getenv("MEMORY_DIR", "memory")
-                    memory_agent = MetaAgent(
-            llm_client=llm_client,
-            memory_dir=memory_dir,
-            use_database=False
-        )
+            memory_agent = MemoryAgent(
+                llm_client=llm_client,
+                memory_dir=memory_dir,
+        # Uses file storage only
+            )
         except Exception as e:
             print(f"Error initializing memory agent: {e}")
             return None
@@ -323,7 +323,7 @@ async def analyze_conversation(request: ConversationAnalysisRequest):
         if not MEMORY_AGENT_AVAILABLE:
             raise HTTPException(
                 status_code=503, 
-                detail="Memory agent not available. Please check MetaAgent installation."
+                detail="Memory agent not available. Please check MemoryAgent installation."
             )
             
         agent = get_memory_agent()

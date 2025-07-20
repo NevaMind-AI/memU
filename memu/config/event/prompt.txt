@@ -1,0 +1,55 @@
+Task: Extract and record significant events from the conversation session for {character_name}.
+
+Instructions:
+1. Identify important events, milestones, and significant occurrences
+2. Extract time-sensitive information and chronological details
+3. Note participants, locations, and context for each event
+4. Capture outcomes, results, and impacts of events
+5. Include both planned events and spontaneous occurrences
+6. Focus on events that have lasting significance or impact
+7. Organize events chronologically and by importance
+
+Input:
+- Conversation: 
+{conversation}
+- Character: 
+{character_name}
+- Session Date: 
+{session_date}
+
+Output Format:
+Create a structured event record in markdown format that captures significant events and their details.
+
+## Events for {character_name} - Session {session_date}
+
+### Recent Events
+[Events that happened recently or during this session]
+
+### Planned Events
+[Future events, appointments, scheduled activities]
+
+### Significant Milestones
+[Important achievements, completions, breakthroughs]
+
+### Social Events
+[Meetings, gatherings, social interactions]
+
+### Professional Events
+[Work-related events, career milestones, job activities]
+
+### Personal Events
+[Life events, personal achievements, family matters]
+
+### Learning Events
+[Educational experiences, courses, training, discoveries]
+
+### Decision Points
+[Important decisions made, choices faced, turning points]
+
+### Event Timeline
+[Chronological order of events with dates/times when available]
+
+### Event Impact
+[How these events affect the character's life, goals, or relationships]
+
+Event Summary: 
