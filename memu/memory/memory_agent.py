@@ -1,13 +1,11 @@
 """
-Simplified Memory Agent for MemU Memory System
+MemU Memory Agent - Simple Conversation Processing
 
-A unified agent that handles core memory processing:
-- Processing conversations into memory types with chunking and embeddings
-- Creating and updating memory content with semantic indexing
-- Reading and searching existing memory
-- Managing memory categories from config
-
-Enhanced with conversation chunking and embedding generation for improved semantic retrieval.
+Clean memory agent that handles:
+- Conversation processing into memory types
+- Memory content generation and storage in markdown files  
+- Embedding generation for semantic retrieval
+- Dynamic memory categories from config
 """
 
 import os
@@ -28,174 +26,36 @@ from ..config.markdown_config import get_config_manager
 logger = get_logger(__name__)
 
 
-class ConversationChunker:
-    """Handles splitting conversations into meaningful chunks for embedding"""
-    
-    def __init__(self, chunk_size: int = 500, overlap: int = 50):
-        """
-        Initialize conversation chunker
-        
-        Args:
-            chunk_size: Target size for each chunk in characters
-            overlap: Overlap between chunks in characters
-        """
-        self.chunk_size = chunk_size
-        self.overlap = overlap
-    
-    def split_conversation(self, conversation: str, character_name: str = "") -> List[Dict[str, Any]]:
-        """
-        Split conversation into meaningful chunks
-        
-        Args:
-            conversation: Raw conversation text
-            character_name: Name of the character for context
-            
-        Returns:
-            List of chunk dictionaries with metadata
-        """
-        chunks = []
-        
-        # First try to split by natural boundaries (turns, paragraphs, sentences)
-        natural_chunks = self._split_by_natural_boundaries(conversation)
-        
-        # If natural chunks are too large, further split them
-        for i, natural_chunk in enumerate(natural_chunks):
-            if len(natural_chunk) <= self.chunk_size:
-                chunks.append({
-                    "text": natural_chunk.strip(),
-                    "chunk_id": f"{character_name}_chunk_{len(chunks)}",
-                    "original_index": i,
-                    "chunk_type": "natural",
-                    "length": len(natural_chunk.strip()),
-                    "timestamp": datetime.now().isoformat()
-                })
-            else:
-                # Split large natural chunks further
-                sub_chunks = self._split_by_size(natural_chunk)
-                for j, sub_chunk in enumerate(sub_chunks):
-                    chunks.append({
-                        "text": sub_chunk.strip(),
-                        "chunk_id": f"{character_name}_chunk_{len(chunks)}",
-                        "original_index": i,
-                        "sub_index": j,
-                        "chunk_type": "split",
-                        "length": len(sub_chunk.strip()),
-                        "timestamp": datetime.now().isoformat()
-                    })
-        
-        return [chunk for chunk in chunks if chunk["text"]]  # Filter empty chunks
-    
-    def _split_by_natural_boundaries(self, text: str) -> List[str]:
-        """Split text by natural conversation boundaries"""
-        # Split by speaker turns if they exist (look for patterns like "Alice:" or "User:")
-        speaker_pattern = r'\n(?=[A-Z][a-zA-Z]*\s*:)'
-        speaker_splits = re.split(speaker_pattern, text)
-        
-        if len(speaker_splits) > 1:
-            return speaker_splits
-        
-        # Split by double newlines (paragraph breaks)
-        paragraph_splits = re.split(r'\n\n+', text)
-        
-        if len(paragraph_splits) > 1:
-            return paragraph_splits
-        
-        # Split by single newlines
-        line_splits = text.split('\n')
-        
-        if len(line_splits) > 1:
-            return line_splits
-        
-        # Return as single chunk if no natural boundaries found
-        return [text]
-    
-    def _split_by_size(self, text: str) -> List[str]:
-        """Split text into size-based chunks with overlap"""
-        if len(text) <= self.chunk_size:
-            return [text]
-        
-        chunks = []
-        start = 0
-        
-        while start < len(text):
-            end = start + self.chunk_size
-            
-            # Try to break at sentence boundary
-            if end < len(text):
-                # Look for sentence endings near the target break point
-                sentence_break = self._find_sentence_break(text, start, end)
-                if sentence_break > start:
-                    end = sentence_break
-            
-            chunk = text[start:end].strip()
-            if chunk:
-                chunks.append(chunk)
-            
-            # Move start position with overlap
-            start = max(start + 1, end - self.overlap)
-            
-            # Prevent infinite loop
-            if start >= len(text):
-                break
-        
-        return chunks
-    
-    def _find_sentence_break(self, text: str, start: int, preferred_end: int) -> int:
-        """Find the best sentence break point near the preferred end"""
-        # Look for sentence endings within a reasonable range
-        search_start = max(start, preferred_end - 100)
-        search_end = min(len(text), preferred_end + 100)
-        
-        search_text = text[search_start:search_end]
-        
-        # Look for sentence endings
-        sentence_endings = ['.', '!', '?', '\n']
-        
-        best_break = preferred_end
-        for ending in sentence_endings:
-            pos = search_text.rfind(ending)
-            if pos > 0:
-                absolute_pos = search_start + pos + 1
-                if start < absolute_pos <= preferred_end + 50:
-                    best_break = absolute_pos
-                    break
-        
-        return best_break
+
+
+
+
 
 
 class MemoryAgent:
     """
-    Simplified Memory Agent that processes conversations and manages memory content.
+    Clean Memory Agent for conversation processing.
     
-    Enhanced with conversation chunking and embedding generation for semantic retrieval.
-    
-    This agent handles:
-    - process_conversation - Convert conversations into memory with chunking and embeddings
-    - add_memory - Add new memory content with optional embedding generation
-    - update_memory - Update existing memory content and embeddings
-    - read_memory - Read memory content and embeddings
-    - search_memory - Search memory content using embeddings
-    - delete_memory - Delete memory content and embeddings
-    - get_memory_status - Get memory status for a character
+    Handles:
+    - Conversation processing into memory types
+    - Memory content generation and storage in markdown files
+    - Embedding generation for semantic retrieval
+    - CRUD operations on memory content
     """
     
     def __init__(
         self,
         llm_client: BaseLLMClient,
         memory_dir: str = "memory",
-        enable_embeddings: bool = True,
-        chunk_size: int = 500,
-        chunk_overlap: int = 50
+        enable_embeddings: bool = True
     ):
         """
         Initialize Memory Agent
         
         Args:
-            llm_client: LLM client for processing conversations
+            llm_client: LLM client for processing conversations and session splitting
             memory_dir: Directory to store memory files
             enable_embeddings: Whether to generate embeddings for semantic search
-            chunk_size: Target size for conversation chunks
-            chunk_overlap: Overlap between chunks for better context
         """
         self.llm_client = llm_client
         self.memory_dir = Path(memory_dir)
@@ -209,8 +69,7 @@ class MemoryAgent:
         # Initialize file-based storage manager
         self.storage_manager = MemoryFileManager(memory_dir)
         
-        # Initialize conversation chunker
-        self.chunker = ConversationChunker(chunk_size=chunk_size, overlap=chunk_overlap)
+
         
         # Initialize embedding client
         self.enable_embeddings = enable_embeddings
@@ -227,32 +86,34 @@ class MemoryAgent:
             self.embedding_client = None
             self.embeddings_enabled = False
         
-        # Create embeddings directory
+        # Create storage directories
         self.embeddings_dir = self.memory_dir / "embeddings"
         self.embeddings_dir.mkdir(exist_ok=True)
         
-        logger.info(f"Memory Agent initialized with {len(self.memory_types)} memory types, embeddings: {self.embeddings_enabled}")
+        logger.info(f"Memory Agent initialized: {len(self.memory_types)} memory types, embeddings: {self.embeddings_enabled}")
 
     def process_conversation(
         self,
-        conversation: str,
+        conversation: List[Dict],
         character_name: str,
         session_date: str = "",
-        selected_types: List[str] = None,
-        enable_chunking: bool = True
+        selected_types: List[str] = None
     ) -> Dict[str, Any]:
         """
-        Process a conversation and generate memory content with chunking and embeddings
+        Process a conversation into memory types:
+        1. Convert conversation to text format
+        2. Process into memory types (activity, profile, events, etc.)
+        3. Save to markdown files with embeddings
         
         Args:
-            conversation: Raw conversation text
+            conversation: List of message dicts with 'role' and 'content' fields
+                         [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
             character_name: Name of the character
             session_date: Date of the session
             selected_types: Specific memory types to process (None for all)
-            enable_chunking: Whether to chunk the conversation for embeddings
             
         Returns:
-            Dict containing processing results including chunk and embedding info
+            Dict containing processing results
         """
         # Reset stop flag at start of new conversation processing
         self.reset_stop_flag()
@@ -262,31 +123,27 @@ class MemoryAgent:
             "character_name": character_name,
             "session_date": session_date or datetime.now().strftime("%Y-%m-%d"),
             "memory_outputs": {},
-            "chunks_created": 0,
-            "embeddings_generated": 0,
             "errors": []
         }
         
         try:
-            logger.info(f"Processing conversation for {character_name} (chunking: {enable_chunking})")
+            # Validate conversation format
+            if not isinstance(conversation, list):
+                logger.error("Conversation must be a list of message objects with 'role' and 'content' fields")
+                results["errors"].append("Invalid conversation format - expected list of message objects")
+                results["success"] = False
+                return results
             
-            # Step 1: Split conversation into chunks if enabled
-            conversation_chunks = []
-            if enable_chunking:
-                conversation_chunks = self.chunker.split_conversation(conversation, character_name)
-                results["chunks_created"] = len(conversation_chunks)
-                logger.debug(f"Created {len(conversation_chunks)} conversation chunks")
+            if not conversation:
+                logger.warning("Empty conversation provided")
+                results["errors"].append("Empty conversation provided")
+                results["success"] = False
+                return results
             
-            # Step 2: Generate embeddings for chunks if enabled
-            chunk_embeddings = []
-            if self.embeddings_enabled and conversation_chunks:
-                chunk_embeddings = self._generate_chunk_embeddings(conversation_chunks)
-                results["embeddings_generated"] = len(chunk_embeddings)
-                logger.debug(f"Generated {len(chunk_embeddings)} embeddings")
+            logger.info(f"Processing conversation for {character_name} ({len(conversation)} messages)")
             
-            # Step 3: Store chunks and embeddings
-            if conversation_chunks:
-                self._store_conversation_chunks(character_name, conversation_chunks, chunk_embeddings)
+            # Convert conversation to text format for LLM processing
+            conversation_text = self._convert_conversation_to_text(conversation)
             
             # Determine which types to process
             types_to_process = selected_types or self.processing_order
@@ -294,7 +151,7 @@ class MemoryAgent:
             # Load existing memory content
             existing_memory = self._load_existing_memory(character_name)
             
-            # Step 4: Process each memory type in order
+            # Process each memory type and add to markdown files
             for memory_type in types_to_process:
                 # Check stop flag
                 if self._stop_flag.is_set():
@@ -311,13 +168,13 @@ class MemoryAgent:
                     
                     # Determine input content
                     if memory_type == "activity":
-                        # Activity gets raw conversation
-                        input_content = conversation
+                        # Activity gets raw conversation converted to text format
+                        input_content = conversation_text
                     else:
                         # Other types get activity summary as input if available
-                        input_content = existing_memory.get("activity", conversation)
+                        input_content = existing_memory.get("activity", conversation_text)
                     
-                    # Generate memory content
+                    # Generate memory content using LLM
                     memory_content = self._process_memory_type(
                         memory_type=memory_type,
                         character_name=character_name,
@@ -326,11 +183,12 @@ class MemoryAgent:
                         existing_memory=existing_memory
                     )
                     
-                    # Save the memory content and generate embeddings
+                    # Save the memory content to markdown files with embeddings
                     if self._save_memory_with_embeddings(character_name, memory_type, memory_content):
                         results["memory_outputs"][memory_type] = memory_content
                         # Update existing memory for next types
                         existing_memory[memory_type] = memory_content
+                        logger.debug(f"Successfully saved {memory_type} to markdown file")
                     else:
                         results["errors"].append(f"Failed to save {memory_type} for {character_name}")
                         
@@ -343,7 +201,7 @@ class MemoryAgent:
             if results["errors"]:
                 logger.warning(f"Completed with {len(results['errors'])} errors for {character_name}")
             else:
-                logger.info(f"Successfully processed all memory types for {character_name}")
+                logger.info(f"Successfully processed {len(results['memory_outputs'])} memory types for {character_name}")
                 
         except Exception as e:
             error_msg = f"Failed to process conversation: {str(e)}"
@@ -795,9 +653,9 @@ class MemoryAgent:
         return [
             {
                 "name": "process_conversation",
-                "description": "Process a conversation with chunking and embedding generation",
-                "parameters": ["conversation", "character_name", "session_date (optional)", "selected_types (optional)", "enable_chunking (optional)"],
-                "returns": "Dict with processing results including chunk and embedding info"
+                "description": "Process a conversation into memory types with embedding generation",
+                "parameters": ["conversation", "character_name", "session_date (optional)", "selected_types (optional)"],
+                "returns": "Dict with processing results including memory outputs in markdown files"
             },
             {
                 "name": "add_memory",
@@ -847,60 +705,26 @@ class MemoryAgent:
     # Enhanced Embedding Methods
     # ================================
 
-    def _generate_chunk_embeddings(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Generate embeddings for conversation chunks"""
-        if not self.embeddings_enabled:
-            return []
-        
-        embeddings = []
-        for chunk in chunks:
-            try:
-                embedding = self.embedding_client.generate_embedding(chunk["text"])
-                embeddings.append({
-                    "chunk_id": chunk["chunk_id"],
-                    "embedding": embedding,
-                    "text": chunk["text"],
-                    "metadata": {k: v for k, v in chunk.items() if k != "text"}
-                })
-            except Exception as e:
-                logger.warning(f"Failed to generate embedding for chunk {chunk['chunk_id']}: {e}")
-        
-        return embeddings
 
-    def _store_conversation_chunks(self, character_name: str, chunks: List[Dict], embeddings: List[Dict]):
-        """Store conversation chunks and their embeddings"""
-        try:
-            # Create character-specific embeddings directory
-            char_embeddings_dir = self.embeddings_dir / character_name
-            char_embeddings_dir.mkdir(exist_ok=True)
-            
-            # Store chunks metadata
-            chunks_file = char_embeddings_dir / "conversation_chunks.json"
-            chunks_data = {
-                "timestamp": datetime.now().isoformat(),
-                "chunks": chunks,
-                "total_chunks": len(chunks)
-            }
-            
-            with open(chunks_file, 'w', encoding='utf-8') as f:
-                json.dump(chunks_data, f, indent=2, ensure_ascii=False)
-            
-            # Store embeddings if available
-            if embeddings:
-                embeddings_file = char_embeddings_dir / "conversation_embeddings.json"
-                embeddings_data = {
-                    "timestamp": datetime.now().isoformat(),
-                    "embeddings": embeddings,
-                    "total_embeddings": len(embeddings)
-                }
-                
-                with open(embeddings_file, 'w', encoding='utf-8') as f:
-                    json.dump(embeddings_data, f, indent=2, ensure_ascii=False)
-            
-            logger.debug(f"Stored {len(chunks)} chunks and {len(embeddings)} embeddings for {character_name}")
-            
-        except Exception as e:
-            logger.error(f"Failed to store conversation chunks for {character_name}: {e}")
+
+
+
+
+
+    def _convert_conversation_to_text(self, conversation: List[Dict]) -> str:
+        """Convert conversation list to text format for LLM processing"""
+        if not conversation or not isinstance(conversation, list):
+            return ""
+        
+        text_parts = []
+        for message in conversation:
+            role = message.get("role", "unknown")
+            content = message.get("content", "")
+            text_parts.append(f"{role.upper()}: {content}")
+        
+        return "\n".join(text_parts)
+
+
 
     def _save_memory_with_embeddings(self, character_name: str, memory_type: str, content: str) -> bool:
         """Save memory content and generate embeddings"""
@@ -1114,6 +938,8 @@ class MemoryAgent:
             "current_memory": existing_memory.get(memory_type, ""),
         }
         
+
+        
         # Add all existing memory as context
         prompt_vars.update(existing_memory)
         
@@ -1189,18 +1015,15 @@ class MemoryAgent:
             "config_source": "markdown_config.py (dynamic folder structure)",
             "tools_available": len(self.get_available_tools()),
             "stop_flag_set": self._stop_flag.is_set(),
+
             "embedding_capabilities": {
                 "embeddings_enabled": self.embeddings_enabled,
                 "embedding_client": str(type(self.embedding_client)) if self.embedding_client else None,
-                "embeddings_directory": str(self.embeddings_dir),
-                "chunker_config": {
-                    "chunk_size": self.chunker.chunk_size,
-                    "chunk_overlap": self.chunker.overlap
-                }
+                "embeddings_directory": str(self.embeddings_dir)
             },
             "config_details": {
                 "total_file_types": len(self.memory_types),
                 "categories_from_config": True,
-                "config_structure": "Dynamic folder configuration with embedding support"
+                "config_structure": "Dynamic folder configuration"
             }
         } 

@@ -1,26 +1,20 @@
 """
-MemU Memory Module - Simplified Two-Agent Architecture
+MemU Memory Module - Clean Two-Agent Architecture
 
 Simplified memory system with specialized agents:
 
 CORE ARCHITECTURE:
-- MemoryAgent: Core memory processing (conversation to memory, CRUD operations)
-- RecallAgent: File system operations (import/export, document scanning, content retrieval)
+- MemoryAgent: LLM-based conversation processing with session splitting
+- RecallAgent: File system operations and content retrieval
 
-STORAGE SUPPORT:
+STORAGE:
 - MemoryFileManager: File operations for memory storage (.md files)
 - EmbeddingClient: Vector embedding generation for semantic search
 
-ARCHITECTURE FLOW:
-1. MemoryAgent: Raw Conversation → Memory Types (activity.md, profile.md, events.md, etc.)
-2. RecallAgent: Local Documents → Import to Memory, Search/Retrieve existing content
-3. Both agents use dynamic config loading from memu/config/ folders
-
-BENEFITS:
-- Clear separation of concerns: Processing vs File Operations
-- Simplified interfaces: Focused tool sets per agent
-- Configuration-driven: Categories loaded from config folders
-- Easier maintenance: Specialized responsibilities
+WORKFLOW:
+1. Conversation → LLM Session Splitting → Session Embeddings → Memory Types
+2. Memory stored as markdown files with embeddings for semantic retrieval
+3. RecallAgent provides file system scanning and content search capabilities
 """
 
 from .memory_agent import MemoryAgent
