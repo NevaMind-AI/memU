@@ -127,7 +127,7 @@ class SearchMemoryAction(BaseAction):
                 return []
             
             # Generate query embedding
-            query_embedding = self.embedding_client.generate_embedding(query)
+            query_embedding = self.embedding_client.embed(query)
             
             results = []
             char_embeddings_dir = self.embeddings_dir / character_name

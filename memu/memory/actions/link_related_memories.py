@@ -45,7 +45,7 @@ class LinkRelatedMemoriesAction(BaseAction):
                     },
                     "memory_id": {
                         "type": "string",
-                        "description": "ID of the memory item to find related memories for"
+                        "description": "ID of the memory item to find related memories for (optional if link_all_items is true)"
                     },
                     "category": {
                         "type": "string",
@@ -66,11 +66,11 @@ class LinkRelatedMemoriesAction(BaseAction):
                         "items": {"type": "string"},
                         "description": "Categories to search in (default: all available categories)"
                     },
-                    "link_format": {
-                        "type": "string",
-                        "enum": ["markdown", "plain", "json"],
-                        "description": "Format for generating links",
-                        "default": "markdown"
+
+                    "link_all_items": {
+                        "type": "boolean",
+                        "description": "Whether to link all memory items in the category (if true, memory_id can be omitted)",
+                        "default": False
                     },
                     "write_to_memory": {
                         "type": "boolean",
@@ -78,19 +78,19 @@ class LinkRelatedMemoriesAction(BaseAction):
                         "default": False
                     }
                 },
-                "required": ["character_name", "memory_id", "category"]
+                "required": ["character_name", "category"]
             }
         }
 
     def execute(
         self,
         character_name: str,
-        memory_id: str,
         category: str,
+        memory_id: Optional[str] = None,
         top_k: int = 5,
         min_similarity: float = 0.3,
         search_categories: Optional[List[str]] = None,
-        link_format: str = "markdown",
+        link_all_items: bool = False,
         write_to_memory: bool = False
     ) -> Dict[str, Any]:
         """
@@ -123,6 +123,19 @@ class LinkRelatedMemoriesAction(BaseAction):
                     "error": f"Invalid category '{category}'. Available: {list(self.memory_types.keys())}"
                 })
             
+            # If link_all_items is True, process all memory items in the category
+            if link_all_items:
+                return self._link_all_items_in_category(
+                    character_name, category, top_k, min_similarity, search_categories, write_to_memory
+                )
+            
+            # Otherwise, process single memory item
+            if not memory_id:
+                return self._add_metadata({
+                    "success": False,
+                    "error": "memory_id is required when link_all_items is False"
+                })
+            
             # Find the target memory item
             target_memory = self._find_memory_item(character_name, category, memory_id)
             if not target_memory:
@@ -132,7 +145,7 @@ class LinkRelatedMemoriesAction(BaseAction):
                 })
             
             # Generate embedding for target content
-            target_embedding = self.embedding_client.generate_embedding(target_memory["content"])
+            target_embedding = self.embedding_client.embed(target_memory["content"])
             
             # Determine search categories - search in ALL categories by default
             if search_categories is None:
@@ -143,14 +156,14 @@ class LinkRelatedMemoriesAction(BaseAction):
                 character_name, target_embedding, search_categories, top_k, min_similarity, memory_id
             )
             
-            # Generate links
-            links = self._generate_links(related_memories, link_format)
+            # Get memory IDs for links  
+            memory_ids = [memory["memory_id"] for memory in related_memories]
             
             # Optionally write links to memory
             updated_content = None
-            if write_to_memory and links:
+            if write_to_memory and memory_ids:
                 updated_content = self._append_links_to_memory(
-                    character_name, category, memory_id, links, link_format
+                    character_name, category, memory_id, memory_ids
                 )
             
             return self._add_metadata({
@@ -162,8 +175,7 @@ class LinkRelatedMemoriesAction(BaseAction):
                     "content": target_memory["content"]
                 },
                 "related_memories": related_memories,
-                "links": links,
-                "link_format": link_format,
+                "memory_ids": memory_ids,
                 "total_related": len(related_memories),
                 "written_to_memory": write_to_memory,
                 "updated_content": updated_content,
@@ -271,45 +283,14 @@ class LinkRelatedMemoriesAction(BaseAction):
         except Exception:
             return 0.0
 
-    def _generate_links(self, related_memories: List[Dict[str, Any]], link_format: str) -> List[str]:
-        """Generate links in the specified format"""
-        links = []
-        
-        for memory in related_memories:
-            memory_id = memory["memory_id"]
-            content = memory["content"]
-            category = memory["category"]
-            similarity = memory["similarity"]
-            
-            if link_format == "markdown":
-                # Markdown link format: [content](memory_id) (similarity: 0.85, category: profile)
-                link = f"[{content[:50]}...]({memory_id}) (similarity: {similarity:.2f}, category: {category})"
-            elif link_format == "plain":
-                # Plain text format: memory_id: content (similarity: 0.85)
-                link = f"{memory_id}: {content[:50]}... (similarity: {similarity:.2f})"
-            elif link_format == "json":
-                # JSON format
-                link = json.dumps({
-                    "memory_id": memory_id,
-                    "content": content,
-                    "category": category,
-                    "similarity": similarity
-                })
-            else:
-                # Default to plain format
-                link = f"{memory_id}: {content[:50]}... (similarity: {similarity:.2f})"
-            
-            links.append(link)
-        
-        return links
+
 
     def _append_links_to_memory(
         self,
         character_name: str,
         category: str,
         memory_id: str,
-        links: List[str],
-        link_format: str
+        memory_ids: List[str]
     ) -> Optional[str]:
         """Append links to the original memory content"""
         try:
@@ -323,15 +304,16 @@ class LinkRelatedMemoriesAction(BaseAction):
             
             for item in memory_items:
                 if item["memory_id"] == memory_id:
-                    # Append links to this memory item
+                    # Format: [memory_id] content (related_id1,related_id2)
                     original_line = item["full_line"]
-                    
-                    if link_format == "markdown":
-                        links_section = "\n\n**Related Memories:**\n" + "\n".join(f"- {link}" for link in links)
+                    if memory_ids:
+                        # Remove existing links if any (content between parentheses at the end)
+                        import re
+                        clean_line = re.sub(r'\s*\([^)]*\)\s*$', '', original_line)
+                        updated_line = f"{clean_line} ({','.join(memory_ids)})"
                     else:
-                        links_section = "\n\nRelated: " + " | ".join(links)
+                        updated_line = original_line
                     
-                    updated_line = f"{original_line}{links_section}"
                     updated_lines.append(updated_line)
                 else:
                     updated_lines.append(item["full_line"])
@@ -348,4 +330,127 @@ class LinkRelatedMemoriesAction(BaseAction):
                 
         except Exception as e:
             logger.error(f"Error appending links to memory: {e}")
+            return None
+
+    def _link_all_items_in_category(
+        self,
+        character_name: str,
+        category: str,
+        top_k: int,
+        min_similarity: float,
+        search_categories: Optional[List[str]],
+        write_to_memory: bool
+    ) -> Dict[str, Any]:
+        """Link all memory items in a category to related memories"""
+        try:
+            # Get all memory items in the category
+            content = self._read_memory_content(character_name, category)
+            if not content:
+                return self._add_metadata({
+                    "success": False,
+                    "error": f"No content found in {category} for {character_name}"
+                })
+            
+            memory_items = self._parse_memory_items(content)
+            if not memory_items:
+                return self._add_metadata({
+                    "success": False,
+                    "error": f"No memory items found in {category}"
+                })
+            
+            # Determine search categories - search in ALL categories by default
+            if search_categories is None:
+                search_categories = list(self.memory_types.keys())
+            
+            total_linked = 0
+            all_related_memories = []
+            updated_content = None
+            
+            # Process each memory item
+            for item in memory_items:
+                memory_id = item["memory_id"]
+                
+                # Generate embedding for this item's content
+                target_embedding = self.embedding_client.embed(item["content"])
+                
+                # Find related memories
+                related_memories = self._find_related_memories(
+                    character_name, target_embedding, search_categories, top_k, min_similarity, memory_id
+                )
+                
+                if related_memories:
+                    all_related_memories.extend(related_memories)
+                    total_linked += 1
+            
+            # If write_to_memory is enabled, update all memory items with their links
+            if write_to_memory and total_linked > 0:
+                updated_content = self._append_links_to_all_items(
+                    character_name, category, memory_items, search_categories, top_k, min_similarity
+                )
+            
+            return self._add_metadata({
+                "success": True,
+                "character_name": character_name,
+                "category": category,
+                "total_items_processed": len(memory_items),
+                "total_items_linked": total_linked,
+                "all_related_memories": all_related_memories,
+                "written_to_memory": write_to_memory,
+                "updated_content": updated_content,
+                "message": f"Linked {total_linked} out of {len(memory_items)} memory items in {category}"
+            })
+            
+        except Exception as e:
+            return self._handle_error(e)
+    
+    def _append_links_to_all_items(
+        self,
+        character_name: str,
+        category: str,
+        memory_items: List[Dict[str, Any]],
+        search_categories: List[str],
+        top_k: int,
+        min_similarity: float
+    ) -> Optional[str]:
+        """Append links to all memory items in the category"""
+        try:
+            updated_lines = []
+            
+            for item in memory_items:
+                memory_id = item["memory_id"]
+                original_line = item["full_line"]
+                
+                # Generate embedding for this item
+                target_embedding = self.embedding_client.embed(item["content"])
+                
+                # Find related memories for this specific item
+                related_memories = self._find_related_memories(
+                    character_name, target_embedding, search_categories, top_k, min_similarity, memory_id
+                )
+                
+                if related_memories:
+                    # Get memory IDs for links
+                    memory_ids = [memory["memory_id"] for memory in related_memories]
+                    
+                    # Remove existing links if any
+                    import re
+                    clean_line = re.sub(r'\s*\([^)]*\)\s*$', '', original_line)
+                    updated_line = f"{clean_line} ({','.join(memory_ids)})"
+                    updated_lines.append(updated_line)
+                else:
+                    # No related memories found, keep original line
+                    updated_lines.append(original_line)
+            
+            # Save updated content
+            updated_content = "\n".join(updated_lines)
+            success = self._save_memory_content(character_name, category, updated_content)
+            
+            if success:
+                return updated_content
+            else:
+                logger.error("Failed to save updated memory content")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error appending links to all items: {e}")
             return None 

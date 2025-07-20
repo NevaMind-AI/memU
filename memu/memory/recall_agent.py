@@ -716,8 +716,8 @@ class RecallAgent:
         
         try:
             # Generate embeddings for query and documents
-            query_embedding = self.embedding_client.generate_embedding(query)
-            doc_embeddings = [self.embedding_client.generate_embedding(doc) for doc in documents]
+            query_embedding = self.embedding_client.embed(query)
+            doc_embeddings = [self.embedding_client.embed(doc) for doc in documents]
             
             results = []
             for i, (doc, meta) in enumerate(zip(documents, metadata)):

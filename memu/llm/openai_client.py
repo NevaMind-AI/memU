@@ -85,20 +85,34 @@ class OpenAIClient(BaseLLMClient):
             processed_messages = self._prepare_messages(messages)
 
             # Call OpenAI API
-            response = self.client.chat.completions.create(
-                model=model,
-                messages=processed_messages,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
+            api_kwargs = {
+                "model": model,
+                "messages": processed_messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens
+            }
+            
+            # Add function calling parameters if provided
+            if "tools" in kwargs:
+                api_kwargs["tools"] = kwargs["tools"]
+            if "tool_choice" in kwargs:
+                api_kwargs["tool_choice"] = kwargs["tool_choice"]
+                
+            response = self.client.chat.completions.create(**api_kwargs)
 
             # Build response
-            return LLMResponse(
-                content=response.choices[0].message.content,
-                usage=response.usage.model_dump() if response.usage else {},
-                model=response.model,
-                success=True,
-            )
+            response_data = {
+                "content": response.choices[0].message.content,
+                "usage": response.usage.model_dump() if response.usage else {},
+                "model": response.model,
+                "success": True,
+            }
+            
+            # Include tool calls if present
+            if hasattr(response.choices[0].message, 'tool_calls') and response.choices[0].message.tool_calls:
+                response_data["tool_calls"] = response.choices[0].message.tool_calls
+                
+            return LLMResponse(**response_data)
 
         except Exception as e:
             logging.error(f"OpenAI API call failed: {e}")
@@ -114,8 +128,26 @@ class OpenAIClient(BaseLLMClient):
         # Ensure message format is correct
         processed = []
         for msg in messages:
-            if isinstance(msg, dict) and "role" in msg and "content" in msg:
-                processed.append({"role": msg["role"], "content": str(msg["content"])})
+            if isinstance(msg, dict) and "role" in msg:
+                processed_msg = {"role": msg["role"]}
+                
+                # Handle content (may be None for tool calls)
+                if "content" in msg and msg["content"] is not None:
+                    processed_msg["content"] = str(msg["content"])
+                elif msg["role"] != "assistant" or "tool_calls" not in msg:
+                    # Only require content if not an assistant message with tool calls
+                    processed_msg["content"] = ""
+                
+                # Handle tool calls (for assistant messages)
+                if "tool_calls" in msg:
+                    processed_msg["tool_calls"] = msg["tool_calls"]
+                
+                # Handle tool call ID (for tool messages)
+                if "tool_call_id" in msg:
+                    processed_msg["tool_call_id"] = msg["tool_call_id"]
+                    processed_msg["content"] = str(msg.get("content", ""))
+                
+                processed.append(processed_msg)
             else:
                 logging.warning(f"Invalid message format: {msg}")
 

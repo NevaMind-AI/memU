@@ -151,13 +151,15 @@ class BaseAction(ABC):
         for line in lines:
             line = line.strip()
             if line:  # Only process non-empty lines
-                if not self._has_memory_id(line):
-                    # Add memory ID if not already present
-                    memory_id = self._generate_memory_id()
-                    processed_lines.append(f"[{memory_id}] {line}")
-                else:
-                    # Keep existing line with memory ID
-                    processed_lines.append(line)
+                # Always remove existing memory ID and generate a new unique one
+                if self._has_memory_id(line):
+                    # Extract content without memory ID
+                    _, clean_content = self._extract_memory_id(line)
+                    line = clean_content
+                
+                # Generate new unique memory ID for this line
+                memory_id = self._generate_memory_id()
+                processed_lines.append(f"[{memory_id}] {line}")
             else:
                 # Keep empty lines as is
                 processed_lines.append("")

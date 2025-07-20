@@ -188,7 +188,7 @@ class UpdateMemoryAction(BaseAction):
                 
                 try:
                     # Generate embedding for the clean content (without memory ID)
-                    embedding_vector = self.embedding_client.generate_embedding(item["content"])
+                    embedding_vector = self.embedding_client.embed(item["content"])
                     
                     embedding_item = {
                         "item_id": f"{character_name}_{category}_item_{i}",

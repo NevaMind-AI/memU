@@ -6,6 +6,7 @@ Each operation is implemented as a separate action module for modularity and mai
 """
 
 import threading
+import json
 from pathlib import Path
 from typing import Dict, List, Any, Callable
 from datetime import datetime
@@ -129,6 +130,221 @@ class MemoryAgent:
         for action_name, action in self.actions.items():
             registry[action_name] = action.execute
         return registry
+
+    # ================================
+    # Smart Conversation Processing
+    # ================================
+
+    def run(
+        self,
+        conversation: List[Dict[str, str]],
+        character_name: str,
+        max_iterations: int = 20
+    ) -> Dict[str, Any]:
+        """
+        Intelligent conversation processing using iterative function calling
+        
+        This function allows the LLM to autonomously decide which memory operations to perform
+        through function calling, iterating until the LLM decides it's complete or max iterations reached.
+        
+        Args:
+            conversation: List of conversation messages
+            character_name: Name of the character to store memories for
+            max_iterations: Maximum number of function calling iterations (default: 20)
+            
+        Returns:
+            Dict containing processing results and file paths
+        """
+        try:
+            if not conversation or not isinstance(conversation, list):
+                return {
+                    "success": False,
+                    "error": "Invalid conversation format. Expected list of message dictionaries."
+                }
+            
+            if not character_name:
+                return {
+                    "success": False,
+                    "error": "Character name is required."
+                }
+            
+            session_date = datetime.now().strftime("%Y-%m-%d")
+            
+            logger.info(f"🚀 Starting iterative conversation processing for {character_name}")
+            
+            # Convert conversation to text for processing
+            conversation_text = self._convert_conversation_to_text(conversation)
+            
+            # Initialize results tracking
+            results = {
+                "success": True,
+                "character_name": character_name,
+                "session_date": session_date,
+                "conversation_length": len(conversation),
+                "iterations": 0,
+                "function_calls": [],
+                "files_generated": [],
+                "processing_log": []
+            }
+            
+            # Get function schemas for LLM
+            function_schemas = self.get_functions_schema()
+            
+            # Build initial system message
+            system_message = f"""You are a memory processing agent. Follow this structured process to analyze and store conversation information for "{character_name}":
+
+CONVERSATION TO PROCESS:
+{conversation_text}
+
+CHARACTER: {character_name}
+SESSION DATE: {session_date}
+
+PROCESSING WORKFLOW:
+1. SUMMARIZE CONVERSATION: First, call summarize_conversation to analyze the conversation and extract multiple distinct memory items (each item should be a focused piece of information).
+
+2. STORE TO ACTIVITY: Store the extracted memory items to the 'activity' category using add_memory with the summary and memory items.
+
+3. GET CATEGORIES: Call get_available_categories to see what memory categories are available.
+
+4. GENERATE SUGGESTIONS: Call generate_memory_suggestions with the extracted memory items to get suggestions for what should be added to each category.
+
+5. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions to update that category with the new memory items and suggestions. This will return structured modifications.
+
+6. LINK MEMORIES: For each category that was modified, call link_related_memories with link_all_items=true and write_to_memory=true to add relevant links between ALL memories in that category.
+
+IMPORTANT GUIDELINES:
+- Step 1: Use summarize_conversation to extract distinct memory items from the conversation
+- Step 2: Store the summary and memory items to activity category 
+- Step 3-6: Use the extracted memory items from step 1 for subsequent processing
+- Each memory item should have its own memory_id and focused content
+- Follow the suggestions when updating categories
+- The update_memory_with_suggestions function will return structured format with memory_id and content
+- Always link related memories after updating categories by setting link_all_items=true and write_to_memory=true
+
+Start with step 1 and work through the process systematically. When you complete all steps, respond with "PROCESSING_COMPLETE"."""
+
+            # Start iterative function calling
+            messages = [{"role": "system", "content": system_message}]
+            
+            for iteration in range(max_iterations):
+                results["iterations"] = iteration + 1
+                logger.info(f"🔄 Iteration {iteration + 1}/{max_iterations}")
+                
+                try:
+                    # Call LLM with function calling enabled
+                    response = self.memory_core.llm_client.chat_completion(
+                        messages=messages,
+                        tools=[{"type": "function", "function": schema} for schema in function_schemas],
+                        tool_choice="auto",
+                        temperature=0.3
+                    )
+                    
+                    if not response.success:
+                        logger.error(f"LLM call failed: {response.error}")
+                        break
+                    
+                    # Add assistant response to conversation
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": response.content or ""
+                    }
+                    
+                    # Check if processing is complete
+                    if response.content and "PROCESSING_COMPLETE" in response.content:
+                        logger.info("✅ LLM indicated processing is complete")
+                        results["processing_log"].append(f"Iteration {iteration + 1}: Processing completed")
+                        break
+                    
+                    # Handle tool calls if present
+                    if response.tool_calls:
+                        assistant_message["tool_calls"] = response.tool_calls
+                        messages.append(assistant_message)
+                        
+                        # Execute each tool call
+                        for tool_call in response.tool_calls:
+                            function_name = tool_call.function.name
+                            
+                            try:
+                                arguments = json.loads(tool_call.function.arguments)
+                            except json.JSONDecodeError as e:
+                                logger.error(f"Failed to parse function arguments: {e}")
+                                continue
+                            
+                            logger.info(f"🔧 Calling function: {function_name}")
+                            
+                            # Execute the function call
+                            function_result = self.call_function(function_name, arguments)
+                            
+                            # Track function call
+                            call_record = {
+                                "iteration": iteration + 1,
+                                "function": function_name,
+                                "arguments": arguments,
+                                "result": function_result
+                            }
+                            results["function_calls"].append(call_record)
+                            
+                            # Track generated files
+                            if function_result.get("success") and function_name == "add_memory":
+                                file_path = f"{self.memory_core.memory_dir}/{character_name}_{arguments.get('category', 'unknown')}.md"
+                                if file_path not in results["files_generated"]:
+                                    results["files_generated"].append(file_path)
+                            
+                            # Add tool result to conversation
+                            tool_message = {
+                                "role": "tool",
+                                "tool_call_id": getattr(tool_call, 'id', f"call_{iteration}_{function_name}"),
+                                "content": json.dumps(function_result, ensure_ascii=False)
+                            }
+                            messages.append(tool_message)
+                            
+                            results["processing_log"].append(
+                                f"Iteration {iteration + 1}: Called {function_name} - " +
+                                ("Success" if function_result.get("success") else f"Failed: {function_result.get('error', 'Unknown error')}")
+                            )
+                    else:
+                        # No tool calls, add response and continue
+                        messages.append(assistant_message)
+                        if response.content:
+                            results["processing_log"].append(f"Iteration {iteration + 1}: {response.content[:100]}...")
+                
+                except Exception as e:
+                    logger.error(f"Error in iteration {iteration + 1}: {e}")
+                    results["processing_log"].append(f"Iteration {iteration + 1}: Error - {str(e)}")
+                    break
+            
+            # Finalize results
+            if results["iterations"] >= max_iterations:
+                logger.warning(f"⚠️ Reached maximum iterations ({max_iterations})")
+                results["processing_log"].append(f"Reached maximum iterations ({max_iterations})")
+            
+            logger.info(f"🎉 Conversation processing completed after {results['iterations']} iterations")
+            logger.info(f"📁 Generated {len(results['files_generated'])} files")
+            logger.info(f"🔧 Made {len(results['function_calls'])} function calls")
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error in conversation processing: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "character_name": character_name,
+                "timestamp": datetime.now().isoformat()
+            }
+
+    def _convert_conversation_to_text(self, conversation: List[Dict]) -> str:
+        """Convert conversation list to text format for LLM processing"""
+        if not conversation or not isinstance(conversation, list):
+            return ""
+        
+        text_parts = []
+        for message in conversation:
+            role = message.get("role", "unknown")
+            content = message.get("content", "")
+            text_parts.append(f"{role.upper()}: {content}")
+        
+        return "\n".join(text_parts)
 
     # ================================
     # Function Calling Interface
@@ -303,23 +519,23 @@ class MemoryAgent:
     def link_related_memories(
         self,
         character_name: str,
-        memory_id: str,
         category: str,
+        memory_id: str = None,
         top_k: int = 5,
         min_similarity: float = 0.3,
         search_categories: List[str] = None,
-        link_format: str = "markdown",
+        link_all_items: bool = False,
         write_to_memory: bool = False
     ) -> Dict[str, Any]:
         """Find and link related memories using embedding search"""
         return self.actions["link_related_memories"].execute(
             character_name=character_name,
-            memory_id=memory_id,
             category=category,
+            memory_id=memory_id,
             top_k=top_k,
             min_similarity=min_similarity,
             search_categories=search_categories,
-            link_format=link_format,
+            link_all_items=link_all_items,
             write_to_memory=write_to_memory
         )
 
