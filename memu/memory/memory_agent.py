@@ -79,9 +79,10 @@ class MemoryAgent:
     - add_memory: Add new memory content  
     - read_memory: Read memory content
     - search_memory: Search memory using embeddings
-    - update_memory: Update existing memory
+    - update_memory: Update specific memory item by ID
     - delete_memory: Delete memory content
     - get_available_categories: Get available categories
+    - link_related_memories: Find and link related memories using embedding search
     
     Each action is implemented as a separate module in the actions/ directory.
     """
@@ -298,6 +299,29 @@ class MemoryAgent:
     def get_available_categories(self) -> Dict[str, Any]:
         """Get available memory categories"""
         return self.actions["get_available_categories"].execute()
+
+    def link_related_memories(
+        self,
+        character_name: str,
+        memory_id: str,
+        category: str,
+        top_k: int = 5,
+        min_similarity: float = 0.3,
+        search_categories: List[str] = None,
+        link_format: str = "markdown",
+        write_to_memory: bool = False
+    ) -> Dict[str, Any]:
+        """Find and link related memories using embedding search"""
+        return self.actions["link_related_memories"].execute(
+            character_name=character_name,
+            memory_id=memory_id,
+            category=category,
+            top_k=top_k,
+            min_similarity=min_similarity,
+            search_categories=search_categories,
+            link_format=link_format,
+            write_to_memory=write_to_memory
+        )
 
     # ================================
     # Utility Methods

@@ -13,6 +13,7 @@ The new MemoryAgent uses an **action-based architecture** where each memory oper
 - **update_memory**: Update specific memory item by ID
 - **delete_memory**: Delete memory content
 - **get_available_categories**: Get available categories
+- **link_related_memories**: Find and link related memories using embedding search
 
 ```
 memory/
@@ -25,7 +26,8 @@ memory/
 │   ├── search_memory.py
 │   ├── update_memory.py
 │   ├── delete_memory.py
-│   └── get_available_categories.py
+│   ├── get_available_categories.py
+│   └── link_related_memories.py
 └── embeddings/            # Per-line embedding storage
 ```
 
@@ -55,7 +57,7 @@ memory_agent = MemoryAgent(
 # Get available actions
 actions = memory_agent.get_function_list()
 print(f"Available actions: {actions}")
-# Output: ['add_memory', 'read_memory', 'search_memory', 'update_memory', 'delete_memory', 'get_available_categories']
+# Output: ['add_memory', 'read_memory', 'search_memory', 'update_memory', 'delete_memory', 'get_available_categories', 'link_related_memories']
 ```
 
 ### Function Calling with LLM
@@ -154,6 +156,30 @@ result = memory_agent.call_function("delete_memory", {
 ### 6. **get_available_categories** - Get all available categories
 ```python
 result = memory_agent.call_function("get_available_categories", {})
+```
+
+### 7. **link_related_memories** - Find and link related memories
+```python
+# Find top 5 globally most similar memories across ALL categories (including current)
+result = memory_agent.call_function("link_related_memories", {
+    "character_name": "Alice",
+    "memory_id": "a34a5f",  # Memory item to find related memories for
+    "category": "profile",   # Category containing the target memory
+    "top_k": 5,             # Number of related memories to find (global ranking)
+    "min_similarity": 0.3,  # Minimum similarity threshold
+    "link_format": "markdown",  # Format: "markdown", "plain", or "json"
+    "write_to_memory": False    # Whether to append links to original memory
+})
+
+# Optionally limit search to specific categories
+result = memory_agent.call_function("link_related_memories", {
+    "character_name": "Alice",
+    "memory_id": "a34a5f",
+    "category": "profile",
+    "search_categories": ["event", "activity"],  # Only search in these categories
+    "top_k": 3,
+    "write_to_memory": True  # Links will be appended to the original memory
+})
 ```
 
 ## 🏗️ Action Architecture Details
@@ -337,7 +363,8 @@ if action:
 operations = [
     {"name": "add_memory", "args": {"character_name": "Alice", "category": "profile", "content": "Loves music"}},
     {"name": "search_memory", "args": {"character_name": "Alice", "query": "music"}},
-    {"name": "read_memory", "args": {"character_name": "Alice", "category": "profile"}}
+    {"name": "read_memory", "args": {"character_name": "Alice", "category": "profile"}},
+    {"name": "link_related_memories", "args": {"character_name": "Alice", "memory_id": "a34a5f", "category": "profile"}}
 ]
 
 results = []

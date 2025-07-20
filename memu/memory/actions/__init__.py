@@ -14,6 +14,7 @@ from .search_memory import SearchMemoryAction
 from .update_memory import UpdateMemoryAction
 from .delete_memory import DeleteMemoryAction
 from .get_available_categories import GetAvailableCategoriesAction
+from .link_related_memories import LinkRelatedMemoriesAction
 
 # Registry of all available actions
 ACTION_REGISTRY = {
@@ -22,7 +23,8 @@ ACTION_REGISTRY = {
     "search_memory": SearchMemoryAction,
     "update_memory": UpdateMemoryAction,
     "delete_memory": DeleteMemoryAction,
-    "get_available_categories": GetAvailableCategoriesAction
+    "get_available_categories": GetAvailableCategoriesAction,
+    "link_related_memories": LinkRelatedMemoriesAction
 }
 
 __all__ = [
@@ -33,5 +35,6 @@ __all__ = [
     "SearchMemoryAction",
     "UpdateMemoryAction",
     "DeleteMemoryAction",
-    "GetAvailableCategoriesAction"
+    "GetAvailableCategoriesAction",
+    "LinkRelatedMemoriesAction"
 ] 
