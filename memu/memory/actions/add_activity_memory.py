@@ -1,7 +1,8 @@
 """
-Add Memory Action
+Add Activity Memory Action
 
-Adds new memory content to a specific category with automatic embedding generation.
+Adds new activity memory content with strict no-pronouns formatting, following the same
+high-quality standards as update_memory_with_suggestions for self-contained memory items.
 """
 
 import json
@@ -15,23 +16,23 @@ from ...utils import get_logger
 logger = get_logger(__name__)
 
 
-class AddMemoryAction(BaseAction):
+class AddActivityMemoryAction(BaseAction):
     """
-    Action to add new memory content to a category
+    Action to add new activity memory content with strict formatting requirements
     
-    Supports both append and replace modes, with optional embedding generation
-    for semantic search functionality.
+    Ensures all memory items are complete, self-contained sentences with no pronouns,
+    following the same standards as update_memory_with_suggestions.
     """
     
     @property
     def action_name(self) -> str:
-        return "add_memory"
+        return "add_activity_memory"
     
     def get_schema(self) -> Dict[str, Any]:
         """Return OpenAI-compatible function schema"""
         return {
-            "name": "add_memory",
-            "description": "Add new memory content to a specific category with automatic embedding generation",
+            "name": "add_activity_memory",
+            "description": "Add new activity memory content with strict no-pronouns formatting for complete, self-contained memory items",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -39,13 +40,14 @@ class AddMemoryAction(BaseAction):
                         "type": "string",
                         "description": "Name of the character"
                     },
-                    "category": {
-                        "type": "string",
-                        "description": "Memory category (activity, profile, event, etc.)"
-                    },
                     "content": {
                         "type": "string",
-                        "description": "Content to add to the memory"
+                        "description": "Raw content to process and add to activity memory"
+                    },
+                    "session_date": {
+                        "type": "string",
+                        "description": "Date of the session (e.g., '2024-01-15')",
+                        "default": None
                     },
                     "append": {
                         "type": "boolean",
@@ -58,92 +60,180 @@ class AddMemoryAction(BaseAction):
                         "default": True
                     }
                 },
-                "required": ["character_name", "category", "content"]
+                "required": ["character_name", "content"]
             }
         }
     
     def execute(
         self,
         character_name: str,
-        category: str,
         content: str,
+        session_date: str = None,
         append: bool = True,
         generate_embeddings: bool = True
     ) -> Dict[str, Any]:
         """
-        Execute add memory operation
+        Execute add activity memory operation with strict formatting
         
         Args:
             character_name: Name of the character
-            category: Memory category to add to
-            content: Content to add
+            content: Raw content to process and format
+            session_date: Date of the session
             append: Whether to append to existing content or replace it
             generate_embeddings: Whether to generate embeddings for the content
             
         Returns:
-            Dict containing operation result including embedding info
+            Dict containing operation result including formatted content and embedding info
         """
         try:
-            # Validate category
-            if category not in self.memory_types:
-                return self._add_metadata({
-                    "success": False,
-                    "error": f"Invalid category '{category}'. Available: {list(self.memory_types.keys())}"
-                })
+            # Use current date if not provided
+            if not session_date:
+                session_date = datetime.now().strftime("%Y-%m-%d")
             
             # Load existing content if appending
             existing_content = ""
             if append:
-                existing_content = self._read_memory_content(character_name, category)
+                existing_content = self._read_memory_content(character_name, "activity")
             
-            # Add memory IDs to new content
-            content_with_ids = self._add_memory_ids_to_content(content)
+            # Process raw content through LLM to ensure strict formatting
+            formatted_content = self._format_content_with_llm(character_name, content, session_date)
+            
+            if not formatted_content.strip():
+                return self._add_metadata({
+                    "success": False,
+                    "error": "LLM returned empty formatted content"
+                })
+            
+            # Add memory IDs to the formatted content
+            content_with_ids = self._add_memory_ids_to_content(formatted_content)
+            
+            # Prepare final content with header
+            activity_header = f"Session Date: {session_date}\n\n"
             
             # Prepare new content
             if append and existing_content:
-                new_content = existing_content + "\n\n" + content_with_ids
+                # Add separator and new content
+                new_content = existing_content + "\n\n" + "=" * 50 + "\n\n" + activity_header + content_with_ids
             else:
-                new_content = content_with_ids
+                # Replace with new content
+                new_content = activity_header + content_with_ids
             
             # Save content with embeddings if enabled
             embeddings_info = ""
             if generate_embeddings and self.embeddings_enabled:
                 if append and existing_content:
                     # For append mode, save first, then add embedding for just the new content
-                    success = self._save_memory_content(character_name, category, new_content)
+                    success = self._save_memory_content(character_name, "activity", new_content)
                     if success:
                         # Add embedding for just the new content
-                        embedding_result = self._add_memory_item_embedding(character_name, category, content_with_ids)
-                        embeddings_info = f"Generated embedding for new item: {embedding_result.get('message', 'Unknown')}"
+                        embedding_result = self._add_memory_item_embedding(character_name, "activity", content_with_ids)
+                        embeddings_info = f"Generated embedding for new items: {embedding_result.get('message', 'Unknown')}"
                     else:
                         embeddings_info = "Failed to save memory"
                 else:
                     # For replace mode, regenerate all embeddings
-                    success = self._save_memory_with_embeddings(character_name, category, new_content)
+                    success = self._save_memory_with_embeddings(character_name, "activity", new_content)
                     embeddings_info = "Generated embeddings for all content"
             else:
-                success = self._save_memory_content(character_name, category, new_content)
+                success = self._save_memory_content(character_name, "activity", new_content)
                 embeddings_info = "No embeddings generated"
             
             if success:
+                # Extract memory items for response
+                memory_items = self._extract_memory_items_from_content(content_with_ids)
+                
                 return self._add_metadata({
                     "success": True,
                     "character_name": character_name,
-                    "category": category,
+                    "category": "activity",
+                    "session_date": session_date,
                     "operation": "append" if append else "replace",
-                    "content_added": len(content),
+                    "content_added": len(content_with_ids),
+                    "memory_items_added": len(memory_items),
+                    "memory_items": memory_items,
                     "embeddings_generated": generate_embeddings and self.embeddings_enabled,
                     "embeddings_info": embeddings_info,
-                    "message": f"Successfully {'appended to' if append else 'replaced'} {category} for {character_name}"
+                    "file_path": f"{self.memory_core.memory_dir}/{character_name}_activity.md",
+                    "message": f"Successfully {'appended' if append else 'added'} {len(memory_items)} self-contained activity memory items for {character_name}"
                 })
             else:
                 return self._add_metadata({
                     "success": False,
-                    "error": f"Failed to save memory to {category}"
+                    "error": "Failed to save activity memory"
                 })
                 
         except Exception as e:
             return self._handle_error(e)
+    
+    def _format_content_with_llm(self, character_name: str, content: str, session_date: str) -> str:
+        """Use LLM to format content with strict no-pronouns requirements"""
+        
+        # Create enhanced prompt for strict formatting
+        format_prompt = f"""You are formatting activity memory content for {character_name} on {session_date}.
+
+Raw content to format:
+{content}
+
+**CRITICAL REQUIREMENT: NO PRONOUNS - COMPLETE SENTENCES ONLY**
+
+Transform this raw content into properly formatted activity memory items following these strict rules:
+
+**SELF-CONTAINED MEMORY REQUIREMENTS:**
+- EVERY memory item must be a complete, standalone sentence
+- ALWAYS include the full subject (use "{character_name}" instead of "she/he/they")
+- NEVER use pronouns that depend on context (no "she", "he", "they", "it")
+- Each memory item should be understandable without reading other items
+- Include specific names, places, dates, and full context in each item
+- Never use "the book", "the place", "the friend" - always include full titles and names
+
+**FORMAT REQUIREMENTS:**
+1. Each line should be one complete, self-contained statement
+2. NO markdown headers, bullets, or structure
+3. NO memory ID information (will be added automatically)
+4. Write in plain text only
+5. Focus on factual, concise information
+6. Use specific names, titles, places, and dates in every relevant item
+
+**COMPLETE SENTENCE EXAMPLES:**
+✅ GOOD: "{character_name} works as a product manager at TechFlow Solutions"
+❌ BAD: "Works as a product manager" (missing subject)
+✅ GOOD: "{character_name} went hiking with Sarah Johnson in Blue Ridge Mountains"
+❌ BAD: "Went hiking with Sarah" (missing location and full name context)
+✅ GOOD: "{character_name} read 'The Midnight Library' by Matt Haig and found it inspiring"
+❌ BAD: "Found the book inspiring" (missing book title and author)
+
+**QUALITY STANDARDS:**
+- Never use "he", "she", "they", "it" - always use the person's actual name
+- Never use "the book", "the place", "the friend" - always include full titles and names
+- Each sentence must be complete and understandable independently
+- Include sufficient detail so each item makes sense on its own
+
+Transform the raw content into properly formatted activity memory items:
+
+Formatted activity content:"""
+
+        # Call LLM to format content
+        formatted_content = self.llm_client.simple_chat(format_prompt)
+        
+        return formatted_content.strip()
+    
+    def _extract_memory_items_from_content(self, content: str) -> list:
+        """Extract memory items with IDs from content"""
+        items = []
+        lines = content.split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if line and self._has_memory_id(line):
+                # Extract memory ID and content
+                memory_id, clean_content = self._extract_memory_id(line)
+                if memory_id and clean_content:
+                    items.append({
+                        "memory_id": memory_id,
+                        "content": clean_content
+                    })
+        
+        return items
     
     def _save_memory_with_embeddings(self, character_name: str, category: str, content: str) -> bool:
         """Save memory content and generate embeddings"""

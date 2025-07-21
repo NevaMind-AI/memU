@@ -87,7 +87,7 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
             if not activity_content:
                 return self._add_metadata({
                     "success": False,
-                    "error": "No activity content found. Run summarize_conversation and add_memory first."
+                    "error": "No activity content found. Run summarize_conversation and add_activity_memory first."
                 })
             
             # Use activity content as the source of memory items for LLM processing
@@ -96,7 +96,7 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
             # Load existing content
             existing_content = self._read_memory_content(character_name, category)
             
-            # Create prompt for LLM to generate the new content
+            # Create enhanced prompt for LLM to generate self-contained content
             update_prompt = f"""You are updating the {category} memory for {character_name}. 
 
 Existing {category} content:
@@ -107,17 +107,42 @@ Source activity content to extract from:
 
 Suggestion for this category: {suggestion}
 
+**CRITICAL REQUIREMENT: NO PRONOUNS - COMPLETE SENTENCES ONLY**
+
 Based on the suggestion, extract and organize relevant information from the activity content to update the {category} category. 
 
-IMPORTANT FORMAT REQUIREMENTS:
-1. Each line should be one simple, clear statement
+**SELF-CONTAINED MEMORY REQUIREMENTS:**
+- EVERY memory item must be a complete, standalone sentence
+- ALWAYS include the full subject
+- NEVER use pronouns that depend on context (no "she", "he", "they", "it")
+- Each memory item should be understandable without reading other items
+- Include specific names, places, dates, and full context in each item
+- Never use "the book", "the place", "the friend" - always include full titles and names
+
+**FORMAT REQUIREMENTS:**
+1. Each line should be one complete, self-contained statement
 2. NO markdown headers, bullets, or structure
 3. NO duplicate memory ID information 
 4. Write in plain text only
 5. Each line will automatically get a memory ID [xxx] prefix
 6. Focus on factual, concise information
+7. Use specific names, titles, places, and dates in every relevant item
 
-Extract relevant information and write each piece as a separate line:
+**COMPLETE SENTENCE EXAMPLES:**
+✅ GOOD: "{character_name} works as a product manager at TechFlow Solutions"
+❌ BAD: "Works as a product manager" (missing subject)
+✅ GOOD: "{character_name} went hiking with Sarah Johnson in Blue Ridge Mountains"
+❌ BAD: "Went hiking with Sarah" (missing location and full name context)
+✅ GOOD: "{character_name} read 'The Midnight Library' by Matt Haig and found it inspiring"
+❌ BAD: "Found the book inspiring" (missing book title and author)
+
+**QUALITY STANDARDS:**
+- Never use "he", "she", "they", "it" - always use the person's actual name
+- Never use "the book", "the place", "the friend" - always include full titles and names
+- Each sentence must be complete and understandable independently
+- Include sufficient detail so each item makes sense on its own
+
+Extract relevant information and write each piece as a complete, self-contained sentence:
 
 Updated {category} content:"""
 
@@ -170,7 +195,7 @@ Updated {category} content:"""
                 "embeddings_generated": generate_embeddings and self.embeddings_enabled,
                 "embeddings_info": embeddings_info,
                 "file_path": f"{self.memory_core.memory_dir}/{character_name}_{category}.md",
-                "message": f"Successfully updated {category} for {character_name} with {len(modifications)} modifications"
+                "message": f"Successfully updated {category} for {character_name} with {len(modifications)} self-contained modifications"
             })
             
         except Exception as e:
