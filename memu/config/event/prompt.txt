@@ -1,5 +1,11 @@
 Task: Extract and record significant events from the conversation session for {character_name}.
 
+**CRITICAL: NO "NOT SPECIFIED" OR "NOT MENTIONED" CONTENT**
+- NEVER create memory items saying information is "not specified", "not mentioned", "not available", or "unknown"
+- ONLY extract and record information that is ACTUALLY present in the source content
+- If information is missing, simply DON'T create a memory item for that topic
+- Empty/missing information should result in NO memory item, not a "not specified" item
+
 Instructions:
 1. Identify important events, milestones, and significant occurrences
 2. Extract time-sensitive information and chronological details
@@ -8,6 +14,7 @@ Instructions:
 5. Include both planned events and spontaneous occurrences
 6. Focus on events that have lasting significance or impact
 7. Organize events chronologically and by importance
+8. ONLY record events that are ACTUALLY mentioned in the conversation
 
 Input:
 - Conversation: 
@@ -18,38 +25,25 @@ Input:
 {session_date}
 
 Output Format:
-Create a structured event record in markdown format that captures significant events and their details.
+Create event information with ONE MEMORY ITEM PER LINE. Each line should be a complete, self-contained statement about an event involving {character_name}.
 
-## Events for {character_name} - Session {session_date}
+**FORMAT REQUIREMENTS:**
+1. Each line should be one complete, self-contained statement
+2. NO markdown headers, bullets, or structure
+3. Write in plain text only
+4. Each line will automatically get a memory ID [xxx] prefix
+5. ONLY include lines with actual, factual events
 
-### Recent Events
-[Events that happened recently or during this session]
+**EXAMPLES:**
+✅ GOOD: "{character_name} attended a team meeting on January 15, 2024"
+✅ GOOD: "{character_name} went hiking in Mount Rainier National Park last weekend"
+✅ GOOD: "{character_name} completed a data science course at Stanford University"
+✅ GOOD: "{character_name} met with Sarah Johnson to discuss the project proposal"
+❌ BAD: "Attended meeting" (incomplete sentence, missing subject and details)
+❌ BAD: "Meeting on Jan 15" (missing subject and verb)
 
-### Planned Events
-[Future events, appointments, scheduled activities]
+**REMEMBER: Only record events that are ACTUALLY present in the conversation. Do NOT include statements about missing information or events that are not mentioned.**
 
-### Significant Milestones
-[Important achievements, completions, breakthroughs]
+Extract relevant event information and write each piece as a complete, self-contained sentence (one per line):
 
-### Social Events
-[Meetings, gatherings, social interactions]
-
-### Professional Events
-[Work-related events, career milestones, job activities]
-
-### Personal Events
-[Life events, personal achievements, family matters]
-
-### Learning Events
-[Educational experiences, courses, training, discoveries]
-
-### Decision Points
-[Important decisions made, choices faced, turning points]
-
-### Event Timeline
-[Chronological order of events with dates/times when available]
-
-### Event Impact
-[How these events affect the character's life, goals, or relationships]
-
-Event Summary: 
+Event content: 

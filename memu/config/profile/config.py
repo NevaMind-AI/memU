@@ -1,6 +1,6 @@
 """
 Profile type configuration file
-Record character's personal information, traits, preferences, background, etc.
+Record character's basic personal information only (age, location, background, etc.) - NO EVENTS
 """
 
 from dataclasses import dataclass
@@ -12,7 +12,7 @@ class ProfileConfig:
     # Basic information
     name: str = "profile"
     filename: str = "profile.md"
-    description: str = "Record character's personal information, traits and preferences"
+    description: str = "Record character's basic personal information only (age, location, background, demographics) - excludes events and activities"
     
     # Folder path
     folder_name: str = "profile"

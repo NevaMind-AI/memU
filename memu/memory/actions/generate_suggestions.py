@@ -94,24 +94,33 @@ Available Categories: {', '.join(available_categories)}
 
 When suggesting content for each category, ensure that the resulting memory items will:
 - Be complete, standalone sentences with full subjects
+- Always include "{character_name}" instead of pronouns like "she/he/they"
 - Include specific names, places, dates, and full context
 - Never use "the book", "the place", "the friend" - always specify full titles and names
 - Be understandable without reading other memory items
 
-For each category, analyze the new memory items and suggest what specific information should be extracted and added to that category. Consider:
+**CATEGORY-SPECIFIC REQUIREMENTS:**
 
-- profile: Personal information, traits, characteristics, background, skills, preferences
-- event: Specific events, dates, milestones, appointments, meetings, activities with time references  
-- activity: General activities, conversations, interactions, daily activities
-- interests: Hobbies, interests, passions, things they enjoy or dislike
-- study: Learning activities, courses, education, skill development
-- Other categories: Relevant information for each specific category
+For each category, analyze the new memory items and suggest what specific information should be extracted and added to that category:
+
+- **profile**: ONLY basic personal information (age, location, occupation, education, family status, demographics) - EXCLUDE events, activities, things they did
+- **event**: Specific events, dates, milestones, appointments, meetings, activities with time references  
+- **activity**: General activities, conversations, interactions, daily activities (events and temporal actions go here)
+- **interests**: Hobbies, interests, passions, things they enjoy or dislike
+- **study**: Learning activities, courses, education, skill development
+- **Other categories**: Relevant information for each specific category
+
+**CRITICAL DISTINCTION - Profile vs Activity/Event:**
+- ✅ Profile: "Alice lives in San Francisco", "Alice is 28 years old", "Alice works at TechFlow Solutions"
+- ❌ Profile: "Alice went hiking" (this is activity), "Alice attended workshop" (this is event)
+- ✅ Activity/Event: "Alice went hiking in Blue Ridge Mountains", "Alice attended photography workshop"
 
 **SUGGESTION REQUIREMENTS:**
 - Specify that memory items should include "{character_name}" as the subject
 - Mention specific names, places, titles, and dates that should be included
 - Ensure suggestions lead to complete, self-contained sentences
 - Avoid suggesting content that would result in pronouns or incomplete sentences
+- For profile: Focus ONLY on stable, factual, demographic information
 
 For each category that has relevant information, provide your suggestions in the following format:
 
@@ -122,11 +131,11 @@ For each category that has relevant information, provide your suggestions in the
 
 Only suggest categories where there is relevant new information to add. Be specific about what content should be extracted and ensure suggestions lead to complete, self-contained memory items.
 
-Example of good suggestion:
-"Add information about {character_name}'s hiking activities including the specific location Blue Ridge Mountains, companion Sarah Johnson, and the waterfall called Crystal Falls that {character_name} discovered"
+Example of good suggestion for profile:
+"Add demographic information about {character_name}'s age, current residence in San Francisco, and occupation as product manager at TechFlow Solutions"
 
-Example of bad suggestion:
-"Add information about hiking activities" (too vague, doesn't specify subjects or context)
+Example of bad suggestion for profile:
+"Add information about {character_name}'s hiking activities" (this belongs in activity/event, not profile)
 """
 
             # Call LLM to generate suggestions

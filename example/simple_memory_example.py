@@ -286,112 +286,12 @@ def demo_detailed_iterations():
                 if not success and error:
                     print(f"     Error: {error}")
 
-def demo_single_step_analysis():
-    """Demonstrate single step with maximum detail"""
-    
-    print("\n\n🔍 BONUS: Single Step Maximum Detail Analysis")
-    print("=" * 60)
-    print("Shows exactly what happens in ONE conversation analysis step")
-    
-    # Initialize LLM client
-    llm_client = OpenAIClient(model="gpt-4o-mini") 
-    memory_agent = MemoryAgent(llm_client=llm_client, memory_dir="memory")
-    character_name = "Alice"
-    
-    # Simple conversation for ultra-detailed analysis
-    conversation = """
-    User: What did you do today?
-    Alice: I had a productive morning! I completed a data analysis project for TechFlow Solutions using Python pandas. Then I attended a virtual photography workshop hosted by the Community Arts Center. The instructor, Mark Stevens, taught us about golden hour lighting techniques. I'm excited to practice these skills during my weekend hike to Shenandoah National Park with Sarah Johnson.
-    """
-    
-    print("📖 Simple conversation for maximum detail analysis:")
-    print(conversation.strip())
-    print("\n" + "=" * 60)
-    
-    # Step 1: Ultra-detailed conversation analysis
-    print("\n🔍 ULTRA-DETAILED CONVERSATION ANALYSIS:")
-    print("-" * 40)
-    
-    print("🚀 Calling summarize_conversation action...")
-    start_time = datetime.now()
-    
-    conversation_result = memory_agent.actions["summarize_conversation"].execute(
-        conversation_text=conversation,
-        character_name=character_name,
-        session_date="2024-01-15"
-    )
-    
-    end_time = datetime.now()
-    processing_time = (end_time - start_time).total_seconds()
-    
-    if conversation_result.get("success"):
-        print(f"✅ Analysis completed in {processing_time:.2f} seconds")
-        print(f"📊 Character: {conversation_result.get('character_name', 'Unknown')}")
-        print(f"📅 Session date: {conversation_result.get('session_date', 'Unknown')}")
-        print(f"📝 Summary length: {len(conversation_result.get('summary', ''))} characters")
-        print(f"🗂️ Memory items extracted: {len(conversation_result.get('memory_items', []))}")
-        
-        print("\n📋 COMPLETE SUMMARY:")
-        print(f"   {conversation_result.get('summary', 'No summary available')}")
-        
-        print("\n📦 EVERY MEMORY ITEM WITH FULL DETAILS:")
-        memory_items = conversation_result.get('memory_items', [])
-        for i, item in enumerate(memory_items, 1):
-            print(f"\n   Item {i}:")
-            print(f"      Memory ID: {item.get('memory_id', 'No ID')}")
-            print(f"      Type: {item.get('type', 'unknown').upper()}")
-            print(f"      Content: {item.get('content', 'No content')}")
-            if item.get('context'):
-                print(f"      Context: {item.get('context', 'No context')}")
-            
-            # Detailed compliance analysis
-            content = item.get('content', '')
-            print(f"      Analysis:")
-            print(f"        - Contains 'Alice': {'YES' if 'Alice' in content else 'NO'}")
-            print(f"        - Character count: {len(content)}")
-            print(f"        - Word count: {len(content.split())}")
-            
-            # Check for pronouns
-            pronouns_found = []
-            for pronoun in ['she', 'he', 'they', 'it', 'her', 'his', 'their']:
-                if pronoun in content.lower():
-                    pronouns_found.append(pronoun)
-            
-            if pronouns_found:
-                print(f"        - ❌ Pronouns found: {pronouns_found}")
-            else:
-                print(f"        - ✅ No pronouns detected")
-            
-            # Check for specific details
-            has_names = any(name in content for name in ['TechFlow', 'Python', 'Community Arts', 'Mark Stevens', 'Shenandoah', 'Sarah Johnson'])
-            print(f"        - Specific details: {'✅ YES' if has_names else '❌ NO'}")
-        
-        # Perform validation
-        print(f"\n🔍 COMPLIANCE VALIDATION:")
-        is_compliant = validate_memory_items(memory_items, character_name)
-        
-        print(f"\n📊 PROCESSING STATISTICS:")
-        print(f"   Input conversation: {len(conversation)} characters")
-        print(f"   Output summary: {len(conversation_result.get('summary', ''))} characters")
-        print(f"   Memory items: {len(memory_items)}")
-        print(f"   Processing time: {processing_time:.2f} seconds")
-        print(f"   Compliance rate: {'100%' if is_compliant else 'VIOLATIONS DETECTED'}")
-        
-    else:
-        print(f"❌ Analysis failed: {conversation_result.get('error', 'Unknown error')}")
-    
-    print("\n" + "=" * 60)
-    print("🎯 This shows the complete internal processing of ONE step!")
-    print("The automatic workflow repeats similar detailed steps for each function call.")
-    print("=" * 60)
-
 if __name__ == "__main__":
     print("🌟 DETAILED ITERATION OUTPUT DEMONSTRATION")
     print("This demo shows EVERY iteration with complete details.")
     print("Enforces strict no-pronouns policy with real-time validation.\n")
     
+    
     # Run detailed iterations demo
     demo_detailed_iterations()
     
-    # Show single step ultra-detail
-    demo_single_step_analysis() 

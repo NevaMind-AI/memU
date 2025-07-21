@@ -153,7 +153,7 @@ class LinkRelatedMemoriesAction(BaseAction):
             
             # Find related memories
             related_memories = self._find_related_memories(
-                character_name, target_embedding, search_categories, top_k, min_similarity, memory_id
+                character_name, target_embedding, target_memory["content"], search_categories, top_k, min_similarity, memory_id
             )
             
             # Get memory IDs for links  
@@ -206,6 +206,7 @@ class LinkRelatedMemoriesAction(BaseAction):
         self,
         character_name: str,
         target_embedding: List[float],
+        target_content: str,
         search_categories: List[str],
         top_k: int,
         min_similarity: float,
@@ -252,14 +253,20 @@ class LinkRelatedMemoriesAction(BaseAction):
             # Sort ALL candidates by similarity globally
             all_candidates.sort(key=lambda x: x["similarity"], reverse=True)
             
-            # Apply similarity threshold and take top K
+            # Apply similarity threshold and take top K candidates for LLM filtering
             filtered_results = [
                 candidate for candidate in all_candidates[:top_k * 2]  # Take more candidates first
                 if candidate["similarity"] >= min_similarity
             ]
             
-            # Return final top K after filtering
-            return filtered_results[:top_k]
+            # Use LLM to filter for truly relevant memories
+            if filtered_results:
+                relevant_memories = self._filter_relevant_memories_with_llm(
+                    character_name, filtered_results, target_content, top_k
+                )
+                return relevant_memories
+            else:
+                return []
             
         except Exception as e:
             logger.error(f"Error finding related memories: {e}")
@@ -304,13 +311,17 @@ class LinkRelatedMemoriesAction(BaseAction):
             
             for item in memory_items:
                 if item["memory_id"] == memory_id:
-                    # Format: [memory_id] content (related_id1,related_id2)
+                    # Format: [memory_id][mentioned at date] content [related_id1,related_id2]
                     original_line = item["full_line"]
                     if memory_ids:
-                        # Remove existing links if any (content between parentheses at the end)
+                        # Remove existing links if any (content between brackets at the end) and old parentheses format
                         import re
+                        # Remove old parentheses format
                         clean_line = re.sub(r'\s*\([^)]*\)\s*$', '', original_line)
-                        updated_line = f"{clean_line} ({','.join(memory_ids)})"
+                        # Remove existing square bracket links at the end
+                        clean_line = re.sub(r'\s*\[[^\]]*\]\s*$', '', clean_line)
+                        # Add new links in square brackets
+                        updated_line = f"{clean_line} [{','.join(memory_ids)}]"
                     else:
                         updated_line = original_line
                     
@@ -375,7 +386,7 @@ class LinkRelatedMemoriesAction(BaseAction):
                 
                 # Find related memories
                 related_memories = self._find_related_memories(
-                    character_name, target_embedding, search_categories, top_k, min_similarity, memory_id
+                    character_name, target_embedding, item["content"], search_categories, top_k, min_similarity, memory_id
                 )
                 
                 if related_memories:
@@ -425,17 +436,21 @@ class LinkRelatedMemoriesAction(BaseAction):
                 
                 # Find related memories for this specific item
                 related_memories = self._find_related_memories(
-                    character_name, target_embedding, search_categories, top_k, min_similarity, memory_id
+                    character_name, target_embedding, item["content"], search_categories, top_k, min_similarity, memory_id
                 )
                 
                 if related_memories:
                     # Get memory IDs for links
                     memory_ids = [memory["memory_id"] for memory in related_memories]
                     
-                    # Remove existing links if any
+                    # Remove existing links if any (both old parentheses and new square bracket formats)
                     import re
+                    # Remove old parentheses format
                     clean_line = re.sub(r'\s*\([^)]*\)\s*$', '', original_line)
-                    updated_line = f"{clean_line} ({','.join(memory_ids)})"
+                    # Remove existing square bracket links at the end
+                    clean_line = re.sub(r'\s*\[[^\]]*\]\s*$', '', clean_line)
+                    # Add new links in square brackets
+                    updated_line = f"{clean_line} [{','.join(memory_ids)}]"
                     updated_lines.append(updated_line)
                 else:
                     # No related memories found, keep original line
@@ -453,4 +468,111 @@ class LinkRelatedMemoriesAction(BaseAction):
                 
         except Exception as e:
             logger.error(f"Error appending links to all items: {e}")
-            return None 
+            return None
+    
+    def _filter_relevant_memories_with_llm(
+        self,
+        character_name: str,
+        candidate_memories: List[Dict[str, Any]],
+        target_content: str,
+        max_links: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Use LLM to filter candidate memories and keep only truly relevant ones
+        
+        Args:
+            character_name: Name of the character
+            candidate_memories: List of candidate memories from embedding search
+            target_content: The target memory content to compare against
+            max_links: Maximum number of links to return
+            
+        Returns:
+            List of filtered relevant memories
+        """
+        try:
+            if not candidate_memories:
+                return []
+            
+            # Prepare candidate memories for LLM evaluation
+            candidates_text = ""
+            for i, memory in enumerate(candidate_memories, 1):
+                candidates_text += f"{i}. [ID: {memory['memory_id']}] [{memory['category']}] {memory['content']} (similarity: {memory['similarity']:.3f})\n"
+            
+            # Create LLM prompt for relevance filtering
+            relevance_prompt = f"""You are evaluating whether candidate memories are truly related to a target memory for {character_name}.
+
+TARGET MEMORY:
+{target_content}
+
+CANDIDATE MEMORIES:
+{candidates_text}
+
+**TASK**: Determine which candidate memories are genuinely related to the target memory. 
+
+**CRITERIA FOR RELEVANCE**:
+- Memories should share meaningful connections (people, places, events, topics, themes)
+- Avoid superficial similarities (just sharing common words like "the", "and", "is")
+- Consider contextual relationships (cause-effect, temporal sequences, thematic connections)
+- Focus on memories that would provide useful context or background for understanding the target memory
+
+**EVALUATION GUIDELINES**:
+- ✅ RELEVANT: Memories about the same people, events, locations, or directly related topics
+- ✅ RELEVANT: Memories that provide context, background, or related information
+- ❌ NOT RELEVANT: Memories that only share common words but different contexts
+- ❌ NOT RELEVANT: Memories about completely different topics/people/events
+
+**OUTPUT FORMAT**: 
+Return ONLY the numbers (1, 2, 3, etc.) of the truly relevant memories, separated by commas. If no memories are relevant, return "NONE".
+
+Examples:
+- If memories 1, 3, and 5 are relevant: "1, 3, 5"
+- If no memories are relevant: "NONE"
+- If only memory 2 is relevant: "2"
+
+RELEVANT MEMORY NUMBERS:"""
+
+            # Call LLM to evaluate relevance
+            llm_response = self.llm_client.simple_chat(relevance_prompt)
+            
+            # Parse LLM response
+            relevant_indices = self._parse_relevance_response(llm_response.strip())
+            
+            # Filter memories based on LLM evaluation
+            relevant_memories = []
+            for idx in relevant_indices:
+                if 1 <= idx <= len(candidate_memories):
+                    relevant_memories.append(candidate_memories[idx - 1])  # Convert to 0-based index
+            
+            # Limit to max_links
+            return relevant_memories[:max_links]
+            
+        except Exception as e:
+            logger.error(f"Error filtering memories with LLM: {e}")
+            # Fallback to original top candidates if LLM filtering fails
+            return candidate_memories[:max_links]
+    
+    def _parse_relevance_response(self, response: str) -> List[int]:
+        """
+        Parse LLM response to extract relevant memory indices
+        
+        Args:
+            response: LLM response containing memory numbers
+            
+        Returns:
+            List of memory indices (1-based)
+        """
+        import re
+        
+        try:
+            response = response.strip().upper()
+            
+            if response == "NONE" or not response:
+                return []
+            
+            # Extract numbers from response
+            numbers = re.findall(r'\b(\d+)\b', response)
+            return [int(num) for num in numbers if num.isdigit()]
+            
+        except Exception as e:
+            logger.warning(f"Failed to parse relevance response '{response}': {e}")
+            return []
