@@ -18,6 +18,8 @@ class MarkdownFileConfig:
     description: str                   # 文件描述
     folder_path: str                   # 文件夹路径
     prompt_path: str                   # prompt文件路径
+    context: str = "rag"               # context模式："all"表示整体放入context，"rag"表示使用RAG搜索
+    rag_length: int = 50               # RAG长度，-1表示全部，其他数值表示行数
 
 
 class MarkdownConfigManager:
@@ -59,7 +61,9 @@ class MarkdownConfigManager:
                                 filename=file_info["filename"],
                                 description=file_info["description"],
                                 folder_path=str(item),
-                                prompt_path=str(prompt_file) if prompt_file.exists() else ""
+                                prompt_path=str(prompt_file) if prompt_file.exists() else "",
+                                context=file_info.get("context", "rag"),
+                                rag_length=file_info.get("rag_length", 50)
                             )
                             
                     except Exception as e:
@@ -103,6 +107,26 @@ class MarkdownConfigManager:
         return {
             name: config.filename 
             for name, config in self._files_config.items()
+        }
+    
+    def get_context_mode(self, file_type: str) -> str:
+        """获取指定文件类型的context模式"""
+        config = self.get_file_config(file_type)
+        return config.context if config else "rag"
+    
+    def get_rag_length(self, file_type: str) -> int:
+        """获取指定文件类型的RAG长度"""
+        config = self.get_file_config(file_type)
+        return config.rag_length if config else 50
+    
+    def get_all_context_configs(self) -> Dict[str, Dict[str, Any]]:
+        """获取所有文件类型的context配置"""
+        return {
+            file_type: {
+                "context": config.context,
+                "rag_length": config.rag_length
+            }
+            for file_type, config in self._files_config.items()
         }
 
 
@@ -168,7 +192,9 @@ def get_simple_summary() -> Dict[str, Any]:
             required_files[file_type] = {
                 "filename": config.filename,
                 "description": config.description,
-                "folder": config.folder_path
+                "folder": config.folder_path,
+                "context": config.context,
+                "rag_length": config.rag_length
             }
     
     return {
