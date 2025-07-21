@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-OpenAI官方Function Calling示例
+OpenAI Official Function Calling Example
 
-展示如何按照OpenAI最佳实践使用Memory Agent
+Demonstrates how to use Memory Agent following OpenAI best practices
 """
 
 import json
@@ -10,50 +10,50 @@ from memu.llm import OpenAIClient
 from memu.memory import MemoryAgent
 
 def main():
-    """OpenAI Function Calling最佳实践示例"""
+    """OpenAI Function Calling Best Practices Example"""
     
-    print("🚀 OpenAI官方Function Calling示例")
+    print("🚀 OpenAI Official Function Calling Example")
     print("=" * 50)
     
-    # 1. 初始化组件
+    # 1. Initialize components
     llm_client = OpenAIClient(model="gpt-4o-mini")
     memory_agent = MemoryAgent(llm_client=llm_client, memory_dir="memory")
     
-    # 2. 获取OpenAI兼容的函数定义
+    # 2. Get OpenAI-compatible function definitions
     function_schemas = memory_agent.get_functions_schema()
     
-    print(f"📋 可用函数: {len(function_schemas)} 个")
+    print(f"📋 Available functions: {len(function_schemas)} functions")
     for schema in function_schemas:
         print(f"  • {schema['name']}: {schema['description']}")
     print()
     
-    # 3. 构建对话 - 使用明确的指令触发函数调用
+    # 3. Build conversation - use clear instructions to trigger function calls
     messages = [
         {
             "role": "system",
-            "content": """你是一个智能助手，可以使用记忆功能来存储和检索信息。
+            "content": """You are an intelligent assistant that can use memory functions to store and retrieve information.
             
-当用户要求你记住信息时，使用 add_memory 函数。
-当用户询问之前的信息时，使用 search_memory 或 read_memory 函数。
-当用户要求更新信息时，使用 update_memory 函数。
+When users ask you to remember information, use the add_memory function.
+When users ask about previous information, use search_memory or read_memory functions.
+When users ask to update information, use the update_memory function.
 
-请根据用户的需求选择合适的函数调用。"""
+Please choose the appropriate function calls based on user needs."""
         },
         {
             "role": "user",
-            "content": "请帮我记住：我叫Alice，25岁，是一名产品经理，喜欢阅读和旅行。"
+            "content": "Please help me remember: My name is Alice, I'm 25 years old, I'm a product manager, and I like reading and traveling."
         }
     ]
     
-    # 4. 按照OpenAI官方格式调用
+    # 4. Call following OpenAI official format
     def process_conversation(messages, max_iterations=5):
-        """处理对话，支持多轮函数调用"""
+        """Process conversation with support for multiple function calls"""
         
         for iteration in range(max_iterations):
-            print(f"\n🔄 迭代 {iteration + 1}")
+            print(f"\n🔄 Iteration {iteration + 1}")
             print("-" * 20)
             
-            # 调用OpenAI API
+            # Call OpenAI API
             response = llm_client.chat_completion(
                 messages=messages,
                 tools=[{"type": "function", "function": schema} for schema in function_schemas],
@@ -62,35 +62,35 @@ def main():
             )
             
             if not response.success:
-                print(f"❌ API调用失败: {response.error}")
+                print(f"❌ API call failed: {response.error}")
                 break
             
-            # 添加助手回复到对话历史
+            # Add assistant reply to conversation history
             assistant_message = {
                 "role": "assistant",
                 "content": response.content
             }
             
-            # 处理函数调用
+            # Handle function calls
             if hasattr(response, 'tool_calls') and response.tool_calls:
-                print(f"🛠️ 检测到 {len(response.tool_calls)} 个函数调用")
+                print(f"🛠️ Detected {len(response.tool_calls)} function calls")
                 
-                # 添加函数调用到助手消息
+                # Add function calls to assistant message
                 assistant_message["tool_calls"] = response.tool_calls
                 messages.append(assistant_message)
                 
-                # 执行每个函数调用
+                # Execute each function call
                 for tool_call in response.tool_calls:
                     function_name = tool_call.function.name
                     arguments = json.loads(tool_call.function.arguments)
                     
-                    print(f"  📞 调用: {function_name}")
-                    print(f"  📝 参数: {json.dumps(arguments, ensure_ascii=False, indent=2)}")
+                    print(f"  📞 Calling: {function_name}")
+                    print(f"  📝 Arguments: {json.dumps(arguments, ensure_ascii=False, indent=2)}")
                     
-                    # 执行函数
+                    # Execute function
                     result = memory_agent.call_function(function_name, arguments)
                     
-                    # 添加工具结果到对话历史
+                    # Add tool result to conversation history
                     tool_message = {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
@@ -98,55 +98,55 @@ def main():
                     }
                     messages.append(tool_message)
                     
-                    print(f"  ✅ 结果: {'成功' if result.get('success') else '失败'}")
+                    print(f"  ✅ Result: {'Success' if result.get('success') else 'Failed'}")
                     if result.get('success'):
                         if 'file_path' in result:
-                            print(f"  📁 文件: {result['file_path']}")
+                            print(f"  📁 File: {result['file_path']}")
                     else:
-                        print(f"  ❌ 错误: {result.get('error')}")
+                        print(f"  ❌ Error: {result.get('error')}")
                 
             else:
-                # 没有函数调用，添加回复并结束
+                # No function calls, add reply and end
                 messages.append(assistant_message)
                 if response.content:
-                    print(f"💬 助手回复: {response.content}")
+                    print(f"💬 Assistant reply: {response.content}")
                 break
         
         return messages
     
-    # 5. 处理第一轮对话
-    print("💬 第一轮对话：存储信息")
+    # 5. Process first conversation round
+    print("💬 First conversation: Store information")
     messages = process_conversation(messages)
     
-    # 6. 添加新的用户消息进行测试
+    # 6. Add new user message for testing
     print("\n" + "=" * 50)
-    print("💬 第二轮对话：检索信息")
+    print("💬 Second conversation: Retrieve information")
     
     messages.append({
         "role": "user",
-        "content": "Alice的职业是什么？她有什么爱好？"
+        "content": "What is Alice's profession? What are her hobbies?"
     })
     
     messages = process_conversation(messages)
     
-    # 7. 演示更新功能
+    # 7. Demonstrate update functionality
     print("\n" + "=" * 50)
-    print("💬 第三轮对话：更新信息")
+    print("💬 Third conversation: Update information")
     
     messages.append({
         "role": "user", 
-        "content": "Alice现在26岁了，请更新她的年龄信息。"
+        "content": "Alice is now 26 years old, please update her age information."
     })
     
     messages = process_conversation(messages)
     
-    print("\n🎉 示例完成！")
-    print("\n📋 总结:")
-    print("✅ 使用OpenAI官方function calling格式")
-    print("✅ 支持多轮函数调用")
-    print("✅ 正确处理工具调用和结果")
-    print("✅ 维护完整的对话历史")
-    print("✅ 符合OpenAI最佳实践")
+    print("\n🎉 Example completed!")
+    print("\n📋 Summary:")
+    print("✅ Uses OpenAI official function calling format")
+    print("✅ Supports multiple function calls")
+    print("✅ Properly handles tool calls and results")
+    print("✅ Maintains complete conversation history")
+    print("✅ Follows OpenAI best practices")
 
 if __name__ == "__main__":
     main() 

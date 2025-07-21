@@ -160,7 +160,7 @@ Only suggest categories where there is relevant new information to add. Be speci
                 elif current_category and line.startswith('- '):
                     if line.startswith('- Should add:'):
                         should_add_text = line.replace('- Should add:', '').strip().lower()
-                        suggestions[current_category]["should_add"] = should_add_text in ['yes', 'true', '是', '需要']
+                        suggestions[current_category]["should_add"] = should_add_text in ['yes', 'true']
                     
                     elif line.startswith('- Suggestion:'):
                         suggestion_text = line.replace('- Suggestion:', '').strip()

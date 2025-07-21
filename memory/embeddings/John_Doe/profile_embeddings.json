@@ -1548,7 +1548,7 @@
       ],
       "line_number": 1,
       "metadata": {
-        "character": "张三",
+        "character": "John_Doe",
         "category": "profile",
         "length": 15,
         "timestamp": "2025-07-21T00:45:01.717817"
@@ -3099,7 +3099,7 @@
       ],
       "line_number": 2,
       "metadata": {
-        "character": "张三",
+        "character": "John_Doe",
         "category": "profile",
         "length": 14,
         "timestamp": "2025-07-21T00:45:02.160976"
@@ -4650,7 +4650,7 @@
       ],
       "line_number": 3,
       "metadata": {
-        "character": "张三",
+        "character": "John_Doe",
         "category": "profile",
         "length": 13,
         "timestamp": "2025-07-21T00:45:02.507215"
@@ -6201,7 +6201,7 @@
       ],
       "line_number": 4,
       "metadata": {
-        "character": "张三",
+        "character": "John_Doe",
         "category": "profile",
         "length": 11,
         "timestamp": "2025-07-21T00:45:02.871710"
@@ -7752,7 +7752,7 @@
       ],
       "line_number": 5,
       "metadata": {
-        "character": "张三",
+        "character": "John_Doe",
         "category": "profile",
         "length": 10,
         "timestamp": "2025-07-21T00:45:03.201831"
@@ -9303,7 +9303,7 @@
       ],
       "line_number": 6,
       "metadata": {
-        "character": "张三",
+        "character": "John_Doe",
         "category": "profile",
         "length": 9,
         "timestamp": "2025-07-21T00:45:03.568437"
@@ -10854,7 +10854,7 @@
       ],
       "line_number": 7,
       "metadata": {
-        "character": "张三",
+        "character": "John_Doe",
         "category": "profile",
         "length": 9,
         "timestamp": "2025-07-21T00:45:04.020647"

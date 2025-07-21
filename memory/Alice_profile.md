@@ -1,1 +1,1 @@
-[3f03bf] 我叫Alice，26岁，是一名产品经理，喜欢阅读和旅行。
+[3f03bf] My name is Alice, I'm 26 years old, I'm a product manager, and I like reading and traveling.

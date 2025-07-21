@@ -1548,7 +1548,7 @@
       ],
       "line_number": 1,
       "metadata": {
-        "character": "测试用户",
+        "character": "Test_User",
         "category": "profile",
         "length": 9,
         "timestamp": "2025-07-21T00:32:21.058734"
@@ -3099,7 +3099,7 @@
       ],
       "line_number": 2,
       "metadata": {
-        "character": "测试用户",
+        "character": "Test_User",
         "category": "profile",
         "length": 9,
         "timestamp": "2025-07-21T00:32:21.456393"
@@ -4650,7 +4650,7 @@
       ],
       "line_number": 3,
       "metadata": {
-        "character": "测试用户",
+        "character": "Test_User",
         "category": "profile",
         "length": 8,
         "timestamp": "2025-07-21T00:32:21.773410"

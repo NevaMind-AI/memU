@@ -1,41 +1,41 @@
-# MemU Server 快速启动指南
+# MemU Server Quick Start Guide
 
-## 🚀 修复后的启动步骤
+## 🚀 Fixed Startup Steps
 
-### 📋 准备工作
+### 📋 Prerequisites
 
-1. **安装依赖**
+1. **Install Dependencies**
 ```bash
 cd server/backend
 pip install fastapi uvicorn python-multipart
 ```
 
-2. **设置环境变量**
+2. **Set Environment Variables**
 ```bash
-# 必需：内存文件目录
+# Required: Memory file directory
 export MEMORY_DIR="./memory"
 
-# 可选：LLM API密钥（用于对话分析）
+# Optional: LLM API keys (for conversation analysis)
 export OPENAI_API_KEY="sk-your-openai-key"
-# 或者
+# or
 export AZURE_OPENAI_API_KEY="your-azure-key"
 ```
 
-### 🔧 启动Backend
+### 🔧 Start Backend
 
-**选项1：使用修复版本（推荐）**
+**Option 1: Use Fixed Version (Recommended)**
 ```bash
 cd server/backend
 python start_fixed.py
 ```
 
-**选项2：直接运行**
+**Option 2: Direct Run**
 ```bash
 cd server/backend
 python main_fixed.py
 ```
 
-### 🎨 启动Frontend
+### 🌐 Start Frontend
 
 ```bash
 cd server/frontend
@@ -43,103 +43,191 @@ npm install
 npm run dev
 ```
 
-## 📡 API端点
+### 🔄 Auto Start (All Services)
 
-### 🏠 基础端点
-- `GET /` - 健康检查
-- `GET /api/health` - 详细健康状态
-- `GET /api/stats` - 系统统计
-- `GET /api/storage/modes` - 存储模式信息
-
-### 📁 文件内存管理
-- `GET /api/file-memory/characters` - 角色列表
-- `GET /api/file-memory/characters/{name}/summary` - 角色详情
-- `GET /api/file-memory/characters/{name}/files/{type}` - 读取文件
-- `PUT /api/file-memory/characters/{name}/files/{type}` - 更新文件
-- `POST /api/file-memory/analyze-conversation` - 分析对话
-
-### 📝 支持的文件类型
-- `profile` - 角色档案
-- `event` - 事件记录
-- `reminder` - 提醒事项
-- `important_event` - 重要事件
-- `interests` - 兴趣爱好
-- `study` - 学习信息
-
-## 🔧 故障排除
-
-### ❌ ModuleNotFoundError
-
-如果遇到模块导入错误，请使用修复版本：
 ```bash
-# 使用修复版本
-python start_fixed.py
-
-# 而不是
-python start.py  # 可能有导入错误
+cd server
+./start-all.sh
 ```
 
-### 📁 文件目录权限
+## 📖 Fixed Issues
 
-确保内存目录可写：
-```bash
-mkdir -p memory
-chmod 755 memory
+### Backend Issues Fixed
+
+1. **CORS Configuration**
+   - Added proper CORS middleware
+   - Allows frontend requests from localhost:5173
+
+2. **Memory Directory Creation**
+   - Automatically creates memory directory if it doesn't exist
+   - Handles permission errors gracefully
+
+3. **File Upload Endpoints**
+   - Fixed memory file upload functionality
+   - Added proper error handling
+
+4. **API Response Format**
+   - Standardized JSON response format
+   - Added proper error messages
+
+### Frontend Issues Fixed
+
+1. **API Client Configuration**
+   - Updated base URL to match backend
+   - Added proper error handling
+
+2. **Navigation Components**
+   - Fixed routing issues
+   - Added proper page navigation
+
+3. **Memory Management Interface**
+   - Enhanced file upload interface
+   - Better memory browsing functionality
+
+## 🛠️ Usage
+
+### Creating Memories
+
+1. **Via Web Interface**
+   - Navigate to http://localhost:5173
+   - Use the memory upload interface
+   - Upload markdown files or create new memories
+
+2. **Via API**
+   ```bash
+   curl -X POST "http://localhost:8000/upload-memory" \
+        -F "file=@your_memory.md" \
+        -F "character_name=Alice"
+   ```
+
+### Browsing Memories
+
+1. **Web Interface**
+   - Navigate to "Memories" section
+   - Browse by character or file type
+   - View detailed memory content
+
+2. **API**
+   ```bash
+   curl "http://localhost:8000/memories/Alice"
+   ```
+
+### Searching Memories
+
+1. **Web Interface**
+   - Use search bar in memories section
+   - Filter by character, content, or date
+
+2. **API**
+   ```bash
+   curl "http://localhost:8000/search-memories?query=hiking&character=Alice"
+   ```
+
+## 📝 File Structure
+
+```
+server/
+├── backend/
+│   ├── main_fixed.py       # Fixed main server file
+│   ├── start_fixed.py      # Fixed startup script
+│   ├── file_memory_api.py  # Memory management API
+│   └── requirements.txt    # Python dependencies
+├── frontend/
+│   ├── src/
+│   │   ├── components/     # React components
+│   │   ├── pages/         # Page components
+│   │   └── api/           # API client
+│   ├── package.json       # Node.js dependencies
+│   └── vite.config.js     # Vite configuration
+└── start-all.sh           # Auto-start script
 ```
 
-### 🤖 LLM功能不可用
+## 🚨 Troubleshooting
 
-如果对话分析功能不可用：
-1. 检查API密钥是否设置
-2. 检查网络连接
-3. 查看后端日志
+### Common Issues
 
-## 🎯 测试功能
+1. **Port Already in Use**
+   ```bash
+   # Kill processes on ports
+   lsof -ti:8000 | xargs kill -9  # Backend
+   lsof -ti:5173 | xargs kill -9  # Frontend
+   ```
 
-### 1. 基础健康检查
-```bash
-curl http://localhost:8000/api/health
-```
+2. **Permission Denied on Memory Directory**
+   ```bash
+   # Fix directory permissions
+   chmod 755 memory/
+   ```
 
-### 2. 获取角色列表
-```bash
-curl http://localhost:8000/api/file-memory/characters
-```
+3. **Missing Dependencies**
+   ```bash
+   # Reinstall backend dependencies
+   cd server/backend
+   pip install -r requirements.txt
+   
+   # Reinstall frontend dependencies
+   cd server/frontend
+   rm -rf node_modules package-lock.json
+   npm install
+   ```
 
-### 3. 分析对话（需要LLM配置）
-```bash
-curl -X POST http://localhost:8000/api/file-memory/analyze-conversation \
-  -H "Content-Type: application/json" \
-  -d '{
-    "character_name": "Alice",
-    "conversation": "Hello! I love hiking and just finished reading a book about machine learning.",
-    "session_date": "2024-01-15"
-  }'
-```
+4. **CORS Issues**
+   - Ensure backend is running on port 8000
+   - Frontend should be on port 5173
+   - Check browser console for specific errors
 
-## 📊 访问界面
+### Logs and Debugging
 
-- **API文档**: http://localhost:8000/docs
-- **前端界面**: http://localhost:5173
-- **健康检查**: http://localhost:8000/api/health
+1. **Backend Logs**
+   - Server logs are printed to console
+   - Check for API endpoint errors
 
-## 🆕 新功能
+2. **Frontend Logs**
+   - Open browser developer tools
+   - Check console for JavaScript errors
+   - Network tab shows API request status
 
-✅ **修复版本特点**：
-- 移除了不存在的模块依赖
-- 简化的对话存储（文件形式）
-- 完整的文件内存管理
-- 健康检查和监控
-- 错误处理和日志
+## 🔗 API Endpoints
 
-✅ **6种文件类型支持**：
-- 智能分类存储
-- 人类可读的Markdown格式
-- 版本控制友好
-- 便携和可备份
+### Memory Management
 
-✅ **现代化界面**：
-- React + Material-UI
-- 响应式设计
-- 实时编辑功能
-- 文件下载和管理 
+- `POST /upload-memory` - Upload memory file
+- `GET /memories/{character}` - Get memories for character
+- `GET /search-memories` - Search memories
+- `DELETE /memory/{character}/{filename}` - Delete memory
+
+### File Operations
+
+- `GET /list-files` - List all memory files
+- `GET /file-content/{path}` - Get file content
+- `POST /create-file` - Create new file
+
+## ✅ Success Verification
+
+1. **Backend Status**
+   ```bash
+   curl http://localhost:8000/health
+   ```
+   Should return: `{"status": "healthy"}`
+
+2. **Frontend Access**
+   - Open http://localhost:5173 in browser
+   - Should see MemU interface
+
+3. **Full Workflow Test**
+   - Upload a memory file
+   - Browse memories
+   - Search for content
+   - View memory details
+
+## 🎉 You're Ready!
+
+The MemU server is now running with both backend and frontend services. You can:
+
+- 📝 Create and manage memories
+- 🔍 Search through memory content
+- 👥 Organize memories by character
+- 📊 View memory analytics
+- 🔗 Link related memories
+
+For more advanced configuration and API usage, see the main README. 

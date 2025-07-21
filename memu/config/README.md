@@ -1,14 +1,14 @@
-# MemU配置系统（简化版本）
+# MemU Configuration System (Simplified Version)
 
-MemU的简化配置系统：**activity.md是唯一必须的核心文件**，记录所有内容。其他文件都是可选的，从activity中提取信息。
+MemU's simplified configuration system: **activity.md is the only required core file**, recording all content. Other files are optional, extracting information from activity.
 
-## 📁 目录结构
+## 📁 Directory Structure
 
 ```
 memu/config/
-├── __init__.py                 # 配置模块初始化
-├── markdown_config.py          # Markdown文件配置（核心）
-├── prompts/                    # Prompt模板目录
+├── __init__.py                 # Configuration module initialization
+├── markdown_config.py          # Markdown file configuration (core)
+├── prompts/                    # Prompt template directory
 │   ├── __init__.py
 │   ├── prompt_loader.py
 │   ├── agent_activity.txt
@@ -18,67 +18,67 @@ memu/config/
 │   ├── analyze_session_for_interests.txt
 │   ├── analyze_session_for_study.txt
 │   └── system_message.txt
-└── README.md                   # 本文档
+└── README.md                   # This document
 ```
 
-## 🎯 核心配置理念
+## 🎯 Core Configuration Philosophy
 
-### 简化配置原则
+### Simplified Configuration Principles
 
-1. **Activity是核心** - 唯一必须的文件，记录所有对话和活动内容
-2. **其他都是可选** - 从activity中提取信息，根据需要启用
-3. **配置足够简单** - 不复杂的依赖关系，易于理解和使用
-4. **智能自动检测** - 自动识别文件类型和内容分类
+1. **Activity is the core** - The only required file, recording all conversation and activity content
+2. **Everything else is optional** - Extract information from activity, enable as needed
+3. **Configuration is simple enough** - No complex dependencies, easy to understand and use
+4. **Intelligent auto-detection** - Automatically identify file types and content categories
 
 ### `markdown_config.py`
 
-这是MemU配置系统的核心文件，采用简化设计：
+This is the core file of the MemU configuration system, adopting a simplified design:
 
-- **1个必须文件** - activity.md记录所有内容  
-- **5个可选文件** - 从activity中提取专门信息
-- **简单配置结构** - 易于理解和修改
-- **智能检测功能** - 自动分类markdown文件
+- **1 required file** - activity.md records all content  
+- **5 optional files** - Extract specialized information from activity
+- **Simple configuration structure** - Easy to understand and modify
+- **Intelligent detection feature** - Automatically categorize markdown files
 
-## 📋 文件类型配置
+## 📋 File Type Configuration
 
-### 🔥 必须文件（核心）
+### 🔥 Required Files (Core)
 
-#### Activity (activity.md) - 🔥 **必须**
-- **作用**: 记录所有对话和活动内容的完整记录
-- **依赖**: 无（核心文件，所有信息的源头）
+#### Activity (activity.md) - 🔥 **Required**
+- **Purpose**: Complete record of all conversation and activity content
+- **Dependencies**: None (core file, source of all information)
 - **Prompt**: `agent_activity.txt`
-- **内容**: 完整记录所有对话、活动、想法和重要信息
+- **Content**: Complete record of all conversations, activities, thoughts and important information
 
-### ⚙️ 可选文件（扩展）
+### ⚙️ Optional Files (Extensions)
 
-以下文件都是可选的，从activity.md中提取特定类型的信息：
+The following files are all optional, extracting specific types of information from activity.md:
 
-#### Profile (profile.md) - ⚙️ 可选
-- **作用**: 从activity中提取角色基本信息
-- **内容**: 角色基本信息档案
+#### Profile (profile.md) - ⚙️ Optional
+- **Purpose**: Extract character basic information from activity
+- **Content**: Character basic information profile
 
-#### Events (events.md) - ⚙️ 可选  
-- **作用**: 从activity中提取重要事件记录
-- **内容**: 重要事件和里程碑
+#### Events (events.md) - ⚙️ Optional  
+- **Purpose**: Extract important event records from activity
+- **Content**: Important events and milestones
 
-#### Reminders (reminders.md) - ⚙️ 可选
-- **作用**: 从activity中提取待办事项和提醒
-- **内容**: 任务清单和提醒事项
+#### Reminders (reminders.md) - ⚙️ Optional
+- **Purpose**: Extract todo items and reminders from activity
+- **Content**: Task lists and reminder items
 
-#### Interests (interests.md) - ⚙️ 可选
-- **作用**: 从activity中提取兴趣爱好信息
-- **内容**: 兴趣爱好和偏好记录
+#### Interests (interests.md) - ⚙️ Optional
+- **Purpose**: Extract interests and hobbies information from activity
+- **Content**: Interests and preference records
 
-#### Study (study.md) - ⚙️ 可选
-- **作用**: 从activity中提取学习相关信息
-- **内容**: 学习计划和教育目标
+#### Study (study.md) - ⚙️ Optional
+- **Purpose**: Extract learning-related information from activity
+- **Content**: Learning plans and educational goals
 
-## 🔗 简化处理流程
+## 🔗 Simplified Processing Flow
 
 ```
-原始对话 → activity.md (必须，记录所有内容)
+Original conversation → activity.md (required, records all content)
              ↓
-          可选文件 (根据需要从activity中提取)
+          Optional files (extract from activity as needed)
            ├── profile.md
            ├── events.md  
            ├── reminders.md
@@ -86,24 +86,24 @@ memu/config/
            └── study.md
 ```
 
-**简化流程说明**:
-1. **activity.md** - 唯一必须的文件，记录所有对话和活动内容
-2. **可选文件** - 都从activity.md中提取信息，没有复杂的依赖关系
-3. **按需启用** - 根据实际需要选择生成哪些可选文件
+**Simplified process explanation**:
+1. **activity.md** - The only required file, recording all conversation and activity content
+2. **Optional files** - All extract information from activity.md, no complex dependencies
+3. **Enable as needed** - Choose which optional files to generate based on actual needs
 
-## 🎯 自动检测功能
+## 🎯 Auto-detection Feature
 
-配置系统支持根据文件名和内容自动检测文件类型：
+The configuration system supports automatic file type detection based on filename and content:
 
-### 文件名检测关键词
-- **profile**: profile, bio, character, person, about, 档案, 信息
-- **event**: event, history, timeline, log, diary, 事件, 历史
-- **reminder**: reminder, todo, task, note, 提醒, 任务
-- **interests**: interest, hobby, like, preference, 兴趣, 爱好
-- **study**: study, learn, course, education, skill, 学习, 课程
-- **activity**: activity, action, summary, 日志, 记录
+### Filename Detection Keywords
+- **profile**: profile, bio, character, person, about, personal_info, information
+- **event**: event, history, timeline, log, diary, events, milestone
+- **reminder**: reminder, todo, task, note, reminders, tasks
+- **interests**: interest, hobby, like, preference, interests, hobbies
+- **study**: study, learn, course, education, skill, learning, courses
+- **activity**: activity, action, summary, diary, record
 
-### 内容模式检测
+### Content Pattern Detection
 - **profile**: "name:", "age:", "occupation:", "born", "lives in", "personality"
 - **event**: "date:", "happened", "occurred", "milestone", "important", "achieved"
 - **reminder**: "remember to", "don't forget", "deadline", "due", "urgent"
@@ -111,125 +111,125 @@ memu/config/
 - **study**: "learning", "studying", "course", "lesson", "skill", "education"
 - **activity**: "today", "yesterday", "conversation", "talked", "did", "went"
 
-## 🔧 简化使用方式
+## 🔧 Simplified Usage
 
-### 1. 基本配置查询
+### 1. Basic Configuration Query
 
 ```python
 from memu.config import get_simple_summary, get_required_files, get_optional_files
 
-# 获取简化配置摘要
+# Get simplified configuration summary
 summary = get_simple_summary()
-print(summary['processing_principle'])  # activity文件记录所有内容
+print(summary['processing_principle'])  # activity file records all content
 
-# 查看必须和可选文件
+# View required and optional files
 required = get_required_files()     # ['activity']
 optional = get_optional_files()    # ['profile', 'event', 'reminder', 'interests', 'study']
 ```
 
-### 2. 智能文件检测
+### 2. Intelligent File Detection
 
 ```python
 from memu.config import detect_file_type, is_required_file
 
-# 自动检测文件类型
-file_type = detect_file_type("activity_log.md")      # 返回 'activity'
-file_type = detect_file_type("alice_profile.md")     # 返回 'profile'
+# Auto-detect file type
+file_type = detect_file_type("activity_log.md")      # Returns 'activity'
+file_type = detect_file_type("alice_profile.md")     # Returns 'profile'
 
-# 检查是否为必须文件
-is_core = is_required_file(file_type)  # activity=True, 其他=False
+# Check if it's a required file
+is_core = is_required_file(file_type)  # activity=True, others=False
 ```
 
-### 3. 实际使用
+### 3. Practical Usage
 
 ```python
 from memu import MemoryAgent
 
-# 最简单的使用 - 只需要activity文件
+# Simplest usage - only need activity file
 agent = MemoryAgent(llm_client, memory_dir="memory")
 
-# 自动导入和分类
-agent.import_local_document("notes.md", "Alice")  # 自动检测文件类型
+# Auto-import and categorize
+agent.import_local_document("notes.md", "Alice")  # Auto-detect file type
 ```
 
-## 📝 添加新的文件类型
+## 📝 Adding New File Types
 
-要添加新的markdown文件类型，请修改 `markdown_config.py` 中的 `_load_markdown_configs()` 方法：
+To add new markdown file types, please modify the `_load_markdown_configs()` method in `markdown_config.py`:
 
 ```python
-# 添加新的文件类型配置
+# Add new file type configuration
 configs["new_type"] = MarkdownFileConfig(
     name="new_type",
     filename="new_type.md",
-    description="新文件类型的描述",
+    description="Description of new file type",
     prompt_template="new_type_prompt",
-    processing_priority=30,  # 设置优先级
-    depends_on=["activity"],  # 设置依赖关系
+    processing_priority=30,  # Set priority
+    depends_on=["activity"],  # Set dependencies
     content_structure={
-        "标题1": "## 标题1\n内容模板",
-        "标题2": "## 标题2\n内容模板"
+        "Title1": "## Title1\nContent template",
+        "Title2": "## Title2\nContent template"
     },
     usage_examples=[
-        "用途1",
-        "用途2"
+        "Usage1",
+        "Usage2"
     ],
     auto_detect_keywords=["keyword1", "keyword2"],
     content_patterns=["pattern1", "pattern2"]
 )
 ```
 
-**同时需要**:
-1. 在 `prompts/` 目录下创建对应的prompt文件
-2. 更新MemoryAgent的处理逻辑（如果需要）
+**Also need**:
+1. Create corresponding prompt file in `prompts/` directory
+2. Update MemoryAgent processing logic (if needed)
 
-## 🚀 示例和演示
+## 🚀 Examples and Demos
 
-运行以下命令查看配置系统的完整演示：
+Run the following command to see a complete demo of the configuration system:
 
 ```bash
 python examples/config_demo.py
 ```
 
-这将展示：
-- 所有支持的文件类型和描述
-- 处理顺序和依赖关系图
-- 内容结构模板
-- 自动检测功能演示
-- 配置验证结果
+This will show:
+- All supported file types and descriptions
+- Processing order and dependency graph
+- Content structure templates
+- Auto-detection feature demo
+- Configuration validation results
 
-## ⚙️ 高级配置
+## ⚙️ Advanced Configuration
 
-### 修改处理优先级
+### Modify Processing Priority
 
-优先级数值越大，处理越早。当前优先级分配：
-- activity: 100 (最高)
+Higher priority values are processed earlier. Current priority allocation:
+- activity: 100 (highest)
 - profile: 80
 - event: 70
 - reminder: 60
 - interests: 50
-- study: 40 (最低)
+- study: 40 (lowest)
 
-### 修改依赖关系
+### Modify Dependencies
 
-依赖关系确保文件按正确顺序处理：
-- 被依赖的文件必须先处理
-- 避免循环依赖
-- activity是所有其他文件的根依赖
+Dependencies ensure files are processed in correct order:
+- Depended-upon files must be processed first
+- Avoid circular dependencies
+- activity is the root dependency for all other files
 
-### 自定义内容结构
+### Custom Content Structure
 
-可以为每种文件类型定义标准的markdown结构模板，用于：
-- 生成一致的文件格式
-- 提供用户指导
-- 支持内容验证
+You can define standard markdown structure templates for each file type, used for:
+- Generating consistent file formats
+- Providing user guidance
+- Supporting content validation
 
-## 📊 配置系统的优势
+## 📊 Configuration System Advantages
 
-1. **集中管理** - 所有配置在一个文件中
-2. **易于扩展** - 添加新类型只需修改配置
-3. **智能检测** - 自动识别文件类型
-4. **依赖管理** - 确保正确的处理顺序
-5. **标准化** - 统一的文件结构和格式
-6. **可验证** - 配置完整性检查
+1. **Centralized management** - All configurations in one file
+2. **Easy to extend** - Adding new types only requires modifying configuration
+3. **Intelligent detection** - Auto-identify file types
+4. **Dependency management** - Ensure correct processing order
+5. **Standardization** - Unified file structure and format
+6. **Verifiable** - Configuration integrity checks
 
-这个配置系统是MemU架构的核心，提供了灵活、可扩展的markdown文件管理方案。 
+This configuration system is the core of the MemU architecture, providing a flexible, extensible markdown file management solution. 

@@ -1548,7 +1548,7 @@
       ],
       "line_number": 1,
       "metadata": {
-        "character": "测试用户",
+        "character": "Test_User",
         "category": "event",
         "length": 11,
         "timestamp": "2025-07-21T00:32:22.181557"
@@ -3099,7 +3099,7 @@
       ],
       "line_number": 2,
       "metadata": {
-        "character": "测试用户",
+        "character": "Test_User",
         "category": "event",
         "length": 11,
         "timestamp": "2025-07-21T00:32:22.594924"

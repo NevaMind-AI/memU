@@ -27,7 +27,7 @@ from .memory import MemoryFileManager
  
 from .memory import get_default_embedding_client
 
-# Prompts system - 现在从动态配置文件夹读取
+# Prompts system - now reads from dynamic configuration folders
 # from .config.prompts import PromptLoader  # Prompt loading utilities
 # from .config.prompts import get_prompt_loader  # Get prompt loader instance
 
@@ -73,7 +73,7 @@ __all__ = [
     "AnthropicClient",  # Anthropic implementation
     "CustomLLMClient",  # Custom LLM support
     
-    # Prompts system - 现在从动态配置文件夹读取
+    # Prompts system - now reads from dynamic configuration folders
     # "PromptLoader",  # Prompt loading utilities
     # "get_prompt_loader",  # Get prompt loader instance
     

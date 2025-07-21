@@ -17,7 +17,7 @@ class FlushingStreamHandler(logging.StreamHandler):
         try:
             super().emit(record)
             self.flush()
-            # 确保立即刷新到终端
+            # Ensure immediate flush to terminal
             if hasattr(self.stream, 'flush'):
                 self.stream.flush()
         except Exception:

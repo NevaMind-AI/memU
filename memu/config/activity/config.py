@@ -1,37 +1,37 @@
 """
-Activity类型的配置文件
-每个md文件类型都有自己的文件夹和配置
+Activity type configuration file
+Each md file type has its own folder and configuration
 """
 
 from dataclasses import dataclass
 
 @dataclass
 class ActivityConfig:
-    """Activity文件的配置"""
+    """Activity file configuration"""
     
-    # 基本信息
+    # Basic information
     name: str = "activity"
     filename: str = "activity.md"
-    description: str = "记录所有对话和活动内容"
+    description: str = "Record all conversation and activity content"
     
-    # 文件夹路径
+    # Folder path
     folder_name: str = "activity"
     prompt_file: str = "prompt.txt"
     config_file: str = "config.py"
     
-    # RAG配置
-    context: str = "rag"  # "all" 表示整体放入context，"rag" 表示只使用RAG搜索
-    rag_length: int = 50  # RAG长度，-1表示全部，其他数值表示行数
+    # RAG configuration
+    context: str = "rag"  # "all" means put entire content in context, "rag" means use RAG search only
+    rag_length: int = 50  # RAG length, -1 means all, other values mean number of lines
 
-# 创建配置实例
+# Create configuration instance
 CONFIG = ActivityConfig()
 
 def get_config():
-    """获取activity配置"""
+    """Get activity configuration"""
     return CONFIG
 
 def get_file_info():
-    """获取文件信息"""
+    """Get file information"""
     return {
         "name": CONFIG.name,
         "filename": CONFIG.filename,

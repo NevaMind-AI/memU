@@ -10,7 +10,7 @@ from .markdown_config import (
     detect_file_type,
     MarkdownConfigManager,
     MarkdownFileConfig,
-    # 简化配置API
+    # Simplified configuration API
     get_required_files,
     get_optional_files,
     get_simple_summary,
@@ -39,7 +39,7 @@ __all__ = [
     "detect_file_type",
     "MarkdownConfigManager",
     "MarkdownFileConfig",
-    # 简化配置API
+    # Simplified configuration API
     "get_required_files",
     "get_optional_files", 
     "get_simple_summary",

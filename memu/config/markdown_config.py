@@ -1,6 +1,6 @@
 """
-MemU Markdown配置系统 - 动态文件夹结构
-每个md文件类型都有自己的文件夹，包含config.py和prompt.txt
+MemU Markdown Configuration System - Dynamic Folder Structure
+Each md file type has its own folder, containing config.py and prompt.txt
 """
 
 import os
@@ -11,19 +11,19 @@ from typing import Dict, List, Optional, Any
 
 @dataclass
 class MarkdownFileConfig:
-    """极简markdown文件配置"""
+    """Minimal markdown file configuration"""
     
-    name: str                          # 文件类型名称
-    filename: str                      # 文件名
-    description: str                   # 文件描述
-    folder_path: str                   # 文件夹路径
-    prompt_path: str                   # prompt文件路径
-    context: str = "rag"               # context模式："all"表示整体放入context，"rag"表示使用RAG搜索
-    rag_length: int = 50               # RAG长度，-1表示全部，其他数值表示行数
+    name: str                          # File type name
+    filename: str                      # Filename
+    description: str                   # File description
+    folder_path: str                   # Folder path
+    prompt_path: str                   # Prompt file path
+    context: str = "rag"               # Context mode: "all" means put entire content in context, "rag" means use RAG search
+    rag_length: int = 50               # RAG length, -1 means all, other values mean number of lines
 
 
 class MarkdownConfigManager:
-    """动态加载文件夹配置的管理器"""
+    """Manager for dynamically loading folder configurations"""
     
     def __init__(self):
         self.config_base_dir = Path(__file__).parent
@@ -32,10 +32,10 @@ class MarkdownConfigManager:
         self._load_all_configs()
     
     def _load_all_configs(self):
-        """动态扫描并加载所有文件夹配置"""
+        """Dynamically scan and load all folder configurations"""
         self._files_config = {}
         
-        # 扫描config目录下的所有文件夹
+        # Scan all folders under config directory
         for item in self.config_base_dir.iterdir():
             if item.is_dir() and item.name not in ['__pycache__', 'prompts']:
                 folder_name = item.name
@@ -44,7 +44,7 @@ class MarkdownConfigManager:
                 
                 if config_file.exists():
                     try:
-                        # 动态加载配置模块
+                        # Dynamically load configuration module
                         spec = importlib.util.spec_from_file_location(
                             f"{folder_name}_config", 
                             config_file
@@ -52,7 +52,7 @@ class MarkdownConfigManager:
                         module = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(module)
                         
-                        # 获取配置信息
+                        # Get configuration information
                         if hasattr(module, 'get_file_info'):
                             file_info = module.get_file_info()
                             
@@ -67,60 +67,60 @@ class MarkdownConfigManager:
                             )
                             
                     except Exception as e:
-                        print(f"警告: 无法加载配置文件夹 {folder_name}: {e}")
+                        print(f"Warning: Unable to load configuration folder {folder_name}: {e}")
         
         self._processing_order = list(self._files_config.keys())
     
     def get_file_config(self, file_type: str) -> Optional[MarkdownFileConfig]:
-        """获取指定文件类型的配置"""
+        """Get configuration for specified file type"""
         return self._files_config.get(file_type)
     
     def get_all_file_types(self) -> List[str]:
-        """获取所有支持的文件类型"""
+        """Get all supported file types"""
         return list(self._files_config.keys())
     
     def get_processing_order(self) -> List[str]:
-        """获取处理顺序"""
+        """Get processing order"""
         return self._processing_order.copy()
     
     def get_file_description(self, file_type: str) -> str:
-        """获取文件类型的描述"""
+        """Get description of file type"""
         config = self.get_file_config(file_type)
         return config.description if config else ""
     
     def validate_file_type(self, file_type: str) -> bool:
-        """验证文件类型是否支持"""
+        """Validate if file type is supported"""
         return file_type in self._files_config
     
     def get_prompt_path(self, file_type: str) -> str:
-        """获取prompt文件路径"""
+        """Get prompt file path"""
         config = self.get_file_config(file_type)
         return config.prompt_path if config else ""
     
     def get_folder_path(self, file_type: str) -> str:
-        """获取文件夹路径"""
+        """Get folder path"""
         config = self.get_file_config(file_type)
         return config.folder_path if config else ""
     
     def get_file_types_mapping(self) -> Dict[str, str]:
-        """获取文件类型到文件名的映射"""
+        """Get mapping from file type to filename"""
         return {
             name: config.filename 
             for name, config in self._files_config.items()
         }
     
     def get_context_mode(self, file_type: str) -> str:
-        """获取指定文件类型的context模式"""
+        """Get context mode for specified file type"""
         config = self.get_file_config(file_type)
         return config.context if config else "rag"
     
     def get_rag_length(self, file_type: str) -> int:
-        """获取指定文件类型的RAG长度"""
+        """Get RAG length for specified file type"""
         config = self.get_file_config(file_type)
         return config.rag_length if config else 50
     
     def get_all_context_configs(self) -> Dict[str, Dict[str, Any]]:
-        """获取所有文件类型的context配置"""
+        """Get context configurations for all file types"""
         return {
             file_type: {
                 "context": config.context,
@@ -130,58 +130,58 @@ class MarkdownConfigManager:
         }
 
 
-# 全局配置管理器实例
+# Global configuration manager instance
 _config_manager = None
 
 def get_config_manager() -> MarkdownConfigManager:
-    """获取配置管理器实例"""
+    """Get configuration manager instance"""
     global _config_manager
     if _config_manager is None:
         _config_manager = MarkdownConfigManager()
     return _config_manager
 
-# 保持向后兼容的API函数
+# Maintain backward compatible API functions
 
 def detect_file_type(filename: str, content: str = "") -> str:
-    """根据文件名智能检测文件类型"""
+    """Intelligently detect file type based on filename"""
     manager = get_config_manager()
     file_types = manager.get_all_file_types()
     
     if not file_types:
         return "activity"
     
-    # 根据文件名关键词检测
+    # Detect based on filename keywords
     filename_lower = filename.lower()
     
-    # 检测profile类型
-    if any(keyword in filename_lower for keyword in ['profile', '个人信息', '档案', '简历']):
+    # Detect profile type
+    if any(keyword in filename_lower for keyword in ['profile', 'personal_info', 'bio', 'resume']):
         if 'profile' in file_types:
             return 'profile'
     
-    # 检测event类型
-    if any(keyword in filename_lower for keyword in ['event', 'events', '事件', '活动', '里程碑', 'milestone']):
+    # Detect event type
+    if any(keyword in filename_lower for keyword in ['event', 'events', 'activity', 'milestone']):
         if 'event' in file_types:
             return 'event'
     
-    # 检测activity类型
-    if any(keyword in filename_lower for keyword in ['activity', 'activities', 'daily', '日志', '记录', 'log']):
+    # Detect activity type
+    if any(keyword in filename_lower for keyword in ['activity', 'activities', 'daily', 'diary', 'log']):
         if 'activity' in file_types:
             return 'activity'
     
-    # 如果没有匹配，返回第一个可用类型
+    # If no match, return first available type
     return file_types[0]
 
 def get_required_files() -> List[str]:
-    """获取必须的文件类型列表"""
+    """Get list of required file types"""
     manager = get_config_manager()
     return manager.get_all_file_types()
 
 def get_optional_files() -> List[str]:
-    """获取可选的文件类型列表（目前为空）"""
+    """Get list of optional file types (currently empty)"""
     return []
 
 def get_simple_summary() -> Dict[str, Any]:
-    """获取配置摘要"""
+    """Get configuration summary"""
     manager = get_config_manager()
     file_types = manager.get_all_file_types()
     
@@ -201,11 +201,11 @@ def get_simple_summary() -> Dict[str, Any]:
         "required_files": required_files,
         "optional_files": {},
         "total_files": len(file_types),
-        "processing_principle": f"动态加载{len(file_types)}个文件夹配置"
+        "processing_principle": f"Dynamically load {len(file_types)} folder configurations"
     }
 
 def get_all_file_configs() -> Dict[str, MarkdownFileConfig]:
-    """获取所有文件配置"""
+    """Get all file configurations"""
     manager = get_config_manager()
     return {
         file_type: manager.get_file_config(file_type)

@@ -1,37 +1,37 @@
 """
-Profile类型的配置文件
-记录角色的个人信息、特征、喜好、背景等
+Profile type configuration file
+Record character's personal information, traits, preferences, background, etc.
 """
 
 from dataclasses import dataclass
 
 @dataclass
 class ProfileConfig:
-    """Profile文件的配置"""
+    """Profile file configuration"""
     
-    # 基本信息
+    # Basic information
     name: str = "profile"
     filename: str = "profile.md"
-    description: str = "记录角色的个人信息、特征和喜好"
+    description: str = "Record character's personal information, traits and preferences"
     
-    # 文件夹路径
+    # Folder path
     folder_name: str = "profile"
     prompt_file: str = "prompt.txt"
     config_file: str = "config.py"
     
-    # RAG配置
-    context: str = "all"  # "all" 表示整体放入context，"rag" 表示只使用RAG搜索
-    rag_length: int = -1  # RAG长度，-1表示全部，其他数值表示行数
+    # RAG configuration
+    context: str = "all"  # "all" means put entire content in context, "rag" means use RAG search only
+    rag_length: int = -1  # RAG length, -1 means all, other values mean number of lines
 
-# 创建配置实例
+# Create configuration instance
 CONFIG = ProfileConfig()
 
 def get_config():
-    """获取profile配置"""
+    """Get profile configuration"""
     return CONFIG
 
 def get_file_info():
-    """获取文件信息"""
+    """Get file information"""
     return {
         "name": CONFIG.name,
         "filename": CONFIG.filename,

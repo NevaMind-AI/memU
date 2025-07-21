@@ -1,37 +1,37 @@
 """
-Event类型的配置文件
-记录重要事件、活动、里程碑等
+Event type configuration file
+Record important events, activities, milestones, etc.
 """
 
 from dataclasses import dataclass
 
 @dataclass
 class EventConfig:
-    """Event文件的配置"""
+    """Event file configuration"""
     
-    # 基本信息
+    # Basic information
     name: str = "event"
     filename: str = "event.md"
-    description: str = "记录重要事件、活动和里程碑"
+    description: str = "Record important events, activities and milestones"
     
-    # 文件夹路径
+    # Folder path
     folder_name: str = "event"
     prompt_file: str = "prompt.txt"
     config_file: str = "config.py"
     
-    # RAG配置
-    context: str = "rag"  # "all" 表示整体放入context，"rag" 表示只使用RAG搜索
-    rag_length: int = 30  # RAG长度，-1表示全部，其他数值表示行数
+    # RAG configuration
+    context: str = "rag"  # "all" means put entire content in context, "rag" means use RAG search only
+    rag_length: int = 30  # RAG length, -1 means all, other values mean number of lines
 
-# 创建配置实例
+# Create configuration instance
 CONFIG = EventConfig()
 
 def get_config():
-    """获取event配置"""
+    """Get event configuration"""
     return CONFIG
 
 def get_file_info():
-    """获取文件信息"""
+    """Get file information"""
     return {
         "name": CONFIG.name,
         "filename": CONFIG.filename,

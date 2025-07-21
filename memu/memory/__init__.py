@@ -4,7 +4,7 @@ MemU Memory Module - Function Calling Architecture
 Modern memory system with function calling interface:
 
 CORE ARCHITECTURE:
-- MemoryAgent: Function calling interface for LLM agents (主要接口)
+- MemoryAgent: Function calling interface for LLM agents (main interface)
 - RecallAgent: File system operations and content retrieval
 
 STORAGE:
