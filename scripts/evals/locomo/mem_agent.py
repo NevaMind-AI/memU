@@ -668,33 +668,16 @@ class MemAgent:
     def _check_events_completeness(self, character_name: str, conversation: str, extracted_events: str) -> Dict[str, Any]:
         """Check if extracted events are sufficient and complete"""
         try:
-            sufficiency_prompt = f"""You are inspecting whether the events about a speaker as they mentioned in the conversation are summarized into the extracted events with no omission.
+            sufficiency_prompt = self.prompt_loader.format_prompt(
+                "check_events_completeness",
+                character_name=character_name,
+                conversation=conversation,
+                extracted_events=extracted_events
+            )
 
-Speaker: {character_name}
-
-Conversation:
-{conversation}
-
-Extracted events:
-{extracted_events}
-
-Please compare the conversation and the extracted events, and determine whether all the events about the speaker included in the extracted events without omission.
-
-Consider about:
-1. Are all events involving {character_name}, no matter how minor, captured?
-2. Are any important details (who, what, when, where, why, how) missing?
-3. Are the events about people who are close to {character_name}, such as their family, also captured?
-
-Respond with a JSON object containing:
-- "sufficient": true/false - whether the information is sufficient
-- "missing_info": string - what specific information is missing (if any). You can copy the original conversation texts if they are missing in the extracted events.
-- "confidence": number between 0-1 - confidence in the completeness assessment
-
-JSON Response:"""
-
-            print('>'*100)
-            print(sufficiency_prompt)
-            print('<'*100)
+            # print('>'*100)
+            # print(sufficiency_prompt)
+            # print('<'*100)
             
             response = self.llm_client.chat_completion(
                 messages=[{"role": "user", "content": sufficiency_prompt}],
@@ -728,9 +711,14 @@ JSON Response:"""
             logger.error(f"Failed to check events completeness: {e}")
             return {"sufficient": True, "missing_info": "", "confidence": 0.5}
 
-    def _refine_events_analysis(self, character_name: str, conversation: str, previous_extraction: str, missing_info: str, session_date: str) -> Dict[str, Any]:
+    def _refine_events_analysis(self, character_name: str, conversation: str, previous_extraction: str, missing_info: str|list[str], session_date: str) -> Dict[str, Any]:
         """Refine the events analysis based on what was missing"""
         try:
+            if not missing_info:
+                missing_info = "Unknown"
+            elif type(missing_info) == list:
+                missing_info = "\n".join([f"{i+1}. {info}" for i, info in enumerate(missing_info)])
+
             refinement_prompt = self.prompt_loader.format_prompt(
                 "refine_events_extraction",
                 character_name=character_name,
@@ -739,6 +727,10 @@ JSON Response:"""
                 previous_extraction=previous_extraction,
                 missing_info=missing_info
             )
+
+            print('>'*100)
+            print(refinement_prompt)
+            print('<'*100)
             
             messages = [{"role": "user", "content": refinement_prompt}]
             llm_response = self.llm_client.chat_completion(messages, max_tokens=4000, temperature=0.3)
@@ -764,7 +756,56 @@ JSON Response:"""
                 "refined_events": previous_extraction
             }
 
-    def update_character_memory(self, session_data: List[Dict], session_date: str, characters: List[str], max_iterations: int = 3) -> Dict[str, Any]:
+    def _clean_profile(self, profile: str) -> str:
+        """Clean the profile by removing unnecessary information"""
+        try:
+            clean_profile_prompt = self.prompt_loader.format_prompt(
+                "clean_profile",
+                profile=profile
+            )
+            
+            print('>'*100)
+            print(clean_profile_prompt)
+            print('<'*100)
+
+            messages = [{"role": "user", "content": clean_profile_prompt}]
+            llm_response = self.llm_client.chat_completion(messages, max_tokens=4000, temperature=0.3)
+
+            if not llm_response.success:
+                return {
+                    "success": False,
+                    "error": f"LLM refinement failed: {llm_response.error}",
+                    "final_profile": profile
+                }
+
+            return {
+                "success": True,
+                "final_profile": llm_response.content.strip(),
+            }            
+        except Exception as e:
+            logger.error(f"Failed to refine events analysis: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "final_profile": profile
+            }
+
+    def clean_profile(self, character_name: str) -> str:
+        """Clean the profile by removing unnecessary information"""
+        try:
+            profile = self._read_memory_file(character_name, "profile")
+            clean_profile_result = self._clean_profile(profile)
+            if clean_profile_result["success"]:
+                self._write_memory_file(character_name, "profile", clean_profile_result["final_profile"])
+
+                print('>'*100)
+                print(clean_profile_result["final_profile"])
+                print('<'*100)
+                
+        except Exception as e:
+            logger.error(f"Failed to clean profile for {character_name}: {e}")
+
+    def update_character_memory(self, session_data: List[Dict], session_date: str, characters: List[str], max_iterations: int = 3, use_image: bool = False) -> Dict[str, Any]:
         """Update character memory files from conversation session data with iterative self-checking"""
         try:
             # Convert session data to conversation string
@@ -772,6 +813,16 @@ JSON Response:"""
             for utterance in session_data:
                 speaker = utterance.get('speaker', 'Unknown')
                 text = utterance.get('text', '')
+
+                # 
+                # Memo: Wu: some utterances have "blip_caption" but no "img_url", consider whether use them
+                # 
+                # if use_image and "img_url" in utterance:
+                if use_image:
+                    image_caption = utterance.get('blip_caption', '')
+                    if image_caption:
+                        conversation += f"({speaker} shares {image_caption}.)\n"
+                        
                 conversation += f"{speaker}: {text}\n"
             
             update_results = {}
@@ -870,7 +921,8 @@ JSON Response:"""
                         
                         # Analyze session for profile updates
                         profile_result = self.analyze_session_for_profile(
-                            character_name, conversation, existing_profile, new_events
+                            # character_name, conversation, existing_profile, new_events
+                            character_name, conversation, existing_profile, "None"
                         )
                         
                         profile_updated = False
@@ -967,8 +1019,6 @@ JSON Response:"""
                 "updated_profile": existing_profile
             }
 
-
-
     def clear_character_memory(self, characters: List[str]) -> Dict[str, Any]:
         """Clear all memory files for specified characters"""
         try:
@@ -1061,9 +1111,9 @@ JSON Response:"""
             existing_events=existing_events
         )
         
-        print('>'*100)
-        print(events_prompt)
-        print('<'*100)
+        # print('>'*100)
+        # print(events_prompt)
+        # print('<'*100)
 
         messages = [{"role": "user", "content": events_prompt}]
         llm_response = self.llm_client.chat_completion(messages, max_tokens=4000, temperature=0.3)

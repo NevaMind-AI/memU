@@ -264,10 +264,10 @@ Just return the label CORRECT or WRONG in a json format with the key as "label".
                 
             evaluation_text = llm_response.content.strip()
 
-            print('*'*100)
-            print("messages: ", repr(messages))
-            print("evaluation_text: ", repr(llm_response))
-            print('*'*100)
+            # print('*'*100)
+            # print("messages: ", repr(messages))
+            # print("evaluation_text: ", repr(llm_response))
+            # print('*'*100)
             
             # Parse the JSON response
             is_correct = False

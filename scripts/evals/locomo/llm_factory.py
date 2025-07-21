@@ -40,7 +40,8 @@ def create_llm_client(
     # Check if it's a DeepSeek model
     if "deepseek" in chat_deployment.lower():
         # Ensure we have valid endpoint for DeepSeek
-        deepseek_endpoint = azure_endpoint or os.getenv("DEEPSEEK_ENDPOINT")
+        # deepseek_endpoint = azure_endpoint or os.getenv("DEEPSEEK_ENDPOINT")
+        deepseek_endpoint = os.getenv("DEEPSEEK_ENDPOINT")
         if not deepseek_endpoint:
             raise ValueError("DeepSeek endpoint is required")
         

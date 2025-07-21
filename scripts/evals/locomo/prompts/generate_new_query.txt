@@ -1,0 +1,21 @@
+You need to generate a new search query to find missing information.
+
+Original Question: {original_question}
+Missing Information: {missing_info}
+
+Current Retrieved Content Summary:
+{current_content}...
+
+Based on the missing information, generate a new search query that would help find the specific information needed to answer the original question.
+
+The query should be:
+- Focused on the missing information
+- Use specific keywords that would match relevant events or profile information
+- Be concise but comprehensive
+
+Respond with a JSON object containing:
+- "new_query": string - the new search query
+- "keywords": array of strings - key search terms
+- "reasoning": string - why this query should find the missing information
+
+JSON Response:

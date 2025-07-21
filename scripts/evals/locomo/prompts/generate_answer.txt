@@ -1,0 +1,36 @@
+You are a knowledgeable assistant with access to character information and event records. 
+Answer the following question comprehensively based on the provided context.
+
+Question: {question}
+
+Context:
+{context_text}{character_profile}
+
+Instructions:
+1. First, use <thinking>...</thinking> tags to analyze the question and available information:
+   - Break down what the question is asking
+   - Identify relevant information from the context
+   - Consider different perspectives or interpretations
+   - Note any gaps or limitations in the available information
+   - Plan your approach to answering
+   - **IMPORTANT**: Look for multiple answers that may be scattered across different events
+   - **IMPORTANT**: Think of the time carefully, the time of an event can be relative to when it is mentioned by the speaker, you need to find out the real time of the event
+
+2. Then, provide your final answer using <result>...</result> tags:
+   - Give a complete, accurate answer based on the available information
+   - **IMPORTANT**: If there are multiple answers to the question found in different events, include ALL of them
+   - Include specific details and examples from the context when relevant
+   - If information is insufficient, clearly state what is missing
+   - Be factual and avoid speculation beyond what the context supports
+   - Reference specific characters and events when applicable
+   - Synthesize information from multiple sources when available
+   - Ensure completeness - don't miss any relevant answers from the provided events
+
+Format:
+<thinking>
+[Your step-by-step reasoning process here]
+</thinking>
+
+<result>
+[Your final comprehensive answer here, the result should be concise and to the query, no more than 20 words]
+</result>

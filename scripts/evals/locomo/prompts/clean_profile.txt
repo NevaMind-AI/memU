@@ -1,0 +1,15 @@
+You are reviewing a user profile, and your task is to remove all uninformative and unhelpful records, especially those records only indicating that some imformation is not available.
+
+The follows are some exmples for the records that should be removed:
+
+Examples:
+- Occupation: Not specified
+- No explicit information on age, location, or family members
+- No health issues or specific living situation mentioned
+
+Output:
+- Simply copy the other lines and their formats except for the lines you decide to remove
+
+User profile:
+
+{profile}

@@ -1,0 +1,15 @@
+You are evaluating whether the provided information is sufficient to answer a question.
+
+Question: {question}
+
+Available Information:
+{current_content}
+
+Please evaluate if the available information is sufficient to provide a complete and accurate answer to the question.
+
+Respond with a JSON object containing:
+- "sufficient": true/false - whether the information is sufficient
+- "missing_info": string - what specific information is missing (if any)
+- "confidence": number between 0-1 - confidence in the sufficiency assessment
+
+JSON Response:

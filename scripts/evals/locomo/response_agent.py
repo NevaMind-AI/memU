@@ -21,6 +21,8 @@ import difflib
 import numpy as np
 import threading
 
+import tqdm
+
 import dotenv
 dotenv.load_dotenv()
 
@@ -82,6 +84,7 @@ class ResponseAgent:
         
         # Initialize embedding cache for events to prevent repeated API calls
         self.event_embedding_cache = {}
+        self.profile_embedding_cache = {}
         
         if self.embedding_client:
             logger.info("Embedding client initialized for semantic search")
@@ -431,20 +434,15 @@ class ResponseAgent:
                             event_embeddings[event["id"]] = self.event_embedding_cache[event_text]
                             cache_hits += 1
                             continue
-                    
-                    # Generate new embedding (outside lock to avoid blocking other threads)
-                    event_embedding = self.embedding_client.embed(event_text)
-                    if event_embedding:
-                        event_embeddings[event["id"]] = event_embedding
-                        # Cache the embedding for future use (thread-safe)
-                        with self._cache_lock:
-                            # Double-check pattern: another thread might have added it while we were computing
-                            if event_text not in self.event_embedding_cache:
-                                self.event_embedding_cache[event_text] = event_embedding
-                        cache_misses += 1
-                    else:
-                        event_embeddings[event["id"]] = [0.0] * len(query_embedding)  # Zero vector fallback
-                        cache_misses += 1
+
+                        event_embedding = self.embedding_client.embed(event_text)
+                        if event_embedding:
+                            event_embeddings[event["id"]] = event_embedding
+                            self.event_embedding_cache[event_text] = event_embedding
+                            cache_misses += 1
+                        else:
+                            event_embeddings[event["id"]] = [0.0] * len(query_embedding)  # Zero vector fallback
+                            cache_misses += 1                    
                 except Exception as e:
                     logger.warning(f"Failed to embed event {event['id']}: {e}")
                     event_embeddings[event["id"]] = [0.0] * len(query_embedding)  # Zero vector fallback
@@ -528,24 +526,77 @@ class ResponseAgent:
                 "profile": None
             }
 
-    def search_character_events(self, query: str, characters: List[str], top_k: int = 10, processed_query: Optional[str] = None) -> Dict[str, Any]:
+    def _get_character_events(self, character_name: str) -> List[str]:
+        events_content = self._read_memory_file(character_name, "events")
+        if "No events file found" not in events_content and "Error reading" not in events_content:
+            events = [line.strip() for line in events_content.split('\n') if line.strip()]
+            return events
+        else:
+            return []
+        
+    def _get_character_profile(self, character_name: str) -> str:
+        profile_content = self._read_memory_file(character_name, "profile")
+        if "No profile file found" not in profile_content and "Error reading" not in profile_content:
+            records = [line.strip() for line in profile_content.split('\n') if line.strip()]
+            records = [record.replace("- ", f"{character_name}: ") for record in records if record.startswith("- ")]
+            return records
+        else:
+            return []
+
+    def cache_events_semantic(self, characters: List[str]):
+        """Cache the events for each character"""
+        for character in characters:
+            events = self._get_character_events(character)
+            for event in tqdm.tqdm(events, desc=f"Caching events for {character}"):
+                with self._cache_lock:
+                    if event not in self.event_embedding_cache:
+                        event_embedding = self.embedding_client.embed(event)
+                        if event_embedding:
+                            self.event_embedding_cache[event] = event_embedding
+                        else:
+                            # self.event_embedding_cache[event] = [0.0] * len(query_embedding)
+                            pass
+
+    def cache_profile_semantic(self, characters: List[str]):
+        """Cache the profile for each character"""
+        for character in characters:
+            records = self._get_character_profile(character)
+            for record in tqdm.tqdm(records, desc=f"Caching profile for {character}"):
+                with self._cache_lock:
+                    if record not in self.profile_embedding_cache:
+                        record_embedding = self.embedding_client.embed(record)
+                        if record_embedding:
+                            self.profile_embedding_cache[record] = record_embedding
+                        else:
+                            pass
+
+    # def search_character_events(self, query: str, characters: List[str], top_k: int = 10, processed_query: Optional[str] = None) -> Dict[str, Any]:
+    def search_character_events_profile(self, query: str, characters: List[str], top_k: int = 10, use_profile: bool = False) -> Dict[str, Any]:
         """Search for events using multi-modal approach: semantic search, BM25, and string matching"""
         try:
             all_events = []
             
             # Read events for each character
             for character in characters:
-                events_content = self._read_memory_file(character, "events")
-                if "No events file found" not in events_content and "Error reading" not in events_content:
-                    # Split events by lines and filter non-empty
-                    character_events = [line.strip() for line in events_content.split('\n') if line.strip()]
-                    for i, event in enumerate(character_events):
-                        all_events.append({
-                            "character": character,
-                            "event": event,
-                            "text": event,
-                            "id": f"{character}_{i}"
-                        })
+                character_events = self._get_character_events(character)
+                for i, event in enumerate(character_events):
+                    all_events.append({
+                        "character": character,
+                        "event": event,
+                        "text": event,
+                        "id": f"{character}_e{i}"
+                    })
+            if use_profile:
+                for character_name in characters:
+                    if character_name in query:
+                        records = self._get_character_profile(character_name)
+                        for record in records:
+                            all_events.append({
+                                "character": character_name,
+                                "event": record,
+                                "text": record,
+                                "id": f"{character_name}_p{i}"
+                            })
 
             if not all_events:
                 return {
@@ -555,14 +606,12 @@ class ResponseAgent:
                 }
 
             # If no processed query provided, create keywords for string/BM25 search
-            if processed_query is None:
-                # Simple keyword extraction - remove common stop words
-                stop_words = {'what', 'where', 'when', 'who', 'why', 'how', 'is', 'are', 'was', 'were', 
-                             'do', 'does', 'did', 'can', 'could', 'would', 'should', 'about', 'the', 
-                             'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with'}
-                words = re.findall(r'\b\w+\b', query.lower())
-                keywords = [word for word in words if word not in stop_words and len(word) > 2]
-                processed_query = " ".join(keywords)
+            stop_words = {'what', 'where', 'when', 'who', 'why', 'how', 'is', 'are', 'was', 'were', 
+                            'do', 'does', 'did', 'can', 'could', 'would', 'should', 'about', 'the', 
+                            'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with'}
+            words = re.findall(r'\b\w+\b', query.lower())
+            keywords = [word for word in words if word not in stop_words and len(word) > 2]
+            processed_query = " ".join(keywords)
 
             # Multi-modal search and scoring
             search_results = self._multi_modal_search(query, processed_query, all_events)
@@ -627,7 +676,7 @@ class ResponseAgent:
             }
 
     def answer_question(self, question: str, characters: Optional[List[str]] = None, 
-                                max_iterations: int = 3) -> Dict[str, Any]:
+                              max_iterations: int = 3, use_profile: str = "none") -> Dict[str, Any]:
         """
         Answer a question using iterative retrieval with automatic sufficiency checking.
         
@@ -661,10 +710,11 @@ class ResponseAgent:
                 logger.info(f"Iteration {iteration + 1}/{max_iterations}: Searching with query '{current_search_query}'")
                 
                 # Search for relevant events using the current search query
-                events_result = self.search_character_events(current_search_query, characters)
+                # events_result = self.search_character_events(current_search_query, characters)
+                search_result = self.search_character_events_profile(current_search_query, characters, use_profile=(use_profile == "search"))
                 current_events = []
-                if events_result.get("success"):
-                    current_events = events_result.get("events", [])
+                if search_result.get("success"):
+                    current_events = search_result.get("events", [])
                     
                     # Add new events to all_events (will deduplicate later)
                     for event in current_events:
@@ -707,12 +757,20 @@ class ResponseAgent:
             # Deduplicate content
             deduplicated_content = self._deduplicate_content(all_retrieved_content)
             deduplicated_events = self._deduplicate_events(all_events)
+
+            character_profile = ""
+            if use_profile == "prompt":
+                for character in characters:
+                    if character in question:
+                        character_profile = self._read_memory_file(character, "profile")
+                        break
             
             # Generate final answer using all collected content
             final_context_data = {
                 "question": question,
                 "relevant_events": deduplicated_events,
-                "all_content": deduplicated_content
+                "all_content": deduplicated_content,
+                "character_profile": character_profile
             }
 
             answer = self._generate_answer(final_context_data)
@@ -746,6 +804,7 @@ class ResponseAgent:
             question = context_data["question"]
             events = context_data.get("relevant_events", [])
             all_content = context_data.get("all_content", [])
+            character_profile = context_data.get("character_profile", "")
             
             # Build context string - only use events, not profiles
             context_parts = []
@@ -764,44 +823,17 @@ class ResponseAgent:
                     context_parts.append(f"\n{i}. {content}")
             
             context_text = "\n".join(context_parts)
+
+            if character_profile:
+                context_text += f"\n\nCharacter Profile: {character_profile}"
             
             # Create prompt for answer generation with reasoning
-            prompt = f"""You are a knowledgeable assistant with access to character information and event records. 
-Answer the following question comprehensively based on the provided context.
-
-Question: {question}
-
-Context:
-{context_text}
-
-Instructions:
-1. First, use <thinking>...</thinking> tags to analyze the question and available information:
-   - Break down what the question is asking
-   - Identify relevant information from the context
-   - Consider different perspectives or interpretations
-   - Note any gaps or limitations in the available information
-   - Plan your approach to answering
-   - **IMPORTANT**: Look for multiple answers that may be scattered across different events
-   - **IMPORTANT**: Think of the time carefully, the time of an event can be relative to when it is mentioned by the speaker, you need to find out the real time of the event
-
-2. Then, provide your final answer using <result>...</result> tags:
-   - Give a complete, accurate answer based on the available information
-   - **IMPORTANT**: If there are multiple answers to the question found in different events, include ALL of them
-   - Include specific details and examples from the context when relevant
-   - If information is insufficient, clearly state what is missing
-   - Be factual and avoid speculation beyond what the context supports
-   - Reference specific characters and events when applicable
-   - Synthesize information from multiple sources when available
-   - Ensure completeness - don't miss any relevant answers from the provided events
-
-Format:
-<thinking>
-[Your step-by-step reasoning process here]
-</thinking>
-
-<result>
-[Your final comprehensive answer here, the result should be concise and to the query, no more than 20 words]
-</result>"""
+            prompt = self.prompt_loader.format_prompt(
+                "generate_answer",
+                question=question,
+                context_text=context_text,
+                character_profile=character_profile
+            )
 
             # Get response from LLM
             response = self.llm_client.chat_completion(
@@ -848,21 +880,11 @@ Format:
                     "confidence": 0.0
                 }
 
-            prompt = f"""You are evaluating whether the provided information is sufficient to answer a question.
-
-Question: {question}
-
-Available Information:
-{current_content}
-
-Please evaluate if the available information is sufficient to provide a complete and accurate answer to the question.
-
-Respond with a JSON object containing:
-- "sufficient": true/false - whether the information is sufficient
-- "missing_info": string - what specific information is missing (if any)
-- "confidence": number between 0-1 - confidence in the sufficiency assessment
-
-JSON Response:"""
+            prompt = self.prompt_loader.format_prompt(
+                "check_content_sufficiency",
+                question=question,
+                current_content=current_content
+            )
 
             response = self.llm_client.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
@@ -899,27 +921,12 @@ JSON Response:"""
     def _generate_new_query(self, original_question: str, missing_info: str, current_content: str) -> Dict[str, Any]:
         """Generate a new search query based on missing information"""
         try:
-            prompt = f"""You need to generate a new search query to find missing information.
-
-Original Question: {original_question}
-Missing Information: {missing_info}
-
-Current Retrieved Content Summary:
-{current_content[:500]}...
-
-Based on the missing information, generate a new search query that would help find the specific information needed to answer the original question.
-
-The query should be:
-- Focused on the missing information
-- Use specific keywords that would match relevant events or profile information
-- Be concise but comprehensive
-
-Respond with a JSON object containing:
-- "new_query": string - the new search query
-- "keywords": array of strings - key search terms
-- "reasoning": string - why this query should find the missing information
-
-JSON Response:"""
+            prompt = self.prompt_loader.format_prompt(
+                "generate_new_query",
+                original_question=original_question,
+                missing_info=missing_info,
+                current_content=current_content[:500]
+            )
 
             response = self.llm_client.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
