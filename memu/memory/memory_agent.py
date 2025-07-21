@@ -80,7 +80,6 @@ class MemoryAgent:
     - add_memory: Add new memory content  
     - read_memory: Read memory content
     - search_memory: Search memory using embeddings
-    - update_memory: Update specific memory item by ID
     - delete_memory: Delete memory content
     - get_available_categories: Get available categories
     - link_related_memories: Find and link related memories using embedding search
@@ -480,23 +479,6 @@ Start with step 1 and work through the process systematically. When you complete
             categories=categories,
             limit=limit,
             use_embeddings=use_embeddings
-        )
-
-    def update_memory(
-        self,
-        character_name: str,
-        category: str,
-        memory_id: str,
-        new_content: str,
-        regenerate_embeddings: bool = True
-    ) -> Dict[str, Any]:
-        """Update existing memory content by memory ID"""
-        return self.actions["update_memory"].execute(
-            character_name=character_name,
-            category=category,
-            memory_id=memory_id,
-            new_content=new_content,
-            regenerate_embeddings=regenerate_embeddings
         )
 
     def delete_memory(

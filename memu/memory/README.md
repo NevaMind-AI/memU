@@ -10,7 +10,6 @@ The new MemoryAgent uses an **action-based architecture** where each memory oper
 - **add_memory**: Add new memory content  
 - **read_memory**: Read memory content
 - **search_memory**: Search memory using embeddings
-- **update_memory**: Update specific memory item by ID
 - **delete_memory**: Delete memory content
 - **get_available_categories**: Get available categories
 - **link_related_memories**: Find and link related memories using embedding search
@@ -24,7 +23,6 @@ memory/
 │   ├── add_memory.py
 │   ├── read_memory.py
 │   ├── search_memory.py
-│   ├── update_memory.py
 │   ├── delete_memory.py
 │   ├── get_available_categories.py
 │   └── link_related_memories.py
@@ -57,7 +55,7 @@ memory_agent = MemoryAgent(
 # Get available actions
 actions = memory_agent.get_function_list()
 print(f"Available actions: {actions}")
-# Output: ['add_memory', 'read_memory', 'search_memory', 'update_memory', 'delete_memory', 'get_available_categories', 'link_related_memories']
+# Output: ['add_memory', 'read_memory', 'search_memory', 'delete_memory', 'get_available_categories', 'link_related_memories']
 ```
 
 ### Function Calling with LLM
@@ -126,19 +124,7 @@ result = memory_agent.call_function("read_memory", {
 })
 ```
 
-### 4. **update_memory** - Update specific memory item by ID
-```python
-result = memory_agent.call_function("update_memory", {
-    "character_name": "Alice",
-    "category": "profile",
-    "memory_id": "a34a5f",  # ID of the memory item to update
-    "new_content": "Updated profile information...",
-    "regenerate_embeddings": True
-})
-# The old memory item is deleted and new content is added at the end with a new ID
-```
-
-### 5. **delete_memory** - Delete memory content
+### 4. **delete_memory** - Delete memory content
 ```python
 # Delete specific category
 result = memory_agent.call_function("delete_memory", {
@@ -153,12 +139,12 @@ result = memory_agent.call_function("delete_memory", {
 })
 ```
 
-### 6. **get_available_categories** - Get all available categories
+### 5. **get_available_categories** - Get all available categories
 ```python
 result = memory_agent.call_function("get_available_categories", {})
 ```
 
-### 7. **link_related_memories** - Find and link related memories
+### 6. **link_related_memories** - Find and link related memories
 ```python
 # Find top 5 globally most similar memories across ALL categories (including current)
 result = memory_agent.call_function("link_related_memories", {
@@ -364,7 +350,7 @@ operations = [
     {"name": "add_memory", "args": {"character_name": "Alice", "category": "profile", "content": "Loves music"}},
     {"name": "search_memory", "args": {"character_name": "Alice", "query": "music"}},
     {"name": "read_memory", "args": {"character_name": "Alice", "category": "profile"}},
-    {"name": "link_related_memories", "args": {"character_name": "Alice", "memory_id": "a34a5f", "category": "profile"}}
+    {"name": "search_memory", "args": {"character_name": "Alice", "query": "profile information"}}
 ]
 
 results = []
