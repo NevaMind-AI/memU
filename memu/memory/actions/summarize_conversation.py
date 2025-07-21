@@ -67,8 +67,11 @@ class SummarizeConversationAction(BaseAction):
                     "error": "Empty conversation text provided"
                 })
             
-            # Create prompt for LLM to analyze conversation and extract memory items
-            summary_prompt = f"""Analyze the following conversation for {character_name} and extract distinct memory items.
+            # Create comprehensive prompt for LLM to analyze conversation and extract ALL details
+            summary_prompt = f"""Analyze the following conversation for {character_name} and extract ALL possible details comprehensively. 
+
+**CRITICAL REQUIREMENT: CAPTURE EVERY DETAIL - DO NOT OMIT ANYTHING**
+**CRITICAL REQUIREMENT: EVERY MEMORY ITEM MUST BE COMPLETE AND SELF-CONTAINED**
 
 Conversation:
 {conversation_text}
@@ -76,39 +79,80 @@ Conversation:
 Character: {character_name}
 Session Date: {session_date}
 
-Your task is to:
-1. Break down the conversation into multiple distinct memory items
-2. Each memory item should contain one focused piece of information
-3. Extract personal details, events, activities, preferences, plans, etc.
-4. Make each item self-contained and meaningful
+Your task is to exhaustively analyze this conversation and extract EVERY piece of information, no matter how small. This is for a complete activity log that must preserve ALL details.
 
-Return your analysis in the following format:
+**SELF-CONTAINED MEMORY REQUIREMENTS:**
+- EVERY memory item must be a complete, standalone sentence
+- ALWAYS include the full subject (use "{character_name}" instead of "she/he/they")
+- NEVER use pronouns that depend on context
+- Each memory item should be understandable without reading other items
+- Include specific names, places, dates, and full context in each item
+- Avoid abbreviations or references that need explanation
 
-**SUMMARY:**
-[Brief overall summary of the conversation]
+**EXTRACTION GUIDELINES:**
+1. Extract EVERY fact, opinion, feeling, plan, event, preference, concern, goal, memory, etc.
+2. Include ALL names, places, dates, times, books, activities, relationships mentioned
+3. Capture emotional context, reactions, and sentiments
+4. Record ALL current situations, past experiences, and future plans
+5. Document ALL interests, hobbies, work details, personal struggles, achievements
+6. Note ALL conversations topics, questions asked, responses given
+7. Include ALL specific details like book titles, friend names, locations, activities
+8. Record thought processes, realizations, decisions, and considerations
+9. Preserve context about why things were mentioned or how they relate
+10. Extract both explicit information and implicit insights
 
-**MEMORY ITEMS:**
+**COMPLETE SENTENCE EXAMPLES:**
+✅ GOOD: "{character_name} works as a product manager at TechFlow Solutions"
+❌ BAD: "Works as a product manager" (missing subject)
+✅ GOOD: "{character_name} went hiking with Sarah Johnson in Blue Ridge Mountains"
+❌ BAD: "Went hiking with Sarah" (missing location and full name context)
+✅ GOOD: "{character_name} read 'The Midnight Library' by Matt Haig and found it inspiring"
+❌ BAD: "Found the book inspiring" (missing book title and author)
+
+**OUTPUT FORMAT:**
+
+**COMPREHENSIVE SUMMARY:**
+[Detailed paragraph summarizing the ENTIRE conversation, including all topics discussed, emotional context, and key information shared. This should be comprehensive enough that someone could understand the full scope of what was discussed.]
+
+**DETAILED MEMORY ITEMS:**
 
 **Item 1:**
 - Memory ID: mem_001
-- Content: [Simple, clear statement - one fact per item]
-- Type: [personal_info|event|activity|preference|plan|other]
+- Content: [{character_name} + complete, specific, self-contained statement with all necessary context and names]
+- Type: [personal_info|event|activity|preference|plan|emotion|relationship|work|interest|goal|concern|realization|other]
+- Context: [Why this was mentioned or how it connects to other topics]
 
 **Item 2:**
 - Memory ID: mem_002  
-- Content: [Another clear statement - avoid complex formatting]
-- Type: [personal_info|event|activity|preference|plan|other]
+- Content: [{character_name} + another complete, specific, self-contained statement with full details]
+- Type: [personal_info|event|activity|preference|plan|emotion|relationship|work|interest|goal|concern|realization|other]
+- Context: [Relationship to conversation flow and other topics]
 
-[Continue for all memory items...]
+[Continue extracting EVERY piece of information...]
 
-Guidelines:
-- Each memory item should be one clear, simple statement
-- Avoid complex descriptions, use plain language
-- Generate unique memory_ids (like "mem_001", "mem_002", etc.)
-- Focus on factual information
-- Aim for 3-8 memory items depending on conversation richness
+**COMPREHENSIVE EXTRACTION REQUIREMENTS:**
+- Personal Details: Extract ALL personal information, current job, feelings about job, background, relationships
+- Events & Activities: Document ALL past events, current activities, weekend activities, specific places visited
+- Reading & Media: Include ALL books, titles, authors, opinions, emotional reactions, impacts
+- Interests & Hobbies: Capture ALL interests mentioned, past interests, rekindled passions, future plans
+- Relationships: Document ALL people mentioned, friends, colleagues, family, their roles
+- Emotions & Thoughts: Record ALL feelings, realizations, concerns, motivations, thought processes
+- Future Plans: Extract ALL plans, considerations, goals, things being contemplated
+- Work & Career: Include ALL job details, career thoughts, professional concerns, work satisfaction
+- Learning & Development: Document ALL educational interests, courses considered, skill development
+- Specific Details: Include ALL specific names, titles, locations, dates, descriptions
 
-Extract memory items:"""
+**QUALITY STANDARDS FOR SELF-CONTAINED MEMORY:**
+- Each memory item must be a complete sentence with full subject and context
+- Include sufficient detail so each item makes sense independently  
+- Use specific names, titles, places, and dates in every relevant item
+- Never use "he", "she", "they", "it" - always use the person's actual name
+- Never use "the book", "the place", "the friend" - always include full titles and names
+- Aim for 10-20 comprehensive, self-contained memory items
+- Prioritize completeness and independence over brevity
+- Never summarize multiple facts into one item - keep them separate but complete
+
+Extract ALL memory items as complete, self-contained statements:"""
 
             # Call LLM to extract memory items
             response = self.llm_client.simple_chat(summary_prompt)
@@ -135,7 +179,7 @@ Extract memory items:"""
                 "memory_items": memory_items,
                 "summary": summary,
                 "items_count": len(memory_items),
-                "message": f"Successfully extracted {len(memory_items)} memory items from conversation"
+                "message": f"Successfully extracted {len(memory_items)} self-contained memory items from conversation"
             })
             
         except Exception as e:
@@ -149,7 +193,7 @@ Extract memory items:"""
         try:
             lines = response_text.split('\n')
             
-            # Parse summary
+            # Parse summary and memory items
             summary_section = False
             memory_section = False
             current_item = {}
@@ -158,24 +202,27 @@ Extract memory items:"""
                 line = line.strip()
                 
                 # Look for summary section
-                if line.upper().startswith('**SUMMARY:**'):
+                if any(marker in line.upper() for marker in ['**COMPREHENSIVE SUMMARY:**', '**SUMMARY:**']):
                     summary_section = True
                     memory_section = False
                     continue
-                elif line.upper().startswith('**MEMORY ITEMS:**'):
+                elif any(marker in line.upper() for marker in ['**DETAILED MEMORY ITEMS:**', '**MEMORY ITEMS:**']):
                     summary_section = False
                     memory_section = True
                     continue
                 
                 # Parse summary content
                 if summary_section and line and not line.startswith('**'):
-                    summary = line.strip()
+                    if not summary:  # Take the first substantial line as summary
+                        summary = line.strip()
+                    else:
+                        summary += " " + line.strip()  # Append additional content
                 
                 # Parse memory items
                 elif memory_section:
                     if line.startswith('**Item ') and line.endswith(':**'):
                         # Save previous item if exists
-                        if current_item and 'memory_id' in current_item:
+                        if current_item and 'memory_id' in current_item and 'content' in current_item:
                             memory_items.append(current_item)
                         # Start new item
                         current_item = {}
@@ -191,47 +238,72 @@ Extract memory items:"""
                     elif line.startswith('- Type:'):
                         item_type = line.replace('- Type:', '').strip()
                         current_item['type'] = item_type
+                    
+                    elif line.startswith('- Context:'):
+                        context = line.replace('- Context:', '').strip()
+                        current_item['context'] = context
             
             # Add last item
-            if current_item and 'memory_id' in current_item:
+            if current_item and 'memory_id' in current_item and 'content' in current_item:
                 memory_items.append(current_item)
             
-            # Fallback if parsing failed
+            # Enhanced fallback if parsing failed - create comprehensive, self-contained memory items
             if not summary:
-                summary = f"Conversation session with {character_name} on {session_date}"
+                summary = f"Comprehensive conversation session with {character_name} on {session_date} covering multiple topics and detailed information exchange"
             
             if not memory_items:
-                # Create basic memory items from conversation
+                # Create detailed, self-contained memory items from conversation lines
                 conv_lines = conversation_text.split('\n')
                 item_id = 1
                 
                 for line in conv_lines:
-                    if line.strip() and any(role in line.upper() for role in ['USER:', 'ASSISTANT:']):
-                        content = line.strip()
-                        if len(content) > 20:  # Only include substantial content
-                            memory_items.append({
-                                "memory_id": f"mem_{item_id:03d}",
-                                "content": content,
-                                "type": "activity"
-                            })
-                            item_id += 1
+                    line = line.strip()
+                    if line and any(role in line for role in ['User:', 'user:', 'USER:', character_name + ':', 'Assistant:', 'assistant:', 'ASSISTANT:']):
+                        # Extract role and content
+                        if ':' in line:
+                            role_part, content_part = line.split(':', 1)
+                            content_part = content_part.strip()
+                            
+                            if len(content_part) > 15:  # Only include substantial content
+                                # Make content self-contained with proper subject
+                                if role_part.strip().lower() in ['user', 'assistant'] or character_name.lower() in role_part.lower():
+                                    if character_name.lower() in role_part.lower():
+                                        complete_content = f"{character_name} said: {content_part}"
+                                    else:
+                                        complete_content = f"User said to {character_name}: {content_part}"
+                                else:
+                                    complete_content = f"{role_part.strip()} said: {content_part}"
+                                
+                                memory_items.append({
+                                    "memory_id": f"mem_{item_id:03d}",
+                                    "content": complete_content,
+                                    "type": "conversation",
+                                    "context": f"Part of conversation exchange on {session_date}"
+                                })
+                                item_id += 1
         
-        except Exception:
-            # Fallback: create basic memory items
-            summary = f"Conversation session with {character_name} on {session_date}"
+        except Exception as e:
+            # Enhanced fallback: create comprehensive, self-contained basic memory items
+            summary = f"Detailed conversation session with {character_name} on {session_date} - comprehensive activity record"
             lines = conversation_text.split('\n')
             memory_items = []
             item_id = 1
             
             for line in lines:
-                if line.strip() and any(role in line.upper() for role in ['USER:', 'ASSISTANT:']):
-                    content = line.strip()
-                    if len(content) > 20:
-                        memory_items.append({
-                            "memory_id": f"mem_{item_id:03d}",
-                            "content": content,
-                            "type": "activity"
-                        })
-                        item_id += 1
+                line = line.strip()
+                if line and len(line) > 10:  # Include all substantial content
+                    # Make each line self-contained with proper subject
+                    if character_name.lower() in line.lower():
+                        complete_content = f"{character_name} participated in conversation: {line}"
+                    else:
+                        complete_content = f"In conversation with {character_name}: {line}"
+                    
+                    memory_items.append({
+                        "memory_id": f"mem_{item_id:03d}",
+                        "content": complete_content,
+                        "type": "conversation_detail",
+                        "context": f"Conversation content from session {session_date}"
+                    })
+                    item_id += 1
         
         return summary, memory_items 

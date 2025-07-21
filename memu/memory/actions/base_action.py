@@ -229,7 +229,7 @@ class BaseAction(ABC):
     
     def _parse_memory_items(self, content: str) -> List[Dict[str, Any]]:
         """
-        Parse content into memory items with IDs
+        Parse content into memory items with IDs, supporting both old and new timestamp formats
         
         Args:
             content: Content with memory IDs
@@ -246,16 +246,55 @@ class BaseAction(ABC):
         for i, line in enumerate(lines):
             line = line.strip()
             if line:  # Only process non-empty lines
-                memory_id, clean_content = self._extract_memory_id(line)
+                # Try to parse new timestamped format first: [memory_id][mentioned at date] content [links]
+                memory_id, clean_content, mentioned_at, links = self._extract_timestamped_memory_item(line)
+                
+                if not memory_id:
+                    # Fallback to old format: [memory_id] content
+                    memory_id, clean_content = self._extract_memory_id(line)
+                    mentioned_at, links = "", ""
+                
                 if clean_content:
-                    items.append({
+                    item = {
                         "memory_id": memory_id,
                         "content": clean_content,
                         "full_line": line,
                         "line_number": i + 1
-                    })
+                    }
+                    if mentioned_at:
+                        item["mentioned_at"] = mentioned_at
+                    if links:
+                        item["links"] = links
+                    items.append(item)
         
         return items
+    
+    def _extract_timestamped_memory_item(self, line: str) -> Tuple[str, str, str, str]:
+        """
+        Extract memory ID, content, timestamp, and links from timestamped format
+        Format: [memory_id][mentioned at date] content [links]
+        
+        Args:
+            line: Line with timestamped memory format
+            
+        Returns:
+            Tuple of (memory_id, content, mentioned_at, links)
+        """
+        import re
+        line = line.strip()
+        
+        # Pattern to match: [memory_id][mentioned at date] content [links] (links optional)
+        pattern = r'^\[([^\]]+)\]\[mentioned at ([^\]]+)\]\s*(.*?)(?:\s*\[([^\]]*)\])?$'
+        match = re.match(pattern, line)
+        
+        if match:
+            memory_id = match.group(1)
+            mentioned_at = match.group(2)
+            content = match.group(3).strip()
+            links = match.group(4) if match.group(4) else ""
+            return memory_id, content, mentioned_at, links
+        else:
+            return "", "", "", ""
     
     # ================================
     # Common utility methods that actions can use

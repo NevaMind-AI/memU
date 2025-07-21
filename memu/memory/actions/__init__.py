@@ -8,9 +8,8 @@ Each action is a standalone module that can be loaded dynamically.
 from .base_action import BaseAction
 
 # Import all actions
-from .add_memory import AddMemoryAction
+from .add_activity_memory import AddActivityMemoryAction
 from .read_memory import ReadMemoryAction
-from .search_memory import SearchMemoryAction
 from .delete_memory import DeleteMemoryAction
 from .get_available_categories import GetAvailableCategoriesAction
 from .link_related_memories import LinkRelatedMemoriesAction
@@ -20,9 +19,8 @@ from .summarize_conversation import SummarizeConversationAction
 
 # Registry of all available actions
 ACTION_REGISTRY = {
-    "add_memory": AddMemoryAction,
+    "add_activity_memory": AddActivityMemoryAction,
     "read_memory": ReadMemoryAction,
-    "search_memory": SearchMemoryAction,
     "delete_memory": DeleteMemoryAction,
     "get_available_categories": GetAvailableCategoriesAction,
     "link_related_memories": LinkRelatedMemoriesAction,
@@ -34,9 +32,8 @@ ACTION_REGISTRY = {
 __all__ = [
     "BaseAction",
     "ACTION_REGISTRY",
-    "AddMemoryAction", 
+    "AddActivityMemoryAction", 
     "ReadMemoryAction",
-    "SearchMemoryAction",
     "DeleteMemoryAction",
     "GetAvailableCategoriesAction",
     "LinkRelatedMemoriesAction",

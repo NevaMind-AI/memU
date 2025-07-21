@@ -1,7 +1,7 @@
 """
 Get Available Categories Action
 
-Gets all available memory categories and their descriptions.
+Gets all available memory categories and their descriptions, excluding activity category.
 """
 
 from typing import Dict, Any
@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 
 
 class GetAvailableCategoriesAction(BaseAction):
-    """Action to get all available memory categories from config"""
+    """Action to get all available memory categories from config, excluding activity"""
     
     @property
     def action_name(self) -> str:
@@ -23,7 +23,7 @@ class GetAvailableCategoriesAction(BaseAction):
         """Return OpenAI-compatible function schema"""
         return {
             "name": "get_available_categories",
-            "description": "Get all available memory categories and their descriptions",
+            "description": "Get all available memory categories and their descriptions (excluding activity category)",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -36,12 +36,16 @@ class GetAvailableCategoriesAction(BaseAction):
         Execute get available categories operation
         
         Returns:
-            Dict containing category information
+            Dict containing category information (excluding activity category)
         """
         try:
             categories = {}
             
             for category, filename in self.memory_types.items():
+                # Skip activity category as it's handled separately by add_activity_memory
+                if category == "activity":
+                    continue
+                    
                 description = self.config_manager.get_file_description(category)
                 
                 categories[category] = {
@@ -54,9 +58,10 @@ class GetAvailableCategoriesAction(BaseAction):
                 "success": True,
                 "categories": categories,
                 "total_categories": len(categories),
-                "processing_order": self.processing_order,
+                "processing_order": [cat for cat in self.processing_order if cat != "activity"],
                 "embeddings_enabled": self.embeddings_enabled,
-                "message": f"Found {len(categories)} memory categories from config"
+                "excluded_categories": ["activity"],
+                "message": f"Found {len(categories)} memory categories from config (excluding activity)"
             })
             
         except Exception as e:

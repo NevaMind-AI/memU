@@ -82,7 +82,7 @@ class GenerateMemorySuggestionsAction(BaseAction):
                 for item in new_memory_items
             ])
             
-            # Create prompt for LLM to analyze and generate suggestions
+            # Create enhanced prompt for LLM to analyze and generate suggestions
             suggestions_prompt = f"""Analyze the following new memory items for {character_name} and suggest what should be added to each memory category.
 
 New Memory Items:
@@ -90,23 +90,52 @@ New Memory Items:
 
 Available Categories: {', '.join(available_categories)}
 
-For each category, analyze the new memory items and suggest what specific information should be extracted and added to that category. Consider:
+**CRITICAL REQUIREMENT: Suggestions must lead to SELF-CONTAINED MEMORY ITEMS**
 
-- profile: Personal information, traits, characteristics, background, skills, preferences
-- event: Specific events, dates, milestones, appointments, meetings, activities with time references  
-- activity: General activities, conversations, interactions, daily activities
-- interests: Hobbies, interests, passions, things they enjoy or dislike
-- study: Learning activities, courses, education, skill development
-- Other categories: Relevant information for each specific category
+When suggesting content for each category, ensure that the resulting memory items will:
+- Be complete, standalone sentences with full subjects
+- Always include "{character_name}" instead of pronouns like "she/he/they"
+- Include specific names, places, dates, and full context
+- Never use "the book", "the place", "the friend" - always specify full titles and names
+- Be understandable without reading other memory items
+
+**CATEGORY-SPECIFIC REQUIREMENTS:**
+
+For each category, analyze the new memory items and suggest what specific information should be extracted and added to that category:
+
+- **profile**: ONLY basic personal information (age, location, occupation, education, family status, demographics) - EXCLUDE events, activities, things they did
+- **event**: Specific events, dates, milestones, appointments, meetings, activities with time references  
+- **activity**: General activities, conversations, interactions, daily activities (events and temporal actions go here)
+- **interests**: Hobbies, interests, passions, things they enjoy or dislike
+- **study**: Learning activities, courses, education, skill development
+- **Other categories**: Relevant information for each specific category
+
+**CRITICAL DISTINCTION - Profile vs Activity/Event:**
+- ✅ Profile: "Alice lives in San Francisco", "Alice is 28 years old", "Alice works at TechFlow Solutions"
+- ❌ Profile: "Alice went hiking" (this is activity), "Alice attended workshop" (this is event)
+- ✅ Activity/Event: "Alice went hiking in Blue Ridge Mountains", "Alice attended photography workshop"
+
+**SUGGESTION REQUIREMENTS:**
+- Specify that memory items should include "{character_name}" as the subject
+- Mention specific names, places, titles, and dates that should be included
+- Ensure suggestions lead to complete, self-contained sentences
+- Avoid suggesting content that would result in pronouns or incomplete sentences
+- For profile: Focus ONLY on stable, factual, demographic information
 
 For each category that has relevant information, provide your suggestions in the following format:
 
 **Category: [category_name]**
 - Should add: [yes/no]
-- Suggestion: [What specific content should be added to this category based on the memory items]
+- Suggestion: [What specific self-contained content should be added to this category, ensuring full subjects and complete context]
 - Priority: [high/medium/low]
 
-Only suggest categories where there is relevant new information to add. Be specific about what content should be extracted and added.
+Only suggest categories where there is relevant new information to add. Be specific about what content should be extracted and ensure suggestions lead to complete, self-contained memory items.
+
+Example of good suggestion for profile:
+"Add demographic information about {character_name}'s age, current residence in San Francisco, and occupation as product manager at TechFlow Solutions"
+
+Example of bad suggestion for profile:
+"Add information about {character_name}'s hiking activities" (this belongs in activity/event, not profile)
 """
 
             # Call LLM to generate suggestions
@@ -127,7 +156,7 @@ Only suggest categories where there is relevant new information to add. Be speci
                 "suggestions": suggestions,
                 "memory_items_count": len(new_memory_items),
                 "categories_analyzed": len(available_categories),
-                "message": f"Generated suggestions for {len(suggestions)} categories based on {len(new_memory_items)} memory items"
+                "message": f"Generated self-contained suggestions for {len(suggestions)} categories based on {len(new_memory_items)} memory items"
             })
             
         except Exception as e:
@@ -171,23 +200,23 @@ Only suggest categories where there is relevant new information to add. Be speci
                         if priority_text in ['high', 'medium', 'low']:
                             suggestions[current_category]["priority"] = priority_text
             
-            # Fallback: if no suggestions parsed, create basic ones
+            # Fallback: if no suggestions parsed, create basic ones with self-contained guidance
             if not suggestions:
                 for category in available_categories:
                     suggestions[category] = {
                         "should_add": True,
-                        "suggestion": f"Extract relevant {category} information from the memory items",
+                        "suggestion": f"Extract relevant {category} information ensuring each memory item starts with the character name and includes full context",
                         "relevant_memory_ids": [item["memory_id"] for item in new_memory_items],
                         "priority": "medium"
                     }
         
         except Exception:
-            # Fallback: create basic suggestions for all categories
+            # Fallback: create basic suggestions with self-contained guidance for all categories
             suggestions = {}
             for category in available_categories:
                 suggestions[category] = {
                     "should_add": True,
-                    "suggestion": f"Extract relevant {category} information from the memory items",
+                    "suggestion": f"Extract relevant {category} information ensuring each memory item is a complete sentence with full subject and specific details",
                     "relevant_memory_ids": [item["memory_id"] for item in new_memory_items],
                     "priority": "medium"
                 }

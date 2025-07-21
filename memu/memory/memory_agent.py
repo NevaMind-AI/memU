@@ -77,12 +77,14 @@ class MemoryAgent:
     Modern Memory Agent with Action-Based Architecture
     
     Uses independent action modules for each memory operation:
-    - add_memory: Add new memory content  
+    - add_activity_memory: Add new activity memory content with strict formatting
     - read_memory: Read memory content
-    - search_memory: Search memory using embeddings
     - delete_memory: Delete memory content
-    - get_available_categories: Get available categories
+    - get_available_categories: Get available categories (excluding activity)
     - link_related_memories: Find and link related memories using embedding search
+    - generate_memory_suggestions: Generate suggestions for memory categories
+    - update_memory_with_suggestions: Update memory categories based on suggestions
+    - summarize_conversation: Summarize conversations and extract memory items
     
     Each action is implemented as a separate module in the actions/ directory.
     """
@@ -201,7 +203,7 @@ SESSION DATE: {session_date}
 PROCESSING WORKFLOW:
 1. SUMMARIZE CONVERSATION: First, call summarize_conversation to analyze the conversation and extract multiple distinct memory items (each item should be a focused piece of information).
 
-2. STORE TO ACTIVITY: Store the extracted memory items to the 'activity' category using add_memory with the summary and memory items.
+2. STORE TO ACTIVITY: Store the extracted memory items to the 'activity' category using add_activity_memory with strict formatting.
 
 3. GET CATEGORIES: Call get_available_categories to see what memory categories are available.
 
@@ -284,8 +286,8 @@ Start with step 1 and work through the process systematically. When you complete
                             results["function_calls"].append(call_record)
                             
                             # Track generated files
-                            if function_result.get("success") and function_name == "add_memory":
-                                file_path = f"{self.memory_core.memory_dir}/{character_name}_{arguments.get('category', 'unknown')}.md"
+                            if function_result.get("success") and function_name == "add_activity_memory":
+                                file_path = f"{self.memory_core.memory_dir}/{character_name}_activity.md"
                                 if file_path not in results["files_generated"]:
                                     results["files_generated"].append(file_path)
                             
@@ -436,23 +438,6 @@ Start with step 1 and work through the process systematically. When you complete
     # Direct Method Access (Compatibility)
     # ================================
 
-    def add_memory(
-        self,
-        character_name: str,
-        category: str,
-        content: str,
-        append: bool = True,
-        generate_embeddings: bool = True
-    ) -> Dict[str, Any]:
-        """Add new memory content"""
-        return self.actions["add_memory"].execute(
-            character_name=character_name,
-            category=category,
-            content=content,
-            append=append,
-            generate_embeddings=generate_embeddings
-        )
-
     def read_memory(
         self,
         character_name: str,
@@ -462,23 +447,6 @@ Start with step 1 and work through the process systematically. When you complete
         return self.actions["read_memory"].execute(
             character_name=character_name,
             category=category
-        )
-
-    def search_memory(
-        self,
-        character_name: str,
-        query: str,
-        categories: List[str] = None,
-        limit: int = 5,
-        use_embeddings: bool = True
-    ) -> Dict[str, Any]:
-        """Search memory content"""
-        return self.actions["search_memory"].execute(
-            character_name=character_name,
-            query=query,
-            categories=categories,
-            limit=limit,
-            use_embeddings=use_embeddings
         )
 
     def delete_memory(
