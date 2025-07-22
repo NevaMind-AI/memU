@@ -1,0 +1,23 @@
+You are inspecting whether the events about a speaker as they mentioned in the conversation are summarized into the extracted events with no omission.
+
+Speaker: {character_name}
+
+Conversation:
+{conversation}
+
+Extracted events:
+{extracted_events}
+
+Please compare the conversation and the extracted events, and determine whether all the events about the speaker included in the extracted events without omission.
+
+Consider about:
+1. Are all events involving {character_name}, no matter how minor, captured?
+2. Are any important details (who, what, when, where, why, how) missing?
+3. Are the events about people who are close to {character_name}, such as their family, also captured?
+
+Respond with a JSON object containing:
+- "sufficient": true/false - whether the information is sufficient
+- "missing_info": string - what specific information is missing (if any). You can copy the original conversation texts if they are missing in the extracted events.
+- "confidence": number between 0-1 - confidence in the completeness assessment
+
+JSON Response:

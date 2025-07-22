@@ -35,9 +35,10 @@ Mentioned at {session_date}: Had lunch with Sarah at the Italian restaurant down
 Mentioned at {session_date}: Completed the marathon training run of 15 miles despite the rain. Felt strong throughout but experienced some knee pain in the last 3 miles. Planning to rest tomorrow and see the physiotherapist on Wednesday if the pain persists.
 
 Notes:
-- Only output the NEW session records, no headers or explanations
+- Only output the event records, no headers or explanations
 - Be comprehensive - capture all events, no matter how minor they seem
 - Maintain chronological order within the session
 - Use third-person perspective consistently
-- You can selectively copy the contents of the previous extraction if you think they are problem-free and have no information to supplement
+- NEVER copy entire sentences from the conversation with "{character_name} said '...'" or "..., saying '...'", only use quotes and copy phrases for important information and keywords, if necessary
+- You can reuse and keep the contents of the previous extraction if you think they are problem-free and have no information to supplement
 - **IMPORTANT**: Expecially focus on the missing information, and ensure they are included in the new results

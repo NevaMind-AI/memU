@@ -26,13 +26,16 @@ Input:
 - Existing Events: 
 {existing_events}
 
+
 Example Output:
 Mentioned at {session_date}: Had lunch with Sarah at the Italian restaurant downtown. Discussed the upcoming project deadline and agreed to meet again on Thursday to finalize the presentation. Sarah mentioned she might bring her colleague Mark to get his input.
 
 Mentioned at {session_date}: Completed the marathon training run of 15 miles despite the rain. Felt strong throughout but experienced some knee pain in the last 3 miles. Planning to rest tomorrow and see the physiotherapist on Wednesday if the pain persists.
 
+
 Notes:
-- Only output the NEW session records, no headers or explanations
+- Only output the NEW event records, no headers or explanations
 - Be comprehensive - capture all events, no matter how minor they seem
 - Maintain chronological order within the session
 - Use third-person perspective consistently
+- NEVER copy entire sentences from the conversation with "{character_name} said '...'" or "..., saying '...'", only use quotes and copy phrases for important information and keywords, if necessary

@@ -1,7 +1,10 @@
 # memory/*.txt
 log_archived
 memory_archived
-memory/backup*
+memory_*/
+
+!memory_with_image/
+!memory_0741_4_1/
 
 qa_error_log_*.txt
 enhanced_memory_test_results_*.json

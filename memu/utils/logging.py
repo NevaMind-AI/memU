@@ -84,7 +84,7 @@ def setup_logging(
     
     # Create formatter
     if format_string is None:
-        format_string = '%(asctime)s | %(name)s | %(levelname)s | %(message)s'
+        format_string = '%(asctime)s | %(name)s:%(lineno)d | %(levelname)s | %(message)s'
     
     if use_colors and sys.stdout.isatty():
         formatter = ColoredFormatter(format_string, datefmt='%Y-%m-%d %H:%M:%S')

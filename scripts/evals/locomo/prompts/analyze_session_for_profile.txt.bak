@@ -9,16 +9,12 @@ Instructions:
 6. Update existing information when new details are more specific or recent
 
 Input:
-
 - Current Session: 
 {conversation}
-
 - Event Records: 
 {events}
-
 - Existing Profile: 
 {existing_profile}
-
 - Character: 
 {character_name}
 
@@ -70,4 +66,3 @@ Notes:
 - Avoid speculation - only include confirmed information
 - Maintain consistency with existing profile data
 - Update outdated information when newer data is available
-- **IMPORTANT**: If some specific imformation (e.g., age, hobby, health condition) is not mentioned or have only guesses, REMOVE that term and avoid output records like "Age: Unknown" or "No explicit information on ..."
