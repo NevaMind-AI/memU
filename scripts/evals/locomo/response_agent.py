@@ -59,8 +59,8 @@ class ResponseAgent:
         memory_dir: str = "memory"
     ):
         """Initialize ResponseAgent with LLM configuration and memory directory"""
-        self.azure_endpoint = azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
-        self.api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY")
+        self.azure_endpoint = azure_endpoint
+        self.api_key = api_key
         self.chat_deployment = chat_deployment
         self.use_entra_id = use_entra_id
         self.api_version = api_version
@@ -645,6 +645,42 @@ class ResponseAgent:
                 "result": []
             }
 
+    def _filter_character_profile(self, query: str, character_name: str, character_profile: str, top_k: int = 60) -> str:
+        profile_lines = character_profile.split("\n")
+        info_lines = [line for line in profile_lines if line.startswith("- ")]
+        if len(info_lines) < top_k:
+            return character_profile
+
+        all_records = []
+        for i, line in enumerate(info_lines):
+            all_records.append({
+                "character": character_name,
+                "text": line,
+                "event": line,
+                "id": i
+            })
+
+        stop_words = {'what', 'where', 'when', 'who', 'why', 'how', 'is', 'are', 'was', 'were', 
+                        'do', 'does', 'did', 'can', 'could', 'would', 'should', 'about', 'the', 
+                        'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with'}
+        words = re.findall(r'\b\w+\b', query.lower())
+        keywords = [word for word in words if word not in stop_words and len(word) > 2]
+        processed_query = " ".join(keywords)
+
+        search_results = self._multi_modal_search(query, processed_query, all_records)
+        
+        search_results = [r for r in search_results if r.get("combined_score", 0) > 0]
+        if len(search_results) <= top_k:
+            score_threshold = 0.0
+        else:
+            search_results.sort(key=lambda x: x["combined_score"], reverse=True)
+            score_threshold = search_results[top_k]["combined_score"]
+        _preserve = {r["id"] for r in search_results if r["combined_score"] > score_threshold}
+        preserve_iter = iter((i in _preserve for i in range(len(info_lines))))
+
+        output_lines = [line for line in profile_lines if not line.startswith("- ") or next(preserve_iter)]
+        return "\n".join(output_lines)
+
     def list_characters(self) -> Dict[str, Any]:
         """List all characters that have memory data available"""
         try:
@@ -768,8 +804,11 @@ class ResponseAgent:
             if use_profile == "prompt":
                 for character in characters:
                     if character in question:
+                        character_name = character
                         character_profile = self._read_memory_file(character, "profile")
                         break
+            # if character_profile:
+            #     character_profile = self._filter_character_profile(question, character_name, character_profile, top_k=60)
             
             # Generate final answer using all collected content
             final_context_data = {

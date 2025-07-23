@@ -5,6 +5,7 @@ memory_*/
 
 !memory_with_image/
 !memory_0721_4_1_with_profile/
+!memory_claude_4_sonnet/
 
 qa_error_log_*.txt
 enhanced_memory_test_results_*.json
