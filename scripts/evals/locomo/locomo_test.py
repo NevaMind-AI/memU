@@ -109,7 +109,8 @@ class ToolBasedMemoryTester:
         self.memory_dir = Path(memory_dir)
         
         # Initialize error log file
-        self.error_log_file = f"qa_error_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        self.log_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        self.error_log_file = f"qa_error_log_{self.log_timestamp}.txt"
         self._init_error_log()
         
         logger.info(f"Tool-based Memory Tester initialized with MemAgent (memory) and ResponseAgent (QA) (max_workers={max_workers})")
@@ -127,19 +128,9 @@ class ToolBasedMemoryTester:
         except Exception as e:
             logger.error(f"Failed to initialize error log file: {e}")
 
-    def _get_category_log_filename(self, category: str) -> str:
-        """Get the category-specific log filename"""
-        try:
-            # Extract base name without extension
-            base_name = self.error_log_file.rsplit('.', 1)[0]
-            return f"{base_name}_CAT_{category}.txt"
-        except Exception:
-            # Fallback if there's any issue
-            return f"qa_error_log_CAT_{category}.txt"
-
-    def _init_category_error_log(self, category: str) -> str:
+    def _get_category_error_log(self, category: str) -> str:
         """Initialize category-specific error log file with header if it doesn't exist"""
-        category_log_file = self._get_category_log_filename(category)
+        category_log_file = f"qa_error_log_{self.log_timestamp}_CAT_{category}.txt"
         
         try:
             # Check if file already exists to avoid overwriting headers
@@ -232,7 +223,7 @@ class ToolBasedMemoryTester:
             with open(self.error_log_file, 'a', encoding='utf-8') as f:
                 f.write(error_content)
             
-            category_log_file = self._init_category_error_log(str(category).strip())
+            category_log_file = self._get_category_error_log(str(category).strip())
             with open(category_log_file, 'a', encoding='utf-8') as f:
                 f.write(error_content)
                 
@@ -383,7 +374,8 @@ class ToolBasedMemoryTester:
         search_keywords = context_used.get("search_keywords", [])
         
         # Get actual retrieved content details from ResponseAgent
-        final_content = answer_result.get("final_content", [])
+        # final_content = answer_result.get("final_content", [])
+        final_content = answer_result.get("retrieved_events", [])
         retrieved_events = answer_result.get("retrieved_events", [])
         iteration_log = answer_result.get("iteration_log", [])
         total_events_found = context_used.get("total_events_found", 0)
@@ -408,7 +400,14 @@ class ToolBasedMemoryTester:
                 if isinstance(content, dict):
                     content_text = content.get('text', content.get('event', str(content)))
                     character = content.get('character', 'Unknown')
-                    retrieved_contents.append(f"\n{i}. [{character}] {content_text}")
+                    retrieved_contents.append(f"\n{i}. {content_text}")
+                    
+                    # Add scoring information if available
+                    string_score = content.get('string_score', 0.0)
+                    bm25_score = content.get('bm25_score', 0.0)
+                    semantic_score = content.get('semantic_score', 0.0)
+                    combined_score = content.get('combined_score', 0.0)
+                    retrieved_contents.append(f"    Scores - String: {string_score:.3f}, BM25: {bm25_score:.3f}, Semantic: {semantic_score:.3f}, Combined: {combined_score:.3f}")
                 else:
                     retrieved_contents.append(f"\n{i}. {content}")
         
@@ -990,36 +989,54 @@ class ToolBasedMemoryTester:
             all_results = []
             overall_category_stats = {}
             total_questions = 0
+            total_processed = 0
             total_correct = 0
+            sample_wise_stats = {}
             
-            for i, sample in enumerate(data, 1):
-                logger.info(f"\n=== Processing Sample {i}/{len(data)} ===")
-                
-                result = self.process_sample(sample)
-                all_results.append(result)
-                
-                if result['success']:
-                    # Aggregate category statistics
-                    for category, stats in result['category_stats'].items():
-                        if category not in overall_category_stats:
-                            overall_category_stats[category] = {'total': 0, 'correct': 0}
-                        overall_category_stats[category]['total'] += stats['total']
-                        overall_category_stats[category]['correct'] += stats['correct']
+            try:
+                for i, sample in enumerate(data, 1):
+                    logger.info(f"\n=== Processing Sample {i}/{len(data)} ===")
                     
-                    total_questions += result['questions_total']
-                    total_correct += sum(1 for qr in result['question_results'] if qr['is_correct'])
-                
-                logger.info(f"Sample {i} completed in {result['processing_time']:.2f}s")
-                
-                # Print real-time category statistics after each sample
-                self._print_realtime_category_stats(all_results, i, len(data))
+                    result = self.process_sample(sample)
+                    all_results.append(result)
+                    
+                    if result['success']:
+                        # Aggregate category statistics
+                        sample_stats = {}
+                        for category, stats in result['category_stats'].items():
+                            if category not in overall_category_stats:
+                                overall_category_stats[category] = {'total': 0, 'correct': 0}
+                            overall_category_stats[category]['total'] += stats['total']
+                            overall_category_stats[category]['correct'] += stats['correct']
+                            sample_stats[category] = {"total": stats['total'], 
+                                                    "correct": stats['correct'],
+                                                    "accuracy": stats['correct'] / stats['total'] if stats['total'] > 0 else 0.0}
+                        
+                        total_questions += result['questions_total']
+                        total_processed += result['questions_processed']
+                        total_correct += sum(1 for qr in result['question_results'] if qr['is_correct'])
+
+                        sample_stats = {key: sample_stats[key] for key in sorted(sample_stats.keys())}
+                        sample_wise_stats[i] = sample_stats
+                    
+                    logger.info(f"Sample {i} completed in {result['processing_time']:.2f}s")
+                    
+                    # Print real-time category statistics after each sample
+                    self._print_realtime_category_stats(all_results, i, len(data))
+            except KeyboardInterrupt:
+                logger.info("Keyboard interrupt detected. Stopping test...")
+                pass
+            except Exception as e:
+                raise
             
             total_time = time.time() - start_time
             
             # Calculate overall accuracy
-            overall_accuracy = total_correct / total_questions if total_questions > 0 else 0.0
+            # overall_accuracy = total_correct / total_questions if total_questions > 0 else 0.0
+            overall_accuracy = total_correct / total_processed if total_processed > 0 else 0.0
             
             # Calculate category accuracies
+            overall_category_stats = {key: overall_category_stats[key] for key in sorted(overall_category_stats.keys())}
             category_accuracies = {}
             for category, stats in overall_category_stats.items():
                 accuracy = stats['correct'] / stats['total'] if stats['total'] > 0 else 0.0
@@ -1052,6 +1069,7 @@ class ToolBasedMemoryTester:
             return {
                 'success': True,
                 'summary': summary,
+                'sample_wise_stats': sample_wise_stats,
                 'detailed_results': all_results
             }
             
@@ -1145,18 +1163,6 @@ class ToolBasedMemoryTester:
             print(f"Total incorrect answers: {total_incorrect}")
             print(f"Detailed error information saved to: {self.error_log_file}")
             
-            # List category-specific log files that were created
-            category_files_created = []
-            for cat in ['1', '2', '3', '4', '5']:
-                cat_file = self._get_category_log_filename(cat)
-                if os.path.exists(cat_file):
-                    category_files_created.append(f"  - Category {cat}: {cat_file}")
-            
-            if category_files_created:
-                print(f"Category-specific error logs also created:")
-                for cat_file_info in category_files_created:
-                    print(cat_file_info)
-            
             print(f"The error logs contain:")
             print(f"  - Original questions")
             print(f"  - Retrieved content from memory")
@@ -1183,7 +1189,7 @@ def main():
     # parser.add_argument('--chat-deployment', default='DeepSeek-V3-0324', help='Azure OpenAI chat deployment')
     parser.add_argument('--max-workers', type=int, default=5, help='Maximum number of parallel workers for session processing')
     parser.add_argument('--category', type=str, help='Filter questions by category. Can be a single category (e.g., "1") or comma-separated categories (e.g., "0,2,3"). If not provided, use all categories.')
-    parser.add_argument('--use-image', action='store_true', help='Insert image caption to conversation')
+    parser.add_argument('--use-image', type=lambda x: x.lower() != 'false', default=True, help='Insert image caption to conversation (default: True)')
     parser.add_argument('--use-profile', type=str, default="none", help='Use the profile to answer the questions')
 
     parser.add_argument('--force-resum', action='store_true', help='Force to redo the memory summarization')
@@ -1238,7 +1244,7 @@ def main():
         tester.print_results()
         
         # Save detailed results
-        output_file = f"enhanced_memory_test_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        output_file = f"enhanced_memory_test_results_{tester.log_timestamp}.json"
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
         

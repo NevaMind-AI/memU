@@ -252,7 +252,6 @@ class ResponseAgent:
             "cached_events": cache_size
         }
 
-
     def _multi_modal_search(self, original_query: str, processed_query: str, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Perform multi-modal search combining semantic search, BM25, and string matching
@@ -278,7 +277,7 @@ class ResponseAgent:
             combined_score = (
                 0.3 * string_score +    # String matching - disabled when semantic is primary
                 0.3 * bm25_score +      # BM25 - disabled when semantic is primary  
-                1.0 * semantic_score    # Semantic - primary scoring method using embeddings
+                2.0 * semantic_score    # Semantic - primary scoring method using embeddings
             )
             
             # Only include events with non-zero scores
@@ -582,6 +581,7 @@ class ResponseAgent:
                 for i, event in enumerate(character_events):
                     all_events.append({
                         "character": character,
+                        "type": "event",
                         "event": event,
                         "text": event,
                         "id": f"{character}_e{i}"
@@ -593,6 +593,7 @@ class ResponseAgent:
                         for record in records:
                             all_events.append({
                                 "character": character_name,
+                                "type": "profile",
                                 "event": record,
                                 "text": record,
                                 "id": f"{character_name}_p{i}"
@@ -621,15 +622,15 @@ class ResponseAgent:
             
             # Sort by combined score and return top_k
             search_results.sort(key=lambda x: x["combined_score"], reverse=True)
-            top_events = search_results[:top_k]
+            top_records = search_results[:top_k]
 
             # Add rank information
-            for i, event in enumerate(top_events):
-                event["rank"] = i + 1
+            for i, record in enumerate(top_records):
+                record["rank"] = i + 1
 
             return {
                 "success": True,
-                "events": top_events,
+                "result": top_records,
                 "total_found": len(search_results),
                 "search_method": "multi_modal",
                 "query_processed": processed_query,
@@ -641,7 +642,7 @@ class ResponseAgent:
             return {
                 "success": False,
                 "error": str(e),
-                "events": []
+                "result": []
             }
 
     def list_characters(self) -> Dict[str, Any]:
@@ -706,25 +707,30 @@ class ResponseAgent:
             # Start with the original question for initial search
             current_search_query = question
             
+            _top_k = (25,15,15,10,10)
+            _top_k = iter(_top_k)
             for iteration in range(max_iterations):
                 logger.info(f"Iteration {iteration + 1}/{max_iterations}: Searching with query '{current_search_query}'")
                 
                 # Search for relevant events using the current search query
                 # events_result = self.search_character_events(current_search_query, characters)
-                search_result = self.search_character_events_profile(current_search_query, characters, use_profile=(use_profile == "search"))
-                current_events = []
+                search_result = self.search_character_events_profile(current_search_query, characters, use_profile=(use_profile == "search"), top_k=next(_top_k))
+                current_result = []
                 if search_result.get("success"):
-                    current_events = search_result.get("events", [])
+                    current_result = search_result.get("result", [])
                     
                     # Add new events to all_events (will deduplicate later)
-                    for event in current_events:
-                        all_events.append(event)
-                        all_retrieved_content.append(f"Event - {event.get('character', 'Unknown')}: {event.get('event', '')}")
+                    for record in current_result:
+                        all_events.append(record)
+                        if record.get("type", "") == "profile":
+                            all_retrieved_content.append(f"Profile - {record.get('event', '')}")
+                        else:
+                            all_retrieved_content.append(f"Event - {record.get('character', 'Unknown')}: {record.get('event', '')}")
                 
                 iteration_log.append({
                     "iteration": iteration + 1,
                     "query": current_search_query,
-                    "events_found": len(current_events),
+                    "records_found": len(current_result),
                     "is_original_question": iteration == 0
                 })
                 
@@ -825,6 +831,7 @@ class ResponseAgent:
             context_text = "\n".join(context_parts)
 
             if character_profile:
+                character_profile = character_profile.replace("\n\n", "\n")
                 context_text += f"\n\nCharacter Profile: {character_profile}"
             
             # Create prompt for answer generation with reasoning

@@ -7,7 +7,7 @@ based on deployment/model names.
 
 import os
 from typing import Optional, Union
-from memu.llm import AzureOpenAIClient, DeepSeekClient, BaseLLMClient
+from memu.llm import AzureOpenAIClient, DeepSeekClient, AnthropicClient, BaseLLMClient
 
 
 def create_llm_client(
@@ -49,13 +49,21 @@ def create_llm_client(
         client_params = {
             "endpoint": deepseek_endpoint,
             "model_name": chat_deployment,
+            "api_key": api_key,
             "api_version": "2024-05-01-preview",  # DeepSeek uses different API version
             **kwargs
         }
-        if api_key is not None:
-            client_params["api_key"] = api_key
         
         return DeepSeekClient(**client_params)
+    elif "claude" in chat_deployment.lower():
+        client_params = {
+            "model": chat_deployment,
+            "api_key": api_key,
+            "api_version": "2025-01-01-preview",
+            **kwargs
+        }
+
+        return AnthropicClient(**client_params)
     else:
         # Ensure we have valid endpoint for Azure OpenAI
         azure_openai_endpoint = azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -67,11 +75,10 @@ def create_llm_client(
             "azure_endpoint": azure_openai_endpoint,
             "deployment_name": chat_deployment,
             "use_entra_id": use_entra_id,
+            "api_key": api_key,
             "api_version": api_version,
             **kwargs
         }
-        if api_key is not None:
-            client_params["api_key"] = api_key
         
         return AzureOpenAIClient(**client_params)
 

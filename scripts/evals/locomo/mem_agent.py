@@ -70,8 +70,8 @@ class MemAgent:
         memory_dir: str = "memory"
     ):
         """Initialize MemAgent with LLM configuration and memory directory"""
-        self.azure_endpoint = azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT")
-        self.api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY")
+        self.azure_endpoint = azure_endpoint
+        self.api_key = api_key
         self.chat_deployment = chat_deployment
         self.use_entra_id = use_entra_id
         self.api_version = api_version
