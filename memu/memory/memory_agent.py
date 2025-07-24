@@ -213,10 +213,18 @@ PROCESSING WORKFLOW:
 
 6. LINK MEMORIES: For each category that was modified, call link_related_memories with link_all_items=true and write_to_memory=true to add relevant links between ALL memories in that category.
 
+7. REFELCTION: Call run_theory_of_mind to analyze the subtle information behind the conversation and extract the theory of mind of the characters.
+
+8. GENERATE SUGGESTIONS: Call generate_memory_suggestions again to get suggestions for what in the REFLECTION result should be added to each category.
+
+9. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions again to update that category with the new memory items and suggestions. This will return structured modifications.
+
 IMPORTANT GUIDELINES:
 - Step 1: Use summarize_conversation to extract distinct memory items from the conversation
 - Step 2: Store the summary and memory items to activity category 
 - Step 3-6: Use the extracted memory items from step 1 for subsequent processing
+- Step 7: Use both the original conversation and the extracted memory items from step 1 for the analysis
+- Step 8-9: Use the reflection result from step 7 for subsequent processing
 - Each memory item should have its own memory_id and focused content
 - Follow the suggestions when updating categories
 - The update_memory_with_suggestions function will return structured format with memory_id and content
@@ -343,7 +351,7 @@ Start with step 1 and work through the process systematically. When you complete
         for message in conversation:
             role = message.get("role", "unknown")
             content = message.get("content", "")
-            text_parts.append(f"{role.upper()}: {content}")
+            text_parts.append(f"{role.capitalize()}: {content.strip()}")
         
         return "\n".join(text_parts)
 

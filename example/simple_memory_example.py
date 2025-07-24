@@ -68,7 +68,74 @@ def validate_memory_items(memory_items, character_name):
     
     return len(violations) == 0
 
-def demo_detailed_iterations():
+def load_locomo_conversation(sample_id: int, session_id: int|str|list, add_image_caption: bool = False, perserve_role: bool = True):
+
+    try:
+        with open(f"locomo/locomo10.json", "r") as f:
+            data = json.load(f)
+
+        sample = data[sample_id]
+        conversation = sample["conversation"]
+
+        speaker_a = conversation.get("speaker_a", "Speaker A")
+        speaker_b = conversation.get("speaker_b", "Speaker B")
+        speakers = [speaker_a, speaker_b]
+
+        if not perserve_role:
+            remap_role = {
+                speaker_a: "user",
+                speaker_b: "assistant"
+            }
+        
+        if isinstance(session_id, int):
+            session_ids = [session_id]
+        elif isinstance(session_id, str):
+            session_ids = [int(session_id)]
+        elif isinstance(session_id, list):
+            session_ids = [int(sid) for sid in session_id]
+
+        conversation_messages = []
+        for session_id in session_ids:
+            if f"session_{session_id+1}" in conversation:
+                session = conversation[f"session_{session_id+1}"]
+                
+                for message in session:
+                    speaker = message["speaker"]
+                    content = message["text"]
+
+                    if not perserve_role:
+                        speaker = remap_role.get(speaker, "Unknown")
+
+                    if add_image_caption and "blip_caption" in message:
+                        content = f"({speaker} shares {message['blip_caption']}.) {content}"
+
+                    conversation_messages.append({
+                        "role": speaker,
+                        "content": content
+                    })
+
+        return conversation_messages, speakers
+
+    except Exception as e:
+        raise
+
+def load_debug_conversation(file_name: str):
+    if '.' not in file_name:
+        file_name = f"{file_name}.txt"
+    with open(f"debug/{file_name}", "r") as f:
+        raw = f.readlines()
+
+    conversation = []
+    speakers = set()
+    for line in raw:
+        if ": " in line:
+            role, content = line.split(": ", 1)
+            speakers.add(role)
+            conversation.append({"role": role, "content": content.strip()})
+
+    return conversation, list(speakers)
+
+def demo_detailed_iterations(conversation: list[dict] = []):
     """Demonstrate automatic workflow with detailed iteration output"""
     
     print("🧠 DETAILED ITERATION OUTPUT DEMO")
@@ -82,7 +149,7 @@ def demo_detailed_iterations():
     memory_agent = MemoryAgent(llm_client=llm_client, memory_dir="memory")
     
     # Convert string conversation to message format for run() method
-    conversation_messages = [
+    conversation_messages = conversation or [
         {"role": "user", "content": "Hi Alice! How was your weekend?"},
         {"role": "assistant", "content": "It was absolutely wonderful! I went hiking in the Blue Ridge Mountains with my friend Sarah Johnson. We discovered this breathtaking hidden waterfall called Crystal Falls, and I took over 200 photos. The weather was perfect - sunny but not too hot, around 75 degrees. I also finally finished reading 'The Midnight Library' by Matt Haig. It's such an inspiring book about life choices and infinite possibilities."},
         {"role": "user", "content": "That sounds wonderful! What did you think of the book?"},
@@ -102,7 +169,8 @@ def demo_detailed_iterations():
     
     result = memory_agent.run(
         conversation=conversation_messages,
-        character_name="Alice",
+        # character_name="Alice",
+        character_name=conversation_messages[0]["role"],
         max_iterations=20
     )
     
@@ -240,6 +308,35 @@ def demo_detailed_iterations():
                                 categories = call_result.get('categories', {})
                                 print(f"      ✅ Categories found: {list(categories.keys())}")
                                 print("      📁 Memory structure ready")
+
+                            elif function_name == 'run_theory_of_mind':
+                                items_count = call_result.get('items_count', 0)
+                                reasoning_process = call_result.get('reasoning_process', '')
+                                print(f"      ✅ Items extracted: {items_count}")
+                                print(f"      ✅ Reasoning process length: {len(reasoning_process)} characters")
+                                print(f"      📝 Reasoning process preview: {reasoning_process[:200]}...")
+
+                                # Show sample memory items with validation
+                                theory_of_mind_items = call_result.get('theory_of_mind_items', [])
+                                if theory_of_mind_items:
+                                    print(f"      📦 Sample memory items ({len(theory_of_mind_items)} total):")
+                                    for j, item in enumerate(theory_of_mind_items[:3], 1):
+                                        content = item.get('content', '')
+                                        item_type = item.get('type', 'unknown')
+                                        context = item.get('context', '')
+                                        
+                                        print(f"        {j}. [{item_type.upper()}] {content}")
+                                        if context:
+                                            print(f"           Context: {context}")
+                                        
+                                        # Quick compliance check
+                                        has_alice = 'Alice' in content
+                                        has_pronouns = any(p in content.lower() for p in ['she ', 'he ', 'they ', 'it '])
+                                        compliance = "✅ COMPLIANT" if has_alice and not has_pronouns else "❌ VIOLATION"
+                                        print(f"           {compliance}")
+                                    
+                                    if len(theory_of_mind_items) > 3:
+                                        print(f"        ... and {len(theory_of_mind_items) - 3} more items")
                             
                             else:
                                 # Generic result display
@@ -291,7 +388,9 @@ if __name__ == "__main__":
     print("This demo shows EVERY iteration with complete details.")
     print("Enforces strict no-pronouns policy with real-time validation.\n")
     
-    
+    # conversation, speakers = load_locomo_conversation(sample_id=2, session_id=[0,1,2,3], perserve_role=True)
+    conversation, speakers = load_debug_conversation("0001.txt")
+
     # Run detailed iterations demo
-    demo_detailed_iterations()
+    demo_detailed_iterations(conversation)
     
