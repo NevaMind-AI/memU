@@ -78,6 +78,11 @@ class RunTheoryOfMindAction(BaseAction):
                     "success": False,
                     "error": "No memory items provided"
                 })
+
+            memory_items_text = "\n".join([
+                f"Memory ID: {item['memory_id']}\nContent: {item['content']}"
+                for item in memory_items
+            ])
             
             # Create comprehensive prompt for LLM to analyze conversation and extract ALL details
             theory_of_mind_prompt = f"""Analyze the following conversation and memory items for {character_name} and try to infer information that is not explicitly mentioned in the conversation, but the character might meant to express or the listener can reasonably deduce.
@@ -86,7 +91,7 @@ Conversation:
 {conversation_text}
 
 Memory Items:
-{memory_items}
+{memory_items_text}
 
 **CRITICAL REQUIREMENT: Inference results must be SELF-CONTAINED MEMORY ITEMS**
 

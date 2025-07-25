@@ -14,6 +14,7 @@ from .link_related_memories import LinkRelatedMemoriesAction
 from .generate_suggestions import GenerateMemorySuggestionsAction
 from .update_memory_with_suggestions import UpdateMemoryWithSuggestionsAction
 from .run_theory_of_mind import RunTheoryOfMindAction
+from .cluster_memories import ClusterMemoriesAction
 
 # Registry of all available actions
 ACTION_REGISTRY = {
@@ -22,7 +23,8 @@ ACTION_REGISTRY = {
     "link_related_memories": LinkRelatedMemoriesAction,
     "generate_memory_suggestions": GenerateMemorySuggestionsAction,
     "update_memory_with_suggestions": UpdateMemoryWithSuggestionsAction,
-    "run_theory_of_mind": RunTheoryOfMindAction
+    "run_theory_of_mind": RunTheoryOfMindAction,
+    "cluster_memories": ClusterMemoriesAction
 }
 
 __all__ = [
@@ -33,5 +35,6 @@ __all__ = [
     "LinkRelatedMemoriesAction",
     "GenerateMemorySuggestionsAction",
     "UpdateMemoryWithSuggestionsAction",
-    "RunTheoryOfMindAction"
+    "RunTheoryOfMindAction",
+    "ClusterMemoriesAction"
 ] 

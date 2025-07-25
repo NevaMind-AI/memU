@@ -16,6 +16,12 @@ from memu.memory import MemoryAgent
 import json
 from datetime import datetime
 
+import re
+import os
+import shutil
+
+character_test = None
+
 def validate_memory_items(memory_items, character_name):
     """Validate that memory items follow strict no-pronouns rules"""
     print("\n🔍 VALIDATING MEMORY ITEMS FOR NO-PRONOUNS POLICY:")
@@ -96,6 +102,7 @@ def load_locomo_conversation(sample_id: int, session_id: int|str|list, add_image
 
         conversation_messages = []
         for session_id in session_ids:
+            conversation_single = []
             if f"session_{session_id+1}" in conversation:
                 session = conversation[f"session_{session_id+1}"]
                 
@@ -109,10 +116,11 @@ def load_locomo_conversation(sample_id: int, session_id: int|str|list, add_image
                     if add_image_caption and "blip_caption" in message:
                         content = f"({speaker} shares {message['blip_caption']}.) {content}"
 
-                    conversation_messages.append({
+                    conversation_single.append({
                         "role": speaker,
                         "content": content
                     })
+            conversation_messages.append(conversation_single)
 
         return conversation_messages, speakers
 
@@ -170,7 +178,7 @@ def demo_detailed_iterations(conversation: list[dict] = []):
     result = memory_agent.run(
         conversation=conversation_messages,
         # character_name="Alice",
-        character_name=conversation_messages[0]["role"],
+        character_name=character_test or conversation_messages[0]["role"],
         max_iterations=20
     )
     
@@ -389,8 +397,21 @@ if __name__ == "__main__":
     print("Enforces strict no-pronouns policy with real-time validation.\n")
     
     # conversation, speakers = load_locomo_conversation(sample_id=2, session_id=[0,1,2,3], perserve_role=True)
-    conversation, speakers = load_debug_conversation("0001.txt")
+    # conversation, speakers = load_debug_conversation("0001.txt")
+    # conversations, speakers = load_locomo_conversation(sample_id=2, session_id=[0,1,2,3], add_image_caption=True, perserve_role=True)
+    conversations, speakers = load_locomo_conversation(sample_id=2, session_id=[0,1], add_image_caption=True, perserve_role=True)
+
+    character_test = speakers[1]
 
     # Run detailed iterations demo
-    demo_detailed_iterations(conversation)
-    
+    # demo_detailed_iterations(conversations)
+    for i, conversation in enumerate(conversations):
+        print(f"🔄 Running conversation {i+1} of {len(conversations)}")
+        demo_detailed_iterations(conversation)
+
+        pattern = rf"{re.escape(character_test)}_([^.]+)\.md$"
+        for file in os.listdir("memory"):
+            match = re.match(pattern, file)
+            if match:
+                tag = match.group(1)
+                shutil.copy2(f"memory/{character_test}_{tag}.md", f"memory/{character_test}_{tag}_{i+1}.md")

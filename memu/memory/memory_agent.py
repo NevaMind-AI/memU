@@ -7,8 +7,10 @@ Each operation is implemented as a separate action module for modularity and mai
 
 import threading
 import json
+import os
+import shutil
 from pathlib import Path
-from typing import Dict, List, Any, Callable
+from typing import Dict, List, Any, Callable, Optional, Union
 from datetime import datetime
 
 from ..llm import BaseLLMClient
@@ -201,25 +203,21 @@ SESSION DATE: {session_date}
 PROCESSING WORKFLOW:
 1. STORE TO ACTIVITY: Call add_activity_memory with the COMPLETE RAW CONVERSATION TEXT as the 'content' parameter. This will automatically append to existing activity memories. DO NOT extract, modify, or summarize the conversation - pass the entire original conversation text exactly as shown above.
 
-2. GET CATEGORIES: Call get_available_categories to see what memory categories are available.
+2. THEORY OF MIND: Call run_theory_of_mind to analyze the subtle information behind the conversation and extract the theory of mind of the characters.
 
 3. GENERATE SUGGESTIONS: Call generate_memory_suggestions with the extracted memory items to get suggestions for what should be added to each category.
 
-4. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions to update that category with the new memory items and suggestions. This will return structured modifications.
+5. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions to update that category with the new memory items and suggestions. This will return structured modifications.
 
-5. LINK MEMORIES: For each category that was modified, call link_related_memories with link_all_items=true and write_to_memory=true to add relevant links between ALL memories in that category.
+6. LINK MEMORIES: For each category that was modified, call link_related_memories with link_all_items=true and write_to_memory=true to add relevant links between ALL memories in that category.
 
-6. REFLECTION: Call run_theory_of_mind to analyze the subtle information behind the conversation and extract the theory of mind of the characters.
-
-7. GENERATE SUGGESTIONS: Call generate_memory_suggestions again to get suggestions for what in the REFLECTION result should be added to each category.
-
-8. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions again to update that category with the new memory items and suggestions. This will return structured modifications.
+7. CLUSTER MEMORIES: Call cluster_memories to cluster the memories into different categories.
 
 IMPORTANT GUIDELINES:
 - Step 1: CRITICAL: For add_activity_memory, the 'content' parameter MUST be the complete original conversation text exactly as shown above. Do NOT modify, extract, or summarize it.
-- Step 2-5: Use the extracted memory items from step 1 for subsequent processing
-- Step 6: Use both the original conversation and the extracted memory items from step 1 for the analysis
-- Step 7-8: Use the reflection result from step 6 for subsequent processing
+- Step 2: Use both the original conversation and the extracted memory items from step 1 for the theory of mind analysis
+- Step 3-6: Use the extracted memory items from both step 1 and step 2 for subsequent processing. You can simply concatenate the two lists of memory items and pass them to the corresponding function.
+- Step 7: IMPORTANT: Use ONLY the memory items from step 1 for clustering. DO NOT use the theory of mind results from step 2, which are inferences and are not 100% certain.
 - Each memory item should have its own memory_id and focused content
 - Follow the suggestions when updating categories
 - The update_memory_with_suggestions function will return structured format with memory_id and content
@@ -316,7 +314,9 @@ Start with step 1 and work through the process systematically. When you complete
                     logger.error(f"Error in iteration {iteration + 1}: {e}")
                     results["processing_log"].append(f"Iteration {iteration + 1}: Error - {str(e)}")
                     break
-            
+
+                # _success = self._create_file_backup(f"{self.memory_core.memory_dir}/{character_name}_event.md", iteration+1)
+
             # Finalize results
             if results["iterations"] >= max_iterations:
                 logger.warning(f"⚠️ Reached maximum iterations ({max_iterations})")
@@ -406,6 +406,8 @@ Start with step 1 and work through the process systematically. When you complete
                 "timestamp": datetime.now().isoformat()
             }
             logger.error(f"Function call failed: {function_name} - {e}")
+            import traceback
+            traceback.print_exc()
             return error_result
 
     def validate_function_call(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
@@ -549,3 +551,39 @@ Start with step 1 and work through the process systematically. When you complete
             },
             "last_updated": datetime.now().isoformat()
         } 
+
+    # 
+    # Memo: Wu: Remove this later, only for debugging
+    # 
+    def _create_file_backup(self, file_path: str, iteration: int) -> bool:
+        """
+        Create a backup of a file by appending the iteration number to its name.
+        
+        Args:
+            file_path (str): Path to the file to backup (e.g., "some/path/output.txt")
+            iteration (int): Current iteration number
+            
+        Returns:
+            bool: True if backup was created successfully, False otherwise
+        """
+        try:
+            # Convert to Path object for easier manipulation
+            original_path = Path(file_path)
+            
+            # Check if the original file exists
+            if not original_path.exists():
+                logger.warning(f"File {file_path} does not exist, skipping backup")
+                return False
+            
+            # Create backup filename by appending iteration number
+            backup_path = original_path.with_suffix(f"{original_path.suffix}.{iteration}")
+            
+            # Copy the file to create backup
+            shutil.copy2(original_path, backup_path)
+            
+            logger.info(f"✅ Created backup: {backup_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to create backup for {file_path}: {e}")
+            return False
