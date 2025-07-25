@@ -1,3 +1,4 @@
-[50b78b][mentioned at 2025-07-24] Andy is 32 years old. []
-[d0109c][mentioned at 2025-07-24] Andy lives in Austin, Texas. []
-[29ef0e][mentioned at 2025-07-24] Andy works as a software engineer. [af8473,45f966,dc91eb,41cdd1,fc74a0]
+[aa2124][mentioned at 2025-07-25] Andy is 30 years old. []
+[578699][mentioned at 2025-07-25] Andy lives in New York City. []
+[95424b][mentioned at 2025-07-25] Andy works as a technology professional. [657a25,0fd6d2,5305f4,6a7930,a74657]
+[657a25][mentioned at 2025-07-25] Andy works as a project manager at TechFlow Solutions. [95424b,6a7930,a74657,0fd6d2,89f1a3]

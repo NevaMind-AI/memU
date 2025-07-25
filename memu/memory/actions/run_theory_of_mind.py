@@ -124,13 +124,13 @@ Your task it to leverage your reasoning skills to infer the information that is 
 [If you insist there is no implicit information that can be inferred from the conversation beyong the explicit memory items after careful reasoning, you can leave this section empty]
 
 **Item 1:**
-- Memory ID: mem_001
+- ToM ID: tom_001
 - Content: [{character_name} + complete, specific, self-contained statement with all necessary context and names]
 - Type: [personal_info|event|activity|preference|plan|emotion|relationship|work|interest|goal|concern|realization|other]
 - Context: [Why this was mentioned or how it connects to other topics]
 
 **Item 2:**
-- Memory ID: mem_002  
+- ToM ID: tom_002  
 - Content: [{character_name} + another complete, specific, self-contained statement with full details]
 - Type: [personal_info|event|activity|preference|plan|emotion|relationship|work|interest|goal|concern|realization|other]
 - Context: [Relationship to conversation flow and other topics]
@@ -149,6 +149,8 @@ Your task it to leverage your reasoning skills to infer the information that is 
             
             # Parse text response
             reasoning_process, theory_of_mind_items = self._parse_theory_of_mind_from_text(response.strip(), character_name, conversation_text, memory_items)
+            dump_debug(f"[final] {repr(reasoning_process)}")
+            dump_debug(f"[final] {repr(theory_of_mind_items)}")
 
             if not theory_of_mind_items:
                 return self._add_metadata({
@@ -194,6 +196,8 @@ Your task it to leverage your reasoning skills to infer the information that is 
                     memory_section = True
                     continue
 
+                dump_debug(f"[ToM raw] {line}")
+
                 if reasoning_section and line and not line.startswith('**'):
                     if not reasoning_process:
                         reasoning_process = line.strip()
@@ -205,17 +209,17 @@ Your task it to leverage your reasoning skills to infer the information that is 
                     if line.startswith('**Item ') and line.endswith(':**'):
                         # Save previous item if exists
                         if current_item and 'memory_id' in current_item and 'content' in current_item:
-                            memory_items.append(current_item)
+                            theory_of_mind_items.append(current_item)
                         # Start new item
                         current_item = {}
                     
-                    elif line.startswith('- Memory ID:'):
-                        memory_id = line.replace('- Memory ID:', '').strip()
+                    elif line.startswith('- ToM ID:'):
+                        memory_id = line.replace('- ToM ID:', '').strip()
                         current_item['memory_id'] = memory_id
                     
                     elif line.startswith('- Content:'):
                         content = line.replace('- Content:', '').strip()
-                        current_item['content'] = f"[ToM] {content}"
+                        current_item['content'] = content
                         dump_debug(f"[ToM] {content}")
                     
                     elif line.startswith('- Type:'):
