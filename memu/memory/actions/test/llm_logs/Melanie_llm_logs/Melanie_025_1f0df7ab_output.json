@@ -1,0 +1,29 @@
+{
+  "call_id": "Melanie_025_1f0df7ab",
+  "character": "Melanie",
+  "timestamp": "2025-07-25T17:17:36.091624",
+  "type": "OUTPUT",
+  "data": {
+    "success": true,
+    "content": "[0d5515] Melanie has children.  \n[9f7a3c] Melanie is committed to balancing personal well-being and family care.",
+    "usage": {
+      "completion_tokens": 32,
+      "prompt_tokens": 1672,
+      "total_tokens": 1704,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0
+      }
+    },
+    "model": "gpt-4.1-mini-2025-04-14",
+    "error": null,
+    "tool_calls": null,
+    "duration_seconds": 0.927
+  }
+}

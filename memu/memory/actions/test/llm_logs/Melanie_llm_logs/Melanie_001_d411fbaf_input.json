@@ -1,0 +1,257 @@
+{
+  "call_id": "Melanie_001_d411fbaf",
+  "character": "Melanie",
+  "timestamp": "2025-07-25T17:16:17.301747",
+  "type": "INPUT",
+  "data": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a memory processing agent. Follow this structured process to analyze and store conversation information for \"Melanie\":\n\nCONVERSATION TO PROCESS:\nCAROLINE: Hey Mel! Good to see you! How have you been?\nMELANIE: Hey Caroline! Good to see you! I'm swamped with the kids & work. What's up with you? Anything new?\nCAROLINE: I went to a LGBTQ support group yesterday and it was so powerful.\nMELANIE: Wow, that's cool, Caroline! What happened that was so awesome? Did you hear any inspiring stories?\nCAROLINE: The transgender stories were so inspiring! I was so happy and thankful for all the support.\nMELANIE: Wow, love that painting! So cool you found such a helpful group. What's it done for you?\nCAROLINE: The support group has made me feel accepted and given me courage to embrace myself.\nMELANIE: That's really cool. You've got guts. What now?\nCAROLINE: Gonna continue my edu and check out career options, which is pretty exciting!\nMELANIE: Wow, Caroline! What kinda jobs are you thinkin' of? Anything that stands out?\nCAROLINE: I'm keen on counseling or working in mental health - I'd love to support those with similar issues.\nMELANIE: You'd be a great counselor! Your empathy and understanding will really help the people you work with. By the way, take a look at this.\nCAROLINE: Thanks, Melanie! That's really sweet. Is this your own painting?\nMELANIE: Yeah, I painted that lake sunrise last year! It's special to me.\nCAROLINE: Wow, Melanie! The colors really blend nicely. Painting looks like a great outlet for expressing yourself.\nMELANIE: Thanks, Caroline! Painting's a fun way to express my feelings and get creative. It's a great way to relax after a long day.\nCAROLINE: Totally agree, Mel. Relaxing and expressing ourselves is key. Well, I'm off to go do some research.\nMELANIE: Yep, Caroline. Taking care of ourselves is vital. I'm off to go swimming with the kids. Talk to you soon!\n\nCHARACTER: Melanie\nSESSION DATE: 2025-07-25\n\nPROCESSING WORKFLOW:\n1. STORE TO ACTIVITY: Call add_activity_memory with the COMPLETE RAW CONVERSATION TEXT as the 'content' parameter. DO NOT extract, modify, or summarize the conversation - pass the entire original conversation text exactly as shown above.\n\n2. GET CATEGORIES: Call get_available_categories to see what memory categories are available.\n\n3. GENERATE SUGGESTIONS: Call generate_memory_suggestions with the extracted memory items to get suggestions for what should be added to each category.\n\n4. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions to update that category with the new memory items and suggestions. This will return structured modifications.\n\n5. LINK MEMORIES: For each category that was modified, call link_related_memories with link_all_items=true and write_to_memory=true to add relevant links between ALL memories in that category.\n\n6. REFLECTION: Call run_theory_of_mind to analyze the subtle information behind the conversation and extract the theory of mind of the characters.\n\n7. GENERATE SUGGESTIONS: Call generate_memory_suggestions again to get suggestions for what in the REFLECTION result should be added to each category.\n\n8. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions again to update that category with the new memory items and suggestions. This will return structured modifications.\n\nIMPORTANT GUIDELINES:\n- Step 1: CRITICAL: For add_activity_memory, the 'content' parameter MUST be the complete original conversation text exactly as shown above. Do NOT modify, extract, or summarize it.\n- Step 2-5: Use the extracted memory items from step 1 for subsequent processing\n- Step 6: Use both the original conversation and the extracted memory items from step 1 for the analysis\n- Step 7-8: Use the reflection result from step 6 for subsequent processing\n- Each memory item should have its own memory_id and focused content\n- Follow the suggestions when updating categories\n- The update_memory_with_suggestions function will return structured format with memory_id and content\n- Always link related memories after updating categories by setting link_all_items=true and write_to_memory=true\n\nStart with step 1 and work through the process systematically. When you complete all steps, respond with \"PROCESSING_COMPLETE\"."
+      }
+    ],
+    "model": null,
+    "temperature": 0.3,
+    "max_tokens": 1000,
+    "kwargs": {
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "add_activity_memory",
+            "description": "Add new activity memory content with strict no-pronouns formatting for complete, self-contained memory items",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "character_name": {
+                  "type": "string",
+                  "description": "Name of the character"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "Complete original conversation text exactly as provided - do NOT modify, extract, or summarize"
+                },
+                "session_date": {
+                  "type": "string",
+                  "description": "Date of the session (e.g., '2024-01-15')",
+                  "default": null
+                },
+                "append": {
+                  "type": "boolean",
+                  "description": "Whether to append to existing content (true) or replace it (false)",
+                  "default": true
+                },
+                "generate_embeddings": {
+                  "type": "boolean",
+                  "description": "Whether to generate embeddings for semantic search",
+                  "default": true
+                }
+              },
+              "required": [
+                "character_name",
+                "content"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "get_available_categories",
+            "description": "Get all available memory categories and their descriptions (excluding activity category)",
+            "parameters": {
+              "type": "object",
+              "properties": {},
+              "required": []
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "link_related_memories",
+            "description": "Find related memories using embedding search and create links between them",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "character_name": {
+                  "type": "string",
+                  "description": "Name of the character"
+                },
+                "memory_id": {
+                  "type": "string",
+                  "description": "ID of the memory item to find related memories for (optional if link_all_items is true)"
+                },
+                "category": {
+                  "type": "string",
+                  "description": "Category containing the target memory item"
+                },
+                "top_k": {
+                  "type": "integer",
+                  "description": "Number of top related memories to find",
+                  "default": 5
+                },
+                "min_similarity": {
+                  "type": "number",
+                  "description": "Minimum similarity threshold (0.0-1.0)",
+                  "default": 0.3
+                },
+                "search_categories": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Categories to search in (default: all available categories)"
+                },
+                "link_all_items": {
+                  "type": "boolean",
+                  "description": "Whether to link all memory items in the category (if true, memory_id can be omitted)",
+                  "default": false
+                },
+                "write_to_memory": {
+                  "type": "boolean",
+                  "description": "Whether to append links to the original memory content",
+                  "default": false
+                }
+              },
+              "required": [
+                "character_name",
+                "category"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "generate_memory_suggestions",
+            "description": "Analyze new memory items and generate suggestions for what should be added to different memory categories",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "character_name": {
+                  "type": "string",
+                  "description": "Name of the character"
+                },
+                "new_memory_items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "memory_id": {
+                        "type": "string"
+                      },
+                      "content": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "memory_id",
+                      "content"
+                    ]
+                  },
+                  "description": "List of new memory items from the conversation"
+                },
+                "available_categories": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "List of available memory categories"
+                }
+              },
+              "required": [
+                "character_name",
+                "new_memory_items",
+                "available_categories"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "update_memory_with_suggestions",
+            "description": "Update memory categories based on new memory items and suggestions, returning modifications in structured format",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "character_name": {
+                  "type": "string",
+                  "description": "Name of the character"
+                },
+                "category": {
+                  "type": "string",
+                  "description": "Memory category to update"
+                },
+                "suggestion": {
+                  "type": "string",
+                  "description": "Suggestion for what content should be added to this category"
+                },
+                "session_date": {
+                  "type": "string",
+                  "description": "Session date for the memory items (format: YYYY-MM-DD)"
+                },
+                "generate_embeddings": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Whether to generate embeddings for the new content"
+                }
+              },
+              "required": [
+                "character_name",
+                "category",
+                "suggestion"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "run_theory_of_mind",
+            "description": "Analyze the conversation and memory items to extract subtle, obscure, and hidden information behind the conversation.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "character_name": {
+                  "type": "string",
+                  "description": "Name of the character"
+                },
+                "conversation_text": {
+                  "type": "string",
+                  "description": "The full conversation text to analyze"
+                },
+                "memory_items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "memory_id": {
+                        "type": "string"
+                      },
+                      "content": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "memory_id",
+                      "content"
+                    ]
+                  },
+                  "description": "List of new memory items from the conversation"
+                }
+              },
+              "required": [
+                "character_name",
+                "conversation_text",
+                "memory_items"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    }
+  }
+}
