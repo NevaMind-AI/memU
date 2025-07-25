@@ -1,0 +1,18 @@
+{
+  "call_id": "Melanie_012_8570a641",
+  "character": "Melanie",
+  "timestamp": "2025-07-25T17:16:55.310459",
+  "type": "INPUT",
+  "data": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Analyze the following new memory items for Melanie and suggest what should be added to each memory category.\n\nNew Memory Items:\nMemory ID: mem_006\nContent: [ToM] Melanie and Caroline likely share a close and supportive friendship, characterized by warm greetings, mutual encouragement, and sharing of personal interests such as art and mental health.\n\nAvailable Categories: profile, event\n\n**CRITICAL REQUIREMENT: Suggestions must lead to SELF-CONTAINED MEMORY ITEMS**\n\nWhen suggesting content for each category, ensure that the resulting memory items will:\n- Be complete, standalone sentences with full subjects\n- Always include \"Melanie\" instead of pronouns like \"she/he/they\"\n- Include specific names, places, dates, and full context\n- Never use \"the book\", \"the place\", \"the friend\" - always specify full titles and names\n- Be understandable without reading other memory items\n\n**CATEGORY-SPECIFIC REQUIREMENTS:**\n\nFor each category, analyze the new memory items and suggest what specific information should be extracted and added to that category:\n\n- **activity**: Detailed description of the conversation, including the time, place, and people involved\n- **profile**: ONLY basic personal information (age, location, occupation, education, family status, demographics) - EXCLUDE events, activities, things they did\n- **event**: Specific events, dates, milestones, appointments, meetings, activities with time references  \n- **Other categories**: Relevant information for each specific category\n\n**CRITICAL DISTINCTION - Profile vs Activity/Event:**\n- ✅ Profile: \"Alice lives in San Francisco\", \"Alice is 28 years old\", \"Alice works at TechFlow Solutions\"\n- ❌ Profile: \"Alice went hiking\" (this is activity), \"Alice attended workshop\" (this is event)\n- ✅ Activity/Event: \"Alice went hiking in Blue Ridge Mountains\", \"Alice attended photography workshop\"\n\n**SUGGESTION REQUIREMENTS:**\n- Specify that memory items should include \"Melanie\" as the subject\n- Mention specific names, places, titles, and dates that should be included\n- Ensure suggestions lead to complete, self-contained sentences\n- Avoid suggesting content that would result in pronouns or incomplete sentences\n- For profile: Focus ONLY on stable, factual, demographic information\n\n\nFor each category that has relevant information, provide your suggestions in the following format:\n\n**Category: [category_name]**\n- Suggestion: [What specific self-contained content should be added to this category, ensuring full subjects and complete context]\n\nOnly suggest categories where there is relevant new information to add/delete/update. Be specific about what content should be extracted and ensure suggestions lead to complete, self-contained memory items.\n\n"
+      }
+    ],
+    "model": null,
+    "temperature": 0.7,
+    "max_tokens": 1000,
+    "kwargs": {}
+  }
+}
