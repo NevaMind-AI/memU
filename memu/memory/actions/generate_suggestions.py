@@ -103,11 +103,9 @@ When suggesting content for each category, ensure that the resulting memory item
 
 For each category, analyze the new memory items and suggest what specific information should be extracted and added to that category:
 
+- **activity**: Detailed description of the conversation, including the time, place, and people involved
 - **profile**: ONLY basic personal information (age, location, occupation, education, family status, demographics) - EXCLUDE events, activities, things they did
 - **event**: Specific events, dates, milestones, appointments, meetings, activities with time references  
-- **activity**: General activities, conversations, interactions, daily activities (events and temporal actions go here)
-- **interests**: Hobbies, interests, passions, things they enjoy or dislike
-- **study**: Learning activities, courses, education, skill development
 - **Other categories**: Relevant information for each specific category
 
 **CRITICAL DISTINCTION - Profile vs Activity/Event:**
@@ -122,20 +120,14 @@ For each category, analyze the new memory items and suggest what specific inform
 - Avoid suggesting content that would result in pronouns or incomplete sentences
 - For profile: Focus ONLY on stable, factual, demographic information
 
+
 For each category that has relevant information, provide your suggestions in the following format:
 
 **Category: [category_name]**
-- Should add: [yes/no]
 - Suggestion: [What specific self-contained content should be added to this category, ensuring full subjects and complete context]
-- Priority: [high/medium/low]
 
-Only suggest categories where there is relevant new information to add. Be specific about what content should be extracted and ensure suggestions lead to complete, self-contained memory items.
+Only suggest categories where there is relevant new information to add/delete/update. Be specific about what content should be extracted and ensure suggestions lead to complete, self-contained memory items.
 
-Example of good suggestion for profile:
-"Add demographic information about {character_name}'s age, current residence in San Francisco, and occupation as product manager at TechFlow Solutions"
-
-Example of bad suggestion for profile:
-"Add information about {character_name}'s hiking activities" (this belongs in activity/event, not profile)
 """
 
             # Call LLM to generate suggestions
@@ -173,34 +165,29 @@ Example of bad suggestion for profile:
             for line in lines:
                 line = line.strip()
                 
-                # Look for category headers
+                # Look for category headers: **Category: [category_name]**
                 if line.startswith('**Category:') and line.endswith('**'):
                     category_name = line.replace('**Category:', '').replace('**', '').strip()
                     if category_name in available_categories:
                         current_category = category_name
                         suggestions[current_category] = {
-                            "should_add": False,
+                            "should_add": True,  # Default to True since category is mentioned
                             "suggestion": "",
                             "relevant_memory_ids": [item["memory_id"] for item in new_memory_items],
                             "priority": "medium"
                         }
                 
-                # Parse suggestion details
-                elif current_category and line.startswith('- '):
-                    if line.startswith('- Should add:'):
-                        should_add_text = line.replace('- Should add:', '').strip().lower()
-                        suggestions[current_category]["should_add"] = should_add_text in ['yes', 'true']
-                    
-                    elif line.startswith('- Suggestion:'):
-                        suggestion_text = line.replace('- Suggestion:', '').strip()
+                # Parse suggestion content: - Suggestion: [content]
+                elif current_category and line.startswith('- Suggestion:'):
+                    suggestion_text = line.replace('- Suggestion:', '').strip()
+                    if suggestion_text:
                         suggestions[current_category]["suggestion"] = suggestion_text
-                    
-                    elif line.startswith('- Priority:'):
-                        priority_text = line.replace('- Priority:', '').strip().lower()
-                        if priority_text in ['high', 'medium', 'low']:
-                            suggestions[current_category]["priority"] = priority_text
+                        suggestions[current_category]["should_add"] = True
             
-            # Fallback: if no suggestions parsed, create basic ones with self-contained guidance
+            # Clean up categories with empty suggestions
+            suggestions = {k: v for k, v in suggestions.items() if v["suggestion"].strip()}
+            
+            # Fallback: if no valid suggestions parsed, create basic ones
             if not suggestions:
                 for category in available_categories:
                     suggestions[category] = {
@@ -210,8 +197,8 @@ Example of bad suggestion for profile:
                         "priority": "medium"
                     }
         
-        except Exception:
-            # Fallback: create basic suggestions with self-contained guidance for all categories
+        except Exception as e:
+            # Fallback: create basic suggestions for all categories
             suggestions = {}
             for category in available_categories:
                 suggestions[category] = {

@@ -93,7 +93,7 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
             if not activity_content:
                 return self._add_metadata({
                     "success": False,
-                    "error": "No activity content found. Run summarize_conversation and add_activity_memory first."
+                    "error": "No activity content found. Run add_activity_memory first."
                 })
             
             # Use activity content as the source of memory items for LLM processing
@@ -102,28 +102,34 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
             # Load existing content
             existing_content = self._read_memory_content(character_name, category)
             
-            # Load category-specific prompt template
-            update_prompt = self._load_category_update_prompt(
+            # Load category-specific prompt template for extracting NEW content only
+            extract_prompt = self._load_category_extract_prompt(
                 category, character_name, existing_content, memory_items_text, suggestion
             )
 
-            # Call LLM to generate updated content
-            updated_content = self.llm_client.simple_chat(update_prompt)
+            # Call LLM to generate NEW content to append
+            new_content = self.llm_client.simple_chat(extract_prompt)
             
-            if not updated_content.strip():
+            if not new_content.strip():
                 return self._add_metadata({
                     "success": False,
                     "error": f"LLM returned empty content for {category}"
                 })
             
             # Clean up any extra brackets around content lines
-            updated_content = self._clean_extra_brackets(updated_content)
+            new_content = self._clean_extra_brackets(new_content)
             
-            # Add memory IDs with timestamp to the updated content
-            content_with_ids = self._add_memory_ids_with_timestamp(updated_content, session_date)
+            # Add memory IDs with timestamp to the new content
+            new_content_with_ids = self._add_memory_ids_with_timestamp(new_content, session_date)
             
-            # Save the updated content
-            success = self._save_memory_content(character_name, category, content_with_ids)
+            # Append new content to existing content
+            if existing_content:
+                final_content = existing_content + "\n" + new_content_with_ids
+            else:
+                final_content = new_content_with_ids
+            
+            # Save the combined content
+            success = self._save_memory_content(character_name, category, final_content)
             
             if not success:
                 return self._add_metadata({
@@ -131,14 +137,15 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
                     "error": f"Failed to save updated content to {category}"
                 })
             
-            # Generate embeddings if enabled
+            # Generate embeddings if enabled (only for new content)
             embeddings_info = ""
             if generate_embeddings and self.embeddings_enabled:
-                self._generate_memory_embeddings(character_name, category, content_with_ids)
-                embeddings_info = "Generated embeddings for updated content"
+                # Add embeddings for just the new content
+                embedding_result = self._add_memory_item_embedding(character_name, category, new_content_with_ids)
+                embeddings_info = f"Generated embeddings for new content: {embedding_result.get('message', 'Unknown')}"
             
             # Extract the newly added memory items for JSON response
-            new_memory_items_added = self._extract_memory_items_from_content(content_with_ids)
+            new_memory_items_added = self._extract_memory_items_from_content(new_content_with_ids)
             
             # Prepare JSON response with the modifications
             modifications = []
@@ -154,12 +161,14 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
                 "success": True,
                 "character_name": character_name,
                 "category": category,
+                "session_date": session_date,
+                "operation": "append",
+                "new_items_added": len(new_memory_items_added),
                 "modifications": modifications,
-                "content_length": len(content_with_ids),
                 "embeddings_generated": generate_embeddings and self.embeddings_enabled,
                 "embeddings_info": embeddings_info,
                 "file_path": f"{self.memory_core.memory_dir}/{character_name}_{category}.md",
-                "message": f"Successfully updated {category} for {character_name} with {len(modifications)} self-contained modifications"
+                "message": f"Successfully appended {len(new_memory_items_added)} new memory items to {category} for {character_name}"
             })
             
         except Exception as e:
@@ -368,7 +377,7 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
         
         return '\n'.join(cleaned_lines)
     
-    def _load_category_update_prompt(
+    def _load_category_extract_prompt(
         self, 
         category: str, 
         character_name: str, 
@@ -377,7 +386,7 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
         suggestion: str
     ) -> str:
         """
-        Load category-specific prompt template from config/{category}/prompt.txt
+        Load category-specific prompt template to extract NEW content only
         
         Args:
             category: Memory category (profile, event, activity, etc.)
@@ -387,7 +396,7 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
             suggestion: Suggestion for what to extract
             
         Returns:
-            Formatted prompt for the specific category
+            Formatted prompt for extracting new content only
         """
         from pathlib import Path
         
@@ -402,14 +411,14 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
         with open(prompt_file, 'r', encoding='utf-8') as f:
             prompt_template = f.read()
             
-        # Format the prompt with variables for update context
-        update_prompt = f"""Based on the following category-specific requirements, update the {category} memory:
+        # Format the prompt with variables for extracting NEW content only
+        extract_prompt = f"""Based on the following category-specific requirements, extract ONLY NEW information for the {category} memory:
 
 {prompt_template}
 
-=== UPDATE CONTEXT ===
+=== EXTRACTION CONTEXT ===
 
-Existing {category} content:
+EXISTING {category} content (DO NOT DUPLICATE):
 {existing_content if existing_content else "No existing content"}
 
 Source activity content to extract from:
@@ -417,7 +426,13 @@ Source activity content to extract from:
 
 Suggestion for this category: {suggestion}
 
-=== CRITICAL UPDATE REQUIREMENTS ===
+=== CRITICAL EXTRACTION REQUIREMENTS ===
+
+**ONLY EXTRACT NEW INFORMATION**
+- CAREFULLY review the existing {category} content above
+- ONLY extract information that is NOT already present in existing content
+- If information is already covered in existing content, DO NOT extract it again
+- Focus on completely NEW facts, details, or updates
 
 **NO PRONOUNS - COMPLETE SENTENCES ONLY**
 - EVERY memory item must be a complete, standalone sentence
@@ -436,10 +451,11 @@ Suggestion for this category: {suggestion}
 2. NO markdown headers, bullets, or structure
 3. Write in plain text only
 4. Each line will automatically get a memory ID [xxx] prefix
-5. ONLY include lines with actual, factual information - NO "not specified" statements
+5. ONLY include lines with actual, factual NEW information
+6. If no new information is found, return empty content
 
-Extract relevant information according to the category requirements above and write each piece as a complete, self-contained sentence:
+Extract ONLY NEW relevant information according to the category requirements above and write each piece as a complete, self-contained sentence:
 
-Updated {category} content:"""
+NEW {category} content to append:"""
         
-        return update_prompt
+        return extract_prompt

@@ -78,13 +78,11 @@ class MemoryAgent:
     
     Uses independent action modules for each memory operation:
     - add_activity_memory: Add new activity memory content with strict formatting
-    - read_memory: Read memory content
-    - delete_memory: Delete memory content
     - get_available_categories: Get available categories (excluding activity)
     - link_related_memories: Find and link related memories using embedding search
     - generate_memory_suggestions: Generate suggestions for memory categories
     - update_memory_with_suggestions: Update memory categories based on suggestions
-    - summarize_conversation: Summarize conversations and extract memory items
+
     
     Each action is implemented as a separate module in the actions/ directory.
     """
@@ -201,30 +199,27 @@ CHARACTER: {character_name}
 SESSION DATE: {session_date}
 
 PROCESSING WORKFLOW:
-1. SUMMARIZE CONVERSATION: First, call summarize_conversation to analyze the conversation and extract multiple distinct memory items (each item should be a focused piece of information).
+1. STORE TO ACTIVITY: Call add_activity_memory with the COMPLETE RAW CONVERSATION TEXT as the 'content' parameter. This will automatically append to existing activity memories. DO NOT extract, modify, or summarize the conversation - pass the entire original conversation text exactly as shown above.
 
-2. STORE TO ACTIVITY: Store the extracted memory items to the 'activity' category using add_activity_memory with strict formatting.
+2. GET CATEGORIES: Call get_available_categories to see what memory categories are available.
 
-3. GET CATEGORIES: Call get_available_categories to see what memory categories are available.
+3. GENERATE SUGGESTIONS: Call generate_memory_suggestions with the extracted memory items to get suggestions for what should be added to each category.
 
-4. GENERATE SUGGESTIONS: Call generate_memory_suggestions with the extracted memory items to get suggestions for what should be added to each category.
+4. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions to update that category with the new memory items and suggestions. This will return structured modifications.
 
-5. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions to update that category with the new memory items and suggestions. This will return structured modifications.
+5. LINK MEMORIES: For each category that was modified, call link_related_memories with link_all_items=true and write_to_memory=true to add relevant links between ALL memories in that category.
 
-6. LINK MEMORIES: For each category that was modified, call link_related_memories with link_all_items=true and write_to_memory=true to add relevant links between ALL memories in that category.
+6. REFLECTION: Call run_theory_of_mind to analyze the subtle information behind the conversation and extract the theory of mind of the characters.
 
-7. REFELCTION: Call run_theory_of_mind to analyze the subtle information behind the conversation and extract the theory of mind of the characters.
+7. GENERATE SUGGESTIONS: Call generate_memory_suggestions again to get suggestions for what in the REFLECTION result should be added to each category.
 
-8. GENERATE SUGGESTIONS: Call generate_memory_suggestions again to get suggestions for what in the REFLECTION result should be added to each category.
-
-9. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions again to update that category with the new memory items and suggestions. This will return structured modifications.
+8. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions again to update that category with the new memory items and suggestions. This will return structured modifications.
 
 IMPORTANT GUIDELINES:
-- Step 1: Use summarize_conversation to extract distinct memory items from the conversation
-- Step 2: Store the summary and memory items to activity category 
-- Step 3-6: Use the extracted memory items from step 1 for subsequent processing
-- Step 7: Use both the original conversation and the extracted memory items from step 1 for the analysis
-- Step 8-9: Use the reflection result from step 7 for subsequent processing
+- Step 1: CRITICAL: For add_activity_memory, the 'content' parameter MUST be the complete original conversation text exactly as shown above. Do NOT modify, extract, or summarize it.
+- Step 2-5: Use the extracted memory items from step 1 for subsequent processing
+- Step 6: Use both the original conversation and the extracted memory items from step 1 for the analysis
+- Step 7-8: Use the reflection result from step 6 for subsequent processing
 - Each memory item should have its own memory_id and focused content
 - Follow the suggestions when updating categories
 - The update_memory_with_suggestions function will return structured format with memory_id and content
@@ -351,7 +346,7 @@ Start with step 1 and work through the process systematically. When you complete
         for message in conversation:
             role = message.get("role", "unknown")
             content = message.get("content", "")
-            text_parts.append(f"{role.capitalize()}: {content.strip()}")
+            text_parts.append(f"{role.upper()}: {content.strip()}")
         
         return "\n".join(text_parts)
 
@@ -446,29 +441,7 @@ Start with step 1 and work through the process systematically. When you complete
     # Direct Method Access (Compatibility)
     # ================================
 
-    def read_memory(
-        self,
-        character_name: str,
-        category: str = None
-    ) -> Dict[str, Any]:
-        """Read memory content"""
-        return self.actions["read_memory"].execute(
-            character_name=character_name,
-            category=category
-        )
 
-    def delete_memory(
-        self,
-        character_name: str,
-        category: str = None,
-        delete_embeddings: bool = True
-    ) -> Dict[str, Any]:
-        """Delete memory content"""
-        return self.actions["delete_memory"].execute(
-            character_name=character_name,
-            category=category,
-            delete_embeddings=delete_embeddings
-        )
 
     def get_available_categories(self) -> Dict[str, Any]:
         """Get available memory categories"""

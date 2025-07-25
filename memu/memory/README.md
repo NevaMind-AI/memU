@@ -8,9 +8,7 @@ The new MemoryAgent uses an **action-based architecture** where each memory oper
 
 **Available Actions:**
 - **add_memory**: Add new memory content  
-- **read_memory**: Read memory content
 - **search_memory**: Search memory using embeddings
-- **delete_memory**: Delete memory content
 - **get_available_categories**: Get available categories
 - **link_related_memories**: Find and link related memories using embedding search
 
@@ -21,9 +19,7 @@ memory/
 │   ├── __init__.py       # Action registry
 │   ├── base_action.py    # Base class for all actions
 │   ├── add_memory.py
-│   ├── read_memory.py
 │   ├── search_memory.py
-│   ├── delete_memory.py
 │   ├── get_available_categories.py
 │   └── link_related_memories.py
 └── embeddings/            # Per-line embedding storage
@@ -55,7 +51,7 @@ memory_agent = MemoryAgent(
 # Get available actions
 actions = memory_agent.get_function_list()
 print(f"Available actions: {actions}")
-# Output: ['add_memory', 'read_memory', 'search_memory', 'delete_memory', 'get_available_categories', 'link_related_memories']
+# Output: ['add_memory', 'search_memory', 'get_available_categories', 'link_related_memories']
 ```
 
 ### Function Calling with LLM
@@ -110,36 +106,7 @@ result = memory_agent.call_function("search_memory", {
 })
 ```
 
-### 3. **read_memory** - Read specific or all memory categories
-```python
-# Read specific category
-result = memory_agent.call_function("read_memory", {
-    "character_name": "Alice",
-    "category": "profile"
-})
-
-# Read all categories
-result = memory_agent.call_function("read_memory", {
-    "character_name": "Alice"
-})
-```
-
-### 4. **delete_memory** - Delete memory content
-```python
-# Delete specific category
-result = memory_agent.call_function("delete_memory", {
-    "character_name": "Alice",
-    "category": "profile",
-    "delete_embeddings": True
-})
-
-# Delete all memory for character
-result = memory_agent.call_function("delete_memory", {
-    "character_name": "Alice"
-})
-```
-
-### 5. **get_available_categories** - Get all available categories
+### 3. **get_available_categories** - Get all available categories
 ```python
 result = memory_agent.call_function("get_available_categories", {})
 ```
@@ -349,7 +316,7 @@ if action:
 operations = [
     {"name": "add_memory", "args": {"character_name": "Alice", "category": "profile", "content": "Loves music"}},
     {"name": "search_memory", "args": {"character_name": "Alice", "query": "music"}},
-    {"name": "read_memory", "args": {"character_name": "Alice", "category": "profile"}},
+    {"name": "get_available_categories", "args": {}},
     {"name": "search_memory", "args": {"character_name": "Alice", "query": "profile information"}}
 ]
 

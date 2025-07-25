@@ -43,17 +43,12 @@ class AddActivityMemoryAction(BaseAction):
                     },
                     "content": {
                         "type": "string",
-                        "description": "Raw content to process and add to activity memory"
+                        "description": "Complete original conversation text exactly as provided - do NOT modify, extract, or summarize"
                     },
                     "session_date": {
                         "type": "string",
                         "description": "Date of the session (e.g., '2024-01-15')",
                         "default": None
-                    },
-                    "append": {
-                        "type": "boolean",
-                        "description": "Whether to append to existing content (true) or replace it (false)",
-                        "default": True
                     },
                     "generate_embeddings": {
                         "type": "boolean",
@@ -70,7 +65,6 @@ class AddActivityMemoryAction(BaseAction):
         character_name: str,
         content: str,
         session_date: str = None,
-        append: bool = True,
         generate_embeddings: bool = True
     ) -> Dict[str, Any]:
         """
@@ -80,7 +74,6 @@ class AddActivityMemoryAction(BaseAction):
             character_name: Name of the character
             content: Raw content to process and format
             session_date: Date of the session
-            append: Whether to append to existing content or replace it
             generate_embeddings: Whether to generate embeddings for the content
             
         Returns:
@@ -91,10 +84,8 @@ class AddActivityMemoryAction(BaseAction):
             if not session_date:
                 session_date = datetime.now().strftime("%Y-%m-%d")
             
-            # Load existing content if appending
-            existing_content = ""
-            if append:
-                existing_content = self._read_memory_content(character_name, "activity")
+            # Always load existing content to append to it
+            existing_content = self._read_memory_content(character_name, "activity")
             
             # Process raw content through LLM to ensure strict formatting
             formatted_content = self._format_content_with_llm(character_name, content, session_date)
@@ -105,36 +96,26 @@ class AddActivityMemoryAction(BaseAction):
                     "error": "LLM returned empty formatted content"
                 })
             
-            # Clean up any extra brackets around content lines
-            formatted_content = self._clean_extra_brackets(formatted_content)
-            
             # Add memory IDs with timestamp to the formatted content
             content_with_ids = self._add_memory_ids_with_timestamp(formatted_content, session_date)
             
-            # Prepare new content (no session date header for activity)
-            if append and existing_content:
-                # Add separator and new content
+            # Always append new content to existing content
+            if existing_content:
                 new_content = existing_content + "\n" + content_with_ids
             else:
-                # Replace with new content
                 new_content = content_with_ids
             
             # Save content with embeddings if enabled
             embeddings_info = ""
             if generate_embeddings and self.embeddings_enabled:
-                if append and existing_content:
-                    # For append mode, save first, then add embedding for just the new content
-                    success = self._save_memory_content(character_name, "activity", new_content)
-                    if success:
-                        # Add embedding for just the new content
-                        embedding_result = self._add_memory_item_embedding(character_name, "activity", content_with_ids)
-                        embeddings_info = f"Generated embedding for new items: {embedding_result.get('message', 'Unknown')}"
-                    else:
-                        embeddings_info = "Failed to save memory"
+                # Save first, then add embedding for just the new content
+                success = self._save_memory_content(character_name, "activity", new_content)
+                if success:
+                    # Add embedding for just the new content
+                    embedding_result = self._add_memory_item_embedding(character_name, "activity", content_with_ids)
+                    embeddings_info = f"Generated embedding for new items: {embedding_result.get('message', 'Unknown')}"
                 else:
-                    # For replace mode, regenerate all embeddings
-                    success = self._save_memory_with_embeddings(character_name, "activity", new_content)
-                    embeddings_info = "Generated embeddings for all content"
+                    embeddings_info = "Failed to save memory"
             else:
                 success = self._save_memory_content(character_name, "activity", new_content)
                 embeddings_info = "No embeddings generated"
@@ -148,14 +129,14 @@ class AddActivityMemoryAction(BaseAction):
                     "character_name": character_name,
                     "category": "activity",
                     "session_date": session_date,
-                    "operation": "append" if append else "replace",
+                    "operation": "append",
                     "content_added": len(content_with_ids),
                     "memory_items_added": len(memory_items),
                     "memory_items": memory_items,
                     "embeddings_generated": generate_embeddings and self.embeddings_enabled,
                     "embeddings_info": embeddings_info,
                     "file_path": f"{self.memory_core.memory_dir}/{character_name}_activity.md",
-                    "message": f"Successfully {'appended' if append else 'added'} {len(memory_items)} self-contained activity memory items for {character_name}"
+                    "message": f"Successfully appended {len(memory_items)} self-contained activity memory items for {character_name}"
                 })
             else:
                 return self._add_metadata({
@@ -167,175 +148,77 @@ class AddActivityMemoryAction(BaseAction):
             return self._handle_error(e)
     
     def _format_content_with_llm(self, character_name: str, content: str, session_date: str) -> str:
-        """Use LLM to format content with strict no-pronouns requirements"""
+        """Use LLM to format content with meaningful activity grouping"""
         
-        # Create enhanced prompt for strict formatting
+        # Create enhanced prompt for meaningful activity grouping
         format_prompt = f"""You are formatting activity memory content for {character_name} on {session_date}.
 
 Raw content to format:
 {content}
 
-**CRITICAL REQUIREMENT: ONE MEMORY PER LINE - NO EXCEPTIONS**
+**CRITICAL REQUIREMENT: GROUP RELATED CONTENT INTO MEANINGFUL ACTIVITIES**
 
-Transform this raw content into properly formatted activity memory items following these strict rules:
+Transform this raw content into properly formatted activity memory items following these rules:
 
-**ONE-MEMORY-PER-LINE REQUIREMENTS:**
-- EXACTLY ONE complete memory item per line
-- NO multi-sentence lines - split into separate lines if needed
-- NO empty lines between memory items
-- NO bullet points, numbers, or markdown formatting
-- NO headers, sections, or groupings
+**MEANINGFUL ACTIVITY GROUPING REQUIREMENTS:**
+- Group related sentences/statements into single, comprehensive activity descriptions
+- Each activity should be a complete, self-contained description of what happened
+- Combine related dialogue, actions, and context into cohesive activity blocks
+- Only create separate items for genuinely different activities or topics
+- Each activity item should tell a complete "story" or "event"
 
 **SELF-CONTAINED MEMORY REQUIREMENTS:**
-- EVERY memory item must be a complete, standalone sentence
-- ALWAYS include the full subject (use "{character_name}" instead of "she/he/they")
+- EVERY activity item must be complete and standalone
+- ALWAYS include the full subject (do not use "she/he/they/it")
 - NEVER use pronouns that depend on context (no "she", "he", "they", "it")
-- Each memory item should be understandable without reading other items
 - Include specific names, places, dates, and full context in each item
-- Never use "the book", "the place", "the friend" - always include full titles and names
+- Each activity should be understandable without reading other items
+- Include all relevant details, emotions, and outcomes in the activity description
 
 **FORMAT REQUIREMENTS:**
-1. Each line = exactly one complete, self-contained statement
+1. Each line = one complete, meaningful activity (may include multiple related sentences)
 2. NO markdown headers, bullets, numbers, or structure
 3. NO memory ID information (will be added automatically)
 4. Write in plain text only
-5. Focus on factual, concise information
-6. Use specific names, titles, places, and dates in every relevant item
+5. Focus on comprehensive, meaningful activity descriptions
+6. Use specific names, titles, places, and dates
 7. Each line ends with a period
 
-**GOOD EXAMPLES (one per line):**
-{character_name} works as a product manager at TechFlow Solutions.
-{character_name} went hiking with Sarah Johnson in Blue Ridge Mountains.
-{character_name} read 'The Midnight Library' by Matt Haig and found it inspiring.
-{character_name} attended a photography workshop at Community Arts Center.
-{character_name} plans to join Mountain View Camera Club on Tuesdays.
+**GOOD EXAMPLES (meaningful activities, one per line):**
+{character_name} attended a LGBTQ support group where {character_name} heard inspiring transgender stories and felt happy, thankful, accepted, and gained courage to embrace {character_name}'s true self.
+{character_name} discussed future career plans with Melanie, expressing keen interest in counseling and mental health work to support people with similar issues, and Melanie encouraged {character_name} saying {character_name} would be a great counselor due to {character_name}'s empathy and understanding.
+{character_name} admired Melanie's lake sunrise painting from last year, complimented the color blending, and discussed how painting serves as a great outlet for expressing feelings and relaxing after long days.
 
-**BAD EXAMPLES:**
-Works as a product manager. (missing subject)
-{character_name} works as a product manager. She loves the job. (two memories on one line)
-- {character_name} works at TechFlow (bullet point)
-1. {character_name} went hiking (numbering)
+**BAD EXAMPLES (too fragmented):**
+{character_name} went to a LGBTQ support group.
+{character_name} heard transgender stories.
+{character_name} felt happy and thankful.
+{character_name} gained courage to embrace {character_name}'s true self.
+
+**ACTIVITY GROUPING GUIDELINES:**
+- Conversations about the same topic → Single activity
+- Related actions and their outcomes → Single activity  
+- Emotional reactions to specific events → Include in the main activity
+- Sequential related events → Single comprehensive activity
+- Different topics or unrelated events → Separate activities
 
 **QUALITY STANDARDS:**
 - Never use "he", "she", "they", "it" - always use the person's actual name
 - Never use "the book", "the place", "the friend" - always include full titles and names
-- Each line must be complete and understandable independently
-- Include sufficient detail so each item makes sense on its own
-- Split compound sentences into separate lines
+- Each activity must be complete and tell the full story
+- Include emotional context, outcomes, and significance
+- Merge related content intelligently to create meaningful activity summaries
 
-Transform the raw content into properly formatted activity memory items (ONE PER LINE):
+Transform the raw content into properly formatted activity memory items (ONE MEANINGFUL ACTIVITY PER LINE):
 
 """
 
         # Call LLM to format content
-        formatted_content = self.llm_client.simple_chat(format_prompt)
-        
-        # Post-process to ensure strict one-memory-per-line format
-        cleaned_content = self._ensure_one_memory_per_line(formatted_content, character_name)
+        cleaned_content = self.llm_client.simple_chat(format_prompt)
         
         return cleaned_content
     
-    def _ensure_one_memory_per_line(self, content: str, character_name: str) -> str:
-        """Post-process to ensure strict one-memory-per-line format"""
-        if not content.strip():
-            return ""
-        
-        lines = content.split('\n')
-        processed_lines = []
-        
-        for line in lines:
-            line = line.strip()
-            
-            # Skip empty lines
-            if not line:
-                continue
-            
-            # Remove any numbering, bullets, or formatting
-            line = re.sub(r'^[\d\-\*\+•]\s*\.?\s*', '', line)
-            line = re.sub(r'^[#]+\s*', '', line)
-            
-            # Skip if line is too short or doesn't contain character name
-            if len(line) < 10 or character_name not in line:
-                continue
-            
-            # Ensure line ends with period
-            if not line.endswith('.'):
-                line = line.rstrip('.,!?;:') + '.'
-            
-            # Split compound sentences with character name
-            # Look for patterns like "Alice did X. She did Y." and split them
-            sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', line)
-            
-            for sentence in sentences:
-                sentence = sentence.strip()
-                if sentence and len(sentence) > 10:
-                    # Replace pronouns with character name
-                    sentence = self._replace_pronouns_with_name(sentence, character_name)
-                    
-                    # Ensure it ends with period
-                    if not sentence.endswith('.'):
-                        sentence = sentence.rstrip('.,!?;:') + '.'
-                    
-                    processed_lines.append(sentence)
-        
-        return '\n'.join(processed_lines)
     
-    def _replace_pronouns_with_name(self, sentence: str, character_name: str) -> str:
-        """Replace pronouns with character name"""
-        # Common pronoun patterns to replace
-        pronoun_patterns = [
-            (r'\bShe\b', character_name),
-            (r'\bHe\b', character_name),
-            (r'\bThey\b', character_name),
-            (r'\bshe\b', character_name),
-            (r'\bhe\b', character_name),
-            (r'\bthey\b', character_name),
-            (r'\bHer\b', character_name),
-            (r'\bHis\b', character_name),
-            (r'\bTheir\b', character_name),
-            (r'\bher\b', character_name),
-            (r'\bhis\b', character_name),
-            (r'\btheir\b', character_name)
-        ]
-        
-        result = sentence
-        for pattern, replacement in pronoun_patterns:
-            result = re.sub(pattern, replacement, result)
-        
-        return result
-    
-    def _clean_extra_brackets(self, content: str) -> str:
-        """
-        Clean up any extra brackets around content lines
-        
-        Args:
-            content: Raw content from LLM
-            
-        Returns:
-            Cleaned content without extra brackets around individual lines
-        """
-        if not content.strip():
-            return content
-        
-        lines = content.split('\n')
-        cleaned_lines = []
-        
-        for line in lines:
-            line = line.strip()
-            if line:
-                # Remove extra brackets that might wrap the entire line content
-                # Pattern: [content] -> content
-                if line.startswith('[') and line.endswith(']') and line.count('[') == 1 and line.count(']') == 1:
-                    # This looks like content wrapped in brackets, remove them
-                    cleaned_line = line[1:-1].strip()
-                    cleaned_lines.append(cleaned_line)
-                else:
-                    # Keep line as is
-                    cleaned_lines.append(line)
-            else:
-                cleaned_lines.append(line)
-        
-        return '\n'.join(cleaned_lines)
     
     def _add_memory_ids_with_timestamp(self, content: str, session_date: str) -> str:
         """
