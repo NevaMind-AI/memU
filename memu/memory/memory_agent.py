@@ -315,8 +315,6 @@ Start with step 1 and work through the process systematically. When you complete
                     results["processing_log"].append(f"Iteration {iteration + 1}: Error - {str(e)}")
                     break
 
-                # _success = self._create_file_backup(f"{self.memory_core.memory_dir}/{character_name}_event.md", iteration+1)
-
             # Finalize results
             if results["iterations"] >= max_iterations:
                 logger.warning(f"⚠️ Reached maximum iterations ({max_iterations})")
@@ -406,8 +404,6 @@ Start with step 1 and work through the process systematically. When you complete
                 "timestamp": datetime.now().isoformat()
             }
             logger.error(f"Function call failed: {function_name} - {e}")
-            import traceback
-            traceback.print_exc()
             return error_result
 
     def validate_function_call(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
@@ -551,39 +547,3 @@ Start with step 1 and work through the process systematically. When you complete
             },
             "last_updated": datetime.now().isoformat()
         } 
-
-    # 
-    # Memo: Wu: Remove this later, only for debugging
-    # 
-    def _create_file_backup(self, file_path: str, iteration: int) -> bool:
-        """
-        Create a backup of a file by appending the iteration number to its name.
-        
-        Args:
-            file_path (str): Path to the file to backup (e.g., "some/path/output.txt")
-            iteration (int): Current iteration number
-            
-        Returns:
-            bool: True if backup was created successfully, False otherwise
-        """
-        try:
-            # Convert to Path object for easier manipulation
-            original_path = Path(file_path)
-            
-            # Check if the original file exists
-            if not original_path.exists():
-                logger.warning(f"File {file_path} does not exist, skipping backup")
-                return False
-            
-            # Create backup filename by appending iteration number
-            backup_path = original_path.with_suffix(f"{original_path.suffix}.{iteration}")
-            
-            # Copy the file to create backup
-            shutil.copy2(original_path, backup_path)
-            
-            logger.info(f"✅ Created backup: {backup_path}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to create backup for {file_path}: {e}")
-            return False

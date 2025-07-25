@@ -2,10 +2,12 @@
 1. (solved) update_memory_with_suggestions部分大概率有大问题，目前无法进行多轮session（多次调用memory_agent.run），会覆盖已有memory
     还没来得及debug
 
-2. 兼容现有文件系统，目前是直接读写的，没有使用统一MemoryFileManager接口
+2. (如果直接后端接数据库的话这个不用管了) 兼容现有文件系统，目前是直接读写的，没有使用统一MemoryFileManager接口
     具体来说，memory_types相关的可能都要改，工程量可能比较大
 
 3. ClusterMemoriesAction需要进行功能拆分，目前debug阶段直接都放在一起了，但是不符合agent调用逻辑
 
 4. PROCESSING WORKFLOW上暂时把cluster_memories移到前面了，但是这个逻辑好像不太对。我个人认为还是要原始conversion + 生成的格式化的memory（5. UPDATE CATEGORIES获得的）才有更好的效果。只靠1. STORE TO ACTIVITY的activity质量我比较不安。
     可能需要回滚
+
+5. ClusterMemoriesAction目前没有重新做总结，只是把已有memory items复制进去了，这个需要改
