@@ -513,13 +513,13 @@ def quick_memory_test():
     print(f"🔧 LLM Provider: {provider.upper()}")
     
     # Setup directories
-    temp_dir = './debug'
+    memory_dir = './memory'
     llm_logs_dir = './llm_logs'
-    print(f"📁 Using temporary directory: {temp_dir}")
+    print(f"📁 Using memory directory: {memory_dir}")
     print(f"📝 Using LLM logs directory: {llm_logs_dir}")
     
     # Create directories
-    Path(temp_dir).mkdir(exist_ok=True)
+    Path(memory_dir).mkdir(exist_ok=True)
     Path(llm_logs_dir).mkdir(exist_ok=True)
     
     # Load data
@@ -579,7 +579,7 @@ def quick_memory_test():
         # Create memory agent
         memory_agent = MemoryAgent(
             llm_client=llm_client,
-            memory_dir=temp_dir,
+            memory_dir=memory_dir,
             enable_embeddings=False
         )
         print("✅ Memory agent initialized successfully")
@@ -710,7 +710,7 @@ def quick_memory_test():
                     # Show memory files status
                     print(f"\n📁 MEMORY FILES STATUS:")
                     for category in ['activity', 'profile', 'event']:
-                        memory_file = os.path.join(temp_dir, f"{test_character}_{category}.md")
+                        memory_file = os.path.join(memory_dir, f"{test_character}_{category}.md")
                         if os.path.exists(memory_file):
                             size = os.path.getsize(memory_file)
                             with open(memory_file, 'r', encoding='utf-8') as f:
@@ -739,7 +739,7 @@ def quick_memory_test():
         total_items = 0
         
         for category in ['activity', 'profile', 'event']:
-            memory_file = os.path.join(temp_dir, f"{test_character}_{category}.md")
+            memory_file = os.path.join(memory_dir, f"{test_character}_{category}.md")
             if os.path.exists(memory_file):
                 with open(memory_file, 'r', encoding='utf-8') as f:
                     content = f.read()
@@ -812,12 +812,9 @@ def quick_memory_test():
         traceback.print_exc()
     
     finally:
-        # Cleanup memory files but keep LLM logs
-        if os.path.exists(temp_dir):
-            print(f"\n🧹 Cleaning up temporary memory directory: {temp_dir}")
-            shutil.rmtree(temp_dir)
-        
-        print(f"\n📝 LLM logs preserved in: {llm_logs_dir}")
+        # Keep both memory files and LLM logs
+        print(f"\n💾 Memory files preserved in: {memory_dir}")
+        print(f"📝 LLM logs preserved in: {llm_logs_dir}")
     
     print(f"\n✅ Quick test completed!")
     print(f"🕒 Finished at: {datetime.now().strftime('%H:%M:%S')}")

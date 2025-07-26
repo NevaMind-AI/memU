@@ -283,14 +283,17 @@ def comprehensive_memory_test():
         return
     
     # Setup memory agent
-    temp_dir = tempfile.mkdtemp()
-    print(f"📁 Using temporary directory: {temp_dir}")
+    # Use memory directory relative to current test file
+    current_dir = Path(__file__).parent
+    memory_dir = current_dir / "memory"
+    memory_dir.mkdir(exist_ok=True)
+    print(f"📁 Using memory directory: {memory_dir}")
     
     try:
         # Create memory agent
         memory_agent = MemoryAgent(
             llm_client=llm_client,
-            memory_dir=temp_dir,
+            memory_dir=str(memory_dir),
             enable_embeddings=False
         )
         print("✅ Memory agent initialized successfully")
@@ -375,9 +378,9 @@ def comprehensive_memory_test():
                     print(f"\n📁 Memory Files Created:")
                     memory_files = []
                     for category in ['activity', 'profile', 'event']:
-                        memory_file = os.path.join(temp_dir, f"{test_character}_{category}.md")
-                        if os.path.exists(memory_file):
-                            size = os.path.getsize(memory_file)
+                        memory_file = memory_dir / f"{test_character}_{category}.md"
+                        if memory_file.exists():
+                            size = memory_file.stat().st_size
                             memory_files.append(f"{category}: {size} bytes")
                     
                     if memory_files:
@@ -443,10 +446,9 @@ def comprehensive_memory_test():
         # Show final memory state
         print(f"\n📁 Final Memory State:")
         for category in ['activity', 'profile', 'event']:
-            memory_file = os.path.join(temp_dir, f"{test_character}_{category}.md")
-            if os.path.exists(memory_file):
-                with open(memory_file, 'r', encoding='utf-8') as f:
-                    content = f.read()
+            memory_file = memory_dir / f"{test_character}_{category}.md"
+            if memory_file.exists():
+                content = memory_file.read_text(encoding='utf-8')
                 lines = content.count('\n') + 1
                 size = len(content)
                 print(f"   📄 {category}: {lines} lines, {size} characters")
@@ -466,10 +468,9 @@ def comprehensive_memory_test():
         traceback.print_exc()
     
     finally:
-        # Cleanup
-        if os.path.exists(temp_dir):
-            print(f"\n🧹 Cleaning up temporary directory: {temp_dir}")
-            shutil.rmtree(temp_dir)
+        # Memory files are preserved in the memory directory for future reference
+        print(f"\n💾 Memory files saved in: {memory_dir}")
+        print("   Files will be preserved for future reference and analysis")
     
     print(f"\n✅ Comprehensive test completed!")
     print(f"🕒 Finished at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
