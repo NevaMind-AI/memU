@@ -231,36 +231,7 @@ def demo_detailed_iterations(conversation: list[dict] = []):
                         print("   📤 Results:")
                         if success:
                             # Show specific results based on function type
-                            if function_name == 'summarize_conversation':
-                                items_count = call_result.get('items_count', 0)
-                                summary = call_result.get('summary', '')
-                                print(f"      ✅ Items extracted: {items_count}")
-                                print(f"      ✅ Summary length: {len(summary)} characters")
-                                print(f"      📝 Summary preview: {summary[:200]}...")
-                                
-                                # Show sample memory items with validation
-                                memory_items = call_result.get('memory_items', [])
-                                if memory_items:
-                                    print(f"      📦 Sample memory items ({len(memory_items)} total):")
-                                    for j, item in enumerate(memory_items[:3], 1):
-                                        content = item.get('content', '')
-                                        item_type = item.get('type', 'unknown')
-                                        context = item.get('context', '')
-                                        
-                                        print(f"        {j}. [{item_type.upper()}] {content}")
-                                        if context:
-                                            print(f"           Context: {context}")
-                                        
-                                        # Quick compliance check
-                                        has_alice = 'Alice' in content
-                                        has_pronouns = any(p in content.lower() for p in ['she ', 'he ', 'they ', 'it '])
-                                        compliance = "✅ COMPLIANT" if has_alice and not has_pronouns else "❌ VIOLATION"
-                                        print(f"           {compliance}")
-                                    
-                                    if len(memory_items) > 3:
-                                        print(f"        ... and {len(memory_items) - 3} more items")
-                            
-                            elif function_name == 'generate_memory_suggestions':
+                            if function_name == 'generate_memory_suggestions':
                                 suggestions = call_result.get('suggestions', {})
                                 print(f"      ✅ Categories analyzed: {len(suggestions)}")
                                 print("      📋 Suggestion summary:")

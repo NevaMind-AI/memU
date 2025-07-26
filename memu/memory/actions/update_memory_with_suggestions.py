@@ -40,7 +40,6 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
                         "type": "string",
                         "description": "Memory category to update"
                     },
-
                     "suggestion": {
                         "type": "string",
                         "description": "Suggestion for what content should be added to this category"
