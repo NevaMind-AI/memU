@@ -42,13 +42,14 @@ class GenerateMemorySuggestionsAction(BaseAction):
                         },
                         "description": "List of new memory items from the conversation"
                     },
-                    "available_categories": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of available memory categories"
-                    }
+                    # "available_categories": {
+                    #     "type": "array",
+                    #     "items": {"type": "string"},
+                    #     "description": "List of available memory categories"
+                    # }
                 },
-                "required": ["character_name", "new_memory_items", "available_categories"]
+                # "required": ["character_name", "new_memory_items", "available_categories"]
+                "required": ["character_name", "new_memory_items"]
             }
         }
     
@@ -56,7 +57,7 @@ class GenerateMemorySuggestionsAction(BaseAction):
         self,
         character_name: str,
         new_memory_items: List[Dict[str, str]],
-        available_categories: List[str]
+        available_categories: List[str] | None = None
     ) -> Dict[str, Any]:
         """
         Generate memory suggestions for different categories
@@ -74,6 +75,14 @@ class GenerateMemorySuggestionsAction(BaseAction):
                 return self._add_metadata({
                     "success": False,
                     "error": "No memory items provided"
+                })
+
+            if available_categories is None:
+                available_categories = self._get_available_categories(character_name)
+            if not available_categories:
+                return self._add_metadata({
+                    "success": False,
+                    "error": "No available categories found"
                 })
             
             # Convert memory items to text for analysis
@@ -153,6 +162,10 @@ Only suggest categories where there is relevant new information to add/delete/up
             
         except Exception as e:
             return self._handle_error(e)
+
+    def _get_available_categories(self, character_name: str) -> List[str]:
+        """Get available categories for a character"""
+        return [category for category in self.memory_types.keys() if category != "activity"]
     
     def _parse_suggestions_from_text(self, response_text: str, available_categories: List[str], new_memory_items: List[Dict[str, str]]) -> Dict[str, Dict[str, Any]]:
         """Parse suggestions from text format response"""
