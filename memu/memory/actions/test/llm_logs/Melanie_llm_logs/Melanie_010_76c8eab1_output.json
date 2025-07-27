@@ -1,0 +1,46 @@
+{
+  "call_id": "Melanie_010_76c8eab1",
+  "character": "Melanie",
+  "timestamp": "2025-07-26T14:27:43.216984",
+  "type": "OUTPUT",
+  "data": {
+    "success": true,
+    "content": "",
+    "usage": {
+      "completion_tokens": 85,
+      "prompt_tokens": 4838,
+      "total_tokens": 4923,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 4608
+      }
+    },
+    "model": "gpt-4.1-mini-2025-04-14",
+    "error": null,
+    "tool_calls": [
+      {
+        "id": "call_7LBHGX7IipltK6mnkkJR5YlV",
+        "function": {
+          "arguments": "{\"character_name\": \"Melanie\", \"category\": \"profile\", \"link_all_items\": true, \"write_to_memory\": true}",
+          "name": "link_related_memories"
+        },
+        "type": "function"
+      },
+      {
+        "id": "call_4e9luHe03cNF0AxvhFWnaHPW",
+        "function": {
+          "arguments": "{\"character_name\": \"Melanie\", \"category\": \"event\", \"link_all_items\": true, \"write_to_memory\": true}",
+          "name": "link_related_memories"
+        },
+        "type": "function"
+      }
+    ],
+    "duration_seconds": 1.075
+  }
+}

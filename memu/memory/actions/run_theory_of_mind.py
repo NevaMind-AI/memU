@@ -2,6 +2,7 @@
 
 from typing import Dict, Any, List
 from datetime import datetime
+from pathlib import Path
 
 from .base_action import BaseAction
 
@@ -251,6 +252,10 @@ Your task it to leverage your reasoning skills to infer the information that is 
         return reasoning_process, theory_of_mind_items
 
 def dump_debug(string: str):
-    with open("debug/tom_debug.txt", "a") as f:
+    debug_dir = Path("debug")
+    debug_dir.mkdir(exist_ok=True)
+    debug_file = debug_dir / "tom_debug.txt"
+    
+    with open(debug_file, "a", encoding='utf-8') as f:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         f.write(f"[{timestamp}] {string}\n")

@@ -48,11 +48,15 @@ Star MemU to get notified about new releases and join our growing community of A
 
 MemU outperforms other memory solutions in multiple reasoning tasks.
 
-| Model       | Avg. Score | Multi-Hop | Open Domain | Single-Hop | Temporal Reasoning |
+| Model    |   Single-Hop |  Multi-Hop | Open Domain | Temporal Reasoning | Avg. Score | 
 |-------------|------------|-----------|-------------|------------|---------------------|
-| **OpenAI**  | 0.5275     | 0.6028    | 0.3299      | 0.6183     | 0.2825              |
-| **MemOS**   | **0.7331** | **0.6430** | **0.5521**   | **0.7844** | **0.7321**          |
-| **Improvement** | **+38.98%** | **+6.67%** | **+67.35%** | **+26.86%** | **+159.15%**       |
+| **OpenAI**  | 63.79      | 42.92     | 62.29       | 21.71      | 52.90               |
+| **Mem0**    | 67.13      | 51.15     | 72.93       | 55.51      | 66.88               |
+| **Mem0ᵍ**   | 65.71      | 47.19     | 75.71       | 58.13      | 68.44               |
+| **Memobase** | 63.83     | 52.08     | 71.82       | 80.37      | 70.91               |
+| **Zep**     | 74.11      | 66.04     | 67.71       | 79.76      | 75.14               |
+| **MIRIX**   | 85.11      | 83.70     | 65.62       | 88.39      | 85.38               |
+| **MemU**    | **94.9**  | **88.3**  | **77.1**    | **92.5**   | **92.09**  |
 
 
 ---

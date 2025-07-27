@@ -28,6 +28,10 @@ class ClusterMemoriesAction(BaseAction):
                         "type": "string",
                         "description": "Name of the character"
                     },
+                    "conversation_content": {
+                        "type": "string",
+                        "description": "The full conversation content to provide context for clustering"
+                    },
                     "new_memory_items": {
                         "type": "array",
                         "items": {
@@ -58,7 +62,7 @@ class ClusterMemoriesAction(BaseAction):
                     #     "description": "List of available memory categories"
                     # }
                 },
-                "required": ["character_name", "new_memory_items"]
+                "required": ["character_name", "conversation_content", "new_memory_items"]
                 # "required": ["character_name", "new_memory_items", "new_theory_of_mind_items", "available_categories"]
             }
         }
@@ -66,6 +70,7 @@ class ClusterMemoriesAction(BaseAction):
     def execute(
         self,
         character_name: str,
+        conversation_content: str,
         new_memory_items: List[Dict[str, str]],
         new_theory_of_mind_items: List[Dict[str, str]] = [],
         # available_categories: List[str]
@@ -77,9 +82,9 @@ class ClusterMemoriesAction(BaseAction):
         existing_clusters = [cluster.replace('_', ' ') for cluster in existing_clusters]
 
         if existing_clusters:
-             self._merge_existing_clusters(character_name, existing_clusters, new_memory_items, new_theory_of_mind_items)
+             self._merge_existing_clusters(character_name, conversation_content, existing_clusters, new_memory_items, new_theory_of_mind_items)
 
-        new_clusters = self._detect_new_clusters(character_name, existing_clusters, new_memory_items, new_theory_of_mind_items)
+        new_clusters = self._detect_new_clusters(character_name, conversation_content, existing_clusters, new_memory_items, new_theory_of_mind_items)
 
         return self._add_metadata({
             "success": True,
@@ -116,6 +121,7 @@ class ClusterMemoriesAction(BaseAction):
 
     def _merge_existing_clusters(self, 
         character_name: str,
+        conversation_content: str,
         existing_clusters: List[str], 
         new_memory_items: List[Dict[str, str]], 
         new_theory_of_mind_items: List[Dict[str, str]],
@@ -134,20 +140,25 @@ class ClusterMemoriesAction(BaseAction):
         
         system_message = f"""You are an expert in analyzing and categorizing memories items.
 
-You are given a list of existing clusters and a list of memory items. 
+You are given a list of existing clusters, a list of memory items, and the full conversation context that generated these memories.
 Your task is to analyze if each of the memory items is related to any of the existing clusters.
 
-Existing Clusters:
+**CONVERSATION CONTEXT:**
+{conversation_content}
+
+**EXISTING CLUSTERS:**
 {'\n'.join(f"- {cluster}" for cluster in existing_clusters)}
 
-Memory Items:
+**MEMORY ITEMS:**
 {memory_items_text}
 
 **INSTRUCTIONS:**
-1. It is possible that a memory items is related to multiple clusters.
+1. Use the conversation context to better understand the background and relationships of the memory items.
+2. It is possible that a memory item is related to multiple clusters.
 Example: "We went to hiking in Blue Ridge Mountains this summer" is related to both "hiking" and "summer events" clusters, if both these two clusters are in the Existing Clusters.
-2. If it possible that some memory items are not related to any of the existing clusters, you don't need to force them into any cluster.
-3. DO NOT output memory items that are not related to any of the existing clusters.
+3. If it possible that some memory items are not related to any of the existing clusters, you don't need to force them into any cluster.
+4. DO NOT output memory items that are not related to any of the existing clusters.
+5. Consider the conversation context when determining relationships - topics discussed together might belong to the same cluster.
 
 **OUTPUT FORMAT:**
 - [Memory ID]: [Cluster names that the memory item is related to, separated by comma]
@@ -196,6 +207,7 @@ Example: "We went to hiking in Blue Ridge Mountains this summer" is related to b
 
     def _detect_new_clusters(self, 
         character_name: str, 
+        conversation_content: str,
         existing_clusters: List[str], 
         new_memory_items: List[Dict[str, str]], 
         new_theory_of_mind_items: List[Dict[str, str]],
@@ -214,20 +226,29 @@ Example: "We went to hiking in Blue Ridge Mountains this summer" is related to b
 
         system_message = f"""You are an expert in discovering some important or repeating events in one's memory records.
 
-You are given a list of memory items, each describes an event in one's life.
-Your task is to discover events that are either:
+You are given a conversation context, a list of memory items extracted from this conversation, and existing clusters.
+Your task is to discover NEW events/themes that are either:
 - Important (e.g., marriage, job promotion, etc.), or 
 - Repeating, periodical, or routine (e.g., going to gym, attending specific events, etc.).
 
-Memory Items:
+**CONVERSATION CONTEXT:**
+{conversation_content}
+
+**EXISTING CLUSTERS (DO NOT recreate these):**
+{'\n'.join(f"- {cluster}" for cluster in existing_clusters)}
+
+**MEMORY ITEMS:**
 {memory_items_text}
 
 **INSTRUCTIONS:**
-1. You should create a Event Name for each event you discover.
-2. The Event Name should be short and clear. A single word is the best (e.g., "marriage", "hiking"). Never let the name be longer than 3 words.
-3. An event can be considered repeating, periodical, or routine, if they are mentioned at least twice in the memory items.
-4. If an event is considered important enough (e.g., proposal), you should record it no matter how many times it is mentioned.
-5. For event content that are close (e.g., hiking and backpacking), you can merge them into a single event, and accumulate the count.
+1. Use the conversation context to better understand the significance and relationships of events.
+2. Only create NEW clusters - do not recreate existing clusters listed above.
+3. You should create a Event Name for each NEW event you discover.
+4. The Event Name should be short and clear. A single word is the best (e.g., "marriage", "hiking"). Never let the name be longer than 3 words.
+5. An event can be considered repeating, periodical, or routine, if they are mentioned at least twice in the memory items OR if the conversation context suggests it's a recurring theme.
+6. If an event is considered important enough (e.g., proposal), you should record it no matter how many times it is mentioned.
+7. For event content that are close (e.g., hiking and backpacking), you can merge them into a single event, and accumulate the count.
+8. Consider the conversation flow - events discussed together might indicate related themes or patterns.
 
 **OUTPUT FORMAT:**
 - [Event Name]: [Memory ID of ALL memory items related to this event, separated by comma]

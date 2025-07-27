@@ -1,0 +1,18 @@
+{
+  "call_id": "Melanie_009_3e76925d",
+  "character": "Melanie",
+  "timestamp": "2025-07-26T14:27:40.770430",
+  "type": "INPUT",
+  "data": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Analyze the following memory update scenario and determine what operation should be performed.\n\n=== SCENARIO ===\nCharacter: Melanie\nCategory: event\nSuggestion: Add a memory item describing the discussion where Melanie showed Caroline Melanie’s lake sunrise painting from the previous year, Caroline complimented the color blending and artistic expression, and Melanie explained that painting serves as a creative outlet and relaxation after long days.\n\n=== EXISTING EVENT CONTENT ===\nNo existing content\n\n=== NEW ACTIVITY CONTENT TO ANALYZE ===\n[3302b3][mentioned at 2025-07-26] Melanie and Caroline had a conversation on 2025-07-26 where Caroline shared that Caroline attended a LGBTQ support group the day before, found the transgender stories inspiring, and felt happy, thankful, accepted, and gained courage to embrace Caroline's true self. []\n\n[73aff4][mentioned at 2025-07-26] Melanie encouraged Caroline's plans to continue education and explore career options, and Caroline expressed keen interest in counseling or working in mental health to support people with similar issues, while Melanie praised Caroline's empathy and understanding as qualities that would make Caroline a great counselor. []\n\n[78e647][mentioned at 2025-07-26] Melanie showed Caroline Melanie's lake sunrise painting from the previous year, and Caroline complimented the color blending and artistic expression, leading to a discussion where Melanie explained that painting serves as a fun, creative outlet to express feelings and relax after long days. []\n\n=== OPERATION TYPES ===\n1. **ADD**: Add completely new information that doesn't exist in current content\n2. **UPDATE**: Modify or enhance existing information with new details\n3. **DELETE**: Remove outdated, incorrect, or irrelevant information\n4. **TOUCH**: Current content is sufficient, no changes needed (mark as accessed)\n\n=== ANALYSIS REQUIREMENTS ===\n\n**Determine the most appropriate operation type:**\n\n- **Choose ADD if:** New activity contains information not covered in existing content\n- **Choose UPDATE if:** New activity provides updated details for existing information\n- **Choose DELETE if:** Existing content is outdated/incorrect based on new activity\n- **Choose TOUCH if:** Existing content already covers the new activity adequately\n\n**For non-TOUCH operations, provide specific content:**\n\n**NO PRONOUNS - COMPLETE SENTENCES ONLY**\n- EVERY memory item must include the full subject \"Melanie\"\n- NEVER use pronouns (no \"she\", \"he\", \"they\", \"it\")\n- Each item should be a complete, standalone sentence\n\n**CRITICAL: NO \"NOT SPECIFIED\" CONTENT**\n- NEVER create items saying information is \"not specified\" or \"unknown\"\n- ONLY process information that is ACTUALLY present in the activity content\n\n=== OUTPUT FORMAT ===\n\n**OPERATION:** [ADD/UPDATE/DELETE/TOUCH]\n\n**REASON:** [One sentence explaining why this operation was chosen]\n\n**CONTENT:** [Only if operation is ADD, UPDATE, or DELETE]\n[Each line should be one complete, self-contained statement]\n[NO markdown, bullets, or structure - plain text only]\n[Each line will automatically get a memory ID]\n\n**TARGET_IDS:** [Only for UPDATE/DELETE operations]\n[List memory IDs from existing content that should be modified/deleted]\n[Format: memory_id1, memory_id2, memory_id3]\n\nAnalyze and determine the appropriate operation:"
+      }
+    ],
+    "model": null,
+    "temperature": 0.7,
+    "max_tokens": 1000,
+    "kwargs": {}
+  }
+}

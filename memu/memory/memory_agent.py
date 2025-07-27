@@ -267,6 +267,7 @@ Start with step 1 and work through the process systematically. When you complete
                             function_name = tool_call.function.name
                             
                             try:
+                                print(tool_call.function.arguments)
                                 arguments = json.loads(tool_call.function.arguments)
                             except json.JSONDecodeError as e:
                                 logger.error(f"Failed to parse function arguments: {e}")
