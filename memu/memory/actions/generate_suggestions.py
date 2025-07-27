@@ -36,7 +36,8 @@ class GenerateMemorySuggestionsAction(BaseAction):
                             "type": "object",
                             "properties": {
                                 "memory_id": {"type": "string"},
-                                "content": {"type": "string"}
+                                "content": {"type": "string"},
+                                "mentioned_at": {"type": "string"},
                             },
                             "required": ["memory_id", "content"]
                         },
@@ -87,7 +88,8 @@ class GenerateMemorySuggestionsAction(BaseAction):
             
             # Convert memory items to text for analysis
             memory_items_text = "\n".join([
-                f"Memory ID: {item['memory_id']}\nContent: {item['content']}"
+                # f"Memory ID: {item['memory_id']}\nContent: {item['content']}"
+                f"- {item['content']}"
                 for item in new_memory_items
             ])
             
@@ -118,9 +120,9 @@ For each category, analyze the new memory items and suggest what specific inform
 - **Other categories**: Relevant information for each specific category
 
 **CRITICAL DISTINCTION - Profile vs Activity/Event:**
-- ✅ Profile: "Alice lives in San Francisco", "Alice is 28 years old", "Alice works at TechFlow Solutions"
-- ❌ Profile: "Alice went hiking" (this is activity), "Alice attended workshop" (this is event)
-- ✅ Activity/Event: "Alice went hiking in Blue Ridge Mountains", "Alice attended photography workshop"
+- Profile (GOOD): "Alice lives in San Francisco", "Alice is 28 years old", "Alice works at TechFlow Solutions"
+- Profile (BAD): "Alice went hiking" (this is activity), "Alice attended workshop" (this is event)
+- Activity/Event (GOOD): "Alice went hiking in Blue Ridge Mountains", "Alice attended photography workshop"
 
 **SUGGESTION REQUIREMENTS:**
 - Specify that memory items should include "{character_name}" as the subject
@@ -128,7 +130,6 @@ For each category, analyze the new memory items and suggest what specific inform
 - Ensure suggestions lead to complete, self-contained sentences
 - Avoid suggesting content that would result in pronouns or incomplete sentences
 - For profile: Focus ONLY on stable, factual, demographic information
-
 
 For each category that has relevant information, provide your suggestions in the following format:
 
@@ -165,7 +166,8 @@ Only suggest categories where there is relevant new information to add/delete/up
 
     def _get_available_categories(self, character_name: str) -> List[str]:
         """Get available categories for a character"""
-        return [category for category in self.memory_types.keys() if category != "activity"]
+        # return [category for category in self.memory_types.keys() if category != "activity"]
+        return ["profile", "event"]
     
     def _parse_suggestions_from_text(self, response_text: str, available_categories: List[str], new_memory_items: List[Dict[str, str]]) -> Dict[str, Dict[str, Any]]:
         """Parse suggestions from text format response"""
@@ -177,48 +179,62 @@ Only suggest categories where there is relevant new information to add/delete/up
             
             for line in lines:
                 line = line.strip()
-                
-                # Look for category headers: **Category: [category_name]**
+
                 if line.startswith('**Category:') and line.endswith('**'):
                     category_name = line.replace('**Category:', '').replace('**', '').strip()
                     if category_name in available_categories:
                         current_category = category_name
-                        suggestions[current_category] = {
-                            "should_add": True,  # Default to True since category is mentioned
-                            "suggestion": "",
-                            "relevant_memory_ids": [item["memory_id"] for item in new_memory_items],
-                            "priority": "medium"
-                        }
-                
-                # Parse suggestion content: - Suggestion: [content]
+                        suggestions[current_category] = ""
                 elif current_category and line.startswith('- Suggestion:'):
                     suggestion_text = line.replace('- Suggestion:', '').strip()
-                    if suggestion_text:
-                        suggestions[current_category]["suggestion"] = suggestion_text
-                        suggestions[current_category]["should_add"] = True
+                    suggestions[current_category] += f"{suggestion_text}\n"
             
-            # Clean up categories with empty suggestions
-            suggestions = {k: v for k, v in suggestions.items() if v["suggestion"].strip()}
-            
-            # Fallback: if no valid suggestions parsed, create basic ones
-            if not suggestions:
-                for category in available_categories:
-                    suggestions[category] = {
-                        "should_add": True,
-                        "suggestion": f"Extract relevant {category} information ensuring each memory item starts with the character name and includes full context",
-                        "relevant_memory_ids": [item["memory_id"] for item in new_memory_items],
-                        "priority": "medium"
-                    }
-        
+            suggestions = {k: v for k, v in suggestions.items() if v.strip()}
         except Exception as e:
-            # Fallback: create basic suggestions for all categories
-            suggestions = {}
-            for category in available_categories:
-                suggestions[category] = {
-                    "should_add": True,
-                    "suggestion": f"Extract relevant {category} information ensuring each memory item is a complete sentence with full subject and specific details",
-                    "relevant_memory_ids": [item["memory_id"] for item in new_memory_items],
-                    "priority": "medium"
-                }
+            raise            
+        return suggestions
+                
+        #         # Look for category headers: **Category: [category_name]**
+        #         if line.startswith('**Category:') and line.endswith('**'):
+        #             category_name = line.replace('**Category:', '').replace('**', '').strip()
+        #             if category_name in available_categories:
+        #                 current_category = category_name
+        #                 suggestions[current_category] = {
+        #                     "should_add": True,  # Default to True since category is mentioned
+        #                     "suggestion": "",
+        #                     "relevant_memory_ids": [item["memory_id"] for item in new_memory_items],
+        #                     "priority": "medium"
+        #                 }
+                
+        #         # Parse suggestion content: - Suggestion: [content]
+        #         elif current_category and line.startswith('- Suggestion:'):
+        #             suggestion_text = line.replace('- Suggestion:', '').strip()
+        #             if suggestion_text:
+        #                 suggestions[current_category]["suggestion"] = suggestion_text
+        #                 suggestions[current_category]["should_add"] = True
+            
+        #     # Clean up categories with empty suggestions
+        #     suggestions = {k: v for k, v in suggestions.items() if v["suggestion"].strip()}
+            
+        #     # Fallback: if no valid suggestions parsed, create basic ones
+        #     if not suggestions:
+        #         for category in available_categories:
+        #             suggestions[category] = {
+        #                 "should_add": True,
+        #                 "suggestion": f"Extract relevant {category} information ensuring each memory item starts with the character name and includes full context",
+        #                 "relevant_memory_ids": [item["memory_id"] for item in new_memory_items],
+        #                 "priority": "medium"
+        #             }
         
-        return suggestions 
+        # except Exception as e:
+        #     # Fallback: create basic suggestions for all categories
+        #     suggestions = {}
+        #     for category in available_categories:
+        #         suggestions[category] = {
+        #             "should_add": True,
+        #             "suggestion": f"Extract relevant {category} information ensuring each memory item is a complete sentence with full subject and specific details",
+        #             "relevant_memory_ids": [item["memory_id"] for item in new_memory_items],
+        #             "priority": "medium"
+        #         }
+        
+        # return suggestions 

@@ -38,9 +38,10 @@ class ClusterMemoriesAction(BaseAction):
                             "type": "object",
                             "properties": {
                                 "memory_id": {"type": "string"},
-                                "content": {"type": "string"}
+                                "content": {"type": "string"},
+                                "session_date": {"type": "string"}
                             },
-                            "required": ["memory_id", "content"]
+                            "required": ["memory_id", "content", "session_date"]
                         },
                         "description": "List of new memory items from the conversation"
                     },
@@ -168,8 +169,6 @@ Example: "We went to hiking in Blue Ridge Mountains this summer" is related to b
 
         response = self.llm_client.simple_chat(system_message)
 
-        dump_debug(f"[merge] {repr(response)}")
-
         if not response.strip():
             return self._add_metadata({
                 "success": False,
@@ -245,10 +244,11 @@ Your task is to discover NEW events/themes that are either:
 2. Only create NEW clusters - do not recreate existing clusters listed above.
 3. You should create a Event Name for each NEW event you discover.
 4. The Event Name should be short and clear. A single word is the best (e.g., "marriage", "hiking"). Never let the name be longer than 3 words.
-5. An event can be considered repeating, periodical, or routine, if they are mentioned at least twice in the memory items OR if the conversation context suggests it's a recurring theme.
-6. If an event is considered important enough (e.g., proposal), you should record it no matter how many times it is mentioned.
-7. For event content that are close (e.g., hiking and backpacking), you can merge them into a single event, and accumulate the count.
-8. Consider the conversation flow - events discussed together might indicate related themes or patterns.
+5. The Event Name should contains only alphabets or space. DO NOT use any other characters including hyphen, underscore, etc.
+6. An event can be considered repeating, periodical, or routine, if they are mentioned at least twice in the memory items OR if the conversation context suggests it's a recurring theme.
+7. If an event is considered important enough (e.g., proposal), you should record it no matter how many times it is mentioned.
+8. For event content that are close (e.g., hiking and backpacking), you can merge them into a single event, and accumulate the count.
+9. Consider the conversation flow - events discussed together might indicate related themes or patterns.
 
 **OUTPUT FORMAT:**
 - [Event Name]: [Memory ID of ALL memory items related to this event, separated by comma]
@@ -264,10 +264,6 @@ Your task is to discover NEW events/themes that are either:
                 "error": "LLM returned empty response"
             })
 
-
-        dump_debug(f"{repr(all_items)}")
-        dump_debug(f"[detect] {repr(response)}")
-
         new_clusters = {}
 
         for line in response.split('\n'):
@@ -275,9 +271,10 @@ Your task is to discover NEW events/themes that are either:
                 continue
 
             cluster, memory_ids = line[2:].split(': ', 1)
+            cluster = cluster.strip().lower()
             cluster_fn = cluster.replace(' ', '_')
             with open(f"memory/{character_name}_{cluster_fn}.md", "a") as f:
-                if cluster not in existing_clusters:
+                if cluster not in new_clusters:
                     new_clusters[cluster] = []
 
                 for memory_id in memory_ids.split(','):
@@ -285,8 +282,6 @@ Your task is to discover NEW events/themes that are either:
                     if not memory_id in all_items:
                         continue
                     memory_item = all_items[memory_id]
-
-                    dump_debug(f"[add] {cluster} {repr(memory_item)}")
 
                     # f.write(f"[{memory_id}][mentioned at {memory_item['session_date']}] {memory_item['content']} []\n")
                     f.write(f"[{memory_id}][mentioned at {memory_item.get('session_date', 'Unknown')}] {memory_item['content']} []\n")
@@ -298,8 +293,3 @@ Your task is to discover NEW events/themes that are either:
             "character_name": character_name,
             "new_clusters": new_clusters
         })
-
-def dump_debug(string: str):
-    with open("debug/cluster_debug.txt", "a") as f:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        f.write(f"[{timestamp}] {string}\n")

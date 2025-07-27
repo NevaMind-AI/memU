@@ -47,7 +47,7 @@ class BaseLLMClient(ABC):
         messages: List[Dict[str, str]],
         model: str = None,
         temperature: float = 0.7,
-        max_tokens: int = 1000,
+        max_tokens: int = 8000,
         **kwargs,
     ) -> LLMResponse:
         """

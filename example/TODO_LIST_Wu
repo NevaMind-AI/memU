@@ -7,7 +7,18 @@
 
 3. ClusterMemoriesAction需要进行功能拆分，目前debug阶段直接都放在一起了，但是不符合agent调用逻辑
 
-4. PROCESSING WORKFLOW上暂时把cluster_memories移到前面了，但是这个逻辑好像不太对。我个人认为还是要原始conversion + 生成的格式化的memory（5. UPDATE CATEGORIES获得的）才有更好的效果。只靠1. STORE TO ACTIVITY的activity质量我比较不安。
+4. PROCESSING WORKFLOW上暂时把run_theory_of_mind移到前面了，但是这个逻辑好像不太对。我个人认为还是要原始conversion + 生成的格式化的memory（5. UPDATE CATEGORIES获得的）才有更好的效果。只靠1. STORE TO ACTIVITY的activity质量可能比较不稳。
     可能需要回滚
 
-5. ClusterMemoriesAction目前没有重新做总结，只是把已有memory items复制进去了，这个需要改
+5. ！！！重要！！！ClusterMemoriesAction目前用的是Step 1的Activity Memory，实际应该用Step 5的结果（更细颗粒度的memory）
+    这个改+测试可能需要不少时间，暂时还没敢动
+
+6. Theory of Mind Action现在没有做embedding，如果和add_activity_memory的embedding方法完全一样，可能把embedding抽象化出去更好
+
+7. 确认Theory of Mind Action返回值dict是否完整/包含所有必要信息
+    或者换个说法，add_activity_memory的返回值是否有用不上的冗余项
+
+8. client的context还是需要精简，对话长了12000 token可能都不一定够
+
+9. generate_suggestions.py: _get_available_categories (line 172)有bug，暂时写死了
+    涉及cursor自己写的屎山memory_types，debug可能要很久，我之后再查

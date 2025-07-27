@@ -205,19 +205,19 @@ PROCESSING WORKFLOW:
 
 2. THEORY OF MIND: Call run_theory_of_mind to analyze the subtle information behind the conversation and extract the theory of mind of the characters.
 
-3. GENERATE SUGGESTIONS: Call generate_memory_suggestions with the extracted memory items to get suggestions for what should be added to each category.
+3. GENERATE SUGGESTIONS: Call generate_memory_suggestions with the available memory items to get suggestions for what should be added to each category.
 
-5. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions to update that category with the new memory items and suggestions. This will return structured modifications.
+4. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions to update that category with the new memory items and suggestions. This will return structured modifications.
 
-6. LINK MEMORIES: For each category that was modified, call link_related_memories with link_all_items=true and write_to_memory=true to add relevant links between ALL memories in that category.
+5. LINK MEMORIES: For each category that was modified, call link_related_memories with link_all_items=true and write_to_memory=true to add relevant links between ALL memories in that category.
 
-7. CLUSTER MEMORIES: Call cluster_memories to cluster the memories into different categories.
+6. CLUSTER MEMORIES: Call cluster_memories to cluster the memories into different categories.
 
 IMPORTANT GUIDELINES:
 - Step 1: CRITICAL: For add_activity_memory, the 'content' parameter MUST be the complete original conversation text exactly as shown above. Do NOT modify, extract, or summarize it.
-- Step 2: Use both the original conversation and the extracted memory items from step 1 for the theory of mind analysis
-- Step 3-6: Use the extracted memory items from both step 1 and step 2 for subsequent processing. You can simply concatenate the two lists of memory items and pass them to the corresponding function.
-- Step 7: IMPORTANT: Use ONLY the memory items from step 1 for clustering. DO NOT use the theory of mind results from step 2, which are inferences and are not 100% certain.
+- Step 2: Use both the original conversation and the extracted activity memoryitems from step 1 for the theory of mind analysis
+- Step 3-5: Use BOTH the extracted memory items from step 1 and theory-of-mind items from step 2 for subsequent processing. You can simply concatenate the two lists of memory items and pass them to the subsequent function.
+- Step 6: IMPORTANT: Use ONLY the memory items from step 1 for clustering. DO NOT use the theory of mind results from step 2, which are inferences and are not 100% certain.
 - Each memory item should have its own memory_id and focused content
 - Follow the suggestions when updating categories
 - The update_memory_with_suggestions function will return structured format with memory_id and content
@@ -267,10 +267,11 @@ Start with step 1 and work through the process systematically. When you complete
                             function_name = tool_call.function.name
                             
                             try:
-                                print(tool_call.function.arguments)
                                 arguments = json.loads(tool_call.function.arguments)
                             except json.JSONDecodeError as e:
                                 logger.error(f"Failed to parse function arguments: {e}")
+                                logger.error(f"Function name: {function_name}")
+                                logger.error(f"Arguments raw: {repr(tool_call.function.arguments)}")
                                 continue
                             
                             logger.info(f"🔧 Calling function: {function_name}")
@@ -281,7 +282,7 @@ Start with step 1 and work through the process systematically. When you complete
                             # Track function call
                             call_record = {
                                 "iteration": iteration + 1,
-                                "function": function_name,
+                                "function_name": function_name,
                                 "arguments": arguments,
                                 "result": function_result
                             }

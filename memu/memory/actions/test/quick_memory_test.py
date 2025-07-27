@@ -16,6 +16,8 @@ from pathlib import Path
 from datetime import datetime
 import uuid
 
+import traceback
+
 # Load environment variables from .env file
 try:
     from dotenv import load_dotenv
@@ -64,7 +66,7 @@ class LLMLoggingWrapper:
             f.write(f"Started at: {datetime.now().isoformat()}\n")
             f.write("=" * 80 + "\n\n")
     
-    def chat_completion(self, messages, model=None, temperature=0.7, max_tokens=1000, **kwargs):
+    def chat_completion(self, messages, model=None, temperature=0.7, max_tokens=12000, **kwargs):
         """Wrapper around chat_completion with logging"""
         self.call_counter += 1
         call_id = f"{self.character_name}_{self.call_counter:03d}_{uuid.uuid4().hex[:8]}"
@@ -444,13 +446,14 @@ class LocomoDataLoader:
         return session_text.strip()
 
 
-def display_function_results(function_results):
+def display_function_results(function_calls):
     """Display function call results in a formatted way"""
-    print(f"\n🔧 FUNCTION CALLS EXECUTED ({len(function_results)} total):")
+    print(f"\n🔧 FUNCTION CALLS EXECUTED ({len(function_calls)} total):")
     print("=" * 60)
     
-    for i, func_result in enumerate(function_results, 1):
-        func_name = func_result.get('function_name', 'unknown')
+    for i, func_call in enumerate(function_calls, 1):
+        func_name = func_call.get('function_name', 'unknown')
+        func_result = func_call.get('result', {})
         success = func_result.get('success', False)
         status = "✅" if success else "❌"
         
@@ -472,7 +475,7 @@ def display_function_results(function_results):
                 suggestions = func_result.get('suggestions', {})
                 print(f"     Suggestions for {len(suggestions)} categories:")
                 for cat, suggestion in list(suggestions.items())[:3]:
-                    print(f"       • {cat}: {suggestion[:80]}...")
+                    print(f"       • {cat}: {repr(suggestion)[:80]}...")
             
             elif func_name == 'update_memory_with_suggestions':
                 modifications = func_result.get('modifications', [])
@@ -724,6 +727,7 @@ def quick_memory_test():
                     
             except Exception as e:
                 print(f"❌ Exception during session {session_num}: {e}")
+                traceback.print_exc()
             
             # Brief pause between sessions
             if session_idx < len(test_sessions):
@@ -808,7 +812,6 @@ def quick_memory_test():
     
     except Exception as e:
         print(f"❌ Fatal error: {e}")
-        import traceback
         traceback.print_exc()
     
     finally:

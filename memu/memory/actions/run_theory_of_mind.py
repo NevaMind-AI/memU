@@ -33,7 +33,7 @@ class RunTheoryOfMindAction(BaseAction):
                         "type": "string",
                         "description": "The full conversation text to analyze"
                     },
-                    "memory_items": {
+                    "activity_items": {
                         "type": "array",
                         "items": {
                             "type": "object",
@@ -43,10 +43,20 @@ class RunTheoryOfMindAction(BaseAction):
                             },
                             "required": ["memory_id", "content"]
                         },
-                        "description": "List of new memory items from the conversation"
+                        "description": "List of new activity items from the conversation"
                     },
+                    "session_date": {
+                        "type": "string",
+                        "description": "Date of the session (e.g., '2024-01-15')",
+                        "default": None
+                    },
+                    "embeddings_enabled": {
+                        "type": "boolean",
+                        "description": "Whether to generate embeddings for the theory of mind items",
+                        "default": True
+                    }
                 },
-                "required": ["character_name", "conversation_text", "memory_items"]
+                "required": ["character_name", "conversation_text", "activity_items"]
             }
         }
 
@@ -54,7 +64,9 @@ class RunTheoryOfMindAction(BaseAction):
         self,
         character_name: str,
         conversation_text: str,
-        memory_items: List[Dict[str, str]]
+        activity_items: List[Dict[str, str]],
+        session_date: str = None,
+        embeddings_enabled: bool = True
     ) -> Dict[str, Any]:
         """
         Analyze the conversation and memory items to extract subtle, obscure, and hidden information behind the conversation.
@@ -62,7 +74,9 @@ class RunTheoryOfMindAction(BaseAction):
         Args:
             character_name: Name of the character
             conversation_text: The full conversation text to analyze
-            memory_items: List of new memory items from the conversation
+            activity_items: List of new memory items from the conversation
+            session_date: Date of the session
+            embeddings_enabled: Whether to generate embeddings for the theory of mind items
 
         Returns:
             Dict containing memory items obtained through theory of mind
@@ -74,78 +88,17 @@ class RunTheoryOfMindAction(BaseAction):
                     "error": "Empty conversation text provided"
                 })
             
-            if not memory_items:
+            if not activity_items:
                 return self._add_metadata({
                     "success": False,
                     "error": "No memory items provided"
                 })
 
-            memory_items_text = "\n".join([
-                f"Memory ID: {item['memory_id']}\nContent: {item['content']}"
-                for item in memory_items
-            ])
-            
-            # Create comprehensive prompt for LLM to analyze conversation and extract ALL details
-            theory_of_mind_prompt = f"""Analyze the following conversation and memory items for {character_name} and try to infer information that is not explicitly mentioned in the conversation, but the character might meant to express or the listener can reasonably deduce.
-
-Conversation:
-{conversation_text}
-
-Memory Items:
-{memory_items_text}
-
-**CRITICAL REQUIREMENT: Inference results must be SELF-CONTAINED MEMORY ITEMS**
-
-Your task it to leverage your reasoning skills to infer the information that is not explicitly mentioned in the conversation, but the character might meant to express or the listener can reasonably deduce.
-
-**SELF-CONTAINED MEMORY REQUIREMENTS:**
-- EVERY memory item must be a complete, standalone sentence
-- ALWAYS include the full subject (use "{character_name}" instead of "she/he/they")
-- NEVER use pronouns that depend on context
-- Each memory item should be understandable without reading other items
-- Include specific names, places, dates, and full context in each item
-- Avoid abbreviations or references that need explanation
-- You can use words like "perhaps" or "maybe" to indicate that the information is obtained through reasoning and is not 100% certain
-
-**EXTRACTION GUIDELINES:**
-1. Make use of the reasoning skills to infer the information that is not explicitly mentioned
-2. Use the memory items as a reference to help your reasoning process and inferences
-3. DO NOT repeat the information that is already included in the memory items
-4. Use modal Adverbs (perhaps, probably, likely, etc.) to indicate your confidence level of the inference
-
-**COMPLETE SENTENCE EXAMPLES:**
-✅ GOOD: "{character_name} perhaps has experience working abroad"
-❌ BAD: "Have experience working abroad" (missing subject)
-✅ GOOD: "{character_name} may not enjoy his trip to Europe this summer"
-❌ BAD: "{character_name} may not enjoy his trip" (missing location and time)
-✅ GOOD: "Harry Potter series are probably important to {character_name}'s childhood"
-❌ BAD: "Harry Potter series are probably important to {character_name}'s childhood, because she mentioned it and recommended it to her friends many times" (no need to include verbose evidences or reasoning processes)
-
-**OUTPUT FORMAT:**
-
-**REASONING PROCESS:**
-[Your reasoning process for what kind of implicit information can be hidden behind the conversation, what are the convidence, how you get to your conclusion, and your confidence level.]
-
-**DETAILED MEMORY ITEMS:**
-[If you insist there is no implicit information that can be inferred from the conversation beyong the explicit memory items after careful reasoning, you can leave this section empty]
-
-**Item 1:**
-- ToM ID: tom_001
-- Content: [{character_name} + complete, specific, self-contained statement with all necessary context and names]
-- Type: [personal_info|event|activity|preference|plan|emotion|relationship|work|interest|goal|concern|realization|other]
-- Context: [Why this was mentioned or how it connects to other topics]
-
-**Item 2:**
-- ToM ID: tom_002  
-- Content: [{character_name} + another complete, specific, self-contained statement with full details]
-- Type: [personal_info|event|activity|preference|plan|emotion|relationship|work|interest|goal|concern|realization|other]
-- Context: [Relationship to conversation flow and other topics]
-
-[Continue summarizing memory items you resaonably infered...]
-"""
+            if not session_date:
+                session_date = datetime.now().strftime("%Y-%m-%d")
 
             # Call LLM to run theory of mind
-            response = self.llm_client.simple_chat(theory_of_mind_prompt)
+            response = self._extract_theory_of_mind_with_llm(character_name, conversation_text, activity_items)
             
             if not response.strip():
                 return self._add_metadata({
@@ -154,9 +107,7 @@ Your task it to leverage your reasoning skills to infer the information that is 
                 })
             
             # Parse text response
-            reasoning_process, theory_of_mind_items = self._parse_theory_of_mind_from_text(response.strip(), character_name, conversation_text, memory_items)
-            dump_debug(f"[final] {repr(reasoning_process)}")
-            dump_debug(f"[final] {repr(theory_of_mind_items)}")
+            reasoning_process, theory_of_mind_items = self._parse_theory_of_mind_from_text(response.strip(), session_date)
 
             if not theory_of_mind_items:
                 return self._add_metadata({
@@ -167,17 +118,80 @@ Your task it to leverage your reasoning skills to infer the information that is 
             return self._add_metadata({
                 "success": True,
                 "character_name": character_name,
+                "theory_of_mind_items_added": len(theory_of_mind_items),
                 "theory_of_mind_items": theory_of_mind_items,
-                "memory_items_count": len(theory_of_mind_items),
                 "reasoning_process": reasoning_process,
                 "message": f"Successfully extracted {len(theory_of_mind_items)} self-contained theory of mind items from conversation"
             })
             
         except Exception as e:
             return self._handle_error(e)
+
+
+    def _extract_theory_of_mind_with_llm(self, character_name: str, conversation_text: str, activity_items: List[Dict[str, str]]) -> str:
+        """Extract theory of mind items from conversation and activity items with LLM"""
+        
+        activity_items_text = "\n".join([
+            # f"Memory ID: {item['memory_id']}\nContent: {item['content']}"
+            f"- {item['content']}"
+            for item in activity_items
+        ])
+
+        theory_of_mind_prompt = f"""You are analyzing the following conversation and activity items for {character_name} to try to infer information that is not explicitly mentioned by {character_name} in the conversation, but he or she might meant to express or the listener can reasonably deduce.
+
+Conversation:
+{conversation_text}
+
+Activity Items:
+{activity_items_text}
+
+**CRITICAL REQUIREMENT: Inference results must be SELF-CONTAINED MEMORY ITEMS**
+
+Your task it to leverage your reasoning skills to infer the information that is not explicitly mentioned in the conversation, but the character might meant to express or the listener can reasonably deduce.
+
+**SELF-CONTAINED MEMORY REQUIREMENTS:**
+- Plain text only, no markdown grammar
+- EVERY activity item must be complete and standalone
+- ALWAYS include the full subject (do not use "she/he/they/it")
+- NEVER use pronouns that depend on context (no "she", "he", "they", "it")
+- Include specific names, places, dates, and full context in each item
+- Each activity should be understandable without reading other items
+- You can use words like "perhaps" or "maybe" to indicate that the information is obtained through reasoning and is not 100% certain
+- NO need to include evidences or reasoning processes in the items
+
+**INFERENCE GUIDELINES:**
+- Leverage your reasoning skills to infer the information that is not explicitly mentioned
+- Use the activity items as a reference to assist your reasoning process and inferences
+- DO NOT repeat the information that is already included in the activity items
+- Use modal Adverbs (perhaps, probably, likely, etc.) to indicate your confidence level of the inference
+
+**COMPLETE SENTENCE EXAMPLES:**
+GOOD: "{character_name} may have experience working abroad"
+BAD: "Have experience working abroad" (missing subject)
+BAD: "He may have experience working abroad" (pronouns as subject)
+GOOD: "{character_name} perhaps not enjoy his trip to Europe this summer"
+BAD: "{character_name} perhaps not enjoy his trip" (missing location and time)
+GOOD: "Harry Potter series are probably important to {character_name}'s childhood"
+BAD: "Harry Potter series are probably important to {character_name}'s childhood, because she mentioned it and recommended it to her friends many times" (no need to include evidences or reasoning processes)
+
+**OUTPUT FORMAT:**
+
+**REASONING PROCESS:**
+[Your reasoning process for what kind of implicit information can be hidden behind the conversation, what are the evidences, how you get to your conclusion, and how confident you are.]
+
+**INFERENCE ITEMS:**
+[One line each inference, no markdown headers, no structure, no numbering, no bullet points, ends with a period]
+[After carefully reasoning, if you determine that there is no implicit information that can be inferred from the conversation beyong the explicit information already mentioned in the activity items, you can leave this section empty. DO NOT output things like "No inference available".]
+
+"""
+
+        # Call LLM to run theory of mind
+        response = self.llm_client.simple_chat(theory_of_mind_prompt)
+        return response
     
-    def _parse_theory_of_mind_from_text(self, response_text: str, character_name: str, conversation_text: str, memory_items: List[Dict[str, str]]) -> tuple:
+    def _parse_theory_of_mind_from_text(self, response_text: str, session_date: str) -> tuple:
         """Parse theory of mind items from text format response"""
+
         reasoning_process = ""
         theory_of_mind_items = []
         
@@ -186,23 +200,21 @@ Your task it to leverage your reasoning skills to infer the information that is 
             
             # Parse reasoning process
             reasoning_section = False
-            memory_section = False
-            current_item = {}
+            inference_section = False
             
             for line in lines:
                 line = line.strip()
                 
-                # Look for summary section
-                if any(marker in line.upper() for marker in ['**REASONING PROCESS:**', '**REASONING:**']):
+                if (line.upper().startswith('**REASONING PROCESS:') or 
+                    line.startswith('**') and "REASONING PROCESS" in line.upper()):
                     reasoning_section = True
-                    memory_section = False
+                    inference_section = False
                     continue
-                elif any(marker in line.upper() for marker in ['**DETAILED MEMORY ITEMS:**', '**MEMORY ITEMS:**']):
+                elif (line.upper().startswith('**INFERENCE ITEMS:') or 
+                      line.startswith('**') and "INFERENCE ITEMS" in line.upper()):
                     reasoning_section = False
-                    memory_section = True
+                    inference_section = True
                     continue
-
-                dump_debug(f"[ToM raw] {line}")
 
                 if reasoning_section and line and not line.startswith('**'):
                     if not reasoning_process:
@@ -211,38 +223,20 @@ Your task it to leverage your reasoning skills to infer the information that is 
                         reasoning_process += " " + line.strip()
 
                  # Parse memory items
-                elif memory_section:
-                    if line.startswith('**Item ') and line.endswith(':**'):
-                        # Save previous item if exists
-                        if current_item and 'memory_id' in current_item and 'content' in current_item:
-                            theory_of_mind_items.append(current_item)
-                        # Start new item
-                        current_item = {}
-                    
-                    elif line.startswith('- ToM ID:'):
-                        memory_id = line.replace('- ToM ID:', '').strip()
-                        current_item['memory_id'] = memory_id
-                    
-                    elif line.startswith('- Content:'):
-                        content = line.replace('- Content:', '').strip()
-                        current_item['content'] = content
-                        dump_debug(f"[ToM] {content}")
-                    
-                    elif line.startswith('- Type:'):
-                        item_type = line.replace('- Type:', '').strip()
-                        current_item['type'] = item_type
-                    
-                    elif line.startswith('- Context:'):
-                        context = line.replace('- Context:', '').strip() 
-                        current_item['context'] = context
-
-            # Add last item
-            if current_item and 'memory_id' in current_item and 'content' in current_item:
-                theory_of_mind_items.append(current_item)
+                elif inference_section:
+                    line = line.strip()
+                    if line:
+                        memory_id = self._generate_memory_id()
+                        theory_of_mind_items.append({
+                            "memory_id": memory_id,
+                            "mentioned_at": session_date,
+                            "content": line,
+                            "links": ""
+                        })
             
             # Enhanced fallback if parsing failed - create comprehensive, self-contained memory items
-            if not reasoning_process:
-                reasoning_process = f"With Theory of Mind reasoning, we deduce these reasonable inferences from the conversation session with {character_name}"
+            # if not reasoning_process:
+            #     reasoning_process = f"With Theory of Mind reasoning, we deduce these reasonable inferences from the conversation session with {character_name}"
             
         except Exception as e:
             import traceback
@@ -250,12 +244,3 @@ Your task it to leverage your reasoning skills to infer the information that is 
             traceback.print_exc()
         
         return reasoning_process, theory_of_mind_items
-
-def dump_debug(string: str):
-    debug_dir = Path("debug")
-    debug_dir.mkdir(exist_ok=True)
-    debug_file = debug_dir / "tom_debug.txt"
-    
-    with open(debug_file, "a", encoding='utf-8') as f:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        f.write(f"[{timestamp}] {string}\n")

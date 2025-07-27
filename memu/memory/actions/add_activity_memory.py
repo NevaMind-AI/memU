@@ -97,7 +97,7 @@ class AddActivityMemoryAction(BaseAction):
                 })
             
             # Add memory IDs with timestamp to the formatted content
-            content_with_ids = self._add_memory_ids_with_timestamp(formatted_content, session_date)
+            memory_items, content_with_ids = self._add_memory_ids_with_timestamp(formatted_content, session_date)
             
             # Always append new content to existing content
             if existing_content:
@@ -112,7 +112,8 @@ class AddActivityMemoryAction(BaseAction):
                 success = self._save_memory_content(character_name, "activity", new_content)
                 if success:
                     # Add embedding for just the new content
-                    embedding_result = self._add_memory_item_embedding(character_name, "activity", content_with_ids)
+                    # embedding_result = self._add_memory_item_embedding(character_name, "activity", content_with_ids)
+                    embedding_result = self._add_memory_item_embedding(character_name, "activity", memory_items)
                     embeddings_info = f"Generated embedding for new items: {embedding_result.get('message', 'Unknown')}"
                 else:
                     embeddings_info = "Failed to save memory"
@@ -122,7 +123,7 @@ class AddActivityMemoryAction(BaseAction):
             
             if success:
                 # Extract memory items for response
-                memory_items = self._extract_memory_items_from_content(content_with_ids)
+                # memory_items = self._extract_memory_items_from_content(content_with_ids)
                 
                 return self._add_metadata({
                     "success": True,
@@ -178,11 +179,10 @@ Transform this raw content into properly formatted activity memory items followi
 **FORMAT REQUIREMENTS:**
 1. Each line = one complete, meaningful activity (may include multiple related sentences)
 2. NO markdown headers, bullets, numbers, or structure
-3. NO memory ID information (will be added automatically)
-4. Write in plain text only
-5. Focus on comprehensive, meaningful activity descriptions
-6. Use specific names, titles, places, and dates
-7. Each line ends with a period
+3. Write in plain text only
+4. Focus on comprehensive, meaningful activity descriptions
+5. Use specific names, titles, places, and dates
+6. Each line ends with a period
 
 **GOOD EXAMPLES (meaningful activities, one per line):**
 {character_name} attended a LGBTQ support group where {character_name} heard inspiring transgender stories and felt happy, thankful, accepted, and gained courage to embrace {character_name}'s true self.
@@ -217,10 +217,8 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
         cleaned_content = self.llm_client.simple_chat(format_prompt)
         
         return cleaned_content
-    
-    
-    
-    def _add_memory_ids_with_timestamp(self, content: str, session_date: str) -> str:
+
+    def _add_memory_ids_with_timestamp(self, content: str, session_date: str) -> (list[dict], str):
         """
         Add memory IDs with timestamp to content lines
         Format: [memory_id][mentioned at {session_date}] {content}
@@ -236,7 +234,8 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
             return content
         
         lines = content.split('\n')
-        processed_lines = []
+        processed_items = []
+        plain_memory_lines = []
         
         for line in lines:
             line = line.strip()
@@ -254,12 +253,21 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
                 # Generate new unique memory ID for this line
                 memory_id = self._generate_memory_id()
                 # Format: [memory_id][mentioned at {session_date}] {content} [links]
-                processed_lines.append(f"[{memory_id}][mentioned at {session_date}] {line} []")
+                processed_items.append({
+                    "memory_id": memory_id,
+                    "mentioned_at": session_date,
+                    "content": line,
+                    "links": ""
+                })
+                plain_memory_lines.append(f"[{memory_id}][mentioned at {session_date}] {line} []")
             else:
                 # Keep empty lines as is
-                processed_lines.append("")
+                # processed_lines.append("")
+                pass
+
+        plain_memory_text = '\n'.join(plain_memory_lines)
         
-        return '\n'.join(processed_lines)
+        return processed_items, plain_memory_text
     
     def _has_memory_id_with_timestamp(self, line: str) -> bool:
         """
@@ -329,10 +337,12 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
         
         return items
     
-    def _add_memory_item_embedding(self, character_name: str, category: str, new_content: str) -> Dict[str, Any]:
+    # def _add_memory_item_embedding(self, character_name: str, category: str, new_content: str) -> Dict[str, Any]:
+    def _add_memory_item_embedding(self, character_name: str, category: str, new_items: list[dict]) -> Dict[str, Any]:
         """Add embedding for new memory items"""
         try:
-            if not self.embeddings_enabled or not new_content.strip():
+            # if not self.embeddings_enabled or not new_content.strip():
+            if not self.embeddings_enabled or not new_items:
                 return {
                     "success": False,
                     "error": "Embeddings disabled or empty item"
@@ -350,7 +360,7 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
                     existing_embeddings = embeddings_data.get("embeddings", [])
             
             # Parse new memory items
-            new_items = self._parse_memory_items(new_content)
+            # new_items = self._parse_memory_items(new_content)
             
             # Generate embeddings for new items
             for item in new_items:
@@ -387,7 +397,7 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
             embeddings_data = {
                 "category": category,
                 "timestamp": datetime.now().isoformat(),
-                "content_hash": hashlib.md5(new_content.encode()).hexdigest(),
+                # "content_hash": hashlib.md5(new_content.encode()).hexdigest(),
                 "embeddings": existing_embeddings,
                 "total_embeddings": len(existing_embeddings)
             }

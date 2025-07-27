@@ -50,7 +50,8 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
                     },
                     "session_date": {
                         "type": "string",
-                        "description": "Session date for the memory items (format: YYYY-MM-DD)"
+                        "description": "Session date for the memory items (format: YYYY-MM-DD)",
+                        "default": None
                     },
                     "generate_embeddings": {
                         "type": "boolean",
@@ -67,7 +68,7 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
         character_name: str,
         category: str,
         suggestion: str,
-        session_date: str,
+        session_date: str = None,
         generate_embeddings: bool = True
     ) -> Dict[str, Any]:
         """
@@ -91,164 +92,131 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
                     "error": f"Invalid category '{category}'. Available: {list(self.memory_types.keys())}"
                 })
             
+            if not session_date:
+                session_date = datetime.now().strftime("%Y-%m-%d")
+
             # Read memory items from activity category (stored in step 2 of workflow)
-            activity_content = self._read_memory_content(character_name, "activity")
-            if not activity_content:
-                return self._add_metadata({
-                    "success": False,
-                    "error": "No activity content found. Run add_activity_memory first."
-                })
+            # activity_content = self._read_memory_content(character_name, "activity")
+            # if not activity_content:
+            #     return self._add_metadata({
+            #         "success": False,
+            #         "error": "No activity content found. Run add_activity_memory first."
+            #     })
             
             # Load existing content
             existing_content = self._read_memory_content(character_name, category)
+            existing_memory_items = self._extract_memory_items_from_content(existing_content)
+            formatted_existing_content = self._format_existing_content(existing_memory_items)
             
-            # Determine operation type and execute accordingly
-            operation_result = self._determine_and_execute_operation(
-                character_name, category, suggestion, session_date, 
-                existing_content, activity_content, generate_embeddings
+            operation_response = self._analyze_memory_operation_from_suggestion(
+                category, character_name, formatted_existing_content, suggestion
             )
+
+            if not operation_response.strip():
+                return {
+                    "success": False,
+                    "error": f"LLM returned empty operation analysis for {category}"
+                }
             
-            return self._add_metadata(operation_result)
+            # Parse operation response
+            operation_list = self._parse_operation_response(operation_response)
+            operation_executed = self._execute_operations(
+                character_name, category, operation_list, session_date, existing_memory_items, generate_embeddings
+            )
+
+            return self._add_metadata({
+                "success": True,
+                "character_name": character_name,
+                "category": category,
+                "operation_executed": operation_executed,
+                "message": f"Successfully performed {len(operation_executed)} memory operations for {category}"
+            })
             
         except Exception as e:
             return self._handle_error(e)
     
-    def _determine_and_execute_operation(
-        self, 
-        character_name: str, 
-        category: str, 
-        suggestion: str,
-        session_date: str,
-        existing_content: str,
-        activity_content: str,
-        generate_embeddings: bool
-    ) -> Dict[str, Any]:
-        """
-        Determine what operation to perform and execute it
-        
-        Returns:
-            Dict containing operation results
-        """
-        # Load operation analysis prompt
-        analysis_prompt = self._create_operation_analysis_prompt(
-            category, character_name, existing_content, activity_content, suggestion
-        )
-        
-        # Call LLM to determine operation type and content
-        operation_response = self.llm_client.simple_chat(analysis_prompt)
-        
-        if not operation_response.strip():
-            return {
-                "success": False,
-                "error": f"LLM returned empty operation analysis for {category}"
-            }
-        
-        # Parse operation response
-        operation_info = self._parse_operation_response(operation_response)
-        
-        # Execute the determined operation
-        if operation_info["operation"] == "ADD":
-            return self._execute_add_operation(
-                character_name, category, operation_info, session_date, 
-                existing_content, generate_embeddings
-            )
-        elif operation_info["operation"] == "UPDATE":
-            return self._execute_update_operation(
-                character_name, category, operation_info, session_date,
-                existing_content, generate_embeddings
-            )
-        elif operation_info["operation"] == "DELETE":
-            return self._execute_delete_operation(
-                character_name, category, operation_info, session_date,
-                existing_content, generate_embeddings
-            )
-        elif operation_info["operation"] == "TOUCH":
-            return self._execute_touch_operation(
-                character_name, category, operation_info, session_date, existing_content
-            )
-        else:
-            return {
-                "success": False,
-                "error": f"Unknown operation type: {operation_info['operation']}"
-            }
-    
-    def _create_operation_analysis_prompt(
+    def _format_existing_content(self, existing_memory_items: List[Dict[str, str]]) -> str:
+        """Format existing content into a list of memory items"""
+        return "\n".join([
+            f"[Memory ID: {item['memory_id']}] {item['content']}"
+            for item in existing_memory_items
+        ])
+
+    def _analyze_memory_operation_from_suggestion(
         self, 
         category: str, 
         character_name: str, 
         existing_content: str, 
-        activity_content: str, 
+        # activity_content: str, 
         suggestion: str
     ) -> str:
-        """Create prompt to analyze what operation should be performed"""
-        return f"""Analyze the following memory update scenario and determine what operation should be performed.
+        """Analyze memory update scenario and determine the operations that should be performed"""
 
-=== SCENARIO ===
+        operation_prompt = f"""Analyze the following memory update scenario and determine the memory operations that should be performed.
+
 Character: {character_name}
-Category: {category}
-Suggestion: {suggestion}
+Memory Category: {category}
 
-=== EXISTING {category.upper()} CONTENT ===
+Existing Memory Items in {category}:
 {existing_content if existing_content else "No existing content"}
 
-=== NEW ACTIVITY CONTENT TO ANALYZE ===
-{activity_content}
+Memory Update Suggestion:
+{suggestion}
 
-=== OPERATION TYPES ===
-1. **ADD**: Add completely new information that doesn't exist in current content
-2. **UPDATE**: Modify or enhance existing information with new details
-3. **DELETE**: Remove outdated, incorrect, or irrelevant information
-4. **TOUCH**: Current content is sufficient, no changes needed (mark as accessed)
+**CRITICAL REQUIREMENT: The object of memory operations must be SELF-CONTAINED MEMORY ITEMS**
 
-=== ANALYSIS REQUIREMENTS ===
+**SELF-CONTAINED MEMORY REQUIREMENTS:**
+- EVERY activity item must be complete and standalone
+- ALWAYS include the full subject (do not use "she/he/they/it")
+- NEVER use pronouns that depend on context (no "she", "he", "they", "it")
+- Include specific names, places, dates, and full context in each item
+- Each activity should be understandable without reading other items
+- Include all relevant details, emotions, and outcomes in the activity description
 
-**Determine the most appropriate operation type:**
+**OPERATION TYPES:**
+1. **ADD**: Add completely new memory items that doesn't exist in Existing Memory Items
+2. **UPDATE**: Modify or enhance existing memory items with new details
+3. **DELETE**: Remove outdated, incorrect, or irrelevant memory items
+4. **TOUCH**: Touch memory items that already exists in current content (only for updating last-mentioned timestamp)
 
-- **Choose ADD if:** New activity contains information not covered in existing content
-- **Choose UPDATE if:** New activity provides updated details for existing information
-- **Choose DELETE if:** Existing content is outdated/incorrect based on new activity
-- **Choose TOUCH if:** Existing content already covers the new activity adequately
+**ANALYSIS GUIDELINES:**
+- Read the Memory Update Suggestion carefully to determine what new memory items are offered
+- Read the Existing Memory Items to view all memory items that are already present
+- Determine the most appropriate operation type FOR EACH NEW MEMORY ITEM based on the new information and existing content
+- **Use ADD for:** New memory items that are not covered in existing content
+- **Use UPDATE for:** New memory items that provide updated details for existing memory items
+- **Use DELETE for:** Existing memory items that are outdated/incorrect based on new memory items
+- **Use TOUCH for:** Existing memory items that already covers the new memory items adequately
 
-**For non-TOUCH operations, provide specific content:**
+**OUTPUT INSTRUCTIONS:**
+- **IMPORTANT** Output ALL necessary memory operations. It is common that you should perform different operations for different specific memory items
+- For ADD and UPDATE operations, provide the content of the new memory items following the self-contained memory requirements
+- For UPDATE, DELETE, and TOUCH operations, provide the target memory IDs associated with the memory items
+- If there are multiple actions for an operation type (e.g, multiple ADDs), output them separately, do not put them in a single **OPERATION:** block
 
-**NO PRONOUNS - COMPLETE SENTENCES ONLY**
-- EVERY memory item must include the full subject "{character_name}"
-- NEVER use pronouns (no "she", "he", "they", "it")
-- Each item should be a complete, standalone sentence
-
-**CRITICAL: NO "NOT SPECIFIED" CONTENT**
-- NEVER create items saying information is "not specified" or "unknown"
-- ONLY process information that is ACTUALLY present in the activity content
-
-=== OUTPUT FORMAT ===
+**OUTPUT FORMAT:**
 
 **OPERATION:** [ADD/UPDATE/DELETE/TOUCH]
+- Target Memory ID: [Only if operation is UPDATE, DELETE, or TOUCH][Memory ID of the memory item that is the target of the operation]
+- Memory Item Content: [Only if operation is ADD or UPDATE][Content of the new memory item]
 
-**REASON:** [One sentence explaining why this operation was chosen]
+**OPERATION:** [ADD/UPDATE/DELETE/TOUCH]
+- Target Memory ID: [Only if operation is UPDATE, DELETE, or TOUCH][Memory ID of the memory item that is the target of the operation]
+- Memory Item Content: [Only if operation is ADD or UPDATE][Content of the new memory item]
 
-**CONTENT:** [Only if operation is ADD, UPDATE, or DELETE]
-[Each line should be one complete, self-contained statement]
-[NO markdown, bullets, or structure - plain text only]
-[Each line will automatically get a memory ID]
+... other operations ...
+"""
 
-**TARGET_IDS:** [Only for UPDATE/DELETE operations]
-[List memory IDs from existing content that should be modified/deleted]
-[Format: memory_id1, memory_id2, memory_id3]
-
-Analyze and determine the appropriate operation:"""
+        # Call LLM to determine operation type and content
+        operation_response = self.llm_client.simple_chat(operation_prompt)
+        return operation_response
     
     def _parse_operation_response(self, response: str) -> Dict[str, Any]:
         """Parse LLM response to extract operation info"""
         lines = response.strip().split('\n')
-        operation_info = {
-            "operation": "TOUCH",  # Default
-            "reason": "",
-            "content": "",
-            "target_ids": []
-        }
-        
-        current_section = None
-        content_lines = []
+
+        operation_list = []
+        current_operation = None
         
         for line in lines:
             line = line.strip()
@@ -256,269 +224,100 @@ Analyze and determine the appropriate operation:"""
             if line.startswith('**OPERATION:**'):
                 operation = line.replace('**OPERATION:**', '').strip()
                 if operation in ['ADD', 'UPDATE', 'DELETE', 'TOUCH']:
-                    operation_info["operation"] = operation
-                current_section = "operation"
-                
-            elif line.startswith('**REASON:**'):
-                reason = line.replace('**REASON:**', '').strip()
-                operation_info["reason"] = reason
-                current_section = "reason"
-                
-            elif line.startswith('**CONTENT:**'):
-                current_section = "content"
-                content_lines = []
-                
-            elif line.startswith('**TARGET_IDS:**'):
-                target_ids_text = line.replace('**TARGET_IDS:**', '').strip()
-                if target_ids_text:
-                    operation_info["target_ids"] = [id.strip() for id in target_ids_text.split(',')]
-                current_section = "target_ids"
-                
-            elif current_section == "content" and line:
-                content_lines.append(line)
-                
-            elif current_section == "reason" and line and not line.startswith('**'):
-                operation_info["reason"] += " " + line
-        
-        if content_lines:
-            operation_info["content"] = '\n'.join(content_lines)
-        
-        return operation_info
-    
-    def _execute_add_operation(
-        self, 
-        character_name: str, 
-        category: str, 
-        operation_info: Dict[str, Any],
+                    if current_operation:
+                        '''cleanup and completeness checks are not conducted here, they will be done in the execute function'''
+                        operation_list.append(current_operation)
+                    current_operation = {
+                        "operation": operation,
+                        "target_id": None,
+                        "memory_content": None
+                    }
+
+            if line.startswith("- Target Memory ID:"):
+                target_id = line.replace("- Target Memory ID:", "").strip()
+                current_operation["target_id"] = target_id
+
+            if line.startswith("- Memory Item Content:"):
+                memory_content = line.replace("- Memory Item Content:", "").strip()
+                current_operation["memory_content"] = memory_content
+
+        if current_operation:
+            operation_list.append(current_operation)
+
+        return operation_list
+
+    def _execute_operations(
+        self,
+        character_name: str,
+        category: str,
+        operation_list: List[Dict[str, Any]],
         session_date: str,
-        existing_content: str,
+        existing_items: List[Dict[str, str]],
         generate_embeddings: bool
-    ) -> Dict[str, Any]:
-        """Execute ADD operation"""
-        new_content = operation_info.get("content", "").strip()
-        
-        if not new_content:
-            return {
-                "success": False,
-                "error": "No content provided for ADD operation"
-            }
-        
-        # Add memory IDs with timestamp to the new content
-        new_content_with_ids = self._add_memory_ids_with_timestamp(new_content, session_date)
-        
-        # Append new content to existing content
-        if existing_content:
-            final_content = existing_content + "\n" + new_content_with_ids
-        else:
-            final_content = new_content_with_ids
-        
-        # Save the combined content
-        success = self._save_memory_content(character_name, category, final_content)
-        
-        if not success:
-            return {
-                "success": False,
-                "error": f"Failed to save updated content to {category}"
-            }
-        
-        # Generate embeddings if enabled
-        embeddings_info = self._handle_embeddings(
-            character_name, category, new_content_with_ids, generate_embeddings
-        )
-        
-        # Extract the newly added memory items
-        new_memory_items = self._extract_memory_items_from_content(new_content_with_ids)
-        
-        modifications = []
-        for item in new_memory_items:
-            modifications.append({
-                "operation": "ADD",
-                "memory_id": item["memory_id"],
-                "content": item["content"],
-                "category": category
-            })
-        
-        return {
-            "success": True,
-            "character_name": character_name,
-            "category": category,
-            "operation": "ADD",
-            "reason": operation_info.get("reason", ""),
-            "items_processed": len(new_memory_items),
-            "modifications": modifications,
-            "embeddings_generated": generate_embeddings and self.embeddings_enabled,
-            "embeddings_info": embeddings_info,
-            "message": f"Successfully added {len(new_memory_items)} new memory items to {category}"
-        }
-    
-    def _execute_update_operation(
-        self, 
-        character_name: str, 
-        category: str, 
-        operation_info: Dict[str, Any],
-        session_date: str,
-        existing_content: str,
-        generate_embeddings: bool
-    ) -> Dict[str, Any]:
-        """Execute UPDATE operation"""
-        new_content = operation_info.get("content", "").strip()
-        target_ids = operation_info.get("target_ids", [])
-        
-        if not new_content:
-            return {
-                "success": False,
-                "error": "No content provided for UPDATE operation"
-            }
-        
-        # Parse existing content into items
-        existing_items = self._extract_memory_items_from_content(existing_content)
-        
-        # Update specified items or add new content
+    ) -> List[Dict[str, Any]]:
+        """Execute all operations in the list"""
+
+        all_items = existing_items
         updated_items = []
-        modifications = []
-        
-        # Add new content with memory IDs
-        new_content_with_ids = self._add_memory_ids_with_timestamp(new_content, session_date)
-        new_items = self._extract_memory_items_from_content(new_content_with_ids)
-        
-        # Keep existing items that are not being updated
-        for item in existing_items:
-            if target_ids and item["memory_id"] not in target_ids:
-                updated_items.append(item)
-            else:
-                # Mark as updated/replaced
-                modifications.append({
-                    "operation": "UPDATED",
-                    "memory_id": item["memory_id"],
-                    "old_content": item["content"],
-                    "category": category
-                })
-        
-        # Add new items
-        updated_items.extend(new_items)
-        for item in new_items:
-            modifications.append({
-                "operation": "ADDED",
-                "memory_id": item["memory_id"],
-                "content": item["content"],
-                "category": category
-            })
-        
-        # Reconstruct content
-        final_content = self._reconstruct_content_from_items(updated_items)
-        
-        # Save updated content
-        success = self._save_memory_content(character_name, category, final_content)
-        
-        if not success:
-            return {
-                "success": False,
-                "error": f"Failed to save updated content to {category}"
-            }
-        
-        # Generate embeddings for new content
-        embeddings_info = self._handle_embeddings(
-            character_name, category, new_content_with_ids, generate_embeddings
-        )
-        
-        return {
-            "success": True,
-            "character_name": character_name,
-            "category": category,
-            "operation": "UPDATE",
-            "reason": operation_info.get("reason", ""),
-            "items_processed": len(new_items),
-            "items_updated": len([m for m in modifications if m["operation"] == "UPDATED"]),
-            "modifications": modifications,
-            "embeddings_generated": generate_embeddings and self.embeddings_enabled,
-            "embeddings_info": embeddings_info,
-            "message": f"Successfully updated {category} with {len(new_items)} new items"
-        }
-    
-    def _execute_delete_operation(
-        self, 
-        character_name: str, 
-        category: str, 
-        operation_info: Dict[str, Any],
-        session_date: str,
-        existing_content: str,
-        generate_embeddings: bool
-    ) -> Dict[str, Any]:
-        """Execute DELETE operation"""
-        target_ids = operation_info.get("target_ids", [])
-        
-        if not target_ids:
-            return {
-                "success": False,
-                "error": "No target IDs provided for DELETE operation"
-            }
-        
-        # Parse existing content into items
-        existing_items = self._extract_memory_items_from_content(existing_content)
-        
-        # Filter out items to be deleted
-        remaining_items = []
-        deleted_items = []
-        
-        for item in existing_items:
-            if item["memory_id"] in target_ids:
-                deleted_items.append(item)
-            else:
-                remaining_items.append(item)
-        
-        # Reconstruct content without deleted items
-        final_content = self._reconstruct_content_from_items(remaining_items)
-        
-        # Save updated content
-        success = self._save_memory_content(character_name, category, final_content)
-        
-        if not success:
-            return {
-                "success": False,
-                "error": f"Failed to save updated content to {category}"
-            }
-        
-        modifications = []
-        for item in deleted_items:
-            modifications.append({
-                "operation": "DELETE",
-                "memory_id": item["memory_id"],
-                "content": item["content"],
-                "category": category
-            })
-        
-        return {
-            "success": True,
-            "character_name": character_name,
-            "category": category,
-            "operation": "DELETE",
-            "reason": operation_info.get("reason", ""),
-            "items_deleted": len(deleted_items),
-            "modifications": modifications,
-            "embeddings_generated": False,
-            "message": f"Successfully deleted {len(deleted_items)} items from {category}"
-        }
-    
-    def _execute_touch_operation(
-        self, 
-        character_name: str, 
-        category: str, 
-        operation_info: Dict[str, Any],
-        session_date: str,
-        existing_content: str
-    ) -> Dict[str, Any]:
-        """Execute TOUCH operation (no changes, just mark as accessed)"""
-        return {
-            "success": True,
-            "character_name": character_name,
-            "category": category,
-            "operation": "TOUCH",
-            "reason": operation_info.get("reason", ""),
-            "items_processed": 0,
-            "modifications": [],
-            "embeddings_generated": False,
-            "message": f"Category {category} touched - current content is sufficient"
-        }
+        operation_executed = []
+
+        for operation in operation_list:
+            if operation["operation"] == "ADD":
+                if not operation["memory_content"]:
+                    continue
+                
+                memory_id = self._generate_memory_id()
+                memory_item = {
+                    "memory_id": memory_id,
+                    "mentioned_at": session_date,
+                    "content": operation["memory_content"],
+                    "links": ""
+                }
+
+                all_items.append(memory_item)
+                updated_items.append(memory_item)
+                operation_executed.append(operation)
+            
+            if operation["operation"] == "UPDATE":
+                if not operation["target_id"] or not operation["memory_content"]:
+                    continue
+                
+                for item in all_items:
+                    if item["memory_id"] == operation["target_id"]:
+                        item["content"] = operation["memory_content"]
+                        updated_items.append(item)
+                        break
+
+                operation_executed.append(operation)
+
+            if operation["operation"] == "DELETE":
+                if not operation["target_id"]:
+                    continue
+                
+                for item in all_items:
+                    if item["memory_id"] == operation["target_id"]:
+                        all_items.remove(item)
+
+                operation_executed.append(operation)
+
+            if operation["operation"] == "TOUCH":
+                if not operation["target_id"]:
+                    continue
+                
+                for item in all_items:
+                    if item["memory_id"] == operation["target_id"]:
+                        ''' should update "updated_at" '''
+                        pass
+
+                operation_executed.append(operation)
+
+        new_content = self._format_memory_items(all_items)
+        self._save_memory_content(character_name, category, new_content)
+
+        if generate_embeddings and self.embeddings_enabled and updated_items:
+            self._add_memory_item_embedding(character_name, category, updated_items)
+
+        return operation_executed
     
     def _reconstruct_content_from_items(self, items: List[Dict[str, str]]) -> str:
         """Reconstruct content string from memory items"""
@@ -598,31 +397,44 @@ Analyze and determine the appropriate operation:"""
         pattern = r'^\[[\w\d_]+\]\[mentioned at [^\]]+\]\s+'
         return bool(re.match(pattern, line.strip()))
     
-    def _generate_memory_embeddings(self, character_name: str, category: str, content: str):
-        """Generate and store embeddings for memory content - one embedding per line"""
+    # def _generate_memory_embeddings(self, character_name: str, category: str, content: str):
+    def _add_memory_item_embedding(self, character_name: str, category: str, new_items: list[dict]) -> Dict[str, Any]:
+        """Add embedding for new memory items"""
         try:
-            if not content.strip() or not self.embedding_client:
-                return
+            # if not self.embeddings_enabled or not new_content.strip():
+            if not self.embeddings_enabled or not new_items:
+                return {
+                    "success": False,
+                    "error": "Embeddings disabled or empty item"
+                }
             
-            # Parse memory items with IDs
-            memory_items = self._parse_memory_items(content)
+            # Load existing embeddings
+            char_embeddings_dir = self.embeddings_dir / character_name
+            char_embeddings_dir.mkdir(exist_ok=True)
+            embeddings_file = char_embeddings_dir / f"{category}_embeddings.json"
             
-            embeddings = []
-            for i, item in enumerate(memory_items):
+            existing_embeddings = []
+            if embeddings_file.exists():
+                with open(embeddings_file, 'r', encoding='utf-8') as f:
+                    embeddings_data = json.load(f)
+                    existing_embeddings = embeddings_data.get("embeddings", [])
+            
+            # Generate embeddings for new items
+            for item in new_items:
                 if not item["content"].strip():
                     continue
-                
-                try:
-                    # Generate embedding for the clean content (without memory ID)
-                    embedding_vector = self.embedding_client.embed(item["content"])
                     
-                    embedding_item = {
-                        "item_id": f"{character_name}_{category}_item_{i}",
-                        "memory_id": item["memory_id"],  # Store the original memory ID
-                        "text": item["content"],  # Store clean content
-                        "full_line": item["full_line"],  # Store full line with memory ID
+                try:
+                    embedding_vector = self.embedding_client.embed(item["content"])
+                    new_item_id = f"{character_name}_{category}_item_{len(existing_embeddings)}"
+                    
+                    new_embedding = {
+                        "item_id": new_item_id,
+                        "memory_id": item["memory_id"],
+                        "text": item["content"],
+                        "full_line": item["full_line"],
                         "embedding": embedding_vector,
-                        "line_number": item["line_number"],
+                        "line_number": len(existing_embeddings) + 1,
                         "metadata": {
                             "character": character_name,
                             "category": category,
@@ -631,37 +443,42 @@ Analyze and determine the appropriate operation:"""
                         }
                     }
                     
-                    embeddings.append(embedding_item)
+                    # Add to existing embeddings
+                    existing_embeddings.append(new_embedding)
                     
                 except Exception as e:
-                    logger.warning(f"Failed to generate embedding for memory item {item.get('memory_id', i)}: {e}")
+                    logger.warning(f"Failed to generate embedding for memory item {item.get('memory_id')}: {e}")
                     continue
             
-            if embeddings:
-                # Store embeddings
-                char_embeddings_dir = self.embeddings_dir / character_name
-                char_embeddings_dir.mkdir(exist_ok=True)
-                
-                embeddings_file = char_embeddings_dir / f"{category}_embeddings.json"
-                embeddings_data = {
-                    "category": category,
-                    "timestamp": datetime.now().isoformat(),
-                    "content_hash": hashlib.md5(content.encode()).hexdigest(),
-                    "embeddings": embeddings,
-                    "total_embeddings": len(embeddings)
-                }
-                
-                with open(embeddings_file, 'w', encoding='utf-8') as f:
-                    json.dump(embeddings_data, f, indent=2, ensure_ascii=False)
-                
-                logger.debug(f"Generated {len(embeddings)} embeddings for {category} of {character_name}")
+            # Save updated embeddings
+            embeddings_data = {
+                "category": category,
+                "timestamp": datetime.now().isoformat(),
+                # "content_hash": hashlib.md5(new_content.encode()).hexdigest(),
+                "embeddings": existing_embeddings,
+                "total_embeddings": len(existing_embeddings)
+            }
+            
+            with open(embeddings_file, 'w', encoding='utf-8') as f:
+                json.dump(embeddings_data, f, indent=2, ensure_ascii=False)
+            
+            return {
+                "success": True,
+                "embedding_count": len(existing_embeddings),
+                "new_items_count": len(new_items),
+                "message": f"Added embeddings for {len(new_items)} new memory items in {category}"
+            }
                 
         except Exception as e:
-            logger.error(f"Failed to generate embeddings for {category}: {e}")
-    
-    def _add_memory_ids_with_timestamp(self, content: str, session_date: str) -> str:
+            logger.error(f"Failed to add memory item embedding: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            } 
+
+    def _add_memory_id_with_timestamp(self, content: str, session_date: str) -> (dict, str):
         """
-        Add memory IDs with timestamp and links to content lines
+        Add memory ID with timestamp and links to content line
         Format: [memory_id][mentioned at {session_date}] {content}
         
         Args:
@@ -669,37 +486,25 @@ Analyze and determine the appropriate operation:"""
             session_date: Date of the session
             
         Returns:
-            Content with memory IDs, timestamps and empty links added to each line
+            Content with memory ID, timestamp and empty links added to each line
         """
-        import re
-        if not content.strip():
-            return content
-        
-        lines = content.split('\n')
-        processed_lines = []
-        
-        for line in lines:
-            line = line.strip()
-            if line:  # Only process non-empty lines
-                # Always remove existing memory ID and generate a new unique one
-                if self._has_memory_id_with_timestamp(line):
-                    # Extract content without memory ID and timestamp
-                    clean_content = self._extract_content_from_timestamped_line(line)
-                    line = clean_content
-                elif self._has_memory_id(line):
-                    # Extract content without basic memory ID
-                    _, clean_content = self._extract_memory_id(line)
-                    line = clean_content
-                
-                # Generate new unique memory ID for this line
-                memory_id = self._generate_memory_id()
-                # Format: [memory_id][mentioned at {session_date}] {content} [links]
-                processed_lines.append(f"[{memory_id}][mentioned at {session_date}] {line} []")
-            else:
-                # Keep empty lines as is
-                processed_lines.append("")
-        
-        return '\n'.join(processed_lines)
+        memory_id = self._generate_memory_id()
+        memory_item = {
+            "memory_id": memory_id,
+            "mentioned_at": session_date,
+            "content": content,
+            "links": ""
+        }
+        plain_memory_line = f"[{memory_id}][mentioned at {session_date}] {content} []"
+
+        return memory_item, plain_memory_line
+
+    def _format_memory_items(self, items: List[Dict[str, str]]) -> str:
+        """Format memory items into a string"""
+        return "\n".join([
+            f"[{item['memory_id']}][mentioned at {item['mentioned_at']}] {item['content']} [{item['links']}]"
+            for item in items
+        ])
     
     def _extract_content_from_timestamped_line(self, line: str) -> str:
         """
