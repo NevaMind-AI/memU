@@ -3,7 +3,7 @@
 ![MemU Banner](assets/banner.png)
 
 # MemU
-**Memory System for Personalized AI Companions: High-Speed Operation, Scalable Framework, Autonomous Evolution.** 
+**Your Personalized AI memory. Organized.** 
 
 [![PyPI version](https://badge.fury.io/py/memu.svg)](https://badge.fury.io/py/memu)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -53,12 +53,12 @@ MemU outperforms other memory solutions in multiple reasoning tasks.
 | **OpenAI**  | 63.79      | 42.92     | 62.29       | 21.71      | 52.90               |
 | **Mem0**    | 67.13      | 51.15     | 72.93       | 55.51      | 66.88               |
 | **Mem0ᵍ**   | 65.71      | 47.19     | 75.71       | 58.13      | 68.44               |
-| **Memobase** | 63.83     | 52.08     | 71.82       | 80.37      | 70.91               |
+| **Memobase** | 70.92     | 46.88     | 77.17       | 85.05      | 75.78               |
 | **Zep**     | 74.11      | 66.04     | 67.71       | 79.76      | 75.14               |
 | **MIRIX**   | 85.11      | 83.70     | 65.62       | 88.39      | 85.38               |
 | **MemU**    | **94.9**  | **88.3**  | **77.1**    | **92.5**   | **92.09**  |
 
-
+model : gpt-4.1-mini
 ---
 
 ## ✨ Key Features
