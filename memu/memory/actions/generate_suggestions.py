@@ -202,48 +202,4 @@ For each category, analyze the new memory items and suggest what specific inform
         except Exception as e:
             raise            
         return suggestions
-                
-        #         # Look for category headers: **Category: [category_name]**
-        #         if line.startswith('**Category:') and line.endswith('**'):
-        #             category_name = line.replace('**Category:', '').replace('**', '').strip()
-        #             if category_name in available_categories:
-        #                 current_category = category_name
-        #                 suggestions[current_category] = {
-        #                     "should_add": True,  # Default to True since category is mentioned
-        #                     "suggestion": "",
-        #                     "relevant_memory_ids": [item["memory_id"] for item in new_memory_items],
-        #                     "priority": "medium"
-        #                 }
-                
-        #         # Parse suggestion content: - Suggestion: [content]
-        #         elif current_category and line.startswith('- Suggestion:'):
-        #             suggestion_text = line.replace('- Suggestion:', '').strip()
-        #             if suggestion_text:
-        #                 suggestions[current_category]["suggestion"] = suggestion_text
-        #                 suggestions[current_category]["should_add"] = True
-            
-        #     # Clean up categories with empty suggestions
-        #     suggestions = {k: v for k, v in suggestions.items() if v["suggestion"].strip()}
-            
-        #     # Fallback: if no valid suggestions parsed, create basic ones
-        #     if not suggestions:
-        #         for category in available_categories:
-        #             suggestions[category] = {
-        #                 "should_add": True,
-        #                 "suggestion": f"Extract relevant {category} information ensuring each memory item starts with the character name and includes full context",
-        #                 "relevant_memory_ids": [item["memory_id"] for item in new_memory_items],
-        #                 "priority": "medium"
-        #             }
-        
-        # except Exception as e:
-        #     # Fallback: create basic suggestions for all categories
-        #     suggestions = {}
-        #     for category in available_categories:
-        #         suggestions[category] = {
-        #             "should_add": True,
-        #             "suggestion": f"Extract relevant {category} information ensuring each memory item is a complete sentence with full subject and specific details",
-        #             "relevant_memory_ids": [item["memory_id"] for item in new_memory_items],
-        #             "priority": "medium"
-        #         }
-        
-        # return suggestions 
+    

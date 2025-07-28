@@ -9,7 +9,6 @@ Updates memory categories based on new memory items and suggestions, supporting 
 """
 
 import json
-import hashlib
 from datetime import datetime
 from typing import Dict, List, Any
 from .base_action import BaseAction

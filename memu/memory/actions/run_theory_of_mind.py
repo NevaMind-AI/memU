@@ -2,7 +2,6 @@
 
 from typing import Dict, Any, List
 from datetime import datetime
-from pathlib import Path
 
 from .base_action import BaseAction
 
@@ -241,7 +240,7 @@ BAD: "Harry Potter series are probably important to {character_name}'s childhood
                     f.write('\n'.join([
                         f"[{item['memory_id']}][mentioned at {item.get('session_date', 'Unknown')}] {item['content']} []"
                         for item in theory_of_mind_items
-                    ]))
+                    ]) + '\n')
             
         except Exception as e:
             import traceback
