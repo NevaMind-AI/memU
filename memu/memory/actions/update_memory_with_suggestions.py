@@ -112,7 +112,7 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
             
             # Parse operation response
             operation_list = self._parse_operation_response(operation_response)
-            operation_executed = self._execute_operations(
+            operation_executed, new_items = self._execute_operations(
                 character_name, category, operation_list, session_date, existing_memory_items, generate_embeddings
             )
 
@@ -121,6 +121,7 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
                 "character_name": character_name,
                 "category": category,
                 "operation_executed": operation_executed,
+                "new_memory_items": new_items,
                 "message": f"Successfully performed {len(operation_executed)} memory operations for {category}"
             })
             
@@ -251,6 +252,7 @@ Memory Update Suggestion:
         """Execute all operations in the list"""
 
         all_items = existing_items
+        new_items = []
         updated_items = []
         operation_executed = []
 
@@ -268,6 +270,7 @@ Memory Update Suggestion:
                 }
 
                 all_items.append(memory_item)
+                new_items.append(memory_item)
                 updated_items.append(memory_item)
                 operation_executed.append(operation)
             
@@ -310,7 +313,7 @@ Memory Update Suggestion:
         if generate_embeddings and self.embeddings_enabled and updated_items:
             self._add_memory_item_embedding(character_name, category, updated_items)
 
-        return operation_executed
+        return operation_executed, new_items
     
     def _reconstruct_content_from_items(self, items: List[Dict[str, str]]) -> str:
         """Reconstruct content string from memory items"""

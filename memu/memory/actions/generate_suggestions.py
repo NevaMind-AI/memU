@@ -166,7 +166,7 @@ For each category, analyze the new memory items and suggest what specific inform
                 "success": True,
                 "character_name": character_name,
                 "suggestions": suggestions,
-                "categories_analyzed": len(available_categories),
+                "categories_analyzed": available_categories,
                 "message": f"Generated self-contained suggestions for {len(suggestions)} categories based on {len(new_memory_items)} memory items"
             })
             

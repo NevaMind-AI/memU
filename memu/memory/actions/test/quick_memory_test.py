@@ -480,7 +480,7 @@ def display_function_results(function_calls):
                     print(f"       • {cat}: {repr(suggestion)[:80]}...")
             
             elif func_name == 'update_memory_with_suggestions':
-                modifications = func_result.get('modifications', [])
+                modifications = func_result.get('new_memory_items', [])
                 category = func_result.get('category', 'unknown')
                 print(f"     Category: {category}")
                 print(f"     Modifications: {len(modifications)}")
@@ -488,12 +488,20 @@ def display_function_results(function_calls):
                     memory_id = mod.get('memory_id', 'N/A')
                     content = mod.get('content', '')[:80]
                     print(f"       [{memory_id}] {content}...")
+                if len(modifications) > 2:
+                    print(f"       ... and {len(modifications) - 2} more")
             
             elif func_name == 'link_related_memories':
-                links_added = func_result.get('links_added', 0)
+                links_added = func_result.get('total_items_linked', 0)
                 category = func_result.get('category', 'unknown')
                 print(f"     Category: {category}")
                 print(f"     Links added: {links_added}")
+
+            elif func_name == 'cluster_memories':
+                updated_clusters = func_result.get('updated_clusters', [])
+                new_clusters = func_result.get('new_clusters', [])
+                print(f"     Updated clusters: {updated_clusters}")
+                print(f"     New clusters: {new_clusters}")
             
         else:
             error = func_result.get('error', 'Unknown error')

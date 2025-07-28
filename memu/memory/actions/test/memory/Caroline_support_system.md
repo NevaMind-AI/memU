@@ -1,3 +1,2 @@
-[bcc4ad][mentioned at Unknown] Caroline shared a photo with Melanie from a recent meetup, highlighting the strong support system Caroline has built over the past four years since moving from Caroline's home country, especially after experiencing a tough breakup. []
-[e61e0e][mentioned at Unknown] Caroline and Melanie discussed the significance of sharing personal stories, with Caroline acknowledging the love and support from friends, family, and mentors throughout the journey, which motivated Caroline to continue promoting understanding and acceptance within the community. []
-[8d16ce][mentioned at Unknown] Caroline may have a desire to maintain close relationships with friends and mentors as a source of strength. []
+[fa8c0f][mentioned at Unknown] Caroline is a member of the LGBTQ community and has been on a transgender journey for three years. []
+[33276f][mentioned at Unknown] On July 21, 2025, Caroline participated in a meet-up with friends where Caroline expressed appreciation for Caroline's strong support system, which has been vital during Caroline's transition, especially after experiencing a tough breakup. []

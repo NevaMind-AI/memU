@@ -72,11 +72,11 @@ class LinkRelatedMemoriesAction(BaseAction):
                         "description": "Whether to link all memory items in the category (if true, memory_id can be omitted)",
                         "default": False
                     },
-                    "write_to_memory": {
-                        "type": "boolean",
-                        "description": "Whether to append links to the original memory content",
-                        "default": False
-                    }
+                    # "write_to_memory": {
+                    #     "type": "boolean",
+                    #     "description": "Whether to append links to the original memory content",
+                    #     "default": False
+                    # }
                 },
                 "required": ["character_name", "category"]
             }
@@ -91,7 +91,7 @@ class LinkRelatedMemoriesAction(BaseAction):
         min_similarity: float = 0.3,
         search_categories: Optional[List[str]] = None,
         link_all_items: bool = False,
-        write_to_memory: bool = False
+        write_to_memory: bool = True
     ) -> Dict[str, Any]:
         """
         Execute link related memories operation
@@ -120,7 +120,8 @@ class LinkRelatedMemoriesAction(BaseAction):
             if category not in self.memory_types:
                 return self._add_metadata({
                     "success": False,
-                    "error": f"Invalid category '{category}'. Available: {list(self.memory_types.keys())}"
+                    # "error": f"Invalid category '{category}'. Available: {list(self.memory_types.keys())}"
+                    "error": f"Skipping category '{category}' not in available categories. Available: {list(self.memory_types.keys())}"
                 })
             
             # If link_all_items is True, process all memory items in the category
@@ -169,16 +170,16 @@ class LinkRelatedMemoriesAction(BaseAction):
             return self._add_metadata({
                 "success": True,
                 "character_name": character_name,
-                "target_memory": {
-                    "memory_id": memory_id,
-                    "category": category,
-                    "content": target_memory["content"]
-                },
-                "related_memories": related_memories,
+                # "target_memory": {
+                #     "memory_id": memory_id,
+                #     "category": category,
+                #     "content": target_memory["content"]
+                # },
+                # "related_memories": related_memories,
                 "memory_ids": memory_ids,
                 "total_related": len(related_memories),
-                "written_to_memory": write_to_memory,
-                "updated_content": updated_content,
+                # "written_to_memory": write_to_memory,
+                # "updated_content": updated_content,
                 "message": f"Found {len(related_memories)} related memories for {memory_id}"
             })
             
@@ -290,8 +291,6 @@ class LinkRelatedMemoriesAction(BaseAction):
             
         except Exception:
             return 0.0
-
-
 
     def _append_links_to_memory(
         self,
@@ -406,9 +405,9 @@ class LinkRelatedMemoriesAction(BaseAction):
                 "category": category,
                 "total_items_processed": len(memory_items),
                 "total_items_linked": total_linked,
-                "all_related_memories": all_related_memories,
-                "written_to_memory": write_to_memory,
-                "updated_content": updated_content,
+                # "all_related_memories": all_related_memories,
+                # "written_to_memory": write_to_memory,
+                # "updated_content": updated_content,
                 "message": f"Linked {total_linked} out of {len(memory_items)} memory items in {category}"
             })
             

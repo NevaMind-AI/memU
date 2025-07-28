@@ -75,21 +75,32 @@ class ClusterMemoriesAction(BaseAction):
         new_memory_items: List[Dict[str, str]],
         new_theory_of_mind_items: List[Dict[str, str]] = [],
         # available_categories: List[str]
+        session_date: str = None
     ) -> Dict[str, Any]:
         """
         Cluster memories into different categories
         """ 
+
+        if session_date:
+            for item in new_memory_items:
+                if not item.get('session_date', None):
+                    item['session_date'] = session_date
+
         existing_clusters = self._get_existing_cluster_items(character_name)
         existing_clusters = [cluster.replace('_', ' ') for cluster in existing_clusters]
 
+        updated_clusters = {}
         if existing_clusters:
-             self._merge_existing_clusters(character_name, conversation_content, existing_clusters, new_memory_items, new_theory_of_mind_items)
+            updated_clusters = self._merge_existing_clusters(character_name, conversation_content, existing_clusters, new_memory_items, new_theory_of_mind_items)
 
         new_clusters = self._detect_new_clusters(character_name, conversation_content, existing_clusters, new_memory_items, new_theory_of_mind_items)
 
         return self._add_metadata({
             "success": True,
             "character_name": character_name,
+            "updated_clusters": sorted(updated_clusters.keys()),
+            "new_clusters": sorted(new_clusters.keys()),
+            "message": f"Analyzed {len(new_memory_items)} new memory items. Updated {len(updated_clusters)} existing clusters and detected {len(new_clusters)} new clusters"
             # "existing_clusters": existing_clusters
         })
 
@@ -199,11 +210,7 @@ Example: "We went to hiking in Blue Ridge Mountains this summer" is related to b
                     updated_clusters[cluster] = []
                 updated_clusters[cluster].append(memory_id)
 
-        return self._add_metadata({
-            "success": True,
-            "character_name": character_name,
-            "updated_clusters": updated_clusters
-        })
+        return updated_clusters
 
     def _detect_new_clusters(self, 
         character_name: str, 
@@ -289,8 +296,4 @@ Your task is to discover NEW events/themes that are either:
                     
                     new_clusters[cluster].append(memory_id)
             
-        return self._add_metadata({
-            "success": True,
-            "character_name": character_name,
-            "new_clusters": new_clusters
-        })
+        return new_clusters

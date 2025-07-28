@@ -215,8 +215,9 @@ PROCESSING WORKFLOW:
 IMPORTANT GUIDELINES:
 - Step 1: CRITICAL: For add_activity_memory, the 'content' parameter MUST be the complete original conversation text exactly as shown above. Do NOT modify, extract, or summarize it.
 - Step 2: Use both the original conversation and the extracted activity memoryitems from step 1 for the theory of mind analysis
-- Step 3-5: Use BOTH the extracted memory items from step 1 and theory-of-mind items from step 2 for subsequent processing. You can simply concatenate the two lists of memory items and pass them to the subsequent function.
-- Step 6: IMPORTANT: Use ONLY the memory items from step 1 for clustering. DO NOT use the theory of mind results from step 2, which are inferences and are not 100% certain.
+- Step 3: Use BOTH the extracted memory items from step 1 and theory-of-mind items from step 2 for generating suggestions. You can simply concatenate the two lists of memory items and pass them to the subsequent function.
+- Step 4: Use the memory suggestions from step 3 to update EVERY memory categories in suggestions.
+- Step 5-6: Use the new memory items returned from step 4 for linking and clustering memories. DO NOT include the memory items returned from step 1 and 2.
 - Each memory item should have its own memory_id and focused content
 - Follow the suggestions when updating categories
 - The update_memory_with_suggestions function will return structured format with memory_id and content

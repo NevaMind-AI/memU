@@ -1,2 +1,0 @@
-[db0ddb][mentioned at Unknown] Caroline agreed with Melanie, highlighting the importance of self-care even when it is challenging, and praised Melanie for prioritizing her well-being. []
-[7b288c][mentioned at Unknown] Melanie informed Caroline that she is setting aside time each day for herself, engaging in activities such as running, reading, and playing the violin, which help her feel refreshed and present for her family. []
