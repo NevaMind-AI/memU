@@ -1,0 +1,29 @@
+{
+  "call_id": "Caroline_018_82df6d3a",
+  "character": "Caroline",
+  "timestamp": "2025-07-27T23:42:49.344866",
+  "type": "OUTPUT",
+  "data": {
+    "success": true,
+    "content": "- LGBTQ support: 652d90, a10c29, 0b2faa\n- career exploration: a10c29, 0b2faa\n- self care: e41a11, 0b2faa",
+    "usage": {
+      "completion_tokens": 50,
+      "prompt_tokens": 1231,
+      "total_tokens": 1281,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0
+      }
+    },
+    "model": "gpt-4o-mini-2024-07-18",
+    "error": null,
+    "tool_calls": null,
+    "duration_seconds": 1.095
+  }
+}

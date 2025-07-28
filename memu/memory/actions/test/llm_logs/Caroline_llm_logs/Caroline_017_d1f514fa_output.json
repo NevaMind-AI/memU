@@ -1,0 +1,29 @@
+{
+  "call_id": "Caroline_017_d1f514fa",
+  "character": "Caroline",
+  "timestamp": "2025-07-27T23:42:48.247725",
+  "type": "OUTPUT",
+  "data": {
+    "success": true,
+    "content": "- 652d90: lgbtq support, support group, self care\n- a10c29: career development, counseling, lgbtq advocacy, support group\n- afa2d8: painting, self expression\n- e41a11: self care, family time, swimming\n- 0b2faa: lgbtq advocacy, counseling, self care, self expression",
+    "usage": {
+      "completion_tokens": 84,
+      "prompt_tokens": 1109,
+      "total_tokens": 1193,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0
+      }
+    },
+    "model": "gpt-4o-mini-2024-07-18",
+    "error": null,
+    "tool_calls": null,
+    "duration_seconds": 1.153
+  }
+}

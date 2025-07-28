@@ -1,0 +1,29 @@
+{
+  "call_id": "Caroline_012_1ef502ac",
+  "character": "Caroline",
+  "timestamp": "2025-07-27T23:42:32.039849",
+  "type": "OUTPUT",
+  "data": {
+    "success": true,
+    "content": "- support group: 652d90, a10c29, 0b2faa\n- career exploration: a10c29, 0b2faa\n- swimming: e41a11",
+    "usage": {
+      "completion_tokens": 43,
+      "prompt_tokens": 1209,
+      "total_tokens": 1252,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0
+      }
+    },
+    "model": "gpt-4o-mini-2024-07-18",
+    "error": null,
+    "tool_calls": null,
+    "duration_seconds": 0.877
+  }
+}

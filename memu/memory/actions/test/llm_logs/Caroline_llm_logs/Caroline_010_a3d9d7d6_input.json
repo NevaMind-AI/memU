@@ -1,0 +1,389 @@
+{
+  "call_id": "Caroline_010_a3d9d7d6",
+  "character": "Caroline",
+  "timestamp": "2025-07-27T23:42:05.076665",
+  "type": "INPUT",
+  "data": {
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a memory processing agent. Follow this structured process to analyze and store conversation information for \"Caroline\":\n\nCONVERSATION TO PROCESS:\nCAROLINE: Hey Mel! Good to see you! How have you been?\nMELANIE: Hey Caroline! Good to see you! I'm swamped with the kids & work. What's up with you? Anything new?\nCAROLINE: I went to a LGBTQ support group yesterday and it was so powerful.\nMELANIE: Wow, that's cool, Caroline! What happened that was so awesome? Did you hear any inspiring stories?\nCAROLINE: The transgender stories were so inspiring! I was so happy and thankful for all the support.\nMELANIE: Wow, love that painting! So cool you found such a helpful group. What's it done for you?\nCAROLINE: The support group has made me feel accepted and given me courage to embrace myself.\nMELANIE: That's really cool. You've got guts. What now?\nCAROLINE: Gonna continue my edu and check out career options, which is pretty exciting!\nMELANIE: Wow, Caroline! What kinda jobs are you thinkin' of? Anything that stands out?\nCAROLINE: I'm keen on counseling or working in mental health - I'd love to support those with similar issues.\nMELANIE: You'd be a great counselor! Your empathy and understanding will really help the people you work with. By the way, take a look at this.\nCAROLINE: Thanks, Melanie! That's really sweet. Is this your own painting?\nMELANIE: Yeah, I painted that lake sunrise last year! It's special to me.\nCAROLINE: Wow, Melanie! The colors really blend nicely. Painting looks like a great outlet for expressing yourself.\nMELANIE: Thanks, Caroline! Painting's a fun way to express my feelings and get creative. It's a great way to relax after a long day.\nCAROLINE: Totally agree, Mel. Relaxing and expressing ourselves is key. Well, I'm off to go do some research.\nMELANIE: Yep, Caroline. Taking care of ourselves is vital. I'm off to go swimming with the kids. Talk to you soon!\n\nCHARACTER: Caroline\nSESSION DATE: 2025-07-27\n\nPROCESSING WORKFLOW:\n1. STORE TO ACTIVITY: Call add_activity_memory with the COMPLETE RAW CONVERSATION TEXT as the 'content' parameter. This will automatically append to existing activity memories. DO NOT extract, modify, or summarize the conversation - pass the entire original conversation text exactly as shown above.\n\n2. THEORY OF MIND: Call run_theory_of_mind to analyze the subtle information behind the conversation and extract the theory of mind of the characters.\n\n3. GENERATE SUGGESTIONS: Call generate_memory_suggestions with the available memory items to get suggestions for what should be added to each category.\n\n4. UPDATE CATEGORIES: For each category that should be updated (based on suggestions), call update_memory_with_suggestions to update that category with the new memory items and suggestions. This will return structured modifications.\n\n5. LINK MEMORIES: For each category that was modified, call link_related_memories with link_all_items=true and write_to_memory=true to add relevant links between ALL memories in that category.\n\n6. CLUSTER MEMORIES: Call cluster_memories to cluster the memories into different categories.\n\nIMPORTANT GUIDELINES:\n- Step 1: CRITICAL: For add_activity_memory, the 'content' parameter MUST be the complete original conversation text exactly as shown above. Do NOT modify, extract, or summarize it.\n- Step 2: Use both the original conversation and the extracted activity memoryitems from step 1 for the theory of mind analysis\n- Step 3-5: Use BOTH the extracted memory items from step 1 and theory-of-mind items from step 2 for subsequent processing. You can simply concatenate the two lists of memory items and pass them to the subsequent function.\n- Step 6: IMPORTANT: Use ONLY the memory items from step 1 for clustering. DO NOT use the theory of mind results from step 2, which are inferences and are not 100% certain.\n- Each memory item should have its own memory_id and focused content\n- Follow the suggestions when updating categories\n- The update_memory_with_suggestions function will return structured format with memory_id and content\n- Always link related memories after updating categories by setting link_all_items=true and write_to_memory=true\n\nStart with step 1 and work through the process systematically. When you complete all steps, respond with \"PROCESSING_COMPLETE\"."
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_FIEiLfbSXZdRP06NTvCMOlI8",
+            "function": {
+              "arguments": "{\"character_name\":\"Caroline\",\"content\":\"CAROLINE: Hey Mel! Good to see you! How have you been?\\nMELANIE: Hey Caroline! Good to see you! I'm swamped with the kids & work. What's up with you? Anything new?\\nCAROLINE: I went to a LGBTQ support group yesterday and it was so powerful.\\nMELANIE: Wow, that's cool, Caroline! What happened that was so awesome? Did you hear any inspiring stories?\\nCAROLINE: The transgender stories were so inspiring! I was so happy and thankful for all the support.\\nMELANIE: Wow, love that painting! So cool you found such a helpful group. What's it done for you?\\nCAROLINE: The support group has made me feel accepted and given me courage to embrace myself.\\nMELANIE: That's really cool. You've got guts. What now?\\nCAROLINE: Gonna continue my edu and check out career options, which is pretty exciting!\\nMELANIE: Wow, Caroline! What kinda jobs are you thinkin' of? Anything that stands out?\\nCAROLINE: I'm keen on counseling or working in mental health - I'd love to support those with similar issues.\\nMELANIE: You'd be a great counselor! Your empathy and understanding will really help the people you work with. By the way, take a look at this.\\nCAROLINE: Thanks, Melanie! That's really sweet. Is this your own painting?\\nMELANIE: Yeah, I painted that lake sunrise last year! It's special to me.\\nCAROLINE: Wow, Melanie! The colors really blend nicely. Painting looks like a great outlet for expressing yourself.\\nMELANIE: Thanks, Caroline! Painting's a fun way to express my feelings and get creative. It's a great way to relax after a long day.\\nCAROLINE: Totally agree, Mel. Relaxing and expressing ourselves is key. Well, I'm off to go do some research.\\nMELANIE: Yep, Caroline. Taking care of ourselves is vital. I'm off to go swimming with the kids. Talk to you soon!\",\"session_date\":\"2025-07-27\"}",
+              "name": "add_activity_memory"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_FIEiLfbSXZdRP06NTvCMOlI8",
+        "content": "{\"success\": true, \"character_name\": \"Caroline\", \"category\": \"activity\", \"session_date\": \"2025-07-27\", \"operation\": \"append\", \"content_added\": 1191, \"memory_items_added\": 4, \"memory_items\": [{\"memory_id\": \"652d90\", \"mentioned_at\": \"2025-07-27\", \"content\": \"Caroline attended a LGBTQ support group on July 26, 2025, where Caroline heard inspiring transgender stories and felt happy, thankful, accepted, and gained courage to embrace Caroline's true self.\", \"links\": \"\"}, {\"memory_id\": \"a10c29\", \"mentioned_at\": \"2025-07-27\", \"content\": \"Caroline shared with Melanie the powerful impact of the support group and expressed excitement about continuing education and exploring career options in counseling or mental health to support individuals with similar issues, receiving encouragement from Melanie who noted Caroline's empathy and understanding would make Caroline a great counselor.\", \"links\": \"\"}, {\"memory_id\": \"afa2d8\", \"mentioned_at\": \"2025-07-27\", \"content\": \"Caroline admired Melanie's lake sunrise painting from last year, complimented the color blending, and discussed how painting serves as a great outlet for expressing feelings and relaxing after long days, with Melanie sharing that painting is a fun way for Melanie to express creativity and unwind.\", \"links\": \"\"}, {\"memory_id\": \"e41a11\", \"mentioned_at\": \"2025-07-27\", \"content\": \"Caroline and Melanie reflected on the importance of taking care of themselves, with Caroline planning to do research after their conversation and Melanie preparing to go swimming with Melanie's kids.\", \"links\": \"\"}], \"embeddings_generated\": false, \"embeddings_info\": \"No embeddings generated\", \"file_path\": \"memory/Caroline_activity.md\", \"message\": \"Successfully appended 4 self-contained activity memory items for Caroline\", \"action_name\": \"add_activity_memory\", \"timestamp\": \"2025-07-27T23:41:40.876194\"}"
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_kRpi6he8AesCboNG4feKvp9g",
+            "function": {
+              "arguments": "{\"character_name\":\"Caroline\",\"conversation_text\":\"CAROLINE: Hey Mel! Good to see you! How have you been?\\nMELANIE: Hey Caroline! Good to see you! I'm swamped with the kids & work. What's up with you? Anything new?\\nCAROLINE: I went to a LGBTQ support group yesterday and it was so powerful.\\nMELANIE: Wow, that's cool, Caroline! What happened that was so awesome? Did you hear any inspiring stories?\\nCAROLINE: The transgender stories were so inspiring! I was so happy and thankful for all the support.\\nMELANIE: Wow, love that painting! So cool you found such a helpful group. What's it done for you?\\nCAROLINE: The support group has made me feel accepted and given me courage to embrace myself.\\nMELANIE: That's really cool. You've got guts. What now?\\nCAROLINE: Gonna continue my edu and check out career options, which is pretty exciting!\\nMELANIE: Wow, Caroline! What kinda jobs are you thinkin' of? Anything that stands out?\\nCAROLINE: I'm keen on counseling or working in mental health - I'd love to support those with similar issues.\\nMELANIE: You'd be a great counselor! Your empathy and understanding will really help the people you work with. By the way, take a look at this.\\nCAROLINE: Thanks, Melanie! That's really sweet. Is this your own painting?\\nMELANIE: Yeah, I painted that lake sunrise last year! It's special to me.\\nCAROLINE: Wow, Melanie! The colors really blend nicely. Painting looks like a great outlet for expressing yourself.\\nMELANIE: Thanks, Caroline! Painting's a fun way to express my feelings and get creative. It's a great way to relax after a long day.\\nCAROLINE: Totally agree, Mel. Relaxing and expressing ourselves is key. Well, I'm off to go do some research.\\nMELANIE: Yep, Caroline. Taking care of ourselves is vital. I'm off to go swimming with the kids. Talk to you soon!\",\"activity_items\":[{\"memory_id\":\"652d90\",\"content\":\"Caroline attended a LGBTQ support group on July 26, 2025, where Caroline heard inspiring transgender stories and felt happy, thankful, accepted, and gained courage to embrace Caroline's true self.\"},{\"memory_id\":\"a10c29\",\"content\":\"Caroline shared with Melanie the powerful impact of the support group and expressed excitement about continuing education and exploring career options in counseling or mental health to support individuals with similar issues, receiving encouragement from Melanie who noted Caroline's empathy and understanding would make Caroline a great counselor.\"},{\"memory_id\":\"afa2d8\",\"content\":\"Caroline admired Melanie's lake sunrise painting from last year, complimented the color blending, and discussed how painting serves as a great outlet for expressing feelings and relaxing after long days, with Melanie sharing that painting is a fun way for Melanie to express creativity and unwind.\"},{\"memory_id\":\"e41a11\",\"content\":\"Caroline and Melanie reflected on the importance of taking care of themselves, with Caroline planning to do research after their conversation and Melanie preparing to go swimming with Melanie's kids.\"}],\"session_date\":\"2025-07-27\"}",
+              "name": "run_theory_of_mind"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_kRpi6he8AesCboNG4feKvp9g",
+        "content": "{\"success\": true, \"character_name\": \"Caroline\", \"theory_of_mind_items_added\": 1, \"theory_of_mind_items\": [{\"memory_id\": \"0b2faa\", \"mentioned_at\": \"2025-07-27\", \"content\": \"Caroline may have previously struggled with issues related to identity, which motivated attendance at the LGBTQ support group. Caroline likely seeks to create a career path that not only fulfills her ambitions but also helps others who have experienced similar challenges. Caroline probably values the importance of community and support in personal development, as demonstrated by her positive experience at the support group. Caroline may have an interest in art or creativity, which aligns with her appreciation of Melanie's painting and its therapeutic aspects. Caroline probably believes that engaging in self-care practices is essential for maintaining mental well-being, as indicated by her conversation with Melanie.\", \"links\": \"\"}], \"reasoning_process\": \"The conversation between Caroline and Melanie reveals a supportive friendship and a focus on personal growth. Caroline's attendance at the LGBTQ support group indicates a desire for community and acceptance, possibly suggesting that Caroline has faced challenges related to identity in the past. Caroline's interest in counseling and mental health implies a commitment to helping others, perhaps stemming from personal experiences or struggles. Additionally, the appreciation for Melanie's painting hints at Caroline's own creative inclinations or a recognition of the therapeutic benefits of art. The emphasis on self-care in their conversation suggests that both Caroline and Melanie prioritize mental well-being, and Caroline's plans for research may indicate a proactive approach to her future. Overall, these inferences suggest deeper layers of personal experience and values that are not explicitly stated.\", \"message\": \"Successfully extracted 1 self-contained theory of mind items from conversation\", \"action_name\": \"run_theory_of_mind\", \"timestamp\": \"2025-07-27T23:41:52.072853\"}"
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_f2vRGSle3uyI6IRtRlPmrhK5",
+            "function": {
+              "arguments": "{\"character_name\":\"Caroline\",\"new_memory_items\":[{\"memory_id\":\"652d90\",\"content\":\"Caroline attended a LGBTQ support group on July 26, 2025, where Caroline heard inspiring transgender stories and felt happy, thankful, accepted, and gained courage to embrace Caroline's true self.\"},{\"memory_id\":\"a10c29\",\"content\":\"Caroline shared with Melanie the powerful impact of the support group and expressed excitement about continuing education and exploring career options in counseling or mental health to support individuals with similar issues, receiving encouragement from Melanie who noted Caroline's empathy and understanding would make Caroline a great counselor.\"},{\"memory_id\":\"afa2d8\",\"content\":\"Caroline admired Melanie's lake sunrise painting from last year, complimented the color blending, and discussed how painting serves as a great outlet for expressing feelings and relaxing after long days, with Melanie sharing that painting is a fun way for Melanie to express creativity and unwind.\"},{\"memory_id\":\"e41a11\",\"content\":\"Caroline and Melanie reflected on the importance of taking care of themselves, with Caroline planning to do research after their conversation and Melanie preparing to go swimming with Melanie's kids.\"},{\"memory_id\":\"0b2faa\",\"content\":\"Caroline may have previously struggled with issues related to identity, which motivated attendance at the LGBTQ support group. Caroline likely seeks to create a career path that not only fulfills her ambitions but also helps others who have experienced similar challenges. Caroline probably values the importance of community and support in personal development, as demonstrated by her positive experience at the support group. Caroline may have an interest in art or creativity, which aligns with her appreciation of Melanie's painting and its therapeutic aspects. Caroline probably believes that engaging in self-care practices is essential for maintaining mental well-being, as indicated by her conversation with Melanie.\"}]}",
+              "name": "generate_memory_suggestions"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_f2vRGSle3uyI6IRtRlPmrhK5",
+        "content": "{\"success\": true, \"character_name\": \"Caroline\", \"suggestions\": {}, \"memory_items_count\": 5, \"categories_analyzed\": 2, \"message\": \"Generated self-contained suggestions for 0 categories based on 5 memory items\", \"action_name\": \"generate_memory_suggestions\", \"timestamp\": \"2025-07-27T23:41:58.155460\"}"
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_o0mLQQrt4Q89RlQ7Rrl5P9CG",
+            "function": {
+              "arguments": "{\"character_name\":\"Caroline\",\"category\":\"identity\",\"suggestion\":\"Caroline may have previously struggled with issues related to identity, which motivated attendance at the LGBTQ support group. Caroline likely seeks to create a career path that not only fulfills her ambitions but also helps others who have experienced similar challenges. Caroline probably values the importance of community and support in personal development, as demonstrated by her positive experience at the support group. Caroline may have an interest in art or creativity, which aligns with her appreciation of Melanie's painting and its therapeutic aspects. Caroline probably believes that engaging in self-care practices is essential for maintaining mental well-being, as indicated by her conversation with Melanie.\",\"session_date\":\"2025-07-27\"}",
+              "name": "update_memory_with_suggestions"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_o0mLQQrt4Q89RlQ7Rrl5P9CG",
+        "content": "{\"success\": false, \"error\": \"Invalid category 'identity'. Available: ['activity', 'event', 'profile']\", \"action_name\": \"update_memory_with_suggestions\", \"timestamp\": \"2025-07-27T23:42:00.180999\"}"
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_iXFDcKSm6e2lWvgcUYYPN0NS",
+            "function": {
+              "arguments": "{\"character_name\":\"Caroline\",\"category\":\"profile\",\"suggestion\":\"Caroline may have previously struggled with issues related to identity, which motivated attendance at the LGBTQ support group. Caroline likely seeks to create a career path that not only fulfills her ambitions but also helps others who have experienced similar challenges. Caroline probably values the importance of community and support in personal development, as demonstrated by her positive experience at the support group. Caroline may have an interest in art or creativity, which aligns with her appreciation of Melanie's painting and its therapeutic aspects. Caroline probably believes that engaging in self-care practices is essential for maintaining mental well-being, as indicated by her conversation with Melanie.\",\"session_date\":\"2025-07-27\"}",
+              "name": "update_memory_with_suggestions"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_iXFDcKSm6e2lWvgcUYYPN0NS",
+        "content": "{\"success\": true, \"character_name\": \"Caroline\", \"category\": \"profile\", \"operation_executed\": [{\"operation\": \"ADD\", \"target_id\": null, \"memory_content\": \"Caroline struggled with issues related to identity in the past, which motivated her attendance at the LGBTQ support group. Caroline seeks to create a career path that not only fulfills her ambitions but also helps others who have experienced similar challenges.\"}, {\"operation\": \"ADD\", \"target_id\": null, \"memory_content\": \"Caroline values the importance of community and support in personal development, as demonstrated by her positive experience at the LGBTQ support group.\"}, {\"operation\": \"ADD\", \"target_id\": null, \"memory_content\": \"Caroline has an interest in art and creativity, which aligns with her appreciation of Melanie's painting and its therapeutic aspects.\"}, {\"operation\": \"ADD\", \"target_id\": null, \"memory_content\": \"Caroline believes that engaging in self-care practices is essential for maintaining mental well-being, as indicated by her conversation with Melanie.\"}], \"message\": \"Successfully performed 4 memory operations for profile\", \"action_name\": \"update_memory_with_suggestions\", \"timestamp\": \"2025-07-27T23:42:05.075745\"}"
+      }
+    ],
+    "model": null,
+    "temperature": 0.3,
+    "max_tokens": 12000,
+    "kwargs": {
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "add_activity_memory",
+            "description": "Add new activity memory content with strict no-pronouns formatting for complete, self-contained memory items",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "character_name": {
+                  "type": "string",
+                  "description": "Name of the character"
+                },
+                "content": {
+                  "type": "string",
+                  "description": "Complete original conversation text exactly as provided - do NOT modify, extract, or summarize"
+                },
+                "session_date": {
+                  "type": "string",
+                  "description": "Date of the session (e.g., '2024-01-15')",
+                  "default": null
+                },
+                "generate_embeddings": {
+                  "type": "boolean",
+                  "description": "Whether to generate embeddings for semantic search",
+                  "default": true
+                }
+              },
+              "required": [
+                "character_name",
+                "content"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "link_related_memories",
+            "description": "Find related memories using embedding search and create links between them",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "character_name": {
+                  "type": "string",
+                  "description": "Name of the character"
+                },
+                "memory_id": {
+                  "type": "string",
+                  "description": "ID of the memory item to find related memories for (optional if link_all_items is true)"
+                },
+                "category": {
+                  "type": "string",
+                  "description": "Category containing the target memory item"
+                },
+                "top_k": {
+                  "type": "integer",
+                  "description": "Number of top related memories to find",
+                  "default": 5
+                },
+                "min_similarity": {
+                  "type": "number",
+                  "description": "Minimum similarity threshold (0.0-1.0)",
+                  "default": 0.3
+                },
+                "search_categories": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Categories to search in (default: all available categories)"
+                },
+                "link_all_items": {
+                  "type": "boolean",
+                  "description": "Whether to link all memory items in the category (if true, memory_id can be omitted)",
+                  "default": false
+                },
+                "write_to_memory": {
+                  "type": "boolean",
+                  "description": "Whether to append links to the original memory content",
+                  "default": false
+                }
+              },
+              "required": [
+                "character_name",
+                "category"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "generate_memory_suggestions",
+            "description": "Analyze new memory items and generate suggestions for what should be added to different memory categories",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "character_name": {
+                  "type": "string",
+                  "description": "Name of the character"
+                },
+                "new_memory_items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "memory_id": {
+                        "type": "string"
+                      },
+                      "content": {
+                        "type": "string"
+                      },
+                      "mentioned_at": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "memory_id",
+                      "content"
+                    ]
+                  },
+                  "description": "List of new memory items from the conversation"
+                }
+              },
+              "required": [
+                "character_name",
+                "new_memory_items"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "update_memory_with_suggestions",
+            "description": "Update memory categories with different operation types (ADD, UPDATE, DELETE, TOUCH)",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "character_name": {
+                  "type": "string",
+                  "description": "Name of the character"
+                },
+                "category": {
+                  "type": "string",
+                  "description": "Memory category to update"
+                },
+                "suggestion": {
+                  "type": "string",
+                  "description": "Suggestion for what content should be processed in this category"
+                },
+                "session_date": {
+                  "type": "string",
+                  "description": "Session date for the memory items (format: YYYY-MM-DD)",
+                  "default": null
+                },
+                "generate_embeddings": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Whether to generate embeddings for the new content"
+                }
+              },
+              "required": [
+                "character_name",
+                "category",
+                "suggestion"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "run_theory_of_mind",
+            "description": "Analyze the conversation and memory items to extract subtle, obscure, and hidden information behind the conversation.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "character_name": {
+                  "type": "string",
+                  "description": "Name of the character"
+                },
+                "conversation_text": {
+                  "type": "string",
+                  "description": "The full conversation text to analyze"
+                },
+                "activity_items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "memory_id": {
+                        "type": "string"
+                      },
+                      "content": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "memory_id",
+                      "content"
+                    ]
+                  },
+                  "description": "List of new activity items from the conversation"
+                },
+                "session_date": {
+                  "type": "string",
+                  "description": "Date of the session (e.g., '2024-01-15')",
+                  "default": null
+                },
+                "embeddings_enabled": {
+                  "type": "boolean",
+                  "description": "Whether to generate embeddings for the theory of mind items",
+                  "default": true
+                }
+              },
+              "required": [
+                "character_name",
+                "conversation_text",
+                "activity_items"
+              ]
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "cluster_memories",
+            "description": "Cluster memories into different categories",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "character_name": {
+                  "type": "string",
+                  "description": "Name of the character"
+                },
+                "conversation_content": {
+                  "type": "string",
+                  "description": "The full conversation content to provide context for clustering"
+                },
+                "new_memory_items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "memory_id": {
+                        "type": "string"
+                      },
+                      "content": {
+                        "type": "string"
+                      },
+                      "session_date": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "memory_id",
+                      "content",
+                      "session_date"
+                    ]
+                  },
+                  "description": "List of new memory items from the conversation"
+                }
+              },
+              "required": [
+                "character_name",
+                "conversation_content",
+                "new_memory_items"
+              ]
+            }
+          }
+        }
+      ],
+      "tool_choice": "auto"
+    }
+  }
+}

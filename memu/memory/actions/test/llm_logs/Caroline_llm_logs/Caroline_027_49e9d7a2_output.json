@@ -1,0 +1,29 @@
+{
+  "call_id": "Caroline_027_49e9d7a2",
+  "character": "Caroline",
+  "timestamp": "2025-07-27T23:43:40.936893",
+  "type": "OUTPUT",
+  "data": {
+    "success": true,
+    "content": "**OPERATION:** ADD\n- Memory Item Content: Caroline is interested in adopting children and has researched adoption agencies that support LGBTQ+ individuals in the adoption process. Caroline is committed to providing a safe and loving home for the children she hopes to adopt. \n\n**OPERATION:** TOUCH\n- Target Memory ID: 289401\n\n**OPERATION:** TOUCH\n- Target Memory ID: 39ff7b\n\n**OPERATION:** TOUCH\n- Target Memory ID: 77fcc0\n\n**OPERATION:** TOUCH\n- Target Memory ID: 03e569\n\n**OPERATION:** TOUCH\n- Target Memory ID: 184d9c",
+    "usage": {
+      "completion_tokens": 132,
+      "prompt_tokens": 958,
+      "total_tokens": 1090,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0
+      }
+    },
+    "model": "gpt-4o-mini-2024-07-18",
+    "error": null,
+    "tool_calls": null,
+    "duration_seconds": 1.658
+  }
+}

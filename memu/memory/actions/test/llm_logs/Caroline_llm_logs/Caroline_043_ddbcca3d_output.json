@@ -1,0 +1,46 @@
+{
+  "call_id": "Caroline_043_ddbcca3d",
+  "character": "Caroline",
+  "timestamp": "2025-07-27T23:45:16.066900",
+  "type": "OUTPUT",
+  "data": {
+    "success": true,
+    "content": "",
+    "usage": {
+      "completion_tokens": 85,
+      "prompt_tokens": 7890,
+      "total_tokens": 7975,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0
+      }
+    },
+    "model": "gpt-4o-mini-2024-07-18",
+    "error": null,
+    "tool_calls": [
+      {
+        "id": "call_oABDpnlZvrsRQ1l5jNgasqar",
+        "function": {
+          "arguments": "{\"character_name\": \"Caroline\", \"category\": \"profile\", \"link_all_items\": true, \"write_to_memory\": true}",
+          "name": "link_related_memories"
+        },
+        "type": "function"
+      },
+      {
+        "id": "call_A71YbJAVYAXawy5D6ixNiW6x",
+        "function": {
+          "arguments": "{\"character_name\": \"Caroline\", \"category\": \"event\", \"link_all_items\": true, \"write_to_memory\": true}",
+          "name": "link_related_memories"
+        },
+        "type": "function"
+      }
+    ],
+    "duration_seconds": 1.503
+  }
+}

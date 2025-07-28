@@ -1,0 +1,29 @@
+{
+  "call_id": "Caroline_047_8fc3eb83",
+  "character": "Caroline",
+  "timestamp": "2025-07-27T23:45:45.075545",
+  "type": "OUTPUT",
+  "data": {
+    "success": true,
+    "content": "PROCESSING_COMPLETE",
+    "usage": {
+      "completion_tokens": 5,
+      "prompt_tokens": 9906,
+      "total_tokens": 9911,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 7296
+      }
+    },
+    "model": "gpt-4o-mini-2024-07-18",
+    "error": null,
+    "tool_calls": null,
+    "duration_seconds": 0.715
+  }
+}

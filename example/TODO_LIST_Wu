@@ -20,5 +20,5 @@
 
 8. client的context还是需要精简，对话长了12000 token可能都不一定够
 
-9. generate_suggestions.py: _get_available_categories (line 172)有bug，暂时写死了
+9. generate_suggestions.py: _get_available_categories (line 167)有bug，暂时写死了
     涉及cursor自己写的屎山memory_types，debug可能要很久，我之后再查

@@ -1,0 +1,29 @@
+{
+  "call_id": "Caroline_002_5a3ae7d2",
+  "character": "Caroline",
+  "timestamp": "2025-07-27T23:41:40.874798",
+  "type": "OUTPUT",
+  "data": {
+    "success": true,
+    "content": "Caroline attended a LGBTQ support group on July 26, 2025, where Caroline heard inspiring transgender stories and felt happy, thankful, accepted, and gained courage to embrace Caroline's true self.  \nCaroline shared with Melanie the powerful impact of the support group and expressed excitement about continuing education and exploring career options in counseling or mental health to support individuals with similar issues, receiving encouragement from Melanie who noted Caroline's empathy and understanding would make Caroline a great counselor.  \nCaroline admired Melanie's lake sunrise painting from last year, complimented the color blending, and discussed how painting serves as a great outlet for expressing feelings and relaxing after long days, with Melanie sharing that painting is a fun way for Melanie to express creativity and unwind.  \nCaroline and Melanie reflected on the importance of taking care of themselves, with Caroline planning to do research after their conversation and Melanie preparing to go swimming with Melanie's kids.",
+    "usage": {
+      "completion_tokens": 183,
+      "prompt_tokens": 1086,
+      "total_tokens": 1269,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0
+      }
+    },
+    "model": "gpt-4o-mini-2024-07-18",
+    "error": null,
+    "tool_calls": null,
+    "duration_seconds": 2.235
+  }
+}

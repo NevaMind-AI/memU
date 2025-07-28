@@ -1,0 +1,29 @@
+{
+  "call_id": "Caroline_021_93d69880",
+  "character": "Caroline",
+  "timestamp": "2025-07-27T23:43:06.124071",
+  "type": "OUTPUT",
+  "data": {
+    "success": true,
+    "content": "Melanie shared with Caroline that she participated in a charity race for mental health on July 22, 2025, which was a rewarding experience that made her reflect on the importance of taking care of mental well-being. Caroline expressed pride in Melanie for making a difference and raising awareness for mental health through the charity race. \n\nMelanie discussed her realization that self-care is crucial for her, stating that focusing on her own well-being enables her to better care for her family. Caroline agreed with Melanie, emphasizing that self-care is important, even if it can be challenging at times, and praised Melanie for prioritizing her self-care. \n\nMelanie revealed that she is now dedicating time each day to activities such as running, reading, and playing the violin, which help her feel refreshed and present for her family. Caroline commended Melanie for taking time for herself and recognized her efforts in caring for both herself and her family. \n\nMelanie expressed excitement about her children anticipating summer break and mentioned their plans to go camping in August 2025. Caroline shared her own plans of researching adoption agencies, expressing her long-held dream of creating a family and providing a loving home for children in need. \n\nMelanie reacted positively to Caroline's adoption plans, complimenting her kindness and noting that Caroline’s future family will be fortunate to have her. Caroline conveyed her gratitude for the support she has received from friends and mentors as she embarks on this journey to turn her dream of adoption into reality and shared that she is looking into a specific agency. \n\nCaroline explained that she chose the adoption agency because it supports LGBTQ+ individuals in the adoption process, highlighting the agency's inclusivity and support as significant factors in her decision. Melanie expressed appreciation for the agency's focus on inclusivity and asked Caroline if there was anything she was particularly excited about in the adoption process. \n\nCaroline conveyed her excitement about creating a family for children who need a loving home, acknowledging the challenges of being a single parent but expressing her readiness to face those challenges. Melanie encouraged Caroline by affirming her admirable intentions and expressing confidence that Caroline will be a wonderful mother, wishing her good luck in her adoption journey. \n\nCaroline thanked Melanie for her kind words, stating that they mean a lot to her as she commits to providing a safe and loving home for the children she hopes to adopt. Melanie reassured Caroline that her caring nature will provide the love and stability the children need and expressed her enthusiasm for this new chapter in Caroline's life.",
+    "usage": {
+      "completion_tokens": 502,
+      "prompt_tokens": 1269,
+      "total_tokens": 1771,
+      "completion_tokens_details": {
+        "accepted_prediction_tokens": 0,
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "rejected_prediction_tokens": 0
+      },
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0
+      }
+    },
+    "model": "gpt-4o-mini-2024-07-18",
+    "error": null,
+    "tool_calls": null,
+    "duration_seconds": 5.859
+  }
+}

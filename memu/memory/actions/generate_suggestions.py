@@ -127,16 +127,23 @@ For each category, analyze the new memory items and suggest what specific inform
 **SUGGESTION REQUIREMENTS:**
 - Specify that memory items should include "{character_name}" as the subject
 - Mention specific names, places, titles, and dates that should be included
-- Ensure suggestions lead to complete, self-contained sentences
+- Ensure suggestions lead to complete, self-contained memory items
 - Avoid suggesting content that would result in pronouns or incomplete sentences
 - For profile: Focus ONLY on stable, factual, demographic information
+
+**OUTPUT INSTRUCTIONS:**
+- **IMPORTANT** NEVER suggest categories that are not in the Available Categories
+- Only suggest categories where there is relevant new information to add/delete/update. 
 
 For each category that has relevant information, provide your suggestions in the following format:
 
 **Category: [category_name]**
 - Suggestion: [What specific self-contained content should be added to this category, ensuring full subjects and complete context]
 
-Only suggest categories where there is relevant new information to add/delete/update. Be specific about what content should be extracted and ensure suggestions lead to complete, self-contained memory items.
+**Category: [category_name]**
+- Suggestion: [What specific self-contained content should be added to this category, ensuring full subjects and complete context]
+
+... other categories ...
 
 """
 
