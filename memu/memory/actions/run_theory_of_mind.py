@@ -107,7 +107,7 @@ class RunTheoryOfMindAction(BaseAction):
                 })
             
             # Parse text response
-            reasoning_process, theory_of_mind_items = self._parse_theory_of_mind_from_text(response.strip(), session_date)
+            reasoning_process, theory_of_mind_items = self._parse_theory_of_mind_from_text(character_name, response.strip(), session_date)
 
             if not theory_of_mind_items:
                 return self._add_metadata({
@@ -121,7 +121,7 @@ class RunTheoryOfMindAction(BaseAction):
                 "theory_of_mind_items_added": len(theory_of_mind_items),
                 "theory_of_mind_items": theory_of_mind_items,
                 "reasoning_process": reasoning_process,
-                "message": f"Successfully extracted {len(theory_of_mind_items)} self-contained theory of mind items from conversation"
+                "message": f"Successfully extracted {len(theory_of_mind_items)} theory of mind items from conversation"
             })
             
         except Exception as e:
@@ -163,7 +163,7 @@ Your task it to leverage your reasoning skills to infer the information that is 
 - Leverage your reasoning skills to infer the information that is not explicitly mentioned
 - Use the activity items as a reference to assist your reasoning process and inferences
 - DO NOT repeat the information that is already included in the activity items
-- Use modal Adverbs (perhaps, probably, likely, etc.) to indicate your confidence level of the inference
+- Use modal adverbs (perhaps, probably, likely, etc.) to indicate your confidence level of the inference
 
 **COMPLETE SENTENCE EXAMPLES:**
 GOOD: "{character_name} may have experience working abroad"
@@ -180,7 +180,7 @@ BAD: "Harry Potter series are probably important to {character_name}'s childhood
 [Your reasoning process for what kind of implicit information can be hidden behind the conversation, what are the evidences, how you get to your conclusion, and how confident you are.]
 
 **INFERENCE ITEMS:**
-[One line each inference, no markdown headers, no structure, no numbering, no bullet points, ends with a period]
+[One piece of inference per line, no markdown headers, no structure, no numbering, no bullet points, ends with a period]
 [After carefully reasoning, if you determine that there is no implicit information that can be inferred from the conversation beyong the explicit information already mentioned in the activity items, you can leave this section empty. DO NOT output things like "No inference available".]
 
 """
@@ -189,7 +189,7 @@ BAD: "Harry Potter series are probably important to {character_name}'s childhood
         response = self.llm_client.simple_chat(theory_of_mind_prompt)
         return response
     
-    def _parse_theory_of_mind_from_text(self, response_text: str, session_date: str) -> tuple:
+    def _parse_theory_of_mind_from_text(self, character_name: str, response_text: str, session_date: str) -> tuple:
         """Parse theory of mind items from text format response"""
 
         reasoning_process = ""
@@ -220,7 +220,7 @@ BAD: "Harry Potter series are probably important to {character_name}'s childhood
                     if not reasoning_process:
                         reasoning_process = line.strip()
                     else:
-                        reasoning_process += " " + line.strip()
+                        reasoning_process += "\n" + line.strip()
 
                  # Parse memory items
                 elif inference_section:
@@ -233,10 +233,15 @@ BAD: "Harry Potter series are probably important to {character_name}'s childhood
                             "content": line,
                             "links": ""
                         })
-            
-            # Enhanced fallback if parsing failed - create comprehensive, self-contained memory items
-            # if not reasoning_process:
-            #     reasoning_process = f"With Theory of Mind reasoning, we deduce these reasonable inferences from the conversation session with {character_name}"
+            # 
+            # For debugging, maybe no need to save ToM separately
+            # 
+            if theory_of_mind_items:
+                with open(f"memory/{character_name}_ToM.md", "a") as f:
+                    f.write('\n'.join([
+                        f"[{item['memory_id']}][mentioned at {item.get('session_date', 'Unknown')}] {item['content']} []"
+                        for item in theory_of_mind_items
+                    ]))
             
         except Exception as e:
             import traceback

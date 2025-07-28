@@ -112,7 +112,8 @@ class ClusterMemoriesAction(BaseAction):
                 if match:
                     # Extract the captured group (the text in parentheses)
                     cluster_name = match.group(1)
-                    if cluster_name not in self.memory_types:
+                    # if cluster_name not in self.memory_types:
+                    if cluster_name not in ['activity', 'event', 'profile', 'ToM']:
                         existing_clusters.append(cluster_name)
 
             return existing_clusters

@@ -248,7 +248,7 @@ class LinkRelatedMemoriesAction(BaseAction):
                             })
                     
                     except Exception as e:
-                        logger.warning(f"Failed to load embeddings for {category}: {e}")
+                        logger.warning(f"Failed to load embeddings for {category}: {repr(e)}")
             
             # Sort ALL candidates by similarity globally
             all_candidates.sort(key=lambda x: x["similarity"], reverse=True)
@@ -261,9 +261,10 @@ class LinkRelatedMemoriesAction(BaseAction):
             
             # Use LLM to filter for truly relevant memories
             if filtered_results:
-                relevant_memories = self._filter_relevant_memories_with_llm(
-                    character_name, filtered_results, target_content, top_k
-                )
+                # relevant_memories = self._filter_relevant_memories_with_llm(
+                #     character_name, filtered_results, target_content, top_k
+                # )
+                relevant_memories = sorted(filtered_results, key=lambda x: x["similarity"], reverse=True)[:top_k]
                 return relevant_memories
             else:
                 return []
@@ -574,5 +575,5 @@ RELEVANT MEMORY NUMBERS:"""
             return [int(num) for num in numbers if num.isdigit()]
             
         except Exception as e:
-            logger.warning(f"Failed to parse relevance response '{response}': {e}")
+            logger.warning(f"Failed to parse relevance response '{response}': {repr(e)}")
             return []

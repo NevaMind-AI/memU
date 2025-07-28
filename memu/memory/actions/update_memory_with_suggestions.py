@@ -94,14 +94,6 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
             
             if not session_date:
                 session_date = datetime.now().strftime("%Y-%m-%d")
-
-            # Read memory items from activity category (stored in step 2 of workflow)
-            # activity_content = self._read_memory_content(character_name, "activity")
-            # if not activity_content:
-            #     return self._add_metadata({
-            #         "success": False,
-            #         "error": "No activity content found. Run add_activity_memory first."
-            #     })
             
             # Load existing content
             existing_content = self._read_memory_content(character_name, category)
@@ -152,7 +144,7 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
     ) -> str:
         """Analyze memory update scenario and determine the operations that should be performed"""
 
-        operation_prompt = f"""Analyze the following memory update scenario and determine the memory operations that should be performed.
+        operation_prompt = f"""You are an expert in analyzing the following memory update scenario and determining the memory operations that should be performed.
 
 Character: {character_name}
 Memory Category: {category}
@@ -193,6 +185,7 @@ Memory Update Suggestion:
 - For ADD and UPDATE operations, provide the content of the new memory items following the self-contained memory requirements
 - For UPDATE, DELETE, and TOUCH operations, provide the target memory IDs associated with the memory items
 - If there are multiple actions for an operation type (e.g, multiple ADDs), output them separately, do not put them in a single **OPERATION:** block
+- **IMPORTANT** If a memory item in suggestion uses modal adverbs (perhaps, probably, likely, etc.) to indicate an uncertain inference, keep the modal adverbs as-is in your output
 
 **OUTPUT FORMAT:**
 
@@ -432,7 +425,7 @@ Memory Update Suggestion:
                         "item_id": new_item_id,
                         "memory_id": item["memory_id"],
                         "text": item["content"],
-                        "full_line": item["full_line"],
+                        "full_line": f"[{item['memory_id']}][mentioned at {item['mentioned_at']}] {item['content']} [{item['links']}]",
                         "embedding": embedding_vector,
                         "line_number": len(existing_embeddings) + 1,
                         "metadata": {
@@ -447,7 +440,7 @@ Memory Update Suggestion:
                     existing_embeddings.append(new_embedding)
                     
                 except Exception as e:
-                    logger.warning(f"Failed to generate embedding for memory item {item.get('memory_id')}: {e}")
+                    logger.warning(f"Failed to generate embedding for memory item {item.get('memory_id')}: {repr(e)}")
                     continue
             
             # Save updated embeddings

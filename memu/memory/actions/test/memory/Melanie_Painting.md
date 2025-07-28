@@ -1,2 +1,0 @@
-[a28cb7][mentioned at Unknown] Melanie encouraged Caroline, affirming that Caroline would be a great counselor due to her empathy and understanding, and then shared a painting she created of a lake sunrise last year, which holds special significance for her. []
-[7b1979][mentioned at Unknown] Caroline complimented Melanie's painting, noting the nice blending of colors and discussing how painting serves as a great outlet for expressing feelings and relaxing after a long day. []

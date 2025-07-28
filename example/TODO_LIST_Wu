@@ -22,3 +22,9 @@
 
 9. generate_suggestions.py: _get_available_categories (line 167)有bug，暂时写死了
     涉及cursor自己写的屎山memory_types，debug可能要很久，我之后再查
+
+0728
+
+10. suggestion和add可能不会保留ToM的表推测的提示词（maybe, perhaps），可能需要在prompt中强调，或者使用硬标识符[ToM]
+
+11. Theory of Mind的指令服从有问题，有时会不按格式输出

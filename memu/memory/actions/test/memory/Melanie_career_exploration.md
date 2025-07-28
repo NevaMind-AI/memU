@@ -1,2 +1,0 @@
-[2a7725][mentioned at Unknown] Caroline revealed her intention to continue her education and explore career options, expressing excitement about the possibilities ahead. []
-[bea4cd][mentioned at Unknown] Melanie showed interest in Caroline's career aspirations by asking what kinds of jobs she was considering, to which Caroline responded that she was keen on counseling or working in mental health to support those with similar issues. []

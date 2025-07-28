@@ -130,14 +130,14 @@ class AddActivityMemoryAction(BaseAction):
                     "character_name": character_name,
                     "category": "activity",
                     "session_date": session_date,
-                    "operation": "append",
-                    "content_added": len(content_with_ids),
+                    # "operation": "append",
+                    # "content_added": len(content_with_ids),
                     "memory_items_added": len(memory_items),
                     "memory_items": memory_items,
-                    "embeddings_generated": generate_embeddings and self.embeddings_enabled,
-                    "embeddings_info": embeddings_info,
-                    "file_path": f"{self.memory_core.memory_dir}/{character_name}_activity.md",
-                    "message": f"Successfully appended {len(memory_items)} self-contained activity memory items for {character_name}"
+                    # "embeddings_generated": generate_embeddings and self.embeddings_enabled,
+                    # "embeddings_info": embeddings_info,
+                    # "file_path": f"{self.memory_core.memory_dir}/{character_name}_activity.md",
+                    "message": f"Successfully generated {len(memory_items)} self-contained activity memory items for {character_name}"
                 })
             else:
                 return self._add_metadata({
@@ -375,7 +375,7 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
                         "item_id": new_item_id,
                         "memory_id": item["memory_id"],
                         "text": item["content"],
-                        "full_line": item["full_line"],
+                        "full_line": f"[{item['memory_id']}][mentioned at {item['mentioned_at']}] {item['content']} [{item['links']}]",
                         "embedding": embedding_vector,
                         "line_number": len(existing_embeddings) + 1,
                         "metadata": {
@@ -390,7 +390,9 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
                     existing_embeddings.append(new_embedding)
                     
                 except Exception as e:
-                    logger.warning(f"Failed to generate embedding for memory item {item.get('memory_id')}: {e}")
+                    logger.warning(f"Failed to generate embedding for memory item {item.get('memory_id')}: {repr(e)}")
+                    import traceback
+                    traceback.print_exc()
                     continue
             
             # Save updated embeddings

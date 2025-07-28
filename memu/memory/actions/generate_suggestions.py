@@ -94,21 +94,22 @@ class GenerateMemorySuggestionsAction(BaseAction):
             ])
             
             # Create enhanced prompt for LLM to analyze and generate suggestions
-            suggestions_prompt = f"""Analyze the following new memory items for {character_name} and suggest what should be added to each memory category.
+            suggestions_prompt = f"""You are an expert in analyzing the provided memory items for {character_name} and suggesting the memory items that should be added to each memory category.
 
 New Memory Items:
 {memory_items_text}
 
 Available Categories: {', '.join(available_categories)}
 
-**CRITICAL REQUIREMENT: Suggestions must lead to SELF-CONTAINED MEMORY ITEMS**
+**CRITICAL REQUIREMENT: Suggestions must be SELF-CONTAINED MEMORY ITEMS**
 
-When suggesting content for each category, ensure that the resulting memory items will:
-- Be complete, standalone sentences with full subjects
-- Always include "{character_name}" instead of pronouns like "she/he/they"
-- Include specific names, places, dates, and full context
-- Never use "the book", "the place", "the friend" - always specify full titles and names
-- Be understandable without reading other memory items
+**SELF-CONTAINED MEMORY REQUIREMENTS:**
+- EVERY activity item must be complete and standalone
+- ALWAYS include the full subject (do not use "she/he/they/it")
+- NEVER use pronouns that depend on context (no "she", "he", "they", "it")
+- Include specific names, places, dates, and full context in each item
+- Each activity should be understandable without reading other items
+- Include all relevant details, emotions, and outcomes in the activity description
 
 **CATEGORY-SPECIFIC REQUIREMENTS:**
 
@@ -130,21 +131,23 @@ For each category, analyze the new memory items and suggest what specific inform
 - Ensure suggestions lead to complete, self-contained memory items
 - Avoid suggesting content that would result in pronouns or incomplete sentences
 - For profile: Focus ONLY on stable, factual, demographic information
+- If one input memory item involves information belongs to multiple categories, you should reasonable seperete the information and provide suggestions to all involved categories
+- **IMPORTANT** If the input memory item use modal adverbs (perhaps, probably, likely, etc.) to indicate an uncertain inference, keep the modal adverbs as-is in your suggestions
 
 **OUTPUT INSTRUCTIONS:**
 - **IMPORTANT** NEVER suggest categories that are not in the Available Categories
-- Only suggest categories where there is relevant new information to add/delete/update. 
+- Only output categories where there are suggestions for new memory items
 
-For each category that has relevant information, provide your suggestions in the following format:
+**OUTPUT FORMAT:**
 
 **Category: [category_name]**
+- Suggestion: [What specific self-contained content should be added to this category, ensuring full subjects and complete context]
 - Suggestion: [What specific self-contained content should be added to this category, ensuring full subjects and complete context]
 
 **Category: [category_name]**
 - Suggestion: [What specific self-contained content should be added to this category, ensuring full subjects and complete context]
 
 ... other categories ...
-
 """
 
             # Call LLM to generate suggestions
@@ -163,7 +166,6 @@ For each category that has relevant information, provide your suggestions in the
                 "success": True,
                 "character_name": character_name,
                 "suggestions": suggestions,
-                "memory_items_count": len(new_memory_items),
                 "categories_analyzed": len(available_categories),
                 "message": f"Generated self-contained suggestions for {len(suggestions)} categories based on {len(new_memory_items)} memory items"
             })

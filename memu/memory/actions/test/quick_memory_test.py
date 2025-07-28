@@ -467,9 +467,11 @@ def display_function_results(function_calls):
                 print(f"     Character: {character}")
                 print(f"     Memory items added: {items_added}")
             
-            elif func_name == 'get_available_categories':
-                categories = func_result.get('available_categories', [])
-                print(f"     Categories: {categories}")
+            elif func_name == 'run_theory_of_mind':
+                character = func_result.get('character_name', 'N/A')
+                items_added = func_result.get('theory_of_mind_items_added', 0)
+                print(f"     Character: {character}")
+                print(f"     ToM items added: {items_added}")
             
             elif func_name == 'generate_memory_suggestions':
                 suggestions = func_result.get('suggestions', {})
@@ -493,12 +495,6 @@ def display_function_results(function_calls):
                 print(f"     Category: {category}")
                 print(f"     Links added: {links_added}")
             
-            elif func_name == 'run_theory_of_mind':
-                character = func_result.get('character_name', 'N/A')
-                analysis = func_result.get('analysis', {})
-                print(f"     Character: {character}")
-                if isinstance(analysis, dict):
-                    print(f"     Analysis areas: {list(analysis.keys())}")
         else:
             error = func_result.get('error', 'Unknown error')
             print(f"     Error: {error}")
@@ -583,7 +579,7 @@ def quick_memory_test():
         memory_agent = MemoryAgent(
             llm_client=llm_client,
             memory_dir=memory_dir,
-            enable_embeddings=False
+            enable_embeddings=True
         )
         print("✅ Memory agent initialized successfully")
         

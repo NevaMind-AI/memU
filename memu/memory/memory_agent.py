@@ -7,8 +7,7 @@ Each operation is implemented as a separate action module for modularity and mai
 
 import threading
 import json
-import os
-import shutil
+import time
 from pathlib import Path
 from typing import Dict, List, Any, Callable, Optional, Union
 from datetime import datetime
@@ -277,7 +276,11 @@ Start with step 1 and work through the process systematically. When you complete
                             logger.info(f"🔧 Calling function: {function_name}")
                             
                             # Execute the function call
+                            time_start = time.time()
                             function_result = self.call_function(function_name, arguments)
+                            time_end = time.time()
+                            
+                            logger.info(f"    Function time used: {time_end - time_start:.2f} seconds")
                             
                             # Track function call
                             call_record = {
@@ -405,7 +408,9 @@ Start with step 1 and work through the process systematically. When you complete
                 "function_name": function_name,
                 "timestamp": datetime.now().isoformat()
             }
-            logger.error(f"Function call failed: {function_name} - {e}")
+            logger.error(f"Function call failed: {function_name} - {repr(e)}")
+            import traceback
+            traceback.print_exc()
             return error_result
 
     def validate_function_call(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
