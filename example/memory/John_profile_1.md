@@ -1,7 +1,0 @@
-[b1402c][mentioned at 2025-07-25] John is passionate about improving education and infrastructure in the community. [4dabc3,ff19db,38a650,bf90f2,a6307c]
-[714f41][mentioned at 2025-07-25] John is motivated to advocate for proper funding for schools and infrastructure due to experiences from his childhood. [4dabc3,857f39,a6307c,ff19db,7f1684]
-[7c0bde][mentioned at 2025-07-25] John likely lives in a suburban area. [14de43,7f1684,e37401]
-[648ac5][mentioned at 2025-07-25] John enjoys spending quality time with his family. [b8282d,d9a5b9]
-[d09805][mentioned at 2025-07-25] John hopes to get involved in local politics to help the community and make it a better place. [76a5ae,7f1684,e37401,ff19db,2e258d]
-[34d37a][mentioned at 2025-07-25] John was motivated to advocate for proper funding for schools and infrastructure due to experiences from his childhood. [4dabc3,857f39]
-[4b718c][mentioned at 2025-07-25] John plans to meet with local leaders and organizations to gain support and gather ideas for the next phase of John's political journey. [f56bdf,7f1684,e37401,76a5ae,83bee5]

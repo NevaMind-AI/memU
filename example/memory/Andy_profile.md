@@ -1,2 +1,0 @@
-[b8bc36][mentioned at 2025-07-25] Andy is a professional in the technology sector. [44ee95,1c373c,8e8adf,407edf,092e90]
-[092e90][mentioned at 2025-07-25] Andy works as a project manager at XYZ Corporation. [1c373c,8e8adf,b8bc36,48d88f,407edf]
