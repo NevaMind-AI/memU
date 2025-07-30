@@ -162,31 +162,37 @@ class RecallAgent:
                 if not content:
                     continue
                 
-                # Calculate category name similarity to query
-                category_lower = category.lower()
-                category_words = set(category_lower.split('_'))
+                # Semantic search for content relevance
+                content_relevance = 0.0
+                if self.semantic_search_enabled and self.embedding_client:
+                    try:
+                        # Generate embeddings for query and content
+                        query_embedding = self.embedding_client.embed(query)
+                        content_embedding = self.embedding_client.embed(content[:1000])  # Limit content length for embedding
+                        
+                        # Calculate semantic similarity
+                        semantic_similarity = self._cosine_similarity(query_embedding, content_embedding)
+                        content_relevance = semantic_similarity
+                    except Exception as e:
+                        logger.warning(f"Semantic search failed for {category}: {e}")
+                        # Fallback to simple keyword matching
+                        content_lower = content.lower()
+                        content_relevance = sum(1 for word in query_words if word in content_lower) / len(query_words) if query_words else 0
+                else:
+                    # Fallback to simple keyword matching when semantic search is not available
+                    content_lower = content.lower()
+                    content_relevance = sum(1 for word in query_words if word in content_lower) / len(query_words) if query_words else 0
                 
-                # Exact match bonus
-                exact_match_score = 1.0 if query_lower in category_lower else 0.0
-                
-                # Word overlap score
-                word_overlap = len(query_words.intersection(category_words)) / len(query_words) if query_words else 0
-                
-                # Content relevance (simple keyword matching)
-                content_lower = content.lower()
-                content_relevance = sum(1 for word in query_words if word in content_lower) / len(query_words) if query_words else 0
-                
-                # Combined score
-                combined_score = exact_match_score * 0.5 + word_overlap * 0.3 + content_relevance * 0.2
+                # Use semantic score directly
+                combined_score = content_relevance
                 
                 if combined_score > 0:
                     category_scores.append({
                         "category": category,
                         "content": content,
                         "score": combined_score,
-                        "exact_match": exact_match_score > 0,
-                        "word_overlap": word_overlap,
                         "content_relevance": content_relevance,
+                        "semantic_search_used": self.semantic_search_enabled and self.embedding_client is not None,
                         "length": len(content),
                         "lines": len(content.split('\n'))
                     })
@@ -203,9 +209,8 @@ class RecallAgent:
                     "content": item["content"],
                     "content_type": "relevant_category",
                     "relevance_score": item["score"],
-                    "exact_match": item["exact_match"],
-                    "word_overlap": item["word_overlap"],
                     "content_relevance": item["content_relevance"],
+                    "semantic_search_used": item["semantic_search_used"],
                     "length": item["length"],
                     "lines": item["lines"],
                     "character": character_name
@@ -220,9 +225,10 @@ class RecallAgent:
                 "all_categories_found": all_categories,
                 "excluded_categories": excluded_categories,
                 "available_categories": relevant_categories,
+                "semantic_search_enabled": self.semantic_search_enabled,
                 "results": results,
                 "total_items": len(results),
-                "message": f"Retrieved top {len(results)} relevant categories for query '{query}' from {len(all_categories)} total categories"
+                "message": f"Retrieved top {len(results)} relevant categories for query '{query}' using semantic search from {len(all_categories)} total categories"
             }
             
         except Exception as e:
