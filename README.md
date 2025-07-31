@@ -26,6 +26,9 @@
 </p>
 
 MemU is an open-source memory framework for personalized AI companions. We treat memory as an agent-controlled file system that stores user information as documents. It provides high-speed memory retrieval and enables self-evolution without interacting with users. The framework is easily extendable, enabling you to create AI companions that genuinely remember and grow with their users.
+
+![MemU Architecture](assets/architecture-overview.png)
+
 </div>
 
 ---
@@ -46,7 +49,13 @@ Star MemU to get notified about new releases and join our growing community of A
 
 ## 📈 Performance Benchmark
 
+<div align="center">
+
+![Performance Chart](assets/performance-chart.png)
+
 MemU outperforms other memory solutions in multiple reasoning tasks.
+
+</div>
 
 | Model    |   Single-Hop |  Multi-Hop | Open Domain | Temporal Reasoning | Avg. Score | 
 |-------------|------------|-----------|-------------|------------|---------------------|
@@ -63,43 +72,120 @@ model : gpt-4.1-mini
 
 ## ✨ Key Features
 
+---
+
+## 📋 **Organized Memory**
+
 <div align="center">
 
-### 🧠 **Specialized for AI companion**
-![Memory Demo](assets/memory-demo.gif)
-*Automatic profile updates and event tracking across conversations*
-#### user reminder
-#### important event
-#### user profile
-#### memory ranking
-#### forget memory
+**Transform chaotic information into structured knowledge**
 
-
-
-
-
-### 🔍 **Retrieval Fast**
-![Search Demo](assets/search-demo.gif)
-
-
-### 🎯 **Extension Framework**
-![Psychology Demo](assets/psychology-demo.gif)
-
-
-
-
-### **Self Evolvement**
-
+![Organized Memory Demo](assets/organized-memory-demo.gif)
 
 </div>
 
+MemU intelligently organizes memories into well-structured documents, creating a coherent knowledge base that grows with each interaction. Unlike traditional memory systems that store isolated fragments, MemU maintains contextual relationships and categorical organization.
 
+**Key Benefits:**
+- 🗂️ **Document-based storage** - Each memory type is stored as readable documents
+- 🏷️ **Smart categorization** - Automatic classification by topics and contexts  
+- 🔍 **Easy retrieval** - Quick access to relevant information through semantic search
+- 📊 **Structured format** - Consistent organization across all memory types
 
 ---
-## 🤖 **Memory as documents** 
-![LLM Integration](assets/llm-integration.gif)
+
+## 🔗 **Linked Connections**
+
+<table align="center">
+<tr>
+<td width="50%">
+
+**Build a web of interconnected knowledge**
+
+Different memories are interconnected through sophisticated semantic relationships, creating a rich network of contextual associations. This enables the AI to understand not just individual facts, but how concepts relate to each other across different conversations and contexts.
+
+**Key Benefits:**
+- 🕸️ **Semantic linking** - Memories connect based on meaning and context
+- 🔄 **Cross-referencing** - Related information surfaces automatically
+- 🧩 **Contextual understanding** - AI grasps relationships between different topics
+- 📈 **Knowledge graph** - Dynamic network that expands with each interaction
+
+</td>
+<td width="50%">
+
+![Linked Connections Demo](assets/linked-connections-demo.gif)
+
+</td>
+</tr>
+</table>
 
 ---
+
+## 🧠 **Evolved Intelligence**
+
+<table align="center">
+<tr>
+<td width="50%">
+
+![Evolved Intelligence Demo](assets/evolved-intelligence-demo.gif)
+
+</td>
+<td width="50%">
+
+**Self-improving AI that grows smarter over time**
+
+The Memory Agent continuously performs Theory of Mind reasoning, analyzing stored memories to generate deeper insights about user preferences, behaviors, and needs. This creates an evolving understanding that enhances existing documents and generates new knowledge automatically.
+
+**Key Benefits:**
+- 🤔 **Theory of Mind** - Deep understanding of user mental states and preferences
+- 📝 **Self-enhancement** - Automatically improves existing memory documents
+- 💡 **Insight generation** - Creates new understanding from existing information
+- 🌱 **Continuous growth** - Knowledge base becomes more sophisticated over time
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🌫️ **Fade Memory**
+
+<div align="center">
+
+**Natural forgetting that preserves what matters**
+
+<table>
+<tr>
+<td width="33%">
+
+![Memory Fade 1](assets/memory-fade-1.gif)
+
+</td>
+<td width="34%">
+
+![Memory Fade 2](assets/memory-fade-2.gif)
+
+</td>
+<td width="33%">
+
+![Memory Fade 3](assets/memory-fade-3.gif)
+
+</td>
+</tr>
+</table>
+
+</div>
+
+MemU implements an intelligent LRU-like forgetting mechanism where memories naturally fade in importance without disappearing entirely. This mimics human memory patterns - rarely accessed information becomes less prominent while frequently referenced memories gain stronger relevance.
+
+**Key Benefits:**
+- ⏰ **Time-based decay** - Unused memories naturally fade in importance
+- 🔄 **Usage-based boost** - Recently accessed memories gain higher relevance
+- 💾 **Never truly lost** - Information fades but remains retrievable when needed
+- 🎯 **Smart prioritization** - Most relevant memories surface first in conversations
+
+---
+
 
 ## 🚀 Quick Start
 
@@ -139,6 +225,8 @@ Try MemU instantly in your browser: [**🔗 Interactive Demo**](https://demo.nev
 
 <div align="center">
 
+![Use Cases Demo](assets/use-cases-demo.gif)
+
 ### 🎓 **Use Cases**
 
 <table>
@@ -150,9 +238,12 @@ Try MemU instantly in your browser: [**🔗 Interactive Demo**](https://demo.nev
 
 **🎯 Role play**
 
+**🛠️ AI companion**
+
 **🎯 Educational AI**
 
 **🛠️ Customer Support**
+
 
 **Creation Support**
 ---
@@ -160,6 +251,8 @@ Try MemU instantly in your browser: [**🔗 Interactive Demo**](https://demo.nev
 ## 🤝 Contributing
 
 <div align="center">
+
+![Contributing Flow](assets/contributing-flow.png)
 
 ### **Join Our Mission**
 
@@ -201,6 +294,21 @@ git push origin feature/amazing-feature
 ## 🌍 Community
 
 <div align="center">
+
+<table>
+<tr>
+<td width="50%">
+
+![Community Network](assets/community-network.gif)
+
+</td>
+<td width="50%">
+
+![Global Users](assets/global-users-map.png)
+
+</td>
+</tr>
+</table>
 
 ### **Connect with the MemU Community**
 
@@ -244,8 +352,12 @@ Licensed under [Apache License 2.0](LICENSE)
 
 <div align="center">
 
+![AI Memory Animation](assets/ai-memory-animation.gif)
+
 **MemU** - Building the memory foundation for next-generation AI agents 🧠✨
 
 *Made with ❤️ by the [NevaMind AI](https://nevamind.ai) team*
+
+![Footer Decoration](assets/footer-decoration.png)
 
 </div> 
