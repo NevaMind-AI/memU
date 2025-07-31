@@ -47,15 +47,23 @@ Star MemU to get notified about new releases and join our growing community of A
 
 ---
 
-## 📈 Performance Benchmark
+## 🏆 **Competitive Advantages**
 
 <div align="center">
 
-![Performance Chart](assets/performance-chart.png)
+![Competitive Analysis](assets/competitive-analysis.png)
 
-MemU outperforms other memory solutions in multiple reasoning tasks.
+**Why MemU stands out from other memory solutions**
 
 </div>
+
+### 🎯 **Higher Memory Accuracy**
+
+![Accuracy Chart](assets/accuracy-comparison-chart.gif)
+
+**Industry-leading precision in memory retrieval**
+
+MemU achieves **92.09% average accuracy** across all reasoning tasks, significantly outperforming competitors. Our advanced embedding and retrieval algorithms ensure that the most relevant memories are surfaced with unprecedented precision.
 
 | Model    |   Single-Hop |  Multi-Hop | Open Domain | Temporal Reasoning | Avg. Score | 
 |-------------|------------|-----------|-------------|------------|---------------------|
@@ -67,61 +75,13 @@ MemU outperforms other memory solutions in multiple reasoning tasks.
 | **MIRIX**   | 85.11      | 83.70     | 65.62       | 88.39      | 85.38               |
 | **MemU**    | **94.88**  | **88.30**  | **77.08**    | **92.52**   | **92.09**  |
 
-model : gpt-4.1-mini
-
----
-
-## 🏆 **Competitive Advantages**
-
-<div align="center">
-
-![Competitive Analysis](assets/competitive-analysis.png)
-
-**Why MemU stands out from other memory solutions**
-
-</div>
-
----
-
-### 🎯 **Higher Memory Accuracy**
-
-<table align="center">
-<tr>
-<td width="60%">
-
-**Industry-leading precision in memory retrieval**
-
-MemU achieves **92.09% average accuracy** across all reasoning tasks, significantly outperforming competitors. Our advanced embedding and retrieval algorithms ensure that the most relevant memories are surfaced with unprecedented precision.
-
-**Accuracy Highlights:**
-- 📊 **94.88%** Single-hop reasoning accuracy
-- 🔗 **88.30%** Multi-hop reasoning performance  
-- 🌐 **77.08%** Open domain knowledge retrieval
-- ⏰ **92.52%** Temporal reasoning capabilities
-
-*Based on comprehensive benchmarks against 7 leading memory frameworks*
-
-</td>
-<td width="40%">
-
-![Accuracy Chart](assets/accuracy-comparison-chart.gif)
-
-</td>
-</tr>
-</table>
+*Based on comprehensive benchmarks against 7 leading memory frameworks using gpt-4.1-mini*
 
 ---
 
 ### 🔄 **Flexible Retrieval Strategies**
 
-<table align="center">
-<tr>
-<td width="40%">
-
 ![Retrieval Strategies](assets/retrieval-strategies-demo.gif)
-
-</td>
-<td width="60%">
 
 **Multiple recall methods for every use case**
 
@@ -129,53 +89,17 @@ MemU provides a comprehensive suite of retrieval strategies, allowing you to cho
 
 **Available Strategies:**
 - 🔍 **Semantic Search** - Find memories by meaning and context
-- ⏰ **Temporal Retrieval** - Recall based on time patterns and recency
-- 🏷️ **Category-based** - Organized retrieval by topic classification
-- 🧠 **Relevance Scoring** - AI-powered importance ranking
+- 🏷️ **Category-based** - Organized retrieval conten by topics
 - 🔗 **Graph Traversal** - Follow memory connections and relationships
 - 🎯 **Hybrid Fusion** - Combine multiple strategies for optimal results
-
-</td>
-</tr>
-</table>
 
 ---
 
 ### 📖 **Human-Readable Memory Format**
 
-<div align="center">
+![Memory Format Comparison](assets/memory-format-comparison.png)
 
 **Memories you can actually read and understand**
-
-<table>
-<tr>
-<td width="33%">
-
-![Traditional Memory](assets/traditional-memory-format.png)
-<br>
-**❌ Traditional Systems**
-<br>
-*Cryptic vectors and fragments*
-
-</td>
-<td width="34%">
-
-![Arrow](assets/arrow-right.png)
-
-</td>
-<td width="33%">
-
-![MemU Memory](assets/memu-memory-format.png)
-<br>
-**✅ MemU Format**
-<br>
-*Clear, structured documents*
-
-</td>
-</tr>
-</table>
-
-</div>
 
 Unlike other memory systems that store information as abstract vectors or fragmented data, MemU organizes memories as **readable documents**. This transparency enables easy debugging, manual editing, and seamless integration with existing workflows.
 
