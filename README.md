@@ -3,7 +3,7 @@
 ![MemU Banner](assets/banner.png)
 
 # MemU
-**Your Personalized AI memory. Organized.** 
+**Personalized memory for AI companions. Organized.** 
 
 [![PyPI version](https://badge.fury.io/py/memu.svg)](https://badge.fury.io/py/memu)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -20,12 +20,9 @@
 
 <p align="center">
   <a href="./README.md"><img alt="English" src="https://img.shields.io/badge/English-d9d9d9"></a>
-  <a href="./README_CN.md"><img alt="简体中文" src="https://img.shields.io/badge/简体中文-d9d9d9"></a>
-  <a href="./README_JA.md"><img alt="日本語" src="https://img.shields.io/badge/日本語-d9d9d9"></a>
-  <a href="./README_KR.md"><img alt="한국어" src="https://img.shields.io/badge/한국어-d9d9d9"></a>
 </p>
 
-MemU is an open-source memory framework for personalized AI companions. We treat memory as an agent-controlled file system that stores user information as documents. It provides high-speed memory retrieval and enables self-evolution without interacting with users. The framework is easily extendable, enabling you to create AI companions that genuinely remember and grow with their users.
+MemU is an open-source memory framework specialized for AI companion that gives AI assistants long-term personalized memory. It acts like a "memory folder" managed by the AI itself. The framework finds memories instantly, updates and learns. With it, you can build AIs that truly memories you by continuously updating memories about who you are, what you care about, and your shared experiences, creating companions that grow alongside you.
 
 ![MemU Architecture](assets/architecture-overview.png)
 
@@ -35,189 +32,72 @@ MemU is an open-source memory framework for personalized AI companions. We treat
 
 ## ⭐ Star Us on GitHub
 
-<div align="center">
-
 ![star-us](https://github.com/NevaMind-AI/MemU/assets/star-us-animation.gif)
 
 **🚀 Join 1,000+ developers building the future of AI memory**
 
 Star MemU to get notified about new releases and join our growing community of AI developers building intelligent agents with persistent memory capabilities.
 
-</div>
+**💬 Join our Discord community:** [https://discord.gg/hQZntfGsbJ](https://discord.gg/hQZntfGsbJ)
 
 ---
 
-## 🏆 **Competitive Advantages**
-
-<div align="center">
-
-![Competitive Analysis](assets/competitive-analysis.png)
-
-**Why MemU stands out from other memory solutions**
-
-</div>
-
-### 🎯 **Higher Memory Accuracy**
-
-![Accuracy Chart](assets/accuracy-comparison-chart.gif)
-
-**Industry-leading precision in memory retrieval**
-
-MemU achieves **92.09% average accuracy** across all reasoning tasks, significantly outperforming competitors. Our advanced embedding and retrieval algorithms ensure that the most relevant memories are surfaced with unprecedented precision.
-
-| Model    |   Single-Hop |  Multi-Hop | Open Domain | Temporal Reasoning | Avg. Score | 
-|-------------|------------|-----------|-------------|------------|---------------------|
-| **OpenAI**  | 63.79      | 42.92     | 62.29       | 21.71      | 52.90               |
-| **Mem0**    | 67.13      | 51.15     | 72.93       | 55.51      | 66.88               |
-| **Mem0ᵍ**   | 65.71      | 47.19     | 75.71       | 58.13      | 68.44               |
-| **Memobase** | 70.92     | 46.88     | 77.17       | 85.05      | 75.78               |
-| **Zep**     | 74.11      | 66.04     | 67.71       | 79.76      | 75.14               |
-| **MIRIX**   | 85.11      | 83.70     | 65.62       | 88.39      | 85.38               |
-| **MemU**    | **94.88**  | **88.30**  | **77.08**    | **92.52**   | **92.09**  |
-
-*Based on comprehensive benchmarks against 7 leading memory frameworks using gpt-4.1-mini*
-
----
-
-### 🔄 **Flexible Retrieval Strategies**
-
-![Retrieval Strategies](assets/retrieval-strategies-demo.gif)
-
-**Multiple recall methods for every use case**
-
-MemU provides a comprehensive suite of retrieval strategies, allowing you to choose the optimal approach for your specific scenario. From semantic similarity to temporal proximity, our flexible system adapts to your needs.
-
-**Available Strategies:**
-- 🔍 **Semantic Search** - Find memories by meaning and context
-- 🏷️ **Category-based** - Organized retrieval conten by topics
-- 🔗 **Graph Traversal** - Follow memory connections and relationships
-- 🎯 **Hybrid Fusion** - Combine multiple strategies for optimal results
-
----
-
-### 📖 **Human-Readable Memory Format**
-
-![Memory Format Comparison](assets/memory-format-comparison.png)
-
-**Memories you can actually read and understand**
-
-Unlike other memory systems that store information as abstract vectors or fragmented data, MemU organizes memories as **readable documents**. This transparency enables easy debugging, manual editing, and seamless integration with existing workflows.
-
-**Readability Benefits:**
-- 📝 **Document Structure** - Organized as markdown files with clear headers
-- 👁️ **Visual Inspection** - Easily browse and audit stored memories
-- ✏️ **Manual Editing** - Direct modification when needed
-- 🔍 **Debugging Support** - Trace memory issues with human-readable content
-- 🤝 **Team Collaboration** - Share and review memory content across teams
-- 📋 **Export Friendly** - Standard formats compatible with any system
-
----
+MemU is built specifically for AI companions, creating personalized long-term memories through categorized memories, memory connections, evolving insights, and adaptive forgetting. Our framework transforms conversations into files, connects related experiences, grows understanding over time, and prioritizes what matters most - making AI companions feel truly alive and personally connected.
 
 ## ✨ Key Features
 
 ---
 
-## 📋 **Organized Memory**
+## 📋 **Categorized Memories**
 
-<div align="center">
-
-**Transform chaotic information into structured knowledge**
+**Your AI companion remembers everything about you, organized and ready**
 
 ![Organized Memory Demo](assets/organized-memory-demo.gif)
 
-</div>
-
-MemU intelligently organizes memories into well-structured documents, creating a coherent knowledge base that grows with each interaction. Unlike traditional memory systems that store isolated fragments, MemU maintains contextual relationships and categorical organization.
+MemU automatically organizes your conversations into meaningful categories - your hobbies, work life, family stories, and personal preferences. Instead of scattered chat fragments, your AI companion builds a structured understanding of who you are, making every conversation feel personal and contextual.
 
 **Key Benefits:**
 - 🗂️ **Document-based storage** - Each memory type is stored as readable documents
 - 🏷️ **Smart categorization** - Automatic classification by topics and contexts  
-- 🔍 **Easy retrieval** - Quick access to relevant information through semantic search
-- 📊 **Structured format** - Consistent organization across all memory types
+- 🔍 **Easy retrieval** - Quick access to relevant information through categories
 
 ---
 
-## 🔗 **Linked Connections**
+## 🔗 **Memory Connections**
 
-<table align="center">
-<tr>
-<td width="50%">
-
-**Build a web of interconnected knowledge**
-
-Different memories are interconnected through sophisticated semantic relationships, creating a rich network of contextual associations. This enables the AI to understand not just individual facts, but how concepts relate to each other across different conversations and contexts.
-
-**Key Benefits:**
-- 🕸️ **Semantic linking** - Memories connect based on meaning and context
-- 🔄 **Cross-referencing** - Related information surfaces automatically
-- 🧩 **Contextual understanding** - AI grasps relationships between different topics
-- 📈 **Knowledge graph** - Dynamic network that expands with each interaction
-
-</td>
-<td width="50%">
+**Your AI companion connects the dots between your stories**
 
 ![Linked Connections Demo](assets/linked-connections-demo.gif)
 
-</td>
-</tr>
-</table>
+When you mention your love for hiking, your AI companion remembers you talked about buying boots last month, and connects it to your upcoming mountain trip. These connections help your AI understand the full context of your infomation, making conversations feel natural and insightful.
+
+**Key Benefits:**
+- 🕸️ **Smart connections** - Your AI links related memories automatically
+- 🔄 **Context awareness** - Previous conversations inform current ones
 
 ---
 
-## 🧠 **Evolved Intelligence**
+## 🧠 **Evolving Insights**
 
-<table align="center">
-<tr>
-<td width="50%">
+**Your AI companion learns about you even when you're not chatting**
 
 ![Evolved Intelligence Demo](assets/evolved-intelligence-demo.gif)
 
-</td>
-<td width="50%">
-
-**Self-improving AI that grows smarter over time**
-
-The Memory Agent continuously performs Theory of Mind reasoning, analyzing stored memories to generate deeper insights about user preferences, behaviors, and needs. This creates an evolving understanding that enhances existing documents and generates new knowledge automatically.
+Even when you're not actively talking to it, your AI companion continuously analyzes your stored memories, discovering new patterns and insights about your preferences, habits, and personality. It's like having a friend who's always thinking about you and getting to know you better in the background.
 
 **Key Benefits:**
-- 🤔 **Theory of Mind** - Deep understanding of user mental states and preferences
-- 📝 **Self-enhancement** - Automatically improves existing memory documents
-- 💡 **Insight generation** - Creates new understanding from existing information
-- 🌱 **Continuous growth** - Knowledge base becomes more sophisticated over time
+- 🤔 **Theory of Mind** - Deep understanding of your mental states and preferences
+- 📝 **Self-improvement** - Automatically enhances existing memories
+- 🌱 **Continuous learning** - Gets smarter about you over time
 
-</td>
-</tr>
-</table>
 
 ---
 
-## 🌫️ **Fade Memory**
+## 🌫️ **Adaptive Forgetting**
 
-<div align="center">
+**Your AI companion remembers what matters most**
 
-**Natural forgetting that preserves what matters**
-
-<table>
-<tr>
-<td width="33%">
-
-![Memory Fade 1](assets/memory-fade-1.gif)
-
-</td>
-<td width="34%">
-
-![Memory Fade 2](assets/memory-fade-2.gif)
-
-</td>
-<td width="33%">
-
-![Memory Fade 3](assets/memory-fade-3.gif)
-
-</td>
-</tr>
-</table>
-
-</div>
+![Memory Fade Demo](assets/memory-fade-1.gif)
 
 MemU implements an intelligent LRU-like forgetting mechanism where memories naturally fade in importance without disappearing entirely. This mimics human memory patterns - rarely accessed information becomes less prominent while frequently referenced memories gain stronger relevance.
 
@@ -229,10 +109,64 @@ MemU implements an intelligent LRU-like forgetting mechanism where memories natu
 
 ---
 
+## 🏆 **Competitive Advantages**
+
+![Competitive Analysis](assets/competitive-analysis.png)
+
+**Why MemU stands out from other memory solutions**
+
+### 🎯 **Higher Memory Accuracy**
+
+MemU achieves **92.09% average accuracy** across all reasoning tasks, significantly outperforming competitors.
+
+| Model    |   Single-Hop |  Multi-Hop | Open Domain | Temporal Reasoning | Avg. Score | 
+|-------------|------------|-----------|-------------|------------|---------------------|
+| **OpenAI**  | 63.79      | 42.92     | 62.29       | 21.71      | 52.90               |
+| **Mem0**    | 67.13      | 51.15     | 72.93       | 55.51      | 66.88               |          |
+| **Memobase** | 70.92     | 46.88     | 77.17       | 85.05      | 75.78               |
+| **Zep**     | 74.11      | 66.04     | 67.71       | 79.76      | 75.14               |            |
+| **MemU**    | **94.88**  | **88.30**  | 77.08      | **92.52**   | **92.09**  |
+
+*Based on comprehensive benchmarks against other memory frameworks*
+
+---
+
+### 🔄 **Flexible Retrieval Strategies**
+
+
+**Multiple recall methods for every use case**
+
+MemU provides a comprehensive suite of retrieval strategies, allowing you to choose the optimal approach for your specific scenario. From semantic similarity to category search, our flexible system adapts to your needs.
+
+**Available Strategies:**
+
+- 🔍 **Semantic Search** - Find memories by meaning and context using advanced embedding models. Perfect for natural language queries and conceptual searches that go beyond keyword matching.
+
+- 🏷️ **Category-based Retrieval** - Organize memories through topic category classification. Ideal for structured information retrieval and domain-specific searches.
+
+- 🔗 **Graph Traversal** - Discover related information by following memory connections and relationship networks. Enables exploration of indirect relationships and contextual paths between concepts.
+
+- 🎯 **Hybrid Fusion** - Combine multiple strategies using ensemble methods. Delivers optimal performance for complex queries requiring maximum accuracy.
+
+- 🧠 **Active Retrieval** - Determine when to retrieve memories based on conversation context and relevance. Prevents unnecessary retrievals while ensuring important memories are surfaced when needed.
+---
+
+### 📖 **Human-Readable Memory Format**
+
+**Memories you can actually read and understand**
+
+Unlike other memory frameworks that store information as fragmented sentences, MemU organizes memories as **coherent, readable documents**. While competitors break down information into scattered fragments, MemU maintains context and structure, enabling easy debugging, manual editing, and seamless integration with existing workflows.
+
+**Readability Benefits:**
+- 📝 **Document Structure** - Organized as markdown files with clear headers
+- 🔗 **Wiki-like Links** - Documents with interconnected links enabling seamless navigation between related memories
+- 📋 **Export Friendly** - Standard formats compatible with any system
+
+---
+
+
 
 ## 🚀 Quick Start
-
-<div align="center">
 
 ### **Installation in 30 seconds**
 
@@ -259,8 +193,6 @@ results = memory_agent.process_conversation("Hi, I'm learning Python", "student_
 ### **Live Demo**
 
 Try MemU instantly in your browser: [**🔗 Interactive Demo**](https://demo.nevamind.ai)
-
-</div>
 
 ---
 
@@ -292,8 +224,6 @@ Try MemU instantly in your browser: [**🔗 Interactive Demo**](https://demo.nev
 ---
 
 ## 🤝 Contributing
-
-<div align="center">
 
 ![Contributing Flow](assets/contributing-flow.png)
 
@@ -330,13 +260,9 @@ git push origin feature/amazing-feature
 - Additional embedding providers
 - Enterprise security features
 
-</div>
-
 ---
 
 ## 🌍 Community
-
-<div align="center">
 
 <table>
 <tr>
@@ -355,17 +281,15 @@ git push origin feature/amazing-feature
 
 ### **Connect with the MemU Community**
 
-<p align="center">
-    <a href="https://discord.gg/your-discord-server">
-        <img src="https://img.shields.io/badge/Discord-Join%20Chat-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord">
-    </a>
-    <a href="https://github.com/NevaMind-AI/MemU/discussions">
-        <img src="https://img.shields.io/badge/GitHub-Discussions-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Discussions">
-    </a>
-    <a href="https://twitter.com/nevamind_ai">
-        <img src="https://img.shields.io/badge/X-Follow-1DA1F2?style=for-the-badge&logo=x&logoColor=white" alt="X (Twitter)">
-    </a>
-</p>
+<a href="https://discord.gg/your-discord-server">
+    <img src="https://img.shields.io/badge/Discord-Join%20Chat-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord">
+</a>
+<a href="https://github.com/NevaMind-AI/MemU/discussions">
+    <img src="https://img.shields.io/badge/GitHub-Discussions-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Discussions">
+</a>
+<a href="https://twitter.com/nevamind_ai">
+    <img src="https://img.shields.io/badge/X-Follow-1DA1F2?style=for-the-badge&logo=x&logoColor=white" alt="X (Twitter)">
+</a>
 
 ### **📞 Get Support**
 
@@ -389,11 +313,7 @@ Report security issues to [security@nevamind.ai](mailto:security@nevamind.ai)
 
 Licensed under [Apache License 2.0](LICENSE)
 
-</div>
-
 ---
-
-<div align="center">
 
 ![AI Memory Animation](assets/ai-memory-animation.gif)
 
@@ -401,6 +321,4 @@ Licensed under [Apache License 2.0](LICENSE)
 
 *Made with ❤️ by the [NevaMind AI](https://nevamind.ai) team*
 
-![Footer Decoration](assets/footer-decoration.png)
-
-</div> 
+![Footer Decoration](assets/footer-decoration.png) 
