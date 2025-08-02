@@ -217,7 +217,7 @@ Try MemU instantly in your browser: [**🔗 Interactive Demo**](https://demo.nev
 
 **🎯 Educational AI**
 
-**🛠️ Customer Support**
+** note类ai **
 
 
 **Creation Support**

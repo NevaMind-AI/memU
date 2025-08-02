@@ -27,6 +27,9 @@ from .memory import MemoryFileManager
  
 from .memory import get_default_embedding_client
 
+# SDK system - HTTP client for MemU API services
+from .sdk import MemuClient, MemorizeRequest, MemorizeResponse
+
 # Prompts system - now reads from dynamic configuration folders
 # from .config.prompts import PromptLoader  # Prompt loading utilities
 # from .config.prompts import get_prompt_loader  # Get prompt loader instance
@@ -72,6 +75,11 @@ __all__ = [
     "OpenAIClient",  # OpenAI implementation
     "AnthropicClient",  # Anthropic implementation
     "CustomLLMClient",  # Custom LLM support
+    
+    # SDK system - HTTP client for MemU API services
+    "MemuClient",  # HTTP client for MemU API
+    "MemorizeRequest",  # Request model for memorize API
+    "MemorizeResponse",  # Response model for memorize API
     
     # Prompts system - now reads from dynamic configuration folders
     # "PromptLoader",  # Prompt loading utilities
