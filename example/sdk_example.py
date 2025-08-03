@@ -243,27 +243,26 @@ def test_recall_functionality():
         
         # Test users and project data
         test_users = [
-            {"user_id": "user_alice", "project_id": "outdoor_activities"},
-            {"user_id": "user_bob", "project_id": "culinary_adventures"}
+            {"user_id": "user_alice"},
+            {"user_id": "user_bob"}
         ]
         
         for test_user in test_users:
             user_id = test_user["user_id"]
-            project_id = test_user["project_id"]
+            agent_id = "1234"
             
             print(f"👤 Testing recall for user: {user_id}")
-            print(f"   Project: {project_id}")
             
             # Method 1: Retrieve default categories
             print(f"   📂 Method 1: Default categories")
             try:
                 categories_response = client.retrieve_default_categories(
-                    project_id=project_id,
-                    include_inactive=False
+                    user_id = user_id,
+                    agent_id = agent_id,
+                    include_inactive=False,
                 )
                 
                 print(f"   ✅ Retrieved {categories_response.total_categories} default categories")
-                print(f"   📁 Project: {categories_response.project_id}")
                 for i, category in enumerate(categories_response.categories[:3]):
                     category_keys = list(category.keys())[:3]  # Show first 3 keys
                     print(f"      {i+1}. Category keys: {category_keys}")
@@ -354,18 +353,18 @@ def main():
     print()
     
     try:
-        # # Step 1: Test memorize functionality
-        # print("🚀 Step 1: Testing memorize functionality")
-        # task_ids = test_memorize_functionality()
-        # print(f"✅ Memorization test completed. Generated {len(task_ids)} tasks")
-        # print()
+        # Step 1: Test memorize functionality
+        print("🚀 Step 1: Testing memorize functionality")
+        task_ids = test_memorize_functionality()
+        print(f"✅ Memorization test completed. Generated {len(task_ids)} tasks")
+        print()
         
-        # # Step 2: Test task status monitoring
-        # if task_ids:
-        #     print("🚀 Step 2: Testing task status monitoring")
-        #     test_task_status_monitoring(task_ids)
-        #     print("✅ Task monitoring test completed")
-        #     print()
+        # Step 2: Test task status monitoring
+        if task_ids:
+            print("🚀 Step 2: Testing task status monitoring")
+            test_task_status_monitoring(task_ids)
+            print("✅ Task monitoring test completed")
+            print()
         
         # Step 3: Test recall functionality with SDK APIs
         print("🚀 Step 3: Testing recall functionality (SDK APIs)")
@@ -375,7 +374,6 @@ def main():
         
         # Summary
         print("🎉 === WORKFLOW TEST SUMMARY ===")
-        print(f"✅ Memorize: {len(task_ids)} conversations processed")
         print(f"✅ Monitor: Task status tracking working (2-minute monitoring)")
         print(f"✅ Recall: SDK client APIs tested (default categories, memory items, clustered categories)")
         print()

@@ -137,12 +137,12 @@ Unlike other memory frameworks that store information as fragmented sentences, M
 ### 🎓 **Use Cases**
 | Use Case | Description |
 |:--------:|:------------|
-| <img src="assets/ai_companion.gif" width="200"> | **AI Companion** |
-| <img src="assets/ai_role_play.gif" width="200"> | **AI Role Play**|
-| <img src="assets/ai_edu.gif" width="200"> | **AI Education** |
-| <img src="assets/ai_therapy.gif" width="200"> | **AI Therapy**|
-| <img src="assets/ai_robot.gif" width="200"> | **AI Robot** |
-| <img src="assets/ai_creation.gif" width="200"> | **AI Creation**|
+| ![AI Companion](assets/ai_companion.gif) | **AI Companion** |
+| ![AI Role Play](assets/ai_role_play.gif) | **AI Role Play**|
+| ![AI Education](assets/ai_edu.gif) | **AI Education** |
+| ![AI Therapy](assets/ai_therapy.gif) | **AI Therapy**|
+| ![AI Robot](assets/ai_robot.gif) | **AI Robot** |
+| ![AI Creation](assets/ai_creation.gif) | **AI Creation**|
 
 ---
 

@@ -196,9 +196,7 @@ class MemuClient:
             user_name: User display name
             agent_id: Agent identifier
             agent_name: Agent display name
-            project_id: Project identifier
-            api_key_id: API key identifier (optional, uses client api_key if not provided)
-            
+
         Returns:
             MemorizeResponse: Task ID and status for tracking the memorization process
             
@@ -270,14 +268,16 @@ class MemuClient:
     
     def retrieve_default_categories(
         self,
-        project_id: str,
+        user_id,
+        agent_id,
         include_inactive: bool = False
     ) -> DefaultCategoriesResponse:
         """
         Retrieve default categories for a project
         
         Args:
-            project_id: Project identifier
+            user_id: User ID
+            agent_id: Agent ID
             include_inactive: Whether to include inactive categories
             
         Returns:
@@ -291,12 +291,11 @@ class MemuClient:
         try:
             # Create request model
             request_data = DefaultCategoriesRequest(
-                project_id=project_id,
+                user_id = user_id,
+                agent_id = agent_id,
                 include_inactive=include_inactive
             )
-            
-            logger.info(f"Retrieving default categories for project {project_id}")
-            
+
             # Make API request
             response_data = self._make_request(
                 method="POST",

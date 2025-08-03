@@ -58,7 +58,8 @@ class ValidationError(BaseModel):
 class DefaultCategoriesRequest(BaseModel):
     """Request model for default categories API"""
     
-    project_id: str = Field(..., description="Project identifier")
+    user_id: str = Field(..., description="User ID")
+    agent_id: str = Field(..., description="Agent ID")
     include_inactive: bool = Field(False, description="Include inactive categories")
 
 
