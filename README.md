@@ -94,158 +94,46 @@ For users and developers who prefer local control, data privacy, or customizatio
 ## ✨ Key Features
 
 ---
+### Autonomous Memory Management System
 
-## 📋 **Categorized Memories**
+#### **Organize** - Autonomous Memory Management
+Your memories are structured as intelligent folders managed by a dedicated memory agent. We do not do explicit modeling for memories. The memory agent automatically decides what to record, modify, or archive based on relevance and usage patterns. Think of it as having a personal librarian who knows exactly how to organize your thoughts.
 
-**Your AI companion remembers everything about you, organized and ready**
+#### **Link** - Interconnected Knowledge Graph
+Memories don't exist in isolation. Our system automatically creates meaningful connections between related memories, building a rich network of hyperlinked documents. As your knowledge base grows, so does the web of relationships, making information discovery intuitive and contextual.
 
-![Organized Memory Demo](assets/organized-memory-demo.gif)
+#### **Evolve** - Continuous Self-Improvement
+Even when offline, your memory system keeps working. It generates new insights by analyzing existing memories, identifies patterns, and creates summary documents through self-reflection. Your knowledge base becomes smarter over time, not just larger.
 
-MemU automatically organizes your conversations into meaningful categories - your hobbies, work life, family stories, and personal preferences. Instead of scattered chat fragments, your AI companion builds a structured understanding of who you are, making every conversation feel personal and contextual.
-
-**Key Benefits:**
-- 🗂️ **Document-based storage** - Each memory type is stored as readable documents
-- 🏷️ **Smart categorization** - Automatic classification by topics and contexts  
-- 🔍 **Easy retrieval** - Quick access to relevant information through categories
-
+#### **Never Forget** - Intelligent Retention System
+We've revolutionized memory persistence with a dynamic importance algorithm. Recently referenced memories gain higher priority, ensuring that what matters most to you now stays readily accessible. The system adapts to your changing needs, keeping relevant information at your fingertips while gracefully archiving what's no longer critical.
 ---
 
-## 🔗 **Memory Connections**
+## Advantages
 
-**Your AI companion connects the dots between your stories**
+### Higher Memory Accuracy
+MemU achieves 92.09% average accuracy across all reasoning tasks, significantly outperforming competitors.
 
-![Linked Connections Demo](assets/linked-connections-demo.gif)
+![Memory Accuracy Comparison](assets/benchmark.png)
 
-When you mention your love for hiking, your AI companion remembers you talked about buying boots last month, and connects it to your upcoming mountain trip. These connections help your AI understand the full context of your infomation, making conversations feel natural and insightful.
-
-**Key Benefits:**
-- 🕸️ **Smart connections** - Your AI links related memories automatically
-- 🔄 **Context awareness** - Previous conversations inform current ones
-
----
-
-## 🧠 **Evolving Insights**
-
-**Your AI companion learns about you even when you're not chatting**
-
-![Evolved Intelligence Demo](assets/evolved-intelligence-demo.gif)
-
-Even when you're not actively talking to it, your AI companion continuously analyzes your stored memories, discovering new patterns and insights about your preferences, habits, and personality. It's like having a friend who's always thinking about you and getting to know you better in the background.
-
-**Key Benefits:**
-- 🤔 **Theory of Mind** - Deep understanding of your mental states and preferences
-- 📝 **Self-improvement** - Automatically enhances existing memories
-- 🌱 **Continuous learning** - Gets smarter about you over time
-
-
----
-
-## 🌫️ **Adaptive Forgetting**
-
-**Your AI companion remembers what matters most**
-
-![Memory Fade Demo](assets/memory-fade-1.gif)
-
-MemU implements an intelligent LRU-like forgetting mechanism where memories naturally fade in importance without disappearing entirely. This mimics human memory patterns - rarely accessed information becomes less prominent while frequently referenced memories gain stronger relevance.
-
-**Key Benefits:**
-- ⏰ **Time-based decay** - Unused memories naturally fade in importance
-- 🔄 **Usage-based boost** - Recently accessed memories gain higher relevance
-- 💾 **Never truly lost** - Information fades but remains retrievable when needed
-- 🎯 **Smart prioritization** - Most relevant memories surface first in conversations
-
----
-
-## 🏆 **Competitive Advantages**
-
-![Competitive Analysis](assets/competitive-analysis.png)
-
-**Why MemU stands out from other memory solutions**
-
-### 🎯 **Higher Memory Accuracy**
-
-MemU achieves **92.09% average accuracy** across all reasoning tasks, significantly outperforming competitors.
-
-| Model    |   Single-Hop |  Multi-Hop | Open Domain | Temporal Reasoning | Avg. Score | 
-|-------------|------------|-----------|-------------|------------|---------------------|
-| **OpenAI**  | 63.79      | 42.92     | 62.29       | 21.71      | 52.90               |
-| **Mem0**    | 67.13      | 51.15     | 72.93       | 55.51      | 66.88               |          |
-| **Memobase** | 70.92     | 46.88     | 77.17       | 85.05      | 75.78               |
-| **Zep**     | 74.11      | 66.04     | 67.71       | 79.76      | 75.14               |            |
-| **MemU**    | **94.88**  | **88.30**  | 77.08      | **92.52**   | **92.09**  |
-
-*Based on comprehensive benchmarks against other memory frameworks*
-
----
-
-### 🔄 **Flexible Retrieval Strategies**
-
-
-**Multiple recall methods for every use case**
+### Flexible Retrieval Strategies
 
 MemU provides a comprehensive suite of retrieval strategies, allowing you to choose the optimal approach for your specific scenario. From semantic similarity to category search, our flexible system adapts to your needs.
 
-**Available Strategies:**
+### Human-Readable & Analyzable Memory Architecture
 
-- 🔍 **Semantic Search** - Find memories by meaning and context using advanced embedding models. Perfect for natural language queries and conceptual searches that go beyond keyword matching.
+Unlike other memory frameworks that store information as fragmented sentences, MemU organizes memories as coherent, readable documents while simultaneously transforming raw data into structured, analyzable datasets. While competitors break down information into scattered fragments, MemU maintains complete context and relationships, enabling easy debugging, manual editing, seamless analytics, and effortless integration with existing workflows.
 
-- 🏷️ **Category-based Retrieval** - Organize memories through topic category classification. Ideal for structured information retrieval and domain-specific searches.
+**Key Benefits:**
+- 📝 **Document Structure** - Organized as markdown files with clear headers for human readability
+- 🔗 **Wiki-like Links** - Documents with interconnected links enabling seamless navigation between related memories  
+- 📊 **Analytics Ready** - Structured datasets that power intelligent decision-making and business intelligence
+- 📋 **Export Friendly** - Standard formats compatible with any system and analytics tools
+- 🔄 **Real-time Processing** - Automated data classification with smart tagging and dynamic updates
 
-- 🔗 **Graph Traversal** - Discover related information by following memory connections and relationship networks. Enables exploration of indirect relationships and contextual paths between concepts.
-
-- 🎯 **Hybrid Fusion** - Combine multiple strategies using ensemble methods. Delivers optimal performance for complex queries requiring maximum accuracy.
-
-- 🧠 **Active Retrieval** - Determine when to retrieve memories based on conversation context and relevance. Prevents unnecessary retrievals while ensuring important memories are surfaced when needed.
----
-
-### 📖 **Human-Readable Memory Format**
-
-**Memories you can actually read and understand**
-
-Unlike other memory frameworks that store information as fragmented sentences, MemU organizes memories as **coherent, readable documents**. While competitors break down information into scattered fragments, MemU maintains context and structure, enabling easy debugging, manual editing, and seamless integration with existing workflows.
-
-**Readability Benefits:**
-- 📝 **Document Structure** - Organized as markdown files with clear headers
-- 🔗 **Wiki-like Links** - Documents with interconnected links enabling seamless navigation between related memories
-- 📋 **Export Friendly** - Standard formats compatible with any system
 
 ---
-
-
-
-## 🚀 Quick Start
-
-### **Installation in 30 seconds**
-
-```bash
-# Install MemU with all features
-pip install memu-py
-```
-
-### **3-Line Demo**
-
-```python
-from memu.memory import MemoryAgent
-from memu.llm import OpenAIClient
-
-# Create AI agent with unified memory
-memory_agent = MemoryAgent(llm_client=OpenAIClient(), memory_dir="memory")
-
-# Process conversation with persistent memory
-results = memory_agent.process_conversation("Hi, I'm learning Python", "student_123")
-```
-
-![Quick Start Demo](assets/quickstart-demo.gif)
-
-### **Live Demo**
-
-Try MemU instantly in your browser: [**🔗 Interactive Demo**](https://demo.nevamind.ai)
-
----
-
 ## 📚 Usage Guide & Research Highlights
-
-
 
 ![Use Cases Demo](assets/use-cases-demo.gif)
 
