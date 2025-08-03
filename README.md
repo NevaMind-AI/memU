@@ -17,12 +17,16 @@
 
 With **memU**, you can build AI companions that truly remember you. They learn who you are, what you care about, and grow alongside you through every interaction.
 
-<h2>**🥇 92.9% Accuracy - 💰 90% Cost Reduction - 🤖 AI Companion Specialized**</h2>
-* ✅ **92.9% Accuracy** - State-of-the-art score in Locomo benchmark
-* ✅ **Up to 70% Cost Reduction** - Through optimized infrastructure
-* ✅ **Advanced Retrieval Strategies** - Multiple methods including semantic search, hybrid search, contextual retrieval
-* ✅ **AI Companion Specialization** - Adapt to AI companions application
-* ✅ **24/7 Support** - For enterprise customers
+#### 🥇 92.9% Accuracy - 💰 90% Cost Reduction - 🤖 AI Companion Specialized
+✅ **92.9% Accuracy** - State-of-the-art score in Locomo benchmark
+
+✅ **Up to 70% Cost Reduction** - Through optimized infrastructure
+
+✅ **Advanced Retrieval Strategies** - Multiple methods including semantic search, hybrid search, contextual retrieval
+
+✅ **AI Companion Specialization** - Adapt to AI companions application
+
+✅ **24/7 Support** - For enterprise customers
 
 ---
 
