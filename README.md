@@ -95,20 +95,21 @@ For users and developers who prefer local control, data privacy, or customizatio
 
 ### Autonomous Memory Management System
 
-#### **Organize** - Autonomous Memory Management
+### **Organize** - Autonomous Memory Management
 Your memories are structured as intelligent folders managed by a dedicated memory agent. We do not do explicit modeling for memories. The memory agent automatically decides what to record, modify, or archive based on relevance and usage patterns. Think of it as having a personal librarian who knows exactly how to organize your thoughts.
 
 #### **Link** - Interconnected Knowledge Graph
 Memories don't exist in isolation. Our system automatically creates meaningful connections between related memories, building a rich network of hyperlinked documents. As your knowledge base grows, so does the web of relationships, making information discovery intuitive and contextual.
 
-#### **Evolve** - Continuous Self-Improvement
+### **Evolve** - Continuous Self-Improvement
 Even when offline, your memory system keeps working. It generates new insights by analyzing existing memories, identifies patterns, and creates summary documents through self-reflection. Your knowledge base becomes smarter over time, not just larger.
 
-#### **Never Forget** - Intelligent Retention System
+### **Never Forget** - Intelligent Retention System
 We've revolutionized memory persistence with a dynamic importance algorithm. Recently referenced memories gain higher priority, ensuring that what matters most to you now stays readily accessible. The system adapts to your changing needs, keeping relevant information at your fingertips while gracefully archiving what's no longer critical.
+
 ---
 
-## Advantages
+## 🤫 Advantages
 
 ### Higher Memory Accuracy
 MemU achieves 92.09% average accuracy across all reasoning tasks, significantly outperforming competitors.
