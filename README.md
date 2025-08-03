@@ -18,10 +18,10 @@
 With **memU**, you can build AI companions that truly remember you. They learn who you are, what you care about, and grow alongside you through every interaction.
 
 ### 🥇 92.9% Accuracy - 💰 90% Cost Reduction - 🤖 AI Companion Specialized
+- ✅ **AI Companion Specialization** - Adapt to AI companions application
 - ✅ **92.9% Accuracy** - State-of-the-art score in Locomo benchmark
 - ✅ **Up to 70% Cost Reduction** - Through optimized infrastructure
 - ✅ **Advanced Retrieval Strategies** - Multiple methods including semantic search, hybrid search, contextual retrieval
-- ✅ **AI Companion Specialization** - Adapt to AI companions application
 - ✅ **24/7 Support** - For enterprise customers
 
 ---
@@ -53,6 +53,7 @@ The fastest way to integrate your application with memU. Perfect for teams and i
 #### Step-by-step
 
 **Step 1:** Create account & get your API key
+
 **Step 2:** Add three lines to your code
 ```python
 pip install memu-py
@@ -70,22 +71,18 @@ memory_agent = MemoryAgent()
 For organizations requiring maximum security, customization, control and best quality:
 
 - **Commercial License** - Full proprietary features, commercial usage rights, white-labeling options
-
 - **Custom Development** - SSO/RBAC integration, dedicated algorithm team for scenario-specific framework optimization
-
 - **Intelligence & Analytics** - User behavior analysis, real-time production monitoring, automated agent optimization
-
 - **Premium Support** - 24/7 dedicated support, custom SLAs, professional implementation services
-
 📧 **Enterprise Inquiries:** [contact@nevamind.ai](mailto:contact@nevamind.ai)
 
 
 ### 🏠 Self-Hosting (Community Edition)
 For users and developers who prefer local control, data privacy, or customization:
 
-* ✅ **Data Privacy** - Keep sensitive data within your infrastructure
-* ✅ **Customization** - Modify and extend the platform to fit your needs
-* ✅ **Cost Control** - Avoid recurring cloud fees for large-scale deployments
+* **Data Privacy** - Keep sensitive data within your infrastructure
+* **Customization** - Modify and extend the platform to fit your needs
+* **Cost Control** - Avoid recurring cloud fees for large-scale deployments
 
 🚀 **Coming Soon!**
 
@@ -275,40 +272,14 @@ Try MemU instantly in your browser: [**🔗 Interactive Demo**](https://demo.nev
 
 ## 🤝 Contributing
 
-![Contributing Flow](assets/contributing-flow.png)
+We build trust through open-source collaboration. Your creative contributions drive memU's innovation forward. Explore our GitHub issues and projects to get started and make your mark on the future of memU.
 
-### **Join Our Mission**
+📋 **[Read our detailed Contributing Guide →](CONTRIBUTING.md)**
 
-Help us build the future of AI memory! We welcome contributions of all kinds.
 
-**🌟 Ways to Contribute:**
-- 🐛 Report bugs and suggest features
-- 📝 Improve documentation and examples  
-- 🔧 Add new LLM providers and integrations
-- 🧪 Write tests and improve code quality
+### **📄 License**
 
-### **Quick Contribution Guide**
-
-```bash
-# 1. Fork and clone
-git clone https://github.com/YOUR_USERNAME/MemU.git
-
-# 2. Create feature branch
-git checkout -b feature/amazing-feature
-
-# 3. Make changes and test
-pip install -e .
-python -m pytest
-
-# 4. Submit PR
-git push origin feature/amazing-feature
-```
-
-**🎯 Current Priorities:**
-- Multi-modal memory support (images, audio)
-- Performance optimizations
-- Additional embedding providers
-- Enterprise security features
+By contributing to MemU, you agree that your contributions will be licensed under the **Apache License 2.0**.
 
 ---
 

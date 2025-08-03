@@ -26,15 +26,15 @@ test: ## Run tests
 	pytest
 
 coverage: ## Run tests with coverage
-	pytest --cov=personalab --cov-report=html --cov-report=term
+	pytest --cov=memu --cov-report=html --cov-report=term
 
 lint: ## Run linting
-	flake8 personalab tests
-	mypy personalab
+	flake8 memu tests
+	mypy memu
 
 format: ## Format code
-	black personalab tests
-	isort personalab tests
+	black memu tests
+	isort memu tests
 
 build: clean ## Build package
 	python -m build
