@@ -17,7 +17,12 @@
 
 With **memU**, you can build AI companions that truly remember you. They learn who you are, what you care about, and grow alongside you through every interaction.
 
-
+<h2>**🥇 92.9% Accuracy - 💰 90% Cost Reduction - 🤖 AI Companion Specialized**</h2>
+* ✅ **92.9% Accuracy** - State-of-the-art score in Locomo benchmark
+* ✅ **Up to 70% Cost Reduction** - Through optimized infrastructure
+* ✅ **Advanced Retrieval Strategies** - Multiple methods including semantic search, hybrid search, contextual retrieval
+* ✅ **AI Companion Specialization** - Adapt to AI companions application
+* ✅ **24/7 Support** - For enterprise customers
 
 ---
 
@@ -30,6 +35,61 @@ With **memU**, you can build AI companions that truly remember you. They learn w
 Star MemU to get notified about new releases and join our growing community of AI developers building intelligent agents with persistent memory capabilities.
 
 **💬 Join our Discord community:** [https://discord.gg/hQZntfGsbJ](https://discord.gg/hQZntfGsbJ)
+
+---
+
+## 🚀Get Started
+
+There are three ways to get started with MemU:
+
+### ☁️ Cloud Version ([Online Platform](https://memu.so))
+
+The fastest way to integrate your application with memU. Perfect for teams and individuals who want immediate access without setup complexity. We host the models, APIs, and cloud storage, ensuring your application gets the best quality AI memory.
+
+- **Instant Access** - Start integrating AI memories in minutes
+- **Managed Infrastructure** - We handle scaling, updates, and maintenance for optimal memory quality
+- **Premium Support** - Subscribe and get priority assistance from our engineering team
+
+#### Step-by-step
+
+**Step 1:** Create account & get your API key
+**Step 2:** Add three lines to your code
+```python
+pip install memu-py
+
+# Example usage
+from memu.memory import MemoryAgent
+from memu.llm import OpenAIClient
+
+memory_agent = MemoryAgent()
+```
+
+
+### 🏢 Enterprise Edition
+
+For organizations requiring maximum security, customization, control and best quality:
+
+- **Commercial License** - Full proprietary features, commercial usage rights, white-labeling options
+
+- **Custom Development** - SSO/RBAC integration, dedicated algorithm team for scenario-specific framework optimization
+
+- **Intelligence & Analytics** - User behavior analysis, real-time production monitoring, automated agent optimization
+
+- **Premium Support** - 24/7 dedicated support, custom SLAs, professional implementation services
+
+📧 **Enterprise Inquiries:** [contact@nevamind.ai](mailto:contact@nevamind.ai)
+
+
+### 🏠 Self-Hosting (Community Edition)
+For users and developers who prefer local control, data privacy, or customization:
+
+* ✅ **Data Privacy** - Keep sensitive data within your infrastructure
+* ✅ **Customization** - Modify and extend the platform to fit your needs
+* ✅ **Cost Control** - Avoid recurring cloud fees for large-scale deployments
+
+🚀 **Coming Soon!**
+
+
 
 ---
 
