@@ -17,8 +17,6 @@
 
 With **memU**, you can build AI companions that truly remember you. They learn who you are, what you care about, and grow alongside you through every interaction.
 
-![MemU Architecture](assets/architecture-overview.png)
-
 </div>
 
 ---
@@ -35,7 +33,6 @@ Star MemU to get notified about new releases and join our growing community of A
 
 ---
 
-MemU is built specifically for AI companions, creating personalized long-term memories through categorized memories, memory connections, evolving insights, and adaptive forgetting. Our framework transforms conversations into files, connects related experiences, grows understanding over time, and prioritizes what matters most - making AI companions feel truly alive and personally connected.
 
 ## ✨ Key Features
 
