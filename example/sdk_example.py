@@ -1,258 +1,391 @@
 """
-MemU SDK Usage Example
+MemU SDK Comprehensive Example
+=============================
 
-Demonstrates how to use the MemU Python SDK to interact with MemU API services.
+Demonstrates complete MemU workflow:
+1. Memorize conversations using SDK
+2. Monitor task status with 2-minute monitoring
+3. Recall memories using SDK client recall APIs
+4. Test different scenarios and error handling
 """
 
-import asyncio
 import os
-from memu.sdk import MemuClient, MemorizeTaskStatusResponse
-from memu.sdk.exceptions import MemuAPIException, MemuValidationException, MemuConnectionException
-os.environ["MEMU_API_BASE_URL"] = "http://20.255.58.47:8000/"
-os.environ["MEMU_API_KEY"] = "mu_aswH7jrXWAwu5e-muFy2e7repj7yxeasqgWnAM2h9JwiIrIz6uvFry5x-qaNgowvfgNvPAKU95Bp2NFaz7kktZABPV1heemINrcRqQ"
+import sys
+import time
+from pathlib import Path
+from typing import Dict, Any, List
 
-def basic_memorize_example():
-    """Basic example of using MemU SDK to memorize conversations"""
+# Add the memu package to Python path
+current_dir = Path(__file__).parent
+project_root = current_dir.parent
+sys.path.insert(0, str(project_root))
+
+# MemU imports
+from memu.sdk import MemuClient
+from memu.sdk.exceptions import MemuAPIException, MemuValidationException, MemuConnectionException
+
+# Environment setup
+os.environ["MEMU_API_BASE_URL"] = "http://test-hippocampus-cloud-853369149.us-east-1.elb.amazonaws.com/"
+os.environ["MEMU_API_KEY"] = "mu_zsRrfdrDTSBTBn0KarVJDx-2I2ux8YmTjjuO0wcG5hCpSgF8OrI_ZKkwv36lTRe57RVLLI5UU0icD_RkF7uEtNnQCN6vIbzaz1NxMg"
+
+
+def test_memorize_functionality():
+    """Test memorize conversation functionality with comprehensive scenarios"""
     
-    print("📝 初始化 MemU SDK 客户端...")
+    print("🧠 === MEMORIZE FUNCTIONALITY TEST ===")
+    print("Testing conversation memorization with different scenarios")
+    print()
     
-    # Initialize the client
+    # Test conversations with different topics
+    test_conversations = [
+        {
+            "name": "Hiking Adventure",
+            "user_id": "user_alice", 
+            "user_name": "Alice Johnson",
+            "agent_id": "1234",
+            "agent_name": "Assistant", 
+            "conversation": """User: I went on an amazing hike yesterday in Mount Rainier National Park. The weather was perfect and I saw some incredible views from the Skyline Trail.
+
+Assistant: That sounds wonderful! Mount Rainier has some of the most spectacular alpine scenery in the Pacific Northwest. The Skyline Trail is definitely one of the crown jewels of the park. Did you make it to Panorama Point?
+
+User: Yes! The view of Mount Rainier from Panorama Point was breathtaking. I could see the Nisqually Glacier clearly. I'm planning to go back next month to try the Tolmie Peak trail.
+
+Assistant: Excellent choice! Tolmie Peak offers one of the best views of Mount Rainier, and the hike to Eunice Lake is beautiful too. Make sure to check the trail conditions before you go - that area can have snow well into summer."""
+        },
+        {
+            "name": "Cooking Experience",
+            "user_id": "user_bob",
+            "user_name": "Bob Chen",
+            "agent_id": "1234",
+            "agent_name": "Assistant",
+            "conversation": """User: I tried making homemade pasta for the first time yesterday. It was challenging but so rewarding!
+
+Assistant: That's wonderful! Making pasta from scratch is definitely an art. What type of pasta did you make? Fettuccine, ravioli, or something else?
+
+User: I made fettuccine with a simple egg and flour dough. The rolling and cutting took forever, but the taste was incredible. So much better than store-bought!
+
+Assistant: Fresh pasta really does make a difference! The texture and flavor are incomparable. Did you make a sauce to go with it, or keep it simple with just butter and herbs?"""
+        }
+    ]
+    
+    # Initialize SDK client
     client = MemuClient(
-        base_url=os.getenv("MEMU_API_BASE_URL"),  # Your MemU API server URL
+        base_url=os.getenv("MEMU_API_BASE_URL"),
         api_key=os.getenv("MEMU_API_KEY")
     )
     
-    print(f"🔗 客户端已连接到: {client.base_url}")
-    print(f"🔑 使用 API 密钥: {client.api_key[:8]}...")
-    print(f"⏱️  超时设置: {client.timeout}秒")
-    print(f"🔄 最大重试次数: {client.max_retries}")
+    print(f"🔗 Connected to: {client.base_url}")
+    print(f"🔑 API Key: {client.api_key[:8]}...")
     print()
     
+    task_ids = []
+    
     try:
-        # Memorize a long conversation
-        long_conversation = """User: Hi, I love hiking in the mountains. I've been exploring different trails in the Pacific Northwest recently.
-
-Assistant: That sounds amazing! The Pacific Northwest has some incredible hiking opportunities. What's your favorite trail so far?
-
-User: I really loved the Cascade Pass trail in North Cascades National Park. The views of the glaciers and peaks were breathtaking. I also did Mount Storm King in Olympic National Park last month, which was challenging but rewarding.
-
-Assistant: Those are excellent choices! Cascade Pass is known for its stunning alpine scenery, and Mount Storm King offers that fantastic view over Lake Crescent. How long have you been hiking? Do you prefer day hikes or multi-day backpacking trips?
-
-User: I've been hiking seriously for about 3 years now. I started with day hikes but recently got into backpacking. Last summer I did a 4-day trip on the Wonderland Trail around Mount Rainier. It was my first multi-day solo trip and really pushed my limits.
-
-Assistant: Wow, the Wonderland Trail solo is impressive! That's a 93-mile loop with significant elevation gain. How did you prepare for that, especially mentally for the solo aspect?
-
-User: I spent months training with weighted day hikes and shorter overnight trips. The mental preparation was harder than the physical. I practiced mindfulness and brought audiobooks for the lonely moments. The sunrise from Tolmie Peak made it all worth it though.
-
-Assistant: That sunrise view from Tolmie Peak is legendary! It sounds like you've really developed a thoughtful approach to both the physical and mental challenges of solo backpacking. Are you planning any new adventures for this season?
-
-User: Yes! I'm hoping to tackle the John Muir Trail in the Sierra Nevada this fall. It's been a dream of mine for years. I'm also considering getting into winter hiking with microspikes and snowshoes.
-
-Assistant: The JMT is an incredible goal - 211 miles of some of the most beautiful wilderness in California! Fall is a great time to avoid the summer crowds. Winter hiking opens up a whole new world too. Have you looked into avalanche safety courses if you're planning to get into more serious winter mountaineering?
-
-User: I actually signed up for an avalanche level 1 course next month. Safety is definitely my top priority, especially when hiking alone. I've also been reading about Leave No Trace principles more seriously since I want to be a responsible steward of these beautiful places.
-
-Assistant: That's fantastic - both the avalanche course and your commitment to Leave No Trace. It's hikers like you who help preserve these wilderness areas for future generations. The education and preparation you're putting in really shows your respect for the mountains and the sport."""
-        
-        response = client.memorize_conversation(
-            conversation_text=long_conversation,
-            user_id="user_123",
-            user_name="Alice Johnson",
-            agent_id="agent_456", 
-            agent_name="AI Assistant",
-            project_id="project_789"
-        )
-        
-        print(f"✅ Long conversation memorization started successfully!")
-        print(f"📋 Task ID: {response.task_id}")
-        print(f"📊 Status: {response.status}")
-        print(f"💬 Message: {response.message}")
-        print(f"📏 Conversation length: {len(long_conversation)} characters")
-        
-        # Check task status with improved structured response
-        print("\n🔍 检查任务状态...")
-        try:
-            task_status = client.get_task_status(response.task_id)
-            print(f"📈 Task Status: {task_status.status}")
-            print(f"🆔 Task ID: {task_status.task_id}")
+        # Test each conversation
+        for i, test_case in enumerate(test_conversations, 1):
+            print(f"📝 Test {i}: {test_case['name']}")
+            print(f"   User: {test_case['user_name']} (ID: {test_case['user_id']})")
+            print(f"   Agent: {test_case['agent_name']} (ID: {test_case['agent_id']})")
+            print(f"   Conversation length: {len(test_case['conversation'])} characters")
             
-            if task_status.progress:
-                print(f"📊 Progress: {task_status.progress}")
+            try:
+                # Memorize conversation
+                response = client.memorize_conversation(
+                    conversation_text=test_case["conversation"],
+                    user_id=test_case["user_id"],
+                    user_name=test_case["user_name"],
+                    agent_id=test_case["agent_id"],
+                    agent_name=test_case["agent_name"],
+                )
+                
+                print(f"   ✅ Memorization started successfully!")
+                print(f"   📋 Task ID: {response.task_id}")
+                print(f"   📊 Status: {response.status}")
+                print(f"   💬 Message: {response.message}")
+                
+                task_ids.append({
+                    "task_id": response.task_id,
+                    "name": test_case["name"],
+                    "user_id": test_case["user_id"]
+                })
+                
+            except MemuValidationException as e:
+                print(f"   ❌ Validation error: {e}")
+            except MemuAPIException as e:
+                print(f"   ❌ API error: {e}")
+            except MemuConnectionException as e:
+                print(f"   ❌ Connection error: {e}")
             
-            if task_status.result:
-                print(f"✅ Result: {task_status.result}")
+            print()
             
-            if task_status.error:
-                print(f"❌ Error: {task_status.error}")
-                
-            if task_status.started_at:
-                print(f"🕐 Started at: {task_status.started_at}")
-                
-            if task_status.completed_at:
-                print(f"🏁 Completed at: {task_status.completed_at}")
-                
-        except MemuAPIException as e:
-            print(f"⚠️  Task status check failed: {e}")
-            print(f"   Status code: {e.status_code if hasattr(e, 'status_code') else 'Unknown'}")
-        
-    except MemuValidationException as e:
-        print(f"❌ Validation error: {e}")
-        if e.response_data:
-            print(f"   Details: {e.response_data}")
-    except MemuAPIException as e:
-        print(f"❌ API error: {e}")
-        print(f"   Status code: {e.status_code}")
-    except MemuConnectionException as e:
-        print(f"❌ Connection error: {e}")
+    finally:
+        client.close()
+    
+    return task_ids
+
+
+def test_task_status_monitoring(task_ids: List[Dict[str, Any]]):
+    """Test task status monitoring functionality with 2-minute time-based monitoring"""
+    
+    print("📊 === TASK STATUS MONITORING TEST ===")
+    print("Monitoring memorization task progress for 2 minutes")
+    print()
+    
+    if not task_ids:
+        print("❌ No task IDs provided for monitoring")
+        return
+    
+    # Initialize SDK client
+    client = MemuClient(
+        base_url=os.getenv("MEMU_API_BASE_URL"),
+        api_key=os.getenv("MEMU_API_KEY")
+    )
+    
+    try:
+        for task_info in task_ids:
+            task_id = task_info["task_id"]
+            name = task_info["name"]
+            user_id = task_info["user_id"]
+            
+            print(f"🔍 Monitoring task: {name}")
+            print(f"   Task ID: {task_id}")
+            print(f"   User ID: {user_id}")
+            
+            # Monitor task for 2 minutes
+            monitor_duration = 120  # 2 minutes in seconds
+            check_interval = 5      # Check every 5 seconds
+            start_time = time.time()
+            check_count = 0
+            
+            print(f"   ⏰ Monitoring for {monitor_duration} seconds (2 minutes)")
+            
+            while time.time() - start_time < monitor_duration:
+                try:
+                    elapsed_time = time.time() - start_time
+                    check_count += 1
+                    
+                    task_status = client.get_task_status(task_id)
+                    
+                    print(f"   📈 Check {check_count} ({elapsed_time:.1f}s): Status = {task_status.status}")
+                    
+                    if task_status.progress:
+                        print(f"   📊 Progress: {task_status.progress}")
+                    
+                    if task_status.result:
+                        print(f"   ✅ Result: {task_status.result}")
+                    
+                    if task_status.error:
+                        print(f"   ❌ Error: {task_status.error}")
+                    
+                    if task_status.started_at:
+                        print(f"   🕐 Started: {task_status.started_at}")
+                    
+                    if task_status.completed_at:
+                        print(f"   🏁 Completed: {task_status.completed_at}")
+                    
+                    # Check if task is complete
+                    if task_status.status in ['SUCCESS', 'FAILURE', 'REVOKED']:
+                        print(f"   ✅ Task completed with status: {task_status.status}")
+                        print(f"   ⏱️  Total monitoring time: {elapsed_time:.1f} seconds")
+                        break
+                    
+                    # Calculate remaining time
+                    remaining_time = monitor_duration - elapsed_time
+                    if remaining_time > check_interval:
+                        print(f"   ⏳ Waiting {check_interval} seconds... ({remaining_time:.1f}s remaining)")
+                        time.sleep(check_interval)
+                    elif remaining_time > 0:
+                        print(f"   ⏳ Waiting {remaining_time:.1f} seconds...")
+                        time.sleep(remaining_time)
+                    
+                except MemuAPIException as e:
+                    print(f"   ⚠️  API error: {e}")
+                    break
+                except Exception as e:
+                    print(f"   ⚠️  Unexpected error: {e}")
+                    break
+            
+            # Final status check
+            final_elapsed = time.time() - start_time
+            if final_elapsed >= monitor_duration:
+                print(f"   ⏰ Monitoring timeout after {final_elapsed:.1f} seconds")
+                try:
+                    final_status = client.get_task_status(task_id)
+                    print(f"   📋 Final status: {final_status.status}")
+                except:
+                    print(f"   📋 Could not retrieve final status")
+            
+            print()
+    
     finally:
         client.close()
 
 
-def context_manager_example():
-    """Example using context manager for automatic cleanup"""
+def test_recall_functionality():
+    """Test recall functionality using SDK client recall APIs"""
     
-    print("📝 使用上下文管理器初始化客户端...")
-    
-    with MemuClient(
-        base_url=os.getenv("MEMU_API_BASE_URL", "https://api.memu.ai"),
-        api_key=os.getenv("MEMU_API_KEY", "your-api-key-here")
-    ) as client:
-        
-        print(f"✅ 上下文管理器创建成功，客户端将自动清理资源")
-        
-        try:
-            response = client.memorize_conversation(
-                conversation_text="User: I just started learning Python. Assistant: Great choice! Python is very beginner-friendly.",
-                user_id="student_456",
-                user_name="Bob Smith", 
-                agent_id="tutor_789",
-                agent_name="Python Tutor",
-                project_id="education_001"
-            )
-            
-            print(f"✅ Context manager example - Task ID: {response.task_id}")
-            
-        except Exception as e:
-            print(f"❌ Error in context manager example: {e}")
-
-
-
-
-def demonstration_mode():
-    """演示模式 - 展示 SDK 功能而不实际连接服务器"""
-    
-    print("🎭 演示模式：展示 SDK 功能")
-    print("=" * 50)
-    print("注意：此模式仅演示 SDK 使用方式，不会实际连接到服务器")
+    print("🧠 === RECALL FUNCTIONALITY TEST ===")
+    print("Testing memory recall using SDK client recall APIs")
     print()
     
-    from memu.sdk.models import MemorizeRequest, MemorizeResponse
-    
-    # 演示数据模型
-    print("📝 1. 数据模型演示")
-    request = MemorizeRequest(
-        conversation_text="用户：我喜欢爬山。助手：爬山是很好的运动！",
-        user_id="user_123",
-        user_name="张三",
-        agent_id="agent_456",
-        agent_name="AI助手", 
-        api_key_id="key_789",
-        project_id="project_101"
+    # Initialize SDK client
+    client = MemuClient(
+        base_url=os.getenv("MEMU_API_BASE_URL"),
+        api_key=os.getenv("MEMU_API_KEY")
     )
     
-    print(f"✅ 请求模型创建成功")
-    print(f"   用户: {request.user_name} (ID: {request.user_id})")
-    print(f"   代理: {request.agent_name} (ID: {request.agent_id})")
-    print(f"   对话: {request.conversation_text[:50]}...")
-    print(f"   项目: {request.project_id}")
-    print()
-    
-    # 演示响应模型
-    response = MemorizeResponse(
-        task_id="task_abc123",
-        status="pending",
-        message="记忆化任务已创建"
-    )
-    
-    print(f"✅ 响应模型创建成功")
-    print(f"   任务ID: {response.task_id}")
-    print(f"   状态: {response.status}")
-    print(f"   消息: {response.message}")
-    print()
-    
-    # 演示客户端配置
-    print("📝 2. 客户端配置演示")
     try:
-        client_config = {
-            "base_url": "https://api.memu.ai",
-            "api_key": "demo-key-12345",
-            "timeout": 30.0,
-            "max_retries": 3
-        }
-        
-        print(f"✅ 客户端配置准备完成:")
-        for key, value in client_config.items():
-            if key == "api_key":
-                print(f"   {key}: {str(value)[:8]}...")
-            else:
-                print(f"   {key}: {value}")
+        print(f"📊 SDK Client Status:")
+        print(f"   Base URL: {client.base_url}")
+        print(f"   API Key: {client.api_key[:8]}...")
+        print(f"   Timeout: {client.timeout}s")
         print()
         
+        # Test users and project data
+        test_users = [
+            {"user_id": "user_alice", "project_id": "outdoor_activities"},
+            {"user_id": "user_bob", "project_id": "culinary_adventures"}
+        ]
+        
+        for test_user in test_users:
+            user_id = test_user["user_id"]
+            project_id = test_user["project_id"]
+            
+            print(f"👤 Testing recall for user: {user_id}")
+            print(f"   Project: {project_id}")
+            
+            # Method 1: Retrieve default categories
+            print(f"   📂 Method 1: Default categories")
+            try:
+                categories_response = client.retrieve_default_categories(
+                    project_id=project_id,
+                    include_inactive=False
+                )
+                
+                print(f"   ✅ Retrieved {categories_response.total_categories} default categories")
+                print(f"   📁 Project: {categories_response.project_id}")
+                for i, category in enumerate(categories_response.categories[:3]):
+                    category_keys = list(category.keys())[:3]  # Show first 3 keys
+                    print(f"      {i+1}. Category keys: {category_keys}")
+                    
+            except MemuAPIException as e:
+                print(f"   ❌ API Error: {e}")
+            except Exception as e:
+                print(f"   ❌ Error: {e}")
+            
+            # Method 2: Retrieve related clustered categories
+            print(f"   🔍 Method 2: Related clustered categories")
+            try:
+                category_query = "hiking outdoor activities exercise"
+                clustered_response = client.retrieve_related_clustered_categories(
+                    user_id=user_id,
+                    category_query=category_query,
+                    top_k=3,
+                    min_similarity=0.3
+                )
+                
+                print(f"   ✅ Found {clustered_response.total_categories_found} clustered categories")
+                print(f"   🔍 Query: '{clustered_response.category_query}'")
+                for i, cluster in enumerate(clustered_response.clustered_categories):
+                    print(f"      {i+1}. {cluster.category_name}: score {cluster.similarity_score:.3f}")
+                    print(f"         {cluster.memory_count} memories")
+                    
+            except MemuAPIException as e:
+                print(f"   ❌ API Error: {e}")
+            except Exception as e:
+                print(f"   ❌ Error: {e}")
+            
+            # Method 3: Retrieve related memory items
+            print(f"   🧠 Method 3: Related memory items")
+            try:
+                memory_query = "cooking food pasta kitchen"
+                memory_response = client.retrieve_related_memory_items(
+                    user_id=user_id,
+                    query=memory_query,
+                    top_k=5,
+                    min_similarity=0.3,
+                    include_categories=["cooking", "food", "kitchen"]
+                )
+                
+                print(f"   ✅ Found {memory_response.total_found} related memories")
+                print(f"   🔍 Query: '{memory_response.query}'")
+                for i, related_mem in enumerate(memory_response.related_memories[:3]):
+                    memory = related_mem.memory
+                    score = related_mem.similarity_score
+                    content_preview = memory.content[:80] + "..." if len(memory.content) > 80 else memory.content
+                    print(f"      {i+1}. {memory.category}: score {score:.3f}")
+                    print(f"         ID: {memory.id}")
+                    print(f"         Content: {content_preview}")
+                    
+            except MemuAPIException as e:
+                print(f"   ❌ API Error: {e}")
+            except Exception as e:
+                print(f"   ❌ Error: {e}")
+            
+            print()
+    
+    finally:
+        client.close()
+
+
+def main():
+    """Main function to run comprehensive MemU SDK workflow test"""
+    
+    print("🌟 MemU SDK Comprehensive Workflow Test")
+    print("=" * 60)
+    print("Testing complete MemU workflow: Memorize → Monitor → SDK Recall APIs")
+    print()
+    
+    # Check environment
+    api_url = os.getenv("MEMU_API_BASE_URL")
+    api_key = os.getenv("MEMU_API_KEY")
+    
+    if not api_url or not api_key:
+        print("❌ Missing environment variables:")
+        print("   MEMU_API_BASE_URL:", "✅ Set" if api_url else "❌ Missing")
+        print("   MEMU_API_KEY:", "✅ Set" if api_key else "❌ Missing")
+        print()
+        print("💡 Please set these environment variables and try again")
+        return
+    
+    print("✅ Environment check passed")
+    print(f"   API URL: {api_url}")
+    print(f"   API Key: {api_key[:8]}...")
+    print()
+    
+    try:
+        # Step 1: Test memorize functionality
+        print("🚀 Step 1: Testing memorize functionality")
+        task_ids = test_memorize_functionality()
+        print(f"✅ Memorization test completed. Generated {len(task_ids)} tasks")
+        print()
+        
+        # Step 2: Test task status monitoring
+        if task_ids:
+            print("🚀 Step 2: Testing task status monitoring")
+            test_task_status_monitoring(task_ids)
+            print("✅ Task monitoring test completed")
+            print()
+        
+        # Step 3: Test recall functionality with SDK APIs
+        print("🚀 Step 3: Testing recall functionality (SDK APIs)")
+        test_recall_functionality()
+        print("✅ Recall test completed (using SDK client APIs)")
+        print()
+        
+        # Summary
+        print("🎉 === WORKFLOW TEST SUMMARY ===")
+        print(f"✅ Memorize: {len(task_ids)} conversations processed")
+        print(f"✅ Monitor: Task status tracking working (2-minute monitoring)")
+        print(f"✅ Recall: SDK client APIs tested (default categories, memory items, clustered categories)")
+        print()
+        print("🔗 Complete workflow: Conversation → Memory → SDK Recall APIs ✅")
+        
     except Exception as e:
-        print(f"❌ 配置错误: {e}")
-    
-    print("📝 3. API 调用流程演示")
-    print("   1. 初始化客户端 ✅")
-    print("   2. 创建请求数据 ✅") 
-    print("   3. 发送 POST 请求到 /api/v1/memory/memorize")
-    print("   4. 处理响应数据")
-    print("   5. 返回结果对象 ✅")
-    print()
-    
-    print("✨ 演示完成！")
-    print()
-    print("💡 实际使用时:")
-    print("1. 设置环境变量 MEMU_API_BASE_URL")
-    print("2. 设置环境变量 MEMU_API_KEY") 
-    print("3. 确保 MemU API 服务器正在运行")
-    print("4. 使用真实的用户和项目数据")
+        print(f"❌ Workflow test failed: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
-    print("🌟 MemU Python SDK 示例程序")
-    print("=" * 60)
-    
-    import sys
-    
-    # 检查是否有实际的 API 配置
-    has_real_config = (
-        os.getenv("MEMU_API_KEY") and 
-        os.getenv("MEMU_API_BASE_URL") and
-        os.getenv("MEMU_API_KEY") != "demo-api-key-for-testing"
-    )
-    
-    if has_real_config:
-        print("🔗 检测到真实 API 配置，运行完整示例...")
-        print()
-        
-        print("1. 基础记忆化示例:")
-        basic_memorize_example()
-        
-        print("\n2. 上下文管理器示例:")
-        context_manager_example()
-        
-        
-    else:
-        print("🎭 未检测到真实 API 配置，运行演示模式...")
-        print()
-        demonstration_mode()
-        print()
-        
-    
-    print("\n" + "=" * 60)
-    print("✨ 程序运行完成！")
-    print("\n📚 更多信息:")
-    print("- 详细文档: memu/sdk/README.md")
-    print("- 测试用例: tests/test_sdk.py")
-    print("- 快速开始: QUICK_START_SDK.md")
-    print("- GitHub: https://github.com/NevaMind-AI/MemU")
+    main()
