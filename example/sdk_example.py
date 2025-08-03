@@ -354,18 +354,18 @@ def main():
     print()
     
     try:
-        # Step 1: Test memorize functionality
-        print("🚀 Step 1: Testing memorize functionality")
-        task_ids = test_memorize_functionality()
-        print(f"✅ Memorization test completed. Generated {len(task_ids)} tasks")
-        print()
+        # # Step 1: Test memorize functionality
+        # print("🚀 Step 1: Testing memorize functionality")
+        # task_ids = test_memorize_functionality()
+        # print(f"✅ Memorization test completed. Generated {len(task_ids)} tasks")
+        # print()
         
-        # Step 2: Test task status monitoring
-        if task_ids:
-            print("🚀 Step 2: Testing task status monitoring")
-            test_task_status_monitoring(task_ids)
-            print("✅ Task monitoring test completed")
-            print()
+        # # Step 2: Test task status monitoring
+        # if task_ids:
+        #     print("🚀 Step 2: Testing task status monitoring")
+        #     test_task_status_monitoring(task_ids)
+        #     print("✅ Task monitoring test completed")
+        #     print()
         
         # Step 3: Test recall functionality with SDK APIs
         print("🚀 Step 3: Testing recall functionality (SDK APIs)")
