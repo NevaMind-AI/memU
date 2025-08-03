@@ -245,7 +245,7 @@ Try MemU instantly in your browser: [**🔗 Interactive Demo**](https://demo.nev
 
 ## 📚 Usage Guide & Research Highlights
 
-<div align="center">
+
 
 ![Use Cases Demo](assets/use-cases-demo.gif)
 
