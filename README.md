@@ -251,9 +251,7 @@ Try MemU instantly in your browser: [**🔗 Interactive Demo**](https://demo.nev
 
 ### 🎓 **Use Cases**
 
-<table>
-<tr>
-<td width="33%" align="center">
+
 
 
 **🤖 Personal Assistant**
