@@ -28,7 +28,7 @@ With **memU**, you can build AI companions that truly remember you. They learn w
 
 ## ⭐ Star Us on GitHub
 
-![star-us](https://github.com/NevaMind-AI/MemU/assets/star-us-animation.gif)
+![star-us](./assets/star.gif)
 
 **🚀 Join 1,000+ developers building the future of AI memory**
 
