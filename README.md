@@ -113,7 +113,7 @@ We've revolutionized memory persistence with a dynamic importance algorithm. Rec
 ## 🤫 Advantages
 
 ### Higher Memory Accuracy
-MemU achieves 92.09% average accuracy across all reasoning tasks, significantly outperforming competitors.
+MemU achieves 92.09% average accuracy across all reasoning tasks, significantly outperforming competitors. Techical Report will be published soon!
 
 ![Memory Accuracy Comparison](assets/benchmark.png)
 
