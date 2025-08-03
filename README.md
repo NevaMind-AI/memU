@@ -165,7 +165,7 @@ By contributing to MemU, you agree that your contributions will be licensed unde
 ---
 
 ## 🌍 Community
-For more information please contact info@eigent.ai
+For more information please contact info@nevamind.ai
 
 - **GitHub Issues:** Report bugs, request features, and track development. [Submit an issue]()
 
