@@ -2,7 +2,7 @@
 
 ![MemU Banner](assets/banner.png)
 
-<h2>memU: The Next-Gen Memory Framework for AI Companions</h2>
+<h3>memU: The Next-Gen Memory Framework for AI Companions</h3>
 
 [![PyPI version](https://badge.fury.io/py/memu.svg)](https://badge.fury.io/py/memu)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
