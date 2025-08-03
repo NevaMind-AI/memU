@@ -1,4 +1,4 @@
-<div align="center">
+<div>
 
 ![MemU Banner](assets/banner.png)
 
