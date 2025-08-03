@@ -93,7 +93,6 @@ For users and developers who prefer local control, data privacy, or customizatio
 
 ## ✨ Key Features
 
----
 ### Autonomous Memory Management System
 
 #### **Organize** - Autonomous Memory Management
