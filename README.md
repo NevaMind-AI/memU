@@ -74,6 +74,7 @@ For organizations requiring maximum security, customization, control and best qu
 - **Custom Development** - SSO/RBAC integration, dedicated algorithm team for scenario-specific framework optimization
 - **Intelligence & Analytics** - User behavior analysis, real-time production monitoring, automated agent optimization
 - **Premium Support** - 24/7 dedicated support, custom SLAs, professional implementation services
+
 📧 **Enterprise Inquiries:** [contact@nevamind.ai](mailto:contact@nevamind.ai)
 
 
@@ -98,7 +99,7 @@ For users and developers who prefer local control, data privacy, or customizatio
 ### **Organize** - Autonomous Memory Management
 Your memories are structured as intelligent folders managed by a dedicated memory agent. We do not do explicit modeling for memories. The memory agent automatically decides what to record, modify, or archive based on relevance and usage patterns. Think of it as having a personal librarian who knows exactly how to organize your thoughts.
 
-#### **Link** - Interconnected Knowledge Graph
+### **Link** - Interconnected Knowledge Graph
 Memories don't exist in isolation. Our system automatically creates meaningful connections between related memories, building a rich network of hyperlinked documents. As your knowledge base grows, so does the web of relationships, making information discovery intuitive and contextual.
 
 ### **Evolve** - Continuous Self-Improvement
@@ -124,12 +125,6 @@ MemU provides a comprehensive suite of retrieval strategies, allowing you to cho
 
 Unlike other memory frameworks that store information as fragmented sentences, MemU organizes memories as coherent, readable documents while simultaneously transforming raw data into structured, analyzable datasets. While competitors break down information into scattered fragments, MemU maintains complete context and relationships, enabling easy debugging, manual editing, seamless analytics, and effortless integration with existing workflows.
 
-**Key Benefits:**
-- 📝 **Document Structure** - Organized as markdown files with clear headers for human readability
-- 🔗 **Wiki-like Links** - Documents with interconnected links enabling seamless navigation between related memories  
-- 📊 **Analytics Ready** - Structured datasets that power intelligent decision-making and business intelligence
-- 📋 **Export Friendly** - Standard formats compatible with any system and analytics tools
-- 🔄 **Real-time Processing** - Automated data classification with smart tagging and dynamic updates
 
 
 ---
@@ -170,78 +165,13 @@ By contributing to MemU, you agree that your contributions will be licensed unde
 ---
 
 ## 🌍 Community
+For more information please contact info@eigent.ai
 
-<table>
-<tr>
-<td width="50%">
+- **GitHub Issues:** Report bugs, request features, and track development. [Submit an issue]()
 
-![Community Network](assets/community-network.gif)
+- **Discord:** Get real-time support, chat with the community, and stay updated. [Join us](https://discord.camel-ai.org/)
 
-</td>
-<td width="50%">
-
-![Global Users](assets/global-users-map.png)
-
-</td>
-</tr>
-</table>
-
-### **Connect with the MemU Community**
-
-<a href="https://discord.gg/hQZntfGsbJ">
-    <img src="https://img.shields.io/badge/Discord-Join%20Chat-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord">
-</a>
-<a href="https://github.com/NevaMind-AI/MemU/discussions">
-    <img src="https://img.shields.io/badge/GitHub-Discussions-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Discussions">
-</a>
-<a href="https://x.com/nevamind_ai">
-    <img src="https://img.shields.io/badge/X-Follow-1DA1F2?style=for-the-badge&logo=x&logoColor=white" alt="X (Twitter)">
-</a>
-<a href="https://reddit.com/r/MemU">
-    <img src="https://img.shields.io/badge/Reddit-Join%20Community-FF4500?style=for-the-badge&logo=reddit&logoColor=white" alt="Reddit">
-</a>
-<a href="https://t.me/MemU_AI">
-    <img src="https://img.shields.io/badge/Telegram-Join%20Channel-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram">
-</a>
-<a href="#">
-    <img src="https://img.shields.io/badge/WeChat-微信群-07C160?style=for-the-badge&logo=wechat&logoColor=white" alt="WeChat">
-</a>
-<a href="https://www.youtube.com/@MemU_AI">
-    <img src="https://img.shields.io/badge/YouTube-Subscribe-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="YouTube">
-</a>
-
-### **📞 Get Support**
-
-| Channel | Best For |
-|---------|----------|
-| 💬 [Discord](https://discord.gg/hQZntfGsbJ) | Real-time chat, community help |
-| 🗣️ [GitHub Discussions](https://github.com/NevaMind-AI/MemU/discussions) | Feature requests, Q&A |
-| 🐛 [GitHub Issues](https://github.com/NevaMind-AI/MemU/issues) | Bug reports, technical issues |
-| 📱 [Reddit](https://reddit.com/r/MemU) | Community discussions, shared experiences |
-| 📞 [Telegram](https://t.me/MemU_AI) | Quick updates, announcements |
-| 💬 [WeChat](https://example.com/wechat-qr) | 中文社区支持 |
-| 🎥 [YouTube](https://www.youtube.com/@MemU_AI) | Tutorials, demos, updates |
-| 📧 [Email](mailto:contact@nevamind.ai) | Enterprise inquiries, partnerships |
-
-### **🏆 Contributors**
-
-<a href="https://github.com/NevaMind-AI/MemU/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=NevaMind-AI/MemU" />
-</a>
+- **X (Twitter):** Follow for updates, AI insights, and key announcements. [Follow us]()
 
 
-### **🔒 Security & License**
 
-Report security issues to [security@nevamind.ai](mailto:security@nevamind.ai)
-
-Licensed under [Apache License 2.0](LICENSE)
-
----
-
-![AI Memory Animation](assets/ai-memory-animation.gif)
-
-**MemU** - Building the memory foundation for next-generation AI agents 🧠✨
-
-*Made with ❤️ by the [NevaMind AI](https://nevamind.ai) team*
-
-![Footer Decoration](assets/footer-decoration.png) 
