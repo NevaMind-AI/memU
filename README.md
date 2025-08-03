@@ -12,24 +12,6 @@
 [![Reddit](https://img.shields.io/badge/Reddit-Join%20Community-FF4500?logo=reddit&logoColor=white)](https://reddit.com/r/MemU)
 [![WeChat](https://img.shields.io/badge/WeChat-微信群-07C160?logo=wechat&logoColor=white)](#)
 
-<p align="center">
-    <a href="https://discord.gg/hQZntfGsbJ" target="_blank">
-        <img src="https://img.shields.io/discord/placeholder?logo=discord&labelColor=%20%235462eb&logoColor=%20%23f5f5f5&color=%20%235462eb"
-            alt="Discord"></a>
-    <a href="https://x.com/Nevamind_ai" target="_blank">
-        <img src="https://img.shields.io/twitter/follow/nevamind_ai?logo=X&color=%20%23f5f5f5"
-            alt="X (Twitter)"></a>
-    <a href="https://reddit.com/r/MemU" target="_blank">
-        <img src="https://img.shields.io/badge/Reddit-Join%20Community-FF4500?logo=reddit&logoColor=white"
-            alt="Reddit"></a>
-    <a href="https://t.me/MemU_AI" target="_blank">
-        <img src="https://img.shields.io/badge/Telegram-Join%20Channel-2CA5E0?logo=telegram&logoColor=white"
-            alt="Telegram"></a>
-</p>
-
-<p align="center">
-  <a href="./README.md"><img alt="English" src="https://img.shields.io/badge/English-d9d9d9"></a>
-</p>
 
 **MemU** is an open-source memory framework for AI companions—high accuracy, fast retrieval, low cost. It acts as an intelligent "memory folder" that adapts to different scenarios, from different companions senarios.
 
