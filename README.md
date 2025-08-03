@@ -96,6 +96,8 @@ For users and developers who prefer local control, data privacy, or customizatio
 
 ### Autonomous Memory Management System
 
+![features](./assets/workflow.png)
+
 ### **Organize** - Autonomous Memory Management
 Your memories are structured as intelligent folders managed by a dedicated memory agent. We do not do explicit modeling for memories. The memory agent automatically decides what to record, modify, or archive based on relevance and usage patterns. Think of it as having a personal librarian who knows exactly how to organize your thoughts.
 
@@ -134,21 +136,15 @@ Unlike other memory frameworks that store information as fragmented sentences, M
 
 ### 🎓 **Use Cases**
 
+| Use Case | Description |
+|:--------:|:------------|
+| ![AI Companion](assets/ai_companion.png) | **AI Companion** |
+| ![AI Role Play](assets/ai_role_play.png) | **AI Role Play**|
+| ![AI Education](assets/ai_edu.png) | **AI Education** |
+| ![AI Therapy](assets/ai_therapy.png) | **AI Therapy**|
+| ![AI Robot](assets/ai_robot.png) | **AI Robot** |
+| ![AI Creation](assets/ai_creation.png) | **AI Creation**|
 
-
-
-**🤖 Personal Assistant**
-
-**🎯 Role play**
-
-**🛠️ AI companion**
-
-**🎯 Educational AI**
-
-** note类ai **
-
-
-**Creation Support**
 ---
 
 ## 🤝 Contributing

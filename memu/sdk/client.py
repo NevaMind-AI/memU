@@ -6,13 +6,18 @@ Provides HTTP client for interacting with MemU API services.
 
 import os
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from urllib.parse import urljoin
 
 import httpx
 from pydantic import ValidationError
 
-from .models import MemorizeRequest, MemorizeResponse, MemorizeTaskStatusResponse
+from .models import (
+    MemorizeRequest, MemorizeResponse, MemorizeTaskStatusResponse,
+    DefaultCategoriesRequest, DefaultCategoriesResponse,
+    RelatedMemoryItemsRequest, RelatedMemoryItemsResponse,
+    RelatedClusteredCategoriesRequest, RelatedClusteredCategoriesResponse
+)
 from .exceptions import (
     MemuAPIException,
     MemuValidationException, 
@@ -181,8 +186,6 @@ class MemuClient:
         user_name: str,
         agent_id: str,
         agent_name: str,
-        project_id: str,
-        api_key_id: str = None
     ) -> MemorizeResponse:
         """
         Start a Celery task to memorize conversation text with agent processing
@@ -205,9 +208,6 @@ class MemuClient:
             MemuConnectionException: For connection errors
         """
         try:
-            # Use provided api_key_id or fall back to client api_key
-            request_api_key_id = api_key_id or self.api_key
-            
             # Create request model
             request_data = MemorizeRequest(
                 conversation_text=conversation_text,
@@ -215,8 +215,6 @@ class MemuClient:
                 user_name=user_name,
                 agent_id=agent_id,
                 agent_name=agent_name,
-                api_key_id=request_api_key_id,
-                project_id=project_id
             )
             
             logger.info(f"Starting memorization for user {user_id} and agent {agent_id}")
@@ -269,3 +267,153 @@ class MemuClient:
             
         except ValidationError as e:
             raise MemuValidationException(f"Response validation failed: {str(e)}")
+    
+    def retrieve_default_categories(
+        self,
+        project_id: str,
+        include_inactive: bool = False
+    ) -> DefaultCategoriesResponse:
+        """
+        Retrieve default categories for a project
+        
+        Args:
+            project_id: Project identifier
+            include_inactive: Whether to include inactive categories
+            
+        Returns:
+            DefaultCategoriesResponse: Default categories information
+            
+        Raises:
+            MemuValidationException: For validation errors
+            MemuAPIException: For API errors
+            MemuConnectionException: For connection errors
+        """
+        try:
+            # Create request model
+            request_data = DefaultCategoriesRequest(
+                project_id=project_id,
+                include_inactive=include_inactive
+            )
+            
+            logger.info(f"Retrieving default categories for project {project_id}")
+            
+            # Make API request
+            response_data = self._make_request(
+                method="POST",
+                endpoint="api/v1/memory/retrieve/default-categories",
+                json_data=request_data.model_dump()
+            )
+            
+            # Parse response
+            response = DefaultCategoriesResponse(**response_data)
+            logger.info(f"Retrieved {response.total_categories} categories")
+            
+            return response
+            
+        except ValidationError as e:
+            raise MemuValidationException(f"Request validation failed: {str(e)}")
+    
+    def retrieve_related_memory_items(
+        self,
+        user_id: str,
+        query: str,
+        top_k: int = 10,
+        min_similarity: float = 0.3,
+        include_categories: Optional[List[str]] = None
+    ) -> RelatedMemoryItemsResponse:
+        """
+        Retrieve related memory items for a user query
+        
+        Args:
+            user_id: User identifier
+            query: Search query for memory retrieval
+            top_k: Number of top results to return
+            min_similarity: Minimum similarity threshold
+            include_categories: Categories to include in search
+            
+        Returns:
+            RelatedMemoryItemsResponse: Related memory items
+            
+        Raises:
+            MemuValidationException: For validation errors
+            MemuAPIException: For API errors
+            MemuConnectionException: For connection errors
+        """
+        try:
+            # Create request model
+            request_data = RelatedMemoryItemsRequest(
+                user_id=user_id,
+                query=query,
+                top_k=top_k,
+                min_similarity=min_similarity,
+                include_categories=include_categories
+            )
+            
+            logger.info(f"Retrieving related memories for user {user_id}, query: '{query}'")
+            
+            # Make API request
+            response_data = self._make_request(
+                method="POST",
+                endpoint="api/v1/memory/retrieve/related-memory-items",
+                json_data=request_data.model_dump()
+            )
+            
+            # Parse response
+            response = RelatedMemoryItemsResponse(**response_data)
+            logger.info(f"Retrieved {response.total_found} related memories")
+            
+            return response
+            
+        except ValidationError as e:
+            raise MemuValidationException(f"Request validation failed: {str(e)}")
+    
+    def retrieve_related_clustered_categories(
+        self,
+        user_id: str,
+        category_query: str,
+        top_k: int = 5,
+        min_similarity: float = 0.3
+    ) -> RelatedClusteredCategoriesResponse:
+        """
+        Retrieve related clustered categories for a user
+        
+        Args:
+            user_id: User identifier
+            category_query: Category search query
+            top_k: Number of top categories to return
+            min_similarity: Minimum similarity threshold
+            
+        Returns:
+            RelatedClusteredCategoriesResponse: Related clustered categories
+            
+        Raises:
+            MemuValidationException: For validation errors
+            MemuAPIException: For API errors
+            MemuConnectionException: For connection errors
+        """
+        try:
+            # Create request model
+            request_data = RelatedClusteredCategoriesRequest(
+                user_id=user_id,
+                category_query=category_query,
+                top_k=top_k,
+                min_similarity=min_similarity
+            )
+            
+            logger.info(f"Retrieving clustered categories for user {user_id}, query: '{category_query}'")
+            
+            # Make API request
+            response_data = self._make_request(
+                method="POST",
+                endpoint="api/v1/memory/retrieve/related-clustered-categories",
+                json_data=request_data.model_dump()
+            )
+            
+            # Parse response
+            response = RelatedClusteredCategoriesResponse(**response_data)
+            logger.info(f"Retrieved {response.total_categories_found} clustered categories")
+            
+            return response
+            
+        except ValidationError as e:
+            raise MemuValidationException(f"Request validation failed: {str(e)}")
