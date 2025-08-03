@@ -4,7 +4,7 @@ MemU SDK Data Models
 Defines request and response models for MemU API interactions.
 """
 
-from typing import Optional
+from typing import Optional, Any, Dict
 from pydantic import BaseModel, Field
 
 
@@ -26,6 +26,18 @@ class MemorizeResponse(BaseModel):
     task_id: str = Field(..., description="Celery task ID for tracking")
     status: str = Field(..., description="Task status")
     message: str = Field(..., description="Response message")
+
+
+class MemorizeTaskStatusResponse(BaseModel):
+    """Response model for memorize task status API"""
+    
+    task_id: str = Field(..., description="Celery task ID")
+    status: str = Field(..., description="Task status (e.g., PENDING, SUCCESS, FAILURE)")
+    progress: Optional[Dict[str, Any]] = Field(None, description="Task progress information")
+    result: Optional[Dict[str, Any]] = Field(None, description="Task results if completed")
+    error: Optional[str] = Field(None, description="Error message if task failed")
+    started_at: Optional[str] = Field(None, description="Task start timestamp")
+    completed_at: Optional[str] = Field(None, description="Task completion timestamp")
 
 
 class ErrorDetail(BaseModel):

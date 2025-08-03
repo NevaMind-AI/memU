@@ -3,11 +3,15 @@
 ![MemU Banner](assets/banner.png)
 
 # MemU
-**Personalized memory for AI companions. Organized.** 
+**memU: The Next-Gen Memory Framework for AI Companions** 
 
 [![PyPI version](https://badge.fury.io/py/memu.svg)](https://badge.fury.io/py/memu)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/hQZntfGsbJ)
+[![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/Nevamind_ai)
+[![Reddit](https://img.shields.io/badge/Reddit-Join%20Community-FF4500?logo=reddit&logoColor=white)](https://reddit.com/r/MemU)
+[![WeChat](https://img.shields.io/badge/WeChat-微信群-07C160?logo=wechat&logoColor=white)](#)
 
 <p align="center">
     <a href="https://discord.gg/hQZntfGsbJ" target="_blank">
@@ -16,13 +20,21 @@
     <a href="https://x.com/Nevamind_ai" target="_blank">
         <img src="https://img.shields.io/twitter/follow/nevamind_ai?logo=X&color=%20%23f5f5f5"
             alt="X (Twitter)"></a>
+    <a href="https://reddit.com/r/MemU" target="_blank">
+        <img src="https://img.shields.io/badge/Reddit-Join%20Community-FF4500?logo=reddit&logoColor=white"
+            alt="Reddit"></a>
+    <a href="https://t.me/MemU_AI" target="_blank">
+        <img src="https://img.shields.io/badge/Telegram-Join%20Channel-2CA5E0?logo=telegram&logoColor=white"
+            alt="Telegram"></a>
 </p>
 
 <p align="center">
   <a href="./README.md"><img alt="English" src="https://img.shields.io/badge/English-d9d9d9"></a>
 </p>
 
-MemU is an open-source memory framework specialized for AI companion that gives AI assistants long-term personalized memory. It acts like a "memory folder" managed by the AI itself. The framework finds memories instantly, updates and learns. With it, you can build AIs that truly memories you by continuously updating memories about who you are, what you care about, and your shared experiences, creating companions that grow alongside you.
+**MemU** is an open-source memory framework for AI companions—high accuracy, fast retrieval, low cost. It acts as an intelligent "memory folder" that adapts to different scenarios, from different companions senarios.
+
+With **memU**, you can build AI companions that truly remember you. They learn who you are, what you care about, and grow alongside you through every interaction.
 
 ![MemU Architecture](assets/architecture-overview.png)
 
@@ -281,23 +293,39 @@ git push origin feature/amazing-feature
 
 ### **Connect with the MemU Community**
 
-<a href="https://discord.gg/your-discord-server">
+<a href="https://discord.gg/hQZntfGsbJ">
     <img src="https://img.shields.io/badge/Discord-Join%20Chat-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord">
 </a>
 <a href="https://github.com/NevaMind-AI/MemU/discussions">
     <img src="https://img.shields.io/badge/GitHub-Discussions-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Discussions">
 </a>
-<a href="https://twitter.com/nevamind_ai">
+<a href="https://x.com/nevamind_ai">
     <img src="https://img.shields.io/badge/X-Follow-1DA1F2?style=for-the-badge&logo=x&logoColor=white" alt="X (Twitter)">
+</a>
+<a href="https://reddit.com/r/MemU">
+    <img src="https://img.shields.io/badge/Reddit-Join%20Community-FF4500?style=for-the-badge&logo=reddit&logoColor=white" alt="Reddit">
+</a>
+<a href="https://t.me/MemU_AI">
+    <img src="https://img.shields.io/badge/Telegram-Join%20Channel-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram">
+</a>
+<a href="#">
+    <img src="https://img.shields.io/badge/WeChat-微信群-07C160?style=for-the-badge&logo=wechat&logoColor=white" alt="WeChat">
+</a>
+<a href="https://www.youtube.com/@MemU_AI">
+    <img src="https://img.shields.io/badge/YouTube-Subscribe-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="YouTube">
 </a>
 
 ### **📞 Get Support**
 
 | Channel | Best For |
 |---------|----------|
-| 💬 [Discord](https://discord.gg/your-discord-server) | Real-time chat, community help |
+| 💬 [Discord](https://discord.gg/hQZntfGsbJ) | Real-time chat, community help |
 | 🗣️ [GitHub Discussions](https://github.com/NevaMind-AI/MemU/discussions) | Feature requests, Q&A |
 | 🐛 [GitHub Issues](https://github.com/NevaMind-AI/MemU/issues) | Bug reports, technical issues |
+| 📱 [Reddit](https://reddit.com/r/MemU) | Community discussions, shared experiences |
+| 📞 [Telegram](https://t.me/MemU_AI) | Quick updates, announcements |
+| 💬 [WeChat](https://example.com/wechat-qr) | 中文社区支持 |
+| 🎥 [YouTube](https://www.youtube.com/@MemU_AI) | Tutorials, demos, updates |
 | 📧 [Email](mailto:contact@nevamind.ai) | Enterprise inquiries, partnerships |
 
 ### **🏆 Contributors**

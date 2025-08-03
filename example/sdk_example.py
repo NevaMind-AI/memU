@@ -6,7 +6,7 @@ Demonstrates how to use the MemU Python SDK to interact with MemU API services.
 
 import asyncio
 import os
-from memu.sdk import MemuClient, MemorizeRequest
+from memu.sdk import MemuClient, MemorizeTaskStatusResponse
 from memu.sdk.exceptions import MemuAPIException, MemuValidationException, MemuConnectionException
 os.environ["MEMU_API_BASE_URL"] = "http://20.255.58.47:8000/"
 os.environ["MEMU_API_KEY"] = "mu_aswH7jrXWAwu5e-muFy2e7repj7yxeasqgWnAM2h9JwiIrIz6uvFry5x-qaNgowvfgNvPAKU95Bp2NFaz7kktZABPV1heemINrcRqQ"
@@ -69,12 +69,31 @@ Assistant: That's fantastic - both the avalanche course and your commitment to L
         print(f"💬 Message: {response.message}")
         print(f"📏 Conversation length: {len(long_conversation)} characters")
         
-        # Optional: Check task status (if endpoint exists)
+        # Check task status with improved structured response
+        print("\n🔍 检查任务状态...")
         try:
-            status = client.get_task_status(response.task_id)
-            print(f"📈 Current task status: {status}")
+            task_status = client.get_task_status(response.task_id)
+            print(f"📈 Task Status: {task_status.status}")
+            print(f"🆔 Task ID: {task_status.task_id}")
+            
+            if task_status.progress:
+                print(f"📊 Progress: {task_status.progress}")
+            
+            if task_status.result:
+                print(f"✅ Result: {task_status.result}")
+            
+            if task_status.error:
+                print(f"❌ Error: {task_status.error}")
+                
+            if task_status.started_at:
+                print(f"🕐 Started at: {task_status.started_at}")
+                
+            if task_status.completed_at:
+                print(f"🏁 Completed at: {task_status.completed_at}")
+                
         except MemuAPIException as e:
-            print(f"⚠️  Task status endpoint may not be implemented: {e}")
+            print(f"⚠️  Task status check failed: {e}")
+            print(f"   Status code: {e.status_code if hasattr(e, 'status_code') else 'Unknown'}")
         
     except MemuValidationException as e:
         print(f"❌ Validation error: {e}")

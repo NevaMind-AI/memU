@@ -12,7 +12,7 @@ from urllib.parse import urljoin
 import httpx
 from pydantic import ValidationError
 
-from .models import MemorizeRequest, MemorizeResponse
+from .models import MemorizeRequest, MemorizeResponse, MemorizeTaskStatusResponse
 from .exceptions import (
     MemuAPIException,
     MemuValidationException, 
@@ -225,8 +225,7 @@ class MemuClient:
             response_data = self._make_request(
                 method="POST",
                 endpoint="api/v1/memory/memorize",
-                json_data=request_data.model_dump(),
-                params={"api_key_id": request_api_key_id}
+                json_data=request_data.model_dump()
             )
             
             # Parse response
@@ -238,7 +237,7 @@ class MemuClient:
         except ValidationError as e:
             raise MemuValidationException(f"Request validation failed: {str(e)}")
     
-    def get_task_status(self, task_id: str) -> Dict[str, Any]:
+    def get_task_status(self, task_id: str) -> MemorizeTaskStatusResponse:
         """
         Get the status of a memorization task
         
@@ -246,14 +245,27 @@ class MemuClient:
             task_id: Task identifier returned from memorize_conversation
             
         Returns:
-            Dict[str, Any]: Task status information
+            MemorizeTaskStatusResponse: Task status, progress, and results
             
-        Note: This method assumes there's a task status endpoint.
-        You may need to implement this endpoint on the server side.
+        Raises:
+            MemuValidationException: For validation errors
+            MemuAPIException: For API errors
+            MemuConnectionException: For connection errors
         """
-        logger.info(f"Getting status for task: {task_id}")
-        
-        return self._make_request(
-            method="GET",
-            endpoint=f"api/v1/tasks/{task_id}/status"
-        )
+        try:
+            logger.info(f"Getting status for task: {task_id}")
+            
+            # Make API request to the correct endpoint
+            response_data = self._make_request(
+                method="GET",
+                endpoint=f"api/v1/memory/memorize/status/{task_id}"
+            )
+            
+            # Parse response using the model
+            response = MemorizeTaskStatusResponse(**response_data)
+            logger.debug(f"Task {task_id} status: {response.status}")
+            
+            return response
+            
+        except ValidationError as e:
+            raise MemuValidationException(f"Response validation failed: {str(e)}")
