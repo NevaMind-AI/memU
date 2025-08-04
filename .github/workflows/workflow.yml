@@ -33,7 +33,7 @@ jobs:
       run: isort --check-only memu
     
     - name: Run flake8 linter
-      run: flake8 memu --max-line-length=88 --extend-ignore=E203,W503
+      run: flake8 memu
 
   test:
     runs-on: ubuntu-latest
