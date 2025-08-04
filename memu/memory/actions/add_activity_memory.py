@@ -7,11 +7,11 @@ high-quality standards as update_memory_with_suggestions for self-contained memo
 
 import json
 import re
-from typing import Dict, Any
 from datetime import datetime
+from typing import Any, Dict
 
-from .base_action import BaseAction
 from ...utils import get_logger
+from .base_action import BaseAction
 
 logger = get_logger(__name__)
 
@@ -108,7 +108,6 @@ class AddActivityMemoryAction(BaseAction):
                 new_content = content_with_ids
 
             # Save content with embeddings if enabled
-            embeddings_info = ""
             if generate_embeddings and self.embeddings_enabled:
                 # Save first, then add embedding for just the new content
                 success = self._save_memory_content(
@@ -117,17 +116,18 @@ class AddActivityMemoryAction(BaseAction):
                 if success:
                     # Add embedding for just the new content
                     # embedding_result = self._add_memory_item_embedding(character_name, "activity", content_with_ids)
-                    embedding_result = self._add_memory_item_embedding(
+                    self._add_memory_item_embedding(
                         character_name, "activity", memory_items
                     )
-                    embeddings_info = f"Generated embedding for new items: {embedding_result.get('message', 'Unknown')}"
+                    # Generated embedding for new items
                 else:
-                    embeddings_info = "Failed to save memory"
+                    # Failed to save memory
+                    pass
             else:
                 success = self._save_memory_content(
                     character_name, "activity", new_content
                 )
-                embeddings_info = "No embeddings generated"
+                # No embeddings generated
 
             if success:
                 # Extract memory items for response
@@ -208,7 +208,7 @@ Transform this raw content into properly formatted activity memory items followi
 
 **ACTIVITY GROUPING GUIDELINES:**
 - Conversations about the same topic → Single activity
-- Related actions and their outcomes → Single activity  
+- Related actions and their outcomes → Single activity
 - Emotional reactions to specific events → Include in the main activity
 - Sequential related events → Single comprehensive activity
 - Different topics or unrelated events → Separate activities

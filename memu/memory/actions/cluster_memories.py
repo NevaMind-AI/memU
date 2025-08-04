@@ -1,7 +1,7 @@
+import itertools
 import os
 import re
-from typing import Dict, Any, List
-import itertools
+from typing import Any, Dict, List
 
 from .base_action import BaseAction
 
@@ -220,11 +220,11 @@ Example: "We went to hiking in Blue Ridge Mountains this summer" is related to b
 
             memory_id, clusters = line[2:].split(": ", 1)
             memory_id = memory_id.strip()
-            if not memory_id in all_items:
+            if memory_id not in all_items:
                 continue
 
             for cluster in clusters.split(","):
-                if not cluster in existing_clusters:
+                if cluster not in existing_clusters:
                     continue
                 cluster_fn = cluster.replace(" ", "_")
                 with open(f"memory/{character_name}_{cluster_fn}.md", "a") as f:
@@ -233,7 +233,7 @@ Example: "We went to hiking in Blue Ridge Mountains this summer" is related to b
                     f.write(
                         f"[{memory_id}][mentioned at {memory_item.get('session_date', 'Unknown')}] {memory_item['content']} []\n"
                     )
-                if not cluster in updated_clusters:
+                if cluster not in updated_clusters:
                     updated_clusters[cluster] = []
                 updated_clusters[cluster].append(memory_id)
 
@@ -273,7 +273,7 @@ Example: "We went to hiking in Blue Ridge Mountains this summer" is related to b
 
 You are given a conversation context, a list of memory items extracted from this conversation, and existing clusters.
 Your task is to discover NEW events/themes that are either:
-- Important (e.g., marriage, job promotion, etc.), or 
+- Important (e.g., marriage, job promotion, etc.), or
 - Repeating, periodical, or routine (e.g., going to gym, attending specific events, etc.).
 
 **CONVERSATION CONTEXT:**
@@ -324,7 +324,7 @@ Your task is to discover NEW events/themes that are either:
 
                 for memory_id in memory_ids.split(","):
                     memory_id = memory_id.strip()
-                    if not memory_id in all_items:
+                    if memory_id not in all_items:
                         continue
                     memory_item = all_items[memory_id]
 

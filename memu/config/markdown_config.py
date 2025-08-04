@@ -3,11 +3,10 @@ MemU Markdown Configuration System - Dynamic Folder Structure
 Each md file type has its own folder, containing config.py and prompt.txt
 """
 
-import os
 import importlib.util
-from pathlib import Path
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 @dataclass

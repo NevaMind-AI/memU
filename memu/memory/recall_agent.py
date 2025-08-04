@@ -5,20 +5,16 @@ A simple workflow for intelligent memory retrieval based on markdown configurati
 Handles context=all (full content) and context=rag (search with limitations) based on config.
 """
 
-import os
-import re
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Tuple
-from datetime import datetime
-import math
-from collections import defaultdict, Counter
 import json
+import math
+from pathlib import Path
+from typing import Any, Dict, List
 
-from ..llm import BaseLLMClient
-from ..utils import get_logger
-from .file_manager import MemoryFileManager
-from .embeddings import get_default_embedding_client
 from ..config.markdown_config import get_config_manager
+
+from ..utils import get_logger
+from .embeddings import get_default_embedding_client
+from .file_manager import MemoryFileManager
 
 logger = get_logger(__name__)
 

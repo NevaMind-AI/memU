@@ -4,7 +4,8 @@ Generate Memory Suggestions Action
 Analyzes new memory items and suggests what should be added to different memory categories.
 """
 
-from typing import Dict, List, Any
+from typing import Any, Dict, List
+
 from .base_action import BaseAction
 
 
@@ -117,7 +118,7 @@ For each category, analyze the new memory items and suggest what specific inform
 
 - **activity**: Detailed description of the conversation, including the time, place, and people involved
 - **profile**: ONLY basic personal information (age, location, occupation, education, family status, demographics) - EXCLUDE events, activities, things they did
-- **event**: Specific events, dates, milestones, appointments, meetings, activities with time references  
+- **event**: Specific events, dates, milestones, appointments, meetings, activities with time references
 - **Other categories**: Relevant information for each specific category
 
 **CRITICAL DISTINCTION - Profile vs Activity/Event:**
@@ -209,6 +210,6 @@ For each category, analyze the new memory items and suggest what specific inform
                     suggestions[current_category] += f"{suggestion_text}\n"
 
             suggestions = {k: v for k, v in suggestions.items() if v.strip()}
-        except Exception as e:
+        except Exception:
             raise
         return suggestions

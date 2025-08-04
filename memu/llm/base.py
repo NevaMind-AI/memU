@@ -4,7 +4,7 @@ LLM Basic Abstract Classes and Data Structures
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 
 @dataclass

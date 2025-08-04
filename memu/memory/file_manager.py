@@ -5,10 +5,9 @@ Provides file operations for storing and retrieving character memory data
 in markdown format.
 """
 
-import os
-from pathlib import Path
-from typing import Dict, List, Optional, Any
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List
 
 from ..utils import get_logger
 

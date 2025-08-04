@@ -4,30 +4,30 @@ MemU SDK HTTP Client
 Provides HTTP client for interacting with MemU API services.
 """
 
-import os
 import logging
-from typing import Optional, Dict, Any, List
+import os
+from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
 
 import httpx
 from pydantic import ValidationError
 
+from .exceptions import (
+    MemuAPIException,
+    MemuAuthenticationException,
+    MemuConnectionException,
+    MemuValidationException,
+)
 from .models import (
+    DefaultCategoriesRequest,
+    DefaultCategoriesResponse,
     MemorizeRequest,
     MemorizeResponse,
     MemorizeTaskStatusResponse,
-    DefaultCategoriesRequest,
-    DefaultCategoriesResponse,
-    RelatedMemoryItemsRequest,
-    RelatedMemoryItemsResponse,
     RelatedClusteredCategoriesRequest,
     RelatedClusteredCategoriesResponse,
-)
-from .exceptions import (
-    MemuAPIException,
-    MemuValidationException,
-    MemuAuthenticationException,
-    MemuConnectionException,
+    RelatedMemoryItemsRequest,
+    RelatedMemoryItemsResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -170,7 +170,7 @@ class MemuClient:
                     try:
                         error_data = response.json()
                         error_msg += f": {error_data}"
-                    except:
+                    except Exception:
                         error_msg += f": {response.text}"
 
                     raise MemuAPIException(error_msg, status_code=response.status_code)

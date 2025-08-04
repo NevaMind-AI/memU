@@ -5,19 +5,19 @@ Modern memory management system with function calling interface.
 Each operation is implemented as a separate action module for modularity and maintainability.
 """
 
-import threading
 import json
+import threading
 import time
-from pathlib import Path
-from typing import Dict, List, Any, Callable, Optional, Union
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, List
 
+from ..config.markdown_config import get_config_manager
 from ..llm import BaseLLMClient
 from ..utils import get_logger
-from .file_manager import MemoryFileManager
-from .embeddings import get_default_embedding_client
-from ..config.markdown_config import get_config_manager
 from .actions import ACTION_REGISTRY
+from .embeddings import get_default_embedding_client
+from .file_manager import MemoryFileManager
 
 logger = get_logger(__name__)
 

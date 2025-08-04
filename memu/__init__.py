@@ -23,12 +23,10 @@ from .llm import OpenAIClient  # OpenAI implementation
 
 # Core Memory system - Unified Memory Agent
 from .memory import MemoryAgent  # Unified memory agent
-from .memory import MemoryFileManager
-
-from .memory import get_default_embedding_client
+from .memory import MemoryFileManager, get_default_embedding_client
 
 # SDK system - HTTP client for MemU API services
-from .sdk import MemuClient, MemorizeRequest, MemorizeResponse
+from .sdk import MemorizeRequest, MemorizeResponse, MemuClient
 
 # Prompts system - now reads from dynamic configuration folders
 # from .config.prompts import PromptLoader  # Prompt loading utilities

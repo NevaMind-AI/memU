@@ -5,16 +5,15 @@ import importlib.util
 import os
 
 # Import markdown configuration
-from .markdown_config import (
-    get_config_manager,
-    detect_file_type,
+from .markdown_config import (  # Simplified configuration API
     MarkdownConfigManager,
     MarkdownFileConfig,
-    # Simplified configuration API
-    get_required_files,
-    get_optional_files,
-    get_simple_summary,
+    detect_file_type,
     get_all_file_configs,
+    get_config_manager,
+    get_optional_files,
+    get_required_files,
+    get_simple_summary,
 )
 
 _config_file_path = os.path.join(

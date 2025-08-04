@@ -6,17 +6,14 @@ Fast test script that processes the first few sessions to quickly validate
 the memory agent workflow and show real-time action results.
 """
 
-import sys
-import os
 import json
-import tempfile
-import shutil
+import os
+import sys
 import time
-from pathlib import Path
-from datetime import datetime
-import uuid
-
 import traceback
+import uuid
+from datetime import datetime
+from pathlib import Path
 
 # Load environment variables from .env file
 try:
@@ -41,10 +38,10 @@ sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../"))
 )
 
-from memu.memory.memory_agent import MemoryAgent
-from memu.llm.openai_client import OpenAIClient
 from memu.llm.azure_openai_client import AzureOpenAIClient
-from memu.llm.base import BaseLLMClient, LLMResponse
+from memu.llm.base import BaseLLMClient
+from memu.llm.openai_client import OpenAIClient
+from memu.memory.memory_agent import MemoryAgent
 
 
 class LLMLoggingWrapper:
@@ -576,7 +573,7 @@ def quick_memory_test():
         return
 
     # Debug: Show structure of loaded data
-    print(f"\n🔍 DEBUG: Locomo data structure analysis")
+    print("\n🔍 DEBUG: Locomo data structure analysis")
     print(f"   Sample keys: {list(sample.keys())}")
     if "conversation" in sample:
         conv_keys = list(sample["conversation"].keys())
@@ -664,14 +661,14 @@ def quick_memory_test():
                 continue
 
             session_date = data_loader.get_session_date(sample, session_num)
-            session_text = data_loader.format_session_as_conversation(conversations)
+            # session_text = data_loader.format_session_as_conversation(conversations)
 
             print(f"📅 Date: {session_date}")
             print(f"📊 Total dialogues: {len(conversations)}")
             print(f"👤 {test_character} dialogues: {len(character_dialogues)}")
 
             # Show session preview
-            print(f"\n📝 SESSION PREVIEW:")
+            print("\n📝 SESSION PREVIEW:")
             for i, dialog in enumerate(conversations[:3], 1):
                 speaker_emoji = "👤" if dialog["speaker"] == test_character else "👥"
                 print(
@@ -682,11 +679,11 @@ def quick_memory_test():
 
             try:
                 # Process with memory agent
-                print(f"\n🚀 Starting Memory Agent workflow...")
+                print("\n🚀 Starting Memory Agent workflow...")
                 start_time = time.time()
 
                 # Debug: Check raw conversation data quality
-                print(f"\n🔍 DEBUG: Checking conversation data quality...")
+                print("\n🔍 DEBUG: Checking conversation data quality...")
                 empty_speakers = 0
                 empty_texts = 0
                 valid_dialogues = 0
@@ -764,7 +761,7 @@ def quick_memory_test():
                     display_function_results(function_calls)
 
                     # Show memory files status
-                    print(f"\n📁 MEMORY FILES STATUS:")
+                    print("\n📁 MEMORY FILES STATUS:")
                     for category in ["activity", "profile", "event"]:
                         memory_file = os.path.join(
                             memory_dir, f"{test_character}_{category}.md"
@@ -831,7 +828,7 @@ def quick_memory_test():
                     line for line in content.split("\n") if line.strip().startswith("[")
                 ]
                 if memory_lines:
-                    print(f"   Sample items:")
+                    print("   Sample items:")
                     for i, line in enumerate(memory_lines[:3], 1):
                         item_id = line.split("]")[0] + "]" if "]" in line else "N/A"
                         item_content = (
@@ -846,13 +843,13 @@ def quick_memory_test():
             else:
                 print(f"\n📄 {category.upper()} MEMORY: Not created")
 
-        print(f"\n📊 TOTAL MEMORY GENERATED:")
+        print("\n📊 TOTAL MEMORY GENERATED:")
         print(f"   Total size: {total_memory_size} characters")
         print(f"   Total items: {total_items}")
         print(f"   Sessions processed: {len(test_sessions)}")
 
         # Show LLM logging summary
-        print(f"\n📝 LLM LOGGING SUMMARY:")
+        print("\n📝 LLM LOGGING SUMMARY:")
         character_log_dir = Path(llm_logs_dir) / f"{test_character}_llm_logs"
         if character_log_dir.exists():
             log_files = list(character_log_dir.glob("*.json"))
@@ -879,7 +876,7 @@ def quick_memory_test():
 
             # Show some example log files
             if log_files:
-                print(f"   Example log files:")
+                print("   Example log files:")
                 for i, log_file in enumerate(sorted(log_files)[:5], 1):
                     print(f"     {i}. {log_file.name}")
                 if len(log_files) > 5:
@@ -896,7 +893,7 @@ def quick_memory_test():
         print(f"\n💾 Memory files preserved in: {memory_dir}")
         print(f"📝 LLM logs preserved in: {llm_logs_dir}")
 
-    print(f"\n✅ Quick test completed!")
+    print("\n✅ Quick test completed!")
     print(f"🕒 Finished at: {datetime.now().strftime('%H:%M:%S')}")
 
 

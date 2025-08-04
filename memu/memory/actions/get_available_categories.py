@@ -4,10 +4,10 @@ Get Available Categories Action
 Gets all available memory categories and their descriptions, excluding activity category.
 """
 
-from typing import Dict, Any
+from typing import Any, Dict
 
-from .base_action import BaseAction
 from ...utils import get_logger
+from .base_action import BaseAction
 
 logger = get_logger(__name__)
 

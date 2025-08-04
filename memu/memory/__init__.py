@@ -18,10 +18,10 @@ WORKFLOW:
 4. All memory operations exposed as standardized function calls
 """
 
+from .embeddings import get_default_embedding_client
+from .file_manager import MemoryFileManager
 from .memory_agent import MemoryAgent
 from .recall_agent import RecallAgent
-from .file_manager import MemoryFileManager
-from .embeddings import get_default_embedding_client
 
 __all__ = [
     "MemoryAgent",  # Function calling interface

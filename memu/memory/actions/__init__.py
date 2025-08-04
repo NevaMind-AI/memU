@@ -5,17 +5,16 @@ Individual action implementations for memory operations.
 Each action is a standalone module that can be loaded dynamically.
 """
 
-from .base_action import BaseAction
-
 # Import all actions
 from .add_activity_memory import AddActivityMemoryAction
+from .base_action import BaseAction
+from .cluster_memories import ClusterMemoriesAction
+from .generate_suggestions import GenerateMemorySuggestionsAction
 
 # from .get_available_categories import GetAvailableCategoriesAction
 from .link_related_memories import LinkRelatedMemoriesAction
-from .generate_suggestions import GenerateMemorySuggestionsAction
-from .update_memory_with_suggestions import UpdateMemoryWithSuggestionsAction
 from .run_theory_of_mind import RunTheoryOfMindAction
-from .cluster_memories import ClusterMemoriesAction
+from .update_memory_with_suggestions import UpdateMemoryWithSuggestionsAction
 
 # Registry of all available actions
 ACTION_REGISTRY = {

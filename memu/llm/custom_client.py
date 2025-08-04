@@ -3,7 +3,7 @@ Custom LLM client supporting user-defined implementations
 """
 
 import logging
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Callable, Dict, List, Union
 
 from .base import BaseLLMClient, LLMResponse
 

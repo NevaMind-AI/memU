@@ -6,9 +6,10 @@ Automatically finds and links related memories using embedding search.
 
 import json
 import math
-from typing import Dict, Any, List, Optional
-from .base_action import BaseAction
+from typing import Any, Dict, List, Optional
+
 from ...utils import get_logger
+from .base_action import BaseAction
 
 logger = get_logger(__name__)
 
@@ -178,9 +179,8 @@ class LinkRelatedMemoriesAction(BaseAction):
             memory_ids = [memory["memory_id"] for memory in related_memories]
 
             # Optionally write links to memory
-            updated_content = None
             if write_to_memory and memory_ids:
-                updated_content = self._append_links_to_memory(
+                self._append_links_to_memory(
                     character_name, category, memory_id, memory_ids
                 )
 
@@ -409,7 +409,6 @@ class LinkRelatedMemoriesAction(BaseAction):
 
             total_linked = 0
             all_related_memories = []
-            updated_content = None
 
             # Process each memory item
             for item in memory_items:
@@ -435,7 +434,7 @@ class LinkRelatedMemoriesAction(BaseAction):
 
             # If write_to_memory is enabled, update all memory items with their links
             if write_to_memory and total_linked > 0:
-                updated_content = self._append_links_to_all_items(
+                self._append_links_to_all_items(
                     character_name,
                     category,
                     memory_items,
@@ -563,7 +562,7 @@ TARGET MEMORY:
 CANDIDATE MEMORIES:
 {candidates_text}
 
-**TASK**: Determine which candidate memories are genuinely related to the target memory. 
+**TASK**: Determine which candidate memories are genuinely related to the target memory.
 
 **CRITERIA FOR RELEVANCE**:
 - Memories should share meaningful connections (people, places, events, topics, themes)
@@ -577,7 +576,7 @@ CANDIDATE MEMORIES:
 - ❌ NOT RELEVANT: Memories that only share common words but different contexts
 - ❌ NOT RELEVANT: Memories about completely different topics/people/events
 
-**OUTPUT FORMAT**: 
+**OUTPUT FORMAT**:
 Return ONLY the numbers (1, 2, 3, etc.) of the truly relevant memories, separated by commas. If no memories are relevant, return "NONE".
 
 Examples:

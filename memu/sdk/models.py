@@ -4,8 +4,9 @@ MemU SDK Data Models
 Defines request and response models for MemU API interactions.
 """
 
-from typing import Optional, Any, Dict, List
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 

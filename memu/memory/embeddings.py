@@ -7,8 +7,7 @@ supporting different embedding providers like OpenAI, Azure OpenAI, etc.
 
 import os
 import time
-from typing import List, Optional, Union
-import numpy as np
+from typing import List, Optional
 
 from ..utils import get_logger
 

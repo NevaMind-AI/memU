@@ -11,13 +11,13 @@ from .base import BaseLLMClient, LLMResponse
 # Try to import Azure AI Inference components
 try:
     from azure.ai.inference import ChatCompletionsClient
-    from azure.core.credentials import AzureKeyCredential
     from azure.ai.inference.models import (
-        SystemMessage,
-        UserMessage,
         AssistantMessage,
+        SystemMessage,
         ToolMessage,
+        UserMessage,
     )
+    from azure.core.credentials import AzureKeyCredential
 
     AZURE_AI_INFERENCE_AVAILABLE = True
 except ImportError as e:

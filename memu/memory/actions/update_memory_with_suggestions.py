@@ -10,9 +10,10 @@ Updates memory categories based on new memory items and suggestions, supporting 
 
 import json
 from datetime import datetime
-from typing import Dict, List, Any
-from .base_action import BaseAction
+from typing import Any, Dict, List
+
 from ...utils import get_logger
+from .base_action import BaseAction
 
 logger = get_logger(__name__)
 
