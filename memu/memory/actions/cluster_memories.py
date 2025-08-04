@@ -150,6 +150,9 @@ class ClusterMemoriesAction(BaseAction):
             for item in all_items.values()
         ])
         
+        # Create cluster list string outside f-string to avoid backslash issue
+        clusters_list = '\n'.join(f"- {cluster}" for cluster in existing_clusters)
+        
         system_message = f"""You are an expert in analyzing and categorizing memories items.
 
 You are given a list of existing clusters, a list of memory items, and the full conversation context that generated these memories.
@@ -159,7 +162,7 @@ Your task is to analyze if each of the memory items is related to any of the exi
 {conversation_content}
 
 **EXISTING CLUSTERS:**
-{'\n'.join(f"- {cluster}" for cluster in existing_clusters)}
+{clusters_list}
 
 **MEMORY ITEMS:**
 {memory_items_text}
@@ -230,6 +233,9 @@ Example: "We went to hiking in Blue Ridge Mountains this summer" is related to b
             for item in all_items.values()
         ])
 
+        # Create cluster list string outside f-string to avoid backslash issue
+        existing_clusters_list = '\n'.join(f"- {cluster}" for cluster in existing_clusters)
+        
         system_message = f"""You are an expert in discovering some important or repeating events in one's memory records.
 
 You are given a conversation context, a list of memory items extracted from this conversation, and existing clusters.
@@ -241,7 +247,7 @@ Your task is to discover NEW events/themes that are either:
 {conversation_content}
 
 **EXISTING CLUSTERS (DO NOT recreate these):**
-{'\n'.join(f"- {cluster}" for cluster in existing_clusters)}
+{existing_clusters_list}
 
 **MEMORY ITEMS:**
 {memory_items_text}
