@@ -18,7 +18,7 @@ jobs:
         image: postgres:14
         env:
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: personalab_test
+          POSTGRES_DB: memu_test
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -54,7 +54,7 @@ jobs:
       env:
         POSTGRES_HOST: localhost
         POSTGRES_PORT: 5432
-        POSTGRES_DB: personalab_test
+        POSTGRES_DB: memu_test
         POSTGRES_USER: postgres
         POSTGRES_PASSWORD: postgres
       run: |
@@ -62,32 +62,32 @@ jobs:
 
     - name: Lint with flake8
       run: |
-        flake8 personalab --count --select=E9,F63,F7,F82 --show-source --statistics
-        flake8 personalab --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        flake8 memu --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 memu --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
     - name: Format check with black
       run: |
-        black --check personalab
+        black --check memu
 
     - name: Import sort check with isort
       run: |
-        isort --check-only personalab
+        isort --check-only memu
 
     - name: Type check with mypy
       run: |
-        mypy personalab --ignore-missing-imports
+        mypy memu --ignore-missing-imports
       continue-on-error: true
 
     - name: Test with pytest
       env:
         POSTGRES_HOST: localhost
         POSTGRES_PORT: 5432
-        POSTGRES_DB: personalab_test
+        POSTGRES_DB: memu_test
         POSTGRES_USER: postgres
         POSTGRES_PASSWORD: postgres
         OPENAI_API_KEY: test_key_not_real
       run: |
-        pytest tests/ --cov=personalab --cov-report=xml --cov-report=term-missing
+        pytest tests/ --cov=memu --cov-report=xml --cov-report=term-missing
       continue-on-error: true
 
     - name: Upload coverage to Codecov

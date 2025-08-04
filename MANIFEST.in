@@ -2,8 +2,8 @@ include README.md
 include CHANGELOG.md
 include requirements.txt
 include requirements-dev.txt
-recursive-include personalab *.py
-recursive-include examples *.py
+recursive-include memu *.py
+recursive-include example *.py
 include setup_postgres_env.sh
 exclude .env
 exclude .env.example

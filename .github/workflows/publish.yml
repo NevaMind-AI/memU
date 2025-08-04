@@ -27,7 +27,7 @@ jobs:
     
     - name: Test package import
       run: |
-        python -c "import personalab; print('PersonaLab imported successfully')"
+        python -c "import memu; print('MemU imported successfully')"
 
   build:
     needs: test
