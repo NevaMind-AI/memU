@@ -23,7 +23,7 @@ memu_api_key = os.getenv("MEMU_API_KEY", "your-memu-key-here")
 # Initialize clients
 openai_client = openai.OpenAI(api_key=openai_api_key)
 memu_client = MemuClient(
-    base_url="http://test-hippocampus-cloud-853369149.us-east-1.elb.amazonaws.com/",
+    base_url="https://api-preview.memu.so",
     api_key=memu_api_key
 )
 
@@ -60,15 +60,12 @@ for i, question in enumerate(questions, 1):
     print(f"Assistant: {assistant_response}")
     
     messages_history.append({"role": "assistant", "content": assistant_response})
-    all_conversations.append(f"User: {question}\n\nAssistant: {assistant_response}")
+    all_conversations.append(f"user: {question}\n\nassistant: {assistant_response}")
 
-# Summary conversation
-print("\n📝 Creating summary of 5-round conversation...")
-full_conversation = "\n\n".join(all_conversations)
-
+    
 # Save to MemU
 response = memu_client.memorize_conversation(
-    conversation_text=full_conversation,
+    conversation_text='\n\n'.join(all_conversations),
     user_id="demo_user",
     user_name="Demo User", 
     agent_id="openai_gpt",
