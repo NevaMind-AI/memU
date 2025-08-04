@@ -10,6 +10,6 @@ from .logging import setup_logging, get_logger, default_logger
 __all__ = [
     # Logging utilities
     "setup_logging",
-    "get_logger", 
+    "get_logger",
     "default_logger",
-] 
+]

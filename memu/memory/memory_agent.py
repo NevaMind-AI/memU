@@ -25,32 +25,32 @@ logger = get_logger(__name__)
 class MemoryCore:
     """
     Core memory functionality shared across all actions
-    
+
     Provides the shared resources and utilities that actions need:
     - LLM client
     - Storage manager
     - Embedding client
     - Configuration
     """
-    
+
     def __init__(
         self,
         llm_client: BaseLLMClient,
         memory_dir: str = "memory",
-        enable_embeddings: bool = True
+        enable_embeddings: bool = True,
     ):
         self.llm_client = llm_client
         self.memory_dir = Path(memory_dir)
         self._stop_flag = threading.Event()
-        
+
         # Initialize memory types from config
         self.config_manager = get_config_manager()
         self.memory_types = self.config_manager.get_file_types_mapping()
         self.processing_order = self.config_manager.get_processing_order()
-        
+
         # Initialize file-based storage manager
         self.storage_manager = MemoryFileManager(memory_dir)
-        
+
         # Initialize embedding client
         self.enable_embeddings = enable_embeddings
         if enable_embeddings:
@@ -59,24 +59,28 @@ class MemoryCore:
                 self.embeddings_enabled = True
                 logger.info("Embeddings enabled for semantic retrieval")
             except Exception as e:
-                logger.warning(f"Failed to initialize embedding client: {e}. Embeddings disabled.")
+                logger.warning(
+                    f"Failed to initialize embedding client: {e}. Embeddings disabled."
+                )
                 self.embedding_client = None
                 self.embeddings_enabled = False
         else:
             self.embedding_client = None
             self.embeddings_enabled = False
-        
+
         # Create storage directories
         self.embeddings_dir = self.memory_dir / "embeddings"
         self.embeddings_dir.mkdir(exist_ok=True)
-        
-        logger.info(f"Memory Core initialized: {len(self.memory_types)} memory types, embeddings: {self.embeddings_enabled}")
+
+        logger.info(
+            f"Memory Core initialized: {len(self.memory_types)} memory types, embeddings: {self.embeddings_enabled}"
+        )
 
 
 class MemoryAgent:
     """
     Modern Memory Agent with Action-Based Architecture
-    
+
     Uses independent action modules for each memory operation:
     - add_activity_memory: Add new activity memory content with strict formatting
     - get_available_categories: Get available categories (excluding activity)
@@ -84,19 +88,19 @@ class MemoryAgent:
     - generate_memory_suggestions: Generate suggestions for memory categories
     - update_memory_with_suggestions: Update memory categories based on suggestions
 
-    
+
     Each action is implemented as a separate module in the actions/ directory.
     """
-    
+
     def __init__(
         self,
         llm_client: BaseLLMClient,
         memory_dir: str = "memory",
-        enable_embeddings: bool = True
+        enable_embeddings: bool = True,
     ):
         """
         Initialize Memory Agent
-        
+
         Args:
             llm_client: LLM client for processing conversations
             memory_dir: Directory to store memory files
@@ -104,14 +108,14 @@ class MemoryAgent:
         """
         # Initialize memory core
         self.memory_core = MemoryCore(llm_client, memory_dir, enable_embeddings)
-        
+
         # Initialize actions
         self.actions = {}
         self._load_actions()
-        
+
         # Build function registry for compatibility
         self.function_registry = self._build_function_registry()
-        
+
         logger.info(f"Memory Agent initialized: {len(self.actions)} actions available")
 
     def _load_actions(self):
@@ -139,19 +143,19 @@ class MemoryAgent:
         self,
         conversation: List[Dict[str, str]],
         character_name: str,
-        max_iterations: int = 20
+        max_iterations: int = 20,
     ) -> Dict[str, Any]:
         """
         Intelligent conversation processing using iterative function calling
-        
+
         This function allows the LLM to autonomously decide which memory operations to perform
         through function calling, iterating until the LLM decides it's complete or max iterations reached.
-        
+
         Args:
             conversation: List of conversation messages
             character_name: Name of the character to store memories for
             max_iterations: Maximum number of function calling iterations (default: 20)
-            
+
         Returns:
             Dict containing processing results and file paths
         """
@@ -159,22 +163,21 @@ class MemoryAgent:
             if not conversation or not isinstance(conversation, list):
                 return {
                     "success": False,
-                    "error": "Invalid conversation format. Expected list of message dictionaries."
+                    "error": "Invalid conversation format. Expected list of message dictionaries.",
                 }
-            
+
             if not character_name:
-                return {
-                    "success": False,
-                    "error": "Character name is required."
-                }
-            
+                return {"success": False, "error": "Character name is required."}
+
             session_date = datetime.now().strftime("%Y-%m-%d")
-            
-            logger.info(f"🚀 Starting iterative conversation processing for {character_name}")
-            
+
+            logger.info(
+                f"🚀 Starting iterative conversation processing for {character_name}"
+            )
+
             # Convert conversation to text for processing
             conversation_text = self._convert_conversation_to_text(conversation)
-            
+
             # Initialize results tracking
             results = {
                 "success": True,
@@ -184,12 +187,12 @@ class MemoryAgent:
                 "iterations": 0,
                 "function_calls": [],
                 "files_generated": [],
-                "processing_log": []
+                "processing_log": [],
             }
-            
+
             # Get function schemas for LLM
             function_schemas = self.get_functions_schema()
-            
+
             # Build initial system message
             system_message = f"""You are a memory processing agent. Follow this structured process to analyze and store conversation information for "{character_name}":
 
@@ -227,131 +230,161 @@ Start with step 1 and work through the process systematically. When you complete
 
             # Start iterative function calling
             messages = [{"role": "system", "content": system_message}]
-            
+
             for iteration in range(max_iterations):
                 results["iterations"] = iteration + 1
                 logger.info(f"🔄 Iteration {iteration + 1}/{max_iterations}")
-                
+
                 try:
                     # Call LLM with function calling enabled
                     response = self.memory_core.llm_client.chat_completion(
                         messages=messages,
-                        tools=[{"type": "function", "function": schema} for schema in function_schemas],
+                        tools=[
+                            {"type": "function", "function": schema}
+                            for schema in function_schemas
+                        ],
                         tool_choice="auto",
-                        temperature=0.3
+                        temperature=0.3,
                     )
-                    
+
                     if not response.success:
                         logger.error(f"LLM call failed: {response.error}")
                         break
-                    
+
                     # Add assistant response to conversation
                     assistant_message = {
                         "role": "assistant",
-                        "content": response.content or ""
+                        "content": response.content or "",
                     }
-                    
+
                     # Check if processing is complete
                     if response.content and "PROCESSING_COMPLETE" in response.content:
                         logger.info("✅ LLM indicated processing is complete")
-                        results["processing_log"].append(f"Iteration {iteration + 1}: Processing completed")
+                        results["processing_log"].append(
+                            f"Iteration {iteration + 1}: Processing completed"
+                        )
                         break
-                    
+
                     # Handle tool calls if present
                     if response.tool_calls:
                         assistant_message["tool_calls"] = response.tool_calls
                         messages.append(assistant_message)
-                        
+
                         # Execute each tool call
                         for tool_call in response.tool_calls:
                             function_name = tool_call.function.name
-                            
+
                             try:
                                 arguments = json.loads(tool_call.function.arguments)
                             except json.JSONDecodeError as e:
                                 logger.error(f"Failed to parse function arguments: {e}")
                                 logger.error(f"Function name: {function_name}")
-                                logger.error(f"Arguments raw: {repr(tool_call.function.arguments)}")
+                                logger.error(
+                                    f"Arguments raw: {repr(tool_call.function.arguments)}"
+                                )
                                 continue
-                            
+
                             logger.info(f"🔧 Calling function: {function_name}")
-                            
+
                             # Execute the function call
                             time_start = time.time()
-                            function_result = self.call_function(function_name, arguments)
+                            function_result = self.call_function(
+                                function_name, arguments
+                            )
                             time_end = time.time()
-                            
-                            logger.info(f"    Function time used: {time_end - time_start:.2f} seconds")
-                            
+
+                            logger.info(
+                                f"    Function time used: {time_end - time_start:.2f} seconds"
+                            )
+
                             # Track function call
                             call_record = {
                                 "iteration": iteration + 1,
                                 "function_name": function_name,
                                 "arguments": arguments,
-                                "result": function_result
+                                "result": function_result,
                             }
                             results["function_calls"].append(call_record)
-                            
+
                             # Track generated files
-                            if function_result.get("success") and function_name == "add_activity_memory":
+                            if (
+                                function_result.get("success")
+                                and function_name == "add_activity_memory"
+                            ):
                                 file_path = f"{self.memory_core.memory_dir}/{character_name}_activity.md"
                                 if file_path not in results["files_generated"]:
                                     results["files_generated"].append(file_path)
-                            
+
                             # Add tool result to conversation
                             tool_message = {
                                 "role": "tool",
-                                "tool_call_id": getattr(tool_call, 'id', f"call_{iteration}_{function_name}"),
-                                "content": json.dumps(function_result, ensure_ascii=False)
+                                "tool_call_id": getattr(
+                                    tool_call, "id", f"call_{iteration}_{function_name}"
+                                ),
+                                "content": json.dumps(
+                                    function_result, ensure_ascii=False
+                                ),
                             }
                             messages.append(tool_message)
-                            
+
                             results["processing_log"].append(
-                                f"Iteration {iteration + 1}: Called {function_name} - " +
-                                ("Success" if function_result.get("success") else f"Failed: {function_result.get('error', 'Unknown error')}")
+                                f"Iteration {iteration + 1}: Called {function_name} - "
+                                + (
+                                    "Success"
+                                    if function_result.get("success")
+                                    else f"Failed: {function_result.get('error', 'Unknown error')}"
+                                )
                             )
                     else:
                         # No tool calls, add response and continue
                         messages.append(assistant_message)
                         if response.content:
-                            results["processing_log"].append(f"Iteration {iteration + 1}: {response.content[:100]}...")
-                
+                            results["processing_log"].append(
+                                f"Iteration {iteration + 1}: {response.content[:100]}..."
+                            )
+
                 except Exception as e:
                     logger.error(f"Error in iteration {iteration + 1}: {e}")
-                    results["processing_log"].append(f"Iteration {iteration + 1}: Error - {str(e)}")
+                    results["processing_log"].append(
+                        f"Iteration {iteration + 1}: Error - {str(e)}"
+                    )
                     break
 
             # Finalize results
             if results["iterations"] >= max_iterations:
                 logger.warning(f"⚠️ Reached maximum iterations ({max_iterations})")
-                results["processing_log"].append(f"Reached maximum iterations ({max_iterations})")
-            
-            logger.info(f"🎉 Conversation processing completed after {results['iterations']} iterations")
+                results["processing_log"].append(
+                    f"Reached maximum iterations ({max_iterations})"
+                )
+
+            logger.info(
+                f"🎉 Conversation processing completed after {results['iterations']} iterations"
+            )
             logger.info(f"📁 Generated {len(results['files_generated'])} files")
             logger.info(f"🔧 Made {len(results['function_calls'])} function calls")
-            
+
             return results
-            
+
         except Exception as e:
             logger.error(f"Error in conversation processing: {e}")
             return {
                 "success": False,
                 "error": str(e),
                 "character_name": character_name,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
     def _convert_conversation_to_text(self, conversation: List[Dict]) -> str:
         """Convert conversation list to text format for LLM processing"""
         if not conversation or not isinstance(conversation, list):
             return ""
-        
+
         text_parts = []
         for message in conversation:
             role = message.get("role", "unknown")
             content = message.get("content", "")
             text_parts.append(f"{role.upper()}: {content.strip()}")
-        
+
         return "\n".join(text_parts)
 
     # ================================
@@ -361,7 +394,7 @@ Start with step 1 and work through the process systematically. When you complete
     def get_functions_schema(self) -> List[Dict[str, Any]]:
         """
         Get OpenAI-compatible function schemas for all memory functions
-        
+
         Returns:
             List of function schemas that can be used with OpenAI function calling
         """
@@ -371,17 +404,21 @@ Start with step 1 and work through the process systematically. When you complete
                 schema = action.get_schema()
                 schemas.append(schema)
             except Exception as e:
-                logger.error(f"Failed to get schema for action {action.action_name}: {e}")
+                logger.error(
+                    f"Failed to get schema for action {action.action_name}: {e}"
+                )
         return schemas
 
-    def call_function(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def call_function(
+        self, function_name: str, arguments: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Call a memory function with the provided arguments
-        
+
         Args:
             function_name: Name of the function to call
             arguments: Arguments to pass to the function
-            
+
         Returns:
             Dict containing the function result
         """
@@ -390,38 +427,41 @@ Start with step 1 and work through the process systematically. When you complete
                 return {
                     "success": False,
                     "error": f"Unknown function: {function_name}",
-                    "available_functions": list(self.actions.keys())
+                    "available_functions": list(self.actions.keys()),
                 }
-            
+
             # Get the action instance
             action = self.actions[function_name]
-            
+
             # Execute the action with arguments
             result = action.execute(**arguments)
-            
+
             logger.debug(f"Function call successful: {function_name}")
             return result
-            
+
         except Exception as e:
             error_result = {
                 "success": False,
                 "error": str(e),
                 "function_name": function_name,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
             logger.error(f"Function call failed: {function_name} - {repr(e)}")
             import traceback
+
             traceback.print_exc()
             return error_result
 
-    def validate_function_call(self, function_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    def validate_function_call(
+        self, function_name: str, arguments: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """
         Validate a function call before execution
-        
+
         Args:
             function_name: Name of the function
             arguments: Arguments for the function
-            
+
         Returns:
             Dict with validation result
         """
@@ -430,24 +470,19 @@ Start with step 1 and work through the process systematically. When you complete
                 return {
                     "valid": False,
                     "error": f"Unknown function: {function_name}",
-                    "available_functions": list(self.actions.keys())
+                    "available_functions": list(self.actions.keys()),
                 }
-            
+
             # Use the action's validation method
             action = self.actions[function_name]
             return action.validate_arguments(arguments)
-            
+
         except Exception as e:
-            return {
-                "valid": False,
-                "error": f"Validation error: {str(e)}"
-            }
+            return {"valid": False, "error": f"Validation error: {str(e)}"}
 
     # ================================
     # Direct Method Access (Compatibility)
     # ================================
-
-
 
     def get_available_categories(self) -> Dict[str, Any]:
         """Get available memory categories"""
@@ -462,7 +497,7 @@ Start with step 1 and work through the process systematically. When you complete
         min_similarity: float = 0.3,
         search_categories: List[str] = None,
         link_all_items: bool = False,
-        write_to_memory: bool = False
+        write_to_memory: bool = False,
     ) -> Dict[str, Any]:
         """Find and link related memories using embedding search"""
         return self.actions["link_related_memories"].execute(
@@ -473,7 +508,7 @@ Start with step 1 and work through the process systematically. When you complete
             min_similarity=min_similarity,
             search_categories=search_categories,
             link_all_items=link_all_items,
-            write_to_memory=write_to_memory
+            write_to_memory=write_to_memory,
         )
 
     # ================================
@@ -501,26 +536,23 @@ Start with step 1 and work through the process systematically. When you complete
     def stop_action(self) -> Dict[str, Any]:
         """
         Stop current operations
-        
+
         Returns:
             Dict containing stop result
         """
         try:
             self.memory_core._stop_flag.set()
             logger.info("Memory Agent: Stop flag set")
-            
+
             return {
                 "success": True,
                 "message": "Stop signal sent to Memory Agent operations",
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
-            
+
         except Exception as e:
             logger.error(f"Error stopping operations: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
+            return {"success": False, "error": str(e)}
 
     def reset_stop_flag(self):
         """Reset the stop flag to allow new operations"""
@@ -545,13 +577,17 @@ Start with step 1 and work through the process systematically. When you complete
             "stop_flag_set": self.memory_core._stop_flag.is_set(),
             "embedding_capabilities": {
                 "embeddings_enabled": self.memory_core.embeddings_enabled,
-                "embedding_client": str(type(self.memory_core.embedding_client)) if self.memory_core.embedding_client else None,
-                "embeddings_directory": str(self.memory_core.embeddings_dir)
+                "embedding_client": (
+                    str(type(self.memory_core.embedding_client))
+                    if self.memory_core.embedding_client
+                    else None
+                ),
+                "embeddings_directory": str(self.memory_core.embeddings_dir),
             },
             "config_details": {
                 "total_file_types": len(self.memory_core.memory_types),
                 "categories_from_config": True,
-                "config_structure": "Dynamic folder configuration"
+                "config_structure": "Dynamic folder configuration",
             },
-            "last_updated": datetime.now().isoformat()
-        } 
+            "last_updated": datetime.now().isoformat(),
+        }

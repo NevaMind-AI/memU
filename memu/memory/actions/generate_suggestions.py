@@ -13,11 +13,11 @@ class GenerateMemorySuggestionsAction(BaseAction):
     Generate suggestions for what memory content should be added to different categories
     based on new memory items from conversations.
     """
-    
+
     @property
     def action_name(self) -> str:
         return "generate_memory_suggestions"
-    
+
     def get_schema(self) -> Dict[str, Any]:
         """Return OpenAI-compatible function schema"""
         return {
@@ -28,7 +28,7 @@ class GenerateMemorySuggestionsAction(BaseAction):
                 "properties": {
                     "character_name": {
                         "type": "string",
-                        "description": "Name of the character"
+                        "description": "Name of the character",
                     },
                     "new_memory_items": {
                         "type": "array",
@@ -39,9 +39,9 @@ class GenerateMemorySuggestionsAction(BaseAction):
                                 "content": {"type": "string"},
                                 "mentioned_at": {"type": "string"},
                             },
-                            "required": ["memory_id", "content"]
+                            "required": ["memory_id", "content"],
                         },
-                        "description": "List of new memory items from the conversation"
+                        "description": "List of new memory items from the conversation",
                     },
                     # "available_categories": {
                     #     "type": "array",
@@ -50,49 +50,49 @@ class GenerateMemorySuggestionsAction(BaseAction):
                     # }
                 },
                 # "required": ["character_name", "new_memory_items", "available_categories"]
-                "required": ["character_name", "new_memory_items"]
-            }
+                "required": ["character_name", "new_memory_items"],
+            },
         }
-    
+
     def execute(
         self,
         character_name: str,
         new_memory_items: List[Dict[str, str]],
-        available_categories: List[str] | None = None
+        available_categories: List[str] | None = None,
     ) -> Dict[str, Any]:
         """
         Generate memory suggestions for different categories
-        
+
         Args:
             character_name: Name of the character
             new_memory_items: List of new memory items with memory_id and content
             available_categories: List of available memory categories
-            
+
         Returns:
             Dict containing suggestions for each category
         """
         try:
             if not new_memory_items:
-                return self._add_metadata({
-                    "success": False,
-                    "error": "No memory items provided"
-                })
+                return self._add_metadata(
+                    {"success": False, "error": "No memory items provided"}
+                )
 
             if available_categories is None:
                 available_categories = self._get_available_categories(character_name)
             if not available_categories:
-                return self._add_metadata({
-                    "success": False,
-                    "error": "No available categories found"
-                })
-            
+                return self._add_metadata(
+                    {"success": False, "error": "No available categories found"}
+                )
+
             # Convert memory items to text for analysis
-            memory_items_text = "\n".join([
-                # f"Memory ID: {item['memory_id']}\nContent: {item['content']}"
-                f"- {item['content']}"
-                for item in new_memory_items
-            ])
-            
+            memory_items_text = "\n".join(
+                [
+                    # f"Memory ID: {item['memory_id']}\nContent: {item['content']}"
+                    f"- {item['content']}"
+                    for item in new_memory_items
+                ]
+            )
+
             # Create enhanced prompt for LLM to analyze and generate suggestions
             suggestions_prompt = f"""You are an expert in analyzing the provided memory items for {character_name} and suggesting the memory items that should be added to each memory category.
 
@@ -152,24 +152,27 @@ For each category, analyze the new memory items and suggest what specific inform
 
             # Call LLM to generate suggestions
             response = self.llm_client.simple_chat(suggestions_prompt)
-            
+
             if not response.strip():
-                return self._add_metadata({
-                    "success": False,
-                    "error": "LLM returned empty suggestions"
-                })
-            
+                return self._add_metadata(
+                    {"success": False, "error": "LLM returned empty suggestions"}
+                )
+
             # Parse text response
-            suggestions = self._parse_suggestions_from_text(response.strip(), available_categories, new_memory_items)
-            
-            return self._add_metadata({
-                "success": True,
-                "character_name": character_name,
-                "suggestions": suggestions,
-                "categories_analyzed": available_categories,
-                "message": f"Generated self-contained suggestions for {len(suggestions)} categories based on {len(new_memory_items)} memory items"
-            })
-            
+            suggestions = self._parse_suggestions_from_text(
+                response.strip(), available_categories, new_memory_items
+            )
+
+            return self._add_metadata(
+                {
+                    "success": True,
+                    "character_name": character_name,
+                    "suggestions": suggestions,
+                    "categories_analyzed": available_categories,
+                    "message": f"Generated self-contained suggestions for {len(suggestions)} categories based on {len(new_memory_items)} memory items",
+                }
+            )
+
         except Exception as e:
             return self._handle_error(e)
 
@@ -177,29 +180,35 @@ For each category, analyze the new memory items and suggest what specific inform
         """Get available categories for a character"""
         # return [category for category in self.memory_types.keys() if category != "activity"]
         return ["profile", "event"]
-    
-    def _parse_suggestions_from_text(self, response_text: str, available_categories: List[str], new_memory_items: List[Dict[str, str]]) -> Dict[str, Dict[str, Any]]:
+
+    def _parse_suggestions_from_text(
+        self,
+        response_text: str,
+        available_categories: List[str],
+        new_memory_items: List[Dict[str, str]],
+    ) -> Dict[str, Dict[str, Any]]:
         """Parse suggestions from text format response"""
         suggestions = {}
-        
+
         try:
-            lines = response_text.split('\n')
+            lines = response_text.split("\n")
             current_category = None
-            
+
             for line in lines:
                 line = line.strip()
 
-                if line.startswith('**Category:') and line.endswith('**'):
-                    category_name = line.replace('**Category:', '').replace('**', '').strip()
+                if line.startswith("**Category:") and line.endswith("**"):
+                    category_name = (
+                        line.replace("**Category:", "").replace("**", "").strip()
+                    )
                     if category_name in available_categories:
                         current_category = category_name
                         suggestions[current_category] = ""
-                elif current_category and line.startswith('- Suggestion:'):
-                    suggestion_text = line.replace('- Suggestion:', '').strip()
+                elif current_category and line.startswith("- Suggestion:"):
+                    suggestion_text = line.replace("- Suggestion:", "").strip()
                     suggestions[current_category] += f"{suggestion_text}\n"
-            
+
             suggestions = {k: v for k, v in suggestions.items() if v.strip()}
         except Exception as e:
-            raise            
+            raise
         return suggestions
-    

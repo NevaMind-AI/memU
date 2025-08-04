@@ -14,7 +14,7 @@ from .markdown_config import (
     get_required_files,
     get_optional_files,
     get_simple_summary,
-    get_all_file_configs
+    get_all_file_configs,
 )
 
 _config_file_path = os.path.join(
@@ -41,7 +41,7 @@ __all__ = [
     "MarkdownFileConfig",
     # Simplified configuration API
     "get_required_files",
-    "get_optional_files", 
+    "get_optional_files",
     "get_simple_summary",
     "get_all_file_configs",
     # LLM configuration (backward compatibility)

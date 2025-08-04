@@ -3,7 +3,7 @@ Update Memory with Suggestions Action
 
 Updates memory categories based on new memory items and suggestions, supporting different operation types:
 - ADD: Add new content
-- UPDATE: Modify existing content  
+- UPDATE: Modify existing content
 - DELETE: Delete specific content
 - TOUCH: Use current content but don't update (mark as accessed)
 """
@@ -22,11 +22,11 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
     Update memory categories based on new memory items and suggestions,
     supporting different operation types (ADD, UPDATE, DELETE, TOUCH).
     """
-    
+
     @property
     def action_name(self) -> str:
         return "update_memory_with_suggestions"
-    
+
     def get_schema(self) -> Dict[str, Any]:
         """Return OpenAI-compatible function schema"""
         return {
@@ -37,68 +37,74 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
                 "properties": {
                     "character_name": {
                         "type": "string",
-                        "description": "Name of the character"
+                        "description": "Name of the character",
                     },
                     "category": {
                         "type": "string",
-                        "description": "Memory category to update"
+                        "description": "Memory category to update",
                     },
                     "suggestion": {
                         "type": "string",
-                        "description": "Suggestion for what content should be processed in this category"
+                        "description": "Suggestion for what content should be processed in this category",
                     },
                     "session_date": {
                         "type": "string",
                         "description": "Session date for the memory items (format: YYYY-MM-DD)",
-                        "default": None
+                        "default": None,
                     },
                     "generate_embeddings": {
                         "type": "boolean",
                         "default": True,
-                        "description": "Whether to generate embeddings for the new content"
-                    }
+                        "description": "Whether to generate embeddings for the new content",
+                    },
                 },
-                "required": ["character_name", "category", "suggestion"]
-            }
+                "required": ["character_name", "category", "suggestion"],
+            },
         }
-    
+
     def execute(
         self,
         character_name: str,
         category: str,
         suggestion: str,
         session_date: str = None,
-        generate_embeddings: bool = True
+        generate_embeddings: bool = True,
     ) -> Dict[str, Any]:
         """
         Update memory category with different operation types based on suggestions
-        
+
         Args:
             character_name: Name of the character
             category: Memory category to update
             suggestion: Suggestion for what content should be processed
             session_date: Session date for the memory items (format: YYYY-MM-DD)
             generate_embeddings: Whether to generate embeddings
-            
+
         Returns:
             Dict containing the operations performed in structured format
         """
         try:
             # Validate category
             if category not in self.memory_types:
-                return self._add_metadata({
-                    "success": False,
-                    "error": f"Invalid category '{category}'. Available: {list(self.memory_types.keys())}"
-                })
-            
+                return self._add_metadata(
+                    {
+                        "success": False,
+                        "error": f"Invalid category '{category}'. Available: {list(self.memory_types.keys())}",
+                    }
+                )
+
             if not session_date:
                 session_date = datetime.now().strftime("%Y-%m-%d")
-            
+
             # Load existing content
             existing_content = self._read_memory_content(character_name, category)
-            existing_memory_items = self._extract_memory_items_from_content(existing_content)
-            formatted_existing_content = self._format_existing_content(existing_memory_items)
-            
+            existing_memory_items = self._extract_memory_items_from_content(
+                existing_content
+            )
+            formatted_existing_content = self._format_existing_content(
+                existing_memory_items
+            )
+
             operation_response = self._analyze_memory_operation_from_suggestion(
                 category, character_name, formatted_existing_content, suggestion
             )
@@ -106,41 +112,52 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
             if not operation_response.strip():
                 return {
                     "success": False,
-                    "error": f"LLM returned empty operation analysis for {category}"
+                    "error": f"LLM returned empty operation analysis for {category}",
                 }
-            
+
             # Parse operation response
             operation_list = self._parse_operation_response(operation_response)
             operation_executed, new_items = self._execute_operations(
-                character_name, category, operation_list, session_date, existing_memory_items, generate_embeddings
+                character_name,
+                category,
+                operation_list,
+                session_date,
+                existing_memory_items,
+                generate_embeddings,
             )
 
-            return self._add_metadata({
-                "success": True,
-                "character_name": character_name,
-                "category": category,
-                "operation_executed": operation_executed,
-                "new_memory_items": new_items,
-                "message": f"Successfully performed {len(operation_executed)} memory operations for {category}"
-            })
-            
+            return self._add_metadata(
+                {
+                    "success": True,
+                    "character_name": character_name,
+                    "category": category,
+                    "operation_executed": operation_executed,
+                    "new_memory_items": new_items,
+                    "message": f"Successfully performed {len(operation_executed)} memory operations for {category}",
+                }
+            )
+
         except Exception as e:
             return self._handle_error(e)
-    
-    def _format_existing_content(self, existing_memory_items: List[Dict[str, str]]) -> str:
+
+    def _format_existing_content(
+        self, existing_memory_items: List[Dict[str, str]]
+    ) -> str:
         """Format existing content into a list of memory items"""
-        return "\n".join([
-            f"[Memory ID: {item['memory_id']}] {item['content']}"
-            for item in existing_memory_items
-        ])
+        return "\n".join(
+            [
+                f"[Memory ID: {item['memory_id']}] {item['content']}"
+                for item in existing_memory_items
+            ]
+        )
 
     def _analyze_memory_operation_from_suggestion(
-        self, 
-        category: str, 
-        character_name: str, 
-        existing_content: str, 
-        # activity_content: str, 
-        suggestion: str
+        self,
+        category: str,
+        character_name: str,
+        existing_content: str,
+        # activity_content: str,
+        suggestion: str,
     ) -> str:
         """Analyze memory update scenario and determine the operations that should be performed"""
 
@@ -203,27 +220,27 @@ Memory Update Suggestion:
         # Call LLM to determine operation type and content
         operation_response = self.llm_client.simple_chat(operation_prompt)
         return operation_response
-    
+
     def _parse_operation_response(self, response: str) -> Dict[str, Any]:
         """Parse LLM response to extract operation info"""
-        lines = response.strip().split('\n')
+        lines = response.strip().split("\n")
 
         operation_list = []
         current_operation = None
-        
+
         for line in lines:
             line = line.strip()
-            
-            if line.startswith('**OPERATION:**'):
-                operation = line.replace('**OPERATION:**', '').strip()
-                if operation in ['ADD', 'UPDATE', 'DELETE', 'TOUCH']:
+
+            if line.startswith("**OPERATION:**"):
+                operation = line.replace("**OPERATION:**", "").strip()
+                if operation in ["ADD", "UPDATE", "DELETE", "TOUCH"]:
                     if current_operation:
-                        '''cleanup and completeness checks are not conducted here, they will be done in the execute function'''
+                        """cleanup and completeness checks are not conducted here, they will be done in the execute function"""
                         operation_list.append(current_operation)
                     current_operation = {
                         "operation": operation,
                         "target_id": None,
-                        "memory_content": None
+                        "memory_content": None,
                     }
 
             if line.startswith("- Target Memory ID:"):
@@ -246,7 +263,7 @@ Memory Update Suggestion:
         operation_list: List[Dict[str, Any]],
         session_date: str,
         existing_items: List[Dict[str, str]],
-        generate_embeddings: bool
+        generate_embeddings: bool,
     ) -> List[Dict[str, Any]]:
         """Execute all operations in the list"""
 
@@ -259,24 +276,24 @@ Memory Update Suggestion:
             if operation["operation"] == "ADD":
                 if not operation["memory_content"]:
                     continue
-                
+
                 memory_id = self._generate_memory_id()
                 memory_item = {
                     "memory_id": memory_id,
                     "mentioned_at": session_date,
                     "content": operation["memory_content"],
-                    "links": ""
+                    "links": "",
                 }
 
                 all_items.append(memory_item)
                 new_items.append(memory_item)
                 updated_items.append(memory_item)
                 operation_executed.append(operation)
-            
+
             if operation["operation"] == "UPDATE":
                 if not operation["target_id"] or not operation["memory_content"]:
                     continue
-                
+
                 for item in all_items:
                     if item["memory_id"] == operation["target_id"]:
                         item["content"] = operation["memory_content"]
@@ -288,7 +305,7 @@ Memory Update Suggestion:
             if operation["operation"] == "DELETE":
                 if not operation["target_id"]:
                     continue
-                
+
                 for item in all_items:
                     if item["memory_id"] == operation["target_id"]:
                         all_items.remove(item)
@@ -298,10 +315,10 @@ Memory Update Suggestion:
             if operation["operation"] == "TOUCH":
                 if not operation["target_id"]:
                     continue
-                
+
                 for item in all_items:
                     if item["memory_id"] == operation["target_id"]:
-                        ''' should update "updated_at" '''
+                        """should update "updated_at" """
                         pass
 
                 operation_executed.append(operation)
@@ -313,12 +330,12 @@ Memory Update Suggestion:
             self._add_memory_item_embedding(character_name, category, updated_items)
 
         return operation_executed, new_items
-    
+
     def _reconstruct_content_from_items(self, items: List[Dict[str, str]]) -> str:
         """Reconstruct content string from memory items"""
         if not items:
             return ""
-        
+
         lines = []
         for item in items:
             if "mentioned_at" in item:
@@ -329,100 +346,106 @@ Memory Update Suggestion:
                 # Old format
                 line = f"[{item['memory_id']}] {item['content']}"
             lines.append(line)
-        
-        return '\n'.join(lines)
-    
+
+        return "\n".join(lines)
+
     def _handle_embeddings(
-        self, 
-        character_name: str, 
-        category: str, 
-        content: str, 
-        generate_embeddings: bool
+        self,
+        character_name: str,
+        category: str,
+        content: str,
+        generate_embeddings: bool,
     ) -> str:
         """Handle embedding generation and return info message"""
         if generate_embeddings and self.embeddings_enabled and content.strip():
-            embedding_result = self._add_memory_item_embedding(character_name, category, content)
+            embedding_result = self._add_memory_item_embedding(
+                character_name, category, content
+            )
             return f"Generated embeddings for new content: {embedding_result.get('message', 'Unknown')}"
         return "Embeddings not generated"
-    
+
     def _extract_memory_items_from_content(self, content: str) -> List[Dict[str, str]]:
         """Extract memory items with IDs from content, supporting both old and new timestamp formats"""
         import re
+
         items = []
-        lines = content.split('\n')
-        
+        lines = content.split("\n")
+
         for line in lines:
             line = line.strip()
-            if line and (self._has_memory_id_with_timestamp(line) or self._has_memory_id(line)):
+            if line and (
+                self._has_memory_id_with_timestamp(line) or self._has_memory_id(line)
+            ):
                 # First try to extract from timestamped format (new format)
                 if self._has_memory_id_with_timestamp(line):
                     # Format: [memory_id][mentioned at date] content [links]
-                    pattern = r'^\[([^\]]+)\]\[mentioned at ([^\]]+)\]\s*(.*?)(?:\s*\[([^\]]*)\])?$'
+                    pattern = r"^\[([^\]]+)\]\[mentioned at ([^\]]+)\]\s*(.*?)(?:\s*\[([^\]]*)\])?$"
                     match = re.match(pattern, line)
                     if match:
                         memory_id = match.group(1)
                         mentioned_at = match.group(2)
                         clean_content = match.group(3).strip()
                         links = match.group(4) if match.group(4) else ""
-                        
+
                         if memory_id and clean_content:
-                            items.append({
-                                "memory_id": memory_id,
-                                "mentioned_at": mentioned_at,
-                                "content": clean_content,
-                                "links": links
-                            })
+                            items.append(
+                                {
+                                    "memory_id": memory_id,
+                                    "mentioned_at": mentioned_at,
+                                    "content": clean_content,
+                                    "links": links,
+                                }
+                            )
                 else:
                     # Fallback to basic format extraction (old format)
                     memory_id, clean_content = self._extract_memory_id(line)
                     if memory_id:
-                        items.append({
-                            "memory_id": memory_id,
-                            "content": clean_content
-                        })
-        
+                        items.append({"memory_id": memory_id, "content": clean_content})
+
         return items
-    
+
     def _has_memory_id_with_timestamp(self, line: str) -> bool:
         """
         Check if a line has a memory ID with timestamp
         Format: [memory_id][mentioned at date] content
         """
         import re
-        pattern = r'^\[[\w\d_]+\]\[mentioned at [^\]]+\]\s+'
+
+        pattern = r"^\[[\w\d_]+\]\[mentioned at [^\]]+\]\s+"
         return bool(re.match(pattern, line.strip()))
-    
+
     # def _generate_memory_embeddings(self, character_name: str, category: str, content: str):
-    def _add_memory_item_embedding(self, character_name: str, category: str, new_items: list[dict]) -> Dict[str, Any]:
+    def _add_memory_item_embedding(
+        self, character_name: str, category: str, new_items: list[dict]
+    ) -> Dict[str, Any]:
         """Add embedding for new memory items"""
         try:
             # if not self.embeddings_enabled or not new_content.strip():
             if not self.embeddings_enabled or not new_items:
-                return {
-                    "success": False,
-                    "error": "Embeddings disabled or empty item"
-                }
-            
+                return {"success": False, "error": "Embeddings disabled or empty item"}
+
             # Load existing embeddings
             char_embeddings_dir = self.embeddings_dir / character_name
             char_embeddings_dir.mkdir(exist_ok=True)
             embeddings_file = char_embeddings_dir / f"{category}_embeddings.json"
-            
+
             existing_embeddings = []
             if embeddings_file.exists():
-                with open(embeddings_file, 'r', encoding='utf-8') as f:
+                with open(embeddings_file, "r", encoding="utf-8") as f:
                     embeddings_data = json.load(f)
                     existing_embeddings = embeddings_data.get("embeddings", [])
-            
+
             # Generate embeddings for new items
             for item in new_items:
                 if not item["content"].strip():
                     continue
-                    
+
                 try:
                     embedding_vector = self.embedding_client.embed(item["content"])
-                    new_item_id = f"{character_name}_{category}_item_{len(existing_embeddings)}"
-                    
+                    new_item_id = (
+                        f"{character_name}_{category}_item_{len(existing_embeddings)}"
+                    )
+
                     new_embedding = {
                         "item_id": new_item_id,
                         "memory_id": item["memory_id"],
@@ -434,52 +457,53 @@ Memory Update Suggestion:
                             "character": character_name,
                             "category": category,
                             "length": len(item["content"]),
-                            "timestamp": datetime.now().isoformat()
-                        }
+                            "timestamp": datetime.now().isoformat(),
+                        },
                     }
-                    
+
                     # Add to existing embeddings
                     existing_embeddings.append(new_embedding)
-                    
+
                 except Exception as e:
-                    logger.warning(f"Failed to generate embedding for memory item {item.get('memory_id')}: {repr(e)}")
+                    logger.warning(
+                        f"Failed to generate embedding for memory item {item.get('memory_id')}: {repr(e)}"
+                    )
                     continue
-            
+
             # Save updated embeddings
             embeddings_data = {
                 "category": category,
                 "timestamp": datetime.now().isoformat(),
                 # "content_hash": hashlib.md5(new_content.encode()).hexdigest(),
                 "embeddings": existing_embeddings,
-                "total_embeddings": len(existing_embeddings)
+                "total_embeddings": len(existing_embeddings),
             }
-            
-            with open(embeddings_file, 'w', encoding='utf-8') as f:
+
+            with open(embeddings_file, "w", encoding="utf-8") as f:
                 json.dump(embeddings_data, f, indent=2, ensure_ascii=False)
-            
+
             return {
                 "success": True,
                 "embedding_count": len(existing_embeddings),
                 "new_items_count": len(new_items),
-                "message": f"Added embeddings for {len(new_items)} new memory items in {category}"
+                "message": f"Added embeddings for {len(new_items)} new memory items in {category}",
             }
-                
+
         except Exception as e:
             logger.error(f"Failed to add memory item embedding: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            } 
+            return {"success": False, "error": str(e)}
 
-    def _add_memory_id_with_timestamp(self, content: str, session_date: str) -> (dict, str):
+    def _add_memory_id_with_timestamp(
+        self, content: str, session_date: str
+    ) -> (dict, str):
         """
         Add memory ID with timestamp and links to content line
         Format: [memory_id][mentioned at {session_date}] {content}
-        
+
         Args:
             content: Raw content
             session_date: Date of the session
-            
+
         Returns:
             Content with memory ID, timestamp and empty links added to each line
         """
@@ -488,7 +512,7 @@ Memory Update Suggestion:
             "memory_id": memory_id,
             "mentioned_at": session_date,
             "content": content,
-            "links": ""
+            "links": "",
         }
         plain_memory_line = f"[{memory_id}][mentioned at {session_date}] {content} []"
 
@@ -496,53 +520,61 @@ Memory Update Suggestion:
 
     def _format_memory_items(self, items: List[Dict[str, str]]) -> str:
         """Format memory items into a string"""
-        return "\n".join([
-            f"[{item['memory_id']}][mentioned at {item['mentioned_at']}] {item['content']} [{item['links']}]"
-            for item in items
-        ])
-    
+        return "\n".join(
+            [
+                f"[{item['memory_id']}][mentioned at {item['mentioned_at']}] {item['content']} [{item['links']}]"
+                for item in items
+            ]
+        )
+
     def _extract_content_from_timestamped_line(self, line: str) -> str:
         """
         Extract content from a timestamped memory line
         Format: [memory_id][mentioned at date] content [links]
-        
+
         Args:
             line: Line with memory ID and timestamp
-            
+
         Returns:
             Clean content without memory ID, timestamp, or links
         """
         import re
+
         # Pattern to match: [memory_id][mentioned at date] content [links] (links optional)
-        pattern = r'^\[([^\]]+)\]\[mentioned at ([^\]]+)\]\s*(.*?)(?:\s*\[([^\]]*)\])?$'
+        pattern = r"^\[([^\]]+)\]\[mentioned at ([^\]]+)\]\s*(.*?)(?:\s*\[([^\]]*)\])?$"
         match = re.match(pattern, line.strip())
-        
+
         if match:
             return match.group(3).strip()  # Return the content part
         return line.strip()
-    
+
     def _clean_extra_brackets(self, content: str) -> str:
         """
         Clean up any extra brackets around content lines
-        
+
         Args:
             content: Raw content from LLM
-            
+
         Returns:
             Cleaned content without extra brackets around individual lines
         """
         if not content.strip():
             return content
-        
-        lines = content.split('\n')
+
+        lines = content.split("\n")
         cleaned_lines = []
-        
+
         for line in lines:
             line = line.strip()
             if line:
                 # Remove extra brackets that might wrap the entire line content
                 # Pattern: [content] -> content
-                if line.startswith('[') and line.endswith(']') and line.count('[') == 1 and line.count(']') == 1:
+                if (
+                    line.startswith("[")
+                    and line.endswith("]")
+                    and line.count("[") == 1
+                    and line.count("]") == 1
+                ):
                     # This looks like content wrapped in brackets, remove them
                     cleaned_line = line[1:-1].strip()
                     cleaned_lines.append(cleaned_line)
@@ -551,43 +583,43 @@ Memory Update Suggestion:
                     cleaned_lines.append(line)
             else:
                 cleaned_lines.append(line)
-        
-        return '\n'.join(cleaned_lines)
-    
+
+        return "\n".join(cleaned_lines)
+
     def _load_category_extract_prompt(
-        self, 
-        category: str, 
-        character_name: str, 
-        existing_content: str, 
-        memory_items_text: str, 
-        suggestion: str
+        self,
+        category: str,
+        character_name: str,
+        existing_content: str,
+        memory_items_text: str,
+        suggestion: str,
     ) -> str:
         """
         Load category-specific prompt template to extract NEW content only
-        
+
         Args:
             category: Memory category (profile, event, activity, etc.)
             character_name: Name of the character
             existing_content: Existing content in the category
             memory_items_text: Source activity content to extract from
             suggestion: Suggestion for what to extract
-            
+
         Returns:
             Formatted prompt for extracting new content only
         """
         from pathlib import Path
-        
+
         # Load category-specific prompt
         config_dir = Path(__file__).parent.parent.parent / "config" / category
         prompt_file = config_dir / "prompt.txt"
-        
+
         if not prompt_file.exists():
             raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
-            
+
         # Load and format the prompt template
-        with open(prompt_file, 'r', encoding='utf-8') as f:
+        with open(prompt_file, "r", encoding="utf-8") as f:
             prompt_template = f.read()
-            
+
         # Format the prompt with variables for extracting NEW content only
         extract_prompt = f"""Based on the following category-specific requirements, extract ONLY NEW information for the {category} memory:
 
@@ -634,5 +666,5 @@ Suggestion for this category: {suggestion}
 Extract ONLY NEW relevant information according to the category requirements above and write each piece as a complete, self-contained sentence:
 
 NEW {category} content to append:"""
-        
+
         return extract_prompt

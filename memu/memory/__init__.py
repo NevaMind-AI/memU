@@ -24,8 +24,8 @@ from .file_manager import MemoryFileManager
 from .embeddings import get_default_embedding_client
 
 __all__ = [
-    "MemoryAgent",          # Function calling interface
-    "RecallAgent", 
+    "MemoryAgent",  # Function calling interface
+    "RecallAgent",
     "MemoryFileManager",
-    "get_default_embedding_client"
+    "get_default_embedding_client",
 ]

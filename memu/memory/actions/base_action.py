@@ -18,17 +18,17 @@ logger = get_logger(__name__)
 class BaseAction(ABC):
     """
     Base class for all memory actions
-    
+
     Defines the standard interface that all actions must implement:
     - get_schema(): Return OpenAI-compatible function schema
     - execute(**kwargs): Execute the action with given arguments
     - validate_arguments(): Validate input arguments
     """
-    
+
     def __init__(self, memory_core):
         """
         Initialize action with memory core
-        
+
         Args:
             memory_core: Core memory functionality (file manager, embeddings, config, etc.)
         """
@@ -41,113 +41,112 @@ class BaseAction(ABC):
         self.memory_types = memory_core.memory_types
         self.processing_order = memory_core.processing_order
         self.embeddings_dir = memory_core.embeddings_dir
-        
+
     @property
     @abstractmethod
     def action_name(self) -> str:
         """Return the name of this action"""
         pass
-    
+
     @abstractmethod
     def get_schema(self) -> Dict[str, Any]:
         """
         Return OpenAI-compatible function schema for this action
-        
+
         Returns:
             Dict containing function schema with name, description, and parameters
         """
         pass
-    
+
     @abstractmethod
     def execute(self, **kwargs) -> Dict[str, Any]:
         """
         Execute the action with provided arguments
-        
+
         Args:
             **kwargs: Action-specific arguments
-            
+
         Returns:
             Dict containing execution result with success status and data
         """
         pass
-    
+
     def validate_arguments(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """
         Validate input arguments against schema
-        
+
         Args:
             arguments: Arguments to validate
-            
+
         Returns:
             Dict with validation result
         """
         try:
             schema = self.get_schema()
             required_params = schema["parameters"].get("required", [])
-            
+
             # Check for missing required parameters
-            missing_params = [param for param in required_params if param not in arguments]
-            
+            missing_params = [
+                param for param in required_params if param not in arguments
+            ]
+
             if missing_params:
                 return {
                     "valid": False,
                     "error": f"Missing required parameters: {missing_params}",
-                    "required_parameters": required_params
+                    "required_parameters": required_params,
                 }
-            
+
             return {
                 "valid": True,
-                "message": f"Validation passed for {self.action_name}"
+                "message": f"Validation passed for {self.action_name}",
             }
-            
+
         except Exception as e:
-            return {
-                "valid": False,
-                "error": f"Validation error: {str(e)}"
-            }
-    
+            return {"valid": False, "error": f"Validation error: {str(e)}"}
+
     def _add_metadata(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """Add standard metadata to action result"""
         if isinstance(result, dict):
             result["action_name"] = self.action_name
             result["timestamp"] = datetime.now().isoformat()
         return result
-    
+
     def _handle_error(self, error: Exception) -> Dict[str, Any]:
         """Standard error handling for actions"""
         error_result = {
             "success": False,
             "error": str(error),
             "action_name": self.action_name,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
         logger.error(f"Action {self.action_name} failed: {error}")
         return error_result
-    
+
     # ================================
     # Memory ID Utilities
     # ================================
-    
+
     def _generate_memory_id(self) -> str:
         short_uuid = str(uuid.uuid4())[:6]
         return f"{short_uuid}"
-    
+
     def _add_memory_ids_to_content(self, content: str) -> str:
         """
         Add memory IDs to content lines
-        
+
         Args:
             content: Raw content
-            
+
         Returns:
             Content with memory IDs added to each line
         """
         if not content.strip():
             return content
-        
-        lines = content.split('\n')
+
+        lines = content.split("\n")
         processed_lines = []
-        
+
         for line in lines:
             line = line.strip()
             if line:  # Only process non-empty lines
@@ -156,43 +155,43 @@ class BaseAction(ABC):
                     # Extract content without memory ID
                     _, clean_content = self._extract_memory_id(line)
                     line = clean_content
-                
+
                 # Generate new unique memory ID for this line
                 memory_id = self._generate_memory_id()
                 processed_lines.append(f"[{memory_id}] {line}")
             else:
                 # Keep empty lines as is
                 processed_lines.append("")
-        
-        return '\n'.join(processed_lines)
-    
+
+        return "\n".join(processed_lines)
+
     def _has_memory_id(self, line: str) -> bool:
         """
         Check if a line already has a memory ID
-        
+
         Args:
             line: Line to check
-            
+
         Returns:
             True if line starts with [memory_id] format
         """
-        pattern = r'^\[[\w\d_]+\]\s+'
+        pattern = r"^\[[\w\d_]+\]\s+"
         return bool(re.match(pattern, line.strip()))
-    
+
     def _extract_memory_id(self, line: str) -> Tuple[str, str]:
         """
         Extract memory ID and content from a line
-        
+
         Args:
             line: Line with memory ID format: [memory_id] content
-            
+
         Returns:
             Tuple of (memory_id, content)
         """
         line = line.strip()
-        pattern = r'^\[([\w\d_]+)\]\s*(.*)'
+        pattern = r"^\[([\w\d_]+)\]\s*(.*)"
         match = re.match(pattern, line)
-        
+
         if match:
             memory_id = match.group(1)
             content = match.group(2)
@@ -200,23 +199,23 @@ class BaseAction(ABC):
         else:
             # If no memory ID found, return empty ID and full line as content
             return "", line
-    
+
     def _extract_content_without_ids(self, content: str) -> str:
         """
         Extract pure content without memory IDs for embedding generation
-        
+
         Args:
             content: Content with memory IDs
-            
+
         Returns:
             Content without memory IDs
         """
         if not content.strip():
             return content
-        
-        lines = content.split('\n')
+
+        lines = content.split("\n")
         clean_lines = []
-        
+
         for line in lines:
             if line.strip():
                 _, clean_content = self._extract_memory_id(line)
@@ -224,69 +223,72 @@ class BaseAction(ABC):
                     clean_lines.append(clean_content)
             else:
                 clean_lines.append("")
-        
-        return '\n'.join(clean_lines)
-    
+
+        return "\n".join(clean_lines)
+
     def _parse_memory_items(self, content: str) -> List[Dict[str, Any]]:
         """
         Parse content into memory items with IDs, supporting both old and new timestamp formats
-        
+
         Args:
             content: Content with memory IDs
-            
+
         Returns:
             List of memory items with metadata
         """
         if not content.strip():
             return []
-        
-        lines = content.split('\n')
+
+        lines = content.split("\n")
         items = []
-        
+
         for i, line in enumerate(lines):
             line = line.strip()
             if line:  # Only process non-empty lines
                 # Try to parse new timestamped format first: [memory_id][mentioned at date] content [links]
-                memory_id, clean_content, mentioned_at, links = self._extract_timestamped_memory_item(line)
-                
+                memory_id, clean_content, mentioned_at, links = (
+                    self._extract_timestamped_memory_item(line)
+                )
+
                 if not memory_id:
                     # Fallback to old format: [memory_id] content
                     memory_id, clean_content = self._extract_memory_id(line)
                     mentioned_at, links = "", ""
-                
+
                 if clean_content:
                     item = {
                         "memory_id": memory_id,
                         "content": clean_content,
                         "full_line": line,
-                        "line_number": i + 1
+                        "line_number": i + 1,
                     }
                     if mentioned_at:
                         item["mentioned_at"] = mentioned_at
                     if links:
                         item["links"] = links
                     items.append(item)
-        
+
         return items
-    
+
     def _extract_timestamped_memory_item(self, line: str) -> Tuple[str, str, str, str]:
         """
         Extract memory ID, content, timestamp, and links from timestamped format
         Format: [memory_id][mentioned at date] content [links]
-        
+
         Args:
             line: Line with timestamped memory format
-            
+
         Returns:
             Tuple of (memory_id, content, mentioned_at, links)
         """
         import re
+
         line = line.strip()
-        
+
         # Pattern to match: [memory_id][mentioned at date] content [links] (links optional)
-        pattern = r'^\[([^\]]+)\]\[mentioned at ([^\]]+)\]\s*(.*?)(?:\s*\[([^\]]*)\])?$'
+        pattern = r"^\[([^\]]+)\]\[mentioned at ([^\]]+)\]\s*(.*?)(?:\s*\[([^\]]*)\])?$"
         match = re.match(pattern, line)
-        
+
         if match:
             memory_id = match.group(1)
             mentioned_at = match.group(2)
@@ -295,29 +297,31 @@ class BaseAction(ABC):
             return memory_id, content, mentioned_at, links
         else:
             return "", "", "", ""
-    
+
     # ================================
     # Common utility methods that actions can use
     # ================================
-    
+
     def _load_existing_memory(self, character_name: str) -> Dict[str, str]:
         """Load existing memory content for all categories"""
         existing_memory = {}
-        
+
         for category in self.memory_types:
             try:
                 content = self._read_memory_content(character_name, category)
                 existing_memory[category] = content if isinstance(content, str) else ""
             except Exception as e:
-                logger.warning(f"Failed to load existing {category} for {character_name}: {e}")
+                logger.warning(
+                    f"Failed to load existing {category} for {character_name}: {e}"
+                )
                 existing_memory[category] = ""
-        
+
         return existing_memory
-    
+
     def _read_memory_content(self, character_name: str, category: str) -> str:
         """Read memory content from storage"""
         try:
-            if hasattr(self.storage_manager, 'read_memory_file'):
+            if hasattr(self.storage_manager, "read_memory_file"):
                 return self.storage_manager.read_memory_file(character_name, category)
             else:
                 method_name = f"read_{category}"
@@ -329,32 +333,38 @@ class BaseAction(ABC):
         except Exception as e:
             logger.warning(f"Failed to read {category} for {character_name}: {e}")
             return ""
-    
-    def _save_memory_content(self, character_name: str, category: str, content: str) -> bool:
+
+    def _save_memory_content(
+        self, character_name: str, category: str, content: str
+    ) -> bool:
         """Save memory content to storage"""
         try:
-            if hasattr(self.storage_manager, 'write_memory_file'):
-                return self.storage_manager.write_memory_file(character_name, category, content)
+            if hasattr(self.storage_manager, "write_memory_file"):
+                return self.storage_manager.write_memory_file(
+                    character_name, category, content
+                )
             else:
                 method_name = f"write_{category}"
                 if hasattr(self.storage_manager, method_name):
-                    return getattr(self.storage_manager, method_name)(character_name, content)
+                    return getattr(self.storage_manager, method_name)(
+                        character_name, content
+                    )
                 else:
                     logger.error(f"No write method available for {category}")
                     return False
         except Exception as e:
             logger.error(f"Failed to save {category} for {character_name}: {e}")
             return False
-    
+
     def _convert_conversation_to_text(self, conversation: List[Dict]) -> str:
         """Convert conversation list to text format for LLM processing"""
         if not conversation or not isinstance(conversation, list):
             return ""
-        
+
         text_parts = []
         for message in conversation:
             role = message.get("role", "unknown")
             content = message.get("content", "")
             text_parts.append(f"{role.upper()}: {content}")
-        
-        return "\n".join(text_parts) 
+
+        return "\n".join(text_parts)

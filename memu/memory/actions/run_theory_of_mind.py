@@ -1,9 +1,8 @@
-
-
 from typing import Dict, Any, List
 from datetime import datetime
 
 from .base_action import BaseAction
+
 
 class RunTheoryOfMindAction(BaseAction):
     """
@@ -15,7 +14,7 @@ class RunTheoryOfMindAction(BaseAction):
     @property
     def action_name(self) -> str:
         return "run_theory_of_mind"
-    
+
     def get_schema(self) -> Dict[str, Any]:
         """Return OpenAI-compatible function schema"""
         return {
@@ -26,11 +25,11 @@ class RunTheoryOfMindAction(BaseAction):
                 "properties": {
                     "character_name": {
                         "type": "string",
-                        "description": "Name of the character"
+                        "description": "Name of the character",
                     },
                     "conversation_text": {
                         "type": "string",
-                        "description": "The full conversation text to analyze"
+                        "description": "The full conversation text to analyze",
                     },
                     "activity_items": {
                         "type": "array",
@@ -38,25 +37,25 @@ class RunTheoryOfMindAction(BaseAction):
                             "type": "object",
                             "properties": {
                                 "memory_id": {"type": "string"},
-                                "content": {"type": "string"}
+                                "content": {"type": "string"},
                             },
-                            "required": ["memory_id", "content"]
+                            "required": ["memory_id", "content"],
                         },
-                        "description": "List of new activity items from the conversation"
+                        "description": "List of new activity items from the conversation",
                     },
                     "session_date": {
                         "type": "string",
                         "description": "Date of the session (e.g., '2024-01-15')",
-                        "default": None
+                        "default": None,
                     },
                     "embeddings_enabled": {
                         "type": "boolean",
                         "description": "Whether to generate embeddings for the theory of mind items",
-                        "default": True
-                    }
+                        "default": True,
+                    },
                 },
-                "required": ["character_name", "conversation_text", "activity_items"]
-            }
+                "required": ["character_name", "conversation_text", "activity_items"],
+            },
         }
 
     def execute(
@@ -65,7 +64,7 @@ class RunTheoryOfMindAction(BaseAction):
         conversation_text: str,
         activity_items: List[Dict[str, str]],
         session_date: str = None,
-        embeddings_enabled: bool = True
+        embeddings_enabled: bool = True,
     ) -> Dict[str, Any]:
         """
         Analyze the conversation and memory items to extract subtle, obscure, and hidden information behind the conversation.
@@ -82,59 +81,72 @@ class RunTheoryOfMindAction(BaseAction):
         """
         try:
             if not conversation_text.strip():
-                return self._add_metadata({
-                    "success": False,
-                    "error": "Empty conversation text provided"
-                })
-            
+                return self._add_metadata(
+                    {"success": False, "error": "Empty conversation text provided"}
+                )
+
             if not activity_items:
-                return self._add_metadata({
-                    "success": False,
-                    "error": "No memory items provided"
-                })
+                return self._add_metadata(
+                    {"success": False, "error": "No memory items provided"}
+                )
 
             if not session_date:
                 session_date = datetime.now().strftime("%Y-%m-%d")
 
             # Call LLM to run theory of mind
-            response = self._extract_theory_of_mind_with_llm(character_name, conversation_text, activity_items)
-            
+            response = self._extract_theory_of_mind_with_llm(
+                character_name, conversation_text, activity_items
+            )
+
             if not response.strip():
-                return self._add_metadata({
-                    "success": False,
-                    "error": "LLM returned empty response"
-                })
-            
+                return self._add_metadata(
+                    {"success": False, "error": "LLM returned empty response"}
+                )
+
             # Parse text response
-            reasoning_process, theory_of_mind_items = self._parse_theory_of_mind_from_text(character_name, response.strip(), session_date)
+            reasoning_process, theory_of_mind_items = (
+                self._parse_theory_of_mind_from_text(
+                    character_name, response.strip(), session_date
+                )
+            )
 
             if not theory_of_mind_items:
-                return self._add_metadata({
-                    "success": False,
-                    "error": "No theory of mind items could be extracted from conversation"
-                })
-            
-            return self._add_metadata({
-                "success": True,
-                "character_name": character_name,
-                "theory_of_mind_items_added": len(theory_of_mind_items),
-                "theory_of_mind_items": theory_of_mind_items,
-                "reasoning_process": reasoning_process,
-                "message": f"Successfully extracted {len(theory_of_mind_items)} theory of mind items from conversation"
-            })
-            
+                return self._add_metadata(
+                    {
+                        "success": False,
+                        "error": "No theory of mind items could be extracted from conversation",
+                    }
+                )
+
+            return self._add_metadata(
+                {
+                    "success": True,
+                    "character_name": character_name,
+                    "theory_of_mind_items_added": len(theory_of_mind_items),
+                    "theory_of_mind_items": theory_of_mind_items,
+                    "reasoning_process": reasoning_process,
+                    "message": f"Successfully extracted {len(theory_of_mind_items)} theory of mind items from conversation",
+                }
+            )
+
         except Exception as e:
             return self._handle_error(e)
 
-
-    def _extract_theory_of_mind_with_llm(self, character_name: str, conversation_text: str, activity_items: List[Dict[str, str]]) -> str:
+    def _extract_theory_of_mind_with_llm(
+        self,
+        character_name: str,
+        conversation_text: str,
+        activity_items: List[Dict[str, str]],
+    ) -> str:
         """Extract theory of mind items from conversation and activity items with LLM"""
-        
-        activity_items_text = "\n".join([
-            # f"Memory ID: {item['memory_id']}\nContent: {item['content']}"
-            f"- {item['content']}"
-            for item in activity_items
-        ])
+
+        activity_items_text = "\n".join(
+            [
+                # f"Memory ID: {item['memory_id']}\nContent: {item['content']}"
+                f"- {item['content']}"
+                for item in activity_items
+            ]
+        )
 
         theory_of_mind_prompt = f"""You are analyzing the following conversation and activity items for {character_name} to try to infer information that is not explicitly mentioned by {character_name} in the conversation, but he or she might meant to express or the listener can reasonably deduce.
 
@@ -187,64 +199,80 @@ BAD: "Harry Potter series are probably important to {character_name}'s childhood
         # Call LLM to run theory of mind
         response = self.llm_client.simple_chat(theory_of_mind_prompt)
         return response
-    
-    def _parse_theory_of_mind_from_text(self, character_name: str, response_text: str, session_date: str) -> tuple:
+
+    def _parse_theory_of_mind_from_text(
+        self, character_name: str, response_text: str, session_date: str
+    ) -> tuple:
         """Parse theory of mind items from text format response"""
 
         reasoning_process = ""
         theory_of_mind_items = []
-        
+
         try:
-            lines = response_text.split('\n')
-            
+            lines = response_text.split("\n")
+
             # Parse reasoning process
             reasoning_section = False
             inference_section = False
-            
+
             for line in lines:
                 line = line.strip()
-                
-                if (line.upper().startswith('**REASONING PROCESS:') or 
-                    line.startswith('**') and "REASONING PROCESS" in line.upper()):
+
+                if (
+                    line.upper().startswith("**REASONING PROCESS:")
+                    or line.startswith("**")
+                    and "REASONING PROCESS" in line.upper()
+                ):
                     reasoning_section = True
                     inference_section = False
                     continue
-                elif (line.upper().startswith('**INFERENCE ITEMS:') or 
-                      line.startswith('**') and "INFERENCE ITEMS" in line.upper()):
+                elif (
+                    line.upper().startswith("**INFERENCE ITEMS:")
+                    or line.startswith("**")
+                    and "INFERENCE ITEMS" in line.upper()
+                ):
                     reasoning_section = False
                     inference_section = True
                     continue
 
-                if reasoning_section and line and not line.startswith('**'):
+                if reasoning_section and line and not line.startswith("**"):
                     if not reasoning_process:
                         reasoning_process = line.strip()
                     else:
                         reasoning_process += "\n" + line.strip()
 
-                 # Parse memory items
+                # Parse memory items
                 elif inference_section:
                     line = line.strip()
                     if line:
                         memory_id = self._generate_memory_id()
-                        theory_of_mind_items.append({
-                            "memory_id": memory_id,
-                            "mentioned_at": session_date,
-                            "content": line,
-                            "links": ""
-                        })
-            # 
+                        theory_of_mind_items.append(
+                            {
+                                "memory_id": memory_id,
+                                "mentioned_at": session_date,
+                                "content": line,
+                                "links": "",
+                            }
+                        )
+            #
             # For debugging, maybe no need to save ToM separately
-            # 
+            #
             if theory_of_mind_items:
                 with open(f"memory/{character_name}_ToM.md", "a") as f:
-                    f.write('\n'.join([
-                        f"[{item['memory_id']}][mentioned at {item.get('session_date', 'Unknown')}] {item['content']} []"
-                        for item in theory_of_mind_items
-                    ]) + '\n')
-            
+                    f.write(
+                        "\n".join(
+                            [
+                                f"[{item['memory_id']}][mentioned at {item.get('session_date', 'Unknown')}] {item['content']} []"
+                                for item in theory_of_mind_items
+                            ]
+                        )
+                        + "\n"
+                    )
+
         except Exception as e:
             import traceback
+
             print(repr(e))
             traceback.print_exc()
-        
+
         return reasoning_process, theory_of_mind_items

@@ -19,15 +19,15 @@ logger = get_logger(__name__)
 class AddActivityMemoryAction(BaseAction):
     """
     Action to add new activity memory content with strict formatting requirements
-    
+
     Ensures all memory items are complete, self-contained sentences with no pronouns,
     following the same standards as update_memory_with_suggestions.
     """
-    
+
     @property
     def action_name(self) -> str:
         return "add_activity_memory"
-    
+
     def get_schema(self) -> Dict[str, Any]:
         """Return OpenAI-compatible function schema"""
         return {
@@ -38,43 +38,43 @@ class AddActivityMemoryAction(BaseAction):
                 "properties": {
                     "character_name": {
                         "type": "string",
-                        "description": "Name of the character"
+                        "description": "Name of the character",
                     },
                     "content": {
                         "type": "string",
-                        "description": "Complete original conversation text exactly as provided - do NOT modify, extract, or summarize"
+                        "description": "Complete original conversation text exactly as provided - do NOT modify, extract, or summarize",
                     },
                     "session_date": {
                         "type": "string",
                         "description": "Date of the session (e.g., '2024-01-15')",
-                        "default": None
+                        "default": None,
                     },
                     "generate_embeddings": {
                         "type": "boolean",
                         "description": "Whether to generate embeddings for semantic search",
-                        "default": True
-                    }
+                        "default": True,
+                    },
                 },
-                "required": ["character_name", "content"]
-            }
+                "required": ["character_name", "content"],
+            },
         }
-    
+
     def execute(
         self,
         character_name: str,
         content: str,
         session_date: str = None,
-        generate_embeddings: bool = True
+        generate_embeddings: bool = True,
     ) -> Dict[str, Any]:
         """
         Execute add activity memory operation with strict formatting
-        
+
         Args:
             character_name: Name of the character
             content: Raw content to process and format
             session_date: Date of the session
             generate_embeddings: Whether to generate embeddings for the content
-            
+
         Returns:
             Dict containing operation result including formatted content and embedding info
         """
@@ -82,74 +82,86 @@ class AddActivityMemoryAction(BaseAction):
             # Use current date if not provided
             if not session_date:
                 session_date = datetime.now().strftime("%Y-%m-%d")
-            
+
             # Always load existing content to append to it
             existing_content = self._read_memory_content(character_name, "activity")
-            
+
             # Process raw content through LLM to ensure strict formatting
-            formatted_content = self._format_content_with_llm(character_name, content, session_date)
-            
+            formatted_content = self._format_content_with_llm(
+                character_name, content, session_date
+            )
+
             if not formatted_content.strip():
-                return self._add_metadata({
-                    "success": False,
-                    "error": "LLM returned empty formatted content"
-                })
-            
+                return self._add_metadata(
+                    {"success": False, "error": "LLM returned empty formatted content"}
+                )
+
             # Add memory IDs with timestamp to the formatted content
-            memory_items, content_with_ids = self._add_memory_ids_with_timestamp(formatted_content, session_date)
-            
+            memory_items, content_with_ids = self._add_memory_ids_with_timestamp(
+                formatted_content, session_date
+            )
+
             # Always append new content to existing content
             if existing_content:
                 new_content = existing_content + "\n" + content_with_ids
             else:
                 new_content = content_with_ids
-            
+
             # Save content with embeddings if enabled
             embeddings_info = ""
             if generate_embeddings and self.embeddings_enabled:
                 # Save first, then add embedding for just the new content
-                success = self._save_memory_content(character_name, "activity", new_content)
+                success = self._save_memory_content(
+                    character_name, "activity", new_content
+                )
                 if success:
                     # Add embedding for just the new content
                     # embedding_result = self._add_memory_item_embedding(character_name, "activity", content_with_ids)
-                    embedding_result = self._add_memory_item_embedding(character_name, "activity", memory_items)
+                    embedding_result = self._add_memory_item_embedding(
+                        character_name, "activity", memory_items
+                    )
                     embeddings_info = f"Generated embedding for new items: {embedding_result.get('message', 'Unknown')}"
                 else:
                     embeddings_info = "Failed to save memory"
             else:
-                success = self._save_memory_content(character_name, "activity", new_content)
+                success = self._save_memory_content(
+                    character_name, "activity", new_content
+                )
                 embeddings_info = "No embeddings generated"
-            
+
             if success:
                 # Extract memory items for response
                 # memory_items = self._extract_memory_items_from_content(content_with_ids)
-                
-                return self._add_metadata({
-                    "success": True,
-                    "character_name": character_name,
-                    "category": "activity",
-                    "session_date": session_date,
-                    # "operation": "append",
-                    # "content_added": len(content_with_ids),
-                    "memory_items_added": len(memory_items),
-                    "memory_items": memory_items,
-                    # "embeddings_generated": generate_embeddings and self.embeddings_enabled,
-                    # "embeddings_info": embeddings_info,
-                    # "file_path": f"{self.memory_core.memory_dir}/{character_name}_activity.md",
-                    "message": f"Successfully generated {len(memory_items)} self-contained activity memory items for {character_name}"
-                })
+
+                return self._add_metadata(
+                    {
+                        "success": True,
+                        "character_name": character_name,
+                        "category": "activity",
+                        "session_date": session_date,
+                        # "operation": "append",
+                        # "content_added": len(content_with_ids),
+                        "memory_items_added": len(memory_items),
+                        "memory_items": memory_items,
+                        # "embeddings_generated": generate_embeddings and self.embeddings_enabled,
+                        # "embeddings_info": embeddings_info,
+                        # "file_path": f"{self.memory_core.memory_dir}/{character_name}_activity.md",
+                        "message": f"Successfully generated {len(memory_items)} self-contained activity memory items for {character_name}",
+                    }
+                )
             else:
-                return self._add_metadata({
-                    "success": False,
-                    "error": "Failed to save activity memory"
-                })
-                
+                return self._add_metadata(
+                    {"success": False, "error": "Failed to save activity memory"}
+                )
+
         except Exception as e:
             return self._handle_error(e)
-    
-    def _format_content_with_llm(self, character_name: str, content: str, session_date: str) -> str:
+
+    def _format_content_with_llm(
+        self, character_name: str, content: str, session_date: str
+    ) -> str:
         """Use LLM to format content with meaningful activity grouping"""
-        
+
         # Create enhanced prompt for meaningful activity grouping
         format_prompt = f"""You are formatting activity memory content for {character_name} on {session_date}.
 
@@ -214,28 +226,30 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
 
         # Call LLM to format content
         cleaned_content = self.llm_client.simple_chat(format_prompt)
-        
+
         return cleaned_content
 
-    def _add_memory_ids_with_timestamp(self, content: str, session_date: str) -> (list[dict], str):
+    def _add_memory_ids_with_timestamp(
+        self, content: str, session_date: str
+    ) -> (list[dict], str):
         """
         Add memory IDs with timestamp to content lines
         Format: [memory_id][mentioned at {session_date}] {content}
-        
+
         Args:
             content: Raw content
             session_date: Date of the session
-            
+
         Returns:
             Content with memory IDs and timestamps added to each line
         """
         if not content.strip():
             return content
-        
-        lines = content.split('\n')
+
+        lines = content.split("\n")
         processed_items = []
         plain_memory_lines = []
-        
+
         for line in lines:
             line = line.strip()
             if line:  # Only process non-empty lines
@@ -248,128 +262,134 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
                     # Extract content without basic memory ID
                     _, clean_content = self._extract_memory_id(line)
                     line = clean_content
-                
+
                 # Generate new unique memory ID for this line
                 memory_id = self._generate_memory_id()
                 # Format: [memory_id][mentioned at {session_date}] {content} [links]
-                processed_items.append({
-                    "memory_id": memory_id,
-                    "mentioned_at": session_date,
-                    "content": line,
-                    "links": ""
-                })
-                plain_memory_lines.append(f"[{memory_id}][mentioned at {session_date}] {line} []")
+                processed_items.append(
+                    {
+                        "memory_id": memory_id,
+                        "mentioned_at": session_date,
+                        "content": line,
+                        "links": "",
+                    }
+                )
+                plain_memory_lines.append(
+                    f"[{memory_id}][mentioned at {session_date}] {line} []"
+                )
             else:
                 # Keep empty lines as is
                 # processed_lines.append("")
                 pass
 
-        plain_memory_text = '\n'.join(plain_memory_lines)
-        
+        plain_memory_text = "\n".join(plain_memory_lines)
+
         return processed_items, plain_memory_text
-    
+
     def _has_memory_id_with_timestamp(self, line: str) -> bool:
         """
         Check if a line already has a memory ID with timestamp
         Format: [memory_id][mentioned at date] content
-        
+
         Args:
             line: Line to check
-            
+
         Returns:
             True if line starts with [memory_id][mentioned at date] format
         """
-        pattern = r'^\[[\w\d_]+\]\[mentioned at [^\]]+\]\s+'
+        pattern = r"^\[[\w\d_]+\]\[mentioned at [^\]]+\]\s+"
         return bool(re.match(pattern, line.strip()))
-    
+
     def _extract_content_from_timestamped_line(self, line: str) -> str:
         """
         Extract content from a line with memory ID and timestamp
         Format: [memory_id][mentioned at date] content
-        
+
         Args:
             line: Line with memory ID and timestamp
-            
+
         Returns:
             Clean content without memory ID and timestamp
         """
-        pattern = r'^\[[\w\d_]+\]\[mentioned at [^\]]+\]\s*(.*?)(?:\s*\[[^\]]*\])?$'
+        pattern = r"^\[[\w\d_]+\]\[mentioned at [^\]]+\]\s*(.*?)(?:\s*\[[^\]]*\])?$"
         match = re.match(pattern, line.strip())
         if match:
             return match.group(1).strip()
         return line.strip()
-    
+
     def _extract_memory_items_from_content(self, content: str) -> list:
         """Extract memory items with IDs and timestamps from content"""
         items = []
-        lines = content.split('\n')
-        
+        lines = content.split("\n")
+
         for line in lines:
             line = line.strip()
-            if line and (self._has_memory_id_with_timestamp(line) or self._has_memory_id(line)):
+            if line and (
+                self._has_memory_id_with_timestamp(line) or self._has_memory_id(line)
+            ):
                 # First try to extract from timestamped format
                 if self._has_memory_id_with_timestamp(line):
                     # Format: [memory_id][mentioned at date] content [links]
-                    pattern = r'^\[([^\]]+)\]\[mentioned at ([^\]]+)\]\s*(.*?)(?:\s*\[([^\]]*)\])?$'
+                    pattern = r"^\[([^\]]+)\]\[mentioned at ([^\]]+)\]\s*(.*?)(?:\s*\[([^\]]*)\])?$"
                     match = re.match(pattern, line)
                     if match:
                         memory_id = match.group(1)
                         mentioned_at = match.group(2)
                         clean_content = match.group(3).strip()
                         links = match.group(4) if match.group(4) else ""
-                        
+
                         if memory_id and clean_content:
-                            items.append({
-                                "memory_id": memory_id,
-                                "mentioned_at": mentioned_at,
-                                "content": clean_content,
-                                "links": links
-                            })
+                            items.append(
+                                {
+                                    "memory_id": memory_id,
+                                    "mentioned_at": mentioned_at,
+                                    "content": clean_content,
+                                    "links": links,
+                                }
+                            )
                 else:
                     # Fallback to basic format extraction
                     memory_id, clean_content = self._extract_memory_id(line)
                     if memory_id and clean_content:
-                        items.append({
-                            "memory_id": memory_id,
-                            "content": clean_content
-                        })
-        
+                        items.append({"memory_id": memory_id, "content": clean_content})
+
         return items
-    
+
     # def _add_memory_item_embedding(self, character_name: str, category: str, new_content: str) -> Dict[str, Any]:
-    def _add_memory_item_embedding(self, character_name: str, category: str, new_items: list[dict]) -> Dict[str, Any]:
+    def _add_memory_item_embedding(
+        self, character_name: str, category: str, new_items: list[dict]
+    ) -> Dict[str, Any]:
         """Add embedding for new memory items"""
         try:
             # if not self.embeddings_enabled or not new_content.strip():
             if not self.embeddings_enabled or not new_items:
-                return {
-                    "success": False,
-                    "error": "Embeddings disabled or empty item"
-                }
-            
+                return {"success": False, "error": "Embeddings disabled or empty item"}
+
             # Load existing embeddings
             char_embeddings_dir = self.embeddings_dir / character_name
             char_embeddings_dir.mkdir(exist_ok=True)
             embeddings_file = char_embeddings_dir / f"{category}_embeddings.json"
-            
+
             existing_embeddings = []
             if embeddings_file.exists():
-                with open(embeddings_file, 'r', encoding='utf-8') as f:
+                with open(embeddings_file, "r", encoding="utf-8") as f:
                     embeddings_data = json.load(f)
                     existing_embeddings = embeddings_data.get("embeddings", [])
-            
+
             # Parse new memory items
             # new_items = self._parse_memory_items(new_content)
-            
+
             # Generate embeddings for new items
             for item in new_items:
                 if not item["content"].strip():
                     continue
-                    
+
                 try:
                     embedding_vector = self.embedding_client.embed(item["content"])
-                    new_item_id = f"{character_name}_{category}_item_{len(existing_embeddings)}"
-                    
+                    new_item_id = (
+                        f"{character_name}_{category}_item_{len(existing_embeddings)}"
+                    )
+
                     new_embedding = {
                         "item_id": new_item_id,
                         "memory_id": item["memory_id"],
@@ -381,41 +401,41 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
                             "character": character_name,
                             "category": category,
                             "length": len(item["content"]),
-                            "timestamp": datetime.now().isoformat()
-                        }
+                            "timestamp": datetime.now().isoformat(),
+                        },
                     }
-                    
+
                     # Add to existing embeddings
                     existing_embeddings.append(new_embedding)
-                    
+
                 except Exception as e:
-                    logger.warning(f"Failed to generate embedding for memory item {item.get('memory_id')}: {repr(e)}")
+                    logger.warning(
+                        f"Failed to generate embedding for memory item {item.get('memory_id')}: {repr(e)}"
+                    )
                     import traceback
+
                     traceback.print_exc()
                     continue
-            
+
             # Save updated embeddings
             embeddings_data = {
                 "category": category,
                 "timestamp": datetime.now().isoformat(),
                 # "content_hash": hashlib.md5(new_content.encode()).hexdigest(),
                 "embeddings": existing_embeddings,
-                "total_embeddings": len(existing_embeddings)
+                "total_embeddings": len(existing_embeddings),
             }
-            
-            with open(embeddings_file, 'w', encoding='utf-8') as f:
+
+            with open(embeddings_file, "w", encoding="utf-8") as f:
                 json.dump(embeddings_data, f, indent=2, ensure_ascii=False)
-            
+
             return {
                 "success": True,
                 "embedding_count": len(existing_embeddings),
                 "new_items_count": len(new_items),
-                "message": f"Added embeddings for {len(new_items)} new memory items in {category}"
+                "message": f"Added embeddings for {len(new_items)} new memory items in {category}",
             }
-                
+
         except Exception as e:
             logger.error(f"Failed to add memory item embedding: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            } 
+            return {"success": False, "error": str(e)}

@@ -35,9 +35,13 @@ class AzureOpenAIClient(BaseLLMClient):
         super().__init__(model=deployment_name, **kwargs)
 
         self.api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY")
-        self.azure_endpoint = azure_endpoint or os.getenv("AZURE_OPENAI_ENDPOINT", "https://openaialluci.openai.azure.com/")
+        self.azure_endpoint = azure_endpoint or os.getenv(
+            "AZURE_OPENAI_ENDPOINT", "https://openaialluci.openai.azure.com/"
+        )
         self.api_version = api_version
-        self.deployment_name = deployment_name or os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o-mini")
+        self.deployment_name = deployment_name or os.getenv(
+            "AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o-mini"
+        )
         self.use_entra_id = use_entra_id
 
         if not self.use_entra_id and not self.api_key:
@@ -61,16 +65,19 @@ class AzureOpenAIClient(BaseLLMClient):
         if self._client is None:
             try:
                 from openai import AzureOpenAI
-                
+
                 if self.use_entra_id:
                     # Use Entra ID authentication
-                    from azure.identity import DefaultAzureCredential, get_bearer_token_provider
-                    
+                    from azure.identity import (
+                        DefaultAzureCredential,
+                        get_bearer_token_provider,
+                    )
+
                     token_provider = get_bearer_token_provider(
                         DefaultAzureCredential(),
-                        "https://cognitiveservices.azure.com/.default"
+                        "https://cognitiveservices.azure.com/.default",
                     )
-                    
+
                     self._client = AzureOpenAI(
                         azure_endpoint=self.azure_endpoint,
                         azure_ad_token_provider=token_provider,
@@ -83,7 +90,7 @@ class AzureOpenAIClient(BaseLLMClient):
                         azure_endpoint=self.azure_endpoint,
                         api_version=self.api_version,
                     )
-                    
+
             except ImportError as e:
                 if "azure.identity" in str(e):
                     raise ImportError(
@@ -119,9 +126,9 @@ class AzureOpenAIClient(BaseLLMClient):
                 "model": deployment,
                 "messages": processed_messages,
                 "temperature": temperature,
-                "max_tokens": max_tokens
+                "max_tokens": max_tokens,
             }
-            
+
             # Add function calling parameters if provided
             if tools:
                 api_params["tools"] = tools
@@ -134,7 +141,7 @@ class AzureOpenAIClient(BaseLLMClient):
             # Extract tool calls if present
             tool_calls = None
             message = response.choices[0].message
-            if hasattr(message, 'tool_calls') and message.tool_calls:
+            if hasattr(message, "tool_calls") and message.tool_calls:
                 tool_calls = message.tool_calls
 
             # Build response
@@ -143,7 +150,7 @@ class AzureOpenAIClient(BaseLLMClient):
                 usage=response.usage.model_dump() if response.usage else {},
                 model=response.model,
                 success=True,
-                tool_calls=tool_calls
+                tool_calls=tool_calls,
             )
 
         except Exception as e:
@@ -162,18 +169,20 @@ class AzureOpenAIClient(BaseLLMClient):
             if isinstance(msg, dict) and "role" in msg:
                 # Base message with role
                 processed_msg = {"role": msg["role"]}
-                
+
                 # Add content if present
                 if "content" in msg:
-                    processed_msg["content"] = str(msg["content"]) if msg["content"] is not None else None
-                
+                    processed_msg["content"] = (
+                        str(msg["content"]) if msg["content"] is not None else None
+                    )
+
                 # Preserve function calling fields
                 if "tool_calls" in msg:
                     processed_msg["tool_calls"] = msg["tool_calls"]
-                
+
                 if "tool_call_id" in msg:
                     processed_msg["tool_call_id"] = msg["tool_call_id"]
-                
+
                 processed.append(processed_msg)
             else:
                 logging.warning(f"Invalid message format: {msg}")
@@ -186,4 +195,4 @@ class AzureOpenAIClient(BaseLLMClient):
         return cls()
 
     def __str__(self) -> str:
-        return f"AzureOpenAIClient(deployment={self.deployment_name}, endpoint={self.azure_endpoint})" 
+        return f"AzureOpenAIClient(deployment={self.deployment_name}, endpoint={self.azure_endpoint})"

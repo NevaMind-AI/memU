@@ -23,82 +23,89 @@ from ..config.markdown_config import get_config_manager
 logger = get_logger(__name__)
 
 
-
 class RecallAgent:
     """
     Enhanced workflow for intelligent memory retrieval with three distinct methods.
     Automatically scans {character_name}_{category}.md files in memory directory.
-    
+
     Three core retrieval methods:
     1. retrieve_default_category: Get content from ['profile', 'event'] categories
     2. retrieve_relevant_category: Get top-k similar category names (excluding profile/event/activity)
     3. retrieve_relevant_memories: Get top-k memories using embedding search
     """
-    
+
     def __init__(self, memory_dir: str = "memory"):
         """
         Initialize Recall Agent
-        
+
         Args:
             memory_dir: Directory where memory files are stored
         """
         self.memory_dir = Path(memory_dir)
-        
+
         # Initialize config manager
         self.config_manager = get_config_manager()
         self.memory_types = self.config_manager.get_file_types_mapping()
-        
+
         # Initialize file-based storage manager
         self.storage_manager = MemoryFileManager(memory_dir)
-        
+
         # Initialize embedding client for semantic search
         try:
             self.embedding_client = get_default_embedding_client()
             self.semantic_search_enabled = True
             logger.info("Semantic search enabled")
         except Exception as e:
-            logger.warning(f"Failed to initialize embedding client: {e}. Semantic search disabled.")
+            logger.warning(
+                f"Failed to initialize embedding client: {e}. Semantic search disabled."
+            )
             self.embedding_client = None
             self.semantic_search_enabled = False
-        
+
         # Default categories for core retrieval
-        self.default_categories = ['profile', 'event']
-        
-        logger.info(f"Recall Agent initialized with memory directory: {self.memory_dir}")
+        self.default_categories = ["profile", "event"]
+
+        logger.info(
+            f"Recall Agent initialized with memory directory: {self.memory_dir}"
+        )
 
     def retrieve_default_category(self, character_name: str) -> Dict[str, Any]:
         """
         Method 1: Retrieve Default Category
         Get complete content from ['profile', 'event'] categories
-        
+
         Args:
             character_name: Name of the character
-            
+
         Returns:
             Dict containing default category content
         """
         try:
             results = []
-            
+
             # Check which default categories actually exist as files
             all_categories = self._get_actual_categories(character_name)
-            existing_defaults = [cat for cat in self.default_categories if cat in all_categories]
-            
+            existing_defaults = [
+                cat for cat in self.default_categories if cat in all_categories
+            ]
+
             for category in self.default_categories:
                 content = self._read_memory_content(character_name, category)
                 if content:
-                    results.append({
-                        "category": category,
-                        "content": content,
-                        "content_type": "default_category",
-                        "length": len(content),
-                        "lines": len(content.split('\n')),
-                        "character": character_name,
-                        "file_exists": category in all_categories
-                    })
+                    results.append(
+                        {
+                            "category": category,
+                            "content": content,
+                            "content_type": "default_category",
+                            "length": len(content),
+                            "lines": len(content.split("\n")),
+                            "character": character_name,
+                            "file_exists": category in all_categories,
+                        }
+                    )
                 else:
                     logger.debug(f"No content found for {character_name}:{category}")
-            
+
             return {
                 "success": True,
                 "method": "retrieve_default_category",
@@ -108,38 +115,44 @@ class RecallAgent:
                 "all_categories_found": all_categories,
                 "results": results,
                 "total_items": len(results),
-                "message": f"Retrieved {len(results)} default categories for {character_name} (found {len(existing_defaults)}/{len(self.default_categories)} requested files)"
+                "message": f"Retrieved {len(results)} default categories for {character_name} (found {len(existing_defaults)}/{len(self.default_categories)} requested files)",
             }
-            
+
         except Exception as e:
-            logger.error(f"Error in retrieve_default_category for {character_name}: {e}")
+            logger.error(
+                f"Error in retrieve_default_category for {character_name}: {e}"
+            )
             return {
                 "success": False,
                 "error": str(e),
                 "method": "retrieve_default_category",
-                "character_name": character_name
+                "character_name": character_name,
             }
 
-    def retrieve_relevant_category(self, character_name: str, query: str, top_k: int = 5) -> Dict[str, Any]:
+    def retrieve_relevant_category(
+        self, character_name: str, query: str, top_k: int = 5
+    ) -> Dict[str, Any]:
         """
         Method 2: Retrieve Relevant Category
         Retrieve relevant contents from top-k similar category names (excluding profile, event, and activity)
         Scans actual {character_name}_{category}.md files in memory directory
-        
+
         Args:
             character_name: Name of the character
             query: Search query for category relevance
             top_k: Number of top categories to return
-            
+
         Returns:
             Dict containing relevant category content
         """
         try:
             # Get all available categories from actual files: {character_name}_{category}.md
             all_categories = self._get_actual_categories(character_name)
-            excluded_categories = self.default_categories + ['activity']
-            relevant_categories = [cat for cat in all_categories if cat not in excluded_categories]
-            
+            excluded_categories = self.default_categories + ["activity"]
+            relevant_categories = [
+                cat for cat in all_categories if cat not in excluded_categories
+            ]
+
             if not relevant_categories:
                 return {
                     "success": True,
@@ -148,74 +161,93 @@ class RecallAgent:
                     "query": query,
                     "results": [],
                     "total_items": 0,
-                    "message": "No categories available (excluding profile/event/activity)"
+                    "message": "No categories available (excluding profile/event/activity)",
                 }
-            
+
             # Calculate category relevance scores
             category_scores = []
             query_lower = query.lower()
             query_words = set(query_lower.split())
-            
+
             for category in relevant_categories:
                 # Check if category has content for this character
                 content = self._read_memory_content(character_name, category)
                 if not content:
                     continue
-                
+
                 # Semantic search for content relevance
                 content_relevance = 0.0
                 if self.semantic_search_enabled and self.embedding_client:
                     try:
                         # Generate embeddings for query and content
                         query_embedding = self.embedding_client.embed(query)
-                        content_embedding = self.embedding_client.embed(content[:1000])  # Limit content length for embedding
-                        
+                        content_embedding = self.embedding_client.embed(
+                            content[:1000]
+                        )  # Limit content length for embedding
+
                         # Calculate semantic similarity
-                        semantic_similarity = self._cosine_similarity(query_embedding, content_embedding)
+                        semantic_similarity = self._cosine_similarity(
+                            query_embedding, content_embedding
+                        )
                         content_relevance = semantic_similarity
                     except Exception as e:
                         logger.warning(f"Semantic search failed for {category}: {e}")
                         # Fallback to simple keyword matching
                         content_lower = content.lower()
-                        content_relevance = sum(1 for word in query_words if word in content_lower) / len(query_words) if query_words else 0
+                        content_relevance = (
+                            sum(1 for word in query_words if word in content_lower)
+                            / len(query_words)
+                            if query_words
+                            else 0
+                        )
                 else:
                     # Fallback to simple keyword matching when semantic search is not available
                     content_lower = content.lower()
-                    content_relevance = sum(1 for word in query_words if word in content_lower) / len(query_words) if query_words else 0
-                
+                    content_relevance = (
+                        sum(1 for word in query_words if word in content_lower)
+                        / len(query_words)
+                        if query_words
+                        else 0
+                    )
+
                 # Use semantic score directly
                 combined_score = content_relevance
-                
+
                 if combined_score > 0:
-                    category_scores.append({
-                        "category": category,
-                        "content": content,
-                        "score": combined_score,
-                        "content_relevance": content_relevance,
-                        "semantic_search_used": self.semantic_search_enabled and self.embedding_client is not None,
-                        "length": len(content),
-                        "lines": len(content.split('\n'))
-                    })
-            
+                    category_scores.append(
+                        {
+                            "category": category,
+                            "content": content,
+                            "score": combined_score,
+                            "content_relevance": content_relevance,
+                            "semantic_search_used": self.semantic_search_enabled
+                            and self.embedding_client is not None,
+                            "length": len(content),
+                            "lines": len(content.split("\n")),
+                        }
+                    )
+
             # Sort by score and get top-k
             category_scores.sort(key=lambda x: x["score"], reverse=True)
             top_categories = category_scores[:top_k]
-            
+
             # Format results
             results = []
             for item in top_categories:
-                results.append({
-                    "category": item["category"],
-                    "content": item["content"],
-                    "content_type": "relevant_category",
-                    "relevance_score": item["score"],
-                    "content_relevance": item["content_relevance"],
-                    "semantic_search_used": item["semantic_search_used"],
-                    "length": item["length"],
-                    "lines": item["lines"],
-                    "character": character_name
-                })
-            
+                results.append(
+                    {
+                        "category": item["category"],
+                        "content": item["content"],
+                        "content_type": "relevant_category",
+                        "relevance_score": item["score"],
+                        "content_relevance": item["content_relevance"],
+                        "semantic_search_used": item["semantic_search_used"],
+                        "length": item["length"],
+                        "lines": item["lines"],
+                        "character": character_name,
+                    }
+                )
+
             return {
                 "success": True,
                 "method": "retrieve_relevant_category",
@@ -228,29 +260,33 @@ class RecallAgent:
                 "semantic_search_enabled": self.semantic_search_enabled,
                 "results": results,
                 "total_items": len(results),
-                "message": f"Retrieved top {len(results)} relevant categories for query '{query}' using semantic search from {len(all_categories)} total categories"
+                "message": f"Retrieved top {len(results)} relevant categories for query '{query}' using semantic search from {len(all_categories)} total categories",
             }
-            
+
         except Exception as e:
-            logger.error(f"Error in retrieve_relevant_category for {character_name}: {e}")
+            logger.error(
+                f"Error in retrieve_relevant_category for {character_name}: {e}"
+            )
             return {
                 "success": False,
                 "error": str(e),
                 "method": "retrieve_relevant_category",
                 "character_name": character_name,
-                "query": query
+                "query": query,
             }
 
-    def retrieve_relevant_memories(self, character_name: str, query: str, top_k: int = 10) -> Dict[str, Any]:
+    def retrieve_relevant_memories(
+        self, character_name: str, query: str, top_k: int = 10
+    ) -> Dict[str, Any]:
         """
         Method 3: Retrieve Relevant Memories
         Retrieve top-k memories using embedding search across all categories
-        
+
         Args:
             character_name: Name of the character
             query: Search query for memory retrieval
             top_k: Number of top memories to return
-            
+
         Returns:
             Dict containing relevant memories
         """
@@ -261,15 +297,15 @@ class RecallAgent:
                     "error": "Semantic search not available - embedding client not initialized",
                     "method": "retrieve_relevant_memories",
                     "character_name": character_name,
-                    "query": query
+                    "query": query,
                 }
-            
+
             # Generate query embedding
             query_embedding = self.embedding_client.embed(query)
-            
+
             results = []
             embeddings_dir = self.memory_dir / "embeddings" / character_name
-            
+
             if not embeddings_dir.exists():
                 return {
                     "success": True,
@@ -278,42 +314,48 @@ class RecallAgent:
                     "query": query,
                     "results": [],
                     "total_items": 0,
-                    "message": f"No embeddings found for {character_name}"
+                    "message": f"No embeddings found for {character_name}",
                 }
-            
+
             # Search through all embedding files for this character
             for embeddings_file in embeddings_dir.glob("*_embeddings.json"):
                 category = embeddings_file.stem.replace("_embeddings", "")
-                
+
                 try:
-                    with open(embeddings_file, 'r', encoding='utf-8') as f:
+                    with open(embeddings_file, "r", encoding="utf-8") as f:
                         embeddings_data = json.load(f)
-                    
+
                     # Search through stored embeddings
                     for emb_data in embeddings_data.get("embeddings", []):
-                        similarity = self._cosine_similarity(query_embedding, emb_data["embedding"])
-                        
-                        if similarity > 0.1:  # Minimum threshold for semantic similarity
-                            results.append({
-                                "content": emb_data["text"],
-                                "content_type": "relevant_memory",
-                                "semantic_score": similarity,
-                                "category": category,
-                                "character": character_name,
-                                "item_id": emb_data.get("item_id", ""),
-                                "memory_id": emb_data.get("memory_id", ""),
-                                "line_number": emb_data.get("line_number", 0),
-                                "length": len(emb_data["text"]),
-                                "metadata": emb_data.get("metadata", {})
-                            })
-                
+                        similarity = self._cosine_similarity(
+                            query_embedding, emb_data["embedding"]
+                        )
+
+                        if (
+                            similarity > 0.1
+                        ):  # Minimum threshold for semantic similarity
+                            results.append(
+                                {
+                                    "content": emb_data["text"],
+                                    "content_type": "relevant_memory",
+                                    "semantic_score": similarity,
+                                    "category": category,
+                                    "character": character_name,
+                                    "item_id": emb_data.get("item_id", ""),
+                                    "memory_id": emb_data.get("memory_id", ""),
+                                    "line_number": emb_data.get("line_number", 0),
+                                    "length": len(emb_data["text"]),
+                                    "metadata": emb_data.get("metadata", {}),
+                                }
+                            )
+
                 except Exception as e:
                     logger.warning(f"Failed to process embeddings for {category}: {e}")
-            
+
             # Sort by semantic score and get top-k
             results.sort(key=lambda x: x["semantic_score"], reverse=True)
             top_memories = results[:top_k]
-            
+
             return {
                 "success": True,
                 "method": "retrieve_relevant_memories",
@@ -324,36 +366,36 @@ class RecallAgent:
                 "results": top_memories,
                 "total_items": len(top_memories),
                 "total_candidates": len(results),
-                "message": f"Retrieved top {len(top_memories)} memories from {len(results)} candidates"
+                "message": f"Retrieved top {len(top_memories)} memories from {len(results)} candidates",
             }
-            
+
         except Exception as e:
-            logger.error(f"Error in retrieve_relevant_memories for {character_name}: {e}")
+            logger.error(
+                f"Error in retrieve_relevant_memories for {character_name}: {e}"
+            )
             return {
                 "success": False,
                 "error": str(e),
                 "method": "retrieve_relevant_memories",
                 "character_name": character_name,
-                "query": query
+                "query": query,
             }
-
-
 
     def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
         """Calculate cosine similarity between two vectors"""
         try:
             if len(vec1) != len(vec2):
                 return 0.0
-            
+
             dot_product = sum(a * b for a, b in zip(vec1, vec2))
             magnitude1 = math.sqrt(sum(a * a for a in vec1))
             magnitude2 = math.sqrt(sum(a * a for a in vec2))
-            
+
             if magnitude1 == 0 or magnitude2 == 0:
                 return 0.0
-            
+
             return dot_product / (magnitude1 * magnitude2)
-            
+
         except Exception as e:
             logger.warning(f"Cosine similarity calculation failed: {e}")
             return 0.0
@@ -363,20 +405,20 @@ class RecallAgent:
         try:
             categories = []
             memory_dir = Path(self.memory_dir)
-            
+
             # Look for files matching pattern: {character_name}_{category}.md
             pattern = f"{character_name}_*.md"
             for file_path in memory_dir.glob(pattern):
                 filename = file_path.stem  # Remove .md extension
                 # Extract category from filename: {character_name}_{category}
                 if filename.startswith(f"{character_name}_"):
-                    category = filename[len(f"{character_name}_"):]
+                    category = filename[len(f"{character_name}_") :]
                     if category:  # Make sure category is not empty
                         categories.append(category)
-            
+
             logger.debug(f"Found categories for {character_name}: {categories}")
             return categories
-            
+
         except Exception as e:
             logger.warning(f"Failed to scan categories for {character_name}: {e}")
             # Fallback to config-based categories
@@ -385,7 +427,7 @@ class RecallAgent:
     def _read_memory_content(self, character_name: str, category: str) -> str:
         """Read memory content from storage"""
         try:
-            if hasattr(self.storage_manager, 'read_memory_file'):
+            if hasattr(self.storage_manager, "read_memory_file"):
                 return self.storage_manager.read_memory_file(character_name, category)
             else:
                 method_name = f"read_{category}"
@@ -410,7 +452,7 @@ class RecallAgent:
             "config_source": "markdown_config.py",
             "retrieval_methods": [
                 "retrieve_default_category(character_name)",
-                "retrieve_relevant_category(character_name, query, top_k) - excludes profile/event/activity", 
-                "retrieve_relevant_memories(character_name, query, top_k)"
-            ]
-        } 
+                "retrieve_relevant_category(character_name, query, top_k) - excludes profile/event/activity",
+                "retrieve_relevant_memories(character_name, query, top_k)",
+            ],
+        }

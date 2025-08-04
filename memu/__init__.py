@@ -23,8 +23,8 @@ from .llm import OpenAIClient  # OpenAI implementation
 
 # Core Memory system - Unified Memory Agent
 from .memory import MemoryAgent  # Unified memory agent
-from .memory import MemoryFileManager 
- 
+from .memory import MemoryFileManager
+
 from .memory import get_default_embedding_client
 
 # SDK system - HTTP client for MemU API services
@@ -46,7 +46,7 @@ setup_env_file = _config_module.setup_env_file
 LLMConfigManager = _config_module.LLMConfigManager
 get_llm_config_manager = _config_module.get_llm_config_manager
 
-# Note: Database functionality has been removed. 
+# Note: Database functionality has been removed.
 # MemU now uses file-based storage only.
 
 __all__ = [
@@ -54,8 +54,6 @@ __all__ = [
     "Memory",  # Simple file-based Memory class
     "MemoryAgent",  # Unified memory agent
     "MemoryFileManager",  # File operations for memory storage
-
-    
     # Memory components
     "ProfileMemory",  # Profile memory component
     "EventMemory",  # Event memory component
@@ -63,35 +61,29 @@ __all__ = [
     "ImportantEventMemory",  # Important event memory component
     "InterestsMemory",  # Interests memory component
     "StudyMemory",  # Study memory component
-    
     # Embedding support
     "EmbeddingClient",  # Vector embedding client
     "create_embedding_client",
     "get_default_embedding_client",  # Default embedding client getter
-    
     # LLM system
     "BaseLLMClient",  # Base LLM client
     "LLMResponse",  # LLM response object
     "OpenAIClient",  # OpenAI implementation
     "AnthropicClient",  # Anthropic implementation
     "CustomLLMClient",  # Custom LLM support
-    
     # SDK system - HTTP client for MemU API services
     "MemuClient",  # HTTP client for MemU API
     "MemorizeRequest",  # Request model for memorize API
     "MemorizeResponse",  # Response model for memorize API
-    
     # Prompts system - now reads from dynamic configuration folders
     # "PromptLoader",  # Prompt loading utilities
     # "get_prompt_loader",  # Get prompt loader instance
-    
     # Configuration
     "config",  # Global config instance
     "load_config",  # Config loader
     "setup_env_file",  # Environment setup helper
     "LLMConfigManager",  # Unified LLM config manager
     "get_llm_config_manager",  # Global LLM config getter
-    
     # Note: Database functionality has been removed
     # MemU now uses file-based storage only
 ]
@@ -111,17 +103,33 @@ def __getattr__(name):
         from . import llm
 
         return llm
-    
-    if name in ["MetaAgent", "BaseAgent", "ActivityAgent", "ProfileAgent", "EventAgent", 
-                "ReminderAgent", "InterestAgent", "StudyAgent", "create_agent", 
-                "get_available_agents", "Persona", "ConversationManager", "MemoryClient", 
-                "MindMemory", "AgentRegistry", "AgentConfig"]:
+
+    if name in [
+        "MetaAgent",
+        "BaseAgent",
+        "ActivityAgent",
+        "ProfileAgent",
+        "EventAgent",
+        "ReminderAgent",
+        "InterestAgent",
+        "StudyAgent",
+        "create_agent",
+        "get_available_agents",
+        "Persona",
+        "ConversationManager",
+        "MemoryClient",
+        "MindMemory",
+        "AgentRegistry",
+        "AgentConfig",
+    ]:
         import warnings
+
         warnings.warn(
             f"'{name}' has been removed. Please use the new MemoryAgent instead.",
             DeprecationWarning,
             stacklevel=2,
         )
+
         # Return a dummy class to provide deprecation warning without breaking import
         class DeprecatedClass:
             def __init__(self, *args, **kwargs):
@@ -130,7 +138,10 @@ def __getattr__(name):
                     DeprecationWarning,
                     stacklevel=2,
                 )
-                raise AttributeError(f"'{name}' is no longer available. Use MemoryAgent instead.")
+                raise AttributeError(
+                    f"'{name}' is no longer available. Use MemoryAgent instead."
+                )
+
         return DeprecatedClass
 
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")

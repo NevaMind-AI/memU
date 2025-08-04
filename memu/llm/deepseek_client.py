@@ -12,7 +12,13 @@ from .base import BaseLLMClient, LLMResponse
 try:
     from azure.ai.inference import ChatCompletionsClient
     from azure.core.credentials import AzureKeyCredential
-    from azure.ai.inference.models import SystemMessage, UserMessage, AssistantMessage, ToolMessage
+    from azure.ai.inference.models import (
+        SystemMessage,
+        UserMessage,
+        AssistantMessage,
+        ToolMessage,
+    )
+
     AZURE_AI_INFERENCE_AVAILABLE = True
 except ImportError as e:
     AZURE_AI_INFERENCE_AVAILABLE = False
@@ -35,7 +41,7 @@ class DeepSeekClient(BaseLLMClient):
 
         Args:
             api_key: DeepSeek API key
-            endpoint: DeepSeek endpoint URL  
+            endpoint: DeepSeek endpoint URL
             model_name: DeepSeek model name
             api_version: API version
             **kwargs: Other configuration parameters
@@ -75,12 +81,14 @@ class DeepSeekClient(BaseLLMClient):
         if self._client is None:
             # Type assertion safe because we validate in __init__
             assert self.api_key is not None, "API key should not be None at this point"
-            assert self.endpoint is not None, "Endpoint should not be None at this point"
-            
+            assert (
+                self.endpoint is not None
+            ), "Endpoint should not be None at this point"
+
             self._client = ChatCompletionsClient(
                 endpoint=self.endpoint,
                 credential=AzureKeyCredential(self.api_key),
-                api_version=self.api_version
+                api_version=self.api_version,
             )
         return self._client
 
@@ -111,7 +119,7 @@ class DeepSeekClient(BaseLLMClient):
                 "presence_penalty": kwargs.get("presence_penalty", 0.0),
                 "frequency_penalty": kwargs.get("frequency_penalty", 0.0),
             }
-            
+
             # Add function calling parameters if provided
             if tools:
                 api_params["tools"] = tools
@@ -124,15 +132,17 @@ class DeepSeekClient(BaseLLMClient):
             # Extract tool calls if present
             tool_calls = None
             message = response.choices[0].message
-            if hasattr(message, 'tool_calls') and message.tool_calls:
+            if hasattr(message, "tool_calls") and message.tool_calls:
                 tool_calls = message.tool_calls
 
             # Extract usage information
             usage = {}
-            if hasattr(response, 'usage') and response.usage:
+            if hasattr(response, "usage") and response.usage:
                 usage = {
                     "prompt_tokens": getattr(response.usage, "prompt_tokens", 0),
-                    "completion_tokens": getattr(response.usage, "completion_tokens", 0),
+                    "completion_tokens": getattr(
+                        response.usage, "completion_tokens", 0
+                    ),
                     "total_tokens": getattr(response.usage, "total_tokens", 0),
                 }
 
@@ -142,7 +152,7 @@ class DeepSeekClient(BaseLLMClient):
                 usage=usage,
                 model=model_name,
                 success=True,
-                tool_calls=tool_calls
+                tool_calls=tool_calls,
             )
 
         except Exception as e:
@@ -160,7 +170,7 @@ class DeepSeekClient(BaseLLMClient):
             if isinstance(msg, dict) and "role" in msg:
                 role = msg["role"]
                 content = msg.get("content", "")
-                
+
                 if role == "system":
                     processed.append(SystemMessage(content=content))
                 elif role == "user":
@@ -168,20 +178,24 @@ class DeepSeekClient(BaseLLMClient):
                 elif role == "assistant":
                     if "tool_calls" in msg:
                         # Handle assistant message with tool calls
-                        processed.append(AssistantMessage(
-                            content=content,
-                            tool_calls=msg["tool_calls"]
-                        ))
+                        processed.append(
+                            AssistantMessage(
+                                content=content, tool_calls=msg["tool_calls"]
+                            )
+                        )
                     else:
                         processed.append(AssistantMessage(content=content))
                 elif role == "tool":
                     # Handle tool response messages
-                    processed.append(ToolMessage(
-                        content=content,
-                        tool_call_id=msg.get("tool_call_id", "")
-                    ))
+                    processed.append(
+                        ToolMessage(
+                            content=content, tool_call_id=msg.get("tool_call_id", "")
+                        )
+                    )
                 else:
-                    logging.warning(f"Unknown message role: {role}, treating as user message")
+                    logging.warning(
+                        f"Unknown message role: {role}, treating as user message"
+                    )
                     processed.append(UserMessage(content=content))
             else:
                 logging.warning(f"Invalid message format: {msg}")
@@ -194,4 +208,4 @@ class DeepSeekClient(BaseLLMClient):
         return cls()
 
     def __str__(self) -> str:
-        return f"DeepSeekClient(model={self.model_name}, endpoint={self.endpoint})" 
+        return f"DeepSeekClient(model={self.model_name}, endpoint={self.endpoint})"

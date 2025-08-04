@@ -206,13 +206,13 @@ class LLMConfigManager:
         # Anthropic Configuration
         self._provider_configs["anthropic"] = {
             "api_key": self.config.anthropic_api_key,
-            "model": "claude-3-7-sonnet-latest", 
+            "model": "claude-3-7-sonnet-latest",
         }
 
         # Azure OpenAI Configuration
         self._provider_configs["azure"] = {
             "api_key": self.config.azure_openai_api_key,
-            "model": "gpt-3.5-turbo",  
+            "model": "gpt-3.5-turbo",
         }
 
     def get_provider_config(self, provider: str = None) -> dict:

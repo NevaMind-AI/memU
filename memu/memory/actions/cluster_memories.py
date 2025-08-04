@@ -1,10 +1,10 @@
-
 import os
 import re
 from typing import Dict, Any, List
 import itertools
 
 from .base_action import BaseAction
+
 
 class ClusterMemoriesAction(BaseAction):
     """
@@ -14,7 +14,7 @@ class ClusterMemoriesAction(BaseAction):
     @property
     def action_name(self) -> str:
         return "cluster_memories"
-    
+
     def get_schema(self) -> Dict[str, Any]:
         """Return OpenAI-compatible function schema"""
         return {
@@ -25,11 +25,11 @@ class ClusterMemoriesAction(BaseAction):
                 "properties": {
                     "character_name": {
                         "type": "string",
-                        "description": "Name of the character"
+                        "description": "Name of the character",
                     },
                     "conversation_content": {
                         "type": "string",
-                        "description": "The full conversation content to provide context for clustering"
+                        "description": "The full conversation content to provide context for clustering",
                     },
                     "new_memory_items": {
                         "type": "array",
@@ -38,11 +38,11 @@ class ClusterMemoriesAction(BaseAction):
                             "properties": {
                                 "memory_id": {"type": "string"},
                                 "content": {"type": "string"},
-                                "session_date": {"type": "string"}
+                                "session_date": {"type": "string"},
                             },
-                            "required": ["memory_id", "content", "session_date"]
+                            "required": ["memory_id", "content", "session_date"],
                         },
-                        "description": "List of new memory items from the conversation"
+                        "description": "List of new memory items from the conversation",
                     },
                     # "new_theory_of_mind_items": {
                     #     "type": "array",
@@ -62,11 +62,15 @@ class ClusterMemoriesAction(BaseAction):
                     #     "description": "List of available memory categories"
                     # }
                 },
-                "required": ["character_name", "conversation_content", "new_memory_items"]
+                "required": [
+                    "character_name",
+                    "conversation_content",
+                    "new_memory_items",
+                ],
                 # "required": ["character_name", "new_memory_items", "new_theory_of_mind_items", "available_categories"]
-            }
+            },
         }
-    
+
     def execute(
         self,
         character_name: str,
@@ -74,34 +78,48 @@ class ClusterMemoriesAction(BaseAction):
         new_memory_items: List[Dict[str, str]],
         new_theory_of_mind_items: List[Dict[str, str]] = [],
         # available_categories: List[str]
-        session_date: str = None
+        session_date: str = None,
     ) -> Dict[str, Any]:
         """
         Cluster memories into different categories
-        """ 
+        """
 
         if session_date:
             for item in new_memory_items:
-                if not item.get('session_date', None):
-                    item['session_date'] = session_date
+                if not item.get("session_date", None):
+                    item["session_date"] = session_date
 
         existing_clusters = self._get_existing_cluster_items(character_name)
-        existing_clusters = [cluster.replace('_', ' ') for cluster in existing_clusters]
+        existing_clusters = [cluster.replace("_", " ") for cluster in existing_clusters]
 
         updated_clusters = {}
         if existing_clusters:
-            updated_clusters = self._merge_existing_clusters(character_name, conversation_content, existing_clusters, new_memory_items, new_theory_of_mind_items)
+            updated_clusters = self._merge_existing_clusters(
+                character_name,
+                conversation_content,
+                existing_clusters,
+                new_memory_items,
+                new_theory_of_mind_items,
+            )
 
-        new_clusters = self._detect_new_clusters(character_name, conversation_content, existing_clusters, new_memory_items, new_theory_of_mind_items)
+        new_clusters = self._detect_new_clusters(
+            character_name,
+            conversation_content,
+            existing_clusters,
+            new_memory_items,
+            new_theory_of_mind_items,
+        )
 
-        return self._add_metadata({
-            "success": True,
-            "character_name": character_name,
-            "updated_clusters": sorted(updated_clusters.keys()),
-            "new_clusters": sorted(new_clusters.keys()),
-            "message": f"Analyzed {len(new_memory_items)} new memory items. Updated {len(updated_clusters)} existing clusters and detected {len(new_clusters)} new clusters"
-            # "existing_clusters": existing_clusters
-        })
+        return self._add_metadata(
+            {
+                "success": True,
+                "character_name": character_name,
+                "updated_clusters": sorted(updated_clusters.keys()),
+                "new_clusters": sorted(new_clusters.keys()),
+                "message": f"Analyzed {len(new_memory_items)} new memory items. Updated {len(updated_clusters)} existing clusters and detected {len(new_clusters)} new clusters",
+                # "existing_clusters": existing_clusters
+            }
+        )
 
     def _get_existing_cluster_items(self, character_name: str) -> List[str]:
         """
@@ -111,11 +129,11 @@ class ClusterMemoriesAction(BaseAction):
         try:
             # List all files in the memory directory
             files = os.listdir("memory")
-            
+
             # Create regex pattern to match {character_name}_($1).md
             # This will capture the text in parentheses as group 1
             pattern = rf"{re.escape(character_name)}_([^.]+)\.md$"
-            
+
             existing_clusters = []
             for file in files:
                 match = re.match(pattern, file)
@@ -123,7 +141,7 @@ class ClusterMemoriesAction(BaseAction):
                     # Extract the captured group (the text in parentheses)
                     cluster_name = match.group(1)
                     # if cluster_name not in self.memory_types:
-                    if cluster_name not in ['activity', 'event', 'profile', 'ToM']:
+                    if cluster_name not in ["activity", "event", "profile", "ToM"]:
                         existing_clusters.append(cluster_name)
 
             return existing_clusters
@@ -131,28 +149,34 @@ class ClusterMemoriesAction(BaseAction):
             # Return empty list if directory doesn't exist
             return []
 
-    def _merge_existing_clusters(self, 
+    def _merge_existing_clusters(
+        self,
         character_name: str,
         conversation_content: str,
-        existing_clusters: List[str], 
-        new_memory_items: List[Dict[str, str]], 
+        existing_clusters: List[str],
+        new_memory_items: List[Dict[str, str]],
         new_theory_of_mind_items: List[Dict[str, str]],
-        count_threshold: int = 3
+        count_threshold: int = 3,
     ) -> List[str]:
         """
         Merge existing clusters with new memory items and theory of mind items
         """
 
-        all_items = {item['memory_id']: item for item in itertools.chain(new_memory_items, new_theory_of_mind_items)}
+        all_items = {
+            item["memory_id"]: item
+            for item in itertools.chain(new_memory_items, new_theory_of_mind_items)
+        }
 
-        memory_items_text = "\n".join([
-            f"Memory ID: {item['memory_id']}\nContent: {item['content']}"
-            for item in all_items.values()
-        ])
-        
+        memory_items_text = "\n".join(
+            [
+                f"Memory ID: {item['memory_id']}\nContent: {item['content']}"
+                for item in all_items.values()
+            ]
+        )
+
         # Create cluster list string outside f-string to avoid backslash issue
-        clusters_list = '\n'.join(f"- {cluster}" for cluster in existing_clusters)
-        
+        clusters_list = "\n".join(f"- {cluster}" for cluster in existing_clusters)
+
         system_message = f"""You are an expert in analyzing and categorizing memories items.
 
 You are given a list of existing clusters, a list of memory items, and the full conversation context that generated these memories.
@@ -184,58 +208,67 @@ Example: "We went to hiking in Blue Ridge Mountains this summer" is related to b
         response = self.llm_client.simple_chat(system_message)
 
         if not response.strip():
-            return self._add_metadata({
-                "success": False,
-                "error": "LLM returned empty response"
-            })
+            return self._add_metadata(
+                {"success": False, "error": "LLM returned empty response"}
+            )
 
         updated_clusters = {}
 
-        for line in response.split('\n'):
-            if not line.startswith('- '):
+        for line in response.split("\n"):
+            if not line.startswith("- "):
                 continue
 
-            memory_id, clusters = line[2:].split(': ', 1)
+            memory_id, clusters = line[2:].split(": ", 1)
             memory_id = memory_id.strip()
             if not memory_id in all_items:
                 continue
 
-            for cluster in clusters.split(','):
+            for cluster in clusters.split(","):
                 if not cluster in existing_clusters:
                     continue
-                cluster_fn = cluster.replace(' ', '_')
+                cluster_fn = cluster.replace(" ", "_")
                 with open(f"memory/{character_name}_{cluster_fn}.md", "a") as f:
                     memory_item = all_items[memory_id]
                     # f.write(f"[{memory_id}][mentioned at {memory_item['session_date']}] {memory_item['content']} []\n")
-                    f.write(f"[{memory_id}][mentioned at {memory_item.get('session_date', 'Unknown')}] {memory_item['content']} []\n")
+                    f.write(
+                        f"[{memory_id}][mentioned at {memory_item.get('session_date', 'Unknown')}] {memory_item['content']} []\n"
+                    )
                 if not cluster in updated_clusters:
                     updated_clusters[cluster] = []
                 updated_clusters[cluster].append(memory_id)
 
         return updated_clusters
 
-    def _detect_new_clusters(self, 
-        character_name: str, 
+    def _detect_new_clusters(
+        self,
+        character_name: str,
         conversation_content: str,
-        existing_clusters: List[str], 
-        new_memory_items: List[Dict[str, str]], 
+        existing_clusters: List[str],
+        new_memory_items: List[Dict[str, str]],
         new_theory_of_mind_items: List[Dict[str, str]],
-        count_threshold: int = 3
+        count_threshold: int = 3,
     ) -> List[str]:
         """
         Detect new clusters from new memory items and theory of mind items
         """
 
-        all_items = {item['memory_id']: item for item in itertools.chain(new_memory_items, new_theory_of_mind_items)}
-        
-        memory_items_text = "\n".join([
-            f"Memory ID: {item['memory_id']}\nContent: {item['content']}"
-            for item in all_items.values()
-        ])
+        all_items = {
+            item["memory_id"]: item
+            for item in itertools.chain(new_memory_items, new_theory_of_mind_items)
+        }
+
+        memory_items_text = "\n".join(
+            [
+                f"Memory ID: {item['memory_id']}\nContent: {item['content']}"
+                for item in all_items.values()
+            ]
+        )
 
         # Create cluster list string outside f-string to avoid backslash issue
-        existing_clusters_list = '\n'.join(f"- {cluster}" for cluster in existing_clusters)
-        
+        existing_clusters_list = "\n".join(
+            f"- {cluster}" for cluster in existing_clusters
+        )
+
         system_message = f"""You are an expert in discovering some important or repeating events in one's memory records.
 
 You are given a conversation context, a list of memory items extracted from this conversation, and existing clusters.
@@ -272,33 +305,34 @@ Your task is to discover NEW events/themes that are either:
         response = self.llm_client.simple_chat(system_message)
 
         if not response.strip():
-            return self._add_metadata({
-                "success": False,
-                "error": "LLM returned empty response"
-            })
+            return self._add_metadata(
+                {"success": False, "error": "LLM returned empty response"}
+            )
 
         new_clusters = {}
 
-        for line in response.split('\n'):
-            if not line.startswith('- '):
+        for line in response.split("\n"):
+            if not line.startswith("- "):
                 continue
 
-            cluster, memory_ids = line[2:].split(': ', 1)
+            cluster, memory_ids = line[2:].split(": ", 1)
             cluster = cluster.strip().lower()
-            cluster_fn = cluster.replace(' ', '_')
+            cluster_fn = cluster.replace(" ", "_")
             with open(f"memory/{character_name}_{cluster_fn}.md", "a") as f:
                 if cluster not in new_clusters:
                     new_clusters[cluster] = []
 
-                for memory_id in memory_ids.split(','):
+                for memory_id in memory_ids.split(","):
                     memory_id = memory_id.strip()
                     if not memory_id in all_items:
                         continue
                     memory_item = all_items[memory_id]
 
                     # f.write(f"[{memory_id}][mentioned at {memory_item['session_date']}] {memory_item['content']} []\n")
-                    f.write(f"[{memory_id}][mentioned at {memory_item.get('session_date', 'Unknown')}] {memory_item['content']} []\n")
-                    
+                    f.write(
+                        f"[{memory_id}][mentioned at {memory_item.get('session_date', 'Unknown')}] {memory_item['content']} []\n"
+                    )
+
                     new_clusters[cluster].append(memory_id)
-            
+
         return new_clusters
