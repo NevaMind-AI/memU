@@ -2,7 +2,7 @@ import os
 import time
 
 import openai
-from memu.sdk import MemuClient
+from memu import MemuClient
 
 
 def main():

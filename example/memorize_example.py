@@ -1,6 +1,5 @@
 from memu.llm import OpenAIClient
 from memu.memory import MemoryAgent
-import json
 from datetime import datetime
 
 import re
@@ -9,58 +8,30 @@ import shutil
 
 character_test = None
 
-def load_locomo_conversation(sample_id: int, session_id: int|str|list, add_image_caption: bool = False, perserve_role: bool = True):
-
-    try:
-        with open(f"locomo/locomo10.json", "r") as f:
-            data = json.load(f)
-
-        sample = data[sample_id]
-        conversation = sample["conversation"]
-
-        speaker_a = conversation.get("speaker_a", "Speaker A")
-        speaker_b = conversation.get("speaker_b", "Speaker B")
-        speakers = [speaker_a, speaker_b]
-
-        if not perserve_role:
-            remap_role = {
-                speaker_a: "user",
-                speaker_b: "assistant"
-            }
-        
-        if isinstance(session_id, int):
-            session_ids = [session_id]
-        elif isinstance(session_id, str):
-            session_ids = [int(session_id)]
-        elif isinstance(session_id, list):
-            session_ids = [int(sid) for sid in session_id]
-
-        conversation_messages = []
-        for session_id in session_ids:
-            conversation_single = []
-            if f"session_{session_id+1}" in conversation:
-                session = conversation[f"session_{session_id+1}"]
-                
-                for message in session:
-                    speaker = message["speaker"]
-                    content = message["text"]
-
-                    if not perserve_role:
-                        speaker = remap_role.get(speaker, "Unknown")
-
-                    if add_image_caption and "blip_caption" in message:
-                        content = f"({speaker} shares {message['blip_caption']}.) {content}"
-
-                    conversation_single.append({
-                        "role": speaker,
-                        "content": content
-                    })
-            conversation_messages.append(conversation_single)
-
-        return conversation_messages, speakers
-
-    except Exception as e:
-        raise
+def get_sample_conversation():
+    """Get sample conversation from the first session"""
+    conversation = [
+        {"role": "Caroline", "content": "Hey Mel! Good to see you! How have you been?"},
+        {"role": "Melanie", "content": "Hey Caroline! Good to see you! I'm swamped with the kids & work. What's up with you? Anything new?"},
+        {"role": "Caroline", "content": "I went to a LGBTQ support group yesterday and it was so powerful."},
+        {"role": "Melanie", "content": "Wow, that's cool, Caroline! What happened that was so awesome? Did you hear any inspiring stories?"},
+        {"role": "Caroline", "content": "The transgender stories were so inspiring! I was so happy and thankful for all the support."},
+        {"role": "Melanie", "content": "Wow, love that painting! So cool you found such a helpful group. What's it done for you?"},
+        {"role": "Caroline", "content": "The support group has made me feel accepted and given me courage to embrace myself."},
+        {"role": "Melanie", "content": "That's really cool. You've got guts. What now?"},
+        {"role": "Caroline", "content": "Gonna continue my edu and check out career options, which is pretty exciting!"},
+        {"role": "Melanie", "content": "Wow, Caroline! What kinda jobs are you thinkin' of? Anything that stands out?"},
+        {"role": "Caroline", "content": "I'm keen on counseling or working in mental health - I'd love to support those with similar issues."},
+        {"role": "Melanie", "content": "You'd be a great counselor! Your empathy and understanding will really help the people you work with. By the way, take a look at this."},
+        {"role": "Caroline", "content": "Thanks, Melanie! That's really sweet. Is this your own painting?"},
+        {"role": "Melanie", "content": "Yeah, I painted that lake sunrise last year! It's special to me."},
+        {"role": "Caroline", "content": "Wow, Melanie! The colors really blend nicely. Painting looks like a great outlet for expressing yourself."},
+        {"role": "Melanie", "content": "Thanks, Caroline! Painting's a fun way to express my feelings and get creative. It's a great way to relax after a long day."},
+        {"role": "Caroline", "content": "Totally agree, Mel. Relaxing and expressing ourselves is key. Well, I'm off to go do some research."},
+        {"role": "Melanie", "content": "Yep, Caroline. Taking care of ourselves is vital. I'm off to go swimming with the kids. Talk to you soon!"}
+    ]
+    speakers = ["Caroline", "Melanie"]
+    return [conversation], speakers
 
 def load_debug_conversation(file_name: str):
     if '.' not in file_name:
@@ -104,7 +75,7 @@ if __name__ == "__main__":
     print("🌟 MEMORY AGENT DEMONSTRATION")
     print("Loading and processing conversations...")
     
-    conversations, speakers = load_locomo_conversation(sample_id=2, session_id=[0,1], add_image_caption=True, perserve_role=True)
+    conversations, speakers = get_sample_conversation()
     character_test = speakers[1]
     
     print(f"Loaded {len(conversations)} conversations for character: {character_test}")

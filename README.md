@@ -20,7 +20,7 @@ With **memU**, you can build AI companions that truly remember you. They learn w
 ### 🥇 92.9% Accuracy - 💰 90% Cost Reduction - 🤖 AI Companion Specialized
 - ✅ **AI Companion Specialization** - Adapt to AI companions application
 - ✅ **92.9% Accuracy** - State-of-the-art score in Locomo benchmark
-- ✅ **Up to 70% Cost Reduction** - Through optimized infrastructure
+- ✅ **Up to 90% Cost Reduction** - Through optimized online platform
 - ✅ **Advanced Retrieval Strategies** - Multiple methods including semantic search, hybrid search, contextual retrieval
 - ✅ **24/7 Support** - For enterprise customers
 
@@ -48,7 +48,7 @@ The fastest way to integrate your application with memU. Perfect for teams and i
 - **Managed Infrastructure** - We handle scaling, updates, and maintenance for optimal memory quality
 - **Premium Support** - Subscribe and get priority assistance from our engineering team
 
-#### Step-by-step
+### Step-by-step
 
 **Step 1:** Create account & get your API key
 Go to https://app-preview.memu.so/api-key/ for generating api-keys.
@@ -57,22 +57,26 @@ Go to https://app-preview.memu.so/api-key/ for generating api-keys.
 pip install memu-py
 
 # Example usage
-from memu.sdk import MemuClient
+from memu import MemuClient
 ```
 
 **Step 3:** Quick Start
 ```python
-import openai
-from memu.sdk import MemuClient
-
 # Initialize
 memu_client = MemuClient(
     base_url="https://api-preview.memu.so", 
     api_key=os.getenv("MEMU_API_KEY")
 )
+memu_client.memorize_conversation(
+    conversation_text=conversation_text,
+    user_id="user001", 
+    user_name="User", 
+    agent_id="assistant001", 
+    agent_name="Assistant"
+)
 ```
 
-📖 **See [`example/openai_chat_example.py`](example/openai_chat_example.py) for complete integration details**
+📖 **See [`example/client/openai_chat_example.py`](example/client/openai_chat_example.py) for complete integration details**
 
 ✨ **That's it!** MemU remembers everything and helps your AI learn from past conversations.
 
@@ -105,8 +109,6 @@ For users and developers who prefer local control, data privacy, or customizatio
 
 ### Autonomous Memory Management System
 
-![features](./assets/workflow.png)
-
 ### **Organize** - Autonomous Memory Management
 Your memories are structured as intelligent folders managed by a memory agent. We do not do explicit modeling for memories. The memory agent automatically decides what to record, modify, or archive. Think of it as having a personal librarian who knows exactly how to organize your thoughts.
 
@@ -118,18 +120,19 @@ Even when offline, your memory agent keeps working. It generates new insights by
 
 ### **Never Forget** - Intelligent Retention System
 The memory agent automatically prioritizes information based on usage patterns. Recently accessed memories remain highly accessible, while less relevant content is deprioritized or forgotten. This creates a personalized information hierarchy that evolves with your needs.
+
 ---
 
 ## 🤫 Advantages
 
 ### Higher Memory Accuracy
-MemU achieves 92.09% average accuracy across all reasoning tasks, significantly outperforming competitors. Technical Report will be published soon!
+MemU achieves 92.09% average accuracy in Locomo dataset across all reasoning tasks, significantly outperforming competitors. Technical Report will be published soon!
 
 ![Memory Accuracy Comparison](assets/benchmark.png)
 
 ### Flexible Retrieval Strategies
 
-MemU provides a comprehensive suite of retrieval strategies, allowing you to choose the optimal approach for your specific scenario. From semantic similarity to category search, our flexible system adapts to your needs.
+MemU offers multiple retrieval methods to handle different query types effectively: semantic search for conceptual queries, hybrid search for balanced precision and recall, and category-based search for structured data access.
 
 ### Readable Memory Format
 
