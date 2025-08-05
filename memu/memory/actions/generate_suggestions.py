@@ -4,7 +4,7 @@ Generate Memory Suggestions Action
 Analyzes new memory items and suggests what should be added to different memory categories.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .base_action import BaseAction
 
@@ -59,7 +59,7 @@ class GenerateMemorySuggestionsAction(BaseAction):
         self,
         character_name: str,
         new_memory_items: List[Dict[str, str]],
-        available_categories: List[str] | None = None,
+        available_categories: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Generate memory suggestions for different categories
