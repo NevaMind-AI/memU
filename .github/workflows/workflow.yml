@@ -63,10 +63,6 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && github.event.action == 'published'
     
-    permissions:
-      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
-      contents: read   # IMPORTANT: this permission is mandatory for trusted publishing
-    
     steps:
     - name: Download build artifacts
       uses: actions/download-artifact@v4
@@ -78,3 +74,4 @@ jobs:
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         verbose: true
+        password: ${{ secrets.PYPI_API_TOKEN }}
