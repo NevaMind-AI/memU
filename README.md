@@ -137,21 +137,12 @@ Unlike other memory frameworks that store information as fragmented sentences, M
 
 
 ---
-## 📚 Usage Guide & Research Highlights
+## 🎓 **Use Cases**
 
-![Use Cases Demo](assets/use-cases-demo.gif)
-
-### 🎓 **Use Cases**
-| Use Case | Description |
-|:--------:|:------------|
-| ![AI Companion](assets/usecase/ai_companion-0000.jpg) | **AI Companion** |
-| ![AI Role Play](assets/usecase/ai_role_play-0000.jpg) | **AI Role Play**|
-| ![AI Role Play](assets/usecase/ai_ip-0000.png) | **AI IP Character**|
-| ![AI Education](assets/usecase/ai_edu-0000.jpg) | **AI Education** |
-| ![AI Therapy](assets/usecase/ai_therapy-0000.jpg) | **AI Therapy**|
-| ![AI Robot](assets/usecase/ai_robot-0000.jpg) | **AI Robot** |
-| ![AI Creation](assets/usecase/ai_creation-0000.jpg) | **AI Creation**|
-
+| | | | |
+|:---:|:---:|:---:|:---:|
+| ![AI Companion](assets/usecase/ai_companion-0000.jpg)<br>**AI Companion** | ![AI Role Play](assets/usecase/ai_role_play-0000.jpg)<br>**AI Role Play** | ![AI IP Character](assets/usecase/ai_ip-0000.png)<br>**AI IP Character** | ![AI Education](assets/usecase/ai_edu-0000.jpg)<br>**AI Education** |
+| ![AI Therapy](assets/usecase/ai_therapy-0000.jpg)<br>**AI Therapy** | ![AI Robot](assets/usecase/ai_robot-0000.jpg)<br>**AI Robot** | ![AI Creation](assets/usecase/ai_creation-0000.jpg)<br>**AI Creation** | |
 ---
 
 ## 🤝 Contributing
