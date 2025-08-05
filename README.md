@@ -141,8 +141,8 @@ Unlike other memory frameworks that store information as fragmented sentences, M
 
 | | | | |
 |:---:|:---:|:---:|:---:|
-| <img src="assets/usecase/ai_companion-0000.jpg" width="150" height="100"><br>**AI Companion** | <img src="assets/usecase/ai_role_play-0000.jpg" width="150" height="100"><br>**AI Role Play** | <img src="assets/usecase/ai_ip-0000.png" width="150" height="100"><br>**AI IP Character** | <img src="assets/usecase/ai_edu-0000.jpg" width="150" height="100"><br>**AI Education** |
-| <img src="assets/usecase/ai_therapy-0000.jpg" width="150" height="100"><br>**AI Therapy** | <img src="assets/usecase/ai_robot-0000.jpg" width="150" height="100"><br>**AI Robot** | <img src="assets/usecase/ai_creation-0000.jpg" width="150" height="100"><br>**AI Creation** | More|
+| <img src="assets/usecase/ai_companion-0000.jpg" width="150" height="150"><br>**AI Companion** | <img src="assets/usecase/ai_role_play-0000.jpg" width="150" height="150"><br>**AI Role Play** | <img src="assets/usecase/ai_ip-0000.png" width="150" height="150"><br>**AI IP Character** | <img src="assets/usecase/ai_edu-0000.jpg" width="150" height="150"><br>**AI Education** |
+| <img src="assets/usecase/ai_therapy-0000.jpg" width="150" height="150"><br>**AI Therapy** | <img src="assets/usecase/ai_robot-0000.jpg" width="150" height="150"><br>**AI Robot** | <img src="assets/usecase/ai_creation-0000.jpg" width="150" height="150"><br>**AI Creation** | More...|
 ---
 
 ## 🤝 Contributing
