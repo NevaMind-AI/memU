@@ -13,7 +13,7 @@
 [![WeChat](https://img.shields.io/badge/WeChat-微信群-07C160?logo=wechat&logoColor=white)](#)
 </div>
 
-**MemU** is an open-source memory framework for AI companions—high accuracy, fast retrieval, low cost. It acts as an intelligent "memory folder" that adapts to different scenarios, from different companions senarios.
+**MemU** is an open-source memory framework for AI companions—high accuracy, fast retrieval, low cost. It acts as an intelligent "memory folder" that adapts to different AI companion scenarios.
 
 With **memU**, you can build AI companions that truly remember you. They learn who you are, what you care about, and grow alongside you through every interaction.
 
@@ -28,11 +28,9 @@ With **memU**, you can build AI companions that truly remember you. They learn w
 
 ## ⭐ Star Us on GitHub
 
-![star-us](./assets/star.gif)
-
-**🚀 Join 1,000+ developers building the future of AI memory**
-
 Star MemU to get notified about new releases and join our growing community of AI developers building intelligent agents with persistent memory capabilities.
+
+![star-us](./assets/star.gif)
 
 **💬 Join our Discord community:** [https://discord.gg/hQZntfGsbJ](https://discord.gg/hQZntfGsbJ)
 
@@ -53,17 +51,30 @@ The fastest way to integrate your application with memU. Perfect for teams and i
 #### Step-by-step
 
 **Step 1:** Create account & get your API key
-
+Go to https://app-preview.memu.so/api-key/ for generating api-keys.
 **Step 2:** Add three lines to your code
 ```python
 pip install memu-py
 
 # Example usage
-from memu.memory import MemoryAgent
-from memu.llm import OpenAIClient
-
-memory_agent = MemoryAgent()
+from memu.sdk import MemuClient
 ```
+
+**Step 3:** Quick Start
+```python
+import openai
+from memu.sdk import MemuClient
+
+# Initialize
+memu_client = MemuClient(
+    base_url="https://api-preview.memu.so", 
+    api_key=os.getenv("MEMU_API_KEY")
+)
+```
+
+📖 **See [`example/openai_chat_example.py`](example/openai_chat_example.py) for complete integration details**
+
+✨ **That's it!** MemU remembers everything and helps your AI learn from past conversations.
 
 
 ### 🏢 Enterprise Edition
@@ -87,8 +98,6 @@ For users and developers who prefer local control, data privacy, or customizatio
 
 🚀 **Coming Soon!**
 
-
-
 ---
 
 
@@ -99,23 +108,22 @@ For users and developers who prefer local control, data privacy, or customizatio
 ![features](./assets/workflow.png)
 
 ### **Organize** - Autonomous Memory Management
-Your memories are structured as intelligent folders managed by a dedicated memory agent. We do not do explicit modeling for memories. The memory agent automatically decides what to record, modify, or archive based on relevance and usage patterns. Think of it as having a personal librarian who knows exactly how to organize your thoughts.
+Your memories are structured as intelligent folders managed by a memory agent. We do not do explicit modeling for memories. The memory agent automatically decides what to record, modify, or archive. Think of it as having a personal librarian who knows exactly how to organize your thoughts.
 
 ### **Link** - Interconnected Knowledge Graph
-Memories don't exist in isolation. Our system automatically creates meaningful connections between related memories, building a rich network of hyperlinked documents. As your knowledge base grows, so does the web of relationships, making information discovery intuitive and contextual.
+Memories don't exist in isolation. Our system automatically creates meaningful connections between related memories, building a rich network of hyperlinked documents and transforming memory discovery from search into effortless recall.
 
 ### **Evolve** - Continuous Self-Improvement
-Even when offline, your memory system keeps working. It generates new insights by analyzing existing memories, identifies patterns, and creates summary documents through self-reflection. Your knowledge base becomes smarter over time, not just larger.
+Even when offline, your memory agent keeps working. It generates new insights by analyzing existing memories, identifies patterns, and creates summary documents through self-reflection. Your knowledge base becomes smarter over time, not just larger.
 
 ### **Never Forget** - Intelligent Retention System
-We've revolutionized memory persistence with a dynamic importance algorithm. Recently referenced memories gain higher priority, ensuring that what matters most to you now stays readily accessible. The system adapts to your changing needs, keeping relevant information at your fingertips while gracefully archiving what's no longer critical.
-
+The memory agent automatically prioritizes information based on usage patterns. Recently accessed memories remain highly accessible, while less relevant content is deprioritized or forgotten. This creates a personalized information hierarchy that evolves with your needs.
 ---
 
 ## 🤫 Advantages
 
 ### Higher Memory Accuracy
-MemU achieves 92.09% average accuracy across all reasoning tasks, significantly outperforming competitors. Techical Report will be published soon!
+MemU achieves 92.09% average accuracy across all reasoning tasks, significantly outperforming competitors. Technical Report will be published soon!
 
 ![Memory Accuracy Comparison](assets/benchmark.png)
 
@@ -123,10 +131,9 @@ MemU achieves 92.09% average accuracy across all reasoning tasks, significantly 
 
 MemU provides a comprehensive suite of retrieval strategies, allowing you to choose the optimal approach for your specific scenario. From semantic similarity to category search, our flexible system adapts to your needs.
 
-### Human-Readable & Analyzable Memory Architecture
+### Readable Memory Format
 
-Unlike other memory frameworks that store information as fragmented sentences, MemU organizes memories as coherent, readable documents while simultaneously transforming raw data into structured, analyzable datasets. While competitors break down information into scattered fragments, MemU maintains complete context and relationships, enabling easy debugging, manual editing, seamless analytics, and effortless integration with existing workflows.
-
+Unlike other memory frameworks that store information as fragmented sentences, MemU organizes memories as coherent, readable documents while simultaneously transforming raw data into structured. MemU maintains complete context and relationships, enabling easy debugging, manual editing, seamless analytics, and effortless integration with existing workflows.
 
 
 ---
@@ -137,12 +144,13 @@ Unlike other memory frameworks that store information as fragmented sentences, M
 ### 🎓 **Use Cases**
 | Use Case | Description |
 |:--------:|:------------|
-| ![AI Companion](assets/ai_companion.gif) | **AI Companion** |
-| ![AI Role Play](assets/ai_role_play.gif) | **AI Role Play**|
-| ![AI Education](assets/ai_edu.gif) | **AI Education** |
-| ![AI Therapy](assets/ai_therapy.gif) | **AI Therapy**|
-| ![AI Robot](assets/ai_robot.gif) | **AI Robot** |
-| ![AI Creation](assets/ai_creation.gif) | **AI Creation**|
+| ![AI Companion](assets/usecase/ai_companion-0000.jpg) | **AI Companion** |
+| ![AI Role Play](assets/usecase/ai_role_play-0000.jpg) | **AI Role Play**|
+| ![AI Role Play](assets/usecase/ai_ip-0000.png) | **AI IP Character**|
+| ![AI Education](assets/usecase/ai_edu-0000.jpg) | **AI Education** |
+| ![AI Therapy](assets/usecase/ai_therapy-0000.jpg) | **AI Therapy**|
+| ![AI Robot](assets/usecase/ai_robot-0000.jpg) | **AI Robot** |
+| ![AI Creation](assets/usecase/ai_creation-0000.jpg) | **AI Creation**|
 
 ---
 
@@ -164,7 +172,7 @@ For more information please contact info@nevamind.ai
 
 - **GitHub Issues:** Report bugs, request features, and track development. [Submit an issue]()
 
-- **Discord:** Get real-time support, chat with the community, and stay updated. [Join us](https://discord.camel-ai.org/)
+- **Discord:** Get real-time support, chat with the community, and stay updated. [Join us](https://discord.memu.org/)
 
 - **X (Twitter):** Follow for updates, AI insights, and key announcements. [Follow us]()
 
