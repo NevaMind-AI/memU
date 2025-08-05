@@ -1,5 +1,4 @@
 include README.md
-include CHANGELOG.md
 include requirements.txt
 include requirements-dev.txt
 recursive-include memu *.py

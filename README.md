@@ -123,7 +123,7 @@ The memory agent automatically prioritizes information based on usage patterns. 
 
 ---
 
-## 🤫 Advantages
+## 😺 Advantages
 
 ### Higher Memory Accuracy
 MemU achieves 92.09% average accuracy in Locomo dataset across all reasoning tasks, significantly outperforming competitors. Technical Report will be published soon!
