@@ -8,7 +8,7 @@ high-quality standards as update_memory_with_suggestions for self-contained memo
 import json
 import re
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple
 
 from ...utils import get_logger
 from .base_action import BaseAction
@@ -231,7 +231,7 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
 
     def _add_memory_ids_with_timestamp(
         self, content: str, session_date: str
-    ) -> (list[dict], str):
+    ) -> Tuple[List[Dict], str]:
         """
         Add memory IDs with timestamp to content lines
         Format: [memory_id][mentioned at {session_date}] {content}
@@ -357,7 +357,7 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
 
     # def _add_memory_item_embedding(self, character_name: str, category: str, new_content: str) -> Dict[str, Any]:
     def _add_memory_item_embedding(
-        self, character_name: str, category: str, new_items: list[dict]
+        self, character_name: str, category: str, new_items: List[Dict]
     ) -> Dict[str, Any]:
         """Add embedding for new memory items"""
         try:

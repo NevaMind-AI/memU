@@ -417,7 +417,7 @@ Memory Update Suggestion:
 
     # def _generate_memory_embeddings(self, character_name: str, category: str, content: str):
     def _add_memory_item_embedding(
-        self, character_name: str, category: str, new_items: list[dict]
+        self, character_name: str, category: str, new_items: List[Dict]
     ) -> Dict[str, Any]:
         """Add embedding for new memory items"""
         try:

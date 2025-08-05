@@ -49,8 +49,10 @@ def load_debug_conversation(file_name: str):
 
     return conversation, list(speakers)
 
-def process_conversation(conversation: list[dict] = []):
+def process_conversation(conversation=None):
     """Process conversation with memory agent"""
+    if conversation is None:
+        conversation = []
     
     # Initialize LLM client
     llm_client = OpenAIClient(model="gpt-4o-mini")
