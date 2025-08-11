@@ -60,23 +60,10 @@ class Settings(BaseSettings):
         "case_sensitive": False,
         "extra": "ignore"
     }
-        
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        
-        # Handle special environment variables that don't follow the prefix pattern
-        # import os
-        # if not self.openai_api_key:
-        #     self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        # if not self.azure_api_key:
-        #     self.azure_api_key = os.getenv("AZURE_API_KEY")
-        # if not self.azure_endpoint:
-        #     self.azure_endpoint = os.getenv("AZURE_ENDPOINT")
-        # if not self.anthropic_api_key:
-        #     self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-        # if not self.deepseek_api_key:
-        #     self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
-        
+
         # Parse CORS origins if provided as comma-separated string
         if isinstance(self.cors_origins, str):
             if self.cors_origins == "*":

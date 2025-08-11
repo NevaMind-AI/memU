@@ -72,8 +72,8 @@ class RecallAgent:
         Get complete content from ['profile', 'event'] categories
 
         Args:
-            agent_id: Agent identifier (if not provided, will try to parse from character_name)
-            user_id: User identifier (if not provided, will try to parse from character_name)
+            agent_id: Agent identifier
+            user_id: User identifier
 
         Returns:
             Dict containing default category content
@@ -283,9 +283,6 @@ class RecallAgent:
             Dict containing relevant memories
         """
         try:
-            # Construct character name from agent_id and user_id
-            character_name = f"{agent_id}@@{user_id}"
-            
             if not self.semantic_search_enabled:
                 return {
                     "success": False,
@@ -335,7 +332,6 @@ class RecallAgent:
                                     "content_type": "relevant_memory",
                                     "semantic_score": similarity,
                                     "category": category,
-                                    "character": character_name,
                                     "item_id": emb_data.get("item_id", ""),
                                     "memory_id": emb_data.get("memory_id", ""),
                                     "line_number": emb_data.get("line_number", 0),
@@ -354,7 +350,6 @@ class RecallAgent:
             return {
                 "success": True,
                 "method": "retrieve_relevant_memories",
-                "character_name": character_name,
                 "query": query,
                 "top_k": top_k,
                 "semantic_search_enabled": self.semantic_search_enabled,
@@ -366,13 +361,12 @@ class RecallAgent:
 
         except Exception as e:
             logger.error(
-                f"Error in retrieve_relevant_memories for {character_name}: {e}"
+                f"Error in retrieve_relevant_memories for {agent_id}:{user_id}: {e}"
             )
             return {
                 "success": False,
                 "error": str(e),
                 "method": "retrieve_relevant_memories",
-                "character_name": character_name,
                 "query": query,
             }
 
@@ -394,32 +388,6 @@ class RecallAgent:
         except Exception as e:
             logger.warning(f"Cosine similarity calculation failed: {e}")
             return 0.0
-
-    def _parse_character_name(self, character_name: str) -> tuple[str, str]:
-        """
-        Parse character_name to extract agent_id and user_id
-        
-        Args:
-            character_name: Character name in format "agent_id@@user_id"
-            
-        Returns:
-            Tuple of (agent_id, user_id)
-            
-        Raises:
-            ValueError: If character_name is not in the correct format
-        """
-        if '@@' in character_name:
-            # Correct format: agent_id@@user_id
-            parts = character_name.split('@@', 1)
-            agent_id = parts[0]
-            user_id = parts[1]
-            return agent_id, user_id
-        else:
-            # Invalid format - require @@ separator to avoid parsing ambiguity
-            raise ValueError(
-                f"character_name '{character_name}' must be in format 'agent_id@@user_id'. "
-                f"Please use MemoryService._get_character_name(agent_id, user_id) to generate the correct format."
-            )
 
     def _read_memory_content(self, agent_id: str, user_id: str, category: str) -> str:
         """Read memory content from storage"""
@@ -475,8 +443,8 @@ class RecallAgent:
             "default_categories": self.default_categories,
             "config_source": "markdown_config.py",
             "retrieval_methods": [
-                "retrieve_default_category(character_name)",
-                "retrieve_relevant_category(character_name, query, top_k) - excludes profile/event/activity",
-                "retrieve_relevant_memories(character_name, query, top_k)",
+                "retrieve_default_category(agent_id, user_id)",
+                "retrieve_relevant_category(agent_id, user_id, query, top_k) - excludes profile/event/activity",
+                "retrieve_relevant_memories(agent_id, user_id, query, top_k)",
             ],
         }

@@ -86,7 +86,7 @@ class MemoryFileManager:
             Path: Full path to the memory file
         """
         filename = f"{category}{self.DEFAULT_EXTENSION}"
-        return self.memory_dir / str(agent_id) / str(user_id) / filename
+        return self.memory_dir / agent_id / user_id / filename
 
 
     def read_memory_file(self, category: str) -> str:
@@ -225,7 +225,7 @@ class MemoryFileManager:
         self, agent_id: str, user_id: str, basic_categories: Set[str]
     ) -> Dict[str, str]:
         """Scan existing files and derive cluster categories not in basic."""
-        user_dir = self.memory_dir / str(agent_id) / str(user_id)
+        user_dir = self.memory_dir / agent_id / user_id
         if not user_dir.exists():
             return {}
         cluster: Dict[str, str] = {}
@@ -276,7 +276,7 @@ class MemoryFileManager:
         if not self.agent_id or not self.user_id:
             raise ValueError("agent_id and user_id must be set to get embeddings directory")
         
-        char_embeddings_dir = self.embeddings_dir / str(self.agent_id) / str(self.user_id)
+        char_embeddings_dir = self.embeddings_dir / self.agent_id / self.user_id
         char_embeddings_dir.mkdir(parents=True, exist_ok=True)
         return char_embeddings_dir
 

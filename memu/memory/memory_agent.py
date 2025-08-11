@@ -191,7 +191,7 @@ class MemoryAgent:
                 "conversation_length": len(conversation),
                 "iterations": 0,
                 "function_calls": [],
-                "files_generated": [],
+                # "files_generated": [],
                 "processing_log": [],
             }
 
@@ -356,7 +356,7 @@ Start with step 1 and work through the process systematically. When you complete
             logger.info(
                 f"🎉 Conversation processing completed after {results['iterations']} iterations"
             )
-            logger.info(f"📁 Generated {len(results['files_generated'])} files")
+            # logger.info(f"📁 Generated {len(results['files_generated'])} files")
             logger.info(f"🔧 Made {len(results['function_calls'])} function calls")
 
             return results

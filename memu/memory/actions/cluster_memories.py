@@ -38,9 +38,9 @@ class ClusterMemoriesAction(BaseAction):
                             "properties": {
                                 "memory_id": {"type": "string"},
                                 "content": {"type": "string"},
-                                "session_date": {"type": "string"},
+                                "mentioned_at": {"type": "string"},
                             },
-                            "required": ["memory_id", "content", "session_date"],
+                            "required": ["memory_id", "content", "mentioned_at"],
                         },
                         "description": "List of new memory items from the conversation",
                     },
@@ -64,8 +64,8 @@ class ClusterMemoriesAction(BaseAction):
 
         if session_date:
             for item in new_memory_items:
-                if not item.get("session_date", None):
-                    item["session_date"] = session_date
+                if not item.get("mentioned_at", None):
+                    item["mentioned_at"] = session_date
 
         existing_clusters = self.memory_types["cluster"].keys()
         # existing_clusters = [cluster.replace("_", " ") for cluster in existing_clusters]
@@ -100,7 +100,7 @@ class ClusterMemoriesAction(BaseAction):
 
     def _format_memory_item(self, memory_item: Dict[str, str]) -> str:
         """Format memory items into a string"""
-        return f"[{memory_item['memory_id']}][mentioned at {memory_item['mentioned_at']}] {memory_item['content']} [{memory_item['links']}]"
+        return f"[{memory_item['memory_id']}][mentioned at {memory_item['mentioned_at']}] {memory_item['content']} [{memory_item['memory_id']}]"
 
     def _merge_existing_clusters(
         self,

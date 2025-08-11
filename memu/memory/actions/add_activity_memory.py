@@ -134,11 +134,7 @@ class AddActivityMemoryAction(BaseAction):
     ) -> str:
         """Use LLM to format content with meaningful activity grouping"""
 
-        # Extract readable user name from character_name
-        if '@@' in character_name:
-            _, user_name = character_name.split('@@', 1)
-        else:
-            user_name = character_name
+        user_name = character_name
             
         # Create enhanced prompt for meaningful activity grouping
         format_prompt = f"""You are formatting activity memory content for {user_name} on {session_date}.
@@ -320,14 +316,9 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
 
                 try:
                     embedding_vector = self.embedding_client.embed(item["content"])
-                    # Extract user_id for item naming
-                    if '@@' in character_name:
-                        _, user_id = character_name.split('@@', 1)
-                    else:
-                        user_id = character_name
                     
                     new_item_id = (
-                        f"{user_id}_{category}_item_{len(existing_embeddings)}"
+                        f"{character_name}_{category}_item_{len(existing_embeddings)}"
                     )
 
                     new_embedding = {
@@ -352,9 +343,6 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
                     logger.warning(
                         f"Failed to generate embedding for memory item {item.get('memory_id')}: {repr(e)}"
                     )
-                    import traceback
-
-                    traceback.print_exc()
                     continue
 
             # Save updated embeddings
@@ -376,7 +364,5 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
             }
 
         except Exception as e:
-            import traceback
-            traceback.print_exc()
             logger.error(f"Failed to add memory item embedding: {e}")
             return {"success": False, "error": str(e)}

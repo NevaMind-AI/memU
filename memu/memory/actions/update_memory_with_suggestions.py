@@ -349,21 +349,6 @@ Memory Update Suggestion:
 
         return "\n".join(lines)
 
-    # def _handle_embeddings(
-    #     self,
-    #     character_name: str,
-    #     category: str,
-    #     content: str,
-    #     generate_embeddings: bool,
-    # ) -> str:
-    #     """Handle embedding generation and return info message"""
-    #     if generate_embeddings and self.embeddings_enabled and content.strip():
-    #         embedding_result = self._add_memory_item_embedding(
-    #             character_name, category, content
-    #         )
-    #         return f"Generated embeddings for new content: {embedding_result.get('message', 'Unknown')}"
-    #     return "Embeddings not generated"
-
     def _extract_memory_items_from_content(self, content: str) -> List[Dict[str, str]]:
         """Extract memory items with IDs from content, supporting both old and new timestamp formats"""
         import re
@@ -439,14 +424,9 @@ Memory Update Suggestion:
 
                 try:
                     embedding_vector = self.embedding_client.embed(item["content"])
-                    # Extract user_id for item naming
-                    if '@@' in character_name:
-                        _, user_id = character_name.split('@@', 1)
-                    else:
-                        user_id = character_name
                     
                     new_item_id = (
-                        f"{user_id}_{category}_item_{len(existing_embeddings)}"
+                        f"{character_name}_{category}_item_{len(existing_embeddings)}"
                     )
 
                     new_embedding = {

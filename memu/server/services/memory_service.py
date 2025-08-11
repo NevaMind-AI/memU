@@ -175,7 +175,7 @@ class MemoryService:
                 character_name,
             )
             
-            logger.info(f"Memory processing completed for {agent_id}@@{user_id}")
+            logger.info(f"Memory processing completed for {agent_id}:{user_id}")
             return result
             
         except Exception as e:
@@ -282,10 +282,10 @@ class MemoryService:
             result = await asyncio.get_event_loop().run_in_executor(
                 None,
                 recall_agent.retrieve_relevant_memories,
+                agent_id or "default_agent",
+                user_id,
                 query,
                 top_k,
-                agent_id or "default_agent",
-                user_id
             )
             
             if not result.get("success"):
@@ -306,8 +306,6 @@ class MemoryService:
                         category=item.get("category", "unknown"),
                         content=item.get("content", ""),
                         happened_at=datetime.now(),  # Default to now
-                        created_at=datetime.now(),
-                        updated_at=datetime.now()
                     )
                     
                     related_memories.append(RelatedMemoryItem(
@@ -364,10 +362,10 @@ class MemoryService:
             result = await asyncio.get_event_loop().run_in_executor(
                 None,
                 recall_agent.retrieve_relevant_category,
+                agent_id or "default_agent",
+                user_id,
                 category_query,
                 top_k,
-                agent_id or "default_agent",
-                user_id
             )
             
             if not result.get("success"):
@@ -440,8 +438,6 @@ class MemoryService:
                     category=category,
                     content=line,
                     happened_at=datetime.now(),
-                    created_at=datetime.now(),
-                    updated_at=datetime.now()
                 ))
         
         return memories

@@ -66,8 +66,8 @@ class MemoryItem(BaseModel):
     category: str = Field(..., description="Memory category")
     content: str = Field(..., description="Memory content")
     happened_at: datetime = Field(..., description="When the memory happened")
-    created_at: datetime = Field(..., description="When the memory was created")
-    updated_at: datetime = Field(..., description="When the memory was updated")
+    created_at: Optional[datetime] = Field(None, description="When the memory was created")
+    updated_at: Optional[datetime] = Field(None, description="When the memory was updated")
 
 
 class CategoryInfo(BaseModel):

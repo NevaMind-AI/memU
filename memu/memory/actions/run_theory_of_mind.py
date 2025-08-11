@@ -2,6 +2,9 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from .base_action import BaseAction
+from ...utils import get_logger
+
+logger = get_logger(__name__)
 
 
 class RunTheoryOfMindAction(BaseAction):
@@ -148,11 +151,7 @@ class RunTheoryOfMindAction(BaseAction):
             ]
         )
 
-        # Extract readable user name from character_name
-        if '@@' in character_name:
-            _, user_name = character_name.split('@@', 1)
-        else:
-            user_name = character_name
+        user_name = character_name
             
         theory_of_mind_prompt = f"""You are analyzing the following conversation and activity items for {user_name} to try to infer information that is not explicitly mentioned by {user_name} in the conversation, but he or she might meant to express or the listener can reasonably deduce.
 
@@ -262,9 +261,6 @@ BAD: "Harry Potter series are probably important to {user_name}'s childhood, bec
                         )
 
         except Exception as e:
-            import traceback
-
-            print(repr(e))
-            traceback.print_exc()
+            logger.error(f"Failed to parse theory of mind from text: {repr(e)}")
 
         return reasoning_process, theory_of_mind_items
