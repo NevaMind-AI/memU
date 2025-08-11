@@ -30,12 +30,12 @@ MemU provides RESTful APIs for managing AI companion memories. This document cov
 
 ## 🔐 Authentication
 
-All API requests require authentication using an API key. Get your API key from the [MemU Dashboard](https://app-preview.memu.so/api-key/).
+All API requests require authentication using an API key. Get your API key from the [MemU Dashboard](https://app.memu.so/api-key/).
 
 ### Environment Variables
 ```bash
 export MEMU_API_KEY="your_api_key_here"
-export MEMU_API_BASE_URL="https://api-preview.memu.so"  # Optional, defaults to localhost
+export MEMU_API_BASE_URL="https://api.memu.so"  # Optional, defaults to localhost
 ```
 
 ---
@@ -236,7 +236,7 @@ import { MemuClient } from 'memu-js';
 
 // Initialize client
 const client = new MemuClient({
-  baseUrl: 'https://api-preview.memu.so',
+  baseUrl: 'https://api.memu.so',
   apiKey: process.env.MEMU_API_KEY
 });
 
@@ -258,7 +258,7 @@ console.log(`Task ID: ${response.taskId}`);
 import { MemuClient, MemorizeResponse } from 'memu-js';
 
 const client = new MemuClient({
-  baseUrl: 'https://api-preview.memu.so',
+  baseUrl: 'https://api.memu.so',
   apiKey: process.env.MEMU_API_KEY,
   timeout: 30000,
   maxRetries: 3
