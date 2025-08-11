@@ -29,12 +29,14 @@ class RecallAgent:
     3. retrieve_relevant_memories: Get top-k memories using embedding search
     """
 
-    def __init__(self, memory_dir: str = "memu/server/memory"):
+    def __init__(self, memory_dir: str = "memu/server/memory", agent_id: str = None, user_id: str = None):
         """
         Initialize Recall Agent
 
         Args:
             memory_dir: Directory where memory files are stored
+            agent_id: Agent identifier
+            user_id: User identifier
         """
         self.memory_dir = Path(memory_dir)
 
@@ -43,7 +45,7 @@ class RecallAgent:
         self.memory_types = self.config_manager.get_file_types_mapping()
 
         # Initialize file-based storage manager
-        self.storage_manager = MemoryFileManager(memory_dir)
+        self.storage_manager = MemoryFileManager(memory_dir, agent_id=agent_id, user_id=user_id)
 
         # Initialize embedding client for semantic search
         try:
@@ -64,13 +66,14 @@ class RecallAgent:
             f"Recall Agent initialized with memory directory: {self.memory_dir}"
         )
 
-    def retrieve_default_category(self, character_name: str) -> Dict[str, Any]:
+    def retrieve_default_category(self, agent_id: str = None, user_id: str = None) -> Dict[str, Any]:
         """
         Method 1: Retrieve Default Category
         Get complete content from ['profile', 'event'] categories
 
         Args:
-            character_name: Name of the character
+            agent_id: Agent identifier (if not provided, will try to parse from character_name)
+            user_id: User identifier (if not provided, will try to parse from character_name)
 
         Returns:
             Dict containing default category content
@@ -79,13 +82,13 @@ class RecallAgent:
             results = []
 
             # Check which default categories actually exist as files
-            all_categories = self._get_actual_categories(character_name)
+            all_categories = self._get_actual_categories_by_ids(agent_id, user_id)
             existing_defaults = [
                 cat for cat in self.default_categories if cat in all_categories
             ]
 
             for category in self.default_categories:
-                content = self._read_memory_content(character_name, category)
+                content = self._read_memory_content_by_ids(agent_id, user_id, category)
                 if content:
                     results.append(
                         {
@@ -94,38 +97,35 @@ class RecallAgent:
                             "content_type": "default_category",
                             "length": len(content),
                             "lines": len(content.split("\n")),
-                            "character": character_name,
                             "file_exists": category in all_categories,
                         }
                     )
                 else:
-                    logger.debug(f"No content found for {character_name}:{category}")
+                    logger.debug(f"No content found for {agent_id}:{user_id}:{category}")
 
             return {
                 "success": True,
                 "method": "retrieve_default_category",
-                "character_name": character_name,
                 "requested_categories": self.default_categories,
                 "existing_categories": existing_defaults,
                 "all_categories_found": all_categories,
                 "results": results,
                 "total_items": len(results),
-                "message": f"Retrieved {len(results)} default categories for {character_name} (found {len(existing_defaults)}/{len(self.default_categories)} requested files)",
+                "message": f"Retrieved {len(results)} default categories for {agent_id}:{user_id} (found {len(existing_defaults)}/{len(self.default_categories)} requested files)",
             }
 
         except Exception as e:
             logger.error(
-                f"Error in retrieve_default_category for {character_name}: {e}"
+                f"Error in retrieve_default_category for {agent_id}:{user_id}: {e}"
             )
             return {
                 "success": False,
                 "error": str(e),
                 "method": "retrieve_default_category",
-                "character_name": character_name,
             }
 
     def retrieve_relevant_category(
-        self, character_name: str, query: str, top_k: int = 5
+        self, agent_id: str, user_id: str, query: str, top_k: int = 5
     ) -> Dict[str, Any]:
         """
         Method 2: Retrieve Relevant Category
@@ -133,7 +133,8 @@ class RecallAgent:
         Scans actual {agent_id}/{user_id}/{category}.md files in memory directory
 
         Args:
-            character_name: Name of the character
+            agent_id: Agent identifier 
+            user_id: User identifier
             query: Search query for category relevance
             top_k: Number of top categories to return
 
@@ -141,8 +142,7 @@ class RecallAgent:
             Dict containing relevant category content
         """
         try:
-            # Get all available categories from actual files: {character_name}_{category}.md
-            all_categories = self._get_actual_categories(character_name)
+            all_categories = self._get_actual_categories_by_ids(agent_id, user_id)
             excluded_categories = self.default_categories + ["activity"]
             relevant_categories = [
                 cat for cat in all_categories if cat not in excluded_categories
@@ -152,7 +152,6 @@ class RecallAgent:
                 return {
                     "success": True,
                     "method": "retrieve_relevant_category",
-                    "character_name": character_name,
                     "query": query,
                     "results": [],
                     "total_items": 0,
@@ -166,7 +165,7 @@ class RecallAgent:
 
             for category in relevant_categories:
                 # Check if category has content for this character
-                content = self._read_memory_content(character_name, category)
+                content = self._read_memory_content_by_ids(agent_id, user_id, category)
                 if not content:
                     continue
 
@@ -239,14 +238,12 @@ class RecallAgent:
                         "semantic_search_used": item["semantic_search_used"],
                         "length": item["length"],
                         "lines": item["lines"],
-                        "character": character_name,
                     }
                 )
 
             return {
                 "success": True,
                 "method": "retrieve_relevant_category",
-                "character_name": character_name,
                 "query": query,
                 "top_k": top_k,
                 "all_categories_found": all_categories,
@@ -260,25 +257,25 @@ class RecallAgent:
 
         except Exception as e:
             logger.error(
-                f"Error in retrieve_relevant_category for {character_name}: {e}"
+                f"Error in retrieve_relevant_category for {agent_id}:{user_id}: {e}"
             )
             return {
                 "success": False,
                 "error": str(e),
                 "method": "retrieve_relevant_category",
-                "character_name": character_name,
                 "query": query,
             }
 
     def retrieve_relevant_memories(
-        self, character_name: str, query: str, top_k: int = 10
+        self, agent_id: str, user_id: str, query: str, top_k: int = 10
     ) -> Dict[str, Any]:
         """
         Method 3: Retrieve Relevant Memories
         Retrieve top-k memories using embedding search across all categories
 
         Args:
-            character_name: Name of the character
+            agent_id: Agent identifier 
+            user_id: User identifier
             query: Search query for memory retrieval
             top_k: Number of top memories to return
 
@@ -286,12 +283,14 @@ class RecallAgent:
             Dict containing relevant memories
         """
         try:
+            # Construct character name from agent_id and user_id
+            character_name = f"{agent_id}@@{user_id}"
+            
             if not self.semantic_search_enabled:
                 return {
                     "success": False,
                     "error": "Semantic search not available - embedding client not initialized",
                     "method": "retrieve_relevant_memories",
-                    "character_name": character_name,
                     "query": query,
                 }
 
@@ -299,20 +298,18 @@ class RecallAgent:
             query_embedding = self.embedding_client.embed(query)
 
             results = []
-            agent_id, user_id = self._parse_character_name(character_name)
             
-            # Embeddings directory: embeddings/{agent_id}/{user_id}/
-            embeddings_dir = self.memory_dir / "embeddings" / agent_id / user_id
+            # Get embeddings directory from storage manager
+            embeddings_dir = self.storage_manager.get_char_embeddings_dir()
 
             if not embeddings_dir.exists():
                 return {
                     "success": True,
                     "method": "retrieve_relevant_memories",
-                    "character_name": character_name,
                     "query": query,
                     "results": [],
                     "total_items": 0,
-                    "message": f"No embeddings found for {character_name} in {embeddings_dir}",
+                    "message": f"No embeddings found for {agent_id}:{user_id} in {embeddings_dir}",
                 }
 
             # Search through all embedding files for this character
@@ -398,31 +395,6 @@ class RecallAgent:
             logger.warning(f"Cosine similarity calculation failed: {e}")
             return 0.0
 
-    def _get_actual_categories(self, character_name: str) -> List[str]:
-        """Get actual categories from existing files in agent_id/user_id directory structure"""
-        try:
-            categories = []
-            memory_dir = Path(self.memory_dir)
-            agent_id, user_id = self._parse_character_name(character_name)
-
-            # Look in {agent_id}/{user_id}/ directory for {category}.md files
-            agent_user_dir = memory_dir / agent_id / user_id
-            if agent_user_dir.exists():
-                for file_path in agent_user_dir.glob("*.md"):
-                    category = file_path.stem  # Remove .md extension
-                    if category:  # Make sure category is not empty
-                        categories.append(category)
-                logger.debug(f"Found categories for {character_name} in {agent_user_dir}: {categories}")
-            else:
-                logger.debug(f"Agent/User directory does not exist: {agent_user_dir}")
-
-            return categories
-
-        except Exception as e:
-            logger.warning(f"Failed to scan categories for {character_name}: {e}")
-            # Fallback to config-based categories
-            return list(self.memory_types.keys())
-
     def _parse_character_name(self, character_name: str) -> tuple[str, str]:
         """
         Parse character_name to extract agent_id and user_id
@@ -449,14 +421,48 @@ class RecallAgent:
                 f"Please use MemoryService._get_character_name(agent_id, user_id) to generate the correct format."
             )
 
-    def _read_memory_content(self, character_name: str, category: str) -> str:
+    def _read_memory_content(self, agent_id: str, user_id: str, category: str) -> str:
         """Read memory content from storage"""
         try:
-            agent_id, user_id = self._parse_character_name(character_name)
-            return self.storage_manager.read_memory_file(agent_id, user_id, category)
+            # agent_id and user_id are managed inside storage_manager
+            return self.storage_manager.read_memory_file(category)
         except Exception as e:
-            logger.warning(f"Failed to read {category} for {character_name}: {e}")
+            logger.warning(f"Failed to read {category} for {agent_id}:{user_id}: {e}")
             return ""
+
+    def _read_memory_content_by_ids(self, agent_id: str, user_id: str, category: str) -> str:
+        """Read memory content from storage using agent_id and user_id directly"""
+        try:
+            # Create a temporary storage manager for this character
+            temp_storage = MemoryFileManager(str(self.memory_dir), agent_id=agent_id, user_id=user_id)
+            
+            return temp_storage.read_memory_file(category)
+        except Exception as e:
+            logger.warning(f"Failed to read {category} for agent {agent_id}, user {user_id}: {e}")
+            return ""
+
+    def _get_actual_categories_by_ids(self, agent_id: str, user_id: str) -> List[str]:
+        """Get actual categories from existing files in agent_id/user_id directory structure"""
+        try:
+            categories = []
+            
+            # Look in {agent_id}/{user_id}/ directory for {category}.md files
+            agent_user_dir = self.memory_dir / agent_id / user_id
+            if agent_user_dir.exists():
+                for file_path in agent_user_dir.glob("*.md"):
+                    category = file_path.stem  # Remove .md extension
+                    if category:  # Make sure category is not empty
+                        categories.append(category)
+                logger.debug(f"Found categories for agent {agent_id}, user {user_id} in {agent_user_dir}: {categories}")
+            else:
+                logger.debug(f"Agent/User directory does not exist: {agent_user_dir}")
+
+            return categories
+
+        except Exception as e:
+            logger.warning(f"Failed to scan categories for agent {agent_id}, user {user_id}: {e}")
+            # Fallback to config-based categories
+            return list(self.memory_types.keys())
 
     def get_status(self) -> Dict[str, Any]:
         """Get status information about the recall agent"""

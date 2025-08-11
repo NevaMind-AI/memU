@@ -40,7 +40,7 @@ class BaseAction(ABC):
         self.config_manager = memory_core.config_manager
         self.memory_types = memory_core.memory_types
         self.processing_order = memory_core.processing_order
-        self.embeddings_dir = memory_core.embeddings_dir
+        # self.embeddings_dir = memory_core.embeddings_dir
 
     @property
     @abstractmethod
@@ -318,37 +318,11 @@ class BaseAction(ABC):
 
         return existing_memory
 
-    def _parse_character_name(self, character_name: str) -> tuple[str, str]:
-        """
-        Parse character_name to extract agent_id and user_id
-        
-        Args:
-            character_name: Character name in format "agent_id@@user_id"
-            
-        Returns:
-            Tuple of (agent_id, user_id)
-            
-        Raises:
-            ValueError: If character_name is not in the correct format
-        """
-        if '@@' in character_name:
-            # Correct format: agent_id@@user_id
-            parts = character_name.split('@@', 1)
-            agent_id = parts[0]
-            user_id = parts[1]
-            return agent_id, user_id
-        else:
-            # Invalid format - require @@ separator to avoid parsing ambiguity
-            raise ValueError(
-                f"character_name '{character_name}' must be in format 'agent_id@@user_id'. "
-                f"Please use MemoryService._get_character_name(agent_id, user_id) to generate the correct format."
-            )
-
     def _read_memory_content(self, character_name: str, category: str) -> str:
         """Read memory content from storage"""
         try:
-            agent_id, user_id = self._parse_character_name(character_name)
-            return self.storage_manager.read_memory_file(agent_id, user_id, category)
+            # agent_id and user_id are managed inside storage_manager
+            return self.storage_manager.read_memory_file(category)
         except Exception as e:
             logger.warning(f"Failed to read {category} for {character_name}: {e}")
             return ""
@@ -358,10 +332,19 @@ class BaseAction(ABC):
     ) -> bool:
         """Save memory content to storage"""
         try:
-            agent_id, user_id = self._parse_character_name(character_name)
-            return self.storage_manager.write_memory_file(agent_id, user_id, category, content)
+            # agent_id and user_id are managed inside storage_manager
+            return self.storage_manager.write_memory_file(category, content)
         except Exception as e:
             logger.error(f"Failed to save {category} for {character_name}: {e}")
+            return False
+
+    def _append_memory_content(self, character_name: str, category: str, content: str) -> bool:
+        """Append memory content to storage"""
+        try:
+            # agent_id and user_id are managed inside storage_manager
+            return self.storage_manager.append_memory_file(category, content)
+        except Exception as e:
+            logger.error(f"Failed to append {category} for {character_name}: {e}")
             return False
 
     def _convert_conversation_to_text(self, conversation: list[dict]) -> str:

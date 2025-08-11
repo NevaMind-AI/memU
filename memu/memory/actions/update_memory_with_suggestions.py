@@ -349,20 +349,20 @@ Memory Update Suggestion:
 
         return "\n".join(lines)
 
-    def _handle_embeddings(
-        self,
-        character_name: str,
-        category: str,
-        content: str,
-        generate_embeddings: bool,
-    ) -> str:
-        """Handle embedding generation and return info message"""
-        if generate_embeddings and self.embeddings_enabled and content.strip():
-            embedding_result = self._add_memory_item_embedding(
-                character_name, category, content
-            )
-            return f"Generated embeddings for new content: {embedding_result.get('message', 'Unknown')}"
-        return "Embeddings not generated"
+    # def _handle_embeddings(
+    #     self,
+    #     character_name: str,
+    #     category: str,
+    #     content: str,
+    #     generate_embeddings: bool,
+    # ) -> str:
+    #     """Handle embedding generation and return info message"""
+    #     if generate_embeddings and self.embeddings_enabled and content.strip():
+    #         embedding_result = self._add_memory_item_embedding(
+    #             character_name, category, content
+    #         )
+    #         return f"Generated embeddings for new content: {embedding_result.get('message', 'Unknown')}"
+    #     return "Embeddings not generated"
 
     def _extract_memory_items_from_content(self, content: str) -> List[Dict[str, str]]:
         """Extract memory items with IDs from content, supporting both old and new timestamp formats"""
@@ -422,12 +422,8 @@ Memory Update Suggestion:
             if not self.embeddings_enabled or not new_items:
                 return {"success": False, "error": "Embeddings disabled or empty item"}
 
-            # Parse character name for directory structure
-            agent_id, user_id = self._parse_character_name(character_name)
-            
-            # Load existing embeddings: embeddings/{agent_id}/{user_id}/
-            char_embeddings_dir = self.embeddings_dir / agent_id / user_id
-            char_embeddings_dir.mkdir(parents=True, exist_ok=True)
+            # Get character embeddings directory from storage manager
+            char_embeddings_dir = self.storage_manager.get_char_embeddings_dir()
             embeddings_file = char_embeddings_dir / f"{category}_embeddings.json"
 
             existing_embeddings = []

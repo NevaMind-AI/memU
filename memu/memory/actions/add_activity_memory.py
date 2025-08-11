@@ -83,9 +83,6 @@ class AddActivityMemoryAction(BaseAction):
             if not session_date:
                 session_date = datetime.now().strftime("%Y-%m-%d")
 
-            # Always load existing content to append to it
-            existing_content = self._read_memory_content(character_name, "activity")
-
             # Process raw content through LLM to ensure strict formatting
             formatted_content = self._format_content_with_llm(
                 character_name, content, session_date
@@ -101,36 +98,18 @@ class AddActivityMemoryAction(BaseAction):
                 formatted_content, session_date
             )
 
-            # Always append new content to existing content
-            if existing_content:
-                new_content = existing_content + "\n" + content_with_ids
-            else:
-                new_content = content_with_ids
+            # Save first, then add embedding for just the new content
+            success = self._append_memory_content(
+                character_name, "activity", content_with_ids
+            )
 
             # Save content with embeddings if enabled
-            if generate_embeddings and self.embeddings_enabled:
-                # Save first, then add embedding for just the new content
-                success = self._save_memory_content(
-                    character_name, "activity", new_content
+            if success and generate_embeddings and self.embeddings_enabled:
+                self._add_memory_item_embedding(
+                    character_name, "activity", memory_items
                 )
-                if success:
-                    # Add embedding for just the new content
-                    self._add_memory_item_embedding(
-                        character_name, "activity", memory_items
-                    )
-                    # Generated embedding for new items
-                else:
-                    # Failed to save memory
-                    pass
-            else:
-                success = self._save_memory_content(
-                    character_name, "activity", new_content
-                )
-                # No embeddings generated
 
             if success:
-                # Extract memory items for response
-
                 return self._add_metadata(
                     {
                         "success": True,
@@ -324,12 +303,8 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
             if not self.embeddings_enabled or not new_items:
                 return {"success": False, "error": "Embeddings disabled or empty item"}
 
-            # Parse character name for directory structure
-            agent_id, user_id = self._parse_character_name(character_name)
-            
-            # Load existing embeddings: embeddings/{agent_id}/{user_id}/
-            char_embeddings_dir = self.embeddings_dir / agent_id / user_id
-            char_embeddings_dir.mkdir(parents=True, exist_ok=True)
+            # Get character embeddings directory from storage manager
+            char_embeddings_dir = self.storage_manager.get_char_embeddings_dir()
             embeddings_file = char_embeddings_dir / f"{category}_embeddings.json"
 
             existing_embeddings = []

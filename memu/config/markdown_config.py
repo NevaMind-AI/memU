@@ -1,12 +1,16 @@
 """
-MemU Markdown Configuration System - Dynamic Folder Structure
-Each md file type has its own folder, containing config.py and prompt.txt
+MemU Markdown Configuration System - YAML based configuration
+
+All file type configurations are centralized in a single YAML file to make
+maintenance and debugging easier. Each item also points to its prompt file
+under its corresponding folder when available.
 """
 
-import importlib.util
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import yaml
 
 
 @dataclass
@@ -25,56 +29,81 @@ class MarkdownFileConfig:
 
 
 class MarkdownConfigManager:
-    """Manager for dynamically loading folder configurations"""
+    """Manager for loading markdown file configurations from YAML."""
 
     def __init__(self):
         self.config_base_dir = Path(__file__).parent
+        self.yaml_path = self.config_base_dir / "memory_cat_config.yaml"
         self._files_config: Dict[str, MarkdownFileConfig] = {}
         self._processing_order: List[str] = []
         self._load_all_configs()
 
-    def _load_all_configs(self):
-        """Dynamically scan and load all folder configurations"""
+    def _load_all_configs(self) -> None:
+        """Load all configurations from YAML file.
+
+        Supports the following YAML structure:
+
+        categories:
+          system: [ {name, filename, description, folder_name, prompt_file, context, rag_length}, ... ]
+          custom: [ ... ]
+
+        Both system and custom lists are concatenated to form the basic categories.
+        """
         self._files_config = {}
 
-        # Scan all folders under config directory
-        for item in self.config_base_dir.iterdir():
-            if item.is_dir() and item.name not in ["__pycache__", "prompts"]:
-                folder_name = item.name
-                config_file = item / "config.py"
-                prompt_file = item / "prompt.txt"
+        if not self.yaml_path.exists():
+            print(f"Warning: YAML configuration file not found: {self.yaml_path}")
+            self._processing_order = []
+            return
 
-                if config_file.exists():
-                    try:
-                        # Dynamically load configuration module
-                        spec = importlib.util.spec_from_file_location(
-                            f"{folder_name}_config", config_file
-                        )
-                        module = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(module)
+        try:
+            raw_config: Dict[str, Any] = yaml.safe_load(
+                self.yaml_path.read_text(encoding="utf-8")
+            ) or {}
+        except Exception as e:
+            print(f"Warning: Failed to parse YAML configuration {self.yaml_path}: {e}")
+            self._processing_order = []
+            return
 
-                        # Get configuration information
-                        if hasattr(module, "get_file_info"):
-                            file_info = module.get_file_info()
+        categories_section: Dict[str, Any] = raw_config.get("categories", {}) or {}
+        system_list = categories_section.get("system", []) or []
+        custom_list = categories_section.get("custom", []) or []
 
-                            self._files_config[folder_name] = MarkdownFileConfig(
-                                name=file_info["name"],
-                                filename=file_info["filename"],
-                                description=file_info["description"],
-                                folder_path=str(item),
-                                prompt_path=(
-                                    str(prompt_file) if prompt_file.exists() else ""
-                                ),
-                                context=file_info.get("context", "rag"),
-                                rag_length=file_info.get("rag_length", 50),
-                            )
+        # Maintain order: system first, then custom
+        combined_items: List[Dict[str, Any]] = []
+        if isinstance(system_list, list):
+            combined_items.extend(system_list)
+        if isinstance(custom_list, list):
+            combined_items.extend(custom_list)
 
-                    except Exception as e:
-                        print(
-                            f"Warning: Unable to load configuration folder {folder_name}: {e}"
-                        )
+        processing_order: List[str] = []
 
-        self._processing_order = list(self._files_config.keys())
+        for item in combined_items:
+            if not isinstance(item, dict):
+                continue
+            name: Optional[str] = item.get("name")
+            if not name:
+                # Skip invalid entries without name
+                continue
+
+            # Compute folder and prompt paths
+            folder_name: str = item.get("folder_name", name)
+            folder_path = self.config_base_dir / folder_name
+            prompt_file_name: str = item.get("prompt_file", "prompt.txt")
+            prompt_path = folder_path / prompt_file_name
+
+            self._files_config[name] = MarkdownFileConfig(
+                name=name,
+                filename=item.get("filename", f"{name}.md"),
+                description=item.get("description", ""),
+                folder_path=str(folder_path),
+                prompt_path=str(prompt_path) if prompt_path.exists() else "",
+                context=item.get("context", "rag"),
+                rag_length=int(item.get("rag_length", 50)),
+            )
+            processing_order.append(name)
+
+        self._processing_order = processing_order
 
     def get_file_config(self, file_type: str) -> Optional[MarkdownFileConfig]:
         """Get configuration for specified file type"""
@@ -215,7 +244,7 @@ def get_simple_summary() -> Dict[str, Any]:
         "required_files": required_files,
         "optional_files": {},
         "total_files": len(file_types),
-        "processing_principle": f"Dynamically load {len(file_types)} folder configurations",
+        "processing_principle": f"Load {len(file_types)} categories from YAML (system + custom)",
     }
 
 

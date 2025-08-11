@@ -36,7 +36,6 @@ class MemoryService:
         """Initialize memory service with settings"""
         self.settings = settings
         self._memory_agent: Optional[MemoryAgent] = None
-        self._recall_agent: Optional[RecallAgent] = None
         self._llm_client = None
         
         # Ensure memory directory exists
@@ -87,15 +86,7 @@ class MemoryService:
             )
         return self._memory_agent
     
-    def _get_recall_agent(self) -> RecallAgent:
-        """Get or create recall agent"""
-        if self._recall_agent is None:
-            self._recall_agent = RecallAgent(memory_dir=str(self.memory_path))
-        return self._recall_agent
 
-    def _get_character_name(self, agent_id: str, user_id: str) -> str:
-        """Generate character name from agent_id and user_id using @@ separator to avoid underscore conflicts"""
-        return f"{agent_id}@@{user_id}"
     
     async def memorize_conversation(
         self,
@@ -123,7 +114,15 @@ class MemoryService:
             Dict with processing results
         """
         try:
-            memory_agent = self._get_memory_agent()
+            # Create a fresh MemoryAgent instance per request to avoid shared state across async jobs
+            llm_client = self._get_llm_client()
+            memory_agent = MemoryAgent(
+                llm_client=llm_client,
+                memory_dir=str(self.memory_path),
+                enable_embeddings=self.settings.enable_embeddings,
+                agent_id=agent_id,
+                user_id=user_id,
+            )
             
             # Convert conversation to the format expected by MemoryAgent
             conversation_data = []
@@ -152,19 +151,20 @@ class MemoryService:
             else:
                 raise ValueError("Either conversation_text or conversation must be provided")
             
-            # Use agent_id and user_id to create character_name for new directory structure
-            # Format: {agent_id}@@{user_id} using @@ separator to avoid underscore conflicts
-            character_name = self._get_character_name(agent_id, user_id)
+            # Use user_name as character_name (no longer encode agent_id and user_id)
+            character_name = user_name
             
             # Log the directory structure being used
             logger.info(f"Using directory structure: memory/{agent_id}/{user_id}/ for character: {character_name}")
             
             # Run the memory processing
+            # TODO: if there's already a memorization task on the same (agent_id, user_id) running,
+            #       should let the new task wait for the old one to finish
             result = await asyncio.get_event_loop().run_in_executor(
                 None,
                 memory_agent.run,
                 conversation_data,
-                character_name
+                character_name,
             )
             
             logger.info(f"Memory processing completed for {agent_id}@@{user_id}")
@@ -192,16 +192,19 @@ class MemoryService:
             DefaultCategoriesResponse with categories
         """
         try:
-            recall_agent = self._get_recall_agent()
-            
-            # Use agent_id and user_id to create character_name for new directory structure
-            character_name = self._get_character_name(agent_id or "default_agent", user_id)
+            # Create a fresh RecallAgent instance per request to avoid shared state across async jobs
+            recall_agent = RecallAgent(
+                memory_dir=str(self.memory_path),
+                agent_id=agent_id or "default_agent",
+                user_id=user_id
+            )
             
             # Get default categories content
             result = await asyncio.get_event_loop().run_in_executor(
                 None,
                 recall_agent.retrieve_default_category,
-                character_name
+                agent_id or "default_agent",
+                user_id
             )
             
             if not result.get("success"):
@@ -215,7 +218,7 @@ class MemoryService:
                 memories = self._parse_memory_content(
                     item["content"],
                     item["category"],
-                    character_name
+                    user_id
                 )
                 
                 categories.append(CategoryInfo(
@@ -260,18 +263,21 @@ class MemoryService:
             RelatedMemoryItemsResponse with related memories
         """
         try:
-            recall_agent = self._get_recall_agent()
-            
-            # Use agent_id and user_id to create character_name for new directory structure
-            character_name = self._get_character_name(agent_id or "default_agent", user_id)
-            
+            # Create a fresh RecallAgent instance per request to avoid shared state across async jobs
+            recall_agent = RecallAgent(
+                memory_dir=str(self.memory_path),
+                agent_id=agent_id or "default_agent",
+                user_id=user_id
+            )
+
             # Retrieve relevant memories
             result = await asyncio.get_event_loop().run_in_executor(
                 None,
                 recall_agent.retrieve_relevant_memories,
-                character_name,
                 query,
-                top_k
+                top_k,
+                agent_id or "default_agent",
+                user_id
             )
             
             if not result.get("success"):
@@ -339,18 +345,21 @@ class MemoryService:
             RelatedClusteredCategoriesResponse with clustered categories
         """
         try:
-            recall_agent = self._get_recall_agent()
-            
-            # Use agent_id and user_id to create character_name for new directory structure
-            character_name = self._get_character_name(agent_id or "default_agent", user_id)
-            
+            # Create a fresh RecallAgent instance per request to avoid shared state across async jobs
+            recall_agent = RecallAgent(
+                memory_dir=str(self.memory_path),
+                agent_id=agent_id or "default_agent",
+                user_id=user_id
+            )
+
             # Retrieve relevant categories
             result = await asyncio.get_event_loop().run_in_executor(
                 None,
                 recall_agent.retrieve_relevant_category,
-                character_name,
                 category_query,
-                top_k
+                top_k,
+                agent_id or "default_agent",
+                user_id
             )
             
             if not result.get("success"):
@@ -370,7 +379,7 @@ class MemoryService:
                     memories = self._parse_memory_content(
                         item["content"],
                         item["category"],
-                        character_name
+                        user_id
                     )
                     
                     clustered_categories.append(ClusteredCategory(
@@ -395,7 +404,7 @@ class MemoryService:
             logger.error(f"Error retrieving clustered categories: {e}", exc_info=True)
             raise
     
-    def _parse_memory_content(self, content: str, category: str, character_name: str) -> List[MemoryItem]:
+    def _parse_memory_content(self, content: str, category: str, user_id: str) -> List[MemoryItem]:
         """
         Parse memory content into individual memory items
         
@@ -417,12 +426,7 @@ class MemoryService:
         for i, line in enumerate(lines):
             line = line.strip()
             if line and not line.startswith('#'):  # Skip empty lines and headers
-                # Extract user_id from character_name for content readability
-                if '@@' in character_name:
-                    _, user_id_part = character_name.split('@@', 1)
-                else:
-                    user_id_part = character_name
-                memory_id = f"{user_id_part}_{category}_{i}"
+                memory_id = f"{user_id}_{category}_{i}"
                 memories.append(MemoryItem(
                     memory_id=memory_id,
                     category=category,

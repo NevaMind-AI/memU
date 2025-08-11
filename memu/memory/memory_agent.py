@@ -38,18 +38,21 @@ class MemoryCore:
         llm_client: BaseLLMClient,
         memory_dir: str = "memu/server/memory",
         enable_embeddings: bool = True,
+        agent_id: str = "",
+        user_id: str = "",
     ):
         self.llm_client = llm_client
         self.memory_dir = Path(memory_dir)
         self._stop_flag = threading.Event()
 
-        # Initialize memory types from config
+        # Initialize config manager and processing order (basic only)
         self.config_manager = get_config_manager()
-        self.memory_types = self.config_manager.get_file_types_mapping()
         self.processing_order = self.config_manager.get_processing_order()
 
-        # Initialize file-based storage manager
-        self.storage_manager = MemoryFileManager(memory_dir)
+        # Initialize file-based storage manager with context (shared by actions)
+        self.storage_manager = MemoryFileManager(memory_dir, agent_id=agent_id, user_id=user_id)
+        # Initialize memory types from storage manager (includes cluster for this context)
+        self.memory_types = self.storage_manager.memory_types
 
         # Initialize embedding client
         self.enable_embeddings = enable_embeddings
@@ -577,7 +580,7 @@ Start with step 1 and work through the process systematically. When you complete
             "processing_order": self.memory_core.processing_order,
             "storage_type": "file_system",
             "memory_dir": str(self.memory_core.memory_dir),
-            "config_source": "markdown_config.py (dynamic folder structure)",
+            "config_source": "memory_cat_config.yaml (system + custom)",
             "total_actions": len(self.actions),
             "available_actions": list(self.actions.keys()),
             "total_functions": len(self.function_registry),
