@@ -119,9 +119,7 @@ class MemoryService:
             memory_agent = MemoryAgent(
                 llm_client=llm_client,
                 memory_dir=str(self.memory_path),
-                enable_embeddings=self.settings.enable_embeddings,
-                agent_id=agent_id,
-                user_id=user_id,
+                enable_embeddings=self.settings.enable_embeddings
             )
             
             # Convert conversation to the format expected by MemoryAgent
