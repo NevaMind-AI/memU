@@ -318,18 +318,37 @@ class BaseAction(ABC):
 
         return existing_memory
 
+    def _parse_character_name(self, character_name: str) -> tuple[str, str]:
+        """
+        Parse character_name to extract agent_id and user_id
+        
+        Args:
+            character_name: Character name in format "agent_id@@user_id"
+            
+        Returns:
+            Tuple of (agent_id, user_id)
+            
+        Raises:
+            ValueError: If character_name is not in the correct format
+        """
+        if '@@' in character_name:
+            # Correct format: agent_id@@user_id
+            parts = character_name.split('@@', 1)
+            agent_id = parts[0]
+            user_id = parts[1]
+            return agent_id, user_id
+        else:
+            # Invalid format - require @@ separator to avoid parsing ambiguity
+            raise ValueError(
+                f"character_name '{character_name}' must be in format 'agent_id@@user_id'. "
+                f"Please use MemoryService._get_character_name(agent_id, user_id) to generate the correct format."
+            )
+
     def _read_memory_content(self, character_name: str, category: str) -> str:
         """Read memory content from storage"""
         try:
-            if hasattr(self.storage_manager, "read_memory_file"):
-                return self.storage_manager.read_memory_file(character_name, category)
-            else:
-                method_name = f"read_{category}"
-                if hasattr(self.storage_manager, method_name):
-                    return getattr(self.storage_manager, method_name)(character_name)
-                else:
-                    logger.warning(f"No read method available for {category}")
-                    return ""
+            agent_id, user_id = self._parse_character_name(character_name)
+            return self.storage_manager.read_memory_file(agent_id, user_id, category)
         except Exception as e:
             logger.warning(f"Failed to read {category} for {character_name}: {e}")
             return ""
@@ -339,19 +358,8 @@ class BaseAction(ABC):
     ) -> bool:
         """Save memory content to storage"""
         try:
-            if hasattr(self.storage_manager, "write_memory_file"):
-                return self.storage_manager.write_memory_file(
-                    character_name, category, content
-                )
-            else:
-                method_name = f"write_{category}"
-                if hasattr(self.storage_manager, method_name):
-                    return getattr(self.storage_manager, method_name)(
-                        character_name, content
-                    )
-                else:
-                    logger.error(f"No write method available for {category}")
-                    return False
+            agent_id, user_id = self._parse_character_name(character_name)
+            return self.storage_manager.write_memory_file(agent_id, user_id, category, content)
         except Exception as e:
             logger.error(f"Failed to save {category} for {character_name}: {e}")
             return False

@@ -204,7 +204,12 @@ Example: "We went to hiking in Blue Ridge Mountains this summer" is related to b
                 if cluster not in existing_clusters:
                     continue
                 cluster_fn = cluster.replace(" ", "_")
-                with open(f"memory/{character_name}_{cluster_fn}.md", "a") as f:
+                # Parse character name to get agent_id and user_id for correct directory structure
+                agent_id, user_id = self._parse_character_name(character_name)
+                cluster_file_path = self.storage_manager.memory_dir / agent_id / user_id / f"{cluster_fn}.md"
+                cluster_file_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                with open(cluster_file_path, "a") as f:
                     memory_item = all_items[memory_id]
                     f.write(
                         f"[{memory_id}][mentioned at {memory_item.get('session_date', 'Unknown')}] {memory_item['content']} []\n"
@@ -294,7 +299,12 @@ Your task is to discover NEW events/themes that are either:
             cluster, memory_ids = line[2:].split(": ", 1)
             cluster = cluster.strip().lower()
             cluster_fn = cluster.replace(" ", "_")
-            with open(f"memory/{character_name}_{cluster_fn}.md", "a") as f:
+            # Parse character name to get agent_id and user_id for correct directory structure
+            agent_id, user_id = self._parse_character_name(character_name)
+            cluster_file_path = self.storage_manager.memory_dir / agent_id / user_id / f"{cluster_fn}.md"
+            cluster_file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(cluster_file_path, "a") as f:
                 if cluster not in new_clusters:
                     new_clusters[cluster] = []
 

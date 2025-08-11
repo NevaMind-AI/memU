@@ -58,10 +58,15 @@ def process_conversation(conversation=None):
     llm_client = OpenAIClient(model="gpt-4o-mini")
     memory_agent = MemoryAgent(llm_client=llm_client, memory_dir="memory")
     
+    # Create character_name in correct format: agent_id@@user_id
+    # For this example, we'll use "example_agent" as agent_id and the character name as user_id
+    character_role = character_test or conversation[0]["role"]
+    character_name = f"example_agent@@{character_role}"
+    
     # Process conversation
     result = memory_agent.run(
         conversation=conversation,
-        character_name=character_test or conversation[0]["role"],
+        character_name=character_name,
         max_iterations=20
     )
     

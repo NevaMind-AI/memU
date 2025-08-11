@@ -155,8 +155,14 @@ class AddActivityMemoryAction(BaseAction):
     ) -> str:
         """Use LLM to format content with meaningful activity grouping"""
 
+        # Extract readable user name from character_name
+        if '@@' in character_name:
+            _, user_name = character_name.split('@@', 1)
+        else:
+            user_name = character_name
+            
         # Create enhanced prompt for meaningful activity grouping
-        format_prompt = f"""You are formatting activity memory content for {character_name} on {session_date}.
+        format_prompt = f"""You are formatting activity memory content for {user_name} on {session_date}.
 
 Raw content to format:
 {content}
@@ -318,9 +324,12 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
             if not self.embeddings_enabled or not new_items:
                 return {"success": False, "error": "Embeddings disabled or empty item"}
 
-            # Load existing embeddings
-            char_embeddings_dir = self.embeddings_dir / character_name
-            char_embeddings_dir.mkdir(exist_ok=True)
+            # Parse character name for directory structure
+            agent_id, user_id = self._parse_character_name(character_name)
+            
+            # Load existing embeddings: embeddings/{agent_id}/{user_id}/
+            char_embeddings_dir = self.embeddings_dir / agent_id / user_id
+            char_embeddings_dir.mkdir(parents=True, exist_ok=True)
             embeddings_file = char_embeddings_dir / f"{category}_embeddings.json"
 
             existing_embeddings = []
@@ -336,8 +345,14 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
 
                 try:
                     embedding_vector = self.embedding_client.embed(item["content"])
+                    # Extract user_id for item naming
+                    if '@@' in character_name:
+                        _, user_id = character_name.split('@@', 1)
+                    else:
+                        user_id = character_name
+                    
                     new_item_id = (
-                        f"{character_name}_{category}_item_{len(existing_embeddings)}"
+                        f"{user_id}_{category}_item_{len(existing_embeddings)}"
                     )
 
                     new_embedding = {

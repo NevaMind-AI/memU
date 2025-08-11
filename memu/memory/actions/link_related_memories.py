@@ -224,7 +224,11 @@ class LinkRelatedMemoriesAction(BaseAction):
         all_candidates = []
 
         try:
-            char_embeddings_dir = self.embeddings_dir / character_name
+            # Parse character name for directory structure
+            agent_id, user_id = self._parse_character_name(character_name)
+            
+            # Embeddings directory: embeddings/{agent_id}/{user_id}/
+            char_embeddings_dir = self.embeddings_dir / agent_id / user_id
             if not char_embeddings_dir.exists():
                 return []
 

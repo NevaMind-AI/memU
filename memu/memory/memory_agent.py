@@ -36,7 +36,7 @@ class MemoryCore:
     def __init__(
         self,
         llm_client: BaseLLMClient,
-        memory_dir: str = "memory",
+        memory_dir: str = "memu/server/memory",
         enable_embeddings: bool = True,
     ):
         self.llm_client = llm_client
@@ -95,7 +95,7 @@ class MemoryAgent:
     def __init__(
         self,
         llm_client: BaseLLMClient,
-        memory_dir: str = "memory",
+        memory_dir: str = "memu/server/memory",
         enable_embeddings: bool = True,
     ):
         """
@@ -311,7 +311,16 @@ Start with step 1 and work through the process systematically. When you complete
                                 function_result.get("success")
                                 and function_name == "add_activity_memory"
                             ):
-                                file_path = f"{self.memory_core.memory_dir}/{character_name}_activity.md"
+                                # Parse character name to get agent_id and user_id
+                                if '@@' in character_name:
+                                    parts = character_name.split('@@', 1)
+                                    agent_id, user_id = parts[0], parts[1]
+                                else:
+                                    # Invalid format - log error and skip file tracking
+                                    logger.error(f"Invalid character_name format: '{character_name}'. Expected 'agent_id@@user_id'")
+                                    continue
+                                
+                                file_path = f"{self.memory_core.memory_dir}/{agent_id}/{user_id}/activity.md"
                                 if file_path not in results["files_generated"]:
                                     results["files_generated"].append(file_path)
 

@@ -3,7 +3,7 @@
 RecallAgent Three Retrieval Methods Example
 
 Demonstrates the new RecallAgent's three distinct retrieval methods:
-Automatically scans {character_name}_{category}.md files in memory directory.
+Automatically scans memory/{agent_id}/{user_id}/{category}.md files in memory directory.
 
 1. retrieve_default_category: Get content from ['profile', 'event'] categories
 2. retrieve_relevant_category: Get top-k similar category names (excluding profile/event/activity)
@@ -29,10 +29,10 @@ def demo_retrieve_default_category():
     """
     print("=== Method 1: retrieve_default_category() ===")
     print("Getting content from default categories: ['profile', 'event']")
-    print("Scans for {character_name}_{category}.md files in memory directory\n")
+    print("Scans for memory/{agent_id}/{user_id}/{category}.md files in memory directory\n")
     
     recall_agent = RecallAgent(memory_dir="memory")
-    character_name = "Melanie"
+    character_name = "example_agent@@Melanie"
     
     result = recall_agent.retrieve_default_category(character_name)
     
@@ -77,11 +77,11 @@ def demo_retrieve_relevant_category():
     """
     print("=== Method 2: retrieve_relevant_category() ===")
     print("Getting relevant categories based on query similarity")
-    print("Scans for {character_name}_{category}.md files in memory directory")
+    print("Scans for memory/{agent_id}/{user_id}/{category}.md files in memory directory")
     print("(Excludes: profile, event, activity)\n")
     
     recall_agent = RecallAgent(memory_dir="memory")
-    character_name = "Melanie"
+    character_name = "example_agent@@Melanie"
     query = "cooking food family dinner"
     top_k = 3
     
@@ -136,7 +136,7 @@ def demo_retrieve_relevant_memories():
     print("Getting relevant memories using semantic search\n")
     
     recall_agent = RecallAgent(memory_dir="memory")
-    character_name = "Melanie"
+    character_name = "example_agent@@Melanie"
     query = "outdoor activities hiking exercise"
     top_k = 5
     
@@ -221,7 +221,7 @@ def main():
         print("\n✅ Demo completed successfully!")
         print("\n📚 Summary:")
         print("  1. retrieve_default_category: Fixed categories (profile, event) - scans actual files")
-        print("  2. retrieve_relevant_category: Query-based category matching - scans {char}_{category}.md files")
+        print("  2. retrieve_relevant_category: Query-based category matching - scans memory/{agent_id}/{user_id}/{category}.md files")
         print("     (excludes profile/event/activity)")
         print("  3. retrieve_relevant_memories: Semantic embedding search")
         print("\n📌 Content shown above is the COMPLETE retrieved content!")

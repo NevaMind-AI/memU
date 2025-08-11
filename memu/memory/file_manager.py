@@ -37,7 +37,7 @@ class MemoryFileManager:
         "activity": ".md",
     }
 
-    def __init__(self, memory_dir: str = "memory"):
+    def __init__(self, memory_dir: str = "memu/server/memory"):
         """
         Initialize File Manager
 
@@ -48,40 +48,56 @@ class MemoryFileManager:
         self.memory_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"MemoryFileManager initialized with directory: {self.memory_dir}")
 
-    def _get_memory_file_path(self, character_name: str, category: str) -> Path:
-        """Get the file path for a character's memory file"""
-        extension = self.MEMORY_TYPES.get(category, ".md")
-        filename = f"{character_name}_{category}{extension}"
-        return self.memory_dir / filename
-
-    def read_memory_file(self, character_name: str, category: str) -> str:
+    def _get_memory_file_path(self, agent_id: str, user_id: str, category: str) -> Path:
         """
-        Read content from a character's memory file
+        Get the file path for a memory file with agent_id/user_id structure
+        
+        Args:
+            agent_id: Agent identifier
+            user_id: User identifier
+            category: Memory category
+            
+        Returns:
+            Path: Full path to the memory file
+        """
+        extension = self.MEMORY_TYPES.get(category, ".md")
+        filename = f"{category}{extension}"
+        return self.memory_dir / agent_id / user_id / filename
+
+
+
+    def read_memory_file(self, agent_id: str, user_id: str, category: str) -> str:
+        """
+        Read content from a memory file using agent_id/user_id structure
 
         Args:
-            character_name: Name of the character
+            agent_id: Agent identifier
+            user_id: User identifier
             category: Category to read
 
         Returns:
             str: File content or empty string if not found
         """
         try:
-            file_path = self._get_memory_file_path(character_name, category)
+            file_path = self._get_memory_file_path(agent_id, user_id, category)
             if file_path.exists():
                 return file_path.read_text(encoding="utf-8")
             return ""
         except Exception as e:
-            logger.error(f"Error reading {category} for {character_name}: {e}")
+            logger.error(f"Error reading {category} for agent {agent_id}, user {user_id}: {e}")
             return ""
 
+
+
     def write_memory_file(
-        self, character_name: str, category: str, content: str
+        self, agent_id: str, user_id: str, category: str, content: str
     ) -> bool:
         """
-        Write content to a character's memory file
+        Write content to a memory file using agent_id/user_id structure
 
         Args:
-            character_name: Name of the character
+            agent_id: Agent identifier
+            user_id: User identifier
             category: Category to write
             content: Content to write
 
@@ -89,23 +105,26 @@ class MemoryFileManager:
             bool: True if successful, False otherwise
         """
         try:
-            file_path = self._get_memory_file_path(character_name, category)
+            file_path = self._get_memory_file_path(agent_id, user_id, category)
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(content, encoding="utf-8")
-            logger.debug(f"Written {category} for {character_name}")
+            logger.debug(f"Written {category} for agent {agent_id}, user {user_id}")
             return True
         except Exception as e:
-            logger.error(f"Error writing {category} for {character_name}: {e}")
+            logger.error(f"Error writing {category} for agent {agent_id}, user {user_id}: {e}")
             return False
 
+
+
     def append_memory_file(
-        self, character_name: str, category: str, content: str
+        self, agent_id: str, user_id: str, category: str, content: str
     ) -> bool:
         """
-        Append content to a character's memory file
+        Append content to a memory file using agent_id/user_id structure
 
         Args:
-            character_name: Name of the character
+            agent_id: Agent identifier
+            user_id: User identifier
             category: Category to append to
             content: Content to append
 
@@ -113,76 +132,87 @@ class MemoryFileManager:
             bool: True if successful, False otherwise
         """
         try:
-            existing_content = self.read_memory_file(character_name, category)
+            existing_content = self.read_memory_file(agent_id, user_id, category)
             if existing_content:
                 new_content = existing_content + "\n\n" + content
             else:
                 new_content = content
-            return self.write_memory_file(character_name, category, new_content)
+            return self.write_memory_file(agent_id, user_id, category, new_content)
         except Exception as e:
-            logger.error(f"Error appending {category} for {character_name}: {e}")
+            logger.error(f"Error appending {category} for agent {agent_id}, user {user_id}: {e}")
             return False
 
-    def delete_memory_file(self, character_name: str, category: str) -> bool:
+
+
+    def delete_memory_file(self, agent_id: str, user_id: str, category: str) -> bool:
         """
-        Delete a character's memory file
+        Delete a memory file using agent_id/user_id structure
 
         Args:
-            character_name: Name of the character
+            agent_id: Agent identifier
+            user_id: User identifier
             category: Category to delete
 
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            file_path = self._get_memory_file_path(character_name, category)
+            file_path = self._get_memory_file_path(agent_id, user_id, category)
             if file_path.exists():
                 file_path.unlink()
-                logger.debug(f"Deleted {category} for {character_name}")
+                logger.debug(f"Deleted {category} for agent {agent_id}, user {user_id}")
             return True
         except Exception as e:
-            logger.error(f"Error deleting {category} for {character_name}: {e}")
+            logger.error(f"Error deleting {category} for agent {agent_id}, user {user_id}: {e}")
             return False
 
-    def list_character_files(self, character_name: str) -> List[str]:
+
+
+    def list_memory_files(self, agent_id: str, user_id: str) -> List[str]:
         """
-        List all memory files for a character
+        List all memory files for an agent-user pair
 
         Args:
-            character_name: Name of the character
+            agent_id: Agent identifier
+            user_id: User identifier
 
         Returns:
-            List[str]: List of categories that exist for the character
+            List[str]: List of categories that exist for the agent-user pair
         """
         existing_categories = []
         for category in self.MEMORY_TYPES:
-            file_path = self._get_memory_file_path(character_name, category)
+            file_path = self._get_memory_file_path(agent_id, user_id, category)
             if file_path.exists():
                 existing_categories.append(category)
         return existing_categories
 
-    def get_file_info(self, character_name: str, category: str) -> Dict[str, Any]:
+
+
+    def get_file_info(self, agent_id: str, user_id: str, category: str) -> Dict[str, Any]:
         """
-        Get information about a memory file
+        Get information about a memory file using agent_id/user_id structure
 
         Args:
-            character_name: Name of the character
+            agent_id: Agent identifier
+            user_id: User identifier
             category: Category name
 
         Returns:
             Dict containing file information
         """
-        file_path = self._get_memory_file_path(character_name, category)
+        file_path = self._get_memory_file_path(agent_id, user_id, category)
 
         if file_path.exists():
             stat = file_path.stat()
-            content = self.read_memory_file(character_name, category)
+            content = self.read_memory_file(agent_id, user_id, category)
             return {
                 "exists": True,
                 "file_size": stat.st_size,
                 "last_modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                 "content_length": len(content),
                 "file_path": str(file_path),
+                "agent_id": agent_id,
+                "user_id": user_id,
             }
         else:
             return {
@@ -191,62 +221,6 @@ class MemoryFileManager:
                 "last_modified": None,
                 "content_length": 0,
                 "file_path": str(file_path),
+                "agent_id": agent_id,
+                "user_id": user_id,
             }
-
-    # Legacy method aliases for backward compatibility
-    def read_profile(self, character_name: str) -> str:
-        """Read character profile"""
-        return self.read_memory_file(character_name, "profile")
-
-    def write_profile(self, character_name: str, content: str) -> bool:
-        """Write character profile"""
-        return self.write_memory_file(character_name, "profile", content)
-
-    def read_events(self, character_name: str) -> str:
-        """Read character events"""
-        return self.read_memory_file(character_name, "event")
-
-    def write_events(self, character_name: str, content: str) -> bool:
-        """Write character events"""
-        return self.write_memory_file(character_name, "event", content)
-
-    def read_reminders(self, character_name: str) -> str:
-        """Read character reminders"""
-        return self.read_memory_file(character_name, "reminder")
-
-    def write_reminders(self, character_name: str, content: str) -> bool:
-        """Write character reminders"""
-        return self.write_memory_file(character_name, "reminder", content)
-
-    def read_interests(self, character_name: str) -> str:
-        """Read character interests"""
-        return self.read_memory_file(character_name, "interests")
-
-    def write_interests(self, character_name: str, content: str) -> bool:
-        """Write character interests"""
-        return self.write_memory_file(character_name, "interests", content)
-
-    def read_study(self, character_name: str) -> str:
-        """Read character study information"""
-        return self.read_memory_file(character_name, "study")
-
-    def write_study(self, character_name: str, content: str) -> bool:
-        """Write character study information"""
-        return self.write_memory_file(character_name, "study", content)
-
-    def read_activity(self, character_name: str) -> str:
-        """Read character activity summary"""
-        return self.read_memory_file(character_name, "activity")
-
-    def write_activity(self, character_name: str, content: str) -> bool:
-        """Write character activity summary"""
-        return self.write_memory_file(character_name, "activity", content)
-
-    # Additional legacy aliases for compatibility
-    def read_important_events(self, character_name: str) -> str:
-        """Read important events (alias for events)"""
-        return self.read_events(character_name)
-
-    def write_important_events(self, character_name: str, content: str) -> bool:
-        """Write important events (alias for events)"""
-        return self.write_events(character_name, content)

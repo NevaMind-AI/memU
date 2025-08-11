@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 class RecallAgent:
     """
     Enhanced workflow for intelligent memory retrieval with three distinct methods.
-    Automatically scans {character_name}_{category}.md files in memory directory.
+    Automatically scans {agent_id}/{user_id}/{category}.md files in memory directory.
 
     Three core retrieval methods:
     1. retrieve_default_category: Get content from ['profile', 'event'] categories
@@ -29,7 +29,7 @@ class RecallAgent:
     3. retrieve_relevant_memories: Get top-k memories using embedding search
     """
 
-    def __init__(self, memory_dir: str = "memory"):
+    def __init__(self, memory_dir: str = "memu/server/memory"):
         """
         Initialize Recall Agent
 
@@ -130,7 +130,7 @@ class RecallAgent:
         """
         Method 2: Retrieve Relevant Category
         Retrieve relevant contents from top-k similar category names (excluding profile, event, and activity)
-        Scans actual {character_name}_{category}.md files in memory directory
+        Scans actual {agent_id}/{user_id}/{category}.md files in memory directory
 
         Args:
             character_name: Name of the character
@@ -299,7 +299,10 @@ class RecallAgent:
             query_embedding = self.embedding_client.embed(query)
 
             results = []
-            embeddings_dir = self.memory_dir / "embeddings" / character_name
+            agent_id, user_id = self._parse_character_name(character_name)
+            
+            # Embeddings directory: embeddings/{agent_id}/{user_id}/
+            embeddings_dir = self.memory_dir / "embeddings" / agent_id / user_id
 
             if not embeddings_dir.exists():
                 return {
@@ -309,7 +312,7 @@ class RecallAgent:
                     "query": query,
                     "results": [],
                     "total_items": 0,
-                    "message": f"No embeddings found for {character_name}",
+                    "message": f"No embeddings found for {character_name} in {embeddings_dir}",
                 }
 
             # Search through all embedding files for this character
@@ -396,22 +399,23 @@ class RecallAgent:
             return 0.0
 
     def _get_actual_categories(self, character_name: str) -> List[str]:
-        """Get actual categories from existing {character_name}_{category}.md files"""
+        """Get actual categories from existing files in agent_id/user_id directory structure"""
         try:
             categories = []
             memory_dir = Path(self.memory_dir)
+            agent_id, user_id = self._parse_character_name(character_name)
 
-            # Look for files matching pattern: {character_name}_{category}.md
-            pattern = f"{character_name}_*.md"
-            for file_path in memory_dir.glob(pattern):
-                filename = file_path.stem  # Remove .md extension
-                # Extract category from filename: {character_name}_{category}
-                if filename.startswith(f"{character_name}_"):
-                    category = filename[len(f"{character_name}_") :]
+            # Look in {agent_id}/{user_id}/ directory for {category}.md files
+            agent_user_dir = memory_dir / agent_id / user_id
+            if agent_user_dir.exists():
+                for file_path in agent_user_dir.glob("*.md"):
+                    category = file_path.stem  # Remove .md extension
                     if category:  # Make sure category is not empty
                         categories.append(category)
+                logger.debug(f"Found categories for {character_name} in {agent_user_dir}: {categories}")
+            else:
+                logger.debug(f"Agent/User directory does not exist: {agent_user_dir}")
 
-            logger.debug(f"Found categories for {character_name}: {categories}")
             return categories
 
         except Exception as e:
@@ -419,18 +423,37 @@ class RecallAgent:
             # Fallback to config-based categories
             return list(self.memory_types.keys())
 
+    def _parse_character_name(self, character_name: str) -> tuple[str, str]:
+        """
+        Parse character_name to extract agent_id and user_id
+        
+        Args:
+            character_name: Character name in format "agent_id@@user_id"
+            
+        Returns:
+            Tuple of (agent_id, user_id)
+            
+        Raises:
+            ValueError: If character_name is not in the correct format
+        """
+        if '@@' in character_name:
+            # Correct format: agent_id@@user_id
+            parts = character_name.split('@@', 1)
+            agent_id = parts[0]
+            user_id = parts[1]
+            return agent_id, user_id
+        else:
+            # Invalid format - require @@ separator to avoid parsing ambiguity
+            raise ValueError(
+                f"character_name '{character_name}' must be in format 'agent_id@@user_id'. "
+                f"Please use MemoryService._get_character_name(agent_id, user_id) to generate the correct format."
+            )
+
     def _read_memory_content(self, character_name: str, category: str) -> str:
         """Read memory content from storage"""
         try:
-            if hasattr(self.storage_manager, "read_memory_file"):
-                return self.storage_manager.read_memory_file(character_name, category)
-            else:
-                method_name = f"read_{category}"
-                if hasattr(self.storage_manager, method_name):
-                    return getattr(self.storage_manager, method_name)(character_name)
-                else:
-                    logger.warning(f"No read method available for {category}")
-                    return ""
+            agent_id, user_id = self._parse_character_name(character_name)
+            return self.storage_manager.read_memory_file(agent_id, user_id, category)
         except Exception as e:
             logger.warning(f"Failed to read {category} for {character_name}: {e}")
             return ""

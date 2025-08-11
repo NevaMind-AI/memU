@@ -68,6 +68,10 @@ local = [
 database = [
     "psycopg2-binary>=2.9.9",
 ]
+server = [
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
+]
 all = [
     "openai>=1.0.0",
     "sentence-transformers>=2.2.0",
@@ -80,6 +84,8 @@ all = [
     "transformers>=4.21.0",
     "torch>=1.12.0",
     "psycopg2-binary>=2.9.9",
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
 ]
 
 [project.urls]
@@ -87,8 +93,8 @@ all = [
 "Bug Tracker" = "https://github.com/NevaMind-AI/MemU/issues"
 "Documentation" = "https://github.com/NevaMind-AI/MemU#readme"
 
-# [project.scripts]
-# memu = "memu.cli:main"  # CLI module not implemented yet
+[project.scripts]
+memu-server = "memu.server.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
