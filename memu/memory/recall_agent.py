@@ -447,7 +447,7 @@ class RecallAgent:
             categories = []
             
             # Look in {agent_id}/{user_id}/ directory for {category}.md files
-            agent_user_dir = self.memory_dir / agent_id / user_id
+            agent_user_dir = self.memory_dir / str(agent_id) / str(user_id)
             if agent_user_dir.exists():
                 for file_path in agent_user_dir.glob("*.md"):
                     category = file_path.stem  # Remove .md extension

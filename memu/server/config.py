@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # LLM settings
     llm_provider: str = "azure"
     openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
-    openai_model: str = "gpt-4"
+    openai_model: str = "gpt-4.1-mini"
 
     azure_api_key: Optional[str] = os.getenv("AZURE_API_KEY")
     azure_endpoint: Optional[str] = os.getenv("AZURE_ENDPOINT")
