@@ -150,7 +150,7 @@ The memory agent automatically prioritizes information based on usage patterns. 
 MemU achieves 92.09% average accuracy in Locomo dataset across all reasoning tasks, significantly outperforming competitors. Technical Report will be published soon!
 
 ![Memory Accuracy Comparison](assets/benchmark.png)
-<em>Single-hop questions require answers based on a single session; (2) Multi-hop questions require synthesizing information from multiple different sessions; (3) Temporal reasoning questions can be answered through temporal reasoning and capturing time-related data cues within the conversation; (4) Open-domain knowledge questions can be answered by integrating a speaker’s provided information with external knowledge such as commonsense or world facts; </em>
+<em>(1) Single-hop questions require answers based on a single session; (2) Multi-hop questions require synthesizing information from multiple different sessions; (3) Temporal reasoning questions can be answered through temporal reasoning and capturing time-related data cues within the conversation; (4) Open-domain knowledge questions can be answered by integrating a speaker’s provided information with external knowledge such as commonsense or world facts; </em>
 
 ### Fast Retrieval
 
