@@ -39,6 +39,7 @@ class BaseAction(ABC):
         self.embeddings_enabled = memory_core.embeddings_enabled
         self.config_manager = memory_core.config_manager
         self.memory_types = memory_core.memory_types
+        self.basic_memory_types = memory_core.memory_types["basic"]
         self.processing_order = memory_core.processing_order
         # self.embeddings_dir = memory_core.embeddings_dir
 
@@ -306,7 +307,7 @@ class BaseAction(ABC):
         """Load existing memory content for all categories"""
         existing_memory = {}
 
-        for category in self.memory_types:
+        for category in self.storage_manager.get_flat_memory_types():
             try:
                 content = self._read_memory_content(character_name, category)
                 existing_memory[category] = content if isinstance(content, str) else ""

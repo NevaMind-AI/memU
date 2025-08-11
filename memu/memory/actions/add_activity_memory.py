@@ -376,5 +376,7 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
             }
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             logger.error(f"Failed to add memory item embedding: {e}")
             return {"success": False, "error": str(e)}

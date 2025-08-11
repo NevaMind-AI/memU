@@ -28,17 +28,23 @@ class Settings(BaseSettings):
     enable_embeddings: bool = True
     
     # LLM settings
-    llm_provider: str = "openai"
-    openai_api_key: Optional[str] = None
+    llm_provider: str = "azure"
+    openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
     openai_model: str = "gpt-4"
+
+    azure_api_key: Optional[str] = os.getenv("AZURE_API_KEY")
+    azure_endpoint: Optional[str] = os.getenv("AZURE_ENDPOINT")
+    azure_deployment_name: str = "gpt-4.1-mini-2"
     
     # Anthropic settings
-    anthropic_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
     anthropic_model: str = "claude-3-sonnet-20240229"
     
     # DeepSeek settings
-    deepseek_api_key: Optional[str] = None
+    deepseek_api_key: Optional[str] = os.getenv("DEEPSEEK_API_KEY")
     deepseek_model: str = "deepseek-chat"
+
+    embedding_model: str = "text-embedding-3-small"
     
     # Task queue settings (for future Celery integration)
     enable_task_queue: bool = False
@@ -59,13 +65,17 @@ class Settings(BaseSettings):
         super().__init__(**kwargs)
         
         # Handle special environment variables that don't follow the prefix pattern
-        import os
-        if not self.openai_api_key:
-            self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        if not self.anthropic_api_key:
-            self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not self.deepseek_api_key:
-            self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
+        # import os
+        # if not self.openai_api_key:
+        #     self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        # if not self.azure_api_key:
+        #     self.azure_api_key = os.getenv("AZURE_API_KEY")
+        # if not self.azure_endpoint:
+        #     self.azure_endpoint = os.getenv("AZURE_ENDPOINT")
+        # if not self.anthropic_api_key:
+        #     self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
+        # if not self.deepseek_api_key:
+        #     self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
         
         # Parse CORS origins if provided as comma-separated string
         if isinstance(self.cors_origins, str):

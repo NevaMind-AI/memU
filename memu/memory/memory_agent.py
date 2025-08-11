@@ -96,8 +96,10 @@ class MemoryAgent:
     """
 
     def __init__(
-        self,
+        self, *,
         llm_client: BaseLLMClient,
+        agent_id: str = "default_agent",
+        user_id: str = "default_user",
         memory_dir: str = "memu/server/memory",
         enable_embeddings: bool = True,
     ):
@@ -110,7 +112,7 @@ class MemoryAgent:
             enable_embeddings: Whether to generate embeddings for semantic search
         """
         # Initialize memory core
-        self.memory_core = MemoryCore(llm_client, memory_dir, enable_embeddings)
+        self.memory_core = MemoryCore(llm_client, memory_dir, enable_embeddings, agent_id, user_id)
 
         # Initialize actions
         self.actions = {}
@@ -308,24 +310,6 @@ Start with step 1 and work through the process systematically. When you complete
                                 "result": function_result,
                             }
                             results["function_calls"].append(call_record)
-
-                            # Track generated files
-                            if (
-                                function_result.get("success")
-                                and function_name == "add_activity_memory"
-                            ):
-                                # Parse character name to get agent_id and user_id
-                                if '@@' in character_name:
-                                    parts = character_name.split('@@', 1)
-                                    agent_id, user_id = parts[0], parts[1]
-                                else:
-                                    # Invalid format - log error and skip file tracking
-                                    logger.error(f"Invalid character_name format: '{character_name}'. Expected 'agent_id@@user_id'")
-                                    continue
-                                
-                                file_path = f"{self.memory_core.memory_dir}/{agent_id}/{user_id}/activity.md"
-                                if file_path not in results["files_generated"]:
-                                    results["files_generated"].append(file_path)
 
                             # Add tool result to conversation
                             tool_message = {

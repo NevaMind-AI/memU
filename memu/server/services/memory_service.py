@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ...config import get_llm_config_manager
-from ...llm import OpenAIClient, AnthropicClient, DeepSeekClient
+from ...llm import OpenAIClient, AzureOpenAIClient, AnthropicClient, DeepSeekClient
 from ...memory import MemoryAgent, RecallAgent
 from ..config import Settings
 from ..models import (
@@ -55,6 +55,14 @@ class MemoryService:
                 self._llm_client = OpenAIClient(
                     api_key=self.settings.openai_api_key,
                     model=self.settings.openai_model
+                )
+            elif provider == "azure":
+                if not self.settings.azure_api_key:
+                    raise ValueError("Azure API key is required")
+                self._llm_client = AzureOpenAIClient(
+                    api_key=self.settings.azure_api_key,
+                    azure_endpoint=self.settings.azure_endpoint,
+                    deployment_name=self.settings.azure_deployment_name
                 )
             elif provider == "anthropic":
                 if not self.settings.anthropic_api_key:
@@ -119,7 +127,9 @@ class MemoryService:
             memory_agent = MemoryAgent(
                 llm_client=llm_client,
                 memory_dir=str(self.memory_path),
-                enable_embeddings=self.settings.enable_embeddings
+                enable_embeddings=self.settings.enable_embeddings,
+                agent_id=agent_id,
+                user_id=user_id
             )
             
             # Convert conversation to the format expected by MemoryAgent

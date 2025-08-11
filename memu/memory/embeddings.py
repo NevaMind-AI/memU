@@ -9,6 +9,8 @@ import os
 import time
 from typing import List, Optional
 
+from memu.server.config import get_settings
+
 from ..utils import get_logger
 
 logger = get_logger(__name__)
@@ -34,7 +36,8 @@ class EmbeddingClient:
         """
         self.provider = provider.lower()
         self.client = None
-        self.model = kwargs.get("model", "text-embedding-ada-002")
+        # self.model = kwargs.get("model", "text-embedding-ada-002")
+        self.model = kwargs.get("model", "text-embedding-3-small")        
 
         # Initialize based on provider
         if self.provider == "openai":
@@ -74,9 +77,9 @@ class EmbeddingClient:
             import openai
 
             # Required Azure parameters
-            api_key = kwargs.get("api_key") or os.getenv("AZURE_OPENAI_API_KEY")
-            endpoint = kwargs.get("endpoint") or os.getenv("AZURE_OPENAI_ENDPOINT")
-            api_version = kwargs.get("api_version", "2023-05-15")
+            api_key = kwargs.get("azure_api_key") or os.getenv("AZURE_API_KEY")
+            endpoint = kwargs.get("azure_endpoint") or os.getenv("AZURE_ENDPOINT")
+            api_version = kwargs.get("api_version", "2025-01-01-preview")
 
             if not api_key or not endpoint:
                 raise ValueError("Azure OpenAI API key and endpoint are required")
@@ -268,17 +271,25 @@ def get_default_embedding_client() -> Optional[EmbeddingClient]:
     Returns:
         EmbeddingClient if configuration is found, None otherwise
     """
+    settings = get_settings()
     # Try OpenAI first
+
+    if settings.llm_provider in ["openai", "azure"]:
+        try:
+            return create_embedding_client(settings.llm_provider, model=settings.embedding_model)
+        except Exception as e:
+            logger.warning(f"Failed to create embedding client: {e}")
+
     if os.getenv("OPENAI_API_KEY"):
         try:
-            return create_embedding_client("openai")
+            return create_embedding_client("openai", model=settings.embedding_model)
         except Exception as e:
             logger.warning(f"Failed to create OpenAI embedding client: {e}")
 
     # Try Azure OpenAI
     if os.getenv("AZURE_OPENAI_API_KEY") and os.getenv("AZURE_OPENAI_ENDPOINT"):
         try:
-            return create_embedding_client("azure")
+            return create_embedding_client("azure", model=settings.embedding_model)
         except Exception as e:
             logger.warning(f"Failed to create Azure OpenAI embedding client: {e}")
 

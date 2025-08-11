@@ -113,11 +113,11 @@ class LinkRelatedMemoriesAction(BaseAction):
                     }
                 )
 
-            if category not in self.memory_types:
+            if category not in self.basic_memory_types:
                 return self._add_metadata(
                     {
                         "success": False,
-                        "error": f"Skipping category '{category}' not in available categories. Available: {list(self.memory_types.keys())}",
+                        "error": f"Skipping category '{category}' not in available categories. Available: {list(self.basic_memory_types.keys())}",
                     }
                 )
 
@@ -156,7 +156,7 @@ class LinkRelatedMemoriesAction(BaseAction):
 
             # Determine search categories - search in ALL categories by default
             if search_categories is None:
-                search_categories = list(self.memory_types.keys())
+                search_categories = list(self.basic_memory_types.keys())
 
             # Find related memories
             related_memories = self._find_related_memories(
@@ -392,7 +392,7 @@ class LinkRelatedMemoriesAction(BaseAction):
 
             # Determine search categories - search in ALL categories by default
             if search_categories is None:
-                search_categories = list(self.memory_types.keys())
+                search_categories = list(self.basic_memory_types.keys())
 
             total_linked = 0
             all_related_memories = []

@@ -86,11 +86,11 @@ class UpdateMemoryWithSuggestionsAction(BaseAction):
         """
         try:
             # Validate category
-            if category not in self.memory_types:
+            if category not in self.basic_memory_types:
                 return self._add_metadata(
                     {
                         "success": False,
-                        "error": f"Invalid category '{category}'. Available: {list(self.memory_types.keys())}",
+                        "error": f"Invalid category '{category}'. Available: {list(self.basic_memory_types.keys())}",
                     }
                 )
 

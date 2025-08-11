@@ -15,11 +15,8 @@ from .routers import memory
 from .middleware import LoggingMiddleware
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+from ..utils.logging import get_logger
+logger = get_logger(__name__)
 
 # Create FastAPI application
 app = FastAPI(

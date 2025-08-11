@@ -173,8 +173,7 @@ For each category, analyze the new memory items and suggest what specific inform
 
     def _get_available_categories(self, character_name: str) -> list[str]:
         """Get available categories for a character"""
-        # return [category for category in self.memory_types.keys() if category != "activity"]
-        return ["profile", "event"]
+        return [category for category in self.basic_memory_types.keys() if category != "activity"]
 
     def _parse_suggestions_from_text(
         self,
