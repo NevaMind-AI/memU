@@ -56,7 +56,7 @@ from memu import MemuClient
 
 # Initialize client
 client = MemuClient(
-    base_url="https://api-preview.memu.so",
+    base_url="https://api.memu.so",
     api_key=os.getenv("MEMU_API_KEY")
 )
 
@@ -78,7 +78,7 @@ print(f"Task ID: {response.task_id}")
 from memu import MemuClient
 
 client = MemuClient(
-    base_url="https://api-preview.memu.so",  # API base URL
+    base_url="https://api.memu.so",  # API base URL
     api_key="your_api_key",                  # API key for authentication
     timeout=30.0,                            # Request timeout in seconds
     max_retries=3                            # Maximum retry attempts
