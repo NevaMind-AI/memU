@@ -21,20 +21,13 @@ class MemoryFileManager:
     Manages memory storage in markdown files:
     - profile.md: Character profile information
     - events.md: Character event records
-    - reminders.md: Important reminders and todo items
-    - interests.md: Hobbies, interests, and preferences
-    - study.md: Learning goals, courses, and educational content
-    - activity.md: Activity summaries from conversations
+    - xxx.md: Other memory files
     """
 
-    # Define supported memory types and their file extensions
-    MEMORY_TYPES = {
+    # Define basic categories and their file extensions
+    BASIC_CATEGORIES = {
         "profile": ".md",
-        "event": ".md",
-        "reminder": ".md",
-        "interests": ".md",
-        "study": ".md",
-        "activity": ".md",
+        "event": ".md"
     }
 
     def __init__(self, memory_dir: str = "memu/server/memory"):
@@ -60,7 +53,7 @@ class MemoryFileManager:
         Returns:
             Path: Full path to the memory file
         """
-        extension = self.MEMORY_TYPES.get(category, ".md")
+        extension = self.BASIC_CATEGORIES.get(category, ".md")
         filename = f"{category}{extension}"
         return self.memory_dir / agent_id / user_id / filename
 
@@ -180,7 +173,7 @@ class MemoryFileManager:
             List[str]: List of categories that exist for the agent-user pair
         """
         existing_categories = []
-        for category in self.MEMORY_TYPES:
+        for category in self.BASIC_CATEGORIES:
             file_path = self._get_memory_file_path(agent_id, user_id, category)
             if file_path.exists():
                 existing_categories.append(category)
