@@ -33,10 +33,13 @@ docker-compose up -d
 ### 3. Verify it's Working
 
 ```bash
-# Check status
+# Quick health check
 curl http://localhost:8000/health
 
-# View logs
+# Run comprehensive test suite
+python example/server/test_server.py
+
+# View logs (optional)
 docker-compose logs -f memu-server
 ```
 
@@ -45,6 +48,58 @@ docker-compose logs -f memu-server
 - **API Base**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs  
 - **Health Check**: http://localhost:8000/health
+
+## 🧪 Testing the Server
+
+After starting the Docker container, you can test all API endpoints using our test script:
+
+```bash
+# Run the comprehensive test suite
+python example/server/test_server.py
+```
+
+### What the Test Does
+
+The test script performs a complete API workflow:
+
+1. **Health Check** - Verifies server is running and responsive
+2. **Memory Storage** - Tests conversation memorization with sample data
+3. **Task Monitoring** - Tracks asynchronous memory processing
+4. **Memory Retrieval** - Tests various search and categorization APIs
+5. **Performance Validation** - Ensures all endpoints work correctly
+
+### Expected Output
+
+```
+🚀 MemU Server API Test
+==================================================
+🔍 Testing server health...
+✅ Server is healthy
+📝 Testing conversation memorization...
+✅ Memorization started successfully
+⏳ Checking task status...
+✅ Task completed successfully
+📂 Testing default categories retrieval...
+✅ Default categories retrieved successfully
+🎉 Test completed!
+```
+
+### Troubleshooting Tests
+
+**Test fails with connection error?**
+```bash
+# Make sure server is running
+curl http://localhost:8000/health
+
+# Check server logs
+docker-compose logs memu-server
+```
+
+**Memory processing takes too long?**
+```bash
+# The test waits up to 400 seconds for memory processing
+# Check your LLM provider API key and rate limits
+```
 
 ## 🛠️ Management Commands
 

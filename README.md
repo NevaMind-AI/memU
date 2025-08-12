@@ -107,9 +107,7 @@ For users and developers who prefer local control, data privacy, or customizatio
 * **Customization** - Modify and extend the platform to fit your needs
 * **Cost Control** - Avoid recurring cloud fees for large-scale deployments
 
-🚀 **Simple Demo Available** - Check out [`example/local/`](example/local/) for local implementation examples
-
-🔧 **Self-Host Backend** - Coming next week! Star us and keep updated
+See [self hosting README](README.self_host.md)
 
 ---
 
