@@ -2,6 +2,9 @@ from datetime import datetime
 from typing import Any, Dict, List
 
 from .base_action import BaseAction
+from ...utils import get_logger
+
+logger = get_logger(__name__)
 
 
 class RunTheoryOfMindAction(BaseAction):
@@ -148,7 +151,9 @@ class RunTheoryOfMindAction(BaseAction):
             ]
         )
 
-        theory_of_mind_prompt = f"""You are analyzing the following conversation and activity items for {character_name} to try to infer information that is not explicitly mentioned by {character_name} in the conversation, but he or she might meant to express or the listener can reasonably deduce.
+        user_name = character_name
+            
+        theory_of_mind_prompt = f"""You are analyzing the following conversation and activity items for {user_name} to try to infer information that is not explicitly mentioned by {user_name} in the conversation, but he or she might meant to express or the listener can reasonably deduce.
 
 Conversation:
 {conversation_text}
@@ -177,13 +182,13 @@ Your task it to leverage your reasoning skills to infer the information that is 
 - Use modal adverbs (perhaps, probably, likely, etc.) to indicate your confidence level of the inference
 
 **COMPLETE SENTENCE EXAMPLES:**
-GOOD: "{character_name} may have experience working abroad"
+GOOD: "{user_name} may have experience working abroad"
 BAD: "Have experience working abroad" (missing subject)
 BAD: "He may have experience working abroad" (pronouns as subject)
-GOOD: "{character_name} perhaps not enjoy his trip to Europe this summer"
-BAD: "{character_name} perhaps not enjoy his trip" (missing location and time)
-GOOD: "Harry Potter series are probably important to {character_name}'s childhood"
-BAD: "Harry Potter series are probably important to {character_name}'s childhood, because she mentioned it and recommended it to her friends many times" (no need to include evidences or reasoning processes)
+GOOD: "{user_name} perhaps not enjoy his trip to Europe this summer"
+BAD: "{user_name} perhaps not enjoy his trip" (missing location and time)
+GOOD: "Harry Potter series are probably important to {user_name}'s childhood"
+BAD: "Harry Potter series are probably important to {user_name}'s childhood, because she mentioned it and recommended it to her friends many times" (no need to include evidences or reasoning processes)
 
 **OUTPUT FORMAT:**
 
@@ -256,9 +261,6 @@ BAD: "Harry Potter series are probably important to {character_name}'s childhood
                         )
 
         except Exception as e:
-            import traceback
-
-            print(repr(e))
-            traceback.print_exc()
+            logger.error(f"Failed to parse theory of mind from text: {repr(e)}")
 
         return reasoning_process, theory_of_mind_items

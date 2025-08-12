@@ -159,7 +159,7 @@ categories = client.retrieve_default_categories(
 )
 
 for category in categories.categories:
-    print(f"Category: {category.category_name}")
+    print(f"Category: {category.name}")
     print(f"Memories: {category.memory_count}")
 ```
 
@@ -213,7 +213,7 @@ categories = client.retrieve_related_clustered_categories(
 )
 
 for category in categories.clustered_categories:
-    print(f"Category: {category.category_name}")
+    print(f"Category: {category.name}")
     print(f"Similarity: {category.similarity_score}")
 ```
 

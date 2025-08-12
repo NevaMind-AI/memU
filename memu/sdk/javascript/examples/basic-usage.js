@@ -8,12 +8,29 @@
  * 4. Retrieve memories and categories
  */
 
-const { MemuClient } = require('@memu/sdk-js');
+const { MemuClient } = require('memu-js');
+
+async function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForTaskCompletion(client, taskId) {
+  // Poll task status until terminal state
+  while (true) {
+    const status = await client.getTaskStatus(taskId);
+    console.log(`⏳ Task status: ${status.status}`);
+    if (['SUCCESS', 'FAILURE', 'REVOKED'].includes(status.status)) {
+      console.log(`✅ Task ${taskId} completed with status: ${status.status}`);
+      break;
+    }
+    await sleep(2000);
+  }
+}
 
 async function basicExample() {
   // Initialize client with environment variables or direct config
   const client = new MemuClient({
-    baseUrl: process.env.MEMU_API_BASE_URL || 'https://api.memu.ai',
+    baseUrl: process.env.MEMU_API_BASE_URL || 'https://api.memu.so',
     apiKey: process.env.MEMU_API_KEY || 'your-api-key-here',
     timeout: 30000, // 30 seconds
     maxRetries: 3
@@ -26,16 +43,20 @@ async function basicExample() {
     console.log('📝 Memorizing text conversation...');
     const textResponse = await client.memorizeConversation(
       "User: I love hiking in the mountains.\nAssistant: That sounds wonderful! What's your favorite trail?",
-      'user_123',
-      'Alice Johnson',
-      'hiking_assistant',
-      'Hiking Assistant',
+      'user',
+      'Johnson',
+      'assistant',
+      'Assistant',
       new Date().toISOString()
     );
 
     console.log(`✅ Task started: ${textResponse.taskId}`);
     console.log(`   Status: ${textResponse.status}`);
-    console.log(`   Message: ${textResponse.message}\n`);
+    console.log(`   Message: ${textResponse.message}`);
+    
+    // Wait for task completion
+    await waitForTaskCompletion(client, textResponse.taskId);
+    console.log();
 
     // Example 2: Memorize a structured conversation
     console.log('💬 Memorizing structured conversation...');
@@ -44,14 +65,18 @@ async function basicExample() {
         { role: 'user', content: 'What gear do I need for winter hiking?' },
         { role: 'assistant', content: 'For winter hiking, you\'ll need insulated boots, layered clothing, and safety equipment like crampons and a headlamp.' }
       ],
-      'user_123',
-      'Alice Johnson',
-      'hiking_assistant',
-      'Hiking Assistant'
+      'user',
+      'Johnson',
+      'assistant',
+      'Assistant'
     );
 
     console.log(`✅ Task started: ${structuredResponse.taskId}`);
-    console.log(`   Status: ${structuredResponse.status}\n`);
+    console.log(`   Status: ${structuredResponse.status}`);
+    
+    // Wait for task completion
+    await waitForTaskCompletion(client, structuredResponse.taskId);
+    console.log();
 
     // Example 3: Check task status
     console.log('⏳ Checking task status...');
@@ -69,8 +94,8 @@ async function basicExample() {
     // Example 4: Retrieve default categories
     console.log('📂 Retrieving default categories...');
     const categories = await client.retrieveDefaultCategories({
-      userId: 'user_123',
-      agentId: 'hiking_assistant',
+      userId: 'user',
+      agentId: 'assistant',
       includeInactive: false
     });
 
@@ -85,8 +110,8 @@ async function basicExample() {
     // Example 5: Search for related memories
     console.log('🔍 Searching for related memories...');
     const relatedMemories = await client.retrieveRelatedMemoryItems({
-      userId: 'user_123',
-      agentId: 'hiking_assistant',
+      userId: 'user',
+      agentId: 'assistant',
       query: 'hiking equipment',
       topK: 5,
       minSimilarity: 0.3
@@ -104,8 +129,8 @@ async function basicExample() {
     // Example 6: Search for clustered categories
     console.log('🗂️ Searching for clustered categories...');
     const clusteredCategories = await client.retrieveRelatedClusteredCategories({
-      userId: 'user_123',
-      agentId: 'hiking_assistant',
+      userId: 'user',
+      agentId: 'assistant',
       categoryQuery: 'outdoor activities',
       topK: 3,
       minSimilarity: 0.4

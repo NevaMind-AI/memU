@@ -1,0 +1,62 @@
+# MemU Docker ignore file
+
+# Git
+.git/
+.gitignore
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+.coverage
+
+# Environment files
+.env
+.env.local
+.env.production
+*.env
+
+# Logs
+*.log
+logs/
+memu/server/memory/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+docs/
+*.md
+README.md
+CONTRIBUTING.md
+
+# Assets and examples
+assets/
+example/
+scripts/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore

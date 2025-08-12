@@ -1,129 +1,165 @@
+/**
+ * Basic usage example for MemU JavaScript SDK
+ * 
+ * This example demonstrates how to:
+ * 1. Initialize the MemU client
+ * 2. Memorize a conversation
+ * 3. Check task status
+ * 4. Retrieve memories and categories
+ */
+
 import { MemuClient } from 'memu-js';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 
 async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function normalizeConversationShape(item) {
-  // Accept multiple shapes and normalize to either string or array of { role, content }
-  if (typeof item === 'string') return item;
-  if (Array.isArray(item)) return item; // assume already [{ role, content }, ...]
-  if (item && typeof item === 'object') {
-    if (typeof item.conversation_text === 'string') return item.conversation_text;
-    if (Array.isArray(item.conversation)) return item.conversation;
-    if (Array.isArray(item.messages)) return item.messages;
-  }
-  // Fallback: stringify unknown structures
-  return JSON.stringify(item);
-}
-
-async function loadConversationsFromJsonFile(filePath) {
-  const content = await readFile(filePath, 'utf-8');
-  const data = JSON.parse(content);
-  const list = Array.isArray(data) ? data : Array.isArray(data?.conversations) ? data.conversations : [];
-  return list.map(normalizeConversationShape).filter((v) => v && (typeof v === 'string' || Array.isArray(v)));
 }
 
 async function waitForTaskCompletion(client, taskId) {
   // Poll task status until terminal state
   while (true) {
     const status = await client.getTaskStatus(taskId);
-    console.log(`Task status: ${status.status}`);
-    if (['SUCCESS', 'FAILURE', 'REVOKED'].includes(status.status)) break;
+    console.log(`⏳ Task status: ${status.status}`);
+    if (['SUCCESS', 'FAILURE', 'REVOKED'].includes(status.status)) {
+      console.log(`✅ Task ${taskId} completed with status: ${status.status}`);
+      break;
+    }
     await sleep(2000);
   }
 }
 
-async function main() {
+async function basicExample() {
+  // Initialize client with environment variables or direct config
   const client = new MemuClient({
-    baseUrl: 'https://api.memu.so',
-    apiKey: process.env.MEMU_API_KEY,
+    baseUrl: process.env.MEMU_API_BASE_URL || 'https://api.memu.so',
+    apiKey: process.env.MEMU_API_KEY || 'your-api-key-here',
+    timeout: 30000, // 30 seconds
+    maxRetries: 3
   });
 
-  const USER_ID = 'user001';
-  const USER_NAME = 'User 001';
-  const AGENT_ID = 'assistant001';
-  const AGENT_NAME = 'Assistant 001';
+  try {
+    console.log('🚀 Starting MemU SDK example...\n');
 
-  const conversationFile = path.join(path.dirname(new URL(import.meta.url).pathname), 'conversation.json');
-  const conversations = await loadConversationsFromJsonFile(conversationFile);
-
-  if (!conversations.length) {
-    console.log('No conversations loaded. Exiting.');
-    if (typeof client.close === 'function') client.close();
-    return;
-  }
-
-  console.log(`Processing ${conversations.length} English dialogues...`);
-
-  for (let i = 0; i < conversations.length; i += 1) {
-    const conversation = conversations[i];
-    console.log(`\nProcessing dialogue ${i + 1}/${conversations.length}`);
-
-    const memoResponse = await client.memorizeConversation(
-      conversation, // string or [{ role, content }]
-      USER_ID,
-      USER_NAME,
-      AGENT_ID,
-      AGENT_NAME
+    // Example 1: Memorize a text conversation
+    console.log('📝 Memorizing text conversation...');
+    const textResponse = await client.memorizeConversation(
+      "User: I love hiking in the mountains.\nAssistant: That sounds wonderful! What's your favorite trail?",
+      'user',
+      'Johnson',
+      'assistant',
+      'Assistant',
+      new Date().toISOString()
     );
 
-    console.log(`Saved! Task ID: ${memoResponse.taskId}`);
-    await waitForTaskCompletion(client, memoResponse.taskId);
-    console.log(`Dialogue ${i + 1} completed successfully!`);
+    console.log(`✅ Task started: ${textResponse.taskId}`);
+    console.log(`   Status: ${textResponse.status}`);
+    console.log(`   Message: ${textResponse.message}`);
+    
+    // Wait for task completion
+    await waitForTaskCompletion(client, textResponse.taskId);
+    console.log();
+
+    // Example 2: Memorize a structured conversation
+    console.log('💬 Memorizing structured conversation...');
+    const structuredResponse = await client.memorizeConversation(
+      [
+        { role: 'user', content: 'What gear do I need for winter hiking?' },
+        { role: 'assistant', content: 'For winter hiking, you\'ll need insulated boots, layered clothing, and safety equipment like crampons and a headlamp.' }
+      ],
+      'user',
+      'Johnson',
+      'assistant',
+      'Assistant'
+    );
+
+    console.log(`✅ Task started: ${structuredResponse.taskId}`);
+    console.log(`   Status: ${structuredResponse.status}`);
+    
+    // Wait for task completion
+    await waitForTaskCompletion(client, structuredResponse.taskId);
+    console.log();
+
+    // Example 3: Check task status
+    console.log('⏳ Checking task status...');
+    const status = await client.getTaskStatus(textResponse.taskId);
+    console.log(`📊 Task ${status.taskId}:`);
+    console.log(`   Status: ${status.status}`);
+    if (status.progress) {
+      console.log(`   Progress: ${JSON.stringify(status.progress)}`);
+    }
+    if (status.error) {
+      console.log(`   Error: ${status.error}`);
+    }
+    console.log();
+
+    // Example 4: Retrieve default categories
+    console.log('📂 Retrieving default categories...');
+    const categories = await client.retrieveDefaultCategories({
+      userId: 'user',
+      agentId: 'assistant',
+      includeInactive: false
+    });
+
+    console.log(`📋 Found ${categories.totalCategories} categories:`);
+    categories.categories.forEach((category, index) => {
+      console.log(`   ${index + 1}. ${category.categoryName} (${category.memoryCount} memories)`);
+      console.log(`      Type: ${category.categoryType}`);
+      console.log(`      Active: ${category.isActive ? '✅' : '❌'}`);
+    });
+    console.log();
+
+    // Example 5: Search for related memories
+    console.log('🔍 Searching for related memories...');
+    const relatedMemories = await client.retrieveRelatedMemoryItems({
+      userId: 'user',
+      agentId: 'assistant',
+      query: 'hiking equipment',
+      topK: 5,
+      minSimilarity: 0.3
+    });
+
+    console.log(`🎯 Found ${relatedMemories.totalFound} related memories:`);
+    relatedMemories.relatedMemories.forEach((memory, index) => {
+      console.log(`   ${index + 1}. Score: ${memory.similarityScore.toFixed(3)}`);
+      console.log(`      Category: ${memory.memory.category}`);
+      console.log(`      Content: ${memory.memory.content.substring(0, 100)}...`);
+      console.log(`      Date: ${memory.memory.happenedAt}`);
+    });
+    console.log();
+
+    // Example 6: Search for clustered categories
+    console.log('🗂️ Searching for clustered categories...');
+    const clusteredCategories = await client.retrieveRelatedClusteredCategories({
+      userId: 'user',
+      agentId: 'assistant',
+      categoryQuery: 'outdoor activities',
+      topK: 3,
+      minSimilarity: 0.4
+    });
+
+    console.log(`📚 Found ${clusteredCategories.totalCategoriesFound} clustered categories:`);
+    clusteredCategories.clusteredCategories.forEach((cluster, index) => {
+      console.log(`   ${index + 1}. ${cluster.categoryName} (Score: ${cluster.similarityScore.toFixed(3)})`);
+      console.log(`      Memories: ${cluster.memoryCount}`);
+      cluster.memories.slice(0, 2).forEach(memory => {
+        console.log(`        - ${memory.content.substring(0, 80)}...`);
+      });
+    });
+
+    console.log('\n✨ Example completed successfully!');
+
+  } catch (error) {
+    console.error('❌ Error occurred:', error.message);
+    if (error.statusCode) {
+      console.error(`   Status Code: ${error.statusCode}`);
+    }
+    if (error.responseData) {
+      console.error(`   Response Data: ${JSON.stringify(error.responseData)}`);
+    }
   }
-
-  console.log(`\nAll ${conversations.length} dialogues have been processed and saved to MemU!`);
-
-  // Test recall
-  console.log(`\nTesting memory recall...`);
-  const memories = await client.retrieveRelatedMemoryItems({
-    userId: USER_ID,
-    query: 'hiking safety',
-    topK: 3,
-  });
-  console.log(`Found ${memories.totalFound} memories`);
-  for (const memoryItem of memories.relatedMemories || []) {
-    const content = memoryItem?.memory?.content || '';
-    console.log(`Memory: ${content.slice(0, 100)}...`);
-  }
-
-  // Retrieve default categories
-  console.log('\nRetrieving default categories...');
-  const defaultCategories = await client.retrieveDefaultCategories({
-    userId: USER_ID,
-    agentId: AGENT_ID,
-    includeInactive: false,
-  });
-  console.log(`Found ${defaultCategories.totalCategories} default categories:`);
-  for (const category of defaultCategories.categories || []) {
-    console.log(`  - ${category.name}: ${category.description}`);
-  }
-
-  // Retrieve related clustered categories
-  console.log("\nRetrieving related categories for 'outdoor activities'...");
-  const relatedCategories = await client.retrieveRelatedClusteredCategories({
-    userId: USER_ID,
-    categoryQuery: 'outdoor activities',
-    topK: 5,
-    minSimilarity: 0.3,
-  });
-
-  const relatedCount = Array.isArray(relatedCategories.clusteredCategories)
-    ? relatedCategories.clusteredCategories.length
-    : (relatedCategories.totalCategoriesFound || 0);
-  console.log(`Found ${relatedCount} related categories:`);
-  for (const category of relatedCategories.clusteredCategories || []) {
-    console.log(`  - ${category.name}`);
-  }
-
-  if (typeof client.close === 'function') client.close();
 }
 
-// Run
-main().catch((err) => {
-  console.error('Error running memory client:', err);
-  process.exitCode = 1;
-});
+// Export the function
+export { basicExample };
+
+// Run the example
+basicExample().catch(console.error);

@@ -1,0 +1,39 @@
+categories:
+  system:
+    -
+      name: profile
+      filename: profile.md
+      description: "Record character's basic personal information only (age, location, background, demographics) - excludes events and activities"
+      folder_name: profile
+      prompt_file: prompt.txt
+      context: all
+      rag_length: -1
+    -
+      name: event
+      filename: event.md
+      description: "Record important events, activities and milestones"
+      folder_name: event
+      prompt_file: prompt.txt
+      context: rag
+      rag_length: 30
+    -
+      name: activity
+      filename: activity.md
+      description: "Record all conversation and activity content"
+      folder_name: activity
+      prompt_file: prompt.txt
+      context: rag
+      rag_length: 50
+
+  custom:
+    # Your custom categories here
+    # - 
+    #   name: reminder
+    #   filename: reminder.md
+    #   description: "Record character's reminders"
+    #   folder_name: reminder
+    #   prompt_file: prompt.txt
+    #   context: all
+    #   rag_length: -1
+
+

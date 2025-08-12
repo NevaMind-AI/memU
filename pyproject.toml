@@ -28,9 +28,11 @@ dependencies = [
     "requests>=2.31.0",
     "python-dotenv>=0.19.0", 
     "json5>=0.9.0",
+    "PyYAML>=6.0.0",
     "openai>=1.60.0",
     "httpx>=0.23,<0.28",
     "pydantic>=2.7.5",
+    "pydantic-settings>=2.0.0",
     "starlette>=0.40.0",
     "fastapi>=0.115.2",
     "cachetools>=5.0.0",
@@ -68,6 +70,10 @@ local = [
 database = [
     "psycopg2-binary>=2.9.9",
 ]
+server = [
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
+]
 all = [
     "openai>=1.0.0",
     "sentence-transformers>=2.2.0",
@@ -80,6 +86,8 @@ all = [
     "transformers>=4.21.0",
     "torch>=1.12.0",
     "psycopg2-binary>=2.9.9",
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
 ]
 
 [project.urls]
@@ -87,8 +95,8 @@ all = [
 "Bug Tracker" = "https://github.com/NevaMind-AI/MemU/issues"
 "Documentation" = "https://github.com/NevaMind-AI/MemU#readme"
 
-# [project.scripts]
-# memu = "memu.cli:main"  # CLI module not implemented yet
+[project.scripts]
+memu-server = "memu.server.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -101,6 +109,14 @@ include = '\.pyi?$'
 
 [tool.setuptools]
 license-files = []
+
+[tool.setuptools.package-data]
+"memu.config" = [
+    "memory_cat_config.yaml",
+    "activity/prompt.txt",
+    "event/prompt.txt",
+    "profile/prompt.txt",
+]
 
 [tool.mypy]
 python_version = "3.9"

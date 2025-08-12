@@ -38,9 +38,9 @@ class ClusterMemoriesAction(BaseAction):
                             "properties": {
                                 "memory_id": {"type": "string"},
                                 "content": {"type": "string"},
-                                "session_date": {"type": "string"},
+                                "mentioned_at": {"type": "string"},
                             },
-                            "required": ["memory_id", "content", "session_date"],
+                            "required": ["memory_id", "content", "mentioned_at"],
                         },
                         "description": "List of new memory items from the conversation",
                     },
@@ -64,11 +64,11 @@ class ClusterMemoriesAction(BaseAction):
 
         if session_date:
             for item in new_memory_items:
-                if not item.get("session_date", None):
-                    item["session_date"] = session_date
+                if not item.get("mentioned_at", None):
+                    item["mentioned_at"] = session_date
 
-        existing_clusters = self._get_existing_cluster_items(character_name)
-        existing_clusters = [cluster.replace("_", " ") for cluster in existing_clusters]
+        existing_clusters = self.memory_types["cluster"].keys()
+        # existing_clusters = [cluster.replace("_", " ") for cluster in existing_clusters]
 
         updated_clusters = {}
         if existing_clusters:
@@ -98,33 +98,9 @@ class ClusterMemoriesAction(BaseAction):
             }
         )
 
-    def _get_existing_cluster_items(self, character_name: str) -> List[str]:
-        """
-        Get existing cluster items by listing files that match pattern {character_name}_($1).md
-        and return the list of captured values ($1)
-        """
-        try:
-            # List all files in the memory directory
-            files = os.listdir("memory")
-
-            # Create regex pattern to match {character_name}_($1).md
-            # This will capture the text in parentheses as group 1
-            pattern = rf"{re.escape(character_name)}_([^.]+)\.md$"
-
-            existing_clusters = []
-            for file in files:
-                match = re.match(pattern, file)
-                if match:
-                    # Extract the captured group (the text in parentheses)
-                    cluster_name = match.group(1)
-                    # if cluster_name not in self.memory_types:
-                    if cluster_name not in ["activity", "event", "profile", "ToM"]:
-                        existing_clusters.append(cluster_name)
-
-            return existing_clusters
-        except FileNotFoundError:
-            # Return empty list if directory doesn't exist
-            return []
+    def _format_memory_item(self, memory_item: Dict[str, str]) -> str:
+        """Format memory items into a string"""
+        return f"[{memory_item['memory_id']}][mentioned at {memory_item['mentioned_at']}] {memory_item['content']} [{memory_item['memory_id']}]"
 
     def _merge_existing_clusters(
         self,
@@ -203,12 +179,9 @@ Example: "We went to hiking in Blue Ridge Mountains this summer" is related to b
             for cluster in clusters.split(","):
                 if cluster not in existing_clusters:
                     continue
-                cluster_fn = cluster.replace(" ", "_")
-                with open(f"memory/{character_name}_{cluster_fn}.md", "a") as f:
-                    memory_item = all_items[memory_id]
-                    f.write(
-                        f"[{memory_id}][mentioned at {memory_item.get('session_date', 'Unknown')}] {memory_item['content']} []\n"
-                    )
+
+                self.storage_manager.append_memory_file(cluster, self._format_memory_item(all_items[memory_id]))
+                
                 if cluster not in updated_clusters:
                     updated_clusters[cluster] = []
                 updated_clusters[cluster].append(memory_id)
@@ -293,21 +266,17 @@ Your task is to discover NEW events/themes that are either:
 
             cluster, memory_ids = line[2:].split(": ", 1)
             cluster = cluster.strip().lower()
-            cluster_fn = cluster.replace(" ", "_")
-            with open(f"memory/{character_name}_{cluster_fn}.md", "a") as f:
-                if cluster not in new_clusters:
-                    new_clusters[cluster] = []
 
-                for memory_id in memory_ids.split(","):
-                    memory_id = memory_id.strip()
-                    if memory_id not in all_items:
-                        continue
-                    memory_item = all_items[memory_id]
+            if cluster not in self.memory_types["cluster"]:
+                new_clusters[cluster] = []
+                self.storage_manager.create_cluster_category(cluster)
 
-                    f.write(
-                        f"[{memory_id}][mentioned at {memory_item.get('session_date', 'Unknown')}] {memory_item['content']} []\n"
-                    )
+            for memory_id in memory_ids.split(","):
+                memory_id = memory_id.strip()
+                if memory_id not in all_items:
+                    continue
+                self.storage_manager.append_memory_file(cluster, self._format_memory_item(all_items[memory_id]))
 
-                    new_clusters[cluster].append(memory_id)
+                new_clusters[cluster].append(memory_id)
 
         return new_clusters

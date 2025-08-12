@@ -39,8 +39,9 @@ class BaseAction(ABC):
         self.embeddings_enabled = memory_core.embeddings_enabled
         self.config_manager = memory_core.config_manager
         self.memory_types = memory_core.memory_types
+        self.basic_memory_types = memory_core.memory_types["basic"]
         self.processing_order = memory_core.processing_order
-        self.embeddings_dir = memory_core.embeddings_dir
+        # self.embeddings_dir = memory_core.embeddings_dir
 
     @property
     @abstractmethod
@@ -245,27 +246,19 @@ class BaseAction(ABC):
         for i, line in enumerate(lines):
             line = line.strip()
             if line:  # Only process non-empty lines
-                # Try to parse new timestamped format first: [memory_id][mentioned at date] content [links]
-                memory_id, clean_content, mentioned_at, links = (
+                memory_id, mentioned_at, clean_content, links = (
                     self._extract_timestamped_memory_item(line)
                 )
-
-                if not memory_id:
-                    # Fallback to old format: [memory_id] content
-                    memory_id, clean_content = self._extract_memory_id(line)
-                    mentioned_at, links = "", ""
 
                 if clean_content:
                     item = {
                         "memory_id": memory_id,
+                        "mentioned_at": mentioned_at,
                         "content": clean_content,
+                        "links": links,
                         "full_line": line,
                         "line_number": i + 1,
                     }
-                    if mentioned_at:
-                        item["mentioned_at"] = mentioned_at
-                    if links:
-                        item["links"] = links
                     items.append(item)
 
         return items
@@ -294,7 +287,7 @@ class BaseAction(ABC):
             mentioned_at = match.group(2)
             content = match.group(3).strip()
             links = match.group(4) if match.group(4) else ""
-            return memory_id, content, mentioned_at, links
+            return memory_id, mentioned_at, content, links
         else:
             return "", "", "", ""
 
@@ -306,7 +299,7 @@ class BaseAction(ABC):
         """Load existing memory content for all categories"""
         existing_memory = {}
 
-        for category in self.memory_types:
+        for category in self.storage_manager.get_flat_memory_types():
             try:
                 content = self._read_memory_content(character_name, category)
                 existing_memory[category] = content if isinstance(content, str) else ""
@@ -321,15 +314,8 @@ class BaseAction(ABC):
     def _read_memory_content(self, character_name: str, category: str) -> str:
         """Read memory content from storage"""
         try:
-            if hasattr(self.storage_manager, "read_memory_file"):
-                return self.storage_manager.read_memory_file(character_name, category)
-            else:
-                method_name = f"read_{category}"
-                if hasattr(self.storage_manager, method_name):
-                    return getattr(self.storage_manager, method_name)(character_name)
-                else:
-                    logger.warning(f"No read method available for {category}")
-                    return ""
+            # agent_id and user_id are managed inside storage_manager
+            return self.storage_manager.read_memory_file(category)
         except Exception as e:
             logger.warning(f"Failed to read {category} for {character_name}: {e}")
             return ""
@@ -339,21 +325,19 @@ class BaseAction(ABC):
     ) -> bool:
         """Save memory content to storage"""
         try:
-            if hasattr(self.storage_manager, "write_memory_file"):
-                return self.storage_manager.write_memory_file(
-                    character_name, category, content
-                )
-            else:
-                method_name = f"write_{category}"
-                if hasattr(self.storage_manager, method_name):
-                    return getattr(self.storage_manager, method_name)(
-                        character_name, content
-                    )
-                else:
-                    logger.error(f"No write method available for {category}")
-                    return False
+            # agent_id and user_id are managed inside storage_manager
+            return self.storage_manager.write_memory_file(category, content)
         except Exception as e:
             logger.error(f"Failed to save {category} for {character_name}: {e}")
+            return False
+
+    def _append_memory_content(self, character_name: str, category: str, content: str) -> bool:
+        """Append memory content to storage"""
+        try:
+            # agent_id and user_id are managed inside storage_manager
+            return self.storage_manager.append_memory_file(category, content)
+        except Exception as e:
+            logger.error(f"Failed to append {category} for {character_name}: {e}")
             return False
 
     def _convert_conversation_to_text(self, conversation: list[dict]) -> str:

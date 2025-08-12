@@ -36,20 +36,23 @@ class MemoryCore:
     def __init__(
         self,
         llm_client: BaseLLMClient,
-        memory_dir: str = "memory",
+        memory_dir: str = "memu/server/memory",
         enable_embeddings: bool = True,
+        agent_id: str = "",
+        user_id: str = "",
     ):
         self.llm_client = llm_client
         self.memory_dir = Path(memory_dir)
         self._stop_flag = threading.Event()
 
-        # Initialize memory types from config
+        # Initialize config manager and processing order (basic only)
         self.config_manager = get_config_manager()
-        self.memory_types = self.config_manager.get_file_types_mapping()
         self.processing_order = self.config_manager.get_processing_order()
 
-        # Initialize file-based storage manager
-        self.storage_manager = MemoryFileManager(memory_dir)
+        # Initialize file-based storage manager with context (shared by actions)
+        self.storage_manager = MemoryFileManager(memory_dir, agent_id=agent_id, user_id=user_id)
+        # Initialize memory types from storage manager (includes cluster for this context)
+        self.memory_types = self.storage_manager.memory_types
 
         # Initialize embedding client
         self.enable_embeddings = enable_embeddings
@@ -93,9 +96,11 @@ class MemoryAgent:
     """
 
     def __init__(
-        self,
+        self, *,
         llm_client: BaseLLMClient,
-        memory_dir: str = "memory",
+        agent_id: str = "default_agent",
+        user_id: str = "default_user",
+        memory_dir: str = "memu/server/memory",
         enable_embeddings: bool = True,
     ):
         """
@@ -107,7 +112,7 @@ class MemoryAgent:
             enable_embeddings: Whether to generate embeddings for semantic search
         """
         # Initialize memory core
-        self.memory_core = MemoryCore(llm_client, memory_dir, enable_embeddings)
+        self.memory_core = MemoryCore(llm_client, memory_dir, enable_embeddings, agent_id, user_id)
 
         # Initialize actions
         self.actions = {}
@@ -186,7 +191,7 @@ class MemoryAgent:
                 "conversation_length": len(conversation),
                 "iterations": 0,
                 "function_calls": [],
-                "files_generated": [],
+                # "files_generated": [],
                 "processing_log": [],
             }
 
@@ -306,15 +311,6 @@ Start with step 1 and work through the process systematically. When you complete
                             }
                             results["function_calls"].append(call_record)
 
-                            # Track generated files
-                            if (
-                                function_result.get("success")
-                                and function_name == "add_activity_memory"
-                            ):
-                                file_path = f"{self.memory_core.memory_dir}/{character_name}_activity.md"
-                                if file_path not in results["files_generated"]:
-                                    results["files_generated"].append(file_path)
-
                             # Add tool result to conversation
                             tool_message = {
                                 "role": "tool",
@@ -360,7 +356,7 @@ Start with step 1 and work through the process systematically. When you complete
             logger.info(
                 f"🎉 Conversation processing completed after {results['iterations']} iterations"
             )
-            logger.info(f"📁 Generated {len(results['files_generated'])} files")
+            # logger.info(f"📁 Generated {len(results['files_generated'])} files")
             logger.info(f"🔧 Made {len(results['function_calls'])} function calls")
 
             return results
@@ -568,7 +564,7 @@ Start with step 1 and work through the process systematically. When you complete
             "processing_order": self.memory_core.processing_order,
             "storage_type": "file_system",
             "memory_dir": str(self.memory_core.memory_dir),
-            "config_source": "markdown_config.py (dynamic folder structure)",
+            "config_source": "memory_cat_config.yaml (system + custom)",
             "total_actions": len(self.actions),
             "available_actions": list(self.actions.keys()),
             "total_functions": len(self.function_registry),

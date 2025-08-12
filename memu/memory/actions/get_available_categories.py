@@ -37,7 +37,7 @@ class GetAvailableCategoriesAction(BaseAction):
         try:
             categories = {}
 
-            for category, filename in self.memory_types.items():
+            for category, filename in self.basic_memory_types.items():
                 # Skip activity category as it's handled separately by add_activity_memory
                 if category == "activity":
                     continue

@@ -29,8 +29,12 @@ export class MemuAPIException extends MemuSDKException {
   constructor(message: string, statusCode?: number, responseData?: Record<string, any>) {
     super(message);
     this.name = 'MemuAPIException';
-    this.statusCode = statusCode;
-    this.responseData = responseData;
+    if (statusCode !== undefined) {
+      this.statusCode = statusCode;
+    }
+    if (responseData !== undefined) {
+      this.responseData = responseData;
+    }
 
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, MemuAPIException);
