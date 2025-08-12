@@ -28,13 +28,13 @@ class Settings(BaseSettings):
     enable_embeddings: bool = True
     
     # LLM settings
-    llm_provider: str = "azure"
+    llm_provider: str = "openai"
     openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
     openai_model: str = "gpt-4.1-mini"
 
     azure_api_key: Optional[str] = os.getenv("AZURE_API_KEY")
     azure_endpoint: Optional[str] = os.getenv("AZURE_ENDPOINT")
-    azure_deployment_name: str = "gpt-4.1-mini-2"
+    azure_deployment_name: str = "gpt-4.1-mini"
     
     # Anthropic settings
     anthropic_api_key: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
