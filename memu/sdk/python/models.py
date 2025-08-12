@@ -10,6 +10,12 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+class ConversationMessage(BaseModel):
+    """Individual conversation message"""
+    role: str = Field(..., description="Message role (user, assistant, system)")
+    content: str = Field(..., description="Message content")
+
+
 class MemorizeRequest(BaseModel):
     """Request model for memorize conversation API
     Either conversation_text or conversation must be provided"""
@@ -17,7 +23,7 @@ class MemorizeRequest(BaseModel):
     conversation_text: Optional[str] = Field(
         None, description="Conversation to memorize in plain text format"
     )
-    conversation: Optional[list[dict[str, str]]] = Field(
+    conversation: Optional[list[ConversationMessage]] = Field(
         None, description="Conversation to memorize in role-content format"
     )
     user_id: str = Field(..., description="User identifier")
@@ -32,7 +38,7 @@ class MemorizeRequest(BaseModel):
 class MemorizeResponse(BaseModel):
     """Response model for memorize conversation API"""
 
-    task_id: str = Field(..., description="Celery task ID for tracking")
+    task_id: str = Field(..., description="Task identifier for tracking")
     status: str = Field(..., description="Task status")
     message: str = Field(..., description="Response message")
 
@@ -40,7 +46,7 @@ class MemorizeResponse(BaseModel):
 class MemorizeTaskStatusResponse(BaseModel):
     """Response model for memorize task status API"""
 
-    task_id: str = Field(..., description="Celery task ID")
+    task_id: str = Field(..., description="Task ID")
     status: str = Field(
         ..., description="Task status (e.g., PENDING, SUCCESS, FAILURE)"
     )
@@ -78,6 +84,7 @@ class MemoryItem(BaseModel):
     memory_id: str = Field(..., description="Memory identifier")
     category: str = Field(..., description="Memory category")
     content: str = Field(..., description="Memory content")
+    happened_at: datetime = Field(..., description="When the memory happened")
     created_at: datetime = Field(..., description="When the memory was created")
     updated_at: datetime = Field(..., description="When the memory was last updated")
 
@@ -87,6 +94,8 @@ class CategoryResponse(BaseModel):
     
     name: str = Field(..., description="Category name")
     type: str = Field(..., description="Category type")
+    user_id: Optional[str] = Field(None, description="User ID")
+    agent_id: Optional[str] = Field(None, description="Agent ID")
     description: str = Field(default="", description="Category description")
     is_active: bool = Field(..., description="Whether the category is active")
     memories: List[MemoryItem] = Field(..., description="Memories in this category")
@@ -121,6 +130,8 @@ class RelatedMemory(BaseModel):
     """Related memory with similarity score"""
 
     memory: MemoryItem = Field(..., description="Memory item")
+    user_id: Optional[str] = Field(None, description="User identifier")
+    agent_id: Optional[str] = Field(None, description="Agent identifier")
     similarity_score: float = Field(..., description="Similarity score")
 
 
@@ -151,6 +162,8 @@ class ClusteredCategory(BaseModel):
     """Clustered category with memories"""
 
     name: str = Field(..., description="Category name")
+    user_id: Optional[str] = Field(None, description="User identifier")
+    agent_id: Optional[str] = Field(None, description="Agent identifier")
     similarity_score: float = Field(..., description="Similarity score")
     memories: List[MemoryItem] = Field(..., description="Memories in this category")
     memory_count: int = Field(..., description="Number of memories in category")

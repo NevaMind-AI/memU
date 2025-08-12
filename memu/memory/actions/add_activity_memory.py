@@ -227,16 +227,6 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
         for line in lines:
             line = line.strip()
             if line:  # Only process non-empty lines
-                # Always remove existing memory ID and generate a new unique one
-                if self._has_memory_id_with_timestamp(line):
-                    # Extract content without memory ID and timestamp
-                    clean_content = self._extract_content_from_timestamped_line(line)
-                    line = clean_content
-                elif self._has_memory_id(line):
-                    # Extract content without basic memory ID
-                    _, clean_content = self._extract_memory_id(line)
-                    line = clean_content
-
                 # Generate new unique memory ID for this line
                 memory_id = self._generate_memory_id()
                 # Format: [memory_id][mentioned at {session_date}] {content} [links]
@@ -251,45 +241,10 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
                 plain_memory_lines.append(
                     f"[{memory_id}][mentioned at {session_date}] {line} []"
                 )
-            else:
-                # Keep empty lines as is
-                # processed_lines.append("")
-                pass
 
         plain_memory_text = "\n".join(plain_memory_lines)
 
         return processed_items, plain_memory_text
-
-    def _has_memory_id_with_timestamp(self, line: str) -> bool:
-        """
-        Check if a line already has a memory ID with timestamp
-        Format: [memory_id][mentioned at date] content
-
-        Args:
-            line: Line to check
-
-        Returns:
-            True if line starts with [memory_id][mentioned at date] format
-        """
-        pattern = r"^\[[\w\d_]+\]\[mentioned at [^\]]+\]\s+"
-        return bool(re.match(pattern, line.strip()))
-
-    def _extract_content_from_timestamped_line(self, line: str) -> str:
-        """
-        Extract content from a line with memory ID and timestamp
-        Format: [memory_id][mentioned at date] content
-
-        Args:
-            line: Line with memory ID and timestamp
-
-        Returns:
-            Clean content without memory ID and timestamp
-        """
-        pattern = r"^\[[\w\d_]+\]\[mentioned at [^\]]+\]\s*(.*?)(?:\s*\[[^\]]*\])?$"
-        match = re.match(pattern, line.strip())
-        if match:
-            return match.group(1).strip()
-        return line.strip()
 
     def _add_memory_item_embedding(
         self, character_name: str, category: str, new_items: list[dict]

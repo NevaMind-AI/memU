@@ -45,19 +45,16 @@ class TaskStatusResponse(BaseModel):
     """Response model for task status API"""
     task_id: str = Field(..., description="Task identifier")
     status: str = Field(..., description="Task status")
-    result: Optional[Dict[str, Any]] = Field(None, description="Task result if completed")
-    error: Optional[str] = Field(None, description="Error message if failed")
-    created_at: datetime = Field(..., description="Task creation time")
-    updated_at: datetime = Field(..., description="Last update time")
+    detail_info: str = Field(default="", description="Detail information")
 
 
 # ========== Retrieve API Models ==========
 
 class DefaultCategoriesRequest(BaseModel):
     """Request model for default categories API"""
-    include_inactive: bool = Field(False, description="Include inactive categories")
     user_id: str = Field(..., description="User identifier")
     agent_id: Optional[str] = Field(None, description="Agent identifier")
+    include_inactive: bool = Field(False, description="Include inactive categories")
 
 
 class MemoryItem(BaseModel):

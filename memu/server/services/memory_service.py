@@ -432,6 +432,9 @@ class MemoryService:
         for i, line in enumerate(lines):
             line = line.strip()
             if line and not line.startswith('#'):  # Skip empty lines and headers
+
+                # re = 
+
                 memory_id = f"{user_id}_{category}_{i}"
                 memories.append(MemoryItem(
                     memory_id=memory_id,
