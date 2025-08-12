@@ -32,6 +32,7 @@ dependencies = [
     "openai>=1.60.0",
     "httpx>=0.23,<0.28",
     "pydantic>=2.7.5",
+    "pydantic-settings>=2.0.0",
     "starlette>=0.40.0",
     "fastapi>=0.115.2",
     "cachetools>=5.0.0",

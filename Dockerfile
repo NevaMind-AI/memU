@@ -21,20 +21,23 @@ COPY pyproject.toml setup.cfg MANIFEST.in ./
 COPY memu/ ./memu/
 COPY docker-entrypoint.sh ./
 
-# Install Python dependencies
-RUN pip install --upgrade pip && \
-    pip install -e ".[server]"
-
 # Make entrypoint script executable
 RUN chmod +x docker-entrypoint.sh
 
 # Create directories
 RUN mkdir -p /app/memory /app/logs
 
-# Create non-root user
-RUN groupadd -r memu && useradd -r -g memu memu
+# Create non-root user with home directory
+RUN groupadd -r memu && useradd -r -g memu -m memu
 RUN chown -R memu:memu /app
 USER memu
+
+# Add user's local bin to PATH
+ENV PATH="/home/memu/.local/bin:$PATH"
+
+# Install Python dependencies as non-root user
+RUN pip install --user --upgrade pip && \
+    pip install --user -e ".[server]"
 
 # Expose port
 EXPOSE 8000

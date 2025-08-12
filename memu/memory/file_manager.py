@@ -85,7 +85,12 @@ class MemoryFileManager:
         Returns:
             Path: Full path to the memory file
         """
-        filename = f"{category}{self.DEFAULT_EXTENSION}"
+        if category in self.memory_types["basic"]:
+            filename = self.memory_types["basic"][category]
+        elif category in self.memory_types["cluster"]:
+            filename = self.memory_types["cluster"][category]
+        else:
+            filename = f"{category.replace(' ', '_')}{self.DEFAULT_EXTENSION}"
         return self.memory_dir / agent_id / user_id / filename
 
 
@@ -249,12 +254,13 @@ class MemoryFileManager:
             bool: True if created or already exists, False on error
         """
         try:
-            file_path = self._get_memory_file_path(self.agent_id, self.user_id, category)
+            _category = category.replace(" ", "_")
+            file_path = self._get_memory_file_path(self.agent_id, self.user_id, _category)
             file_path.parent.mkdir(parents=True, exist_ok=True)
             if not file_path.exists():
                 file_path.write_text("", encoding="utf-8")
             # Update in-memory cluster categories mapping
-            self.memory_types.setdefault("cluster", {})[category] = f"{category}{self.DEFAULT_EXTENSION}"
+            self.memory_types.setdefault("cluster", {})[category] = f"{_category}{self.DEFAULT_EXTENSION}"
             return True
         except Exception as e:
             logger.error(
