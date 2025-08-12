@@ -4,6 +4,15 @@
  * Provides HTTP client for MemU API services.
  */
 
+import { MemuClient, MemuClientConfig } from './client';
+import {
+  MemuSDKException,
+  MemuAPIException,
+  MemuValidationException,
+  MemuAuthenticationException,
+  MemuConnectionException,
+} from './exceptions';
+
 export { MemuClient, MemuClientConfig } from './client';
 export {
   ClusteredCategory,

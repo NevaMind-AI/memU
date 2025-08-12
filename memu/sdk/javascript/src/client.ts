@@ -340,7 +340,7 @@ export class MemuClient {
       // Create request data
       const requestData: DefaultCategoriesRequest = {
         userId: options.userId,
-        agentId: options.agentId,
+        ...(options.agentId && { agentId: options.agentId }),
         includeInactive: options.includeInactive || false,
       };
 
@@ -388,11 +388,11 @@ export class MemuClient {
       // Create request data
       const requestData: RelatedMemoryItemsRequest = {
         userId: options.userId,
-        agentId: options.agentId,
+        ...(options.agentId && { agentId: options.agentId }),
         query: options.query,
         topK: options.topK || 10,
         minSimilarity: options.minSimilarity || 0.3,
-        includeCategories: options.includeCategories,
+        ...(options.includeCategories && { includeCategories: options.includeCategories }),
       };
 
       console.log(`Retrieving related memories for user ${options.userId}, query: '${options.query}'`);
@@ -440,7 +440,7 @@ export class MemuClient {
       // Create request data
       const requestData: RelatedClusteredCategoriesRequest = {
         userId: options.userId,
-        agentId: options.agentId,
+        ...(options.agentId && { agentId: options.agentId }),
         categoryQuery: options.categoryQuery,
         topK: options.topK || 5,
         minSimilarity: options.minSimilarity || 0.3,
