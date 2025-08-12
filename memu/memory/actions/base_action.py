@@ -246,27 +246,19 @@ class BaseAction(ABC):
         for i, line in enumerate(lines):
             line = line.strip()
             if line:  # Only process non-empty lines
-                # Try to parse new timestamped format first: [memory_id][mentioned at date] content [links]
-                memory_id, clean_content, mentioned_at, links = (
+                memory_id, mentioned_at, clean_content, links = (
                     self._extract_timestamped_memory_item(line)
                 )
-
-                if not memory_id:
-                    # Fallback to old format: [memory_id] content
-                    memory_id, clean_content = self._extract_memory_id(line)
-                    mentioned_at, links = "", ""
 
                 if clean_content:
                     item = {
                         "memory_id": memory_id,
+                        "mentioned_at": mentioned_at,
                         "content": clean_content,
+                        "links": links,
                         "full_line": line,
                         "line_number": i + 1,
                     }
-                    if mentioned_at:
-                        item["mentioned_at"] = mentioned_at
-                    if links:
-                        item["links"] = links
                     items.append(item)
 
         return items
@@ -295,7 +287,7 @@ class BaseAction(ABC):
             mentioned_at = match.group(2)
             content = match.group(3).strip()
             links = match.group(4) if match.group(4) else ""
-            return memory_id, content, mentioned_at, links
+            return memory_id, mentioned_at, content, links
         else:
             return "", "", "", ""
 

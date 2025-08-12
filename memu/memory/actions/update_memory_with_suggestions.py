@@ -331,24 +331,6 @@ Memory Update Suggestion:
 
         return operation_executed, new_items
 
-    def _reconstruct_content_from_items(self, items: List[Dict[str, str]]) -> str:
-        """Reconstruct content string from memory items"""
-        if not items:
-            return ""
-
-        lines = []
-        for item in items:
-            if "mentioned_at" in item:
-                # New format with timestamp
-                links = item.get("links", "")
-                line = f"[{item['memory_id']}][mentioned at {item['mentioned_at']}] {item['content']} [{links}]"
-            else:
-                # Old format
-                line = f"[{item['memory_id']}] {item['content']}"
-            lines.append(line)
-
-        return "\n".join(lines)
-
     def _extract_memory_items_from_content(self, content: str) -> List[Dict[str, str]]:
         """Extract memory items with IDs from content, supporting both old and new timestamp formats"""
         import re
@@ -358,46 +340,26 @@ Memory Update Suggestion:
 
         for line in lines:
             line = line.strip()
-            if line and (
-                self._has_memory_id_with_timestamp(line) or self._has_memory_id(line)
-            ):
-                # First try to extract from timestamped format (new format)
-                if self._has_memory_id_with_timestamp(line):
-                    # Format: [memory_id][mentioned at date] content [links]
-                    pattern = r"^\[([^\]]+)\]\[mentioned at ([^\]]+)\]\s*(.*?)(?:\s*\[([^\]]*)\])?$"
-                    match = re.match(pattern, line)
-                    if match:
-                        memory_id = match.group(1)
-                        mentioned_at = match.group(2)
-                        clean_content = match.group(3).strip()
-                        links = match.group(4) if match.group(4) else ""
 
-                        if memory_id and clean_content:
-                            items.append(
-                                {
-                                    "memory_id": memory_id,
-                                    "mentioned_at": mentioned_at,
-                                    "content": clean_content,
-                                    "links": links,
-                                }
-                            )
-                else:
-                    # Fallback to basic format extraction (old format)
-                    memory_id, clean_content = self._extract_memory_id(line)
-                    if memory_id:
-                        items.append({"memory_id": memory_id, "content": clean_content})
+            pattern = r"^\[([^\]]+)\]\[mentioned at ([^\]]+)\]\s*(.*?)(?:\s*\[([^\]]*)\])?$"
+            match = re.match(pattern, line)
+            if match:
+                memory_id = match.group(1)
+                mentioned_at = match.group(2)
+                clean_content = match.group(3).strip()
+                links = match.group(4) if match.group(4) else ""
+
+                if memory_id and clean_content:
+                    items.append(
+                        {
+                            "memory_id": memory_id,
+                            "mentioned_at": mentioned_at,
+                            "content": clean_content,
+                            "links": links,
+                        }
+                    )
 
         return items
-
-    def _has_memory_id_with_timestamp(self, line: str) -> bool:
-        """
-        Check if a line has a memory ID with timestamp
-        Format: [memory_id][mentioned at date] content
-        """
-        import re
-
-        pattern = r"^\[[\w\d_]+\]\[mentioned at [^\]]+\]\s+"
-        return bool(re.match(pattern, line.strip()))
 
     def _add_memory_item_embedding(
         self, character_name: str, category: str, new_items: list[dict]
@@ -440,6 +402,7 @@ Memory Update Suggestion:
                             "character": character_name,
                             "category": category,
                             "length": len(item["content"]),
+                            "mentioned_at": item["mentioned_at"],
                             "timestamp": datetime.now().isoformat(),
                         },
                     }
@@ -476,31 +439,6 @@ Memory Update Suggestion:
             logger.error(f"Failed to add memory item embedding: {e}")
             return {"success": False, "error": str(e)}
 
-    def _add_memory_id_with_timestamp(
-        self, content: str, session_date: str
-    ) -> (dict, str):
-        """
-        Add memory ID with timestamp and links to content line
-        Format: [memory_id][mentioned at {session_date}] {content}
-
-        Args:
-            content: Raw content
-            session_date: Date of the session
-
-        Returns:
-            Content with memory ID, timestamp and empty links added to each line
-        """
-        memory_id = self._generate_memory_id()
-        memory_item = {
-            "memory_id": memory_id,
-            "mentioned_at": session_date,
-            "content": content,
-            "links": "",
-        }
-        plain_memory_line = f"[{memory_id}][mentioned at {session_date}] {content} []"
-
-        return memory_item, plain_memory_line
-
     def _format_memory_items(self, items: List[Dict[str, str]]) -> str:
         """Format memory items into a string"""
         return "\n".join(
@@ -509,65 +447,6 @@ Memory Update Suggestion:
                 for item in items
             ]
         )
-
-    def _extract_content_from_timestamped_line(self, line: str) -> str:
-        """
-        Extract content from a timestamped memory line
-        Format: [memory_id][mentioned at date] content [links]
-
-        Args:
-            line: Line with memory ID and timestamp
-
-        Returns:
-            Clean content without memory ID, timestamp, or links
-        """
-        import re
-
-        # Pattern to match: [memory_id][mentioned at date] content [links] (links optional)
-        pattern = r"^\[([^\]]+)\]\[mentioned at ([^\]]+)\]\s*(.*?)(?:\s*\[([^\]]*)\])?$"
-        match = re.match(pattern, line.strip())
-
-        if match:
-            return match.group(3).strip()  # Return the content part
-        return line.strip()
-
-    def _clean_extra_brackets(self, content: str) -> str:
-        """
-        Clean up any extra brackets around content lines
-
-        Args:
-            content: Raw content from LLM
-
-        Returns:
-            Cleaned content without extra brackets around individual lines
-        """
-        if not content.strip():
-            return content
-
-        lines = content.split("\n")
-        cleaned_lines = []
-
-        for line in lines:
-            line = line.strip()
-            if line:
-                # Remove extra brackets that might wrap the entire line content
-                # Pattern: [content] -> content
-                if (
-                    line.startswith("[")
-                    and line.endswith("]")
-                    and line.count("[") == 1
-                    and line.count("]") == 1
-                ):
-                    # This looks like content wrapped in brackets, remove them
-                    cleaned_line = line[1:-1].strip()
-                    cleaned_lines.append(cleaned_line)
-                else:
-                    # Keep line as is
-                    cleaned_lines.append(line)
-            else:
-                cleaned_lines.append(line)
-
-        return "\n".join(cleaned_lines)
 
     def _load_category_extract_prompt(
         self,

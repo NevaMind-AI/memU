@@ -5,7 +5,7 @@ Service for handling memory operations using MemU components.
 """
 
 import asyncio
-import json
+import re
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -301,11 +301,14 @@ class MemoryService:
             related_memories = []
             for item in result.get("results", []):
                 if item.get("semantic_score", 0) >= min_similarity:
+                    timestamp = datetime.strptime(item["metadata"]["mentioned_at"], "%Y-%m-%d")
                     memory = MemoryItem(
-                        memory_id=item.get("memory_id", f"{item.get('category', 'unknown')}_{item.get('line_number', 0)}"),
+                        memory_id=item["memory_id"],
                         category=item.get("category", "unknown"),
                         content=item.get("content", ""),
-                        happened_at=datetime.now(),  # Default to now
+                        happened_at=timestamp,
+                        # created_at=timestamp,
+                        # updated_at=timestamp,
                     )
                     
                     related_memories.append(RelatedMemoryItem(
@@ -433,14 +436,26 @@ class MemoryService:
             line = line.strip()
             if line and not line.startswith('#'):  # Skip empty lines and headers
 
-                # re = 
+                pattern = r"^\[([^\]]+)\]\[mentioned at ([^\]]+)\]\s*(.*?)(?:\s*\[([^\]]*)\])?$"
+                match = re.match(pattern, line)
 
-                memory_id = f"{user_id}_{category}_{i}"
+                if match:
+                    memory_id = match.group(1)
+                    mentioned_at = match.group(2)
+                    content = match.group(3).strip()
+                    timestamp = datetime.strptime(mentioned_at, "%Y-%m-%d")
+                else:
+                    memory_id = f"{user_id}_{category}_{i}"
+                    content = line
+                    timestamp = datetime.now()
+
                 memories.append(MemoryItem(
                     memory_id=memory_id,
                     category=category,
-                    content=line,
-                    happened_at=datetime.now(),
+                    content=content,
+                    happened_at=timestamp,
+                    # created_at=timestamp,
+                    # updated_at=timestamp,
                 ))
         
         return memories

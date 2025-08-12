@@ -81,14 +81,13 @@ class RecallAgent:
         try:
             results = []
 
-            # Check which default categories actually exist as files
-            all_categories = self._get_actual_categories_by_ids(agent_id, user_id)
+            all_categories = self.storage_manager.list_memory_files()
             existing_defaults = [
                 cat for cat in self.default_categories if cat in all_categories
             ]
 
             for category in self.default_categories:
-                content = self._read_memory_content_by_ids(agent_id, user_id, category)
+                content = self.storage_manager.read_memory_file(category)
                 if content:
                     results.append(
                         {
@@ -142,7 +141,7 @@ class RecallAgent:
             Dict containing relevant category content
         """
         try:
-            all_categories = self._get_actual_categories_by_ids(agent_id, user_id)
+            all_categories = self.storage_manager.list_memory_files("all")
             excluded_categories = self.default_categories + ["activity"]
             relevant_categories = [
                 cat for cat in all_categories if cat not in excluded_categories
@@ -165,7 +164,7 @@ class RecallAgent:
 
             for category in relevant_categories:
                 # Check if category has content for this character
-                content = self._read_memory_content_by_ids(agent_id, user_id, category)
+                content = self.storage_manager.read_memory_file(category)
                 if not content:
                     continue
 
@@ -388,49 +387,6 @@ class RecallAgent:
         except Exception as e:
             logger.warning(f"Cosine similarity calculation failed: {e}")
             return 0.0
-
-    def _read_memory_content(self, agent_id: str, user_id: str, category: str) -> str:
-        """Read memory content from storage"""
-        try:
-            # agent_id and user_id are managed inside storage_manager
-            return self.storage_manager.read_memory_file(category)
-        except Exception as e:
-            logger.warning(f"Failed to read {category} for {agent_id}:{user_id}: {e}")
-            return ""
-
-    def _read_memory_content_by_ids(self, agent_id: str, user_id: str, category: str) -> str:
-        """Read memory content from storage using agent_id and user_id directly"""
-        try:
-            # Create a temporary storage manager for this character
-            temp_storage = MemoryFileManager(str(self.memory_dir), agent_id=agent_id, user_id=user_id)
-            
-            return temp_storage.read_memory_file(category)
-        except Exception as e:
-            logger.warning(f"Failed to read {category} for agent {agent_id}, user {user_id}: {e}")
-            return ""
-
-    def _get_actual_categories_by_ids(self, agent_id: str, user_id: str) -> List[str]:
-        """Get actual categories from existing files in agent_id/user_id directory structure"""
-        try:
-            categories = []
-            
-            # Look in {agent_id}/{user_id}/ directory for {category}.md files
-            agent_user_dir = self.memory_dir / str(agent_id) / str(user_id)
-            if agent_user_dir.exists():
-                for file_path in agent_user_dir.glob("*.md"):
-                    category = file_path.stem  # Remove .md extension
-                    if category:  # Make sure category is not empty
-                        categories.append(category)
-                logger.debug(f"Found categories for agent {agent_id}, user {user_id} in {agent_user_dir}: {categories}")
-            else:
-                logger.debug(f"Agent/User directory does not exist: {agent_user_dir}")
-
-            return categories
-
-        except Exception as e:
-            logger.warning(f"Failed to scan categories for agent {agent_id}, user {user_id}: {e}")
-            # Fallback to config-based categories
-            return list(self.memory_types.keys())
 
     def get_status(self) -> Dict[str, Any]:
         """Get status information about the recall agent"""

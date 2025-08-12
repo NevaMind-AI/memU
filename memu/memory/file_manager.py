@@ -44,6 +44,8 @@ class MemoryFileManager:
         self.agent_id = agent_id
         self.user_id = user_id
 
+        self.config_manager = get_config_manager()
+
         # Maintain memory types by group
         self.memory_types: Dict[str, Dict[str, str]] = {"basic": {}, "cluster": {}}
         self._initialize_memory_types()
@@ -54,8 +56,7 @@ class MemoryFileManager:
 
     def _initialize_memory_types(self) -> None:
         """Load basic categories from MarkdownConfigManager into memory_types['basic']."""
-        manager = get_config_manager()
-        basic_map = manager.get_file_types_mapping()
+        basic_map = self.config_manager.get_file_types_mapping()
         # Ensure a copy to avoid accidental external mutation
         self.memory_types["basic"] = dict(basic_map)
         cluster_set = self._get_cluster_categories(
@@ -223,8 +224,7 @@ class MemoryFileManager:
 
     def _get_basic_categories(self) -> Set[str]:
         """Get basic categories from MarkdownConfigManager."""
-        manager = get_config_manager()
-        return set(manager.get_all_file_types())
+        return set(self.config_manager.get_all_file_types())
 
     def _get_cluster_categories(
         self, agent_id: str, user_id: str, basic_categories: Set[str]

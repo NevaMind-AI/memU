@@ -287,6 +287,7 @@ Transform the raw content into properly formatted activity memory items (ONE MEA
                             "character": character_name,
                             "category": category,
                             "length": len(item["content"]),
+                            "mentioned_at": item["mentioned_at"],
                             "timestamp": datetime.now().isoformat(),
                         },
                     }
