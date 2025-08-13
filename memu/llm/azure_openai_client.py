@@ -17,7 +17,7 @@ class AzureOpenAIClient(BaseLLMClient):
         api_key: str = None,
         azure_endpoint: str = None,
         api_version: str = "2025-01-01-preview",
-        deployment_name: str = "gpt-4o-mini",
+        model: str = "gpt-4o-mini",
         use_entra_id: bool = False,
         **kwargs,
     ):
@@ -28,20 +28,20 @@ class AzureOpenAIClient(BaseLLMClient):
             api_key: Azure OpenAI API key (not needed if using Entra ID)
             azure_endpoint: Azure OpenAI endpoint URL
             api_version: Azure OpenAI API version
-            deployment_name: Azure OpenAI deployment name
+            model: Azure OpenAI model name
             use_entra_id: Whether to use Entra ID authentication
             **kwargs: Other configuration parameters
         """
-        super().__init__(model=deployment_name, **kwargs)
+        super().__init__(model=model, **kwargs)
 
-        self.api_key = api_key or os.getenv("AZURE_OPENAI_API_KEY")
-        self.azure_endpoint = azure_endpoint or os.getenv(
-            "AZURE_OPENAI_ENDPOINT", "https://openaialluci.openai.azure.com/"
+        # Prefer explicit params if provided, otherwise read from environment
+        # Use variables defined in .env.example
+        self.api_key = api_key or os.getenv("AZURE_API_KEY")
+        self.azure_endpoint = (
+            azure_endpoint or os.getenv("AZURE_ENDPOINT") or "https://openaialluci.openai.azure.com/"
         )
         self.api_version = api_version
-        self.deployment_name = deployment_name or os.getenv(
-            "AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-4o-mini"
-        )
+        self.model = model or os.getenv("MEMU_AZURE_DEPLOYMENT_NAME") or "gpt-4o-mini"
         self.use_entra_id = use_entra_id
 
         if not self.use_entra_id and not self.api_key:
@@ -114,8 +114,6 @@ class AzureOpenAIClient(BaseLLMClient):
         **kwargs,
     ) -> LLMResponse:
         """Azure OpenAI chat completion with function calling support"""
-        # For Azure OpenAI, we use the deployment name instead of model name
-        deployment = model or self.deployment_name
 
         try:
             # Preprocess messages
@@ -123,7 +121,7 @@ class AzureOpenAIClient(BaseLLMClient):
 
             # Prepare API call parameters
             api_params = {
-                "model": deployment,
+                "model": model,
                 "messages": processed_messages,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
@@ -155,11 +153,11 @@ class AzureOpenAIClient(BaseLLMClient):
 
         except Exception as e:
             logging.error(f"Azure OpenAI API call failed: {e}")
-            return self._handle_error(e, deployment)
+            return self._handle_error(e, model)
 
     def _get_default_model(self) -> str:
-        """Get Azure OpenAI default deployment"""
-        return self.deployment_name
+        """Get Azure OpenAI default model"""
+        return self.model
 
     def _prepare_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """Preprocess Azure OpenAI message format"""
@@ -195,4 +193,4 @@ class AzureOpenAIClient(BaseLLMClient):
         return cls()
 
     def __str__(self) -> str:
-        return f"AzureOpenAIClient(deployment={self.deployment_name}, endpoint={self.azure_endpoint})"
+        return f"AzureOpenAIClient(model={self.model}, endpoint={self.azure_endpoint})"

@@ -12,7 +12,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
 
-from ..config import get_settings
+from memu.config.server_config import get_settings
 from ..models import (
     MemorizeRequest,
     MemorizeResponse,

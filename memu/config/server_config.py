@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     enable_embeddings: bool = True
     
     # LLM settings
-    llm_provider: str = "openai"
+    llm_provider: str = os.getenv("MEMU_LLM_PROVIDER") or "openai"
     openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
     openai_model: str = "gpt-4.1-mini"
 
@@ -76,3 +76,5 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Get cached settings instance"""
     return Settings()
+
+

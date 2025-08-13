@@ -12,20 +12,12 @@ from pathlib import Path
 
 import uvicorn
 
-from .config import get_settings
+from memu.config.server_config import get_settings
 
 
-def start_server(host: str = None, port: int = None, debug: bool = None):
-    """Start the MemU server"""
+def start_server():
+    """Start the MemU server (configuration via environment variables only)"""
     settings = get_settings()
-    
-    # Override settings if provided
-    if host:
-        settings.host = host
-    if port:
-        settings.port = port
-    if debug is not None:
-        settings.debug = debug
     
     print(f"🚀 Starting MemU Server...")
     print(f"   Host: {settings.host}")
@@ -92,10 +84,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  memu-server start                    # Start server with default settings
-  memu-server start --host 127.0.0.1  # Start on localhost only
-  memu-server start --port 8080       # Start on port 8080
-  memu-server start --debug           # Start in debug mode
+  memu-server start                   # Start server using .env variables
   memu-server init-env                 # Create .env file from template
         """
     )
@@ -103,22 +92,7 @@ Examples:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
     # Start command
-    start_parser = subparsers.add_parser("start", help="Start the server")
-    start_parser.add_argument(
-        "--host", 
-        type=str, 
-        help="Host to bind to (default: from config/env)"
-    )
-    start_parser.add_argument(
-        "--port", 
-        type=int, 
-        help="Port to bind to (default: from config/env)"
-    )
-    start_parser.add_argument(
-        "--debug", 
-        action="store_true", 
-        help="Enable debug mode"
-    )
+    subparsers.add_parser("start", help="Start the server")
     
     # Init env command
     subparsers.add_parser("init-env", help="Create .env file from template")
@@ -126,11 +100,7 @@ Examples:
     args = parser.parse_args()
     
     if args.command == "start":
-        start_server(
-            host=args.host,
-            port=args.port,
-            debug=args.debug
-        )
+        start_server()
     elif args.command == "init-env":
         create_env_file()
     else:

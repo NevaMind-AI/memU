@@ -10,9 +10,7 @@ __version__ = "0.1.6"
 __author__ = "MemU Team"
 __email__ = "support@nevamind.ai"
 
-# Configuration module - import from original config.py file
-import importlib.util
-import os
+# Configuration module
 
 # LLM system
 from .llm import AnthropicClient  # Anthropic implementation
@@ -32,17 +30,9 @@ from .sdk.python import MemorizeRequest, MemorizeResponse, MemuClient
 # from .config.prompts import PromptLoader  # Prompt loading utilities
 # from .config.prompts import get_prompt_loader  # Get prompt loader instance
 
-_config_file_path = os.path.join(os.path.dirname(__file__), "config.py")
-_config_spec = importlib.util.spec_from_file_location(
-    "memu_config", _config_file_path
-)
-_config_module = importlib.util.module_from_spec(_config_spec)
-_config_spec.loader.exec_module(_config_module)
-config = _config_module.config
-load_config = _config_module.load_config
-setup_env_file = _config_module.setup_env_file
-LLMConfigManager = _config_module.LLMConfigManager
-get_llm_config_manager = _config_module.get_llm_config_manager
+# Note: legacy `memu/config.py` has been removed. Server configuration now
+# lives under `memu/server/config.py`. Markdown configuration lives under
+# `memu/config/markdown_config.py`.
 
 # Note: Database functionality has been removed.
 # MemU now uses file-based storage only.
@@ -76,12 +66,6 @@ __all__ = [
     # Prompts system - now reads from dynamic configuration folders
     # "PromptLoader",  # Prompt loading utilities
     # "get_prompt_loader",  # Get prompt loader instance
-    # Configuration
-    "config",  # Global config instance
-    "load_config",  # Config loader
-    "setup_env_file",  # Environment setup helper
-    "LLMConfigManager",  # Unified LLM config manager
-    "get_llm_config_manager",  # Global LLM config getter
     # Note: Database functionality has been removed
     # MemU now uses file-based storage only
 ]

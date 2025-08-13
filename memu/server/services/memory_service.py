@@ -11,7 +11,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ...config import get_llm_config_manager
 from ...llm import OpenAIClient, AzureOpenAIClient, AnthropicClient, DeepSeekClient
 from ...memory import MemoryAgent, RecallAgent
 from ..config import Settings
@@ -48,36 +47,15 @@ class MemoryService:
         """Get or create LLM client"""
         if self._llm_client is None:
             provider = self.settings.llm_provider.lower()
-            
+
             if provider == "openai":
-                if not self.settings.openai_api_key:
-                    raise ValueError("OpenAI API key is required")
-                self._llm_client = OpenAIClient(
-                    api_key=self.settings.openai_api_key,
-                    model=self.settings.openai_model
-                )
+                self._llm_client = OpenAIClient.from_env()
             elif provider == "azure":
-                if not self.settings.azure_api_key:
-                    raise ValueError("Azure API key is required")
-                self._llm_client = AzureOpenAIClient(
-                    api_key=self.settings.azure_api_key,
-                    azure_endpoint=self.settings.azure_endpoint,
-                    deployment_name=self.settings.azure_deployment_name
-                )
+                self._llm_client = AzureOpenAIClient.from_env()
             elif provider == "anthropic":
-                if not self.settings.anthropic_api_key:
-                    raise ValueError("Anthropic API key is required")
-                self._llm_client = AnthropicClient(
-                    api_key=self.settings.anthropic_api_key,
-                    model=self.settings.anthropic_model
-                )
+                self._llm_client = AnthropicClient.from_env()
             elif provider == "deepseek":
-                if not self.settings.deepseek_api_key:
-                    raise ValueError("DeepSeek API key is required")
-                self._llm_client = DeepSeekClient(
-                    api_key=self.settings.deepseek_api_key,
-                    model=self.settings.deepseek_model
-                )
+                self._llm_client = DeepSeekClient.from_env()
             else:
                 raise ValueError(f"Unsupported LLM provider: {provider}")
         

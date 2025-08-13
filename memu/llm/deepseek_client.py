@@ -49,8 +49,9 @@ class DeepSeekClient(BaseLLMClient):
         super().__init__(model=model_name, **kwargs)
 
         self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY")
-        self.endpoint = endpoint or os.getenv("DEEPSEEK_ENDPOINT")
-        self.model_name = model_name
+        # DeepSeek via Azure AI Inference uses Azure endpoint
+        self.endpoint = endpoint or os.getenv("AZURE_ENDPOINT")
+        self.model_name = model_name or os.getenv("MEMU_DEEPSEEK_MODEL") or "deepseek-chat"
         self.api_version = api_version
 
         if not self.api_key:

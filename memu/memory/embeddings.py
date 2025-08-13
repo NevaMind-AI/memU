@@ -9,7 +9,7 @@ import os
 import time
 from typing import List, Optional
 
-from memu.server.config import get_settings
+from memu.config.server_config import get_settings
 
 from ..utils import get_logger
 
@@ -287,7 +287,7 @@ def get_default_embedding_client() -> Optional[EmbeddingClient]:
             logger.warning(f"Failed to create OpenAI embedding client: {e}")
 
     # Try Azure OpenAI
-    if os.getenv("AZURE_OPENAI_API_KEY") and os.getenv("AZURE_OPENAI_ENDPOINT"):
+    if os.getenv("AZURE_API_KEY") and os.getenv("AZURE_ENDPOINT"):
         try:
             return create_embedding_client("azure", model=settings.embedding_model)
         except Exception as e:

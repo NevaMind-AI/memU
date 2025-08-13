@@ -16,7 +16,7 @@ class OpenAIClient(BaseLLMClient):
         self,
         api_key: str = None,
         base_url: str = None,
-        model: str = "gpt-4o-mini",
+        model: str = "gpt-4.1-mini",
         **kwargs,
     ):
         """
@@ -31,8 +31,8 @@ class OpenAIClient(BaseLLMClient):
         super().__init__(model=model, **kwargs)
 
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        # Only use custom base_url if explicitly provided (env or param)
-        self.base_url = base_url or os.getenv("OPENAI_BASE_URL")
+        # Only use custom base_url if explicitly provided as a parameter
+        self.base_url = base_url
 
         if not self.api_key:
             raise ValueError(
