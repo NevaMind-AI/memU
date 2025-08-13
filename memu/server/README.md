@@ -91,12 +91,6 @@ OPENAI_API_KEY=your_key_here
 MEMU_OPENAI_MODEL=gpt-4
 ```
 
-#### Anthropic
-```bash
-MEMU_LLM_PROVIDER=anthropic
-ANTHROPIC_API_KEY=your_key_here
-MEMU_ANTHROPIC_MODEL=claude-3-sonnet-20240229
-```
 
 #### DeepSeek
 ```bash

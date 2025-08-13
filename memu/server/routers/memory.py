@@ -12,7 +12,6 @@ from typing import Any, Dict
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
 
-from memu.config.server_config import get_settings
 from ..models import (
     MemorizeRequest,
     MemorizeResponse,
@@ -41,8 +40,7 @@ def get_memory_service() -> MemoryService:
     """Get memory service instance"""
     global memory_service
     if memory_service is None:
-        settings = get_settings()
-        memory_service = MemoryService(settings)
+        memory_service = MemoryService()
     return memory_service
 
 

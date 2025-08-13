@@ -13,7 +13,6 @@ __email__ = "support@nevamind.ai"
 # Configuration module
 
 # LLM system
-from .llm import AnthropicClient  # Anthropic implementation
 from .llm import BaseLLMClient  # Base LLM client
 from .llm import CustomLLMClient  # Custom LLM support
 from .llm import LLMResponse  # LLM response object

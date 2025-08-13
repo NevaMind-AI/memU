@@ -17,7 +17,7 @@ class AzureOpenAIClient(BaseLLMClient):
         api_key: str = None,
         azure_endpoint: str = None,
         api_version: str = "2025-01-01-preview",
-        model: str = "gpt-4o-mini",
+        model: str = None,
         use_entra_id: bool = False,
         **kwargs,
     ):
@@ -32,28 +32,32 @@ class AzureOpenAIClient(BaseLLMClient):
             use_entra_id: Whether to use Entra ID authentication
             **kwargs: Other configuration parameters
         """
-        super().__init__(model=model, **kwargs)
-
         # Prefer explicit params if provided, otherwise read from environment
-        # Use variables defined in .env.example
+        # Also wire the default model into BaseLLMClient for get_model()
+        resolved_model = model or os.getenv("MEMU_AZURE_DEPLOYMENT_NAME")
+        super().__init__(model=resolved_model, **kwargs)
+
         self.api_key = api_key or os.getenv("AZURE_API_KEY")
-        self.azure_endpoint = (
-            azure_endpoint or os.getenv("AZURE_ENDPOINT") or "https://openaialluci.openai.azure.com/"
+        self.azure_endpoint = azure_endpoint or os.getenv("AZURE_ENDPOINT")
+        # Fall back to a safe preview version if not provided
+        self.api_version = (
+            api_version or os.getenv("AZURE_API_VERSION") or "2025-01-01-preview"
         )
-        self.api_version = api_version
-        self.model = model or os.getenv("MEMU_AZURE_DEPLOYMENT_NAME") or "gpt-4o-mini"
+        # Keep a local mirror for __str__ and _get_default_model
+        self.model = resolved_model
         self.use_entra_id = use_entra_id
+
 
         if not self.use_entra_id and not self.api_key:
             raise ValueError(
                 "Azure OpenAI API key is required when not using Entra ID. "
-                "Set AZURE_OPENAI_API_KEY environment variable or pass api_key parameter."
+                "Set AZURE_API_KEY environment variable or pass api_key parameter."
             )
 
         if not self.azure_endpoint:
             raise ValueError(
                 "Azure OpenAI endpoint is required. "
-                "Set AZURE_OPENAI_ENDPOINT environment variable or pass azure_endpoint parameter."
+                "Set AZURE_ENDPOINT environment variable or pass azure_endpoint parameter."
             )
 
         # Lazy import Azure OpenAI library
@@ -116,6 +120,8 @@ class AzureOpenAIClient(BaseLLMClient):
         """Azure OpenAI chat completion with function calling support"""
 
         try:
+            # Resolve model: use passed-in, default_model, or provider default
+            model = self.get_model(model)
             # Preprocess messages
             processed_messages = self._prepare_messages(messages)
 

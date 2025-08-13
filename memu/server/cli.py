@@ -8,48 +8,71 @@ Command line interface for managing the MemU self-hosted server.
 import argparse
 import os
 import sys
-from pathlib import Path
-
 import uvicorn
+from pathlib import Path
+from dotenv import load_dotenv
 
-from memu.config.server_config import get_settings
+load_dotenv()
+
+def _get_bool_env(name: str, default: bool = False) -> bool:
+    val = os.getenv(name)
+    if val is None:
+        return default
+    return str(val).lower() == "true"
 
 
 def start_server():
     """Start the MemU server (configuration via environment variables only)"""
-    settings = get_settings()
-    
+    host = os.getenv("MEMU_HOST", "0.0.0.0")
+    port = int(os.getenv("MEMU_PORT", "8000"))
+    debug = _get_bool_env("MEMU_DEBUG", False)
+    memory_dir = os.getenv("MEMU_MEMORY_DIR", "memu/server/memory")
+    llm_provider = os.getenv("MEMU_LLM_PROVIDER", "openai").lower()
+    enable_embeddings = _get_bool_env("MEMU_ENABLE_EMBEDDINGS", True)
+
     print(f"🚀 Starting MemU Server...")
-    print(f"   Host: {settings.host}")
-    print(f"   Port: {settings.port}")
-    print(f"   Debug: {settings.debug}")
-    print(f"   Memory Dir: {settings.memory_dir}")
-    print(f"   LLM Provider: {settings.llm_provider}")
-    print(f"   Embeddings: {settings.enable_embeddings}")
+    print(f"   Host: {host}")
+    print(f"   Port: {port}")
+    print(f"   Debug: {debug}")
+    print(f"   Memory Dir: {memory_dir}")
+    print(f"   LLM Provider: {llm_provider}")
+    print(f"   Embeddings: {enable_embeddings}")
     print()
     
     # Validate LLM configuration
-    if settings.llm_provider == "openai" and not settings.openai_api_key:
+    if llm_provider == "openai" and not os.getenv("OPENAI_API_KEY"):
         print("❌ Error: OpenAI API key is required. Set OPENAI_API_KEY environment variable.")
         sys.exit(1)
-    elif settings.llm_provider == "anthropic" and not settings.anthropic_api_key:
+    elif llm_provider == "anthropic" and not os.getenv("ANTHROPIC_API_KEY"):
         print("❌ Error: Anthropic API key is required. Set ANTHROPIC_API_KEY environment variable.")
         sys.exit(1)
-    elif settings.llm_provider == "deepseek" and not settings.deepseek_api_key:
+    elif llm_provider == "deepseek" and not os.getenv("DEEPSEEK_API_KEY"):
         print("❌ Error: DeepSeek API key is required. Set DEEPSEEK_API_KEY environment variable.")
         sys.exit(1)
+    elif llm_provider == "azure":
+        missing = []
+        if not os.getenv("AZURE_API_KEY"):
+            missing.append("AZURE_API_KEY")
+        if not os.getenv("AZURE_ENDPOINT"):
+            missing.append("AZURE_ENDPOINT")
+        # Deployment name is required by Azure for the model parameter
+        if not os.getenv("MEMU_AZURE_DEPLOYMENT_NAME"):
+            missing.append("MEMU_AZURE_DEPLOYMENT_NAME")
+        if missing:
+            print(f"❌ Error: Azure OpenAI requires {', '.join(missing)}. Set them in environment variables.")
+            sys.exit(1)
     
     # Create memory directory if it doesn't exist
-    memory_path = Path(settings.memory_dir)
+    memory_path = Path(memory_dir)
     memory_path.mkdir(exist_ok=True)
     
     # Start server
     uvicorn.run(
         "memu.server.main:app",
-        host=settings.host,
-        port=settings.port,
-        reload=settings.debug,
-        log_level="info" if not settings.debug else "debug"
+        host=host,
+        port=port,
+        reload=debug,
+        log_level="info" if not debug else "debug"
     )
 
 

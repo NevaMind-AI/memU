@@ -5,12 +5,12 @@ FastAPI application providing REST APIs for MemU memory management.
 """
 
 import logging
+import os
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from memu.config.server_config import get_settings
 from .routers import memory
 from .middleware import LoggingMiddleware
 
@@ -27,13 +27,21 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Get settings
-settings = get_settings()
+# Read server config from environment
+HOST = os.getenv("MEMU_HOST", "0.0.0.0")
+PORT = int(os.getenv("MEMU_PORT", "8000"))
+DEBUG = os.getenv("MEMU_DEBUG", "false").lower() == "true"
+
+cors_origins_env = os.getenv("MEMU_CORS_ORIGINS", "*")
+if cors_origins_env == "*":
+    CORS_ORIGINS = ["*"]
+else:
+    CORS_ORIGINS = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -83,10 +91,10 @@ def start_server():
     """Start the server with uvicorn"""
     uvicorn.run(
         "memu.server.main:app",
-        host=settings.host,
-        port=settings.port,
-        reload=settings.debug,
-        log_level="info" if not settings.debug else "debug"
+        host=HOST,
+        port=PORT,
+        reload=DEBUG,
+        log_level="info" if not DEBUG else "debug"
     )
 
 

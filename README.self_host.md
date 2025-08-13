@@ -1,119 +1,139 @@
-# 🐳 MemU Server Docker Quick Start
+# 🐳 MemU Self-Host (Docker Compose)
 
-Get MemU server running in Docker with just a few commands!
+Get the MemU server running locally with Docker Compose. This guide covers configuration, startup, verification, testing, persistence, and troubleshooting.
 
 ## Prerequisites
 
-- Docker and Docker Compose installed
-- Your LLM provider API key
+- Docker and Docker Compose
+- At least one LLM provider API key
 
 ## 🚀 Quick Start (3 steps)
 
-### 1. Configure Environment
+### 1) Configure environment
 
 ```bash
-# Copy environment template
+# Copy the root template and edit values
 cp env.example .env
 
-# Edit .env and add your API key
-# For OpenAI (default):
-echo "OPENAI_API_KEY=your-api-key-here" >> .env
+# OpenAI (default provider)
+echo "OPENAI_API_KEY=your-openai-api-key" >> .env
 
-# For other providers, edit .env file and set:
-# MEMU_LLM_PROVIDER=anthropic (or deepseek, azure)
-# ANTHROPIC_API_KEY=your-key-here
+# Optional: choose provider in .env (openai | deepseek | azure)
+# MEMU_LLM_PROVIDER=openai
 ```
 
-### 2. Start the Server
+Key variables from `.env` used by the server:
+
+- MEMU_HOST (default 0.0.0.0)
+- MEMU_PORT (default 8000)
+- MEMU_DEBUG (default false)
+- MEMU_MEMORY_DIR (default memu/server/memory; container default is /app/memory)
+- MEMU_LLM_PROVIDER (openai | deepseek | azure)
+- MEMU_ENABLE_EMBEDDINGS (default true)
+
+LLM-specific settings are documented below.
+
+### 2) Start the server
 
 ```bash
 docker-compose up -d
 ```
 
-### 3. Verify it's Working
+This uses `docker-compose.yml` to build and launch the `memu-server` container, mapping host port 8000 → container port 8000 and persisting data to named volumes.
+
+### 3) Verify
 
 ```bash
-# Quick health check
+# Health
 curl http://localhost:8000/health
 
-# Run comprehensive test suite
-python example/server/test_server.py
+# API docs
+open http://localhost:8000/docs
 
-# View logs (optional)
+# Logs (optional)
 docker-compose logs -f memu-server
 ```
 
-## 🌐 Access Points
+## 🌐 Endpoints
 
-- **API Base**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs  
-- **Health Check**: http://localhost:8000/health
+- API Base: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+- Health: http://localhost:8000/health
 
-## 🧪 Testing the Server
-
-After starting the Docker container, you can test all API endpoints using our test script:
+## 🧪 Test the server
 
 ```bash
-# Run the comprehensive test suite
 python example/server/test_server.py
 ```
 
-### What the Test Does
+This script runs an end-to-end flow: health check, memorize, task status, and retrieval. If embeddings are enabled, ensure a valid embedding model and API key are configured.
 
-The test script performs a complete API workflow:
+## ⚙️ Configuration reference
 
-1. **Health Check** - Verifies server is running and responsive
-2. **Memory Storage** - Tests conversation memorization with sample data
-3. **Task Monitoring** - Tracks asynchronous memory processing
-4. **Memory Retrieval** - Tests various search and categorization APIs
-5. **Performance Validation** - Ensures all endpoints work correctly
+Edit `.env` to configure the server. Common options:
 
-### Expected Output
+- MEMU_HOST: bind address (default 0.0.0.0)
+- MEMU_PORT: port (default 8000)
+- MEMU_DEBUG: auto-reload and verbose logs (true/false)
+- MEMU_MEMORY_DIR: on-disk memory path inside the container (default /app/memory via entrypoint)
+- MEMU_ENABLE_EMBEDDINGS: enable vector embeddings (true/false)
+- MEMU_CORS_ORIGINS: CORS origins (e.g. *, http://localhost:3000)
+- MEMU_LLM_PROVIDER: openai | deepseek | azure
 
-```
-🚀 MemU Server API Test
-==================================================
-🔍 Testing server health...
-✅ Server is healthy
-📝 Testing conversation memorization...
-✅ Memorization started successfully
-⏳ Checking task status...
-✅ Task completed successfully
-📂 Testing default categories retrieval...
-✅ Default categories retrieved successfully
-🎉 Test completed!
-```
+### OpenAI
 
-### Troubleshooting Tests
-
-**Test fails with connection error?**
 ```bash
-# Make sure server is running
-curl http://localhost:8000/health
-
-# Check server logs
-docker-compose logs memu-server
+MEMU_LLM_PROVIDER=openai (Must provide for embedding)
+OPENAI_API_KEY=your-openai-api-key
+MEMU_OPENAI_MODEL=gpt-4.1-mini
+MEMU_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
-**Memory processing takes too long?**
+### DeepSeek
+
 ```bash
-# The test waits up to 400 seconds for memory processing
-# Check your LLM provider API key and rate limits
+MEMU_LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=your-deepseek-api-key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_API_VERSION=2024-05-01-preview
+MEMU_DEEPSEEK_MODEL=deepseek-chat
 ```
 
-## 🛠️ Management Commands
+### Azure OpenAI
+
+```bash
+MEMU_LLM_PROVIDER=azure
+AZURE_API_KEY=your-azure-api-key
+AZURE_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_API_VERSION=2025-01-01-preview
+MEMU_AZURE_DEPLOYMENT_NAME=gpt-4.1-mini
+MEMU_EMBEDDING_MODEL=text-embedding-3-small
+```
+
+Note: The container entrypoint validates required keys for the selected provider before starting.
+
+## 💾 Data persistence and logs
+
+The Compose file defines named volumes:
+
+- memu-memory → mounted at `/app/memory` (or `${MEMU_MEMORY_DIR}`)
+- memu-logs → mounted at `/app/logs`
+
+To inspect data on the host, use Docker Desktop or `docker volume inspect` and mount the volume into a temporary container.
+
+## 🔧 Management
 
 ```bash
 # View logs
-docker-compose logs memu-server
+docker-compose logs -f memu-server
 
-# Stop server
-docker-compose down
-
-# Restart server
+# Restart
 docker-compose restart memu-server
 
-# Update and rebuild
+# Stop
+docker-compose down
+
+# Rebuild and start clean
 docker-compose down
 docker-compose build --no-cache
 docker-compose up -d
@@ -121,24 +141,36 @@ docker-compose up -d
 
 ## 🐛 Troubleshooting
 
-**Port 8000 already in use?**
+### Port 8000 already in use
+
+Option A: override at runtime
+
 ```bash
-# Use different port
-docker-compose up -d --env MEMU_PORT=8001
+MEMU_PORT=8001 docker-compose up -d
 ```
 
-**API key errors?**
+Option B: edit `docker-compose.yml` ports mapping, e.g. `"8001:8000"`.
+
+### API key or provider errors
+
 ```bash
-# Check your .env file
 cat .env
-# Make sure OPENAI_API_KEY (or your provider's key) is set
+# Ensure the correct provider is set and required keys exist
+# e.g. OPENAI_API_KEY, or DEEPSEEK_API_KEY, or AZURE_API_KEY + AZURE_ENDPOINT + MEMU_AZURE_DEPLOYMENT_NAME
 ```
 
-**Need shell access?**
+### Long memory processing times
+
+- Verify rate limits and quotas on your LLM account
+- Reduce payload size while testing
+- Check logs: `docker-compose logs -f memu-server`
+
+### Shell access
+
 ```bash
 docker-compose exec memu-server bash
 ```
 
-## 📚 More Info
+## 📚 More information
 
-For detailed configuration and production deployment, see `README.docker.md`.
+For a deeper dive into features, endpoints, and development usage, see `memu/server/README.md`.

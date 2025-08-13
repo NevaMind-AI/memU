@@ -5,15 +5,15 @@ Service for handling memory operations using MemU components.
 """
 
 import asyncio
+import os
 import re
 import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ...llm import OpenAIClient, AzureOpenAIClient, AnthropicClient, DeepSeekClient
+from ...llm import OpenAIClient, AzureOpenAIClient, DeepSeekClient
 from ...memory import MemoryAgent, RecallAgent
-from ..config import Settings
 from ..models import (
     ConversationMessage,
     DefaultCategoriesResponse,
@@ -31,27 +31,39 @@ logger = logging.getLogger(__name__)
 class MemoryService:
     """Service for memory operations using MemU components"""
     
-    def __init__(self, settings: Settings):
-        """Initialize memory service with settings"""
-        self.settings = settings
+    def __init__(self):
+        """Initialize memory service with environment variables"""
         self._memory_agent: Optional[MemoryAgent] = None
         self._llm_client = None
         
+        # Load settings from environment
+        self.llm_provider = (os.getenv("MEMU_LLM_PROVIDER", "openai")).lower()
+        self.enable_embeddings = (os.getenv("MEMU_ENABLE_EMBEDDINGS", "true").lower() == "true")
+        memory_dir = os.getenv("MEMU_MEMORY_DIR", "memu/server/memory")
+
         # Ensure memory directory exists
-        self.memory_path = Path(settings.memory_dir)
+        self.memory_path = Path(memory_dir)
         self.memory_path.mkdir(exist_ok=True)
         
-        logger.info(f"Memory service initialized with directory: {settings.memory_dir}")
+        logger.info(f"Memory service initialized with directory: {memory_dir}")
     
     def _get_llm_client(self):
         """Get or create LLM client"""
         if self._llm_client is None:
-            provider = self.settings.llm_provider.lower()
+            provider = self.llm_provider
 
             if provider == "openai":
-                self._llm_client = OpenAIClient.from_env()
+                self._llm_client = OpenAIClient(
+                    api_key=os.getenv("OPENAI_API_KEY"),
+                    model=os.getenv("MEMU_OPENAI_MODEL", "gpt-4.1-mini"),
+                )
             elif provider == "azure":
-                self._llm_client = AzureOpenAIClient.from_env()
+                self._llm_client = AzureOpenAIClient(
+                    api_key=os.getenv("AZURE_API_KEY"),
+                    azure_endpoint=os.getenv("AZURE_ENDPOINT"),
+                    model=os.getenv("MEMU_AZURE_DEPLOYMENT_NAME"),
+                    api_version=os.getenv("AZURE_API_VERSION"),
+                )
             elif provider == "anthropic":
                 self._llm_client = AnthropicClient.from_env()
             elif provider == "deepseek":
@@ -68,7 +80,7 @@ class MemoryService:
             self._memory_agent = MemoryAgent(
                 llm_client=llm_client,
                 memory_dir=str(self.memory_path),
-                enable_embeddings=self.settings.enable_embeddings
+                enable_embeddings=self.enable_embeddings
             )
         return self._memory_agent
     
@@ -105,7 +117,7 @@ class MemoryService:
             memory_agent = MemoryAgent(
                 llm_client=llm_client,
                 memory_dir=str(self.memory_path),
-                enable_embeddings=self.settings.enable_embeddings,
+                enable_embeddings=self.enable_embeddings,
                 agent_id=agent_id,
                 user_id=user_id
             )
