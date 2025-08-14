@@ -64,8 +64,8 @@ class MemoryService:
                     model=os.getenv("MEMU_AZURE_DEPLOYMENT_NAME"),
                     api_version=os.getenv("AZURE_API_VERSION"),
                 )
-            elif provider == "anthropic":
-                self._llm_client = AnthropicClient.from_env()
+            # elif provider == "anthropic":
+            #     self._llm_client = AnthropicClient.from_env()
             elif provider == "deepseek":
                 self._llm_client = DeepSeekClient.from_env()
             else:

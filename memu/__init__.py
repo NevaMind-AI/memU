@@ -56,7 +56,7 @@ __all__ = [
     "BaseLLMClient",  # Base LLM client
     "LLMResponse",  # LLM response object
     "OpenAIClient",  # OpenAI implementation
-    "AnthropicClient",  # Anthropic implementation
+    # "AnthropicClient",  # Anthropic implementation
     "CustomLLMClient",  # Custom LLM support
     # SDK system - HTTP client for MemU API services
     "MemuClient",  # HTTP client for MemU API

@@ -17,7 +17,7 @@ __all__ = [
     # Concrete implementations
     "OpenAIClient",
     "AzureOpenAIClient",
-    "AnthropicClient",
+    # "AnthropicClient",
     "CustomLLMClient",
     "DeepSeekClient",
 ]
