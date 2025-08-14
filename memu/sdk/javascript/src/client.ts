@@ -14,6 +14,8 @@ import {
 import {
   DefaultCategoriesRequest,
   DefaultCategoriesResponse,
+  DeleteMemoryRequest,
+  DeleteMemoryResponse,
   MemorizeRequest,
   MemorizeResponse,
   MemorizeTaskStatusResponse,
@@ -463,6 +465,57 @@ export class MemuClient {
       // Convert response to camelCase
       const response = this.toCamelCase(responseData) as RelatedClusteredCategoriesResponse;
       console.log(`Retrieved ${response.totalCategoriesFound} clustered categories`);
+
+      return response;
+    } catch (error) {
+      if (error instanceof MemuValidationException || 
+          error instanceof MemuAPIException || 
+          error instanceof MemuConnectionException ||
+          error instanceof MemuAuthenticationException) {
+        throw error;
+      }
+      throw new MemuValidationException(`Request validation failed: ${error}`);
+    }
+  }
+
+  /**
+   * Delete memories for a given user. If agentId is provided, delete only that agent's memories; 
+   * otherwise delete all memories for the user within the project.
+   * 
+   * @param options Request options
+   * @returns Response with deletion status and count
+   */
+  async deleteMemories(options: {
+    userId: string;
+    agentId?: string;
+  }): Promise<DeleteMemoryResponse> {
+    try {
+      // Create request data
+      const requestData: DeleteMemoryRequest = {
+        userId: options.userId,
+        ...(options.agentId && { agentId: options.agentId }),
+      };
+
+      console.log(
+        `Deleting memories for user ${options.userId}` +
+        (options.agentId ? ` and agent ${options.agentId}` : ' (all agents)')
+      );
+
+      // Convert to snake_case for API
+      const apiRequestData = this.toSnakeCase(requestData as Record<string, any>);
+
+      // Make API request
+      const responseData = await this.makeRequest<any>({
+        method: 'POST',
+        url: 'api/v1/memory/delete',
+        data: apiRequestData,
+      });
+
+      // Convert response to camelCase
+      const response = this.toCamelCase(responseData) as DeleteMemoryResponse;
+      console.log(
+        `Successfully deleted memories: ${response.deletedCount} memories deleted`
+      );
 
       return response;
     } catch (error) {

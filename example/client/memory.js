@@ -145,6 +145,31 @@ async function basicExample() {
       });
     });
 
+    // Example 7: Delete memories
+    console.log('🗑️ Deleting memories examples...');
+    
+    // Delete memories for a specific user and agent
+    console.log('Deleting memories for user and assistant...');
+    const deleteResponse = await client.deleteMemories({
+      userId: 'user',
+      agentId: 'assistant'
+    });
+    console.log(`✅ ${deleteResponse.message}`);
+    console.log(`   Deleted ${deleteResponse.deletedCount} memories`);
+    console.log(`   User: ${deleteResponse.userId}`);
+    console.log(`   Agent: ${deleteResponse.agentId}`);
+    console.log();
+
+    // Example: Delete all memories for a user (without specifying agent)
+    console.log('Deleting all memories for user...');
+    const deleteAllResponse = await client.deleteMemories({
+      userId: 'user'
+    });
+    console.log(`✅ ${deleteAllResponse.message}`);
+    console.log(`   Deleted ${deleteAllResponse.deletedCount} memories`);
+    console.log(`   User: ${deleteAllResponse.userId}`);
+    console.log();
+
     console.log('\n✨ Example completed successfully!');
 
   } catch (error) {

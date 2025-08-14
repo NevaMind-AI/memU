@@ -22,6 +22,8 @@ from .exceptions import (
 from .models import (
     DefaultCategoriesRequest,
     DefaultCategoriesResponse,
+    DeleteMemoryRequest,
+    DeleteMemoryResponse,
     MemorizeRequest,
     MemorizeResponse,
     MemorizeTaskStatusResponse,
@@ -457,6 +459,57 @@ class MemuClient:
             response = RelatedClusteredCategoriesResponse(**response_data)
             logger.info(
                 f"Retrieved {response.total_categories_found} clustered categories"
+            )
+
+            return response
+
+        except ValidationError as e:
+            raise MemuValidationException(f"Request validation failed: {str(e)}")
+
+    def delete_memories(
+        self,
+        user_id: str,
+        agent_id: str | None = None,
+    ) -> DeleteMemoryResponse:
+        """
+        Delete memories for a given user. If agent_id is provided, delete only that agent's memories; 
+        otherwise delete all memories for the user within the project.
+
+        Args:
+            user_id: User identifier
+            agent_id: Agent identifier (optional, delete all user memories if not provided)
+
+        Returns:
+            DeleteMemoryResponse: Response with deletion status and count
+
+        Raises:
+            MemuValidationException: For validation errors
+            MemuAPIException: For API errors
+            MemuConnectionException: For connection errors
+        """
+        try:
+            # Create request model
+            request_data = DeleteMemoryRequest(
+                user_id=user_id,
+                agent_id=agent_id,
+            )
+
+            logger.info(
+                f"Deleting memories for user {user_id}"
+                + (f" and agent {agent_id}" if agent_id else " (all agents)")
+            )
+
+            # Make API request
+            response_data = self._make_request(
+                method="POST",
+                endpoint="api/v1/memory/delete",
+                json_data=request_data.model_dump(),
+            )
+
+            # Parse response
+            response = DeleteMemoryResponse(**response_data)
+            logger.info(
+                f"Successfully deleted memories: {response.deleted_count} memories deleted"
             )
 
             return response

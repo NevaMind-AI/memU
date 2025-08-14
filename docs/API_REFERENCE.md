@@ -217,6 +217,29 @@ for category in categories.clustered_categories:
     print(f"Similarity: {category.similarity_score}")
 ```
 
+#### `delete_memories()`
+
+Deletes memories for a given user. If agent_id is provided, delete only that agent's memories; otherwise delete all memories for the user within the project.
+
+**Parameters:**
+- `user_id` (str): User identifier
+- `agent_id` (str, optional): Agent identifier (optional, delete all user memories if not provided)
+
+**Returns:** `DeleteMemoryResponse`
+
+```python
+# Delete all memories for a user
+response = client.delete_memories(user_id="user123")
+print(f"Deleted {response.deleted_count} memories for user {response.user_id}")
+
+# Delete memories for a specific user and agent
+response = client.delete_memories(
+    user_id="user123",
+    agent_id="agent456"
+)
+print(f"Deleted {response.deleted_count} memories for user {response.user_id} and agent {response.agent_id}")
+```
+
 ---
 
 ## 🟨 JavaScript SDK
@@ -411,6 +434,34 @@ categories.clusteredCategories.forEach(category => {
 });
 ```
 
+#### `deleteMemories()`
+
+Deletes memories for a given user. If agentId is provided, delete only that agent's memories; otherwise delete all memories for the user within the project.
+
+```typescript
+async deleteMemories(options: {
+  userId: string;
+  agentId?: string;
+}): Promise<DeleteMemoryResponse>
+```
+
+**Example:**
+
+```javascript
+// Delete all memories for a user
+const response1 = await client.deleteMemories({
+  userId: "user123"
+});
+console.log(`Deleted ${response1.deletedCount} memories for user ${response1.userId}`);
+
+// Delete memories for a specific user and agent
+const response2 = await client.deleteMemories({
+  userId: "user123",
+  agentId: "agent456"
+});
+console.log(`Deleted ${response2.deletedCount} memories for user ${response2.userId} and agent ${response2.agentId}`);
+```
+
 ---
 
 ## 📊 Data Models
@@ -470,6 +521,16 @@ categories.clusteredCategories.forEach(category => {
   similarityScore: number;     // Similarity score (0-1)
   memories: MemoryItem[];      // Memories in category
   memoryCount: number;         // Number of memories
+}
+```
+
+### DeleteMemoryResponse
+```typescript
+{
+  message: string;             // Response message
+  deletedCount?: number;       // Number of memories deleted
+  userId: string;              // User identifier
+  agentId?: string;            // Agent identifier (if specified)
 }
 ```
 

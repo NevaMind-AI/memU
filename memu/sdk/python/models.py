@@ -182,3 +182,21 @@ class RelatedClusteredCategoriesResponse(BaseModel):
     category_query: str = Field(..., description="Original category query")
     total_categories_found: int = Field(..., description="Total categories found")
     search_params: Dict[str, Any] = Field(..., description="Search parameters used")
+
+
+# ========== Delete Memory API Models ==========
+
+class DeleteMemoryRequest(BaseModel):
+    """Request model for delete memory API"""
+
+    user_id: str = Field(..., description="User identifier")
+    agent_id: Optional[str] = Field(None, description="Agent identifier (optional, delete all user memories if not provided)")
+
+
+class DeleteMemoryResponse(BaseModel):
+    """Response model for delete memory API"""
+
+    message: str = Field(..., description="Response message")
+    deleted_count: Optional[int] = Field(None, description="Number of memories deleted")
+    user_id: str = Field(..., description="User identifier")
+    agent_id: Optional[str] = Field(None, description="Agent identifier (if specified)")

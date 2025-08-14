@@ -85,6 +85,27 @@ def main():
     for category in related_categories.clustered_categories:
         print(f"  - {category.name}")
 
+    # Example: Delete memories
+    print("\n🗑️ Deleting memories examples:")
+    
+    # Delete memories for a specific user and agent
+    print("Deleting memories for user001 and assistant001...")
+    delete_response = memu_client.delete_memories(
+        user_id="user001",
+        agent_id="assistant001"
+    )
+    print(f"✅ {delete_response.message}")
+    print(f"   Deleted {delete_response.deleted_count} memories")
+    print(f"   User: {delete_response.user_id}")
+    print(f"   Agent: {delete_response.agent_id}")
+
+    # Example: Delete all memories for a user (without specifying agent)
+    print("\nDeleting all memories for user001...")
+    delete_all_response = memu_client.delete_memories(user_id="user001")
+    print(f"✅ {delete_all_response.message}")
+    print(f"   Deleted {delete_all_response.deleted_count} memories")
+    print(f"   User: {delete_all_response.user_id}")
+
     memu_client.close()
 
 

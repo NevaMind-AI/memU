@@ -212,3 +212,29 @@ export interface RelatedClusteredCategoriesResponse {
   /** Search parameters used */
   searchParams: Record<string, any>;
 }
+
+// ========== Delete Memory API Models ==========
+
+/**
+ * Request model for delete memory API
+ */
+export interface DeleteMemoryRequest {
+  /** User identifier */
+  userId: string;
+  /** Agent identifier (optional, delete all user memories if not provided) */
+  agentId?: string;
+}
+
+/**
+ * Response model for delete memory API
+ */
+export interface DeleteMemoryResponse {
+  /** Response message */
+  message: string;
+  /** Number of memories deleted */
+  deletedCount?: number;
+  /** User identifier */
+  userId: string;
+  /** Agent identifier (if specified) */
+  agentId?: string;
+}
