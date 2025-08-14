@@ -99,9 +99,9 @@ class CategoryResponse(BaseModel):
     agent_id: Optional[str] = Field(None, description="Agent ID")
     description: str = Field(default="", description="Category description")
     is_active: bool = Field(..., description="Whether the category is active")
-    memories: Optional[List[MemoryItem]] = Field(None, description="Memories in this category")
-    memory_count: Optional[int] = Field(None, description="Number of memories in this category")
-    summary: Optional[str] = Field(None, description="Memory summarization for this category")
+    memories: Optional[List[MemoryItem] | None] = Field(None, description="Memories in this category")
+    memory_count: Optional[int | None] = Field(None, description="Number of memories in this category")
+    summary: Optional[str | None] = Field(None, description="Memory summarization for this category")
 
 
 class DefaultCategoriesResponse(BaseModel):
@@ -168,9 +168,9 @@ class ClusteredCategory(BaseModel):
     user_id: Optional[str] = Field(None, description="User identifier")
     agent_id: Optional[str] = Field(None, description="Agent identifier")
     similarity_score: float = Field(..., description="Similarity score")
-    memories: Optional[List[MemoryItem]] = Field(None, description="Memories in this category")
-    memory_count: Optional[int] = Field(None, description="Number of memories in category")
-    summary: Optional[str] = Field(None, description="Memory summarization for this category")
+    memories: Optional[List[MemoryItem] | None] = Field(None, description="Memories in this category")
+    memory_count: Optional[int | None] = Field(None, description="Number of memories in category")
+    summary: Optional[str | None] = Field(None, description="Memory summarization for this category")
 
 
 class RelatedClusteredCategoriesResponse(BaseModel):
