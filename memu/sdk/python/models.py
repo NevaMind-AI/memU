@@ -76,6 +76,7 @@ class DefaultCategoriesRequest(BaseModel):
     user_id: str = Field(..., description="User ID")
     agent_id: Optional[str] = Field(None, description="Agent ID")
     include_inactive: bool = Field(False, description="Include inactive categories")
+    want_summary: bool = Field(default=True, description="Request summary instead of raw memory items")
 
 
 class MemoryItem(BaseModel):
@@ -98,8 +99,9 @@ class CategoryResponse(BaseModel):
     agent_id: Optional[str] = Field(None, description="Agent ID")
     description: str = Field(default="", description="Category description")
     is_active: bool = Field(..., description="Whether the category is active")
-    memories: List[MemoryItem] = Field(..., description="Memories in this category")
-    memory_count: int = Field(..., description="Number of memories in this category")
+    memories: Optional[List[MemoryItem]] = Field(None, description="Memories in this category")
+    memory_count: Optional[int] = Field(None, description="Number of memories in this category")
+    summary: Optional[str] = Field(None, description="Memory summarization for this category")
 
 
 class DefaultCategoriesResponse(BaseModel):
@@ -156,6 +158,7 @@ class RelatedClusteredCategoriesRequest(BaseModel):
     category_query: str = Field(..., description="Category search query")
     top_k: int = Field(5, description="Number of top categories to return")
     min_similarity: float = Field(0.3, description="Minimum similarity threshold")
+    want_summary: bool = Field(default=True, description="Request summary instead of raw memory items")
 
 
 class ClusteredCategory(BaseModel):
@@ -165,8 +168,9 @@ class ClusteredCategory(BaseModel):
     user_id: Optional[str] = Field(None, description="User identifier")
     agent_id: Optional[str] = Field(None, description="Agent identifier")
     similarity_score: float = Field(..., description="Similarity score")
-    memories: List[MemoryItem] = Field(..., description="Memories in this category")
-    memory_count: int = Field(..., description="Number of memories in category")
+    memories: Optional[List[MemoryItem]] = Field(None, description="Memories in this category")
+    memory_count: Optional[int] = Field(None, description="Number of memories in category")
+    summary: Optional[str] = Field(None, description="Memory summarization for this category")
 
 
 class RelatedClusteredCategoriesResponse(BaseModel):

@@ -296,7 +296,12 @@ class MemuClient:
             raise MemuValidationException(f"Response validation failed: {str(e)}")
 
     def retrieve_default_categories(
-        self, *, user_id, agent_id: str | None = None, include_inactive: bool = False
+        self,
+        *,
+        user_id,
+        agent_id: str | None = None,
+        include_inactive: bool = False,
+        want_summary: bool = True,
     ) -> DefaultCategoriesResponse:
         """
         Retrieve default categories for a project
@@ -305,6 +310,7 @@ class MemuClient:
             user_id: User ID
             agent_id: Agent ID (None for all agents)
             include_inactive: Whether to include inactive categories
+            want_summary: Whether to return summary instead of raw memory items
 
         Returns:
             DefaultCategoriesResponse: Default categories information
@@ -317,7 +323,7 @@ class MemuClient:
         try:
             # Create request model
             request_data = DefaultCategoriesRequest(
-                user_id=user_id, agent_id=agent_id, include_inactive=include_inactive
+                user_id=user_id, agent_id=agent_id, include_inactive=include_inactive, want_summary=want_summary
             )
 
             # Make API request
@@ -404,6 +410,7 @@ class MemuClient:
         category_query: str,
         top_k: int = 5,
         min_similarity: float = 0.3,
+        want_summary: bool = True,
     ) -> RelatedClusteredCategoriesResponse:
         """
         Retrieve related clustered categories for a user
@@ -414,6 +421,7 @@ class MemuClient:
             category_query: Category search query
             top_k: Number of top categories to return
             min_similarity: Minimum similarity threshold
+            want_summary: Whether to return summary instead of raw memory items
 
         Returns:
             RelatedClusteredCategoriesResponse: Related clustered categories
@@ -431,6 +439,7 @@ class MemuClient:
                 category_query=category_query,
                 top_k=top_k,
                 min_similarity=min_similarity,
+                want_summary=want_summary,
             )
 
             logger.info(
