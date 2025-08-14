@@ -27,7 +27,7 @@ Key variables from `.env` used by the server:
 - MEMU_HOST (default 0.0.0.0)
 - MEMU_PORT (default 8000)
 - MEMU_DEBUG (default false)
-- MEMU_MEMORY_DIR (default memu/server/memory; container default is /app/memory)
+- MEMU_MEMORY_DIR (default memu/server/memory; default in container is /app/memory/server)
 - MEMU_LLM_PROVIDER (openai | deepseek | azure)
 - MEMU_ENABLE_EMBEDDINGS (default true)
 
