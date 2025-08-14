@@ -74,7 +74,7 @@ memu_client = MemuClient(
     api_key=os.getenv("MEMU_API_KEY")
 )
 memu_client.memorize_conversation(
-    conversation=conversation_text,
+    conversation=conversation_text, # Recommend longer conversation (~8000 tokens), see https://memu.pro/blog/memu-best-practice for details
     user_id="user001", 
     user_name="User", 
     agent_id="assistant001", 
