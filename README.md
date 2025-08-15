@@ -191,9 +191,9 @@ For more information please contact info@nevamind.ai
 
 ---
 
-## 🤝 Partners
+## 🤝 Ecosystem
 
-We're proud to work with amazing organizations and technologies that help make MemU possible:
+We're proud to work with amazing organizations:
 
 <div align="center">
 
