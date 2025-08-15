@@ -42,10 +42,10 @@ def main():
     print("\nProcessing multi-turn conversation")
     memo_response = memu_client.memorize_conversation(
         conversation=conversation_messages,
-        user_id="user002", 
-        user_name="User 002", 
-        agent_id="assistant002", 
-        agent_name="Assistant 002"
+        user_id="user003", 
+        user_name="User 003", 
+        agent_id="assistant003", 
+        agent_name="Assistant 003"
     )
     print(f"Saved! Task ID: {memo_response.task_id}")
 
@@ -66,8 +66,8 @@ def main():
 
     # Retrieve default categories
     default_categories = memu_client.retrieve_default_categories(
-        user_id="user002",
-        agent_id="assistant002",
+        user_id="user003",
+        agent_id="assistant003",
         include_inactive=False
     )
     print(f"Found {default_categories.total_categories} default categories:")
@@ -76,7 +76,7 @@ def main():
 
     # Retrieve related clustered categories
     related_categories = memu_client.retrieve_related_clustered_categories(
-        user_id="user002",
+        user_id="user003",
         category_query="outdoor activities",
         top_k=5,
         min_similarity=0.3
@@ -90,17 +90,17 @@ def main():
     print("\n🗑️ Deleting memories examples:")
     
     # Delete memories for a specific user and agent
-    print("Deleting memories for user002 and assistant002...")
+    print("Deleting memories for user003 and assistant003...")
     delete_response = memu_client.delete_memories(
-        user_id="user002",
-        agent_id="assistant002"
+        user_id="user003",
+        agent_id="assistant003"
     )
     print(f"✅ Success: {delete_response.success}")
     print(f"   Deleted {delete_response.deleted_count} memories")
 
     # Example: Delete all memories for a user (without specifying agent)
-    print("\nDeleting all memories for user002...")
-    delete_all_response = memu_client.delete_memories(user_id="user002")
+    print("\nDeleting all memories for user003...")
+    delete_all_response = memu_client.delete_memories(user_id="user003")
     print(f"✅ Success: {delete_all_response.success}")
     print(f"   Deleted {delete_all_response.deleted_count} memories")
 

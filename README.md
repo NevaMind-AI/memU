@@ -189,5 +189,20 @@ For more information please contact info@nevamind.ai
 
 - **X (Twitter):** Follow for updates, AI insights, and key announcements. [Follow us](https://x.com/memU_ai)
 
+---
 
+## 🤝 Partners & Supporters
+
+We're proud to work with amazing organizations and technologies that help make MemU possible:
+
+<div align="center">
+
+### Development Tools
+<a href="https://github.com/TEN-framework/ten-framework"><img src="https://avatars.githubusercontent.com/u/113095513?s=200&v=4" alt="xRoute" height="60" style="margin: 20px;"></a>
+<a href="https://xroute.ai/"><img src="https://xroute.ai/static/logo/logo.png" alt="xRoute" height="60" style="margin: 20px;"></a>
+</div>
+
+---
+
+*Interested in partnering with MemU? Contact us at [partnerships@nevamind.ai](mailto:contact@nevamind.ai)*
 
