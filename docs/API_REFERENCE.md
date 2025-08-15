@@ -230,14 +230,16 @@ Deletes memories for a given user. If agent_id is provided, delete only that age
 ```python
 # Delete all memories for a user
 response = client.delete_memories(user_id="user123")
-print(f"Deleted {response.deleted_count} memories for user {response.user_id}")
+print(f"Success: {response.success}")
+print(f"Deleted {response.deleted_count} memories")
 
 # Delete memories for a specific user and agent
 response = client.delete_memories(
     user_id="user123",
     agent_id="agent456"
 )
-print(f"Deleted {response.deleted_count} memories for user {response.user_id} and agent {response.agent_id}")
+print(f"Success: {response.success}")
+print(f"Deleted {response.deleted_count} memories")
 ```
 
 ---
@@ -452,14 +454,16 @@ async deleteMemories(options: {
 const response1 = await client.deleteMemories({
   userId: "user123"
 });
-console.log(`Deleted ${response1.deletedCount} memories for user ${response1.userId}`);
+console.log(`Success: ${response1.success}`);
+console.log(`Deleted ${response1.deletedCount} memories`);
 
 // Delete memories for a specific user and agent
 const response2 = await client.deleteMemories({
   userId: "user123",
   agentId: "agent456"
 });
-console.log(`Deleted ${response2.deletedCount} memories for user ${response2.userId} and agent ${response2.agentId}`);
+console.log(`Success: ${response2.success}`);
+console.log(`Deleted ${response2.deletedCount} memories`);
 ```
 
 ---
@@ -527,10 +531,8 @@ console.log(`Deleted ${response2.deletedCount} memories for user ${response2.use
 ### DeleteMemoryResponse
 ```typescript
 {
-  message: string;             // Response message
+  success: boolean;            // Operation success status
   deletedCount?: number;       // Number of memories deleted
-  userId: string;              // User identifier
-  agentId?: string;            // Agent identifier (if specified)
 }
 ```
 

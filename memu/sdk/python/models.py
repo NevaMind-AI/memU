@@ -196,7 +196,5 @@ class DeleteMemoryRequest(BaseModel):
 class DeleteMemoryResponse(BaseModel):
     """Response model for delete memory API"""
 
-    message: str = Field(..., description="Response message")
+    success: bool = Field(..., description="Operation success status")
     deleted_count: Optional[int] = Field(None, description="Number of memories deleted")
-    user_id: str = Field(..., description="User identifier")
-    agent_id: Optional[str] = Field(None, description="Agent identifier (if specified)")

@@ -229,12 +229,8 @@ export interface DeleteMemoryRequest {
  * Response model for delete memory API
  */
 export interface DeleteMemoryResponse {
-  /** Response message */
-  message: string;
+  /** Operation success status */
+  success: boolean;
   /** Number of memories deleted */
   deletedCount?: number;
-  /** User identifier */
-  userId: string;
-  /** Agent identifier (if specified) */
-  agentId?: string;
 }

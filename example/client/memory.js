@@ -54,6 +54,7 @@ async function basicExample() {
     console.log(`   Status: ${textResponse.status}`);
     console.log(`   Message: ${textResponse.message}`);
     
+    sleep(2000);
     // Wait for task completion
     await waitForTaskCompletion(client, textResponse.taskId);
     console.log();
@@ -154,10 +155,8 @@ async function basicExample() {
       userId: 'user',
       agentId: 'assistant'
     });
-    console.log(`✅ ${deleteResponse.message}`);
+    console.log(`✅ Success: ${deleteResponse.success}`);
     console.log(`   Deleted ${deleteResponse.deletedCount} memories`);
-    console.log(`   User: ${deleteResponse.userId}`);
-    console.log(`   Agent: ${deleteResponse.agentId}`);
     console.log();
 
     // Example: Delete all memories for a user (without specifying agent)
@@ -165,9 +164,8 @@ async function basicExample() {
     const deleteAllResponse = await client.deleteMemories({
       userId: 'user'
     });
-    console.log(`✅ ${deleteAllResponse.message}`);
+    console.log(`✅ Success: ${deleteAllResponse.success}`);
     console.log(`   Deleted ${deleteAllResponse.deletedCount} memories`);
-    console.log(`   User: ${deleteAllResponse.userId}`);
     console.log();
 
     console.log('\n✨ Example completed successfully!');
