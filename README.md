@@ -117,7 +117,7 @@ See [self hosting README](README.self_host.md)
 ### 🎥 Demo Video
 
 <div align="left">
-  <a href="https://youtu.be/ueOe4ZPlZLU">
+  <a href="https://www.youtube.com/watch?v=qZIuCoLglHs">
     <img src="https://img.youtube.com/vi/ueOe4ZPlZLU/maxresdefault.jpg" alt="MemU Demo Video" width="600">
   </a>
   <br>
