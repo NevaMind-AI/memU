@@ -49,6 +49,12 @@ def start_server():
     elif llm_provider == "deepseek" and not os.getenv("DEEPSEEK_API_KEY"):
         print("❌ Error: DeepSeek API key is required. Set DEEPSEEK_API_KEY environment variable.")
         sys.exit(1)
+    elif llm_provider == "openrouter" and not os.getenv("OPENROUTER_API_KEY"):
+        print(
+            "❌ Error: OpenRouter API key is required. Set OPENROUTER_API_KEY environment variable."
+        )
+        sys.exit(1)
+
     elif llm_provider == "azure":
         missing = []
         if not os.getenv("AZURE_API_KEY"):

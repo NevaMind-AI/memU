@@ -9,6 +9,7 @@ from .base import BaseLLMClient, LLMResponse
 from .custom_client import CustomLLMClient
 from .deepseek_client import DeepSeekClient
 from .openai_client import OpenAIClient
+from .openrouter_client import OpenRouterClient
 
 __all__ = [
     # Base classes
@@ -20,4 +21,5 @@ __all__ = [
     # "AnthropicClient",
     "CustomLLMClient",
     "DeepSeekClient",
+    "OpenRouterClient",
 ]
