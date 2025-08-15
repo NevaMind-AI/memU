@@ -32,7 +32,7 @@ class OpenAIClient(BaseLLMClient):
 
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         # Only use custom base_url if explicitly provided as a parameter
-        self.base_url = base_url
+        self.base_url = base_url or os.getenv("OPENAI_BASE_URL")
 
         if not self.api_key:
             raise ValueError(
