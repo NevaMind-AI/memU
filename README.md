@@ -10,7 +10,7 @@
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/memu)
 [![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
 [![Reddit](https://img.shields.io/badge/Reddit-Join%20Community-FF4500?logo=reddit&logoColor=white)](https://www.reddit.com/r/memU_ai)
-[![WeChat](https://img.shields.io/badge/WeChat-WeChat%20Group-07C160?logo=wechat&logoColor=white)](assets/wechat.png)
+[![WeChat](https://img.shields.io/badge/WeChat-WeChat%20Group-07C160?logo=wechat&logoColor=white)](assets/wechat/wechat1.png)
 </div>
 
 **MemU** is an open-source memory framework for AI companions—high accuracy, fast retrieval, low cost. It acts as an intelligent "memory folder" that adapts to different AI companion scenarios.
@@ -205,10 +205,36 @@ We're proud to work with amazing organizations:
 <a href="https://xroute.ai/"><img src="assets/partners/xroute.png" alt="xRoute" height="40" style="margin: 10px;"></a>
 <a href="https://jaaz.app/"><img src="assets/partners/jazz.png" alt="jazz" height="40" style="margin: 10px;"></a>
 <a href="https://github.com/Buddie-AI/Buddie"><img src="assets/partners/buddie.png" alt="buddie" height="40" style="margin: 10px;"></a>
-
+<a href="https://github.com/bytebase/bytebase"><img src="assets/partners/bytebase.png" alt="bytebase" height="40" style="margin: 10px;"></a>
 </div>
 
 ---
 
 *Interested in partnering with MemU? Contact us at [contact@nevamind.ai](mailto:contact@nevamind.ai)*
 
+---
+
+## 📱 Join Our WeChat Community
+
+Connect with us on WeChat for the latest updates, community discussions, and exclusive content:
+
+<div align="center">
+
+### WeChat QR Codes
+
+<img src="assets/wechat/wechat1.png" alt="MemU WeChat QR Code 1" width="180" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
+<img src="assets/wechat/wechat2.png" alt="MemU WeChat QR Code 2" width="180" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
+<img src="assets/wechat/wechat3.png" alt="MemU WeChat QR Code 3" width="180" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
+
+<br>
+
+<img src="assets/wechat/wechat4.png" alt="MemU WeChat QR Code 4" width="180" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
+<img src="assets/wechat/wechat5.png" alt="MemU WeChat QR Code 5" width="180" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
+
+*Scan any of the QR codes above to join our WeChat community*
+
+</div>
+
+---
+
+*Stay connected with the MemU community! Join our WeChat groups for real-time discussions, technical support, and networking opportunities.*
