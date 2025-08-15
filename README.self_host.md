@@ -56,9 +56,9 @@ docker-compose logs -f memu-server
 
 ## 🌐 Endpoints
 
-- API Base: http://localhost:8000
-- API Docs: http://localhost:8000/docs
-- Health: http://localhost:8000/health
+- API Base: <http://localhost:8000>
+- API Docs: <http://localhost:8000/docs>
+- Health: <http://localhost:8000/health>
 
 ## 🧪 Test the server
 
@@ -77,8 +77,8 @@ Edit `.env` to configure the server. Common options:
 - MEMU_DEBUG: auto-reload and verbose logs (true/false)
 - MEMU_MEMORY_DIR: on-disk memory path inside the container (default /app/memory via entrypoint)
 - MEMU_ENABLE_EMBEDDINGS: enable vector embeddings (true/false)
-- MEMU_CORS_ORIGINS: CORS origins (e.g. *, http://localhost:3000)
-- MEMU_LLM_PROVIDER: openai | deepseek | azure
+- MEMU_CORS_ORIGINS: CORS origins (e.g. \*, <http://localhost:3000>)
+- MEMU_LLM_PROVIDER: openai | deepseek | azure | openrouter
 
 ### OpenAI
 
@@ -108,6 +108,14 @@ AZURE_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_API_VERSION=2025-01-01-preview
 MEMU_AZURE_DEPLOYMENT_NAME=gpt-4.1-mini
 MEMU_EMBEDDING_MODEL=text-embedding-3-small
+```
+
+### OpenRouter
+
+```bash
+MEMU_LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=your-openrouter-api-key
+MEMU_OPENROUTER_MODEL=openrouter/auto
 ```
 
 Note: The container entrypoint validates required keys for the selected provider before starting.
