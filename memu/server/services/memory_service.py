@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ...llm import OpenAIClient, AzureOpenAIClient, DeepSeekClient
+from ...llm import OpenAIClient, AzureOpenAIClient, DeepSeekClient, OpenRouterClient
 from ...memory import MemoryAgent, RecallAgent
 from ..models import (
     ConversationMessage,
@@ -68,6 +68,8 @@ class MemoryService:
             #     self._llm_client = AnthropicClient.from_env()
             elif provider == "deepseek":
                 self._llm_client = DeepSeekClient.from_env()
+            elif provider == "openrouter":
+                self._llm_client = OpenRouterClient.from_env()
             else:
                 raise ValueError(f"Unsupported LLM provider: {provider}")
         

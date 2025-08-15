@@ -58,6 +58,7 @@ __all__ = [
     "OpenAIClient",  # OpenAI implementation
     # "AnthropicClient",  # Anthropic implementation
     "CustomLLMClient",  # Custom LLM support
+    "OpenRouterClient"  # OpenRouter support
     # SDK system - HTTP client for MemU API services
     "MemuClient",  # HTTP client for MemU API
     "MemorizeRequest",  # Request model for memorize API
