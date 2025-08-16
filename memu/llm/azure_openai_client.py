@@ -2,11 +2,13 @@
 Azure OpenAI LLM Client Implementation
 """
 
-import logging
 import os
 from typing import Dict, List
 
 from .base import BaseLLMClient, LLMResponse
+from ..utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class AzureOpenAIClient(BaseLLMClient):
@@ -158,7 +160,7 @@ class AzureOpenAIClient(BaseLLMClient):
             )
 
         except Exception as e:
-            logging.error(f"Azure OpenAI API call failed: {e}")
+            logger.error(f"Azure OpenAI API call failed: {e}")
             return self._handle_error(e, model)
 
     def _get_default_model(self) -> str:
@@ -189,7 +191,7 @@ class AzureOpenAIClient(BaseLLMClient):
 
                 processed.append(processed_msg)
             else:
-                logging.warning(f"Invalid message format: {msg}")
+                logger.warning(f"Invalid message format: {msg}")
 
         return processed
 

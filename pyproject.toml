@@ -75,6 +75,7 @@ database = [
 server = [
     "uvicorn[standard]>=0.24.0",
     "python-multipart>=0.0.6",
+    "sentence-transformers>=2.2.0",
 ]
 all = [
     "openai>=1.0.0",

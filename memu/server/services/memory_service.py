@@ -7,13 +7,13 @@ Service for handling memory operations using MemU components.
 import asyncio
 import os
 import re
-import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ...llm import OpenAIClient, AzureOpenAIClient, DeepSeekClient, OpenRouterClient
 from ...memory import MemoryAgent, RecallAgent
+from ...utils.logging import get_logger
 from ..models import (
     ConversationMessage,
     DefaultCategoriesResponse,
@@ -25,7 +25,7 @@ from ..models import (
     ClusteredCategory,
 )
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class MemoryService:
@@ -155,7 +155,7 @@ class MemoryService:
             character_name = user_name
             
             # Log the directory structure being used
-            logger.info(f"Using directory structure: memory/{agent_id}/{user_id}/ for character: {character_name}")
+            logger.info(f"Using directory structure: {os.getenv('MEMU_MEMORY_DIR')}/{agent_id}/{user_id}/ for character: {character_name}")
             
             # Run the memory processing
             # TODO: if there's already a memorization task on the same (agent_id, user_id) running,

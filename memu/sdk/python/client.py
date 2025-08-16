@@ -5,7 +5,6 @@ Provides HTTP client for interacting with MemU API services.
 """
 
 from datetime import datetime
-import logging
 import os
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin
@@ -33,7 +32,9 @@ from .models import (
     RelatedMemoryItemsResponse,
 )
 
-logger = logging.getLogger(__name__)
+from ...utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class MemuClient:

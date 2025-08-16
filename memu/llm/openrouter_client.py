@@ -2,11 +2,13 @@
 OpenRouter LLM Client Implementation using OpenRouter's OpenAI-compatible API
 """
 
-import logging
 import os
 from typing import Any, Dict, List, Optional
 
 from .base import BaseLLMClient, LLMResponse
+from ..utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class OpenRouterClient(BaseLLMClient):
@@ -121,7 +123,7 @@ class OpenRouterClient(BaseLLMClient):
             )
 
         except Exception as e:
-            logging.error(f"OpenRouter API call failed: {e}")
+            logger.error(f"OpenRouter API call failed: {e}")
             return self._handle_error(e, model_name)
 
     def _get_default_model(self) -> str:
@@ -145,7 +147,7 @@ class OpenRouterClient(BaseLLMClient):
                     processed_msg["content"] = str(msg.get("content", ""))
                 processed.append(processed_msg)
             else:
-                logging.warning(f"Invalid message format: {msg}")
+                logger.warning(f"Invalid message format: {msg}")
         return processed
 
     @classmethod

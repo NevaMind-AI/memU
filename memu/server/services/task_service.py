@@ -9,9 +9,9 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-import logging
+from ...utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TaskService:

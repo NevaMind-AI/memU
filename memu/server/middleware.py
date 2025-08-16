@@ -5,13 +5,14 @@ Custom middleware for logging, authentication, and request processing.
 """
 
 import time
-import logging
 from typing import Callable
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-logger = logging.getLogger(__name__)
+from ..utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):

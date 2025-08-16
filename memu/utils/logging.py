@@ -75,6 +75,9 @@ def setup_logging(
     numeric_level = getattr(logging, level.upper(), logging.INFO)
     logger.setLevel(numeric_level)
 
+    # Prevent log propagation to avoid duplicate messages when running under uvicorn
+    logger.propagate = False
+
     # Create console handler with optional auto-flush
     if enable_flush:
         console_handler = FlushingStreamHandler(sys.stdout)
@@ -109,7 +112,13 @@ def get_logger(name: str = "memu") -> logging.Logger:
     Returns:
         logging.Logger: Logger instance
     """
-    return logging.getLogger(name)
+    logger = logging.getLogger(name)
+    
+    # Ensure the logger doesn't propagate to prevent duplicate messages
+    # when running under uvicorn or other logging frameworks
+    # logger.propagate = False
+    
+    return logger
 
 
 # Default logger instance

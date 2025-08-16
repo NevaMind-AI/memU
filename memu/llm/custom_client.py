@@ -2,10 +2,12 @@
 Custom LLM client supporting user-defined implementations
 """
 
-import logging
 from typing import Callable, Dict, List, Union
 
 from .base import BaseLLMClient, LLMResponse
+from ..utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class CustomLLMClient(BaseLLMClient):
@@ -94,7 +96,7 @@ class CustomLLMClient(BaseLLMClient):
                 if isinstance(result, LLMResponse):
                     return result
                 else:
-                    logging.warning(
+                    logger.warning(
                         "Function declared as 'full' but didn't return LLMResponse"
                     )
                     return LLMResponse(
@@ -109,7 +111,7 @@ class CustomLLMClient(BaseLLMClient):
                 )
 
         except Exception as e:
-            logging.error(f"Custom LLM function failed: {e}")
+            logger.error(f"Custom LLM function failed: {e}")
             return self._handle_error(e, model)
 
     def _get_default_model(self) -> str:

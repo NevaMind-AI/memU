@@ -4,7 +4,6 @@ MemU Self-Hosted Server Main Application
 FastAPI application providing REST APIs for MemU memory management.
 """
 
-import logging
 import os
 import uvicorn
 from fastapi import FastAPI, Request

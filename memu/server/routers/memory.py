@@ -4,10 +4,7 @@ Memory API Router
 FastAPI router for memory-related endpoints.
 """
 
-import asyncio
-import logging
 from datetime import datetime
-from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import JSONResponse
@@ -25,8 +22,9 @@ from ..models import (
 )
 from ..services.memory_service import MemoryService
 from ..services.task_service import TaskService
+from ...utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Create router
 router = APIRouter()
