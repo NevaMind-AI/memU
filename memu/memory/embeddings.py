@@ -119,16 +119,19 @@ class EmbeddingClient:
             model_type = kwargs.get("model_type", "").lower()
             model_name = kwargs.get("model_name") or self.model
             
+            # Remove model_name from kwargs to avoid duplicate parameter error
+            init_kwargs = {k: v for k, v in kwargs.items() if k != "model_name"}
+            
             if model_type == "huggingface":
-                self._init_huggingface_client(model_name, **kwargs)
+                self._init_huggingface_client(model_name, **init_kwargs)
             elif model_type == "sentence_transformers":
-                self._init_sentence_transformers_client(model_name, **kwargs)
+                self._init_sentence_transformers_client(model_name, **init_kwargs)
             elif model_type == "local":
-                self._init_local_client(model_name, **kwargs)
+                self._init_local_client(model_name, **init_kwargs)
             else:
                 # Fallback: try to create sentence-transformers client
                 try:
-                    self._init_sentence_transformers_client(model_name, **kwargs)
+                    self._init_sentence_transformers_client(model_name, **init_kwargs)
                 except Exception as e:
                     logger.warning(f"Failed to initialize default sentence-transformers client: {e}")
                     logger.warning("No custom embedding client provided or initialized")
@@ -448,6 +451,11 @@ def get_default_embedding_client() -> Optional[EmbeddingClient]:
     # Custom embedding specific configurations
     model_type = os.getenv("MEMU_EMBEDDING_MODEL_TYPE", "sentence_transformers")
     device = os.getenv("MEMU_EMBEDDING_DEVICE", "cpu")
+
+    logger.info(f"Embedding provider: {embedding_provider}")
+    logger.info(f"Embedding model: {embedding_model}")
+    logger.info(f"Embedding model type: {model_type}")
+    logger.info(f"Embedding device: {device}")
 
     # Try provider from env first
     if embedding_provider == "custom":

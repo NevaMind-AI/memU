@@ -83,7 +83,7 @@ Edit `.env` to configure the server. Common options:
 ### OpenAI
 
 ```bash
-MEMU_LLM_PROVIDER=openai (Must provide for embedding)
+MEMU_LLM_PROVIDER=openai 
 OPENAI_API_KEY=your-openai-api-key
 MEMU_OPENAI_MODEL=gpt-4.1-mini
 MEMU_EMBEDDING_MODEL=text-embedding-3-small
