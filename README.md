@@ -224,12 +224,6 @@ Connect with us on WeChat for the latest updates, community discussions, and exc
 
 <img src="assets/wechat/wechat1.png" alt="MemU WeChat QR Code 1" width="180" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
 <img src="assets/wechat/wechat2.png" alt="MemU WeChat QR Code 2" width="180" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
-<img src="assets/wechat/wechat3.png" alt="MemU WeChat QR Code 3" width="180" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
-
-<br>
-
-<img src="assets/wechat/wechat4.png" alt="MemU WeChat QR Code 4" width="180" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
-<img src="assets/wechat/wechat5.png" alt="MemU WeChat QR Code 5" width="180" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
 
 *Scan any of the QR codes above to join our WeChat community*
 
