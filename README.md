@@ -222,8 +222,7 @@ Connect with us on WeChat for the latest updates, community discussions, and exc
 
 ### WeChat QR Codes
 
-<img src="assets/wechat/wechat1.png" alt="MemU WeChat QR Code 1" width="180" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
-<img src="assets/wechat/wechat2.png" alt="MemU WeChat QR Code 2" width="180" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
+<img src="assets/qrcode.png" alt="MemU WeChat and discord QR Code" width="180" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
 
 *Scan any of the QR codes above to join our WeChat community*
 
