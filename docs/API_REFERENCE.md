@@ -114,7 +114,7 @@ response = client.memorize_conversation(
 # Structured format
 conversation_messages = [
     {"role": "user", "content": "What's the weather?"},
-    {"role": "agent", "content": "It's sunny today!"}
+    {"role": "assistant", "content": "It's sunny today!"}
 ]
 
 response = client.memorize_conversation(
@@ -328,7 +328,7 @@ const response = await client.memorizeConversation(
 // Structured format
 const messages = [
   { role: "user", content: "How's the weather?" },
-  { role: "agent", content: "It's sunny!" }
+  { role: "assistant", content: "It's sunny!" }
 ];
 
 const response = await client.memorizeConversation(
