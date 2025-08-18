@@ -73,13 +73,14 @@ class OpenRouterClient(BaseLLMClient):
         messages: List[Dict[str, str]],
         model: Optional[str] = None,
         temperature: float = 0.7,
-        max_tokens: int = 1000,
+        max_tokens: Optional[int] = None,
         tools: Optional[List[Dict]] = None,
         tool_choice: Optional[str] = None,
         **kwargs,
     ) -> LLMResponse:
         """OpenRouter chat completion with function calling support"""
         model_name = model or self.model_name
+        resolved_max_tokens = self._get_max_tokens(max_tokens)
 
         try:
             # Preprocess messages (OpenAI format)
@@ -90,7 +91,7 @@ class OpenRouterClient(BaseLLMClient):
                 "model": model_name,
                 "messages": processed_messages,
                 "temperature": temperature,
-                "max_tokens": max_tokens,
+                "max_tokens": resolved_max_tokens,
             }
 
             # Add function calling parameters if provided

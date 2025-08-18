@@ -2,6 +2,7 @@
 LLM Basic Abstract Classes and Data Structures
 """
 
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -92,6 +93,22 @@ class BaseLLMClient(ABC):
     def _prepare_messages(self, messages: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """Preprocess message format, can be overridden by subclasses"""
         return messages
+
+    def _get_max_tokens(self, max_tokens: int = None) -> int:
+        """Get max tokens value from environment or use provided/default value"""
+        if max_tokens is not None:
+            return max_tokens
+        
+        # Try to read from environment variable, default to 8000
+        env_max_tokens = os.getenv("MEMU_MAX_TOKENS")
+        if env_max_tokens:
+            try:
+                return int(env_max_tokens)
+            except ValueError:
+                # If env value is invalid, fall back to default
+                pass
+        
+        return 8000
 
     def _handle_error(self, error: Exception, model: str) -> LLMResponse:
         """Unified error handling"""

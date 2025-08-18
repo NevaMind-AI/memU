@@ -62,17 +62,18 @@ class CustomLLMClient(BaseLLMClient):
         messages: List[Dict[str, str]],
         model: str = None,
         temperature: float = 0.7,
-        max_tokens: int = 1000,
+        max_tokens: int = None,
         **kwargs,
     ) -> LLMResponse:
         """Custom LLM chat completion"""
         model = self.get_model(model)
+        resolved_max_tokens = self._get_max_tokens(max_tokens)
 
         try:
             # Prepare parameters
             call_kwargs = {
                 "temperature": temperature,
-                "max_tokens": max_tokens,
+                "max_tokens": resolved_max_tokens,
                 **kwargs,
             }
 

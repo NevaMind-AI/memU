@@ -75,11 +75,12 @@ class OpenAIClient(BaseLLMClient):
         messages: List[Dict[str, str]],
         model: str = None,
         temperature: float = 0.7,
-        max_tokens: int = 8000,
+        max_tokens: int = None,
         **kwargs,
     ) -> LLMResponse:
         """OpenAI chat completion"""
         model = self.get_model(model)
+        resolved_max_tokens = self._get_max_tokens(max_tokens)
 
         try:
 
@@ -91,7 +92,7 @@ class OpenAIClient(BaseLLMClient):
                 "model": model,
                 "messages": processed_messages,
                 "temperature": temperature,
-                "max_tokens": max_tokens,
+                "max_tokens": resolved_max_tokens,
             }
 
             # Add function calling parameters if provided

@@ -114,7 +114,7 @@ class AzureOpenAIClient(BaseLLMClient):
         messages: List[Dict[str, str]],
         model: str = None,
         temperature: float = 0.7,
-        max_tokens: int = 8000,
+        max_tokens: int = None,
         tools: List[Dict] = None,
         tool_choice: str = None,
         **kwargs,
@@ -124,6 +124,7 @@ class AzureOpenAIClient(BaseLLMClient):
         try:
             # Resolve model: use passed-in, default_model, or provider default
             model = self.get_model(model)
+            resolved_max_tokens = self._get_max_tokens(max_tokens)
             # Preprocess messages
             processed_messages = self._prepare_messages(messages)
 
@@ -132,7 +133,7 @@ class AzureOpenAIClient(BaseLLMClient):
                 "model": model,
                 "messages": processed_messages,
                 "temperature": temperature,
-                "max_tokens": max_tokens,
+                "max_tokens": resolved_max_tokens,
             }
 
             # Add function calling parameters if provided
