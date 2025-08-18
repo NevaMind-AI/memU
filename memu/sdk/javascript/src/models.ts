@@ -81,6 +81,8 @@ export interface DefaultCategoriesRequest {
   agentId?: string;
   /** Include inactive categories */
   includeInactive?: boolean;
+  /** Request summary instead of raw memory items */
+  wantSummary?: boolean;
 }
 
 /**
@@ -93,6 +95,8 @@ export interface MemoryItem {
   category: string;
   /** Memory content */
   content: string;
+  /** When the memory happened */
+  happenedAt: Date;
   /** When the memory was created */
   createdAt: Date;
   /** When the memory was last updated */
@@ -107,14 +111,20 @@ export interface CategoryResponse {
   name: string;
   /** Category type */
   type: string;
+  /** User ID */
+  userId?: string;
+  /** Agent ID */
+  agentId?: string;
   /** Category description */
-  description: string;
+  description?: string;
   /** Whether the category is active */
   isActive: boolean;
   /** Memories in this category */
-  memories: MemoryItem[];
+  memories?: MemoryItem[] | null;
   /** Number of memories in this category */
-  memoryCount: number;
+  memoryCount?: number | null;
+  /** Memory summarization for this category */
+  summary?: string | null;
 }
 
 /**
@@ -151,6 +161,10 @@ export interface RelatedMemoryItemsRequest {
 export interface RelatedMemory {
   /** Memory item */
   memory: MemoryItem;
+  /** User identifier */
+  userId?: string;
+  /** Agent identifier */
+  agentId?: string;
   /** Similarity score */
   similarityScore: number;
 }
@@ -183,6 +197,8 @@ export interface RelatedClusteredCategoriesRequest {
   topK?: number;
   /** Minimum similarity threshold */
   minSimilarity?: number;
+  /** Request summary instead of raw memory items */
+  wantSummary?: boolean;
 }
 
 /**
@@ -191,12 +207,18 @@ export interface RelatedClusteredCategoriesRequest {
 export interface ClusteredCategory {
   /** Category name */
   name: string;
+  /** User identifier */
+  userId?: string;
+  /** Agent identifier */
+  agentId?: string;
   /** Similarity score */
   similarityScore: number;
   /** Memories in this category */
-  memories: MemoryItem[];
+  memories?: MemoryItem[] | null;
   /** Number of memories in category */
-  memoryCount: number;
+  memoryCount?: number | null;
+  /** Memory summarization for this category */
+  summary?: string | null;
 }
 
 /**

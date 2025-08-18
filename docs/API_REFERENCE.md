@@ -104,7 +104,7 @@ Stores conversation data for processing by the memory agent.
 ```python
 # String format
 response = client.memorize_conversation(
-    conversation="User: What's the weather? Agent: It's sunny today!",
+    conversation="User: What's the weather? Assistant: It's sunny today!",
     user_id="user123",
     user_name="Alice",
     agent_id="weather_bot",
@@ -148,6 +148,7 @@ Retrieves available memory categories for a user.
 - `user_id` (str): User identifier
 - `agent_id` (str, optional): Filter by specific agent
 - `include_inactive` (bool): Include inactive categories (default: False)
+- `want_summary` (bool): Request summary instead of raw memory items (default: True)
 
 **Returns:** `DefaultCategoriesResponse`
 
@@ -155,12 +156,15 @@ Retrieves available memory categories for a user.
 categories = client.retrieve_default_categories(
     user_id="user123",
     agent_id="agent456",
-    include_inactive=False
+    include_inactive=False,
+    want_summary=True
 )
 
 for category in categories.categories:
     print(f"Category: {category.name}")
     print(f"Memories: {category.memory_count}")
+    if category.summary:
+        print(f"Summary: {category.summary}")
 ```
 
 #### `retrieve_related_memory_items()`
@@ -201,6 +205,7 @@ Retrieves categories clustered by similarity to a query.
 - `agent_id` (str, optional): Filter by specific agent
 - `top_k` (int): Number of categories to return (default: 5)
 - `min_similarity` (float): Minimum similarity threshold (default: 0.3)
+- `want_summary` (bool): Request summary instead of raw memory items (default: True)
 
 **Returns:** `RelatedClusteredCategoriesResponse`
 
@@ -209,12 +214,15 @@ categories = client.retrieve_related_clustered_categories(
     user_id="user123",
     category_query="personal preferences",
     top_k=3,
-    min_similarity=0.4
+    min_similarity=0.4,
+    want_summary=True
 )
 
 for category in categories.clustered_categories:
     print(f"Category: {category.name}")
     print(f"Similarity: {category.similarity_score}")
+    if category.summary:
+        print(f"Summary: {category.summary}")
 ```
 
 #### `delete_memories()`
@@ -267,7 +275,7 @@ const client = new MemuClient({
 
 // Memorize a conversation
 const response = await client.memorizeConversation(
-  "User: Hello! Agent: Hi there, how can I help you today?",
+  "User: Hello! Assistant: Hi there, how can I help you today?",
   "user123",
   "John Doe",
   "agent456",
@@ -318,7 +326,7 @@ async memorizeConversation(
 ```javascript
 // String format
 const response = await client.memorizeConversation(
-  "User: How's the weather? Agent: It's sunny!",
+  "User: How's the weather? Assistant: It's sunny!",
   "user123",
   "Alice",
   "weather_bot", 
@@ -360,6 +368,7 @@ async retrieveDefaultCategories(options: {
   userId: string;
   agentId?: string;
   includeInactive?: boolean;
+  wantSummary?: boolean;
 }): Promise<DefaultCategoriesResponse>
 ```
 
@@ -369,12 +378,16 @@ async retrieveDefaultCategories(options: {
 const categories = await client.retrieveDefaultCategories({
   userId: "user123",
   agentId: "agent456",
-  includeInactive: false
+  includeInactive: false,
+  wantSummary: true
 });
 
 categories.categories.forEach(category => {
-  console.log(`Category: ${category.categoryName}`);
+  console.log(`Category: ${category.name}`);
   console.log(`Memories: ${category.memoryCount}`);
+  if (category.summary) {
+    console.log(`Summary: ${category.summary}`);
+  }
 });
 ```
 
@@ -417,6 +430,7 @@ async retrieveRelatedClusteredCategories(options: {
   categoryQuery: string;
   topK?: number;
   minSimilarity?: number;
+  wantSummary?: boolean;
 }): Promise<RelatedClusteredCategoriesResponse>
 ```
 
@@ -427,12 +441,16 @@ const categories = await client.retrieveRelatedClusteredCategories({
   userId: "user123",
   categoryQuery: "personal preferences",
   topK: 3,
-  minSimilarity: 0.4
+  minSimilarity: 0.4,
+  wantSummary: true
 });
 
 categories.clusteredCategories.forEach(category => {
-  console.log(`Category: ${category.categoryName}`);
+  console.log(`Category: ${category.name}`);
   console.log(`Similarity: ${category.similarityScore}`);
+  if (category.summary) {
+    console.log(`Summary: ${category.summary}`);
+  }
 });
 ```
 
@@ -493,6 +511,7 @@ console.log(`Deleted ${response2.deletedCount} memories`);
   memoryId: string;    // Unique memory identifier
   category: string;    // Memory category
   content: string;     // Memory content
+  happenedAt: Date;    // When the memory happened
   createdAt: Date;     // Creation timestamp
   updatedAt: Date;     // Last update timestamp
 }
@@ -501,12 +520,15 @@ console.log(`Deleted ${response2.deletedCount} memories`);
 ### CategoryResponse
 ```typescript
 {
-  categoryName: string;        // Category name
-  categoryType: string;        // Category type
-  categoryDescription: string; // Category description
-  isActive: boolean;          // Whether category is active
-  memories: MemoryItem[];     // Memories in category
-  memoryCount: number;        // Number of memories
+  name: string;                // Category name
+  type: string;                // Category type
+  userId?: string;             // User identifier
+  agentId?: string;            // Agent identifier  
+  description?: string;        // Category description
+  isActive: boolean;           // Whether category is active
+  memories?: MemoryItem[] | null; // Memories in category
+  memoryCount?: number | null; // Number of memories
+  summary?: string | null;     // Memory summarization for this category
 }
 ```
 
@@ -514,6 +536,8 @@ console.log(`Deleted ${response2.deletedCount} memories`);
 ```typescript
 {
   memory: MemoryItem;          // Memory item
+  userId?: string;             // User identifier
+  agentId?: string;            // Agent identifier
   similarityScore: number;     // Similarity score (0-1)
 }
 ```
@@ -521,10 +545,13 @@ console.log(`Deleted ${response2.deletedCount} memories`);
 ### ClusteredCategory
 ```typescript
 {
-  categoryName: string;        // Category name
+  name: string;                // Category name
+  userId?: string;             // User identifier
+  agentId?: string;            // Agent identifier
   similarityScore: number;     // Similarity score (0-1)
-  memories: MemoryItem[];      // Memories in category
-  memoryCount: number;         // Number of memories
+  memories?: MemoryItem[] | null; // Memories in category
+  memoryCount?: number | null; // Number of memories
+  summary?: string | null;     // Memory summarization for this category
 }
 ```
 

@@ -1,6 +1,6 @@
 {
   "name": "memu-js",
-  "version": "0.1.4",
+  "version": "0.1.8",
   "description": "MemU JavaScript SDK for interacting with MemU API services",
   "main": "dist/index.esm.js",
   "module": "dist/index.esm.js",
@@ -42,8 +42,7 @@
   },
   "homepage": "https://github.com/NevaMind-AI/MemU#readme",
   "dependencies": {
-    "axios": "^1.6.0",
-    "memu-js": "^0.1.4"
+    "axios": "^1.6.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
