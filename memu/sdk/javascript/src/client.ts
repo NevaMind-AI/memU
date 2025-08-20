@@ -381,6 +381,7 @@ export class MemuClient {
     userId: string;
     agentId?: string;
     includeInactive?: boolean;
+    wantSummary?: boolean;
   }): Promise<DefaultCategoriesResponse> {
     try {
       // Create request data
@@ -388,6 +389,7 @@ export class MemuClient {
         userId: options.userId,
         ...(options.agentId && { agentId: options.agentId }),
         includeInactive: options.includeInactive || false,
+        wantSummary: options.wantSummary || true,
       };
 
       // Convert to snake_case for API
