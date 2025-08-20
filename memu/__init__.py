@@ -6,7 +6,7 @@ A Python framework for creating and managing AI agent memories through file-base
 Simplified unified memory architecture with a single Memory Agent.
 """
 
-__version__ = "0.1.8"
+__version__ = "0.1.9"
 __author__ = "MemU Team"
 __email__ = "support@nevamind.ai"
 

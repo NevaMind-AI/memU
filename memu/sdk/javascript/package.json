@@ -1,6 +1,6 @@
 {
   "name": "memu-js",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "MemU JavaScript SDK for interacting with MemU API services",
   "main": "dist/index.esm.js",
   "module": "dist/index.esm.js",
