@@ -53,6 +53,20 @@ class MemorizeTaskStatusResponse(BaseModel):
     detail_info: str = Field(default="", description="Detail information")
 
 
+class MemorizeTaskSummaryReadyRequest(BaseModel):
+    """Request model for memorize task summary ready API"""
+    # user_id: str = Field(..., description="User ID")
+    # agent_id: Optional[str] = Field(None, description="Agent ID")
+    group: str = Field(default="basic", description="Category group to query")
+
+
+class MemorizeTaskSummaryReadyResponse(BaseModel):
+    """Response model for memorize task summary ready API"""
+
+    all_ready: bool = Field(..., description="Whether all summaries are ready")
+    category_ready: dict[str, bool] = Field(..., description="Whether each category is ready")
+
+
 class ErrorDetail(BaseModel):
     """Error detail model for validation errors"""
 

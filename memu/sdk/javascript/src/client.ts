@@ -19,6 +19,8 @@ import {
   MemorizeRequest,
   MemorizeResponse,
   MemorizeTaskStatusResponse,
+  MemorizeTaskSummaryReadyRequest,
+  MemorizeTaskSummaryReadyResponse,
   RelatedClusteredCategoriesRequest,
   RelatedClusteredCategoriesResponse,
   RelatedMemoryItemsRequest,
@@ -314,6 +316,48 @@ export class MemuClient {
       // Convert response to camelCase
       const response = this.toCamelCase(responseData) as MemorizeTaskStatusResponse;
       console.log(`Task ${taskId} status: ${response.status}`);
+
+      return response;
+    } catch (error) {
+      if (error instanceof MemuValidationException || 
+          error instanceof MemuAPIException || 
+          error instanceof MemuConnectionException ||
+          error instanceof MemuAuthenticationException) {
+        throw error;
+      }
+      throw new MemuValidationException(`Response validation failed: ${error}`);
+    }
+  }
+
+  /**
+   * Get the summary ready status of a memorization task
+   * 
+   * @param taskId Task identifier returned from memorizeConversation
+   * @param group Category group to query (default: 'basic')
+   * @returns Summary ready status for the task
+   */
+  async getTaskSummaryReady(taskId: string, group: string = 'basic'): Promise<MemorizeTaskSummaryReadyResponse> {
+    try {
+      // Create request data
+      const requestData: MemorizeTaskSummaryReadyRequest = {
+        group,
+      };
+
+      console.log(`Getting summary ready status for task: ${taskId}`);
+
+      // Convert to snake_case for API
+      const apiRequestData = this.toSnakeCase(requestData as Record<string, any>);
+
+      // Make API request
+      const responseData = await this.makeRequest<any>({
+        method: 'POST',
+        url: `api/v1/memory/memorize/status/${taskId}/summary`,
+        data: apiRequestData,
+      });
+
+      // Convert response to camelCase
+      const response = this.toCamelCase(responseData) as MemorizeTaskSummaryReadyResponse;
+      console.log(`Task ${taskId} summary ready: ${response.allReady}`);
 
       return response;
     } catch (error) {

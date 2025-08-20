@@ -21,6 +21,8 @@ export {
   MemorizeRequest,
   MemorizeResponse,
   MemorizeTaskStatusResponse,
+  MemorizeTaskSummaryReadyRequest,
+  MemorizeTaskSummaryReadyResponse,
   MemoryItem,
   RelatedClusteredCategoriesRequest,
   RelatedClusteredCategoriesResponse,

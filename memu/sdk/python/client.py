@@ -30,6 +30,8 @@ from .models import (
     RelatedClusteredCategoriesResponse,
     RelatedMemoryItemsRequest,
     RelatedMemoryItemsResponse,
+    MemorizeTaskSummaryReadyRequest,
+    MemorizeTaskSummaryReadyResponse,
 )
 
 from ...utils.logging import get_logger
@@ -292,6 +294,25 @@ class MemuClient:
             # Parse response using the model
             response = MemorizeTaskStatusResponse(**response_data)
             logger.debug(f"Task {task_id} status: {response.status}")
+
+            return response
+
+        except ValidationError as e:
+            raise MemuValidationException(f"Response validation failed: {str(e)}")
+
+    def get_task_summary_ready(self, task_id: str, group: str = "basic") -> MemorizeTaskSummaryReadyResponse:
+        """
+        Get the summary ready status of a memorization task
+        """
+        try:
+            request_data = MemorizeTaskSummaryReadyRequest(group=group)
+            response_data = self._make_request(
+                method="POST",
+                endpoint="api/v1/memory/memorize/status/{task_id}/summary",
+                json_data=request_data.model_dump(),
+            )
+            response = MemorizeTaskSummaryReadyResponse(**response_data)
+            logger.debug(f"Task {task_id} summary ready: {response.all_ready}")
 
             return response
 

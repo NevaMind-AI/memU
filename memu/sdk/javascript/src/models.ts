@@ -256,3 +256,23 @@ export interface DeleteMemoryResponse {
   /** Number of memories deleted */
   deletedCount?: number;
 }
+
+// ========== Task Summary Ready API Models ==========
+
+/**
+ * Request model for memorize task summary ready API
+ */
+export interface MemorizeTaskSummaryReadyRequest {
+  /** Category group to query */
+  group?: string;
+}
+
+/**
+ * Response model for memorize task summary ready API
+ */
+export interface MemorizeTaskSummaryReadyResponse {
+  /** Whether all summaries are ready */
+  allReady: boolean;
+  /** Whether each category is ready */
+  categoryReady: Record<string, boolean>;
+}
