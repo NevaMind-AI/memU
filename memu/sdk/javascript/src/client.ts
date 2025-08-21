@@ -59,8 +59,8 @@ export class MemuClient {
    * @param config Client configuration options
    */
   constructor(config: MemuClientConfig = {}) {
-    this.baseUrl = config.baseUrl || process.env.MEMU_API_BASE_URL || 'http://localhost:8000';
-    this.apiKey = config.apiKey || process.env.MEMU_API_KEY || '';
+    this.baseUrl = config.baseUrl || globalThis.process?.env?.MEMU_API_BASE_URL || 'http://localhost:8000';
+    this.apiKey = config.apiKey || globalThis.process?.env?.MEMU_API_KEY || '';
     this.timeout = config.timeout || 30000; // 30 seconds
     this.maxRetries = config.maxRetries || 3;
 
