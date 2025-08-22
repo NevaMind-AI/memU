@@ -7,6 +7,144 @@ Get the MemU server running locally with Docker Compose. This guide covers confi
 - Docker and Docker Compose
 - At least one LLM provider API key
 
+## 🏗️ Docker Build Options
+
+MemU supports different Docker configurations to optimize for various deployment scenarios. Choose the build option that best fits your needs:
+
+### Available Build Modes
+
+| Mode | Image Size | Use Case | GPU Support | Local Models |
+|------|------------|----------|-------------|--------------|
+| `minimal` | ~200MB | API-only server | ❌ | ❌ |
+| `server` | ~500MB | Standard deployment | Optional | Optional |
+| `server-cpu` | ~500MB | CPU-only server | ❌ | ❌ |
+| `local-cpu` | ~2GB | Local models (CPU) | ❌ | ✅ |
+| `gpu` | ~3GB+ | GPU-accelerated | ✅ | ✅ |
+
+### Quick Build Commands
+
+#### Minimal Setup (Recommended for most users)
+```bash
+# Lightweight API server without heavy dependencies
+docker build -t memu:minimal \
+  --build-arg INSTALL_MODE=minimal \
+  --build-arg INCLUDE_GPU=false \
+  .
+```
+
+#### Standard CPU-Only (Default)
+```bash
+# Standard server functionality without GPU dependencies
+docker build -t memu:server-cpu \
+  --build-arg INSTALL_MODE=server \
+  --build-arg INCLUDE_GPU=false \
+  .
+```
+
+#### GPU-Enabled Setup
+```bash
+# Full server with GPU support for local models
+docker build -t memu:gpu \
+  --build-arg INSTALL_MODE=server \
+  --build-arg INCLUDE_GPU=true \
+  --build-arg INCLUDE_LOCAL_MODELS=true \
+  .
+```
+
+### Docker Compose with Build Options
+
+Create different compose files for different setups:
+
+**compose/docker-compose.minimal.yml** (Lightest setup):
+```yaml
+services:
+  memu-server:
+    build:
+      context: .
+      args:
+        INSTALL_MODE: minimal
+        INCLUDE_GPU: false
+        INCLUDE_LOCAL_MODELS: false
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - memu-memory:/app/memory
+      - memu-logs:/app/logs
+    restart: unless-stopped
+
+volumes:
+  memu-memory:
+  memu-logs:
+```
+
+**compose/docker-compose.gpu.yml** (GPU support):
+```yaml
+services:
+  memu-server:
+    build:
+      context: .
+      args:
+        INSTALL_MODE: server
+        INCLUDE_GPU: true
+        INCLUDE_LOCAL_MODELS: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - memu-memory:/app/memory
+      - memu-logs:/app/logs
+      - memu-models:/app/models
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    restart: unless-stopped
+
+volumes:
+  memu-memory:
+  memu-logs:
+  memu-models:
+```
+
+### Available Docker Compose Files
+
+| File | Configuration | Best For |
+|------|---------------|----------|
+| `compose/docker-compose.yml` | Standard server (CPU-only) | Default deployment |
+| `compose/docker-compose.minimal.yml` | Minimal setup | Lightweight API server |
+| `compose/docker-compose.server-cpu.yml` | Server without embeddings | CPU-only server |
+| `compose/docker-compose.local-cpu.yml` | Local models (CPU-only) | Offline processing |
+| `compose/docker-compose.gpu.yml` | GPU-enabled with local models | High-performance setup |
+
+### Usage with Different Configurations
+
+```bash
+# Use minimal setup (fastest startup, smallest image)
+docker-compose -f compose/docker-compose.minimal.yml up -d
+
+# Use standard CPU-only server (default - same as docker-compose up -d)
+docker-compose -f compose/docker-compose.server-cpu.yml up -d
+
+# Use local models with CPU-only processing
+docker-compose -f compose/docker-compose.local-cpu.yml up -d
+
+# Use GPU setup (requires NVIDIA Docker support)
+docker-compose -f compose/docker-compose.gpu.yml up -d
+
+# Use default setup (standard server, CPU-only)
+docker-compose up -d
+```
+
+> 💡 **Recommendation**: Start with the `minimal` build for initial testing and API-only usage. Upgrade to `server` or `gpu` configurations only if you need local model processing capabilities.
+
+> ⚠️ **GPU Requirements**: GPU builds require NVIDIA Container Toolkit and compatible NVIDIA drivers. See [DOCKER_BUILD_OPTIONS.md](DOCKER_BUILD_OPTIONS.md) for detailed setup instructions.
+
 ## 🚀 Quick Start (3 steps)
 
 ### 1) Configure environment
@@ -35,11 +173,38 @@ LLM-specific settings are documented below.
 
 ### 2) Start the server
 
+Choose your preferred configuration:
+
+**Option A: Minimal setup (fastest, recommended for most users)**
+```bash
+# Use the provided minimal configuration
+docker-compose -f compose/docker-compose.minimal.yml up -d
+```
+
+**Option B: Default setup**
 ```bash
 docker-compose up -d
 ```
 
-This uses `docker-compose.yml` to build and launch the `memu-server` container, mapping host port 8000 → container port 8000 and persisting data to named volumes.
+**Option C: Custom build**
+```bash
+# Build with specific options first
+docker build -t memu:custom \
+  --build-arg INSTALL_MODE=server \
+  --build-arg INCLUDE_GPU=false \
+  .
+
+# Then run with the custom image
+docker run -d \
+  --name memu-server \
+  -p 8000:8000 \
+  --env-file .env \
+  -v memu-memory:/app/memory \
+  -v memu-logs:/app/logs \
+  memu:custom
+```
+
+This builds and launches the `memu-server` container, mapping host port 8000 → container port 8000 and persisting data to named volumes.
 
 ### 3) Verify
 
@@ -83,7 +248,7 @@ Edit `.env` to configure the server. Common options:
 ### OpenAI
 
 ```bash
-MEMU_LLM_PROVIDER=openai 
+MEMU_LLM_PROVIDER=openai
 OPENAI_API_KEY=your-openai-api-key
 MEMU_OPENAI_MODEL=gpt-4.1-mini
 MEMU_EMBEDDING_MODEL=text-embedding-3-small
@@ -131,6 +296,8 @@ To inspect data on the host, use Docker Desktop or `docker volume inspect` and m
 
 ## 🔧 Management
 
+### Basic Management
+
 ```bash
 # View logs
 docker-compose logs -f memu-server
@@ -145,6 +312,50 @@ docker-compose down
 docker-compose down
 docker-compose build --no-cache
 docker-compose up -d
+```
+
+### Managing Different Configurations
+
+```bash
+# For minimal setup
+docker-compose -f compose/docker-compose.minimal.yml logs -f memu-server
+docker-compose -f compose/docker-compose.minimal.yml down
+docker-compose -f compose/docker-compose.minimal.yml build --no-cache
+
+# For server-cpu setup
+docker-compose -f compose/docker-compose.server-cpu.yml logs -f memu-server
+docker-compose -f compose/docker-compose.server-cpu.yml down
+
+# For local-cpu setup
+docker-compose -f compose/docker-compose.local-cpu.yml logs -f memu-server
+docker-compose -f compose/docker-compose.local-cpu.yml down
+
+# For GPU setup
+docker-compose -f compose/docker-compose.gpu.yml logs -f memu-server
+docker-compose -f compose/docker-compose.gpu.yml down
+
+# Switch between configurations
+docker-compose down                                      # Stop current
+docker-compose -f compose/docker-compose.minimal.yml up -d     # Start minimal
+docker-compose -f compose/docker-compose.local-cpu.yml up -d   # Start local-cpu
+docker-compose -f compose/docker-compose.gpu.yml up -d         # Start GPU
+```
+
+### Image Management
+
+```bash
+# List MemU images
+docker images | grep memu
+
+# Remove old images
+docker image prune -f
+
+# Rebuild specific configuration
+docker build -t memu:minimal \
+  --build-arg INSTALL_MODE=minimal \
+  --build-arg INCLUDE_GPU=false \
+  --no-cache \
+  .
 ```
 
 ## 🐛 Troubleshooting
@@ -173,12 +384,71 @@ cat .env
 - Reduce payload size while testing
 - Check logs: `docker-compose logs -f memu-server`
 
+### Build-related issues
+
+#### "No space left on device" during build
+```bash
+# Clean up Docker system
+docker system prune -a --volumes
+
+# Check available space
+df -h
+
+# Use minimal build if space is limited
+docker build -t memu:minimal \
+  --build-arg INSTALL_MODE=minimal \
+  --build-arg INCLUDE_GPU=false \
+  .
+```
+
+#### GPU not detected (for GPU builds)
+```bash
+# Check NVIDIA runtime
+docker run --rm --gpus all nvidia/cuda:11.8-base-ubuntu20.04 nvidia-smi
+
+# Verify GPU configuration
+docker-compose -f compose/docker-compose.gpu.yml config
+
+# Try running without GPU temporarily
+docker-compose -f compose/docker-compose.minimal.yml up -d
+```
+
+#### Memory issues with large models
+```bash
+# Use CPU-only builds with smaller models
+docker build -t memu:server-cpu \
+  --build-arg INSTALL_MODE=server \
+  --build-arg INCLUDE_GPU=false \
+  .
+
+# Or increase Docker Desktop memory limit (macOS/Windows)
+# Settings > Resources > Memory
+```
+
+#### Slow model downloads
+```bash
+# Use minimal build for API-only usage (no model downloads)
+docker-compose -f compose/docker-compose.minimal.yml up -d
+
+# Or pre-download models and mount them
+mkdir -p ./models
+docker run -v ./models:/app/models memu:gpu python -c "import sentence_transformers; sentence_transformers.SentenceTransformer('all-MiniLM-L6-v2')"
+```
+
 ### Shell access
 
 ```bash
 docker-compose exec memu-server bash
+
+# For specific configurations
+docker-compose -f compose/docker-compose.minimal.yml exec memu-server bash
+docker-compose -f compose/docker-compose.server-cpu.yml exec memu-server bash
+docker-compose -f compose/docker-compose.local-cpu.yml exec memu-server bash
+docker-compose -f compose/docker-compose.gpu.yml exec memu-server bash
 ```
 
 ## 📚 More information
 
-For a deeper dive into features, endpoints, and development usage, see `memu/server/README.md`.
+- For detailed Docker build options and configurations: [DOCKER_BUILD_OPTIONS.md](DOCKER_BUILD_OPTIONS.md)
+- For features, endpoints, and development usage: `memu/server/README.md`
+- For GPU setup requirements: [DOCKER_BUILD_OPTIONS.md#docker-installation-requirements](DOCKER_BUILD_OPTIONS.md#docker-installation-requirements)
