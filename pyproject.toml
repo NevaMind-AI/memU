@@ -77,6 +77,16 @@ server = [
     "python-multipart>=0.0.6",
     "sentence-transformers>=2.2.0",
 ]
+server-cpu = [
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
+    # Use CPU-only embeddings alternative or skip heavy dependencies
+]
+minimal = [
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
+    # Minimal server setup without embeddings
+]
 all = [
     "openai>=1.0.0",
     "sentence-transformers>=2.2.0",

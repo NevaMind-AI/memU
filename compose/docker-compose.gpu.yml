@@ -1,0 +1,36 @@
+services:
+  memu-server:
+    build:
+      context: ..
+      args:
+        INSTALL_MODE: server
+        INCLUDE_GPU: true
+        INCLUDE_LOCAL_MODELS: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    ports:
+      - "8000:8000"
+    env_file: ../.env
+    volumes:
+      - memu-memory:/app/memory
+      - memu-logs:/app/logs
+      - memu-models:/app/models
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  memu-memory:
+  memu-logs:
+  memu-models:

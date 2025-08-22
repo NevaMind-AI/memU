@@ -1,23 +1,19 @@
-# MemU Server Docker Compose Configuration
 services:
   memu-server:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
       args:
         INSTALL_MODE: server
         INCLUDE_GPU: false
         INCLUDE_LOCAL_MODELS: false
-    container_name: memu-server
-    restart: unless-stopped
+    container_name: memu-server-cpu
     ports:
       - "8000:8000"
-    env_file: ".env"
+    env_file: ../.env
     volumes:
-      # Persist memory data
       - memu-memory:/app/memory
-      # Optional: mount logs
       - memu-logs:/app/logs
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
