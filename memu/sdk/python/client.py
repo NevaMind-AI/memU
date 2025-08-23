@@ -308,7 +308,7 @@ class MemuClient:
             request_data = MemorizeTaskSummaryReadyRequest(group=group)
             response_data = self._make_request(
                 method="POST",
-                endpoint="api/v1/memory/memorize/status/{task_id}/summary",
+                endpoint=f"api/v1/memory/memorize/status/{task_id}/summary",
                 json_data=request_data.model_dump(),
             )
             response = MemorizeTaskSummaryReadyResponse(**response_data)
