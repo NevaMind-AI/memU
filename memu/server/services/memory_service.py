@@ -160,12 +160,13 @@ class MemoryService:
             # Run the memory processing
             # TODO: if there's already a memorization task on the same (agent_id, user_id) running,
             #       should let the new task wait for the old one to finish
-            result = await asyncio.get_event_loop().run_in_executor(
-                None,
-                memory_agent.run,
-                conversation_data,
-                character_name,
-            )
+            def run_memory_agent():
+                return memory_agent.run(
+                    conversation_data,
+                    character_name,
+                    session_date=session_date
+                )
+            result = await asyncio.get_event_loop().run_in_executor(None, run_memory_agent)
             
             logger.info(f"Memory processing completed for {agent_id}:{user_id}")
             return result

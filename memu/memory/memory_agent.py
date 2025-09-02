@@ -149,6 +149,7 @@ class MemoryAgent:
         conversation: List[Dict[str, str]],
         character_name: str,
         max_iterations: int = 20,
+        session_date: str = None,
     ) -> Dict[str, Any]:
         """
         Intelligent conversation processing using iterative function calling
@@ -174,7 +175,11 @@ class MemoryAgent:
             if not character_name:
                 return {"success": False, "error": "Character name is required."}
 
-            session_date = datetime.now().strftime("%Y-%m-%d")
+            try:
+                session_date = datetime.fromisoformat(session_date).strftime("%Y-%m-%d")
+            except Exception as e:
+                logger.info(f"session date unavaiable, use system datetime")
+                session_date = datetime.now().strftime("%Y-%m-%d")
 
             logger.info(
                 f"🚀 Starting iterative conversation processing for {character_name}"
