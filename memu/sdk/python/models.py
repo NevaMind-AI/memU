@@ -84,13 +84,16 @@ class ValidationError(BaseModel):
 # ========== New Retrieve API Models ==========
 
 
+# From 0.1.10, return summary becomes the default behavior
+# Set want_memory_items to True to request also raw memory items
 class DefaultCategoriesRequest(BaseModel):
     """Request model for default categories API"""
 
     user_id: str = Field(..., description="User ID")
     agent_id: Optional[str] = Field(None, description="Agent ID")
-    include_inactive: bool = Field(False, description="Include inactive categories")
-    want_summary: bool = Field(default=True, description="Request summary instead of raw memory items")
+    # include_inactive: bool = Field(False, description="Include inactive categories")
+    # want_summary: bool = Field(default=True, description="Request summary instead of raw memory items")
+    want_memory_items: bool = Field(default=False, description="Request also raw memory items")
 
 
 class MemoryItem(BaseModel):
@@ -104,6 +107,12 @@ class MemoryItem(BaseModel):
     updated_at: datetime = Field(..., description="When the memory was last updated")
 
 
+class CategoryMemoryItems(BaseModel):
+    """Category memory items model"""
+
+    memories: List[MemoryItem] = Field(..., description="Memory items")
+    memory_count: int = Field(..., description="Number of memory items")
+
 class CategoryResponse(BaseModel):
     """Category response model"""
     
@@ -112,9 +121,10 @@ class CategoryResponse(BaseModel):
     user_id: Optional[str] = Field(None, description="User ID")
     agent_id: Optional[str] = Field(None, description="Agent ID")
     description: str = Field(default="", description="Category description")
-    is_active: bool = Field(..., description="Whether the category is active")
-    memories: Optional[List[MemoryItem] | None] = Field(None, description="Memories in this category")
-    memory_count: Optional[int | None] = Field(None, description="Number of memories in this category")
+    # is_active: bool = Field(..., description="Whether the category is active")
+    # memories: Optional[List[MemoryItem] | None] = Field(None, description="Memories in this category")
+    # memory_count: Optional[int | None] = Field(None, description="Number of memories in this category")
+    memory_items: Optional[CategoryMemoryItems | None] = Field(None, description="Memory items in this category")
     summary: Optional[str | None] = Field(None, description="Memory summarization for this category")
 
 

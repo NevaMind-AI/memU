@@ -17,7 +17,7 @@ def wait_for_task_completion(memu_client: MemuClient, task_id: str) -> None:
     while True:
         status = memu_client.get_task_status(task_id)
         print(f"Task status: {status.status}")
-        if status.status in ['SUCCESS', 'FAILURE', 'REVOKED']:
+        if status.status in ['SUCCESS', 'FAILURE', 'REJECTED']:
             break
         time.sleep(2)
 
@@ -42,10 +42,10 @@ def main():
     print("\nProcessing multi-turn conversation")
     memo_response = memu_client.memorize_conversation(
         conversation=conversation_messages,
-        user_id="user003", 
-        user_name="User 003", 
-        agent_id="assistant003", 
-        agent_name="Assistant 003"
+        user_id="user001", 
+        user_name="User 001", 
+        agent_id="assistant001", 
+        agent_name="Assistant 001"
     )
     print(f"Saved! Task ID: {memo_response.task_id}")
 
@@ -66,41 +66,32 @@ def main():
 
     # Retrieve default categories
     default_categories = memu_client.retrieve_default_categories(
-        user_id="user003",
-        agent_id="assistant003",
-        include_inactive=False
+        user_id="user001",
+        agent_id="assistant001",
+        want_memory_items=True
     )
     print(f"Found {default_categories.total_categories} default categories:")
     for category in default_categories.categories:
-        print(f"  - {category.name}: {category.description}")
-
-    # Retrieve related clustered categories
-    related_categories = memu_client.retrieve_related_clustered_categories(
-        user_id="user003",
-        category_query="outdoor activities",
-        top_k=5,
-        min_similarity=0.3
-    )
-
-    print(f"Found {len(related_categories.clustered_categories)} related categories:")
-    for category in related_categories.clustered_categories:
-        print(f"  - {category.name}")
+        print(f"  - {category.name}: {category.summary}")
+        if category.memory_items:
+            for memory_item in category.memory_items.memories:
+                print(f"    - {memory_item.content[:100]}...")
 
     # Example: Delete memories
     print("\n🗑️ Deleting memories examples:")
     
     # Delete memories for a specific user and agent
-    print("Deleting memories for user003 and assistant003...")
+    print("Deleting memories for user001 and assistant001...")
     delete_response = memu_client.delete_memories(
-        user_id="user003",
-        agent_id="assistant003"
+        user_id="user001",
+        agent_id="assistant001"
     )
     print(f"✅ Success: {delete_response.success}")
     print(f"   Deleted {delete_response.deleted_count} memories")
 
     # Example: Delete all memories for a user (without specifying agent)
-    print("\nDeleting all memories for user003...")
-    delete_all_response = memu_client.delete_memories(user_id="user003")
+    print("\nDeleting all memories for user001...")
+    delete_all_response = memu_client.delete_memories(user_id="user001")
     print(f"✅ Success: {delete_all_response.success}")
     print(f"   Deleted {delete_all_response.deleted_count} memories")
 

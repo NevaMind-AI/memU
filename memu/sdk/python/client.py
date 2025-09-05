@@ -300,32 +300,32 @@ class MemuClient:
         except ValidationError as e:
             raise MemuValidationException(f"Response validation failed: {str(e)}")
 
-    def get_task_summary_ready(self, task_id: str, group: str = "basic") -> MemorizeTaskSummaryReadyResponse:
-        """
-        Get the summary ready status of a memorization task
-        """
-        try:
-            request_data = MemorizeTaskSummaryReadyRequest(group=group)
-            response_data = self._make_request(
-                method="POST",
-                endpoint=f"api/v1/memory/memorize/status/{task_id}/summary",
-                json_data=request_data.model_dump(),
-            )
-            response = MemorizeTaskSummaryReadyResponse(**response_data)
-            logger.debug(f"Task {task_id} summary ready: {response.all_ready}")
+    # From 0.1.10, summary is always ready when memorization task's status is SUCCESS
+    # def get_task_summary_ready(self, task_id: str, group: str = "basic") -> MemorizeTaskSummaryReadyResponse:
+    #     """
+    #     Get the summary ready status of a memorization task
+    #     """
+    #     try:
+    #         request_data = MemorizeTaskSummaryReadyRequest(group=group)
+    #         response_data = self._make_request(
+    #             method="POST",
+    #             endpoint=f"api/v1/memory/memorize/status/{task_id}/summary",
+    #             json_data=request_data.model_dump(),
+    #         )
+    #         response = MemorizeTaskSummaryReadyResponse(**response_data)
+    #         logger.debug(f"Task {task_id} summary ready: {response.all_ready}")
 
-            return response
+    #         return response
 
-        except ValidationError as e:
-            raise MemuValidationException(f"Response validation failed: {str(e)}")
+    #     except ValidationError as e:
+    #         raise MemuValidationException(f"Response validation failed: {str(e)}")
 
     def retrieve_default_categories(
         self,
         *,
         user_id,
         agent_id: str | None = None,
-        include_inactive: bool = False,
-        want_summary: bool = True,
+        want_memory_items: bool = False,
     ) -> DefaultCategoriesResponse:
         """
         Retrieve default categories for a project
@@ -333,8 +333,7 @@ class MemuClient:
         Args:
             user_id: User ID
             agent_id: Agent ID (None for all agents)
-            include_inactive: Whether to include inactive categories
-            want_summary: Whether to return summary instead of raw memory items
+            want_memory_items: Whether to return memory items instead of summary
 
         Returns:
             DefaultCategoriesResponse: Default categories information
@@ -347,7 +346,7 @@ class MemuClient:
         try:
             # Create request model
             request_data = DefaultCategoriesRequest(
-                user_id=user_id, agent_id=agent_id, include_inactive=include_inactive, want_summary=want_summary
+                user_id=user_id, agent_id=agent_id, want_memory_items=want_memory_items
             )
 
             # Make API request
