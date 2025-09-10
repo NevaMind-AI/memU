@@ -86,7 +86,7 @@ export class MemuClient {
       baseURL: this.baseUrl,
       timeout: this.timeout,
       headers: {
-        'User-Agent': 'MemU-JavaScript-SDK/0.1.3',
+        'User-Agent': 'MemU-JavaScript-SDK/0.1.10',
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`,
@@ -332,6 +332,8 @@ export class MemuClient {
   /**
    * Get the summary ready status of a memorization task
    * 
+   * @deprecated From 0.1.10, summary is always ready when memorization task's status is SUCCESS.
+   * 
    * @param taskId Task identifier returned from memorizeConversation
    * @param group Category group to query (default: 'basic')
    * @returns Summary ready status for the task
@@ -371,6 +373,9 @@ export class MemuClient {
     }
   }
 
+  // From 0.1.10, summary is always ready when memorization task's status is SUCCESS
+  // The getTaskSummaryReady method above is deprecated and will be removed in future versions
+
   /**
    * Retrieve default categories for a project
    * 
@@ -380,16 +385,14 @@ export class MemuClient {
   async retrieveDefaultCategories(options: {
     userId: string;
     agentId?: string;
-    includeInactive?: boolean;
-    wantSummary?: boolean;
+    wantMemoryItems?: boolean;
   }): Promise<DefaultCategoriesResponse> {
     try {
       // Create request data
       const requestData: DefaultCategoriesRequest = {
         userId: options.userId,
         ...(options.agentId && { agentId: options.agentId }),
-        includeInactive: options.includeInactive || false,
-        wantSummary: options.wantSummary || true,
+        wantMemoryItems: options.wantMemoryItems || false,
       };
 
       // Convert to snake_case for API

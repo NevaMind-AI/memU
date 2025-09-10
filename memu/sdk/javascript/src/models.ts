@@ -73,16 +73,16 @@ export interface ValidationError {
 
 /**
  * Request model for default categories API
+ * From 0.1.10, return summary becomes the default behavior
+ * Set wantMemoryItems to true to request also raw memory items
  */
 export interface DefaultCategoriesRequest {
   /** User ID */
   userId: string;
   /** Agent ID */
   agentId?: string;
-  /** Include inactive categories */
-  includeInactive?: boolean;
-  /** Request summary instead of raw memory items */
-  wantSummary?: boolean;
+  /** Request also raw memory items */
+  wantMemoryItems?: boolean;
 }
 
 /**
@@ -104,6 +104,16 @@ export interface MemoryItem {
 }
 
 /**
+ * Category memory items model
+ */
+export interface CategoryMemoryItems {
+  /** Memory items */
+  memories: MemoryItem[];
+  /** Number of memory items */
+  memoryCount: number;
+}
+
+/**
  * Category response model
  */
 export interface CategoryResponse {
@@ -117,12 +127,8 @@ export interface CategoryResponse {
   agentId?: string;
   /** Category description */
   description?: string;
-  /** Whether the category is active */
-  isActive: boolean;
-  /** Memories in this category */
-  memories?: MemoryItem[] | null;
-  /** Number of memories in this category */
-  memoryCount?: number | null;
+  /** Memory items in this category */
+  memoryItems?: CategoryMemoryItems | null;
   /** Memory summarization for this category */
   summary?: string | null;
 }
