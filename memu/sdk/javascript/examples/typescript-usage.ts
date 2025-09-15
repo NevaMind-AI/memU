@@ -130,8 +130,8 @@ export const typescriptExample = async (): Promise<void> => {
       console.log(`   ${index + 1}. ${category.name}`)
       console.log(`      Type: ${category.type}`)
       console.log(`      Description: ${category.description}`)
-      // wrong types
-      // console.log(`      Memories: ${category.memoryCount}`)
+      console.log(`      Memories: ${category.memoryItems?.memoryCount}`)
+      // missing / removed
       // console.log(`      Active: ${category.isActive}`)
     })
     console.log()
