@@ -14,6 +14,7 @@ class ConversationMessage(BaseModel):
     """Individual conversation message"""
     role: str = Field(..., description="Message role (user, assistant, system)")
     content: str = Field(..., description="Message content")
+    time: Optional[str] = Field(None, description="Message time in ISO 8601 format, taking higher priority than session_date")
 
 
 class MemorizeRequest(BaseModel):

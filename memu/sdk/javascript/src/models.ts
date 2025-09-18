@@ -122,7 +122,7 @@ export interface MemorizeRequest {
   /** Agent display name */
   agentName: string
   /** Conversation to memorize in role-content format */
-  conversation?: Array<{ content: string, role: string }>
+  conversation?: Array<{ content: string, role: string, time?: string }>
   /** Conversation to memorize in plain text format */
   conversationText?: string
   /** Session date in ISO 8601 format */

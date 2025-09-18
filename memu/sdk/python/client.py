@@ -236,7 +236,14 @@ class MemuClient:
             else:
                 raise ValueError("Conversation must be as a string for flatten text, or as a list of dictionaries for structured messages")
 
-            session_date = session_date or datetime.now().astimezone().isoformat()
+            if session_date:
+                # We now force a format check
+                try:
+                    _ = datetime.fromisoformat(session_date)
+                except Exception as e:
+                    raise ValueError(f"Failed to validate session date: {session_date}. Please confirm it matches the ISO 8601 format")
+            else:
+                session_date = datetime.now().astimezone().isoformat()
 
             # Create request model
             request_data = MemorizeRequest(

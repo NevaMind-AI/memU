@@ -1,7 +1,7 @@
 {
   "name": "memu-js",
   "type": "module",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "packageManager": "pnpm@10.15.0",
   "description": "MemU JavaScript SDK for interacting with MemU API services",
   "author": "MemU Team",

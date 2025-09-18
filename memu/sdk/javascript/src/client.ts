@@ -94,7 +94,7 @@ export class MemuClient {
         'Accept': 'application/json',
         'Authorization': `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
-        'User-Agent': 'MemU-JavaScript-SDK/0.1.10',
+        'User-Agent': 'MemU-JavaScript-SDK/0.1.11',
       },
       timeout: this.timeout,
       ...config.axiosConfig,

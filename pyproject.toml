@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "memu-py"
-version = "0.1.10"
+version = "0.1.11"
 authors = [
     {name = "MemU Team", email = "contact@nevamind.ai"},
 ]
