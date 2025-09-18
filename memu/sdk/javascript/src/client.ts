@@ -475,7 +475,6 @@ export class MemuClient {
         console.log(`Making ${config.method?.toUpperCase()} request to ${url} (attempt ${attempt + 1})`)
 
         const response = await fetch(url, {
-          signal: this.timeout ? AbortSignal.timeout(this.timeout) : undefined,
           ...config,
           headers: {
             'Accept': 'application/json',
@@ -484,6 +483,12 @@ export class MemuClient {
             'User-Agent': 'MemU-JavaScript-SDK/0.1.11',
             ...config.headers,
           },
+          signal: this.timeout
+            // eslint-disable-next-line sonarjs/no-nested-conditional
+            ? config.signal
+              ? AbortSignal.any([config.signal, AbortSignal.timeout(this.timeout)])
+              : AbortSignal.timeout(this.timeout)
+            : undefined,
         })
 
         // Handle HTTP status codes
