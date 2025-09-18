@@ -49,9 +49,6 @@
     "test:watch": "vitest",
     "type-check": "tsc --noEmit"
   },
-  "dependencies": {
-    "axios": "^1.12.2"
-  },
   "devDependencies": {
     "@antfu/eslint-config": "^5.3.0",
     "@moeru/eslint-config": "0.1.0-beta.10",
