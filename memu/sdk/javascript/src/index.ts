@@ -1,23 +1,23 @@
 /**
  * MemU SDK Package
- * 
+ *
  * Provides HTTP client for MemU API services.
  */
 
-import { MemuClient, MemuClientConfig } from './client';
-import {
-  MemuSDKException,
+export { MemuClient, type MemuClientConfig } from './client'
+export {
   MemuAPIException,
-  MemuValidationException,
   MemuAuthenticationException,
   MemuConnectionException,
-} from './exceptions';
-
-export { MemuClient, MemuClientConfig } from './client';
-export {
+  MemuSDKException,
+  MemuValidationException,
+} from './exceptions'
+export type {
+  CategoryResponse,
   ClusteredCategory,
   DefaultCategoriesRequest,
   DefaultCategoriesResponse,
+  ErrorDetail,
   MemorizeRequest,
   MemorizeResponse,
   MemorizeTaskStatusResponse,
@@ -29,25 +29,5 @@ export {
   RelatedMemory,
   RelatedMemoryItemsRequest,
   RelatedMemoryItemsResponse,
-  CategoryResponse,
-  ErrorDetail,
   ValidationError,
-} from './models';
-export {
-  MemuSDKException,
-  MemuAPIException,
-  MemuValidationException,
-  MemuAuthenticationException,
-  MemuConnectionException,
-} from './exceptions';
-
-// Default export for CommonJS compatibility
-export default {
-  MemuClient,
-  // Exceptions
-  MemuSDKException,
-  MemuAPIException,
-  MemuValidationException,
-  MemuAuthenticationException,
-  MemuConnectionException,
-};
+} from './models'

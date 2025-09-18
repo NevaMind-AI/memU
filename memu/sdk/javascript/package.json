@@ -1,24 +1,19 @@
 {
   "name": "memu-js",
+  "type": "module",
   "version": "0.1.10",
+  "packageManager": "pnpm@10.15.0",
   "description": "MemU JavaScript SDK for interacting with MemU API services",
-  "main": "dist/index.esm.js",
-  "module": "dist/index.esm.js",
-  "types": "dist/index.d.ts",
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
-  "scripts": {
-    "build": "rollup -c --bundleConfigAsCjs",
-    "build:dev": "rollup -c --watch",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "lint": "eslint src/**/*.ts",
-    "lint:fix": "eslint src/**/*.ts --fix",
-    "type-check": "tsc --noEmit",
-    "prepublishOnly": "npm run build"
+  "author": "MemU Team",
+  "license": "MIT",
+  "homepage": "https://github.com/NevaMind-AI/MemU#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NevaMind-AI/MemU.git",
+    "directory": "memu/sdk/javascript"
+  },
+  "bugs": {
+    "url": "https://github.com/NevaMind-AI/MemU/issues"
   },
   "keywords": [
     "memu",
@@ -30,33 +25,40 @@
     "javascript",
     "typescript"
   ],
-  "author": "MemU Team",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/NevaMind-AI/MemU.git",
-    "directory": "memu/sdk-js"
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
-  "bugs": {
-    "url": "https://github.com/NevaMind-AI/MemU/issues"
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
   },
-  "homepage": "https://github.com/NevaMind-AI/MemU#readme",
+  "scripts": {
+    "build": "pkgroll",
+    "build:watch": "pkgroll --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "prepublishOnly": "pnpm build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc --noEmit"
+  },
   "dependencies": {
-    "axios": "^1.6.0"
+    "axios": "^1.12.2"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.0",
-    "@types/node": "^20.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "eslint": "^8.50.0",
-    "jest": "^29.5.0",
-    "rollup": "^4.0.0",
-    "rollup-plugin-typescript2": "^0.36.0",
-    "ts-jest": "^29.1.0",
-    "typescript": "^5.0.0"
-  },
-  "engines": {
-    "node": ">=16.0.0"
+    "@antfu/eslint-config": "^5.3.0",
+    "@moeru/eslint-config": "0.1.0-beta.10",
+    "@moeru/tsconfig": "0.1.0-beta.10",
+    "@types/node": "^24.4.0",
+    "eslint": "^9.35.0",
+    "pkgroll": "^2.15.4",
+    "typescript": "~5.8.3"
   }
 }

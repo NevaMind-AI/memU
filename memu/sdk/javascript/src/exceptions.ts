@@ -1,6 +1,6 @@
 /**
  * MemU SDK Exceptions
- * 
+ *
  * Custom exception classes for MemU SDK operations.
  */
 
@@ -9,13 +9,13 @@
  */
 export class MemuSDKException extends Error {
   constructor(message: string) {
-    super(message);
-    this.name = 'MemuSDKException';
-    
+    super(message)
+
+    this.name = 'MemuSDKException'
+
     // Maintains proper stack trace for where our error was thrown (only available on V8)
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, MemuSDKException);
-    }
+    if ('captureStackTrace' in Error)
+      Error.captureStackTrace(this, MemuSDKException)
   }
 }
 
@@ -23,36 +23,22 @@ export class MemuSDKException extends Error {
  * Exception for API-related errors
  */
 export class MemuAPIException extends MemuSDKException {
-  public statusCode?: number;
-  public responseData?: Record<string, any>;
+  public responseData?: Record<string, unknown>
+  public statusCode?: number
 
-  constructor(message: string, statusCode?: number, responseData?: Record<string, any>) {
-    super(message);
-    this.name = 'MemuAPIException';
-    if (statusCode !== undefined) {
-      this.statusCode = statusCode;
-    }
-    if (responseData !== undefined) {
-      this.responseData = responseData;
-    }
+  constructor(message: string, statusCode?: number, responseData?: Record<string, unknown>) {
+    super(message)
 
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, MemuAPIException);
-    }
-  }
-}
+    this.name = 'MemuAPIException'
 
-/**
- * Exception for validation errors
- */
-export class MemuValidationException extends MemuAPIException {
-  constructor(message: string, statusCode?: number, responseData?: Record<string, any>) {
-    super(message, statusCode, responseData);
-    this.name = 'MemuValidationException';
+    if (statusCode !== undefined)
+      this.statusCode = statusCode
 
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, MemuValidationException);
-    }
+    if (responseData !== undefined)
+      this.responseData = responseData
+
+    if ('captureStackTrace' in Error)
+      Error.captureStackTrace(this, MemuAPIException)
   }
 }
 
@@ -61,12 +47,12 @@ export class MemuValidationException extends MemuAPIException {
  */
 export class MemuAuthenticationException extends MemuAPIException {
   constructor(message: string, statusCode?: number, responseData?: Record<string, any>) {
-    super(message, statusCode, responseData);
-    this.name = 'MemuAuthenticationException';
+    super(message, statusCode, responseData)
 
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, MemuAuthenticationException);
-    }
+    this.name = 'MemuAuthenticationException'
+
+    if ('captureStackTrace' in Error)
+      Error.captureStackTrace(this, MemuAuthenticationException)
   }
 }
 
@@ -75,11 +61,25 @@ export class MemuAuthenticationException extends MemuAPIException {
  */
 export class MemuConnectionException extends MemuSDKException {
   constructor(message: string) {
-    super(message);
-    this.name = 'MemuConnectionException';
+    super(message)
 
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, MemuConnectionException);
-    }
+    this.name = 'MemuConnectionException'
+
+    if ('captureStackTrace' in Error)
+      Error.captureStackTrace(this, MemuConnectionException)
+  }
+}
+
+/**
+ * Exception for validation errors
+ */
+export class MemuValidationException extends MemuAPIException {
+  constructor(message: string, statusCode?: number, responseData?: Record<string, any>) {
+    super(message, statusCode, responseData)
+
+    this.name = 'MemuValidationException'
+
+    if ('captureStackTrace' in Error)
+      Error.captureStackTrace(this, MemuValidationException)
   }
 }
