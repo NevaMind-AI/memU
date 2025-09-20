@@ -5,10 +5,6 @@
  * Provides HTTP client for interacting with MemU API services.
  */
 
-import type { AxiosError, AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
-
-import axios from 'axios'
-
 import type {
   DefaultCategoriesRequest,
   DefaultCategoriesResponse,
@@ -38,8 +34,6 @@ import {
 export interface MemuClientConfig {
   /** API key for authentication */
   apiKey?: string
-  /** Additional axios configuration */
-  axiosConfig?: AxiosRequestConfig
   /** Base URL for MemU API server */
   baseUrl?: string
   /** Maximum number of retries for failed requests */
@@ -54,7 +48,6 @@ export interface MemuClientConfig {
 export class MemuClient {
   private apiKey: string
   private baseUrl: string
-  private client: AxiosInstance
   private maxRetries: number
   private timeout: number
 
@@ -86,21 +79,6 @@ export class MemuClient {
     // Ensure base_url ends with /
     if (!this.baseUrl.endsWith('/'))
       this.baseUrl += '/'
-
-    // Configure axios client
-    const axiosConfig: AxiosRequestConfig = {
-      baseURL: this.baseUrl,
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-        'User-Agent': 'MemU-JavaScript-SDK/0.1.11',
-      },
-      timeout: this.timeout,
-      ...config.axiosConfig,
-    }
-
-    this.client = axios.create(axiosConfig)
 
     console.log(`MemU SDK client initialized with baseUrl: ${this.baseUrl}`)
   }
@@ -134,10 +112,9 @@ export class MemuClient {
       const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>({
-        data: apiRequestData,
+      const responseData = await this.makeRequest<unknown>('api/v1/memory/delete', {
+        body: JSON.stringify(apiRequestData),
         method: 'POST',
-        url: 'api/v1/memory/delete',
       })
 
       // Convert response to camelCase
@@ -172,9 +149,8 @@ export class MemuClient {
       console.log(`Getting status for task: ${taskId}`)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>({
+      const responseData = await this.makeRequest<unknown>(`api/v1/memory/memorize/status/${taskId}`, {
         method: 'GET',
-        url: `api/v1/memory/memorize/status/${taskId}`,
       })
 
       // Convert response to camelCase
@@ -219,10 +195,9 @@ export class MemuClient {
       const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>({
-        data: apiRequestData,
+      const responseData = await this.makeRequest<unknown>(`api/v1/memory/memorize/status/${taskId}/summary`, {
+        body: JSON.stringify(apiRequestData),
         method: 'POST',
-        url: `api/v1/memory/memorize/status/${taskId}/summary`,
       })
 
       // Convert response to camelCase
@@ -297,10 +272,9 @@ export class MemuClient {
       const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>({
-        data: apiRequestData,
+      const responseData = await this.makeRequest<unknown>('api/v1/memory/memorize', {
+        body: JSON.stringify(apiRequestData),
         method: 'POST',
-        url: 'api/v1/memory/memorize',
       })
 
       // Convert response to camelCase
@@ -346,10 +320,9 @@ export class MemuClient {
       const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>({
-        data: apiRequestData,
+      const responseData = await this.makeRequest<unknown>('api/v1/memory/retrieve/default-categories', {
+        body: JSON.stringify(apiRequestData),
         method: 'POST',
-        url: 'api/v1/memory/retrieve/default-categories',
       })
 
       // Convert response to camelCase
@@ -403,10 +376,9 @@ export class MemuClient {
       const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>({
-        data: apiRequestData,
+      const responseData = await this.makeRequest<unknown>('api/v1/memory/retrieve/related-clustered-categories', {
+        body: JSON.stringify(apiRequestData),
         method: 'POST',
-        url: 'api/v1/memory/retrieve/related-clustered-categories',
       })
 
       // Convert response to camelCase
@@ -463,10 +435,9 @@ export class MemuClient {
       const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>({
-        data: apiRequestData,
+      const responseData = await this.makeRequest<unknown>('api/v1/memory/retrieve/related-memory-items', {
+        body: JSON.stringify(apiRequestData),
         method: 'POST',
-        url: 'api/v1/memory/retrieve/related-memory-items',
       })
 
       // Convert response to camelCase
@@ -491,81 +462,89 @@ export class MemuClient {
   /**
    * Make HTTP request with error handling and retries
    *
-   * @param config Axios request configuration
+   * @param path url path
+   * @param config request init
    * @returns Response data
    */
   // eslint-disable-next-line sonarjs/cognitive-complexity
-  private async makeRequest<T = unknown>(config: AxiosRequestConfig): Promise<T> {
+  private async makeRequest<T = unknown>(path: string, config: RequestInit): Promise<T> {
+    const url = new URL(path, this.baseUrl)
+
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       try {
-        console.log(`Making ${config.method?.toUpperCase()} request to ${config.url} (attempt ${attempt + 1})`)
+        console.log(`Making ${config.method?.toUpperCase()} request to ${url} (attempt ${attempt + 1})`)
 
-        const response: AxiosResponse<T> = await this.client.request(config)
+        const response = await fetch(url, {
+          ...config,
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'MemU-JavaScript-SDK/0.1.11',
+            ...config.headers,
+          },
+          signal: this.timeout
+            // eslint-disable-next-line sonarjs/no-nested-conditional
+            ? config.signal
+              ? AbortSignal.any([config.signal, AbortSignal.timeout(this.timeout)])
+              : AbortSignal.timeout(this.timeout)
+            : undefined,
+        })
 
         // Handle HTTP status codes
-        if (response.status === 200) {
-          return response.data
+        if (response.ok) {
+          // eslint-disable-next-line @masknet/type-prefer-return-type-annotation
+          return response.json() as T
         }
         else {
-          throw new MemuAPIException(
-            `API request failed with status ${response.status}`,
-            response.status,
-          )
+          let errorData: Record<string, unknown> | undefined
+
+          try {
+            errorData = await response.json() as Record<string, unknown>
+          }
+          catch {}
+
+          // Handle specific HTTP status codes
+          switch (response.status) {
+            case 422:
+              throw new MemuValidationException(
+                `Validation error: ${JSON.stringify(errorData)}`,
+                response.status,
+                errorData,
+              )
+            case 401:
+              throw new MemuAuthenticationException(
+                'Authentication failed. Check your API key.',
+                response.status,
+              )
+            case 403:
+              throw new MemuAuthenticationException(
+                'Access forbidden. Check your API key permissions.',
+                response.status,
+              )
+            default:
+              throw new MemuAPIException(
+                `API request failed with status ${response.status}: ${JSON.stringify(errorData)}`,
+                response.status,
+              )
+          }
         }
       }
       catch (error) {
-        if (axios.isAxiosError(error)) {
-          const axiosError = error as AxiosError
-
-          // Handle specific HTTP status codes
-          if (axiosError.response?.status === 422) {
-            const errorData = axiosError.response.data
-            throw new MemuValidationException(
-              `Validation error: ${JSON.stringify(errorData)}`,
-              axiosError.response.status,
-              errorData as Record<string, unknown>,
+        if (error instanceof TypeError) {
+          // Request was made but no response received
+          if (attempt === this.maxRetries) {
+            throw new MemuConnectionException(
+              `Connection error after ${this.maxRetries + 1} attempts: ${error.message}`,
             )
-          }
-          else if (axiosError.response?.status === 401) {
-            throw new MemuAuthenticationException(
-              'Authentication failed. Check your API key.',
-              axiosError.response.status,
-            )
-          }
-          else if (axiosError.response?.status === 403) {
-            throw new MemuAuthenticationException(
-              'Access forbidden. Check your API key permissions.',
-              axiosError.response.status,
-            )
-          }
-          else if (axiosError.response) {
-            // Server responded with error status
-            const errorMsg = `API request failed with status ${axiosError.response.status}`
-            const errorData = axiosError.response.data
-            throw new MemuAPIException(
-              `${errorMsg}: ${JSON.stringify(errorData)}`,
-              axiosError.response.status,
-            )
-          }
-          else if (axiosError.request != null) {
-            // Request was made but no response received
-            if (attempt === this.maxRetries) {
-              throw new MemuConnectionException(
-                `Connection error after ${this.maxRetries + 1} attempts: ${axiosError.message}`,
-              )
-            }
-            else {
-              console.warn(`Request failed (attempt ${attempt + 1}), retrying: ${axiosError.message}`)
-              continue
-            }
           }
           else {
-            // Something else happened
-            throw new MemuAPIException(`Request setup error: ${axiosError.message}`)
+            console.warn(`Request failed (attempt ${attempt + 1}), retrying: ${error.message}`)
+            continue
           }
         }
         else {
-          // Non-Axios error (shouldn't happen in normal cases)
+          // Non-Fetch error (shouldn't happen in normal cases)
           if (attempt === this.maxRetries) {
             throw new MemuConnectionException(
               // eslint-disable-next-line ts/restrict-template-expressions
