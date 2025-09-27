@@ -56,8 +56,6 @@ export interface ClusteredCategory {
 
 /**
  * Request model for default categories API
- * From 0.1.10, return summary becomes the default behavior
- * Set wantMemoryItems to true to request also raw memory items
  */
 export interface DefaultCategoriesRequest {
   /** Agent ID */
@@ -281,4 +279,64 @@ export interface RelatedMemoryItemsResponse {
 export interface ValidationError {
   /** List of validation errors */
   detail: ErrorDetail[]
+}
+
+// ========== Chat API Models ==========
+
+/**
+ * Request model for chat API
+ */
+export interface ChatRequest {
+  /** User identifier */
+  userId: string
+  /** User display name */
+  userName?: string
+  /** Agent identifier */
+  agentId: string
+  /** Agent display name */
+  agentName?: string
+  /** User message content */
+  message: string
+  /** Maximum tokens for final chat prompt (current query + short term context + long term memory), correspond to ChatTokenUsage.promptTokens */
+  maxContextTokens?: number
+  /** Additional parameters for LLM */
+  kwargs?: Record<string, any>
+}
+
+/**
+ * Token usage breakdown for chat response
+ */
+export interface ChatTokenUsageBreakdown {
+  /** Tokens used for current query */
+  currentQuery?: number
+  /** Tokens used for short term context */
+  shortTermContext?: number
+  /** Tokens used for user profile */
+  userProfile?: number
+  /** Tokens used for retrieved memory */
+  retrievedMemory?: number
+}
+
+/**
+ * Token usage information for chat response
+ */
+export interface ChatTokenUsage {
+  /** Total prompt tokens */
+  promptTokens: number
+  /** Breakdown of prompt tokens */
+  promptTokensBreakdown?: ChatTokenUsageBreakdown
+  /** Completion tokens */
+  completionTokens: number
+  /** Total tokens */
+  totalTokens: number
+}
+
+/**
+ * Response model for chat API
+ */
+export interface ChatResponse {
+  /** AI response message */
+  message: string
+  /** Token usage information */
+  chatTokenUsage: ChatTokenUsage
 }

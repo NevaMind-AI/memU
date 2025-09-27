@@ -14,6 +14,10 @@ export {
 } from './exceptions'
 export type {
   CategoryResponse,
+  ChatRequest,
+  ChatResponse,
+  ChatTokenUsage,
+  ChatTokenUsageBreakdown,
   ClusteredCategory,
   DefaultCategoriesRequest,
   DefaultCategoriesResponse,

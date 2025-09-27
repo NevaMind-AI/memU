@@ -85,15 +85,11 @@ class ValidationError(BaseModel):
 # ========== New Retrieve API Models ==========
 
 
-# From 0.1.10, return summary becomes the default behavior
-# Set want_memory_items to True to request also raw memory items
 class DefaultCategoriesRequest(BaseModel):
     """Request model for default categories API"""
 
     user_id: str = Field(..., description="User ID")
     agent_id: Optional[str] = Field(None, description="Agent ID")
-    # include_inactive: bool = Field(False, description="Include inactive categories")
-    # want_summary: bool = Field(default=True, description="Request summary instead of raw memory items")
     want_memory_items: bool = Field(default=False, description="Request also raw memory items")
 
 
@@ -223,3 +219,43 @@ class DeleteMemoryResponse(BaseModel):
 
     success: bool = Field(..., description="Operation success status")
     deleted_count: Optional[int] = Field(None, description="Number of memories deleted")
+
+
+# ========== Chat API Models ==========
+
+class ChatRequest(BaseModel):
+    """Request model for chat API"""
+
+    user_id: str = Field(..., description="User identifier")
+    user_name: Optional[str] = Field(None, description="User display name")
+    agent_id: str = Field(..., description="Agent identifier")
+    agent_name: Optional[str] = Field(None, description="Agent display name")
+    message: str = Field(..., description="User message content")
+    max_context_tokens: Optional[int] = Field(
+        None, description="Maximum tokens for final chat prompt (current query + short term context + long term memory), correspoind to ChatTokenUsage.prompt_tokens")
+    kwargs: Dict[str, Any] = Field(default_factory=dict, description="Additional parameters for LLM")
+
+
+class ChatTokenUsageBreakdown(BaseModel):
+    """Token usage breakdown for chat response"""
+
+    current_query: int = Field(0, description="Tokens used for current query")
+    short_term_context: int = Field(0, description="Tokens used for short term context")
+    user_profile: int = Field(0, description="Tokens used for user profile")
+    retrieved_memory: int = Field(0, description="Tokens used for retrieved memory")
+
+
+class ChatTokenUsage(BaseModel):
+    """Token usage information for chat response"""
+
+    prompt_tokens: int = Field(..., description="Total prompt tokens")
+    prompt_tokens_breakdown: Optional[ChatTokenUsageBreakdown] = Field(None, description="Breakdown of prompt tokens")
+    completion_tokens: int = Field(..., description="Completion tokens")
+    total_tokens: int = Field(..., description="Total tokens")
+
+
+class ChatResponse(BaseModel):
+    """Response model for chat API"""
+
+    message: str = Field(..., description="AI response message")
+    chat_token_usage: ChatTokenUsage = Field(..., description="Token usage information")

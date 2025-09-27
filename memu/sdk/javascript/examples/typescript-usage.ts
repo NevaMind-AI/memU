@@ -6,6 +6,7 @@
  */
 
 import type {
+  ChatResponse,
   DefaultCategoriesResponse,
   MemorizeResponse,
   MemorizeTaskStatusResponse,
@@ -186,6 +187,47 @@ export const typescriptExample = async (): Promise<void> => {
         console.log(`      Memory ${memIndex + 1}: ${memory.content.substring(0, 60)}...`)
       })
     })
+
+    console.log()
+
+    // Example 6: Memory-enhanced chat with full TypeScript support
+    console.log('💬 Starting memory-enhanced chat...')
+    const chatResponse: ChatResponse = await client.chat({
+      agentId: 'ml_tutor',
+      agentName: 'ML Tutor',
+      kwargs: {
+        maxTokens: 200,
+        temperature: 0.8,
+      },
+      maxContextTokens: 4000,
+      message: 'Can you explain more about supervised vs unsupervised learning?',
+      userId: 'student_456',
+      userName: 'Bob Smith',
+    })
+
+    console.log(`🤖 AI Response: ${chatResponse.message}`)
+    console.log('📊 Token Usage:')
+    console.log(`   Total Tokens: ${chatResponse.chatTokenUsage.totalTokens}`)
+    console.log(`   Prompt Tokens: ${chatResponse.chatTokenUsage.promptTokens}`)
+    console.log(`   Completion Tokens: ${chatResponse.chatTokenUsage.completionTokens}`)
+    
+    // Type-safe access to token breakdown
+    const breakdown = chatResponse.chatTokenUsage.promptTokensBreakdown
+    if (breakdown) {
+      console.log('   Token Breakdown:')
+      if (breakdown.currentQuery !== undefined) {
+        console.log(`     - Current Query: ${breakdown.currentQuery}`)
+      }
+      if (breakdown.shortTermContext !== undefined) {
+        console.log(`     - Short Term Context: ${breakdown.shortTermContext}`)
+      }
+      if (breakdown.userProfile !== undefined) {
+        console.log(`     - User Profile: ${breakdown.userProfile}`)
+      }
+      if (breakdown.retrievedMemory !== undefined) {
+        console.log(`     - Retrieved Memory: ${breakdown.retrievedMemory}`)
+      }
+    }
 
     console.log('\n✨ TypeScript example completed successfully!')
   }

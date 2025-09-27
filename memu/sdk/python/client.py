@@ -19,6 +19,8 @@ from .exceptions import (
     MemuValidationException,
 )
 from .models import (
+    ChatRequest,
+    ChatResponse,
     DefaultCategoriesRequest,
     DefaultCategoriesResponse,
     DeleteMemoryRequest,
@@ -262,7 +264,7 @@ class MemuClient:
             # Make API request
             response_data = self._make_request(
                 method="POST",
-                endpoint="api/v1/memory/memorize",
+                endpoint="api/v2/memory/memorize",
                 json_data=request_data.model_dump(),
             )
 
@@ -295,7 +297,7 @@ class MemuClient:
 
             # Make API request to the correct endpoint
             response_data = self._make_request(
-                method="GET", endpoint=f"api/v1/memory/memorize/status/{task_id}"
+                method="GET", endpoint=f"api/v2/memory/memorize/status/{task_id}"
             )
 
             # Parse response using the model
@@ -306,26 +308,6 @@ class MemuClient:
 
         except ValidationError as e:
             raise MemuValidationException(f"Response validation failed: {str(e)}")
-
-    # From 0.1.10, summary is always ready when memorization task's status is SUCCESS
-    # def get_task_summary_ready(self, task_id: str, group: str = "basic") -> MemorizeTaskSummaryReadyResponse:
-    #     """
-    #     Get the summary ready status of a memorization task
-    #     """
-    #     try:
-    #         request_data = MemorizeTaskSummaryReadyRequest(group=group)
-    #         response_data = self._make_request(
-    #             method="POST",
-    #             endpoint=f"api/v1/memory/memorize/status/{task_id}/summary",
-    #             json_data=request_data.model_dump(),
-    #         )
-    #         response = MemorizeTaskSummaryReadyResponse(**response_data)
-    #         logger.debug(f"Task {task_id} summary ready: {response.all_ready}")
-
-    #         return response
-
-    #     except ValidationError as e:
-    #         raise MemuValidationException(f"Response validation failed: {str(e)}")
 
     def retrieve_default_categories(
         self,
@@ -359,7 +341,7 @@ class MemuClient:
             # Make API request
             response_data = self._make_request(
                 method="POST",
-                endpoint="api/v1/memory/retrieve/default-categories",
+                endpoint="api/v2/memory/retrieve/default-categories",
                 json_data=request_data.model_dump(),
             )
 
@@ -419,7 +401,7 @@ class MemuClient:
             # Make API request
             response_data = self._make_request(
                 method="POST",
-                endpoint="api/v1/memory/retrieve/related-memory-items",
+                endpoint="api/v2/memory/retrieve/related-memory-items",
                 json_data=request_data.model_dump(),
             )
 
@@ -479,7 +461,7 @@ class MemuClient:
             # Make API request
             response_data = self._make_request(
                 method="POST",
-                endpoint="api/v1/memory/retrieve/related-clustered-categories",
+                endpoint="api/v2/memory/retrieve/related-clustered-categories",
                 json_data=request_data.model_dump(),
             )
 
@@ -530,7 +512,7 @@ class MemuClient:
             # Make API request
             response_data = self._make_request(
                 method="POST",
-                endpoint="api/v1/memory/delete",
+                endpoint="api/v2/memory/delete",
                 json_data=request_data.model_dump(),
             )
 
@@ -539,6 +521,69 @@ class MemuClient:
             logger.info(
                 f"Successfully deleted memories: {response.deleted_count} memories deleted"
             )
+
+            return response
+
+        except ValidationError as e:
+            raise MemuValidationException(f"Request validation failed: {str(e)}")
+
+    def chat(
+        self,
+        *,
+        user_id: str,
+        agent_id: str,
+        message: str,
+        user_name: Optional[str] = None,
+        agent_name: Optional[str] = None,
+        max_context_tokens: Optional[int] = None,
+        **kwargs,
+    ) -> ChatResponse:
+        """
+        Send a chat message to the agent with memory-enhanced conversation
+        
+        Args:
+            user_id: User identifier
+            agent_id: Agent identifier  
+            message: User message content
+            user_name: User display name (optional)
+            agent_name: Agent display name (optional)
+            max_context_tokens: Maximum tokens for final chat prompt (current query + short term context + long term memory), correspoind to ChatTokenUsage.prompt_tokens (optional)
+            **kwargs: Additional parameters for LLM (e.g., temperature, max_tokens, etc.)
+        
+        Returns:
+            ChatResponse: AI response with token usage information
+            
+        Raises:
+            MemuValidationException: For validation errors
+            MemuAPIException: For API errors
+            MemuConnectionException: For connection errors
+        """
+        try:
+            # Create request model
+            request_data = ChatRequest(
+                user_id=user_id,
+                user_name=user_name,
+                agent_id=agent_id,
+                agent_name=agent_name,
+                message=message,
+                max_context_tokens=max_context_tokens,
+                kwargs=kwargs,
+            )
+
+            logger.info(
+                f"Sending chat message for user {user_id} and agent {agent_id}"
+            )
+
+            # Make API request
+            response_data = self._make_request(
+                method="POST",
+                endpoint="api/v2/chat",
+                json_data=request_data.model_dump(),
+            )
+
+            # Parse response
+            response = ChatResponse(**response_data)
+            logger.info(f"Chat response received: {len(response.message)} characters")
 
             return response
 

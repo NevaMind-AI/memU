@@ -6,6 +6,8 @@
  */
 
 import type {
+  ChatRequest,
+  ChatResponse,
   DefaultCategoriesRequest,
   DefaultCategoriesResponse,
   DeleteMemoryRequest,
@@ -112,7 +114,7 @@ export class MemuClient {
       const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>('api/v1/memory/delete', {
+      const responseData = await this.makeRequest<unknown>('api/v2/memory/delete', {
         body: JSON.stringify(apiRequestData),
         method: 'POST',
       })
@@ -149,7 +151,7 @@ export class MemuClient {
       console.log(`Getting status for task: ${taskId}`)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>(`api/v1/memory/memorize/status/${taskId}`, {
+      const responseData = await this.makeRequest<unknown>(`api/v2/memory/memorize/status/${taskId}`, {
         method: 'GET',
       })
 
@@ -272,7 +274,7 @@ export class MemuClient {
       const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>('api/v1/memory/memorize', {
+      const responseData = await this.makeRequest<unknown>('api/v2/memory/memorize', {
         body: JSON.stringify(apiRequestData),
         method: 'POST',
       })
@@ -320,7 +322,7 @@ export class MemuClient {
       const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>('api/v1/memory/retrieve/default-categories', {
+      const responseData = await this.makeRequest<unknown>('api/v2/memory/retrieve/default-categories', {
         body: JSON.stringify(apiRequestData),
         method: 'POST',
       })
@@ -343,65 +345,6 @@ export class MemuClient {
       throw new MemuValidationException(`Request validation failed: ${error}`)
     }
   }
-
-  /**
-   * Retrieve related clustered categories for a user
-   *
-   * @param options Request options
-   * @returns Related clustered categories
-   */
-  async retrieveRelatedClusteredCategories(options: {
-    agentId?: string
-    categoryQuery: string
-    minSimilarity?: number
-    topK?: number
-    userId: string
-  }): Promise<RelatedClusteredCategoriesResponse> {
-    try {
-      // Create request data
-      const requestData: RelatedClusteredCategoriesRequest = {
-        userId: options.userId,
-        ...(options.agentId != null && { agentId: options.agentId }),
-        categoryQuery: options.categoryQuery,
-        minSimilarity: options.minSimilarity ?? 0.3,
-        topK: options.topK ?? 5,
-      }
-
-      console.log(
-        `Retrieving clustered categories for user ${options.userId}, query: '${options.categoryQuery}'`,
-      )
-
-      // Convert to snake_case for API
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
-
-      // Make API request
-      const responseData = await this.makeRequest<unknown>('api/v1/memory/retrieve/related-clustered-categories', {
-        body: JSON.stringify(apiRequestData),
-        method: 'POST',
-      })
-
-      // Convert response to camelCase
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const response = this.toCamelCase(responseData as Record<string, unknown>) as unknown as RelatedClusteredCategoriesResponse
-      console.log(`Retrieved ${response.totalCategoriesFound} clustered categories`)
-
-      return response
-    }
-    catch (error) {
-      if (error instanceof MemuValidationException
-        || error instanceof MemuAPIException
-        || error instanceof MemuConnectionException
-        || error instanceof MemuAuthenticationException) {
-        throw error
-      }
-      // eslint-disable-next-line ts/restrict-template-expressions
-      throw new MemuValidationException(`Request validation failed: ${error}`)
-    }
-  }
-
-  // From 0.1.10, summary is always ready when memorization task's status is SUCCESS
-  // The getTaskSummaryReady method above is deprecated and will be removed in future versions
 
   /**
    * Retrieve related memory items for a user query
@@ -435,7 +378,7 @@ export class MemuClient {
       const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>('api/v1/memory/retrieve/related-memory-items', {
+      const responseData = await this.makeRequest<unknown>('api/v2/memory/retrieve/related-memory-items', {
         body: JSON.stringify(apiRequestData),
         method: 'POST',
       })
@@ -444,6 +387,64 @@ export class MemuClient {
       // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
       const response = this.toCamelCase(responseData as Record<string, unknown>) as unknown as RelatedMemoryItemsResponse
       console.log(`Retrieved ${response.totalFound} related memories`)
+
+      return response
+    }
+    catch (error) {
+      if (error instanceof MemuValidationException
+        || error instanceof MemuAPIException
+        || error instanceof MemuConnectionException
+        || error instanceof MemuAuthenticationException) {
+        throw error
+      }
+      // eslint-disable-next-line ts/restrict-template-expressions
+      throw new MemuValidationException(`Request validation failed: ${error}`)
+    }
+  }
+
+  /**
+   * Send a chat message to the agent with memory-enhanced conversation
+   *
+   * @param options Request options
+   * @returns AI response with token usage information
+   */
+  async chat(options: {
+    agentId: string
+    agentName?: string
+    kwargs?: Record<string, any>
+    maxContextTokens?: number
+    message: string
+    userId: string
+    userName?: string
+  }): Promise<ChatResponse> {
+    try {
+      // Create request data
+      const requestData: ChatRequest = {
+        userId: options.userId,
+        ...(options.userName != null && { userName: options.userName }),
+        agentId: options.agentId,
+        ...(options.agentName != null && { agentName: options.agentName }),
+        message: options.message,
+        ...(options.maxContextTokens != null && { maxContextTokens: options.maxContextTokens }),
+        kwargs: options.kwargs ?? {},
+      }
+
+      console.log(`Sending chat message for user ${options.userId} and agent ${options.agentId}`)
+
+      // Convert to snake_case for API
+      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
+      const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
+
+      // Make API request
+      const responseData = await this.makeRequest<unknown>('api/v2/chat', {
+        body: JSON.stringify(apiRequestData),
+        method: 'POST',
+      })
+
+      // Convert response to camelCase
+      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
+      const response = this.toCamelCase(responseData as Record<string, unknown>) as unknown as ChatResponse
+      console.log(`Chat response received: ${response.message.length} characters`)
 
       return response
     }
@@ -480,7 +481,7 @@ export class MemuClient {
             'Accept': 'application/json',
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
-            'User-Agent': 'MemU-JavaScript-SDK/0.1.11',
+            'User-Agent': 'MemU-JavaScript-SDK/0.2.1',
             ...config.headers,
           },
           signal: this.timeout
