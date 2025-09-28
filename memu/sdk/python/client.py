@@ -535,7 +535,8 @@ class MemuClient:
         message: str,
         user_name: Optional[str] = None,
         agent_name: Optional[str] = None,
-        max_context_tokens: Optional[int] = None,
+        system: Optional[str] = None,
+        model: Optional[str] = None,
         **kwargs,
     ) -> ChatResponse:
         """
@@ -547,7 +548,8 @@ class MemuClient:
             message: User message content
             user_name: User display name (optional)
             agent_name: Agent display name (optional)
-            max_context_tokens: Maximum tokens for final chat prompt (current query + short term context + long term memory), correspoind to ChatTokenUsage.prompt_tokens (optional)
+            system: System message content (optional)
+            model: Chat LLM model (optional)
             **kwargs: Additional parameters for LLM (e.g., temperature, max_tokens, etc.)
         
         Returns:
@@ -566,7 +568,8 @@ class MemuClient:
                 agent_id=agent_id,
                 agent_name=agent_name,
                 message=message,
-                max_context_tokens=max_context_tokens,
+                system=system,
+                model=model,
                 kwargs=kwargs,
             )
 

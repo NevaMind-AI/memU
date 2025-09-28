@@ -297,8 +297,13 @@ export interface ChatRequest {
   agentName?: string
   /** User message content */
   message: string
-  /** Maximum tokens for final chat prompt (current query + short term context + long term memory), correspond to ChatTokenUsage.promptTokens */
-  maxContextTokens?: number
+  /** System message content */
+  system?: string
+  /** Chat LLM model */
+  model?: string
+  // Now configure the maximum context token in the web platform.
+  // /** Maximum tokens for final chat prompt (current query + short term context + long term memory), correspond to ChatTokenUsage.promptTokens */
+  // maxContextTokens?: number
   /** Additional parameters for LLM */
   kwargs?: Record<string, any>
 }

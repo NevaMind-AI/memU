@@ -231,8 +231,11 @@ class ChatRequest(BaseModel):
     agent_id: str = Field(..., description="Agent identifier")
     agent_name: Optional[str] = Field(None, description="Agent display name")
     message: str = Field(..., description="User message content")
-    max_context_tokens: Optional[int] = Field(
-        None, description="Maximum tokens for final chat prompt (current query + short term context + long term memory), correspoind to ChatTokenUsage.prompt_tokens")
+    system: Optional[str] = Field(None, description="System message content")
+    model: Optional[str] = Field(None, description="Chat LLM model")
+    # Now configure the maximum context token in the web platform.
+    # max_context_tokens: Optional[int] = Field(
+    #     None, description="Maximum tokens for final chat prompt (current query + short term context + long term memory), corresponding to ChatTokenUsage.prompt_tokens")
     kwargs: Dict[str, Any] = Field(default_factory=dict, description="Additional parameters for LLM")
 
 

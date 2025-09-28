@@ -199,8 +199,9 @@ export const typescriptExample = async (): Promise<void> => {
         maxTokens: 200,
         temperature: 0.8,
       },
-      maxContextTokens: 4000,
       message: 'Can you explain more about supervised vs unsupervised learning?',
+      model: 'gpt-5-nano', // Specify the chat model
+      system: 'You are an expert machine learning tutor who explains concepts clearly with practical examples.',
       userId: 'student_456',
       userName: 'Bob Smith',
     })

@@ -412,8 +412,9 @@ export class MemuClient {
     agentId: string
     agentName?: string
     kwargs?: Record<string, any>
-    maxContextTokens?: number
     message: string
+    model?: string
+    system?: string
     userId: string
     userName?: string
   }): Promise<ChatResponse> {
@@ -425,7 +426,8 @@ export class MemuClient {
         agentId: options.agentId,
         ...(options.agentName != null && { agentName: options.agentName }),
         message: options.message,
-        ...(options.maxContextTokens != null && { maxContextTokens: options.maxContextTokens }),
+        ...(options.system != null && { system: options.system }),
+        ...(options.model != null && { model: options.model }),
         kwargs: options.kwargs ?? {},
       }
 

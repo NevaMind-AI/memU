@@ -156,8 +156,9 @@ export const basicExample = async () => {
         temperature: 0.7,
         maxTokens: 150,
       },
-      maxContextTokens: 4000,
       message: 'What should I prepare for my next hiking trip?',
+      model: 'gpt-4o-mini', // Specify the chat model
+      system: 'You are a helpful hiking assistant with expertise in outdoor activities and safety.',
       userId: 'user',
       userName: 'Johnson',
     })
