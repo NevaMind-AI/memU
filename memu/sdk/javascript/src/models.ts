@@ -1,3 +1,4 @@
+/* eslint-disable perfectionist/sort-modules */
 /**
  * MemU SDK Data Models
  *
@@ -287,25 +288,25 @@ export interface ValidationError {
  * Request model for chat API
  */
 export interface ChatRequest {
-  /** User identifier */
-  userId: string
-  /** User display name */
-  userName?: string
   /** Agent identifier */
   agentId: string
   /** Agent display name */
   agentName?: string
-  /** User message content */
-  message: string
-  /** System message content */
-  system?: string
-  /** Chat LLM model */
-  model?: string
   // Now configure the maximum context token in the web platform.
   // /** Maximum tokens for final chat prompt (current query + short term context + long term memory), correspond to ChatTokenUsage.promptTokens */
   // maxContextTokens?: number
   /** Additional parameters for LLM */
-  kwargs?: Record<string, any>
+  kwargs?: Record<string, unknown>
+  /** User message content */
+  message: string
+  /** Chat LLM model */
+  model?: string
+  /** System message content */
+  system?: string
+  /** User identifier */
+  userId: string
+  /** User display name */
+  userName?: string
 }
 
 /**
@@ -314,24 +315,24 @@ export interface ChatRequest {
 export interface ChatTokenUsageBreakdown {
   /** Tokens used for current query */
   currentQuery?: number
+  /** Tokens used for retrieved memory */
+  retrievedMemory?: number
   /** Tokens used for short term context */
   shortTermContext?: number
   /** Tokens used for user profile */
   userProfile?: number
-  /** Tokens used for retrieved memory */
-  retrievedMemory?: number
 }
 
 /**
  * Token usage information for chat response
  */
 export interface ChatTokenUsage {
+  /** Completion tokens */
+  completionTokens: number
   /** Total prompt tokens */
   promptTokens: number
   /** Breakdown of prompt tokens */
   promptTokensBreakdown?: ChatTokenUsageBreakdown
-  /** Completion tokens */
-  completionTokens: number
   /** Total tokens */
   totalTokens: number
 }
@@ -340,8 +341,8 @@ export interface ChatTokenUsage {
  * Response model for chat API
  */
 export interface ChatResponse {
-  /** AI response message */
-  message: string
   /** Token usage information */
   chatTokenUsage: ChatTokenUsage
+  /** AI response message */
+  message: string
 }
