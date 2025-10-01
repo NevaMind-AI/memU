@@ -17,8 +17,6 @@ import type {
   MemorizeTaskStatusResponse,
   MemorizeTaskSummaryReadyRequest,
   MemorizeTaskSummaryReadyResponse,
-  RelatedClusteredCategoriesRequest,
-  RelatedClusteredCategoriesResponse,
   RelatedMemoryItemsRequest,
   RelatedMemoryItemsResponse,
 } from './models'
@@ -86,22 +84,59 @@ export class MemuClient {
   }
 
   /**
+   * Send a chat message to the agent with memory-enhanced conversation
+   *
+   * @param options Request options
+   * @returns AI response with token usage information
+   */
+  async chat(options: ChatRequest): Promise<ChatResponse> {
+    try {
+      // Create request data
+      const requestData: ChatRequest = {
+        ...options,
+        kwargs: options.kwargs ?? {},
+      }
+
+      console.log(`Sending chat message for user ${options.userId} and agent ${options.agentId}`)
+
+      // Convert to snake_case for API
+      const apiRequestData = this.toSnakeCase(requestData)
+
+      // Make API request
+      const responseData = await this.makeRequest('api/v2/chat', {
+        body: JSON.stringify(apiRequestData),
+        method: 'POST',
+      })
+
+      // Convert response to camelCase
+      const response = this.toCamelCase<ChatResponse>(responseData)
+      console.log(`Chat response received: ${response.message.length} characters`)
+
+      return response
+    }
+    catch (error) {
+      if (error instanceof MemuValidationException
+        || error instanceof MemuAPIException
+        || error instanceof MemuConnectionException
+        || error instanceof MemuAuthenticationException) {
+        throw error
+      }
+      // eslint-disable-next-line ts/restrict-template-expressions
+      throw new MemuValidationException(`Request validation failed: ${error}`)
+    }
+  }
+
+  /**
    * Delete memories for a given user. If agentId is provided, delete only that agent's memories;
    * otherwise delete all memories for the user within the project.
    *
    * @param options Request options
    * @returns Response with deletion status and count
    */
-  async deleteMemories(options: {
-    agentId?: string
-    userId: string
-  }): Promise<DeleteMemoryResponse> {
+  async deleteMemories(options: DeleteMemoryRequest): Promise<DeleteMemoryResponse> {
     try {
       // Create request data
-      const requestData: DeleteMemoryRequest = {
-        userId: options.userId,
-        ...(options.agentId != null && { agentId: options.agentId }),
-      }
+      const requestData: DeleteMemoryRequest = options
 
       console.log(
         `Deleting memories for user ${options.userId}${
@@ -110,18 +145,16 @@ export class MemuClient {
       )
 
       // Convert to snake_case for API
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
+      const apiRequestData = this.toSnakeCase(requestData)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>('api/v2/memory/delete', {
+      const responseData = await this.makeRequest('api/v2/memory/delete', {
         body: JSON.stringify(apiRequestData),
         method: 'POST',
       })
 
       // Convert response to camelCase
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const response = this.toCamelCase(responseData as Record<string, unknown>) as unknown as DeleteMemoryResponse
+      const response = this.toCamelCase<DeleteMemoryResponse>(responseData)
       console.log(
         `Successfully deleted memories: ${response.deletedCount} memories deleted`,
       )
@@ -151,13 +184,12 @@ export class MemuClient {
       console.log(`Getting status for task: ${taskId}`)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>(`api/v2/memory/memorize/status/${taskId}`, {
+      const responseData = await this.makeRequest(`api/v2/memory/memorize/status/${taskId}`, {
         method: 'GET',
       })
 
       // Convert response to camelCase
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const response = this.toCamelCase(responseData as Record<string, unknown>) as unknown as MemorizeTaskStatusResponse
+      const response = this.toCamelCase<MemorizeTaskStatusResponse>(responseData)
       console.log(`Task ${taskId} status: ${response.status}`)
 
       return response
@@ -193,18 +225,16 @@ export class MemuClient {
       console.log(`Getting summary ready status for task: ${taskId}`)
 
       // Convert to snake_case for API
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
+      const apiRequestData = this.toSnakeCase(requestData)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>(`api/v1/memory/memorize/status/${taskId}/summary`, {
+      const responseData = await this.makeRequest(`api/v1/memory/memorize/status/${taskId}/summary`, {
         body: JSON.stringify(apiRequestData),
         method: 'POST',
       })
 
       // Convert response to camelCase
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const response = this.toCamelCase(responseData as Record<string, unknown>) as unknown as MemorizeTaskSummaryReadyResponse
+      const response = this.toCamelCase<MemorizeTaskSummaryReadyResponse>(responseData)
       console.log(`Task ${taskId} summary ready: ${response.allReady}`)
 
       return response
@@ -270,18 +300,16 @@ export class MemuClient {
       console.log(`Starting memorization for user ${userId} and agent ${agentId}`)
 
       // Convert to snake_case for API
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
+      const apiRequestData = this.toSnakeCase(requestData)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>('api/v2/memory/memorize', {
+      const responseData = await this.makeRequest('api/v2/memory/memorize', {
         body: JSON.stringify(apiRequestData),
         method: 'POST',
       })
 
       // Convert response to camelCase
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const response = this.toCamelCase(responseData as Record<string, unknown>) as unknown as MemorizeResponse
+      const response = this.toCamelCase<MemorizeResponse>(responseData)
       console.log(`Memorization task started: ${response.taskId}`)
 
       return response
@@ -304,32 +332,25 @@ export class MemuClient {
    * @param options Request options
    * @returns Default categories information
    */
-  async retrieveDefaultCategories(options: {
-    agentId?: string
-    userId: string
-    wantMemoryItems?: boolean
-  }): Promise<DefaultCategoriesResponse> {
+  async retrieveDefaultCategories(options: DefaultCategoriesRequest): Promise<DefaultCategoriesResponse> {
     try {
       // Create request data
       const requestData: DefaultCategoriesRequest = {
-        userId: options.userId,
-        ...(options.agentId != null && { agentId: options.agentId }),
-        wantMemoryItems: options.wantMemoryItems || false,
+        ...options,
+        wantMemoryItems: options.wantMemoryItems ?? false,
       }
 
       // Convert to snake_case for API
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
+      const apiRequestData = this.toSnakeCase(requestData)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>('api/v2/memory/retrieve/default-categories', {
+      const responseData = await this.makeRequest('api/v2/memory/retrieve/default-categories', {
         body: JSON.stringify(apiRequestData),
         method: 'POST',
       })
 
       // Convert response to camelCase
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const response = this.toCamelCase(responseData as Record<string, unknown>) as unknown as DefaultCategoriesResponse
+      const response = this.toCamelCase<DefaultCategoriesResponse>(responseData)
       console.log(`Retrieved ${response.totalCategories} categories`)
 
       return response
@@ -352,101 +373,29 @@ export class MemuClient {
    * @param options Request options
    * @returns Related memory items
    */
-  async retrieveRelatedMemoryItems(options: {
-    agentId?: string
-    includeCategories?: string[]
-    minSimilarity?: number
-    query: string
-    topK?: number
-    userId: string
-  }): Promise<RelatedMemoryItemsResponse> {
+  async retrieveRelatedMemoryItems(options: RelatedMemoryItemsRequest): Promise<RelatedMemoryItemsResponse> {
     try {
       // Create request data
       const requestData: RelatedMemoryItemsRequest = {
-        userId: options.userId,
-        ...(options.agentId != null && { agentId: options.agentId }),
+        ...options,
         minSimilarity: options.minSimilarity ?? 0.3,
-        query: options.query,
         topK: options.topK ?? 10,
-        ...(options.includeCategories && { includeCategories: options.includeCategories }),
       }
 
       console.log(`Retrieving related memories for user ${options.userId}, query: '${options.query}'`)
 
       // Convert to snake_case for API
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
+      const apiRequestData = this.toSnakeCase(requestData)
 
       // Make API request
-      const responseData = await this.makeRequest<unknown>('api/v2/memory/retrieve/related-memory-items', {
+      const responseData = await this.makeRequest('api/v2/memory/retrieve/related-memory-items', {
         body: JSON.stringify(apiRequestData),
         method: 'POST',
       })
 
       // Convert response to camelCase
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const response = this.toCamelCase(responseData as Record<string, unknown>) as unknown as RelatedMemoryItemsResponse
+      const response = this.toCamelCase<RelatedMemoryItemsResponse>(responseData)
       console.log(`Retrieved ${response.totalFound} related memories`)
-
-      return response
-    }
-    catch (error) {
-      if (error instanceof MemuValidationException
-        || error instanceof MemuAPIException
-        || error instanceof MemuConnectionException
-        || error instanceof MemuAuthenticationException) {
-        throw error
-      }
-      // eslint-disable-next-line ts/restrict-template-expressions
-      throw new MemuValidationException(`Request validation failed: ${error}`)
-    }
-  }
-
-  /**
-   * Send a chat message to the agent with memory-enhanced conversation
-   *
-   * @param options Request options
-   * @returns AI response with token usage information
-   */
-  async chat(options: {
-    agentId: string
-    agentName?: string
-    kwargs?: Record<string, any>
-    message: string
-    model?: string
-    system?: string
-    userId: string
-    userName?: string
-  }): Promise<ChatResponse> {
-    try {
-      // Create request data
-      const requestData: ChatRequest = {
-        userId: options.userId,
-        ...(options.userName != null && { userName: options.userName }),
-        agentId: options.agentId,
-        ...(options.agentName != null && { agentName: options.agentName }),
-        message: options.message,
-        ...(options.system != null && { system: options.system }),
-        ...(options.model != null && { model: options.model }),
-        kwargs: options.kwargs ?? {},
-      }
-
-      console.log(`Sending chat message for user ${options.userId} and agent ${options.agentId}`)
-
-      // Convert to snake_case for API
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const apiRequestData = this.toSnakeCase(requestData as unknown as Record<string, unknown>)
-
-      // Make API request
-      const responseData = await this.makeRequest<unknown>('api/v2/chat', {
-        body: JSON.stringify(apiRequestData),
-        method: 'POST',
-      })
-
-      // Convert response to camelCase
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type
-      const response = this.toCamelCase(responseData as Record<string, unknown>) as unknown as ChatResponse
-      console.log(`Chat response received: ${response.message.length} characters`)
 
       return response
     }
@@ -470,7 +419,7 @@ export class MemuClient {
    * @returns Response data
    */
   // eslint-disable-next-line sonarjs/cognitive-complexity
-  private async makeRequest<T = unknown>(path: string, config: RequestInit): Promise<T> {
+  private async makeRequest<T = Record<string, unknown>>(path: string, config: RequestInit): Promise<T> {
     const url = new URL(path, this.baseUrl)
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
@@ -573,18 +522,19 @@ export class MemuClient {
    * @param obj Object to convert
    * @returns Object with camelCase keys
    */
-  private toCamelCase(obj: Record<string, unknown>): Record<string, unknown> {
+  private toCamelCase<T = unknown>(obj: Record<string, unknown>): T {
     if (obj == null || typeof obj !== 'object')
       return obj
 
     if (Array.isArray(obj))
-      // eslint-disable-next-line @masknet/type-no-force-cast-via-top-type, @masknet/type-prefer-return-type-annotation
-      return obj.map(item => this.toCamelCase(item as Record<string, unknown>)) as unknown as Record<string, unknown>
+      // eslint-disable-next-line @masknet/type-prefer-return-type-annotation
+      return obj.map(item => this.toCamelCase(item as Record<string, unknown>)) as T
 
     return Object.fromEntries(
       Object.entries(obj)
         .map(([key, value]) => [key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()), value]),
-    )
+    // eslint-disable-next-line @masknet/type-prefer-return-type-annotation
+    ) as T
   }
 
   /**
@@ -593,7 +543,7 @@ export class MemuClient {
    * @param obj Object to convert
    * @returns Object with snake_case keys
    */
-  private toSnakeCase(obj: Record<string, unknown>): Record<string, unknown> {
+  private toSnakeCase(obj: object): Record<string, unknown> {
     return Object.fromEntries(
       Object.entries(obj)
         .map(([key, value]) => [key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`), value]),
