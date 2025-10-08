@@ -174,7 +174,8 @@ class MemuClient:
                 # Handle HTTP status codes
                 if response.status_code == 200:
                     if stream:
-                        return response.iter_lines()
+                        # return response.iter_lines()
+                        return self._make_safe_response_iterator(response)
                     else:
                         return response.json()
                 elif response.status_code == 422:
@@ -221,6 +222,16 @@ class MemuClient:
             ):
                 # Don't retry these errors
                 raise
+
+    def _make_safe_response_iterator(self, response: httpx.Response) -> Iterator[str]:
+        """
+        Make a safe response iterator
+        """
+        try:
+            for line in response.iter_lines():
+                yield line
+        finally:
+            response.close()
 
     def memorize_conversation(
         self,

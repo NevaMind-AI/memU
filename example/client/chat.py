@@ -106,31 +106,31 @@ def main():
     ]
 
     # Conduct the chat session
-    # for i, example in enumerate(chat_examples[:3], 1):
-    #     print(f"\n👤 User Message #{i}: {example['message']}")
-    #     print(f"   Context: {example['description']}")
-    #     print(f"   LLM Parameters: {example['kwargs']}")
+    for i, example in enumerate(chat_examples[:3], 1):
+        print(f"\n👤 User Message #{i}: {example['message']}")
+        print(f"   Context: {example['description']}")
+        print(f"   LLM Parameters: {example['kwargs']}")
         
-    #     try:
-    #         # Send chat message
-    #         response = memu_client.chat(
-    #             user_id=user_id,
-    #             user_name=user_name,
-    #             agent_id=agent_id,
-    #             agent_name=agent_name,
-    #             message=example['message'],
-    #             max_context_tokens=4000,
-    #             **example['kwargs']
-    #         )
+        try:
+            # Send chat message
+            response = memu_client.chat(
+                user_id=user_id,
+                user_name=user_name,
+                agent_id=agent_id,
+                agent_name=agent_name,
+                message=example['message'],
+                max_context_tokens=4000,
+                **example['kwargs']
+            )
             
-    #         # Print detailed response
-    #         print_chat_response(response, i)
+            # Print detailed response
+            print_chat_response(response, i)
             
-    #     except Exception as e:
-    #         print(f"   ❌ Chat error: {e}")
+        except Exception as e:
+            print(f"   ❌ Chat error: {e}")
             
-    #     # Small delay between messages
-    #     time.sleep(1)
+        # Small delay between messages
+        time.sleep(1)
 
     # Conduct the chat session with stream
     for i, example in enumerate(chat_examples[3:], 4):
