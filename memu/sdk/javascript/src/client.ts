@@ -8,6 +8,7 @@
 import type {
   ChatRequest,
   ChatResponse,
+  ChatResponseStream,
   DefaultCategoriesRequest,
   DefaultCategoriesResponse,
   DeleteMemoryRequest,
@@ -87,9 +88,94 @@ export class MemuClient {
    * Send a chat message to the agent with memory-enhanced conversation
    *
    * @param options Request options
-   * @returns AI response with token usage information
+   * @returns AI response with token usage information or stream response
    */
-  async chat(options: ChatRequest): Promise<ChatResponse> {
+  async chat(options: ChatRequest): Promise<ChatResponse | AsyncGenerator<ChatResponseStream, void, unknown>> {
+    if (options.stream) {
+      return this.chatStream(options)
+    }
+    return this.chatNonStream(options)
+  }
+
+  /**
+   * Send a chat message with streaming response
+   *
+   * @param options Request options
+   * @returns Stream response generator
+   */
+  private async * chatStream(options: ChatRequest): AsyncGenerator<ChatResponseStream, void, unknown> {
+    // Create request data with stream enabled
+    const requestData: ChatRequest = {
+      ...options,
+      stream: true,
+      kwargs: { ...options.kwargs, stream: true },
+    }
+
+    console.log(`Sending streaming chat message for user ${options.userId} and agent ${options.agentId}`)
+
+    // Convert to snake_case for API
+    const apiRequestData = this.toSnakeCase(requestData)
+
+    // Make streaming API request
+    const response = await this.makeStreamRequest('api/v2/chat', {
+      body: JSON.stringify(apiRequestData),
+      method: 'POST',
+    })
+
+    try {
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new MemuConnectionException('No response body reader available')
+      }
+
+      while (true) {
+        const { done, value } = await reader.read()
+        
+        if (done) {
+          break
+        }
+
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          if (!line.trim()) {
+            continue
+          }
+
+          if (line === 'data: [DONE]') {
+            return
+          }
+
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6)
+            try {
+              const chunkData = JSON.parse(dataStr)
+              const response = this.toCamelCase<ChatResponseStream>(chunkData)
+              yield response
+            } catch (jsonError) {
+              console.error(`Skipping bad chunk with JSON decode error: ${dataStr}`)
+              continue
+            }
+          }
+        }
+      }
+    } finally {
+      // Clean up response
+      // Note: Don't cancel the body as the reader might have already consumed it
+      // and the stream would be locked
+    }
+  }
+
+  /**
+   * Send a chat message with non-streaming response
+   *
+   * @param options Request options
+   * @returns Chat response
+   */
+  private async chatNonStream(options: ChatRequest): Promise<ChatResponse> {
     try {
       // Create request data
       const requestData: ChatRequest = {
@@ -409,6 +495,73 @@ export class MemuClient {
       // eslint-disable-next-line ts/restrict-template-expressions
       throw new MemuValidationException(`Request validation failed: ${error}`)
     }
+  }
+
+  /**
+   * Make HTTP streaming request for chat API
+   *
+   * @param path url path
+   * @param config request init
+   * @returns Response with stream body
+   */
+  private async makeStreamRequest(path: string, config: RequestInit): Promise<Response> {
+    const url = new URL(path, this.baseUrl)
+
+    console.log(`Making streaming ${config.method?.toUpperCase()} request to ${url}`)
+
+    const response = await fetch(url, {
+      ...config,
+      headers: {
+        'Accept': 'text/event-stream',
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Cache-Control': 'no-cache',
+        'Content-Type': 'application/json',
+        'User-Agent': 'MemU-JavaScript-SDK/0.2.1',
+        ...config.headers,
+      },
+      signal: this.timeout
+        ? config.signal
+          ? AbortSignal.any([config.signal, AbortSignal.timeout(this.timeout)])
+          : AbortSignal.timeout(this.timeout)
+        : undefined,
+    })
+
+    // Handle HTTP status codes
+    if (!response.ok) {
+      let errorData: Record<string, unknown> | undefined
+
+      try {
+        errorData = await response.json() as Record<string, unknown>
+      }
+      catch {}
+
+      // Handle specific HTTP status codes
+      switch (response.status) {
+        case 422:
+          throw new MemuValidationException(
+            `Validation error: ${JSON.stringify(errorData)}`,
+            response.status,
+            errorData,
+          )
+        case 401:
+          throw new MemuAuthenticationException(
+            'Authentication failed. Check your API key.',
+            response.status,
+          )
+        case 403:
+          throw new MemuAuthenticationException(
+            'Access forbidden. Check your API key permissions.',
+            response.status,
+          )
+        default:
+          throw new MemuAPIException(
+            `API request failed with status ${response.status}: ${JSON.stringify(errorData)}`,
+            response.status,
+          )
+      }
+    }
+
+    return response
   }
 
   /**

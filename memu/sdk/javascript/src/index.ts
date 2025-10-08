@@ -16,6 +16,7 @@ export type {
   CategoryResponse,
   ChatRequest,
   ChatResponse,
+  ChatResponseStream,
   ChatTokenUsage,
   ChatTokenUsageBreakdown,
   ClusteredCategory,

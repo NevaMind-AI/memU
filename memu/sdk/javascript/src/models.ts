@@ -301,6 +301,8 @@ export interface ChatRequest {
   message: string
   /** Chat LLM model */
   model?: string
+  /** Whether to use stream mode */
+  stream?: boolean
   /** System message content */
   system?: string
   /** User identifier */
@@ -345,4 +347,18 @@ export interface ChatResponse {
   chatTokenUsage: ChatTokenUsage
   /** AI response message */
   message: string
+}
+
+/**
+ * Response model for chat API when using stream
+ */
+export interface ChatResponseStream {
+  /** AI response message, by chunk */
+  message?: string
+  /** Error message */
+  error?: string
+  /** Token usage information, only in last chunk */
+  chatTokenUsage?: ChatTokenUsage
+  /** Whether is the end of the stream */
+  streamEnded: boolean
 }
