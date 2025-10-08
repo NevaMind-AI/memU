@@ -516,7 +516,7 @@ export class MemuClient {
         'Authorization': `Bearer ${this.apiKey}`,
         'Cache-Control': 'no-cache',
         'Content-Type': 'application/json',
-        'User-Agent': 'MemU-JavaScript-SDK/0.2.1',
+        'User-Agent': 'MemU-JavaScript-SDK/0.2.2',
         ...config.headers,
       },
       signal: this.timeout
@@ -585,7 +585,7 @@ export class MemuClient {
             'Accept': 'application/json',
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json',
-            'User-Agent': 'MemU-JavaScript-SDK/0.2.1',
+            'User-Agent': 'MemU-JavaScript-SDK/0.2.2',
             ...config.headers,
           },
           signal: this.timeout
