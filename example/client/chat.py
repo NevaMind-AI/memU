@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Iterator
+from typing import ContextManager, Iterator
 from memu import MemuClient
 from memu.sdk.python.models import ChatResponse, ChatResponseStream
 
@@ -25,22 +25,24 @@ def print_chat_response(response: ChatResponse, message_num: int):
         print(f"     - Retrieved Memory: {breakdown.retrieved_memory}")
 
 
-def print_chat_response_stream(response: Iterator[ChatResponseStream], message_num: int):
+def print_chat_response_stream(response: ContextManager[Iterator[ChatResponseStream]], message_num: int):
     print(f"\n🤖 Chat Response #{message_num} (Stream):")
     print("   💬", end="", flush=True)
 
     chat_token_usage = None
 
-    for chunk in response:
-        if chunk.error:
-            print(f"   ❌ Error: {chunk.error}")
-            break
-        if chunk.message:
-            print(f"{chunk.message}", end="", flush=True)
-        if chunk.chat_token_usage:
-            chat_token_usage = chunk.chat_token_usage
-        if chunk.stream_ended:
-            print()
+    # Context manager version is safer for it ensures the .close() in the finally block is called
+    with response as response_iterator:
+        for chunk in response_iterator:
+            if chunk.error:
+                print(f"   ❌ Error: {chunk.error}")
+                break
+            if chunk.message:
+                print(f"{chunk.message}", end="", flush=True)
+            if chunk.chat_token_usage:
+                chat_token_usage = chunk.chat_token_usage
+            if chunk.stream_ended:
+                print()
 
     if chat_token_usage:
         print("\n📊 Token Usage:")
