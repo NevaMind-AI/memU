@@ -145,39 +145,6 @@ export const basicExample = async () => {
       })
     })
 
-    console.log()
-
-    // Example 7: Chat with memory-enhanced conversation
-    console.log('💬 Starting memory-enhanced chat...')
-    const chatResponse = await client.chat({
-      agentId: 'assistant',
-      agentName: 'Assistant',
-      kwargs: {
-        temperature: 0.7,
-        maxTokens: 150,
-      },
-      message: 'What should I prepare for my next hiking trip?',
-      model: 'gpt-4o-mini', // Specify the chat model
-      system: 'You are a helpful hiking assistant with expertise in outdoor activities and safety.',
-      userId: 'user',
-      userName: 'Johnson',
-    })
-
-    console.log(`🤖 AI Response: ${chatResponse.message}`)
-    console.log('📊 Token Usage:')
-    console.log(`   Total Tokens: ${chatResponse.chatTokenUsage.totalTokens}`)
-    console.log(`   Prompt Tokens: ${chatResponse.chatTokenUsage.promptTokens}`)
-    console.log(`   Completion Tokens: ${chatResponse.chatTokenUsage.completionTokens}`)
-    
-    if (chatResponse.chatTokenUsage.promptTokensBreakdown) {
-      const breakdown = chatResponse.chatTokenUsage.promptTokensBreakdown
-      console.log('   Token Breakdown:')
-      console.log(`     - Current Query: ${breakdown.currentQuery || 0}`)
-      console.log(`     - Short Term Context: ${breakdown.shortTermContext || 0}`)
-      console.log(`     - User Profile: ${breakdown.userProfile || 0}`)
-      console.log(`     - Retrieved Memory: ${breakdown.retrievedMemory || 0}`)
-    }
-
     console.log('\n✨ Example completed successfully!')
   }
   catch (error) {

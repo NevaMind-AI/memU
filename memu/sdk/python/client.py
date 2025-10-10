@@ -6,7 +6,9 @@ Provides HTTP client for interacting with MemU API services.
 
 from datetime import datetime
 import os
-from typing import Any, Dict, List, Optional
+import json
+from typing import Any, Dict, Iterator, List, Optional, ContextManager
+from contextlib import contextmanager
 from urllib.parse import urljoin
 
 import httpx
@@ -21,6 +23,7 @@ from .exceptions import (
 from .models import (
     ChatRequest,
     ChatResponse,
+    ChatResponseStream,
     DefaultCategoriesRequest,
     DefaultCategoriesResponse,
     DeleteMemoryRequest,
@@ -118,8 +121,9 @@ class MemuClient:
         endpoint: str,
         json_data: Dict[str, Any] = None,
         params: Dict[str, Any] = None,
+        stream: Optional[bool] = False,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> Dict[str, Any] | httpx.Response:
         """
         Make HTTP request with error handling and retries
 
@@ -149,13 +153,35 @@ class MemuClient:
                     f"Making {method} request to {url} (attempt {attempt + 1})"
                 )
 
-                response = self._client.request(
-                    method=method, url=url, json=json_data, params=params, **kwargs
-                )
+                # Configure streaming if needed
+                if stream:
+                    # response = self._client.stream(
+                    #     method=method, url=url, json=json_data, params=params, **kwargs
+                    # )
+
+                    # WARNING: This bypassed the context manager, which may cause unexpected behavior
+                    request = self._client.build_request(
+                        method=method, url=url, json=json_data, params=params, **kwargs
+                    )
+                    response = self._client.send(
+                        request=request,
+                        stream=True,
+                    )
+                else:
+                    response = self._client.request(
+                        method=method, url=url, json=json_data, params=params, **kwargs
+                    )
 
                 # Handle HTTP status codes
                 if response.status_code == 200:
-                    return response.json()
+                    if stream:
+                        # return response.iter_lines()
+                        # return self._make_safe_response_iterator(response)
+
+                        # Let the downstream function handle the context manager and .close()
+                        return response
+                    else:
+                        return response.json()
                 elif response.status_code == 422:
                     error_data = response.json()
                     raise MemuValidationException(
@@ -200,6 +226,16 @@ class MemuClient:
             ):
                 # Don't retry these errors
                 raise
+
+    def _make_safe_response_iterator(self, response: httpx.Response) -> Iterator[str]:
+        """
+        Make a safe response iterator
+        """
+        try:
+            for line in response.iter_lines():
+                yield line
+        finally:
+            response.close()
 
     def memorize_conversation(
         self,
@@ -537,8 +573,10 @@ class MemuClient:
         agent_name: Optional[str] = None,
         system: Optional[str] = None,
         model: Optional[str] = None,
+        stream: Optional[bool] = False,
         **kwargs,
-    ) -> ChatResponse:
+    # ) -> ChatResponse | Iterator[ChatResponseStream]:
+    ) -> ChatResponse | ContextManager[Iterator[ChatResponseStream]]:
         """
         Send a chat message to the agent with memory-enhanced conversation
         
@@ -550,6 +588,7 @@ class MemuClient:
             agent_name: Agent display name (optional)
             system: System message content (optional)
             model: Chat LLM model (optional)
+            stream: Whether to use stream (optional)
             **kwargs: Additional parameters for LLM (e.g., temperature, max_tokens, etc.)
         
         Returns:
@@ -561,6 +600,9 @@ class MemuClient:
             MemuConnectionException: For connection errors
         """
         try:
+            if stream:
+                kwargs["stream"] = True
+
             # Create request model
             request_data = ChatRequest(
                 user_id=user_id,
@@ -582,13 +624,87 @@ class MemuClient:
                 method="POST",
                 endpoint="api/v2/chat",
                 json_data=request_data.model_dump(),
+                stream=stream,
             )
 
             # Parse response
-            response = ChatResponse(**response_data)
-            logger.info(f"Chat response received: {len(response.message)} characters")
+            if stream:
+                # response = self._handle_stream_response(response_data)
+                response = self._response_to_generator(response_data)
+            else:
+                response = ChatResponse(**response_data)
+                logger.info(f"Chat response received: {len(response.message)} characters")
 
             return response
 
         except ValidationError as e:
             raise MemuValidationException(f"Request validation failed: {str(e)}")
+
+
+    @contextmanager
+    def _response_to_generator(self, response: httpx.Response) -> Iterator[ChatResponseStream]:
+        """
+        Handle stream response from chat API
+        """
+        try:
+            def _response_generator() -> Iterator[str]:
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+                    
+                    if line == "data: [DONE]":
+                        break
+                    
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        try:
+                            chunk_response = ChatResponseStream(**json.loads(data_str))
+                            yield chunk_response
+                        except json.JSONDecodeError:
+                            logger.error(f"Skipping bad chunk with JSON decode error: {data_str}")
+                            continue
+                        except ValidationError:
+                            logger.error(f"Skipping bad chunk with validation error: {data_str}")
+                            continue
+                        except Exception as e:
+                            logger.error(f"Skipping bad chunk with error {str(e)}: {data_str}")
+                            continue
+
+            yield _response_generator()
+
+        finally:
+            response.close()
+
+    
+    def _handle_stream_response(self, response_generator: Iterator[str]) -> Iterator[ChatResponseStream]:
+        """
+        Handle stream response from chat API
+
+        Args:
+            response: HTTP response
+
+        Returns:
+            Iterator[ChatResponseStream]: Iterator of chat response streams
+        """
+
+        for line in response_generator:
+            if not line:
+                continue
+            
+            if line == "data: [DONE]":
+                break
+            
+            if line.startswith("data: "):
+                data_str = line[6:]
+                try:
+                    chunk_response = ChatResponseStream(**json.loads(data_str))
+                    yield chunk_response
+                except json.JSONDecodeError:
+                    logger.error(f"Skipping bad chunk with JSON decode error: {data_str}")
+                    continue
+                except ValidationError:
+                    logger.error(f"Skipping bad chunk with validation error: {data_str}")
+                    continue
+                except Exception as e:
+                    logger.error(f"Skipping bad chunk with error {str(e)}: {data_str}")
+                    continue

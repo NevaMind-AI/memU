@@ -262,3 +262,12 @@ class ChatResponse(BaseModel):
 
     message: str = Field(..., description="AI response message")
     chat_token_usage: ChatTokenUsage = Field(..., description="Token usage information")
+
+
+class ChatResponseStream(BaseModel):
+    """Response model for chat API when using stream"""
+
+    message: Optional[str] = Field(None, description="AI response message, by chunk")
+    error: Optional[str] = Field(None, description="Error message")
+    chat_token_usage: Optional[ChatTokenUsage] = Field(None, description="Token usage information, only in last chunk")
+    stream_ended: bool = Field(..., description="Whether is the end of the stream")

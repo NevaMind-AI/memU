@@ -1,10 +1,11 @@
 import os
 import time
-
+from typing import ContextManager, Iterator
 from memu import MemuClient
+from memu.sdk.python.models import ChatResponse, ChatResponseStream
 
 
-def print_chat_response(response, message_num: int):
+def print_chat_response(response: ChatResponse, message_num: int):
     """Print chat response with detailed token usage."""
     print(f"\n🤖 Chat Response #{message_num}:")
     print(f"   {response.message}")
@@ -22,6 +23,40 @@ def print_chat_response(response, message_num: int):
         print(f"     - Short Term Context: {breakdown.short_term_context}")  
         print(f"     - User Profile: {breakdown.user_profile}")
         print(f"     - Retrieved Memory: {breakdown.retrieved_memory}")
+
+
+def print_chat_response_stream(response: ContextManager[Iterator[ChatResponseStream]], message_num: int):
+    print(f"\n🤖 Chat Response #{message_num} (Stream):")
+    print("   💬", end="", flush=True)
+
+    chat_token_usage = None
+
+    # Context manager version is safer for it ensures the .close() in the finally block is called
+    with response as response_iterator:
+        for chunk in response_iterator:
+            if chunk.error:
+                print(f"   ❌ Error: {chunk.error}")
+                break
+            if chunk.message:
+                print(f"{chunk.message}", end="", flush=True)
+            if chunk.chat_token_usage:
+                chat_token_usage = chunk.chat_token_usage
+            if chunk.stream_ended:
+                print()
+
+    if chat_token_usage:
+        print("\n📊 Token Usage:")
+        print(f"   Total Tokens: {chat_token_usage.total_tokens}")
+        print(f"   Prompt Tokens: {chat_token_usage.prompt_tokens}")
+        print(f"   Completion Tokens: {chat_token_usage.completion_tokens}")
+        
+        if chat_token_usage.prompt_tokens_breakdown:
+            breakdown = chat_token_usage.prompt_tokens_breakdown
+            print("   📈 Token Breakdown:")
+            print(f"     - Current Query: {breakdown.current_query}")
+            print(f"     - Short Term Context: {breakdown.short_term_context}")  
+            print(f"     - User Profile: {breakdown.user_profile}")
+            print(f"     - Retrieved Memory: {breakdown.retrieved_memory}")
 
 
 def main():
@@ -73,7 +108,7 @@ def main():
     ]
 
     # Conduct the chat session
-    for i, example in enumerate(chat_examples, 1):
+    for i, example in enumerate(chat_examples[:3], 1):
         print(f"\n👤 User Message #{i}: {example['message']}")
         print(f"   Context: {example['description']}")
         print(f"   LLM Parameters: {example['kwargs']}")
@@ -92,6 +127,34 @@ def main():
             
             # Print detailed response
             print_chat_response(response, i)
+            
+        except Exception as e:
+            print(f"   ❌ Chat error: {e}")
+            
+        # Small delay between messages
+        time.sleep(1)
+
+    # Conduct the chat session with stream
+    for i, example in enumerate(chat_examples[3:], 4):
+        print(f"\n👤 User Message #{i}: {example['message']}")
+        print(f"   Context: {example['description']}")
+        print(f"   LLM Parameters: {example['kwargs']}")
+        
+        try:
+            # Send chat message
+            response = memu_client.chat(
+                user_id=user_id,
+                user_name=user_name,
+                agent_id=agent_id,
+                agent_name=agent_name,
+                message=example['message'],
+                max_context_tokens=4000,
+                **example['kwargs'],
+                stream=True,
+            )
+            
+            # Print detailed response
+            print_chat_response_stream(response, i)
             
         except Exception as e:
             print(f"   ❌ Chat error: {e}")

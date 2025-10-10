@@ -7,6 +7,7 @@
 
 import type {
   ChatResponse,
+  ChatResponseStream,
   DefaultCategoriesResponse,
   MemorizeResponse,
   MemorizeTaskStatusResponse,
@@ -231,6 +232,52 @@ export const typescriptExample = async (): Promise<void> => {
     }
 
     console.log('\n✨ TypeScript example completed successfully!')
+
+    // Example 7: Streaming chat example
+    console.log('\n🌊 Starting streaming chat example...')
+    const streamResponse = await client.chat({
+      agentId: 'ml_tutor',
+      agentName: 'ML Tutor',
+      kwargs: {
+        maxTokens: 300,
+        temperature: 0.7,
+      },
+      message: 'Tell me a detailed explanation about neural networks and how they work.',
+      model: 'gpt-3.5-turbo',
+      stream: true, // Enable streaming
+      system: 'You are an expert machine learning tutor. Provide detailed explanations.',
+      userId: 'student_456',
+      userName: 'Bob Smith',
+    }) as AsyncGenerator<ChatResponseStream, void, unknown>
+
+    console.log('🤖 Streaming AI Response:')
+    let fullStreamMessage = ''
+
+    for await (const chunk of streamResponse) {
+      if (chunk.error) {
+        console.error(`❌ Stream error: ${chunk.error}`)
+        break
+      }
+
+      if (chunk.message) {
+        process.stdout.write(chunk.message)
+        fullStreamMessage += chunk.message
+      }
+
+      if (chunk.streamEnded) {
+        console.log('\n\n🏁 Stream ended.')
+        if (chunk.chatTokenUsage) {
+          console.log('📊 Final Token Usage:')
+          console.log(`   Total Tokens: ${chunk.chatTokenUsage.totalTokens}`)
+          console.log(`   Prompt Tokens: ${chunk.chatTokenUsage.promptTokens}`)
+          console.log(`   Completion Tokens: ${chunk.chatTokenUsage.completionTokens}`)
+        }
+        break
+      }
+    }
+
+    console.log(`✅ Full streamed message received: ${fullStreamMessage.length} characters`)
+    console.log('\n✨ TypeScript example with streaming completed successfully!')
   }
   catch (error) {
     console.error('❌ Error occurred:')
