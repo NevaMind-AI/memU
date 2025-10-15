@@ -11,18 +11,10 @@
 [![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
 </div>
 
-**MemU** is an open-source memory framework for AI companions—high accuracy, fast retrieval, low cost. It acts as an intelligent "memory folder" that adapts to different AI companion scenarios.
-
- With **memU**, you can build AI companions that truly remember you. They learn who you are, what you care about, and grow alongside you through every interaction. 
+**MemU** is a next-generation Agentic Memory System that redesigns Agent memory architecture from a memory-centric perspective—abstracting it as a dynamically evolving data layer that intelligently organizes and retrieves relevant information based on context. Through adaptive retrieval and backtracking mechanisms, it dynamically extracts the most pertinent information. 
+The system employs a **Unified Multimodal Memory** architecture with native support for diverse data types including text, images, and audio, forming a cohesive memory representation.
 
  Visit our homepage: [memu.pro](https://memu.pro/)
-
-### 🥇 92% Accuracy - 💰 90% Cost Reduction - 🤖 AI Companion Specialized
-- ✅ **AI Companion Specialization** - Adapt to AI companions application
-- ✅ **92% Accuracy** - State-of-the-art score in Locomo benchmark
-- ✅ **Up to 90% Cost Reduction** - Through optimized online platform
-- ✅ **Advanced Retrieval Strategies** - Multiple methods including semantic search, hybrid search, contextual retrieval
-- ✅ **24/7 Support** - For enterprise customers
 
 ---
 
