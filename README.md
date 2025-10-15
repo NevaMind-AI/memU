@@ -2,7 +2,7 @@
 
 ![MemU Banner](assets/banner.png)
 
-### MemU: The Next-Gen Memory Framework for AI Companions
+### MemU: The Next-Gen Agentic Memory System
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
