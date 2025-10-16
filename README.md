@@ -115,40 +115,6 @@ See [self hosting README](README.self_host.md)
 </div>
 
 ---
-
-### Memory as file system
-
-#### **Organize** - Autonomous Memory File Management
-Your memories are structured as intelligent folders managed by a memory agent. We do not do explicit modeling for memories. The memory agent automatically decides what to record, modify, or archive. Think of it as having a personal librarian who knows exactly how to organize your thoughts.
-
-#### **Link** - Interconnected Knowledge Graph
-Memories don't exist in isolation. Our system automatically creates meaningful connections between related memories, building a rich network of hyperlinked documents and transforming memory discovery from search into effortless recall.
-
-#### **Evolve** - Continuous Self-Improvement
-Even when offline, your memory agent keeps working. It generates new insights by analyzing existing memories, identifies patterns, and creates summary documents through self-reflection. Your knowledge base becomes smarter over time, not just larger.
-
-#### **Never Forget** - Adaptive Forgetting Mechanism
-The memory agent automatically prioritizes information based on usage patterns. Recently accessed memories remain highly accessible, while less relevant content is deprioritized or forgotten. This creates a personalized information hierarchy that evolves with your needs.
-
----
-
-## 😺 Advantages
-
-### Higher Memory Accuracy
-MemU achieves 92.09% average accuracy in Locomo dataset across all reasoning tasks, significantly outperforming competitors. Technical Report will be published soon!
-
-![Memory Accuracy Comparison](assets/benchmark.png)
-<em>(1) Single-hop questions require answers based on a single session; (2) Multi-hop questions require synthesizing information from multiple different sessions; (3) Temporal reasoning questions can be answered through temporal reasoning and capturing time-related data cues within the conversation; (4) Open-domain knowledge questions can be answered by integrating a speaker’s provided information with external knowledge such as commonsense or world facts; </em>
-
-### Fast Retrieval
-
-We categorize important information into documents, and during retrieval, we only need to find the relevant document content, eliminating the need for extensive embedding searches for fragmented sentences.
-
-### Low cost
-
-We can process hundreds of conversation turns at once, eliminating the need for developers to repeatedly call memory functions, thus saving users from wasting tokens on multiple memory operations. See [best practice](https://memu.pro/blog/memu-best-practice).
-
----
 ## 🎓 **Use Cases**
 
 | | | | |
