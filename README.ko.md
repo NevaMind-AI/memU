@@ -119,8 +119,8 @@ memu_client.memorize_conversation(
 
 | | | | | 
 |:---:|:---:|:---:|:---:| 
-| <img src="assets/usecase/ai\_companion-0000.jpg" width="150" height="200"\><br>**الرفيق الذكي** | <img src="assets/usecase/ai\_role\_play-0000.jpg" width="150" height="200"\><br>**لعب الأدوار الذكي** | <img src="assets/usecase/ai\_ip-0000.png" width="150" height="200"\><br>**شخصيات الملكية الفكرية الذكية** | <img src="assets/usecase/ai\_edu-0000.jpg" width="150" height="200"\><br>**التعليم الذكي** | | <img src="assets/usecase/ai\_therapy-0000.jpg" width="150" height="200"\><br>**العلاج الذكي** | 
-| <img src="assets/usecase/ai\_robot-0000.jpg" width="150" height="200"\><br>**الروبوت الذكي** | <img src="assets/usecase/ai\_creation-0000.jpg" width="150" height="200"\><br>**الإبداع الذكي** | والمزيد...|
+| <img src="assets/usecase/ai_companion-0000.jpg" width="150" height="200"><br>**الرفيق الذكي** | <img src="assets/usecase/ai_role_play-0000.jpg" width="150" height="200"><br>**لعب الأدوار الذكي** | <img src="assets/usecase/ai_ip-0000.png" width="150" height="200"><br>**شخصيات الملكية الفكرية الذكية** | <img src="assets/usecase/ai_edu-0000.jpg" width="150" height="200"><br>**التعليم الذكي** | | <img src="assets/usecase/ai_therapy-0000.jpg" width="150" height="200"><br>**العلاج الذكي** | 
+| <img src="assets/usecase/ai_robot-0000.jpg" width="150" height="200"><br>**الروبوت الذكي** | <img src="assets/usecase/ai_creation-0000.jpg" width="150" height="200"><br>**الإبداع الذكي** | والمزيد...|
 ---
 
 ## 🤝 المساهمة
@@ -157,31 +157,30 @@ memu_client.memorize_conversation(
 <a href="https://github.com/TEN-framework/ten-framework"><img src="https://avatars.githubusercontent.com/u/113095513?s=200\&v=4" alt="Ten" height="40" style="margin: 10px;"></a>
 <a href="https://github.com/openagents-org/openagents"><img src="assets/partners/openagents.png" alt="OpenAgents" height="40" style="margin: 10px;"></a>
 <a href="https://github.com/camel-ai/camel"><img src="https://avatars.githubusercontent.com/u/134388954?s=200\&v=4" alt="Camel" height="40" style="margin: 10px;"></a>
-<a href="https://github.com/eigent-ai/eigent"><img src="https://www.eigent.ai/nav/logo\_icon.svg" alt="Eigent" height="40" style="margin: 10px;"></a>
-<a href="https://github.com/milvus-io/milvus"><img src="https://miro.medium.com/v2/resize:fit:2400/1\*-VEGyAgcIBD62XtZWavy8w.png" alt="Ten" height="40" style="margin: 10px;"></a>
+<a href="https://github.com/eigent-ai/eigent"><img src="https://www.eigent.ai/nav/logo_icon.svg" alt="Eigent" height="40" style="margin: 10px;"></a>
+<a href="https://github.com/milvus-io/milvus"><img src="https://miro.medium.com/v2/resize:fit:2400/1*-VEGyAgcIBD62XtZWavy8w.png" alt="Ten" height="40" style="margin: 10px;"></a>
 <a href="https://xroute.ai/"><img src="assets/partners/xroute.png" alt="xRoute" height="40" style="margin: 10px;"></a>
 <a href="https://jaaz.app/"><img src="assets/partners/jazz.png" alt="jazz" height="40" style="margin: 10px;"></a>
 <a href="https://github.com/Buddie-AI/Buddie"><img src="assets/partners/buddie.png" alt="buddie" height="40" style="margin: 10px;"></a>
 <a href="https://github.com/bytebase/bytebase"><img src="assets/partners/bytebase.png" alt="bytebase" height="40" style="margin: 10px;"></a>
-
 </div>
 
------
+---
 
 *هل أنت مهتم بالشراكة مع MemU؟ اتصل بنا على [contact@nevamind.ai](mailto:contact@nevamind.ai)*
 
------
+---
 
 ## 📱 انضم إلى مجتمعنا على WeChat
 
 تواصل معنا على WeChat للحصول على أحدث التحديثات، ومناقشات المجتمع، والمحتوى الحصري:
 
-<div align="center"\>
-<img src="assets/qrcode.png" alt="MemU WeChat and discord QR Code" width="480" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;"\>
+<div align="center">
+<img src="assets/qrcode.png" alt="MemU WeChat and discord QR Code" width="480" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
 
 *امسح أيًا من رموز QR أعلاه للانضمام إلى مجتمعنا على WeChat*
 
-</div\>
+</div>
 
 -----
 
