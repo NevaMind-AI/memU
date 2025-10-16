@@ -106,7 +106,7 @@ memu_client.memorize_conversation(
 
 ### 🎥 فيديو العرض التوضيحي
 
-<div align="right">
+<div align="left">
   <a href="https://www.youtube.com/watch?v=qZIuCoLglHs">
     <img src="https://img.youtube.com/vi/ueOe4ZPlZLU/maxresdefault.jpg" alt="MemU Demo Video" width="600">
   </a>
