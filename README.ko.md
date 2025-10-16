@@ -6,10 +6,10 @@
 ### MemU: نظام الذاكرة الوكيلي من الجيل التالي
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/memu)
-[![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
+[![License: Apache 2.0](https:/img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Python 3.8+](https:/img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Discord](https:/img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/memu)
+[![Twitter](https:/img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
 </div>
 
 **MemU** هو نظام ذاكرة وكيلية من الجيل التالي يعيد تصميم بنية ذاكرة الوكيل من منظور يركز على الذاكرة—تجريدها كطبقة بيانات تتطور ديناميكيًا تقوم بتنظيم واسترجاع المعلومات ذات الصلة بذكاء بناءً على السياق. من خلال آليات الاسترجاع التكيفي والتراجع، يستخلص النظام ديناميكيًا المعلومات الأكثر صلة. يستخدم النظام بنية **ذاكرة موحدة متعددة الوسائط** مع دعم أصلي لأنواع البيانات المتنوعة بما في ذلك النصوص والصور والصوت، مما يشكل تمثيلاً متماسكًا للذاكرة.
@@ -77,7 +77,7 @@ memu_client.memorize_conversation(
 
 📖 **شاهد [`example/client/memory.py`](https://www.google.com/search?q=example/client/memory.py) للحصول على تفاصيل التكامل الكاملة**
 
-✨ **هذا كل شيء\!** MemU يتذكر كل شيء ويساعد الذكاء الاصطناعي الخاص بك على التعلم من المحادثات السابقة.
+✨ **هذا كل شيء!** MemU يتذكر كل شيء ويساعد الذكاء الاصطناعي الخاص بك على التعلم من المحادثات السابقة.
 
 ### 🏢 إصدار المؤسسات
 
@@ -108,10 +108,10 @@ memu_client.memorize_conversation(
 
 \<div align="left"\>
  <a href="https://www.youtube.com/watch?v=qZIuCoLglHs"\>
-  <img src="https://img.youtube.com/vi/ueOe4ZPlZLU/maxresdefault.jpg" alt="MemU Demo Video" width="600"\>
+  <img src="https:/img.youtube.com/vi/ueOe4ZPlZLU/maxresdefault.jpg" alt="MemU Demo Video" width="600"\>
  </a\>
  <br>
- <em\>انقر لمشاهدة فيديو عرض MemU التوضيحي\</em\>
+ <em\>انقر لمشاهدة فيديو عرض MemU التوضيحي</em\>
 </div\>
 
 -----
@@ -120,7 +120,7 @@ memu_client.memorize_conversation(
 
 ## | | | | | 
 |:---:|:---:|:---:|:---:| 
-| \<img src="assets/usecase/ai\_companion-0000.jpg" width="150" height="200"\><br>**الرفيق الذكي** | \<img src="assets/usecase/ai\_role\_play-0000.jpg" width="150" height="200"\><br>**لعب الأدوار الذكي** | \<img src="assets/usecase/ai\_ip-0000.png" width="150" height="200"\><br>**شخصيات الملكية الفكرية الذكية** | \<img src="assets/usecase/ai\_edu-0000.jpg" width="150" height="200"\><br>**التعليم الذكي** | | \<img src="assets/usecase/ai\_therapy-0000.jpg" width="150" height="200"\><br>**العلاج الذكي** | \<img src="assets/usecase/ai\_robot-0000.jpg" width="150" height="200"\><br>**الروبوت الذكي** | \<img src="assets/usecase/ai\_creation-0000.jpg" width="150" height="200"\><br>**الإبداع الذكي** | والمزيد...|
+| <img src="assets/usecase/ai\_companion-0000.jpg" width="150" height="200"\><br>**الرفيق الذكي** | <img src="assets/usecase/ai\_role\_play-0000.jpg" width="150" height="200"\><br>**لعب الأدوار الذكي** | <img src="assets/usecase/ai\_ip-0000.png" width="150" height="200"\><br>**شخصيات الملكية الفكرية الذكية** | <img src="assets/usecase/ai\_edu-0000.jpg" width="150" height="200"\><br>**التعليم الذكي** | | <img src="assets/usecase/ai\_therapy-0000.jpg" width="150" height="200"\><br>**العلاج الذكي** | <img src="assets/usecase/ai\_robot-0000.jpg" width="150" height="200"\><br>**الروبوت الذكي** | <img src="assets/usecase/ai\_creation-0000.jpg" width="150" height="200"\><br>**الإبداع الذكي** | والمزيد...|
 
 ## 🤝 المساهمة
 
@@ -150,21 +150,21 @@ memu_client.memorize_conversation(
 
 نحن فخورون بالعمل مع منظمات مذهلة:
 
-\<div align="center"\>
+<div align="center"\>
 
 ### أدوات التطوير
 
-\<a href="https://github.com/TEN-framework/ten-framework"\>\<img src="https://avatars.githubusercontent.com/u/113095513?s=200\&v=4" alt="Ten" height="40" style="margin: 10px;"\>\</a\>
-\<a href="https://github.com/openagents-org/openagents"\>\<img src="assets/partners/openagents.png" alt="OpenAgents" height="40" style="margin: 10px;"\>\</a\>
-\<a href="https://github.com/camel-ai/camel"\>\<img src="https://avatars.githubusercontent.com/u/134388954?s=200\&v=4" alt="Camel" height="40" style="margin: 10px;"\>\</a\>
-\<a href="https://github.com/eigent-ai/eigent"\>\<img src="https://www.eigent.ai/nav/logo\_icon.svg" alt="Eigent" height="40" style="margin: 10px;"\>\</a\>
-\<a href="https://github.com/milvus-io/milvus"\>\<img src="https://miro.medium.com/v2/resize:fit:2400/1\*-VEGyAgcIBD62XtZWavy8w.png" alt="Ten" height="40" style="margin: 10px;"\>\</a\>
-\<a href="https://xroute.ai/"\>\<img src="assets/partners/xroute.png" alt="xRoute" height="40" style="margin: 10px;"\>\</a\>
-\<a href="https://jaaz.app/"\>\<img src="assets/partners/jazz.png" alt="jazz" height="40" style="margin: 10px;"\>\</a\>
-\<a href="https://github.com/Buddie-AI/Buddie"\>\<img src="assets/partners/buddie.png" alt="buddie" height="40" style="margin: 10px;"\>\</a\>
-\<a href="https://github.com/bytebase/bytebase"\>\<img src="assets/partners/bytebase.png" alt="bytebase" height="40" style="margin: 10px;"\>\</a\>
+<a href="https://github.com/TEN-framework/ten-framework"\><img src="https://avatars.githubusercontent.com/u/113095513?s=200\&v=4" alt="Ten" height="40" style="margin: 10px;"\></a\>
+<a href="https://github.com/openagents-org/openagents"\><img src="assets/partners/openagents.png" alt="OpenAgents" height="40" style="margin: 10px;"\></a\>
+<a href="https://github.com/camel-ai/camel"\><img src="https://avatars.githubusercontent.com/u/134388954?s=200\&v=4" alt="Camel" height="40" style="margin: 10px;"\></a\>
+<a href="https://github.com/eigent-ai/eigent"\><img src="https://www.eigent.ai/nav/logo\_icon.svg" alt="Eigent" height="40" style="margin: 10px;"\></a\>
+<a href="https://github.com/milvus-io/milvus"\><img src="https://miro.medium.com/v2/resize:fit:2400/1\*-VEGyAgcIBD62XtZWavy8w.png" alt="Ten" height="40" style="margin: 10px;"\></a\>
+<a href="https://xroute.ai/"\><img src="assets/partners/xroute.png" alt="xRoute" height="40" style="margin: 10px;"\></a\>
+<a href="https://jaaz.app/"\><img src="assets/partners/jazz.png" alt="jazz" height="40" style="margin: 10px;"\></a\>
+<a href="https://github.com/Buddie-AI/Buddie"\><img src="assets/partners/buddie.png" alt="buddie" height="40" style="margin: 10px;"\></a\>
+<a href="https://github.com/bytebase/bytebase"\><img src="assets/partners/bytebase.png" alt="bytebase" height="40" style="margin: 10px;"\></a\>
 
-\</div\>
+</div\>
 
 -----
 
@@ -176,16 +176,16 @@ memu_client.memorize_conversation(
 
 تواصل معنا على WeChat للحصول على أحدث التحديثات، ومناقشات المجتمع، والمحتوى الحصري:
 
-\<div align="center"\>
-\<img src="assets/qrcode.png" alt="MemU WeChat and discord QR Code" width="480" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;"\>
+<div align="center"\>
+<img src="assets/qrcode.png" alt="MemU WeChat and discord QR Code" width="480" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;"\>
 
 *امسح أيًا من رموز QR أعلاه للانضمام إلى مجتمعنا على WeChat*
 
-\</div\>
+</div\>
 
 -----
 
-*ابقَ على اتصال مع مجتمع MemU\! انضم إلى مجموعات WeChat الخاصة بنا لإجراء مناقشات في الوقت الفعلي، والحصول على دعم فني، وفرص للتواصل.*
+*ابقَ على اتصال مع مجتمع MemU! انضم إلى مجموعات WeChat الخاصة بنا لإجراء مناقشات في الوقت الفعلي، والحصول على دعم فني، وفرص للتواصل.*
 
 ```
 ```
