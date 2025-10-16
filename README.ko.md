@@ -108,7 +108,7 @@ memu_client.memorize_conversation(
 
 <div align="left">
  <a href="https://www.youtube.com/watch?v=qZIuCoLglHs">
-  <img src="https:/img.youtube.com/vi/ueOe4ZPlZLU/maxresdefault.jpg" alt="MemU Demo Video" width="600">
+   <img src="https:/img.youtube.com/vi/ueOe4ZPlZLU/maxresdefault.jpg" alt="MemU  Demo Video" width="600">
  </a>
  <br>
  <em>انقر لمشاهدة فيديو عرض MemU التوضيحي</em>
@@ -119,8 +119,8 @@ memu_client.memorize_conversation(
 
 | | | | | 
 |:---:|:---:|:---:|:---:| 
-| <img src="assets/usecase/ai_companion-0000.jpg" width="150" height="200"><br>**الرفيق الذكي** | <img src="assets/usecase/ai_role_play-0000.jpg" width="150" height="200"><br>**لعب الأدوار الذكي** | <img src="assets/usecase/ai_ip-0000.png" width="150" height="200"><br>**شخصيات الملكية الفكرية الذكية** | <img src="assets/usecase/ai_edu-0000.jpg" width="150" height="200"><br>**التعليم الذكي** | | <img src="assets/usecase/ai_therapy-0000.jpg" width="150" height="200"><br>**العلاج الذكي** | 
-| <img src="assets/usecase/ai_robot-0000.jpg" width="150" height="200"><br>**الروبوت الذكي** | <img src="assets/usecase/ai_creation-0000.jpg" width="150" height="200"><br>**الإبداع الذكي** | والمزيد...|
+| <img src="assets/usecase/ai_companion-0000.jpg" width="150" height="200"><br>**الرفيق الذكي** | <img src="assets/usecase/ai_role_play-0000.jpg" width="150" height="200"><br>**لعب الأدوار الذكي** | <img src="assets/usecase/ai_ip-0000.png" width="150" height="200"><br>**شخصيات الملكية الفكرية الذكية** | <img src="assets/usecase/ai_edu-0000.jpg" width="150" height="200"><br>**التعليم الذكي** |
+| <img src="assets/usecase/ai_therapy-0000.jpg" width="150" height="200"><br>**العلاج الذكي** | <img src="assets/usecase/ai_robot-0000.jpg" width="150" height="200"><br>**الروبوت الذكي** | <img src="assets/usecase/ai_creation-0000.jpg" width="150" height="200"><br>**الإبداع الذكي** | والمزيد...|
 ---
 
 ## 🤝 المساهمة
