@@ -18,4 +18,4 @@ exclude Dockerfile
 exclude .dockerignore
 exclude PROJECT_RELEASE_SUMMARY.md
 exclude Makefile
-exclude .pre-commit-config.yaml 
+exclude .pre-commit-config.yaml

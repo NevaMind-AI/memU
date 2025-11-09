@@ -7,7 +7,7 @@ Thank you for your interest in contributing to MemU! This document provides guid
 We welcome all types of contributions:
 
 - 🐛 **Bug Reports** - Help us identify and fix issues
-- 💡 **Feature Requests** - Suggest new capabilities and improvements  
+- 💡 **Feature Requests** - Suggest new capabilities and improvements
 - 📝 **Documentation** - Improve guides, examples, and API docs
 - 🔧 **Code Contributions** - Add features, fix bugs, optimize performance
 - 🧪 **Testing** - Write tests, improve coverage, test edge cases
@@ -145,7 +145,7 @@ type(scope): description
 
 Examples:
 feat(memory): add semantic search functionality
-fix(llm): resolve OpenAI timeout issues  
+fix(llm): resolve OpenAI timeout issues
 docs(readme): update installation instructions
 test(agent): add unit tests for memory retrieval
 refactor(core): restructure memory storage logic

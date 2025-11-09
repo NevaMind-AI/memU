@@ -11,7 +11,7 @@
 [![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
 </div>
 
-**MemU** is a next-generation Agentic Memory System that redesigns Agent memory architecture from a memory-centric perspective—abstracting it as a dynamically evolving data layer that intelligently organizes and retrieves relevant information based on context. Through adaptive retrieval and backtracking mechanisms, it dynamically extracts the most pertinent information. 
+**MemU** is a next-generation Agentic Memory System that redesigns Agent memory architecture from a memory-centric perspective—abstracting it as a dynamically evolving data layer that intelligently organizes and retrieves relevant information based on context. Through adaptive retrieval and backtracking mechanisms, it dynamically extracts the most pertinent information.
 The system employs a **Unified Multimodal Memory** architecture with native support for diverse data types including text, images, and audio, forming a cohesive memory representation.
 
  Visit our homepage: [memu.pro](https://memu.pro/)
@@ -60,18 +60,18 @@ from memu import MemuClient
 ```python
 # Initialize
 memu_client = MemuClient(
-    base_url="https://api.memu.so", 
+    base_url="https://api.memu.so",
     api_key=os.getenv("MEMU_API_KEY")
 )
 memu_client.memorize_conversation(
     conversation=conversation_text, # Recommend longer conversation (~8000 tokens), see https://memu.pro/blog/memu-best-practice for details
-    user_id="user001", 
-    user_name="User", 
-    agent_id="assistant001", 
+    user_id="user001",
+    user_name="User",
+    agent_id="assistant001",
     agent_name="Assistant"
 )
 ```
-Check [API reference](docs/API_REFERENCE.md) or [our blog](https://memu.pro/blog) for more details. 
+Check [API reference](docs/API_REFERENCE.md) or [our blog](https://memu.pro/blog) for more details.
 
 📖 **See [`example/client/memory.py`](example/client/memory.py) for complete integration details**
 
@@ -185,4 +185,3 @@ Connect with us on WeChat for the latest updates, community discussions, and exc
 ---
 
 *Stay connected with the MemU community! Join our WeChat groups for real-time discussions, technical support, and networking opportunities.*
-

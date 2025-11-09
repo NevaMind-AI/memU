@@ -60,14 +60,14 @@ from memu import MemuClient
 ```python
 # Initialize
 memu_client = MemuClient(
-    base_url="[https://api.memu.so](https://api.memu.so)", 
+    base_url="[https://api.memu.so](https://api.memu.so)",
     api_key=os.getenv("MEMU_API_KEY")
 )
 memu_client.memorize_conversation(
     conversation=conversation_text, # Recommend longer conversation (~8000 tokens), see [https://memu.pro/blog/memu-best-practice](https://memu.pro/blog/memu-best-practice) for details
-    user_id="user001", 
-    user_name="User", 
-    agent_id="assistant001", 
+    user_id="user001",
+    user_name="User",
+    agent_id="assistant001",
     agent_name="Assistant"
 )
 ```
@@ -117,8 +117,8 @@ memu_client.memorize_conversation(
 ---
 ## 🎓 **حالات الاستخدام**
 
-| | | | | 
-|:---:|:---:|:---:|:---:| 
+| | | | |
+|:---:|:---:|:---:|:---:|
 | <img src="assets/usecase/ai_companion-0000.jpg" width="150" height="200"><br>**الرفيق الذكي** | <img src="assets/usecase/ai_role_play-0000.jpg" width="150" height="200"><br>**لعب الأدوار الذكي** | <img src="assets/usecase/ai_ip-0000.png" width="150" height="200"><br>**شخصيات الملكية الفكرية الذكية** | <img src="assets/usecase/ai_edu-0000.jpg" width="150" height="200"><br>**التعليم الذكي** |
 | <img src="assets/usecase/ai_therapy-0000.jpg" width="150" height="200"><br>**العلاج الذكي** | <img src="assets/usecase/ai_robot-0000.jpg" width="150" height="200"><br>**الروبوت الذكي** | <img src="assets/usecase/ai_creation-0000.jpg" width="150" height="200"><br>**الإبداع الذكي** | والمزيد...|
 ---
