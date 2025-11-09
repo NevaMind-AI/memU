@@ -1,4 +1,0 @@
-{
-  "extends": "@moeru/tsconfig",
-  "include": ["src"]
-}
