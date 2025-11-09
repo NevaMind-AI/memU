@@ -54,6 +54,6 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: dist/memU-kaisen-test-*.whl
+          file: dist/memU-*.whl
           tag: ${{ needs.release-please.outputs.tag_name }}
           file_glob: true
