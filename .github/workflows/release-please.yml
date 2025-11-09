@@ -21,6 +21,7 @@ jobs:
         id: release
         with:
           release-type: python
+          target-branch: next
 
   build:
     name: upload wheel
