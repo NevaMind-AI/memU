@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 MemoryType = Literal["profile", "event", "knowledge", "behavior"]
 
@@ -22,7 +22,6 @@ class MemoryItem(BaseModel):
     memory_type: MemoryType
     summary: str
     embedding: list[float]
-    category_ids: list[str] = Field(default_factory=list)
 
 
 class MemoryCategory(BaseModel):

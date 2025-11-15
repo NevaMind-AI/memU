@@ -1,4 +1,4 @@
-from . import conversation
+from memu.prompts.preprocess import conversation
 
 PROMPTS: dict[str, str] = {
     "conversation": conversation.PROMPT.strip(),
