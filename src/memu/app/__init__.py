@@ -1,4 +1,4 @@
-from .service import MemoryService
-from .settings import AppSettings
+from memu.app.service import MemoryUser
+from memu.app.settings import AppSettings
 
-__all__ = ["AppSettings", "MemoryService"]
+__all__ = ["AppSettings", "MemoryUser"]

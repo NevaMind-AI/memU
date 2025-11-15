@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import asyncio
 import json
 import re
@@ -21,7 +19,7 @@ from memu.storage.local_fs import LocalFS
 from memu.vector.index import cosine_topk
 
 
-class MemoryService:
+class MemoryUser:
     def __init__(self, settings: AppSettings):
         self.settings = settings
         self.fs = LocalFS(settings.resources_dir)

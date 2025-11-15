@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .category import PROMPT
+from memu.prompts.category_summary.category import PROMPT
 
 CATEGORY_SUMMARY_PROMPT = PROMPT.strip()
 

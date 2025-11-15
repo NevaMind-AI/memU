@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from .base import HTTPBackend
+from memu.llm.backends.base import HTTPBackend
 
 
 class OpenAIHTTPBackend(HTTPBackend):

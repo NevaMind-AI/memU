@@ -1,4 +1,4 @@
-from . import behavior, event, knowledge, profile
+from memu.prompts.memory_type import behavior, event, knowledge, profile
 
 DEFAULT_MEMORY_TYPES: list[str] = ["profile", "event", "knowledge", "behavior"]
 

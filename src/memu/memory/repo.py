@@ -41,15 +41,15 @@ class InMemoryStore:
             memory_type=memory_type,
             summary=summary,
             embedding=embedding,
-            category_ids=[],
         )
         self.items[mid] = it
         return it
 
     def link_item_category(self, item_id: str, cat_id: str) -> CategoryItem:
-        it = self.items[item_id]
-        if cat_id not in it.category_ids:
-            it.category_ids.append(cat_id)
+        _ = self.items[item_id]
+        for rel in self.relations:
+            if rel.item_id == item_id and rel.category_id == cat_id:
+                return rel
         rel = CategoryItem(item_id=item_id, category_id=cat_id)
         self.relations.append(rel)
         return rel
