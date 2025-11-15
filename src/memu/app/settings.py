@@ -32,12 +32,12 @@ class AppSettings(BaseModel):
     resources_dir: str = Field(default="./resources")
     # openai base
     openai_base: str = Field(default="https://api.openai.com/v1")
-    openai_api_key_env: str = Field(default="OPENAI_API_KEY")
+    openai_api_key: str = Field(default="OPENAI_API_KEY")
     # models
-    chat_model: str = Field(default="gpt-4o-mini")
+    chat_model: str = Field(default="gpt-5-nano")
     embed_model: str = Field(default="text-embedding-3-small")
     llm_client_backend: str = Field(
-        default="httpx",
+        default="sdk",
         description="Which OpenAI client backend to use: 'httpx' (httpx) or 'sdk' (official OpenAI).",
     )
     llm_http_provider: str = Field(

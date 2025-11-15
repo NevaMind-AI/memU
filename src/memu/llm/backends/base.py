@@ -11,7 +11,7 @@ class HTTPBackend:
     embedding_endpoint: str = "/embeddings"
 
     def build_summary_payload(
-        self, *, text: str, system_prompt: str | None, chat_model: str, max_tokens: int
+        self, *, text: str, system_prompt: str | None, chat_model: str, max_tokens: int | None
     ) -> dict[str, Any]:
         raise NotImplementedError
 

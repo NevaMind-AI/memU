@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 from collections.abc import Sequence
 from typing import Any, cast
+
+from pydantic import BaseModel
 
 from memu.app.settings import AppSettings
 from memu.llm.http_client import HTTPLLMClient
@@ -27,9 +28,9 @@ class MemoryService:
         self.store = InMemoryStore()
         backend = (settings.llm_client_backend or "httpx").lower()
         self.openai: Any
-        client_kwargs = {
+        client_kwargs: dict[str, Any] = {
             "base_url": settings.openai_base,
-            "api_key": os.getenv(settings.openai_api_key_env, ""),
+            "api_key": settings.openai_api_key,
             "chat_model": settings.chat_model,
             "embed_model": settings.embed_model,
         }
@@ -39,9 +40,9 @@ class MemoryService:
             self.openai = OpenAISDKClient(**client_kwargs)
         elif backend == "httpx":
             self.openai = HTTPLLMClient(
-                **client_kwargs,
                 provider=self.settings.llm_http_provider,
                 endpoint_overrides=self.settings.llm_http_endpoints,
+                **client_kwargs,
             )
         else:
             msg = f"Unknown llm_client_backend '{settings.llm_client_backend}'"
@@ -89,9 +90,9 @@ class MemoryService:
         await self._update_category_summaries(category_memory_updates)
 
         return {
-            "resource": res.model_dump(),
-            "items": [item.model_dump() for item in items],
-            "categories": [self.store.categories[c].model_dump() for c in cat_ids],
+            "resource": self._model_dump_without_embeddings(res),
+            "items": [self._model_dump_without_embeddings(item) for item in items],
+            "categories": [self._model_dump_without_embeddings(self.store.categories[c]) for c in cat_ids],
             "relations": [r.model_dump() for r in rels],
         }
 
@@ -110,7 +111,7 @@ class MemoryService:
             caption_text = caption.strip()
             if caption_text:
                 res.caption = caption_text
-                res.caption_embedding = (await self.openai.embed([caption_text]))[0]
+                res.embedding = (await self.openai.embed([caption_text]))[0]
         return res
 
     def _resolve_memory_types(self) -> list[MemoryType]:
@@ -365,6 +366,11 @@ class MemoryService:
     def _escape_prompt_value(value: str) -> str:
         return value.replace("{", "{{").replace("}", "}}")
 
+    def _model_dump_without_embeddings(self, obj: BaseModel) -> dict[str, Any]:
+        data = obj.model_dump()
+        data.pop("embedding", None)
+        return data
+
     async def retrieve(self, query: str, *, top_k: int = 5) -> dict[str, Any]:
         qvec = (await self.openai.embed([query]))[0]
         response: dict[str, list[dict[str, Any]]] = {"resources": [], "items": [], "categories": []}
@@ -413,7 +419,7 @@ class MemoryService:
             obj = pool.get(_id)
             if not obj:
                 continue
-            data = obj.model_dump()
+            data = self._model_dump_without_embeddings(obj)
             data["score"] = float(score)
             out.append(data)
         return out
@@ -450,8 +456,8 @@ class MemoryService:
     def _resource_caption_corpus(self) -> list[tuple[str, list[float]]]:
         corpus: list[tuple[str, list[float]]] = []
         for rid, res in self.store.resources.items():
-            if res.caption_embedding:
-                corpus.append((rid, res.caption_embedding))
+            if res.embedding:
+                corpus.append((rid, res.embedding))
         return corpus
 
     async def _judge_retrieval_sufficient(self, query: str, content: str) -> bool:

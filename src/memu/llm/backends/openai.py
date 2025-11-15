@@ -11,7 +11,7 @@ class OpenAIHTTPBackend(HTTPBackend):
     embedding_endpoint = "/embeddings"
 
     def build_summary_payload(
-        self, *, text: str, system_prompt: str | None, chat_model: str, max_tokens: int
+        self, *, text: str, system_prompt: str | None, chat_model: str, max_tokens: int | None
     ) -> dict[str, Any]:
         prompt = system_prompt or "Summarize the text in one short paragraph."
         return {

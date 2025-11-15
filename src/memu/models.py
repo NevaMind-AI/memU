@@ -13,7 +13,7 @@ class Resource(BaseModel):
     modality: str
     local_path: str
     caption: str | None = None
-    caption_embedding: list[float] | None = None
+    embedding: list[float] | None = None
 
 
 class MemoryItem(BaseModel):
