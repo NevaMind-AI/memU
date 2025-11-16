@@ -55,7 +55,7 @@ class HTTPLLMClient:
             data = resp.json()
         logger.debug("HTTP LLM summarize response: %s", data)
         return self.backend.parse_summary_response(data)
-    
+
     async def vision(
         self,
         prompt: str,
@@ -66,20 +66,20 @@ class HTTPLLMClient:
     ) -> str:
         """
         Call Vision API with an image.
-        
+
         Args:
             prompt: Text prompt to send with the image
             image_path: Path to the image file
             max_tokens: Maximum tokens in response
             system_prompt: Optional system prompt
-            
+
         Returns:
             LLM response text
         """
         # Read and encode image as base64
         image_data = Path(image_path).read_bytes()
         base64_image = base64.b64encode(image_data).decode("utf-8")
-        
+
         # Detect image format
         suffix = Path(image_path).suffix.lower()
         mime_type = {
@@ -89,7 +89,7 @@ class HTTPLLMClient:
             ".gif": "image/gif",
             ".webp": "image/webp",
         }.get(suffix, "image/jpeg")
-        
+
         payload = self.backend.build_vision_payload(
             prompt=prompt,
             base64_image=base64_image,
@@ -98,7 +98,7 @@ class HTTPLLMClient:
             chat_model=self.chat_model,
             max_tokens=max_tokens,
         )
-        
+
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
             resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
@@ -114,7 +114,7 @@ class HTTPLLMClient:
             data = resp.json()
         logger.debug("HTTP LLM embedding response: %s", data)
         return self.backend.parse_embedding_response(data)
-    
+
     async def transcribe(
         self,
         audio_path: str,
@@ -125,13 +125,13 @@ class HTTPLLMClient:
     ) -> str:
         """
         Transcribe audio file using OpenAI Audio API.
-        
+
         Args:
             audio_path: Path to the audio file
             prompt: Optional prompt to guide the transcription
             language: Optional language code (e.g., 'en', 'zh')
             response_format: Response format ('text', 'json', 'verbose_json')
-            
+
         Returns:
             Transcribed text
         """
@@ -147,7 +147,7 @@ class HTTPLLMClient:
                     data["prompt"] = prompt
                 if language:
                     data["language"] = language
-                
+
                 async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout * 3) as client:
                     resp = await client.post(
                         "/v1/audio/transcriptions",
@@ -156,19 +156,19 @@ class HTTPLLMClient:
                         headers=self._headers(),
                     )
                     resp.raise_for_status()
-                    
+
                     if response_format == "text":
                         result = resp.text
                     else:
                         result_data = resp.json()
                         result = result_data.get("text", "")
-            
+
             logger.debug("HTTP audio transcribe response for %s: %s chars", audio_path, len(result))
-            return result or ""
-            
-        except Exception as e:
-            logger.error("Audio transcription failed for %s: %s", audio_path, e)
+        except Exception:
+            logger.exception("Audio transcription failed for %s", audio_path)
             raise
+        else:
+            return result or ""
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.api_key}"}

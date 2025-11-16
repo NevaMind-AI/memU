@@ -26,7 +26,7 @@ class OpenAIHTTPBackend(HTTPBackend):
 
     def parse_summary_response(self, data: dict[str, Any]) -> str:
         return cast(str, data["choices"][0]["message"]["content"])
-    
+
     def build_vision_payload(
         self,
         *,
@@ -41,7 +41,7 @@ class OpenAIHTTPBackend(HTTPBackend):
         messages: list[dict[str, Any]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
-        
+
         messages.append({
             "role": "user",
             "content": [
@@ -54,7 +54,7 @@ class OpenAIHTTPBackend(HTTPBackend):
                 },
             ],
         })
-        
+
         return {
             "model": chat_model,
             "messages": messages,

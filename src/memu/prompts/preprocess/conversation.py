@@ -51,8 +51,8 @@ Only output valid **JSON**, with no explanations, prefixes, or extra text.
 ## Conversation Content
 
 ```
-<conversation> 
-{conversation} 
+<conversation>
+{conversation}
 </conversation>
 ```
 

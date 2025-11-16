@@ -17,7 +17,7 @@ class HTTPBackend:
 
     def parse_summary_response(self, data: dict[str, Any]) -> str:
         raise NotImplementedError
-    
+
     def build_vision_payload(
         self,
         *,
