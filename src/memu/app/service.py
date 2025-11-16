@@ -302,7 +302,6 @@ class MemoryUser:
             self._categories_ready = True
             return
         cat_texts = [self._category_embedding_text(cfg) for cfg in self.category_configs]
-        print(cat_texts)
         cat_vecs = await self.openai.embed(cat_texts)
         self._category_ids = []
         self._category_name_to_id = {}
@@ -340,9 +339,9 @@ class MemoryUser:
         Preprocess resource based on modality.
         
         General preprocessing dispatcher for all modalities:
-        - Text-based modalities (conversation, document): use text content
-        - Audio modality: transcribe first, then process
-        - Media modalities (video, image): use local_path to file
+        - Text-based modalities (conversation, document): require text content
+        - Audio modality: transcribe audio file first, then process as text
+        - Media modalities (video, image): process media files directly
         
         Args:
             local_path: Local file path to the resource
@@ -383,8 +382,8 @@ class MemoryUser:
                 logger.warning(f"Unknown audio file type: {file_ext}, skipping transcription")
                 return None, None, None
         
-        # For text-based modalities, text is required
-        if modality in ("conversation", "document", "audio"):
+        # For pure text-based modalities (not audio), text is required
+        if modality in ("conversation", "document"):
             if not text:
                 return text, None, None
         
