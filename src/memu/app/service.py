@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import re
 from collections.abc import Sequence
 from typing import Any, cast
@@ -16,7 +17,10 @@ from memu.prompts.memory_type import PROMPTS as MEMORY_TYPE_PROMPTS
 from memu.prompts.preprocess import PROMPTS as PREPROCESS_PROMPTS
 from memu.prompts.retrieve.judger import PROMPT as RETRIEVE_JUDGER_PROMPT
 from memu.storage.local_fs import LocalFS
+from memu.utils.video import VideoFrameExtractor
 from memu.vector.index import cosine_topk
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryUser:
@@ -55,7 +59,7 @@ class MemoryUser:
         self._start_category_initialization()
 
     async def memorize(self, *, resource_url: str, modality: str, summary_prompt: str | None = None) -> dict[str, Any]:
-        local_path, text, caption = await self._fetch_and_preprocess_resource(resource_url, modality)
+        local_path, text, caption, segments = await self._fetch_and_preprocess_resource(resource_url, modality)
 
         await self._ensure_categories_ready()
         cat_ids: list[str] = list(self._category_ids)
@@ -78,6 +82,7 @@ class MemoryUser:
             text=text,
             base_prompt=base_prompt,
             categories_prompt_str=categories_prompt_str,
+            segments=segments,
         )
 
         items, rels, category_memory_updates = await self._persist_memory_items(
@@ -96,10 +101,12 @@ class MemoryUser:
 
     async def _fetch_and_preprocess_resource(
         self, resource_url: str, modality: str
-    ) -> tuple[str, str | None, str | None]:
+    ) -> tuple[str, str | None, str | None, list[dict[str, int]] | None]:
         local_path, text = await self.fs.fetch(resource_url, modality)
-        processed_text, caption = await self._preprocess_resource_text(text=text, modality=modality)
-        return local_path, processed_text, caption
+        processed_text, caption, segments = await self._preprocess_resource_url(
+            local_path=local_path, text=text, modality=modality
+        )
+        return local_path, processed_text, caption, segments
 
     async def _create_resource_with_caption(
         self, *, resource_url: str, modality: str, local_path: str, caption: str | None
@@ -128,9 +135,89 @@ class MemoryUser:
         text: str | None,
         base_prompt: str,
         categories_prompt_str: str,
+        segments: list[dict[str, int]] | None = None,
     ) -> list[tuple[MemoryType, str, list[str]]]:
         structured_entries: list[tuple[MemoryType, str, list[str]]] = []
-        if text and memory_types:
+        
+        # For conversation modality with segments, process each segment separately
+        if modality == "conversation" and text and segments and memory_types:
+            # Split the conversation text by lines
+            lines = text.split("\n")
+            
+            # Process each segment
+            for segment in segments:
+                start_idx = segment.get("start", 0)
+                end_idx = segment.get("end", len(lines) - 1)
+                
+                # Extract segment text by finding lines with [INDEX] markers
+                segment_lines = []
+                for line in lines:
+                    # Extract index from line format like "[123] message"
+                    import re
+                    match = re.match(r"\[(\d+)\]", line)
+                    if match:
+                        idx = int(match.group(1))
+                        if start_idx <= idx <= end_idx:
+                            segment_lines.append(line)
+                
+                if not segment_lines:
+                    continue
+                
+                segment_text = "\n".join(segment_lines)
+                
+                # Generate memory items for each memory type for this segment
+                prompts = [
+                    self._build_memory_type_prompt(
+                        memory_type=mtype,
+                        resource_text=segment_text,
+                        categories_str=categories_prompt_str,
+                    )
+                    for mtype in memory_types
+                ]
+                tasks = [self.openai.summarize(prompt_text, system_prompt=base_prompt) for prompt_text in prompts]
+                responses = await asyncio.gather(*tasks)
+                
+                for mtype, response in zip(memory_types, responses, strict=True):
+                    parsed = self._parse_memory_type_response(response)
+                    if not parsed:
+                        fallback_entry = response.strip()
+                        if fallback_entry:
+                            structured_entries.append((mtype, fallback_entry, []))
+                        continue
+                    for entry in parsed:
+                        content = (entry.get("content") or "").strip()
+                        if not content:
+                            continue
+                        cat_names = [c.strip() for c in entry.get("categories", []) if isinstance(c, str) and c.strip()]
+                        structured_entries.append((mtype, content, cat_names))
+            
+            # If no segments were processed, fall back to original behavior
+            if not structured_entries:
+                prompts = [
+                    self._build_memory_type_prompt(
+                        memory_type=mtype,
+                        resource_text=text,
+                        categories_str=categories_prompt_str,
+                    )
+                    for mtype in memory_types
+                ]
+                tasks = [self.openai.summarize(prompt_text, system_prompt=base_prompt) for prompt_text in prompts]
+                responses = await asyncio.gather(*tasks)
+                for mtype, response in zip(memory_types, responses, strict=True):
+                    parsed = self._parse_memory_type_response(response)
+                    if not parsed:
+                        fallback_entry = response.strip()
+                        if fallback_entry:
+                            structured_entries.append((mtype, fallback_entry, []))
+                        continue
+                    for entry in parsed:
+                        content = (entry.get("content") or "").strip()
+                        if not content:
+                            continue
+                        cat_names = [c.strip() for c in entry.get("categories", []) if isinstance(c, str) and c.strip()]
+                        structured_entries.append((mtype, content, cat_names))
+        elif text and memory_types:
+            # Original logic for non-conversation or non-segmented processing
             prompts = [
                 self._build_memory_type_prompt(
                     memory_type=mtype,
@@ -215,6 +302,7 @@ class MemoryUser:
             self._categories_ready = True
             return
         cat_texts = [self._category_embedding_text(cfg) for cfg in self.category_configs]
+        print(cat_texts)
         cat_vecs = await self.openai.embed(cat_texts)
         self._category_ids = []
         self._category_name_to_id = {}
@@ -245,18 +333,165 @@ class MemoryUser:
                 seen.add(cid)
         return mapped
 
-    async def _preprocess_resource_text(self, *, text: str | None, modality: str) -> tuple[str | None, str | None]:
-        if not text:
-            return text, None
+    async def _preprocess_resource_url(
+        self, *, local_path: str, text: str | None, modality: str
+    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+        """
+        Preprocess resource based on modality.
+        
+        General preprocessing dispatcher for all modalities:
+        - Text-based modalities (conversation, document): use text content
+        - Audio modality: transcribe first, then process
+        - Media modalities (video, image): use local_path to file
+        
+        Args:
+            local_path: Local file path to the resource
+            text: Text content if available (for text-based modalities)
+            modality: Resource modality type
+            
+        Returns:
+            Tuple of (processed_text, caption, segments)
+        """
         template = PREPROCESS_PROMPTS.get(modality)
         if not template:
-            return text, None
-        prompt = template.format(conversation=self._escape_prompt_value(text))
-        processed = await self.openai.summarize(prompt, system_prompt=None)
+            return text, None, None
+        
+        # For audio, transcribe first if no text is provided
+        if modality == "audio" and not text:
+            # Check if file is actually an audio file (not text)
+            audio_extensions = {'.mp3', '.mp4', '.mpeg', '.mpga', '.m4a', '.wav', '.webm'}
+            file_ext = pathlib.Path(local_path).suffix.lower()
+            
+            if file_ext in audio_extensions:
+                try:
+                    logger.info(f"Transcribing audio file: {local_path}")
+                    text = await self.openai.transcribe(local_path)
+                    logger.info(f"Audio transcription completed: {len(text)} characters")
+                except Exception as e:
+                    logger.error(f"Audio transcription failed: {e}")
+                    return None, None, None
+            elif file_ext in {'.txt', '.text'}:
+                # It's already a text file (pre-transcribed), read it directly
+                import pathlib as pathlib_import
+                try:
+                    text = pathlib_import.Path(local_path).read_text(encoding="utf-8")
+                    logger.info(f"Read pre-transcribed text file: {len(text)} characters")
+                except Exception as e:
+                    logger.error(f"Failed to read text file: {e}")
+                    return None, None, None
+            else:
+                logger.warning(f"Unknown audio file type: {file_ext}, skipping transcription")
+                return None, None, None
+        
+        # For text-based modalities, text is required
+        if modality in ("conversation", "document", "audio"):
+            if not text:
+                return text, None, None
+        
+        # Dispatch to modality-specific preprocessors
         if modality == "conversation":
-            conv, summary = self._parse_conversation_preprocess(processed)
-            return conv or processed, summary
-        return processed, None
+            return await self._preprocess_conversation(text, template)
+        elif modality == "video":
+            return await self._preprocess_video(local_path, template)
+        elif modality == "image":
+            return await self._preprocess_image(local_path, template)
+        elif modality == "document":
+            return await self._preprocess_document(text, template)
+        elif modality == "audio":
+            return await self._preprocess_audio(text, template)
+        
+        # Default fallback
+        return text, None, None
+    
+    async def _preprocess_conversation(
+        self, text: str, template: str
+    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+        """Preprocess conversation data with segmentation"""
+        preprocessed_text = self._add_conversation_indices(text)
+        prompt = template.format(conversation=self._escape_prompt_value(preprocessed_text))
+        processed = await self.openai.summarize(prompt, system_prompt=None)
+        conv, summary, segments = self._parse_conversation_preprocess_with_segments(processed, preprocessed_text)
+        return conv or preprocessed_text, summary, segments
+    
+    async def _preprocess_video(
+        self, local_path: str, template: str
+    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+        """
+        Preprocess video data - extract description and caption using Vision API.
+        
+        Extracts the middle frame from the video and analyzes it using Vision API.
+        
+        Args:
+            local_path: Path to the video file
+            template: Prompt template for video analysis
+            
+        Returns:
+            Tuple of (description, caption, None)
+        """
+        try:
+            # Check if ffmpeg is available
+            if not VideoFrameExtractor.is_ffmpeg_available():
+                logger.warning("ffmpeg not available, cannot process video. Returning None.")
+                return None, None, None
+            
+            # Extract middle frame from video
+            logger.info(f"Extracting frame from video: {local_path}")
+            frame_path = VideoFrameExtractor.extract_middle_frame(local_path)
+            
+            try:
+                # Call Vision API with extracted frame
+                logger.info(f"Analyzing video frame with Vision API: {frame_path}")
+                processed = await self.openai.vision(prompt=template, image_path=frame_path, system_prompt=None)
+                description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
+                return description, caption, None
+            finally:
+                # Clean up temporary frame file
+                import pathlib
+                try:
+                    pathlib.Path(frame_path).unlink(missing_ok=True)
+                    logger.debug(f"Cleaned up temporary frame: {frame_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to clean up frame {frame_path}: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Video preprocessing failed: {e}", exc_info=True)
+            return None, None, None
+    
+    async def _preprocess_image(
+        self, local_path: str, template: str
+    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+        """
+        Preprocess image data - extract description and caption using Vision API.
+        
+        Args:
+            local_path: Path to the image file
+            template: Prompt template for image analysis
+            
+        Returns:
+            Tuple of (description, caption, None)
+        """
+        # Call Vision API with image
+        processed = await self.openai.vision(prompt=template, image_path=local_path, system_prompt=None)
+        description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
+        return description, caption, None
+    
+    async def _preprocess_document(
+        self, text: str, template: str
+    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+        """Preprocess document data - condense and extract caption"""
+        prompt = template.format(document_text=self._escape_prompt_value(text))
+        processed = await self.openai.summarize(prompt, system_prompt=None)
+        processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
+        return processed_content or text, caption, None
+    
+    async def _preprocess_audio(
+        self, text: str, template: str
+    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+        """Preprocess audio data - format transcription and extract caption"""
+        prompt = template.format(transcription=self._escape_prompt_value(text))
+        processed = await self.openai.summarize(prompt, system_prompt=None)
+        processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
+        return processed_content or text, caption, None
 
     def _format_categories_for_prompt(self, categories: list[dict[str, str]]) -> str:
         if not categories:
@@ -267,6 +502,31 @@ class MemoryUser:
             desc = (cat.get("description") or "").strip()
             lines.append(f"- {name}: {desc}" if desc else f"- {name}")
         return "\n".join(lines)
+
+    def _add_conversation_indices(self, conversation: str) -> str:
+        """
+        Add [INDEX] markers to each line of the conversation.
+        
+        Args:
+            conversation: Raw conversation text with lines
+            
+        Returns:
+            Conversation with [INDEX] markers prepended to each non-empty line
+        """
+        lines = conversation.split("\n")
+        indexed_lines = []
+        index = 0
+        
+        for line in lines:
+            stripped = line.strip()
+            if stripped:  # Only index non-empty lines
+                indexed_lines.append(f"[{index}] {line}")
+                index += 1
+            else:
+                # Preserve empty lines without indexing
+                indexed_lines.append(line)
+        
+        return "\n".join(indexed_lines)
 
     def _build_memory_type_prompt(self, *, memory_type: MemoryType, resource_text: str, categories_str: str) -> str:
         template = (
@@ -314,6 +574,79 @@ class MemoryUser:
         conversation = self._extract_tag_content(raw, "conversation")
         summary = self._extract_tag_content(raw, "summary")
         return conversation, summary
+    
+    def _parse_multimodal_response(self, raw: str, content_tag: str, caption_tag: str) -> tuple[str | None, str | None]:
+        """
+        Parse multimodal preprocessing response (video, image, document, audio).
+        Extracts content and caption from XML-like tags.
+        
+        Args:
+            raw: Raw LLM response
+            content_tag: Tag name for main content (e.g., "detailed_description", "processed_content")
+            caption_tag: Tag name for caption (typically "caption")
+            
+        Returns:
+            Tuple of (content, caption)
+        """
+        content = self._extract_tag_content(raw, content_tag)
+        caption = self._extract_tag_content(raw, caption_tag)
+        
+        # Fallback: if no tags found, try to use raw response as content
+        if not content:
+            content = raw.strip()
+        
+        # Fallback for caption: use first sentence of content if no caption found
+        if not caption and content:
+            first_sentence = content.split(".")[0]
+            caption = first_sentence[:200] if len(first_sentence) <= 200 else first_sentence[:200]
+        
+        return content, caption
+
+    def _parse_conversation_preprocess_with_segments(
+        self, raw: str, original_text: str
+    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+        """
+        Parse conversation preprocess response and extract segments.
+        Returns: (conversation_text, summary, segments)
+        """
+        conversation = self._extract_tag_content(raw, "conversation")
+        summary = self._extract_tag_content(raw, "summary")
+        
+        # Try to extract segments from JSON response
+        segments = None
+        try:
+            # Try to parse the raw response as JSON
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict) and "segments" in parsed:
+                segments_data = parsed["segments"]
+                if isinstance(segments_data, list):
+                    segments = []
+                    for seg in segments_data:
+                        if isinstance(seg, dict) and "start" in seg and "end" in seg:
+                            segments.append({
+                                "start": int(seg["start"]),
+                                "end": int(seg["end"])
+                            })
+        except (json.JSONDecodeError, ValueError, KeyError):
+            # If JSON parsing fails, try to extract JSON blob
+            try:
+                blob = self._extract_json_blob(raw)
+                parsed = json.loads(blob)
+                if isinstance(parsed, dict) and "segments" in parsed:
+                    segments_data = parsed["segments"]
+                    if isinstance(segments_data, list):
+                        segments = []
+                        for seg in segments_data:
+                            if isinstance(seg, dict) and "start" in seg and "end" in seg:
+                                segments.append({
+                                    "start": int(seg["start"]),
+                                    "end": int(seg["end"])
+                                })
+            except Exception:
+                # If all parsing fails, segments remain None
+                pass
+        
+        return conversation, summary, segments
 
     @staticmethod
     def _extract_tag_content(raw: str, tag: str) -> str | None:

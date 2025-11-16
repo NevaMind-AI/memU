@@ -17,6 +17,18 @@ class HTTPBackend:
 
     def parse_summary_response(self, data: dict[str, Any]) -> str:
         raise NotImplementedError
+    
+    def build_vision_payload(
+        self,
+        *,
+        prompt: str,
+        base64_image: str,
+        mime_type: str,
+        system_prompt: str | None,
+        chat_model: str,
+        max_tokens: int | None,
+    ) -> dict[str, Any]:
+        raise NotImplementedError
 
     def build_embedding_payload(self, *, inputs: list[str], embed_model: str) -> dict[str, Any]:
         raise NotImplementedError
