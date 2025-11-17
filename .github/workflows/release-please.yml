@@ -1,7 +1,7 @@
 on:
   push:
     branches:
-      - next
+      - main
 
 permissions:
   contents: write
@@ -21,7 +21,7 @@ jobs:
         id: release
         with:
           release-type: python
-          target-branch: next
+          target-branch: main
 
   build:
     name: upload wheel
