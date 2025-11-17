@@ -11,8 +11,8 @@
 [![Twitter](https://img.shields.io/badge/Twitter-Síguenos-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
 </div>
 
-**MemU** es un sistema de memoria agente de próxima generación que rediseña la arquitectura de memoria de los agentes desde una perspectiva centrada en la memoria, abstrayéndola como una capa de datos que evoluciona dinámicamente y organiza y recupera información relevante de forma inteligente según el contexto.  
-A través de mecanismos adaptativos de recuperación y retroceso, extrae dinámicamente la información más pertinente.  
+**MemU** es un sistema de memoria agente de próxima generación que rediseña la arquitectura de memoria de los agentes desde una perspectiva centrada en la memoria, abstrayéndola como una capa de datos que evoluciona dinámicamente y organiza y recupera información relevante de forma inteligente según el contexto.
+A través de mecanismos adaptativos de recuperación y retroceso, extrae dinámicamente la información más pertinente.
 El sistema utiliza una **Memoria Multimodal Unificada**, con soporte nativo para diferentes tipos de datos, incluidos texto, imágenes y audio, formando una representación de memoria cohesiva.
 
 Visita nuestra página web: [memu.pro](https://memu.pro/)
@@ -35,18 +35,18 @@ Existen tres formas de comenzar con MemU:
 
 ### ☁️ Versión en la nube ([Plataforma en línea](https://app.memu.so))
 
-La forma más rápida de integrar tu aplicación con memU. Perfecta para equipos e individuos que desean acceso inmediato sin la complejidad de configuración.  
+La forma más rápida de integrar tu aplicación con memU. Perfecta para equipos e individuos que desean acceso inmediato sin la complejidad de configuración.
 Nosotros alojamos los modelos, las API y el almacenamiento en la nube, asegurando que tu aplicación obtenga la mejor calidad de memoria IA.
 
-- **Acceso instantáneo** – Comienza a integrar memorias de IA en minutos  
-- **Infraestructura gestionada** – Nos encargamos del escalado, actualizaciones y mantenimiento para una calidad óptima de memoria  
-- **Soporte premium** – Suscríbete y obtén asistencia prioritaria de nuestro equipo de ingeniería  
+- **Acceso instantáneo** – Comienza a integrar memorias de IA en minutos
+- **Infraestructura gestionada** – Nos encargamos del escalado, actualizaciones y mantenimiento para una calidad óptima de memoria
+- **Soporte premium** – Suscríbete y obtén asistencia prioritaria de nuestro equipo de ingeniería
 
 ### Paso a paso
 
-**Paso 1:** Crear cuenta  
+**Paso 1:** Crear cuenta
 
-Crea una cuenta en https://app.memu.so  
+Crea una cuenta en https://app.memu.so
 
 Luego, visita https://app.memu.so/api-key/ para generar tus claves API.
 
@@ -62,14 +62,14 @@ from memu import MemuClient
 ```python
 # Inicialización
 memu_client = MemuClient(
-    base_url="https://api.memu.so", 
+    base_url="https://api.memu.so",
     api_key=os.getenv("MEMU_API_KEY")
 )
 memu_client.memorize_conversation(
     conversation=conversation_text, # Se recomienda una conversación larga (~8000 tokens), consulta https://memu.pro/blog/memu-best-practice para más detalles
-    user_id="user001", 
-    user_name="User", 
-    agent_id="assistant001", 
+    user_id="user001",
+    user_name="User",
+    agent_id="assistant001",
     agent_name="Assistant"
 )
 ```
@@ -85,10 +85,10 @@ Consulta la [referencia de la API](docs/API_REFERENCE.md) o [nuestro blog](https
 
 Para organizaciones que requieren máxima seguridad, personalización, control y la mejor calidad:
 
-- **Licencia Comercial** – Funcionalidades propietarias completas, derechos de uso comercial, opciones de marca blanca  
-- **Desarrollo Personalizado** – Integración SSO/RBAC, equipo dedicado de algoritmos para optimización de marcos específicos por escenario  
-- **Inteligencia y Analítica** – Análisis de comportamiento del usuario, monitoreo en tiempo real, optimización automática de agentes  
-- **Soporte Premium** – Soporte dedicado 24/7, SLA personalizados, servicios profesionales de implementación  
+- **Licencia Comercial** – Funcionalidades propietarias completas, derechos de uso comercial, opciones de marca blanca
+- **Desarrollo Personalizado** – Integración SSO/RBAC, equipo dedicado de algoritmos para optimización de marcos específicos por escenario
+- **Inteligencia y Analítica** – Análisis de comportamiento del usuario, monitoreo en tiempo real, optimización automática de agentes
+- **Soporte Premium** – Soporte dedicado 24/7, SLA personalizados, servicios profesionales de implementación
 
 📧 **Consultas empresariales:** [contact@nevamind.ai](mailto:contact@nevamind.ai)
 
@@ -98,9 +98,9 @@ Para organizaciones que requieren máxima seguridad, personalización, control y
 
 Para usuarios y desarrolladores que prefieren control local, privacidad de datos o personalización:
 
-* **Privacidad de Datos** – Mantén los datos sensibles dentro de tu infraestructura  
-* **Personalización** – Modifica y amplía la plataforma según tus necesidades  
-* **Control de Costos** – Evita tarifas recurrentes en la nube para implementaciones a gran escala  
+* **Privacidad de Datos** – Mantén los datos sensibles dentro de tu infraestructura
+* **Personalización** – Modifica y amplía la plataforma según tus necesidades
+* **Control de Costos** – Evita tarifas recurrentes en la nube para implementaciones a gran escala
 
 Consulta el [README de autoalojamiento](README.self_host.md)
 
@@ -131,8 +131,8 @@ Consulta el [README de autoalojamiento](README.self_host.md)
 
 ## 🤝 Contribuir
 
-Construimos confianza a través de la colaboración de código abierto.  
-Tus contribuciones creativas impulsan la innovación de memU hacia adelante.  
+Construimos confianza a través de la colaboración de código abierto.
+Tus contribuciones creativas impulsan la innovación de memU hacia adelante.
 Explora nuestros issues e iniciativas en GitHub para comenzar y dejar tu huella en el futuro de memU.
 
 📋 **[Lee nuestra guía detallada de contribución →](CONTRIBUTING.md)**
@@ -149,8 +149,8 @@ Al contribuir a MemU, aceptas que tus contribuciones se licencien bajo la **Lice
 
 Para más información, contacta con [info@nevamind.ai](mailto:info@nevamind.ai)
 
-- **GitHub Issues:** Reporta errores, solicita funciones y sigue el desarrollo. [Enviar un issue](https://github.com/NevaMind-AI/memU/issues)  
-- **Discord:** Obtén soporte en tiempo real, chatea con la comunidad y mantente actualizado. [Únete aquí](https://discord.com/invite/hQZntfGsbJ)  
+- **GitHub Issues:** Reporta errores, solicita funciones y sigue el desarrollo. [Enviar un issue](https://github.com/NevaMind-AI/memU/issues)
+- **Discord:** Obtén soporte en tiempo real, chatea con la comunidad y mantente actualizado. [Únete aquí](https://discord.com/invite/hQZntfGsbJ)
 - **X (Twitter):** Síguenos para recibir actualizaciones, información sobre IA y anuncios clave. [Síguenos](https://x.com/memU_ai)
 
 ---
@@ -195,4 +195,3 @@ Conéctate con nosotros en WeChat para recibir las últimas actualizaciones, dis
 ---
 
 *¡Mantente conectado con la comunidad de MemU! Únete a nuestros grupos de WeChat para discusiones en tiempo real, soporte técnico y oportunidades de networking.*
-

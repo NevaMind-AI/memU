@@ -11,7 +11,7 @@
 [![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
 </div>
 
-**MemU** は、エージェントのメモリアーキテクチャをメモリ中心の視点から再設計した次世代のエージェントメモリシステムです。文脈に基づいて関連情報を知的に整理・検索する「動的に進化するデータレイヤー」として抽象化されています。適応的な検索（retrieval）とバックトラッキング機構により、最も関連性の高い情報を動的に抽出します。  
+**MemU** は、エージェントのメモリアーキテクチャをメモリ中心の視点から再設計した次世代のエージェントメモリシステムです。文脈に基づいて関連情報を知的に整理・検索する「動的に進化するデータレイヤー」として抽象化されています。適応的な検索（retrieval）とバックトラッキング機構により、最も関連性の高い情報を動的に抽出します。
 このシステムはテキスト、画像、音声などの多様なデータ型をネイティブにサポートする **Unified Multimodal Memory** アーキテクチャを採用し、統一されたメモリ表現を形成します。
 
 公式サイト: [memu.pro](https://memu.pro/)
@@ -36,15 +36,15 @@ MemU の導入方法は主に 3 つあります。
 
 memU をアプリケーションに最も速く統合する方法です。セットアップの手間をかけずにすぐ使い始めたいチームや個人に最適です。私たちはモデル、API、クラウドストレージをホストし、アプリケーションが高品質な AI メモリを利用できるようにします。
 
-- **Instant Access** - 数分で AI メモリの統合を開始できます  
-- **Managed Infrastructure** - スケーリング、更新、メンテナンスを当社で管理し、最適なメモリ品質を維持します  
+- **Instant Access** - 数分で AI メモリの統合を開始できます
+- **Managed Infrastructure** - スケーリング、更新、メンテナンスを当社で管理し、最適なメモリ品質を維持します
 - **Premium Support** - サブスクライブでエンジニアチームによる優先サポートを受けられます
 
 ### 手順
 
 **Step 1:** アカウント作成
 
-https://app.memu.so にアクセスしてアカウントを作成してください。  
+https://app.memu.so にアクセスしてアカウントを作成してください。
 その後、https://app.memu.so/api-key/ に移動して API キーを生成してください。
 
 **Step 2:** コードに3行を追加
@@ -54,7 +54,7 @@ pip install memu-py
 # Example usage
 from memu import MemuClient
 # Initialize
-  
+
 詳細については、[APIリファレンス](docs/API_REFERENCE.md) または [公式ブログ](https://memu.pro/blog) をご覧ください。
 
 📖 **完全な統合の詳細については [`example/client/memory.py`](example/client/memory.py) を参照してください。**
@@ -94,7 +94,7 @@ from memu import MemuClient
 </div>
 
 ---
- 
+
 ## 🎓 **ユースケース**
 
 | | | | |
@@ -108,7 +108,7 @@ from memu import MemuClient
 オープンソースの協力を通じて信頼を築きます。あなたの創造的な貢献が memU の革新を前進させます。GitHub の課題やプロジェクトを確認し、参加して memU の未来に影響を与えましょう。
 
 📋 **[詳細なコントリビューションガイドを読む →](CONTRIBUTING.md)**
- 
+
 ### **📄 ライセンス**
 
 MemU に貢献することで、あなたの貢献は **Apache License 2.0** の下でライセンスされることに同意したことになります。
@@ -119,17 +119,17 @@ MemU に貢献することで、あなたの貢献は **Apache License 2.0** の
 
 詳細については info@nevamind.ai までお問い合わせください
 
-- **GitHub Issues:** バグ報告、機能リクエスト、開発状況の追跡。[Issueを提出](https://github.com/NevaMind-AI/memU/issues)  
+- **GitHub Issues:** バグ報告、機能リクエスト、開発状況の追跡。[Issueを提出](https://github.com/NevaMind-AI/memU/issues)
 
-- **Discord:** リアルタイムサポートを受けたり、コミュニティでチャットしたり、最新情報を取得。[参加する](https://discord.com/invite/hQZntfGsbJ)  
+- **Discord:** リアルタイムサポートを受けたり、コミュニティでチャットしたり、最新情報を取得。[参加する](https://discord.com/invite/hQZntfGsbJ)
 
 - **X (Twitter):** 更新情報、AIの洞察、重要な発表をフォロー。[フォローする](https://x.com/memU_ai)
 
 ## 🤝 エコシステム
- 
+
 素晴らしい組織と協力できることを誇りに思います：
 
-<div align="center"> 
+<div align="center">
 ### 開発ツール
 <a href="https://github.com/TEN-framework/ten-framework"><img src="https://avatars.githubusercontent.com/u/113095513?s=200&v=4" alt="Ten" height="40" style="margin: 10px;"></a>
 <a href="https://github.com/openagents-org/openagents"><img src="assets/partners/openagents.png" alt="OpenAgents" height="40" style="margin: 10px;"></a>
@@ -159,4 +159,3 @@ MemU に貢献することで、あなたの貢献は **Apache License 2.0** の
 ---
 
 *MemU コミュニティとつながり続けましょう！WeChat グループに参加して、リアルタイムのディスカッション、技術サポート、ネットワーキングの機会を活用してください。*
-

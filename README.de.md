@@ -11,7 +11,7 @@
 [![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
 </div>
 
-**MemU** ist ein Next-Generation Agentic Memory System, das die Speicherarchitektur von Agenten aus einer speicherzentrierten Perspektive neu gestaltet—es abstrahiert sie als eine dynamisch entwickelnde Datenschicht, die intelligent relevante Informationen basierend auf dem Kontext organisiert und abruft. Durch adaptive Abruf- und Backtracking-Mechanismen extrahiert es dynamisch die relevantesten Informationen. 
+**MemU** ist ein Next-Generation Agentic Memory System, das die Speicherarchitektur von Agenten aus einer speicherzentrierten Perspektive neu gestaltet—es abstrahiert sie als eine dynamisch entwickelnde Datenschicht, die intelligent relevante Informationen basierend auf dem Kontext organisiert und abruft. Durch adaptive Abruf- und Backtracking-Mechanismen extrahiert es dynamisch die relevantesten Informationen.
 Das System verwendet eine **Unified Multimodal Memory**-Architektur mit nativer Unterstützung für verschiedene Datentypen, einschließlich Text, Bilder und Audio, um eine kohärente Speicherrepräsentation zu bilden.
 
 Besuche unsere Homepage: [memu.pro](https://memu.pro/)
@@ -60,18 +60,18 @@ from memu import MemuClient
 ```python
 # Initialisierung
 memu_client = MemuClient(
-    base_url="https://api.memu.so", 
+    base_url="https://api.memu.so",
     api_key=os.getenv("MEMU_API_KEY")
 )
 memu_client.memorize_conversation(
     conversation=conversation_text,
-    user_id="user001", 
-    user_name="User", 
-    agent_id="assistant001", 
+    user_id="user001",
+    user_name="User",
+    agent_id="assistant001",
     agent_name="Assistant"
 )
 ```
-Siehe [API reference](docs/API_REFERENCE.md) oder [unseren Blog](https://memu.pro/blog) für weitere Details. 
+Siehe [API reference](docs/API_REFERENCE.md) oder [unseren Blog](https://memu.pro/blog) für weitere Details.
 
 📖 **Siehe [`example/client/memory.py`](example/client/memory.py) für vollständige Integrationsdetails**
 

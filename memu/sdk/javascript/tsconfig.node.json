@@ -1,4 +1,0 @@
-{
-  "extends": "@moeru/tsconfig/node.json",
-  "include": ["*.config.*", "examples"]
-}
