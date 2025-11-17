@@ -1,6 +1,6 @@
 [project]
 name = "memu-py"
-version = "1.0.0-alpha.1"
+version = "0.3.0"
 authors = [
     {name = "MemU Team", email = "contact@nevamind.ai"},
 ]
