@@ -27,30 +27,36 @@ def _default_memory_categories() -> list[dict[str, str]]:
     ]
 
 
-class AppSettings(BaseModel):
-    # where to store raw resources
-    resources_dir: str = Field(default="./resources")
-    # openai base
-    openai_base: str = Field(default="https://api.openai.com/v1")
-    openai_api_key: str = Field(default="OPENAI_API_KEY")
-    # models
-    chat_model: str = Field(default="gpt-5-nano")
-    embed_model: str = Field(default="text-embedding-3-small")
-    llm_client_backend: str = Field(
-        default="sdk",
-        description="Which OpenAI client backend to use: 'httpx' (httpx) or 'sdk' (official OpenAI).",
-    )
-    llm_http_provider: str = Field(
+class LLMConfig(BaseModel):
+    provider: str = Field(
         default="openai",
-        description="Name of the HTTP LLM provider implementation (e.g. 'openai').",
+        description="Identifier for the LLM provider implementation (used by HTTP client backend).",
     )
-    llm_http_endpoints: dict[str, str] = Field(
+    base_url: str = Field(default="https://api.openai.com/v1")
+    api_key: str = Field(default="OPENAI_API_KEY")
+    chat_model: str = Field(default="gpt-4o-mini")
+    embed_model: str = Field(default="text-embedding-3-small")
+    client_backend: str = Field(
+        default="sdk",
+        description="Which LLM client backend to use: 'httpx' (httpx) or 'sdk' (official OpenAI).",
+    )
+    endpoint_overrides: dict[str, str] = Field(
         default_factory=dict,
         description="Optional overrides for HTTP endpoints (keys: 'chat'/'summary', 'embeddings'/'embed').",
     )
-    # thresholds
+
+
+class BlobConfig(BaseModel):
+    provider: str = Field(default="local")
+    resources_dir: str = Field(default="./data/resources")
+
+
+class DatabaseConfig(BaseModel):
+    provider: str = Field(default="memory")
+
+
+class MemorizeConfig(BaseModel):
     category_assign_threshold: float = Field(default=0.25)
-    # summarization prompts
     default_summary_prompt: str = Field(default="Summarize the text in one short paragraph.")
     summary_prompts: dict[str, str] = Field(
         default_factory=dict,

@@ -3,12 +3,12 @@ import json
 import logging
 import pathlib
 import re
-from collections.abc import Sequence
-from typing import Any, cast
+from collections.abc import Mapping, Sequence
+from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel
 
-from memu.app.settings import AppSettings
+from memu.app.settings import BlobConfig, DatabaseConfig, LLMConfig, MemorizeConfig
 from memu.llm.http_client import HTTPLLMClient
 from memu.memory.repo import InMemoryStore
 from memu.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
@@ -24,18 +24,31 @@ from memu.vector.index import cosine_topk
 logger = logging.getLogger(__name__)
 
 
+TConfigModel = TypeVar("TConfigModel", bound=BaseModel)
+
+
 class MemoryUser:
-    def __init__(self, settings: AppSettings):
-        self.settings = settings
-        self.fs = LocalFS(settings.resources_dir)
+    def __init__(
+        self,
+        *,
+        llm_config: dict[str, Any] | LLMConfig | None = None,
+        blob_config: dict[str, Any] | BlobConfig | None = None,
+        database_config: dict[str, Any] | DatabaseConfig | None = None,
+        memorize_config: dict[str, Any] | MemorizeConfig | None = None,
+    ):
+        self.llm_config = self._validate_config(llm_config, LLMConfig)
+        self.blob_config = self._validate_config(blob_config, BlobConfig)
+        self.database_config = self._validate_config(database_config, DatabaseConfig)
+        self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
+        self.fs = LocalFS(self.blob_config.resources_dir)
         self.store = InMemoryStore()
-        backend = (settings.llm_client_backend or "httpx").lower()
+        backend = self.llm_config.client_backend
         self.openai: Any
         client_kwargs: dict[str, Any] = {
-            "base_url": settings.openai_base,
-            "api_key": settings.openai_api_key,
-            "chat_model": settings.chat_model,
-            "embed_model": settings.embed_model,
+            "base_url": self.llm_config.base_url,
+            "api_key": self.llm_config.api_key,
+            "chat_model": self.llm_config.chat_model,
+            "embed_model": self.llm_config.embed_model,
         }
         if backend == "sdk":
             from memu.llm.openai_sdk import OpenAISDKClient
@@ -43,15 +56,15 @@ class MemoryUser:
             self.openai = OpenAISDKClient(**client_kwargs)
         elif backend == "httpx":
             self.openai = HTTPLLMClient(
-                provider=self.settings.llm_http_provider,
-                endpoint_overrides=self.settings.llm_http_endpoints,
+                provider=self.llm_config.provider,
+                endpoint_overrides=self.llm_config.endpoint_overrides,
                 **client_kwargs,
             )
         else:
-            msg = f"Unknown llm_client_backend '{settings.llm_client_backend}'"
+            msg = f"Unknown llm_client_backend '{self.llm_config.client_backend}'"
             raise ValueError(msg)
 
-        self.category_configs: list[dict[str, str]] = list(settings.memory_categories or [])
+        self.category_configs: list[dict[str, str]] = list(self.memorize_config.memory_categories or [])
         self._category_prompt_str = self._format_categories_for_prompt(self.category_configs)
         self._category_ids: list[str] = []
         self._category_name_to_id: dict[str, str] = {}
@@ -121,11 +134,12 @@ class MemoryUser:
         return res
 
     def _resolve_memory_types(self) -> list[MemoryType]:
-        configured_types = self.settings.memory_types or DEFAULT_MEMORY_TYPES
+        configured_types = self.memorize_config.memory_types or DEFAULT_MEMORY_TYPES
         return [cast(MemoryType, mtype) for mtype in configured_types]
 
     def _resolve_summary_prompt(self, modality: str, override: str | None) -> str:
-        return override or self.settings.summary_prompts.get(modality) or self.settings.default_summary_prompt
+        memo_settings = self.memorize_config
+        return override or memo_settings.summary_prompts.get(modality) or memo_settings.default_summary_prompt
 
     async def _generate_structured_entries(
         self,
@@ -580,7 +594,7 @@ class MemoryUser:
 
     def _build_memory_type_prompt(self, *, memory_type: MemoryType, resource_text: str, categories_str: str) -> str:
         template = (
-            self.settings.memory_type_prompts.get(memory_type) or MEMORY_TYPE_PROMPTS.get(memory_type) or ""
+            self.memorize_config.memory_type_prompts.get(memory_type) or MEMORY_TYPE_PROMPTS.get(memory_type) or ""
         ).strip()
         if not template:
             return resource_text
@@ -596,7 +610,7 @@ class MemoryUser:
             category=self._escape_prompt_value(category.name),
             original_content=self._escape_prompt_value(original or ""),
             new_memory_items_text=self._escape_prompt_value(new_items_text or "No new memory items."),
-            target_length=self.settings.category_summary_target_length,
+            target_length=self.memorize_config.category_summary_target_length,
         )
 
     async def _update_category_summaries(self, updates: dict[str, list[str]]) -> None:
@@ -751,6 +765,17 @@ class MemoryUser:
         data = obj.model_dump()
         data.pop("embedding", None)
         return data
+
+    @staticmethod
+    def _validate_config(
+        config: Mapping[str, Any] | BaseModel | None,
+        model_type: type[TConfigModel],
+    ) -> TConfigModel:
+        if isinstance(config, model_type):
+            return config
+        if config is None:
+            return model_type()
+        return model_type.model_validate(config)
 
     async def retrieve(self, query: str, *, top_k: int = 5) -> dict[str, Any]:
         qvec = (await self.openai.embed([query]))[0]
