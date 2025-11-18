@@ -27,8 +27,7 @@ MemU offers several convenient ways to get started right away:
 ## ⭐ Star Us on GitHub
 
 Star MemU to get notified about new releases and join our growing community of AI developers building intelligent agents with persistent memory capabilities.
-
-![star-us](./assets/star.gif)
+![star-us](https://github.com/user-attachments/assets/913dcd2e-90d2-4f62-9e2d-30e1950c0606)
 
 **💬 Join our Discord community:** [https://discord.gg/memu](https://discord.gg/memu)
 
