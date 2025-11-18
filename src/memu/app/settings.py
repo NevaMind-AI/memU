@@ -1,7 +1,18 @@
-from pydantic import BaseModel, Field
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, BeforeValidator, Field
 
 from memu.prompts.memory_type import DEFAULT_MEMORY_TYPES
 from memu.prompts.memory_type import PROMPTS as DEFAULT_MEMORY_TYPE_PROMPTS
+
+
+def normalize_value(v: str) -> str:
+    if isinstance(v, str):
+        return v.strip().lower()
+    return v
+
+
+Normalize = BeforeValidator(normalize_value)
 
 
 def _default_memory_types() -> list[str]:
@@ -56,10 +67,16 @@ class DatabaseConfig(BaseModel):
 
 
 class RetrieveConfig(BaseModel):
-    method: str = Field(
-        default="rag",
-        description="Retrieval method: 'rag' for embedding-based vector search, 'llm' for LLM-based ranking.",
-    )
+    """Configure retrieval behavior for `MemoryUser.retrieve`.
+
+    Attributes:
+        method: Retrieval strategy. Use "rag" for embedding-based vector search or
+            "llm" to delegate ranking to the LLM.
+        top_k: Maximum number of results to return per category (and per stage),
+            controlling breadth of the retrieved context.
+    """
+
+    method: Annotated[Literal["rag", "llm"], Normalize] = "rag"
     top_k: int = Field(
         default=5,
         description="Maximum number of results to return per category.",

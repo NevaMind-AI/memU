@@ -34,19 +34,21 @@ logger = logging.getLogger(__name__)
 TConfigModel = TypeVar("TConfigModel", bound=BaseModel)
 
 
-class MemoryUser:
+class MemoryService:
     def __init__(
         self,
         *,
-        llm_config: dict[str, Any] | LLMConfig | None = None,
-        blob_config: dict[str, Any] | BlobConfig | None = None,
-        database_config: dict[str, Any] | DatabaseConfig | None = None,
-        memorize_config: dict[str, Any] | MemorizeConfig | None = None,
+        llm_config: LLMConfig | dict[str, Any] | None = None,
+        blob_config: BlobConfig | dict[str, Any] | None = None,
+        database_config: DatabaseConfig | dict[str, Any] | None = None,
+        memorize_config: MemorizeConfig | dict[str, Any] | None = None,
+        retrieve_config: RetrieveConfig | dict[str, Any] | None = None,
     ):
         self.llm_config = self._validate_config(llm_config, LLMConfig)
         self.blob_config = self._validate_config(blob_config, BlobConfig)
         self.database_config = self._validate_config(database_config, DatabaseConfig)
         self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
+        self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
         self.fs = LocalFS(self.blob_config.resources_dir)
         self.store = InMemoryStore()
         backend = self.llm_config.client_backend
@@ -788,7 +790,6 @@ class MemoryUser:
         self,
         query: str,
         *,
-        retrieve_config: dict[str, Any] | RetrieveConfig | None = None,
         conversation_history: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """
@@ -796,11 +797,6 @@ class MemoryUser:
 
         Args:
             query: The search query string
-            retrieve_config: Configuration for retrieval method and parameters.
-                           Can be a dict or RetrieveConfig object with:
-                           - method: 'rag' for embedding-based vector search (default),
-                                   'llm' for LLM-based semantic ranking
-                           - top_k: Maximum number of results per category (default: 5)
             conversation_history: Optional list of last 3 conversation turns, each with 'role' and 'content'.
                                 Example: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
 
@@ -819,14 +815,6 @@ class MemoryUser:
             - Pre-retrieval decision checks if retrieval is needed based on query type
             - Query rewriting incorporates conversation history for better context
         """
-        # Validate and resolve config
-        config = self._validate_config(retrieve_config, RetrieveConfig)
-
-        # Validate method
-        if config.method not in ("rag", "llm"):
-            msg = f"Invalid retrieval method '{config.method}'. Must be 'rag' or 'llm'."
-            raise ValueError(msg)
-
         # Step 1: Decide if retrieval is needed
         needs_retrieval, rewritten_query = await self._decide_if_retrieval_needed(query, conversation_history)
 
@@ -844,13 +832,13 @@ class MemoryUser:
         logger.info(f"Query rewritten: '{query}' -> '{rewritten_query}'")
 
         # Step 2: Perform retrieval with rewritten query using configured method
-        if config.method == "llm":
+        if self.retrieve_config.method == "llm":
             results = await self._llm_based_retrieve(
-                rewritten_query, top_k=config.top_k, conversation_history=conversation_history
+                rewritten_query, top_k=self.retrieve_config.top_k, conversation_history=conversation_history
             )
         else:  # rag
             results = await self._embedding_based_retrieve(
-                rewritten_query, top_k=config.top_k, conversation_history=conversation_history
+                rewritten_query, top_k=self.retrieve_config.top_k, conversation_history=conversation_history
             )
 
         # Add metadata
