@@ -17,6 +17,7 @@ from memu.prompts.memory_type import DEFAULT_MEMORY_TYPES
 from memu.prompts.memory_type import PROMPTS as MEMORY_TYPE_PROMPTS
 from memu.prompts.preprocess import PROMPTS as PREPROCESS_PROMPTS
 from memu.prompts.retrieve.judger import PROMPT as RETRIEVE_JUDGER_PROMPT
+from memu.prompts.retrieve.query_rewriter import PROMPT as QUERY_REWRITER_PROMPT
 from memu.storage.local_fs import LocalFS
 from memu.utils.video import VideoFrameExtractor
 from memu.vector.index import cosine_topk
@@ -777,9 +778,56 @@ class MemoryUser:
             return model_type()
         return model_type.model_validate(config)
 
-    async def retrieve(self, query: str, *, top_k: int = 5) -> dict[str, Any]:
+    async def retrieve(
+        self,
+        query: str,
+        *,
+        conversation_history: list[dict[str, str]] | None = None,
+        method: str = "rag",
+        top_k: int = 5,
+    ) -> dict[str, Any]:
+        """
+        Retrieve relevant memories based on the query.
+
+        Args:
+            query: The search query
+            conversation_history: Optional conversation history for query rewriting
+            method: Retrieval method - "rag" (vector similarity) or "llm" (LLM-based ranking)
+            top_k: Number of top results to return
+
+        Returns:
+            Dictionary containing original_query, rewritten_query, method, and retrieved results
+        """
+        # Rewrite query if conversation history is provided
+        original_query = query
+        rewritten_query = query
+
+        if conversation_history:
+            rewritten_query = await self._rewrite_query_with_history(query, conversation_history)
+            logger.debug(f"Original query: {original_query}")
+            logger.debug(f"Rewritten query: {rewritten_query}")
+
+        response: dict[str, Any] = {
+            "original_query": original_query,
+            "rewritten_query": rewritten_query,
+            "method": method,
+            "resources": [],
+            "items": [],
+            "categories": [],
+        }
+
+        if method == "rag":
+            return await self._retrieve_rag(rewritten_query, response, top_k)
+        elif method == "llm":
+            return await self._retrieve_llm(rewritten_query, response, top_k)
+        else:
+            msg = f"Unknown retrieval method '{method}'. Use 'rag' or 'llm'."
+            raise ValueError(msg)
+
+    async def _retrieve_rag(self, query: str, response: dict[str, Any], top_k: int) -> dict[str, Any]:
+        """RAG-based retrieval using vector similarity search"""
+        # Use query for embedding
         qvec = (await self.openai.embed([query]))[0]
-        response: dict[str, list[dict[str, Any]]] = {"resources": [], "items": [], "categories": []}
         content_sections: list[str] = []
 
         cat_hits, summary_lookup = await self._rank_categories_by_summary(qvec, top_k)
@@ -805,6 +853,126 @@ class MemoryUser:
                 await self._judge_retrieval_sufficient(query, "\n\n".join(content_sections))
 
         return response
+
+    async def _retrieve_llm(self, query: str, response: dict[str, Any], top_k: int) -> dict[str, Any]:
+        """LLM-based retrieval using language model to rank and select memories"""
+        # Get all available memories
+        all_categories = list(self.store.categories.values())
+        all_items = list(self.store.items.values())
+        all_resources = list(self.store.resources.values())
+
+        # Use LLM to select and rank relevant memories
+        if all_categories:
+            selected_categories = await self._llm_rank_memories(query, all_categories, "categories", top_k)
+            response["categories"] = selected_categories
+
+        if all_items:
+            selected_items = await self._llm_rank_memories(query, all_items, "items", top_k)
+            response["items"] = selected_items
+
+        if all_resources:
+            selected_resources = await self._llm_rank_memories(query, all_resources, "resources", top_k)
+            response["resources"] = selected_resources
+
+        return response
+
+    async def _llm_rank_memories(
+        self, query: str, memories: list[Any], memory_type: str, top_k: int
+    ) -> list[dict[str, Any]]:
+        """Use LLM to rank and select relevant memories"""
+        if not memories:
+            return []
+
+        # Limit to top 20 to avoid token limits
+        sample_size = min(len(memories), 20)
+        memories_to_rank = memories[:sample_size]
+
+        # Format memories for LLM
+        formatted_memories = []
+        for idx, mem in enumerate(memories_to_rank):
+            if memory_type == "categories":
+                content = f"Category: {mem.name}\nSummary: {mem.summary or 'N/A'}"
+            elif memory_type == "items":
+                content = f"Item: {mem.summary}"
+            else:  # resources
+                content = f"Resource: {mem.caption or mem.url}"
+            formatted_memories.append(f"[{idx}] {content}")
+
+        memories_text = "\n\n".join(formatted_memories)
+
+        # Create prompt for LLM ranking
+        prompt = f"""Given the query and a list of memories, select the top {top_k} most relevant memories.
+Return only the indices (numbers) of the selected memories, separated by commas.
+
+Query: {query}
+
+Memories:
+{memories_text}
+
+Output format: 0,3,7,... (indices only, comma-separated)
+Selected indices:"""
+
+        response_text = await self.openai.summarize(prompt, system_prompt=None)
+
+        # Parse selected indices
+        selected_indices = self._parse_llm_indices(response_text, len(memories_to_rank))
+
+        # Return selected memories
+        result = []
+        for idx in selected_indices[:top_k]:
+            mem = memories_to_rank[idx]
+            mem_dict = {
+                "id": mem.id,
+                "score": 1.0 - (selected_indices.index(idx) * 0.1),  # Decreasing score
+            }
+            if memory_type == "categories":
+                mem_dict.update({"name": mem.name, "summary": mem.summary})
+            elif memory_type == "items":
+                mem_dict.update({"summary": mem.summary, "memory_type": mem.memory_type})
+            else:
+                mem_dict.update({"url": mem.url, "caption": mem.caption})
+            result.append(mem_dict)
+
+        return result
+
+    def _parse_llm_indices(self, response: str, max_idx: int) -> list[int]:
+        """Parse indices from LLM response"""
+        # Extract numbers from response
+        numbers = re.findall(r"\d+", response)
+        indices = []
+        for num_str in numbers:
+            idx = int(num_str)
+            if 0 <= idx < max_idx and idx not in indices:
+                indices.append(idx)
+        return indices
+
+    async def _rewrite_query_with_history(self, query: str, conversation_history: list[dict[str, str]]) -> str:
+        """Rewrite query using conversation history to resolve references"""
+        # Format conversation history
+        history_text = "\n".join([
+            f"{msg.get('role', 'unknown')}: {msg.get('content', '')}" for msg in conversation_history
+        ])
+
+        # Create prompt for query rewriting
+        prompt = QUERY_REWRITER_PROMPT.format(
+            conversation_history=self._escape_prompt_value(history_text), query=self._escape_prompt_value(query)
+        )
+
+        # Get rewritten query from LLM
+        response = await self.openai.summarize(prompt, system_prompt=None)
+
+        # Parse the rewritten query from the response
+        rewritten_query = self._parse_rewritten_query(response)
+        return rewritten_query or query  # Fall back to original if parsing fails
+
+    def _parse_rewritten_query(self, response: str) -> str | None:
+        """Parse rewritten query from LLM response"""
+        # Try to extract content between <rewritten_query> tags
+        match = re.search(r"<rewritten_query>\s*(.*?)\s*</rewritten_query>", response, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        # If no tags found, return the response as is (fallback)
+        return response.strip()
 
     async def _rank_categories_by_summary(
         self, query_vec: list[float], top_k: int

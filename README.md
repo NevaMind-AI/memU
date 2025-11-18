@@ -40,7 +40,7 @@ memU v0.3.0-Alpha has been released! This version initializes the memorize and r
 Starting from this release, memU will roll out multiple features in the short- to mid-term:
 
 ### Core capabilities iteration
-- [ ] **Multi-modal enhancements** – Support for images, audio, and video
+- [x] **Multi-modal enhancements** – Support for images, audio, and video
 - [ ] **Intention** – Higher-level decision-making and goal management
 - [ ] **Multi-client support** – Switch between OpenAI, Deepseek, Gemini, etc.
 - [ ] **Data persistence expansion** – Support for Postgres, S3, DynamoDB
@@ -88,76 +88,76 @@ Through this three-layer design, **MemU brings genuine memory into the agent lay
   A feedback-driven mechanism continuously adapts the memory structure according to real usage patterns.
 <img width="1280" height="312" alt="image" src="https://github.com/user-attachments/assets/e2c0ac0c-e5cb-44a9-b880-89be142e1ca5" />
 
-## 🚀Get Started
+#### Quick Start
 
-There are three ways to get started with MemU:
-
-### ☁️ Cloud Version ([Online Platform](https://app.memu.so))
-
-The fastest way to integrate your application with memU. Perfect for teams and individuals who want immediate access without setup complexity. We host the models, APIs, and cloud storage, ensuring your application gets the best quality AI memory.
-
-- **Instant Access** - Start integrating AI memories in minutes
-- **Managed Infrastructure** - We handle scaling, updates, and maintenance for optimal memory quality
-- **Premium Support** - Subscribe and get priority assistance from our engineering team
-
-### Step-by-step
-
-**Step 1:** Create account
-
-Create account on https://app.memu.so
-
-Then, go to https://app.memu.so/api-key/ for generating api-keys.
-
-**Step 2:** Add three lines to your code
-```python
-pip install memu-py
-
-# Example usage
-from memu import MemuClient
+**Step 1: Install**
+```bash
+pip install -e .
 ```
 
-**Step 3:** Quick Start
+**Step 2: Run the example**
 ```python
-# Initialize
-memu_client = MemuClient(
-    base_url="https://api.memu.so",
-    api_key=os.getenv("MEMU_API_KEY")
-)
-memu_client.memorize_conversation(
-    conversation=conversation_text, # Recommend longer conversation (~8000 tokens), see https://memu.pro/blog/memu-best-practice for details
-    user_id="user001",
-    user_name="User",
-    agent_id="assistant001",
-    agent_name="Assistant"
-)
+from memu.app import MemoryUser
+import logging
+
+async def test_memory_service():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+    logger = logging.getLogger("memu")
+    logger.setLevel(logging.DEBUG)
+
+    # Initialize MemoryUser with your OpenAI API key
+    service = MemoryUser(llm_config={"api_key": "your-openai-api-key"})
+
+    # Memorize a conversation
+    memory = await service.memorize(
+        resource_url="tests/data/example_conversation.json",
+        modality="conversation"
+    )
+
+    # Example conversation history for query rewriting
+    conversation_history = [
+        {"role": "user", "content": "Tell me about the user's preferences"},
+        {"role": "assistant", "content": "I'd be happy to help. Let me search the memory."},
+        {"role": "user", "content": "What are their habits?"}
+    ]
+
+    # Test 1: RAG-based Retrieval with conversation history
+    print("\n[Test 1] RAG-based Retrieval with conversation history")
+    retrieved_rag = await service.retrieve(
+        query="What are their habits?",
+        conversation_history=conversation_history,
+        method="rag",
+        top_k=5
+    )
+    print(f"Method: {retrieved_rag.get('method')}")
+    print(f"Original query: {retrieved_rag.get('original_query')}")
+    print(f"Rewritten query: {retrieved_rag.get('rewritten_query')}")
+    print(f"Results: {len(retrieved_rag.get('categories', []))} categories, "
+          f"{len(retrieved_rag.get('items', []))} items")
+
+    # Test 2: LLM-based Retrieval with conversation history
+    print("\n[Test 2] LLM-based Retrieval with conversation history")
+    retrieved_llm = await service.retrieve(
+        query="What are their habits?",
+        conversation_history=conversation_history,
+        method="llm",
+        top_k=5
+    )
+    print(f"Method: {retrieved_llm.get('method')}")
+    print(f"Original query: {retrieved_llm.get('original_query')}")
+    print(f"Rewritten query: {retrieved_llm.get('rewritten_query')}")
+    print(f"Results: {len(retrieved_llm.get('categories', []))} categories, "
+          f"{len(retrieved_llm.get('items', []))} items")
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(test_memory_service())
 ```
-Check [API reference](docs/API_REFERENCE.md) or [our blog](https://memu.pro/blog) for more details.
 
-📖 **See [`example/client/memory.py`](example/client/memory.py) for complete integration details**
-
-✨ **That's it!** MemU remembers everything and helps your AI learn from past conversations.
-
-
-### 🏢 Enterprise Edition
-
-For organizations requiring maximum security, customization, control and best quality:
-
-- **Commercial License** - Full proprietary features, commercial usage rights, white-labeling options
-- **Custom Development** - SSO/RBAC integration, dedicated algorithm team for scenario-specific framework optimization
-- **Intelligence & Analytics** - User behavior analysis, real-time production monitoring, automated agent optimization
-- **Premium Support** - 24/7 dedicated support, custom SLAs, professional implementation services
-
-📧 **Enterprise Inquiries:** [contact@nevamind.ai](mailto:contact@nevamind.ai)
-
-
-### 🏠 Self-Hosting (Community Edition)
-For users and developers who prefer local control, data privacy, or customization:
-
-* **Data Privacy** - Keep sensitive data within your infrastructure
-* **Customization** - Modify and extend the platform to fit your needs
-* **Cost Control** - Avoid recurring cloud fees for large-scale deployments
-
-See [self hosting README](README.self_host.md)
+See [self hosting README](README.self_host.md) for more details.
 
 ---
 
