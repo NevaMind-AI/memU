@@ -30,4 +30,3 @@ If the query is already self-contained and clear, return it as is.
 [The rewritten query that is self-contained and explicit]
 </rewritten_query>
 """
-

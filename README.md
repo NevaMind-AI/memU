@@ -11,7 +11,7 @@
 [![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
 </div>
 
-MemU is an agentic memory framework for LLM and AI agent backends. It receive multi-modal inputs, extracts them into memory items, and then organizes and summarizes these items into structured memory files. 
+MemU is an agentic memory framework for LLM and AI agent backends. It receive multi-modal inputs, extracts them into memory items, and then organizes and summarizes these items into structured memory files.
 
 Unlike traditional RAG systems that rely solely on embedding-based search, MemU supports **non-embedding retrieval** through direct file reading. The LLM comprehends natural language memory files directly, enabling deep search by progressively tracking from categories → items → original resources.
 
@@ -236,5 +236,3 @@ We're proud to work with amazing organizations:
 ---
 
 *Interested in partnering with MemU? Contact us at [contact@nevamind.ai](mailto:contact@nevamind.ai)*
-
-
