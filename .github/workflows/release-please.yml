@@ -55,6 +55,6 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: dist/memU-*.whl
+          file: dist/memu_*.whl
           tag: ${{ needs.release-please.outputs.tag_name }}
           file_glob: true
