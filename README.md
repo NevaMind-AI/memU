@@ -17,10 +17,10 @@ It redefines agent memory from a **memory-first perspective** by abstracting it 
 
 MemU offers several convenient ways to get started right away:
 
-- **One call = response + memory**  
+- **One call = response + memory**
   👉 memU Response API: https://memu.pro/docs#responseapi
 
-- **Try it instantly**  
+- **Try it instantly**
   👉 https://app.memu.so/quick-start
 ---
 
@@ -35,20 +35,20 @@ Star MemU to get notified about new releases and join our growing community of A
 ---
 ## Roadmap
 
-memU v0.3.0-Alpha has been released! This version initializes the memorize and retrieve workflows with the new 3-layer architecture.  
+memU v0.3.0-Alpha has been released! This version initializes the memorize and retrieve workflows with the new 3-layer architecture.
 
 Starting from this release, memU will roll out multiple features in the short- to mid-term:
 
 ### Core capabilities iteration
-- [ ] **Multi-modal enhancements** – Support for images, audio, and video  
-- [ ] **Intention** – Higher-level decision-making and goal management  
-- [ ] **Multi-client support** – Switch between OpenAI, Deepseek, Gemini, etc.  
-- [ ] **Data persistence expansion** – Support for Postgres, S3, DynamoDB  
-- [ ] **Benchmark tools** – Test agent performance and memory efficiency  
+- [ ] **Multi-modal enhancements** – Support for images, audio, and video
+- [ ] **Intention** – Higher-level decision-making and goal management
+- [ ] **Multi-client support** – Switch between OpenAI, Deepseek, Gemini, etc.
+- [ ] **Data persistence expansion** – Support for Postgres, S3, DynamoDB
+- [ ] **Benchmark tools** – Test agent performance and memory efficiency
 - [ ] ……
 
 ### Upcoming open-source repositories
-- [ ] **memU-ui** – The web frontend for memU, providing developers with an intuitive and visual interface  
+- [ ] **memU-ui** – The web frontend for memU, providing developers with an intuitive and visual interface
 - [ ] **memU-server** – Powers memU-ui with reliable data support, ensuring efficient reading, writing, and maintenance of agent memories
 
 ## 🧩 Why MemU?
@@ -61,30 +61,30 @@ Its core architecture consists of three layers: **Resource Layer → Memory Item
 
 <img width="1280" height="639" alt="image" src="https://github.com/user-attachments/assets/c34a1fdb-02fd-4542-9c10-121d79dba67f" />
 
-- **Resource Layer**  
+- **Resource Layer**
   A multimodal raw data warehouse, also serving as the ground truth layer, providing a semantic foundation for the memory system.
 
-- **Memory Item Layer**  
+- **Memory Item Layer**
   A unified semantic abstraction layer, functioning as the system’s semantic cache, supplying high-density semantic vectors for downstream retrieval and reasoning.
 
-- **MemoryCategory Layer**  
+- **MemoryCategory Layer**
   A thematic document layer, mimicking human working memory mechanisms, balancing short-term response efficiency and long-term information completeness.
 
 Through this three-layer design, **MemU brings genuine memory into the agent layer, achieving:**
 
-- **Full Traceability**  
+- **Full Traceability**
   Complete traceability across the three layers—from raw data → memory items → aggregated documents. Enables bidirectional tracking of each knowledge piece’s source and evolution, ensuring transparency and interpretability.
 
-- **End-to-End Memory Lifecycle Management**  
+- **End-to-End Memory Lifecycle Management**
   The three core processes correspond to the memory lifecycle: **Memorization → Retrieval → Self-evolution**.
 
-- **Coherent and Scalable Memorization**  
+- **Coherent and Scalable Memorization**
   During memorization, the system maintains memory coherence while automatically managing resources to support sustainable expansion.
 
-- **Efficient and Interpretable Retrieval**  
+- **Efficient and Interpretable Retrieval**
   Retrieves information efficiently while preserving interpretability, supporting cross-theme and cross-modal semantic queries and reasoning.
 
-- **Self-Evolving Memory**  
+- **Self-Evolving Memory**
   A feedback-driven mechanism continuously adapts the memory structure according to real usage patterns.
 <img width="1280" height="312" alt="image" src="https://github.com/user-attachments/assets/e2c0ac0c-e5cb-44a9-b880-89be142e1ca5" />
 
