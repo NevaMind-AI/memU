@@ -117,7 +117,7 @@ async def test_memory_service():
 
     # Memorize a conversation
     memory = await service.memorize(
-        resource_url="tests/data/example_conversation.json",
+        resource_url="tests/example/example_conversation.json",
         modality="conversation"
     )
 
