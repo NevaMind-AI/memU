@@ -33,4 +33,3 @@ USER_PROMPT = """Analyze the following query in the context of the conversation 
 <rewritten_query>
 [If RETRIEVE: provide a rewritten query with context. If NO_RETRIEVE: return original query]
 </rewritten_query>"""
-

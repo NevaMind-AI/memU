@@ -36,4 +36,3 @@ Analyze if the retrieved content is sufficient to answer the query. Consider:
 <judgment>
 [Either "ENOUGH" if sufficient, or "MORE" if additional information is needed]
 </judgment>"""
-

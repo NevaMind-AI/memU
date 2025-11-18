@@ -25,4 +25,3 @@ Important:
 - Only include resources that are actually relevant to the query
 - Empty array is acceptable if no relevant resources are found
 """
-

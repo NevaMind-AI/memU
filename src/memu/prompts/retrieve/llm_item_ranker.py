@@ -25,4 +25,3 @@ Important:
 - Only include items that are actually relevant to the query
 - Empty array is acceptable if no relevant items are found
 """
-
