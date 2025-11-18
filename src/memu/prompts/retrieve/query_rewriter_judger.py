@@ -33,6 +33,6 @@ Analyze if the retrieved content is sufficient to answer the query. Consider:
 [Provide the rewritten query with conversation context]
 </rewritten_query>
 
-<judgment>
+<judgement>
 [Either "ENOUGH" if sufficient, or "MORE" if additional information is needed]
-</judgment>"""
+</judgement>"""
