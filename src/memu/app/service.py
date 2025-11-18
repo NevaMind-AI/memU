@@ -8,7 +8,7 @@ from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel
 
-from memu.app.settings import BlobConfig, DatabaseConfig, LLMConfig, MemorizeConfig
+from memu.app.settings import BlobConfig, DatabaseConfig, LLMConfig, MemorizeConfig, RetrieveConfig
 from memu.llm.http_client import HTTPLLMClient
 from memu.memory.repo import InMemoryStore
 from memu.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
@@ -788,19 +788,19 @@ class MemoryUser:
         self,
         query: str,
         *,
-        top_k: int = 5,
-        embedding_search: bool = True,
+        retrieve_config: dict[str, Any] | RetrieveConfig | None = None,
         conversation_history: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """
-        Retrieve relevant memories based on the query using either embedding-based or LLM-based search.
+        Retrieve relevant memories based on the query using either RAG-based or LLM-based search.
 
         Args:
             query: The search query string
-            top_k: Maximum number of results to return per category (default: 5)
-            embedding_search: If True (default), use vector embedding similarity search.
-                            If False, use LLM-based search and ranking where the LLM
-                            reads all memory data and ranks results based on semantic understanding.
+            retrieve_config: Configuration for retrieval method and parameters.
+                           Can be a dict or RetrieveConfig object with:
+                           - method: 'rag' for embedding-based vector search (default),
+                                   'llm' for LLM-based semantic ranking
+                           - top_k: Maximum number of results per category (default: 5)
             conversation_history: Optional list of last 3 conversation turns, each with 'role' and 'content'.
                                 Example: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
 
@@ -813,12 +813,20 @@ class MemoryUser:
             - "resources": list - Retrieved resources
 
         Notes:
-            - Embedding search is faster and more efficient for large datasets
-            - LLM-based search may provide better semantic understanding but is slower and more expensive
-            - LLM-based search includes reasoning for each ranked result
+            - RAG (rag) method is faster and more efficient for large datasets
+            - LLM (llm) method may provide better semantic understanding but is slower and more expensive
+            - LLM method includes reasoning for each ranked result
             - Pre-retrieval decision checks if retrieval is needed based on query type
             - Query rewriting incorporates conversation history for better context
         """
+        # Validate and resolve config
+        config = self._validate_config(retrieve_config, RetrieveConfig)
+
+        # Validate method
+        if config.method not in ("rag", "llm"):
+            msg = f"Invalid retrieval method '{config.method}'. Must be 'rag' or 'llm'."
+            raise ValueError(msg)
+
         # Step 1: Decide if retrieval is needed
         needs_retrieval, rewritten_query = await self._decide_if_retrieval_needed(query, conversation_history)
 
@@ -835,14 +843,14 @@ class MemoryUser:
 
         logger.info(f"Query rewritten: '{query}' -> '{rewritten_query}'")
 
-        # Step 2: Perform retrieval with rewritten query
-        if not embedding_search:
+        # Step 2: Perform retrieval with rewritten query using configured method
+        if config.method == "llm":
             results = await self._llm_based_retrieve(
-                rewritten_query, top_k=top_k, conversation_history=conversation_history
+                rewritten_query, top_k=config.top_k, conversation_history=conversation_history
             )
-        else:
+        else:  # rag
             results = await self._embedding_based_retrieve(
-                rewritten_query, top_k=top_k, conversation_history=conversation_history
+                rewritten_query, top_k=config.top_k, conversation_history=conversation_history
             )
 
         # Add metadata

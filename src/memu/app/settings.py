@@ -55,6 +55,17 @@ class DatabaseConfig(BaseModel):
     provider: str = Field(default="memory")
 
 
+class RetrieveConfig(BaseModel):
+    method: str = Field(
+        default="rag",
+        description="Retrieval method: 'rag' for embedding-based vector search, 'llm' for LLM-based ranking.",
+    )
+    top_k: int = Field(
+        default=5,
+        description="Maximum number of results to return per category.",
+    )
+
+
 class MemorizeConfig(BaseModel):
     category_assign_threshold: float = Field(default=0.25)
     default_summary_prompt: str = Field(default="Summarize the text in one short paragraph.")
