@@ -24,10 +24,15 @@ jobs:
           target-branch: main
 
   build:
-    name: upload wheel
+    name: upload wheel & publish to pypi
     runs-on: ubuntu-latest
     needs: release-please
     if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
+
+    environment: pypi
+    permissions:
+      id-token: write
+
     strategy:
       fail-fast: false
       matrix:
@@ -58,3 +63,8 @@ jobs:
           file: dist/memu_*.whl
           tag: ${{ needs.release-please.outputs.tag_name }}
           file_glob: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
