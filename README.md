@@ -2,7 +2,7 @@
 
 ![MemU Banner](assets/banner.png)
 
-### MemU: The Next-Gen Agentic Memory System
+### MemU: A Future-Oriented Agentic Memory System
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -11,11 +11,17 @@
 [![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
 </div>
 
-**MemU** is a next-generation Agentic Memory System that redesigns Agent memory architecture from a memory-centric perspective—abstracting it as a dynamically evolving data layer that intelligently organizes and retrieves relevant information based on context. Through adaptive retrieval and backtracking mechanisms, it dynamically extracts the most pertinent information.
-The system employs a **Unified Multimodal Memory** architecture with native support for diverse data types including text, images, and audio, forming a cohesive memory representation.
+MemU is a future-oriented Agentic Memory System that addresses the core issue of **inaccurate retrieval in traditional RAG-based memory frameworks**.
 
- Visit our homepage: [memu.pro](https://memu.pro/)
+It redefines agent memory from a **memory-first perspective** by abstracting it as a dynamically evolving data layer. This layer intelligently organizes and surfaces relevant information based on the current task and context, dynamically extracting the most pertinent content through **adaptive retrieval** and **backtracking mechanisms**—while maintaining retrieval efficiency and ensuring information integrity and accuracy.MemU adopts a **Unified Multimodal Memory architecture** that enables AI agents to integrate and reason over diverse information sources, significantly enhancing memory performance in complex scenarios.
 
+MemU offers several convenient ways to get started right away:
+
+- **One call = response + memory**  
+  👉 memU Response API: https://memu.pro/docs#responseapi
+
+- **Try it instantly**  
+  👉 https://app.memu.so/quick-start
 ---
 
 ## ⭐ Star Us on GitHub
@@ -27,6 +33,60 @@ Star MemU to get notified about new releases and join our growing community of A
 **💬 Join our Discord community:** [https://discord.gg/memu](https://discord.gg/memu)
 
 ---
+## Roadmap
+
+memU v0.3.0-Alpha has been released! This version initializes the memorize and retrieve workflows with the new 3-layer architecture.  
+
+Starting from this release, memU will roll out multiple features in the short- to mid-term:
+
+### Core capabilities iteration
+- [ ] **Multi-modal enhancements** – Support for images, audio, and video  
+- [ ] **Intention** – Higher-level decision-making and goal management  
+- [ ] **Multi-client support** – Switch between OpenAI, Deepseek, Gemini, etc.  
+- [ ] **Data persistence expansion** – Support for Postgres, S3, DynamoDB  
+- [ ] **Benchmark tools** – Test agent performance and memory efficiency  
+- [ ] ……
+
+### Upcoming open-source repositories
+- [ ] **memU-ui** – The web frontend for memU, providing developers with an intuitive and visual interface  
+- [ ] **memU-server** – Powers memU-ui with reliable data support, ensuring efficient reading, writing, and maintenance of agent memories
+
+## 🧩 Why MemU?
+
+Most memory systems in current LLM pipelines rely heavily on explicit modeling, requiring manual definition and annotation of memory categories. This limits AI’s ability to truly understand memory and makes it difficult to support diverse usage scenarios.
+
+MemU offers a flexible and robust alternative, inspired by hierarchical storage architecture in computer systems. It progressively transforms heterogeneous input data into queryable and interpretable textual memory.
+
+Its core architecture consists of three layers: **Resource Layer → Memory Item Layer → MemoryCategory Layer.**
+
+<img width="1280" height="639" alt="image" src="https://github.com/user-attachments/assets/c34a1fdb-02fd-4542-9c10-121d79dba67f" />
+
+- **Resource Layer**  
+  A multimodal raw data warehouse, also serving as the ground truth layer, providing a semantic foundation for the memory system.
+
+- **Memory Item Layer**  
+  A unified semantic abstraction layer, functioning as the system’s semantic cache, supplying high-density semantic vectors for downstream retrieval and reasoning.
+
+- **MemoryCategory Layer**  
+  A thematic document layer, mimicking human working memory mechanisms, balancing short-term response efficiency and long-term information completeness.
+
+Through this three-layer design, **MemU brings genuine memory into the agent layer, achieving:**
+
+- **Full Traceability**  
+  Complete traceability across the three layers—from raw data → memory items → aggregated documents. Enables bidirectional tracking of each knowledge piece’s source and evolution, ensuring transparency and interpretability.
+
+- **End-to-End Memory Lifecycle Management**  
+  The three core processes correspond to the memory lifecycle: **Memorization → Retrieval → Self-evolution**.
+
+- **Coherent and Scalable Memorization**  
+  During memorization, the system maintains memory coherence while automatically managing resources to support sustainable expansion.
+
+- **Efficient and Interpretable Retrieval**  
+  Retrieves information efficiently while preserving interpretability, supporting cross-theme and cross-modal semantic queries and reasoning.
+
+- **Self-Evolving Memory**  
+  A feedback-driven mechanism continuously adapts the memory structure according to real usage patterns.
+<img width="1280" height="312" alt="image" src="https://github.com/user-attachments/assets/e2c0ac0c-e5cb-44a9-b880-89be142e1ca5" />
 
 ## 🚀Get Started
 
