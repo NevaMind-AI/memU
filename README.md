@@ -11,9 +11,9 @@
 [![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
 </div>
 
-MemU is a future-oriented Agentic Memory System that addresses the core issue of **inaccurate retrieval in traditional RAG-based memory frameworks**.
+MemU is an agentic memory framework for LLM and AI agent backends. It receive multi-modal inputs, extracts them into memory items, and then organizes and summarizes these items into structured memory files. 
 
-It redefines agent memory from a **memory-first perspective** by abstracting it as a dynamically evolving data layer. This layer intelligently organizes and surfaces relevant information based on the current task and context, dynamically extracting the most pertinent content through **adaptive retrieval** and **backtracking mechanisms**—while maintaining retrieval efficiency and ensuring information integrity and accuracy.MemU adopts a **Unified Multimodal Memory architecture** that enables AI agents to integrate and reason over diverse information sources, significantly enhancing memory performance in complex scenarios.
+Unlike traditional RAG systems that rely solely on embedding-based search, MemU supports **non-embedding retrieval** through direct file reading. The LLM comprehends natural language memory files directly, enabling deep search by progressively tracking from categories → items → original resources.
 
 MemU offers several convenient ways to get started right away:
 
@@ -39,7 +39,7 @@ MemU v0.3.0 has been released! This version initializes the memorize and retriev
 Starting from this release, MemU will roll out multiple features in the short- to mid-term:
 
 ### Core capabilities iteration
-- [ ] **Multi-modal enhancements** – Support for images, audio, and video
+- [x] **Multi-modal enhancements** – Support for images, audio, and video
 - [ ] **Intention** – Higher-level decision-making and goal management
 - [ ] **Multi-client support** – Switch between OpenAI, Deepseek, Gemini, etc.
 - [ ] **Data persistence expansion** – Support for Postgres, S3, DynamoDB
@@ -81,7 +81,9 @@ Through this three-layer design, **MemU brings genuine memory into the agent lay
   During memorization, the system maintains memory coherence while automatically managing resources to support sustainable expansion.
 
 - **Efficient and Interpretable Retrieval:**
-  Retrieves information efficiently while preserving interpretability, supporting cross-theme and cross-modal semantic queries and reasoning.
+  Retrieves information efficiently while preserving interpretability, supporting cross-theme and cross-modal semantic queries and reasoning. The system offers two retrieval methods:
+  - **RAG-based Retrieval**: Fast embedding-based vector search for efficient large-scale retrieval
+  - **LLM-based Retrieval**: Direct file reading through natural language understanding, allowing deep search by tracking step-by-step from categories → items → original resources without relying on embedding search
 
 - **Self-Evolving Memory:**
   A feedback-driven mechanism continuously adapts the memory structure according to real usage patterns.
@@ -90,104 +92,111 @@ Through this three-layer design, **MemU brings genuine memory into the agent lay
 
 ## 🚀Get Started
 
-There are three ways to get started with MemU:
+### Installation
 
-### ☁️ Cloud Version ([Online Platform](https://app.memu.so))
-
-The fastest way to integrate your application with memU. Perfect for teams and individuals who want immediate access without setup complexity. We host the models, APIs, and cloud storage, ensuring your application gets the best quality AI memory.
-
-- **Instant Access** - Start integrating AI memories in minutes
-- **Managed Infrastructure** - We handle scaling, updates, and maintenance for optimal memory quality
-- **Premium Support** - Subscribe and get priority assistance from our engineering team
-
-### Step-by-step
-
-**Step 1:** Create account
-
-Create account on https://app.memu.so
-
-Then, go to https://app.memu.so/api-key/ for generating api-keys.
-
-**Step 2:** Add three lines to your code
-```python
+```bash
 pip install memu-py
-
-# Example usage
-from memu import MemuClient
 ```
 
-**Step 3:** Quick Start
+### Basic Usage
+
 ```python
-# Initialize
-memu_client = MemuClient(
-    base_url="https://api.memu.so",
-    api_key=os.getenv("MEMU_API_KEY")
-)
-memu_client.memorize_conversation(
-    conversation=conversation_text, # Recommend longer conversation (~8000 tokens), see https://memu.pro/blog/memu-best-practice for details
-    user_id="user001",
-    user_name="User",
-    agent_id="assistant001",
-    agent_name="Assistant"
-)
+from memu.app import MemoryUser
+import logging
+
+async def test_memory_service():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+    logger = logging.getLogger("memu")
+    logger.setLevel(logging.DEBUG)
+
+    # Initialize MemoryUser with your OpenAI API key
+    service = MemoryUser(llm_config={"api_key": "your-openai-api-key"})
+
+    # Memorize a conversation
+    memory = await service.memorize(
+        resource_url="tests/data/example_conversation.json",
+        modality="conversation"
+    )
+
+    # Example conversation history for query rewriting
+    conversation_history = [
+        {"role": "user", "content": "Tell me about the user's preferences"},
+        {"role": "assistant", "content": "I'd be happy to help. Let me search the memory."},
+        {"role": "user", "content": "What are their habits?"}
+    ]
+
+    # Test 1: RAG-based Retrieval with conversation history
+    print("\n[Test 1] RAG-based Retrieval with conversation history")
+    retrieved_rag = await service.retrieve(
+        query="What are their habits?",
+        conversation_history=conversation_history,
+        retrieve_config={"method": "rag", "top_k": 5}
+    )
+    print(f"Needs retrieval: {retrieved_rag.get('needs_retrieval')}")
+    print(f"Original query: {retrieved_rag.get('original_query')}")
+    print(f"Rewritten query: {retrieved_rag.get('rewritten_query')}")
+    print(f"Results: {len(retrieved_rag.get('categories', []))} categories, "
+          f"{len(retrieved_rag.get('items', []))} items")
+
+    # Test 2: LLM-based Retrieval with conversation history
+    print("\n[Test 2] LLM-based Retrieval with conversation history")
+    retrieved_llm = await service.retrieve(
+        query="What are their habits?",
+        conversation_history=conversation_history,
+        retrieve_config={"method": "llm", "top_k": 5}
+    )
+    print(f"Needs retrieval: {retrieved_llm.get('needs_retrieval')}")
+    print(f"Original query: {retrieved_llm.get('original_query')}")
+    print(f"Rewritten query: {retrieved_llm.get('rewritten_query')}")
+    print(f"Results: {len(retrieved_llm.get('categories', []))} categories, "
+          f"{len(retrieved_llm.get('items', []))} items")
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(test_memory_service())
 ```
-Check [API reference](docs/API_REFERENCE.md) or [our blog](https://memu.pro/blog) for more details.
 
-📖 **See [`example/client/memory.py`](example/client/memory.py) for complete integration details**
+### Understanding Retrieval Methods
 
-✨ **That's it!** MemU remembers everything and helps your AI learn from past conversations.
+MemU provides two distinct retrieval approaches, each optimized for different scenarios:
+
+#### **1. RAG-based Retrieval (`method="rag"`)**
+Fast embedding-based vector search using cosine similarity. Ideal for:
+- Large-scale datasets
+- Real-time performance requirements
+- Cost-effective retrieval at scale
+
+The system progressively searches through three layers:
+1. **Category Layer**: Searches category summaries
+2. **Item Layer**: Searches memory items within relevant categories
+3. **Resource Layer**: Tracks back to original multimodal resources (conversations, documents, videos, etc.)
+
+At each tier, the system judges if sufficient information has been found and dynamically rewrites the query with context for deeper search.
+
+#### **2. LLM-based Retrieval (`method="llm"`)**
+Direct file reading through natural language understanding. Ideal for:
+- Complex semantic queries requiring nuanced understanding
+- Deep contextual reasoning
+- Scenarios where interpretability is critical
+
+This method uses the LLM to:
+- Read and comprehend natural language memory files directly
+- Rank results based on semantic relevance
+- Provide reasoning for each ranked result
+- Track step-by-step from categories → items → original resources **without relying on embeddings**
+
+Both methods support:
+- **Full traceability**: Each retrieved item includes its `resource_id`, allowing you to trace back to the original source
+- **Conversation-aware rewriting**: Automatically resolves pronouns and references using conversation history
+- **Pre-retrieval decision**: Intelligently determines if memory retrieval is needed for the query
+- **Progressive search**: Stops early if sufficient information is found at higher layers
 
 
-### 🏢 Enterprise Edition
-
-For organizations requiring maximum security, customization, control and best quality:
-
-- **Commercial License** - Full proprietary features, commercial usage rights, white-labeling options
-- **Custom Development** - SSO/RBAC integration, dedicated algorithm team for scenario-specific framework optimization
-- **Intelligence & Analytics** - User behavior analysis, real-time production monitoring, automated agent optimization
-- **Premium Support** - 24/7 dedicated support, custom SLAs, professional implementation services
-
-📧 **Enterprise Inquiries:** [contact@nevamind.ai](mailto:contact@nevamind.ai)
-
-
-### 🏠 Self-Hosting (Community Edition)
-For users and developers who prefer local control, data privacy, or customization:
-
-* **Data Privacy** - Keep sensitive data within your infrastructure
-* **Customization** - Modify and extend the platform to fit your needs
-* **Cost Control** - Avoid recurring cloud fees for large-scale deployments
-
-See [self hosting README](README.self_host.md)
-
----
-
-
-## ✨ Key Features
-
-### 🎥 Demo Video
-
-<div align="left">
-  <a href="https://www.youtube.com/watch?v=qZIuCoLglHs">
-    <img src="https://img.youtube.com/vi/ueOe4ZPlZLU/maxresdefault.jpg" alt="MemU Demo Video" width="600">
-  </a>
-  <br>
-  <em>Click to watch the MemU demonstration video</em>
-</div>
 
 ---
-## 🎓 **Use Cases**
-
-| | | | |
-|:---:|:---:|:---:|:---:|
-| <img src="assets/usecase/ai_companion-0000.jpg" width="150" height="200"><br>**AI Companion** | <img src="assets/usecase/ai_role_play-0000.jpg" width="150" height="200"><br>**AI Role Play** | <img src="assets/usecase/ai_ip-0000.png" width="150" height="200"><br>**AI IP Characters** | <img src="assets/usecase/ai_edu-0000.jpg" width="150" height="200"><br>**AI Education** |
-| <img src="assets/usecase/ai_therapy-0000.jpg" width="150" height="200"><br>**AI Therapy** | <img src="assets/usecase/ai_robot-0000.jpg" width="150" height="200"><br>**AI Robot** | <img src="assets/usecase/ai_creation-0000.jpg" width="150" height="200"><br>**AI Creation** | More...|
----
-
-## 🤝 Contributing
-
-We build trust through open-source collaboration. Your creative contributions drive memU's innovation forward. Explore our GitHub issues and projects to get started and make your mark on the future of memU.
-
-📋 **[Read our detailed Contributing Guide →](CONTRIBUTING.md)**
 
 
 ### **📄 License**
@@ -228,20 +237,4 @@ We're proud to work with amazing organizations:
 
 *Interested in partnering with MemU? Contact us at [contact@nevamind.ai](mailto:contact@nevamind.ai)*
 
----
 
-## 📱 Join Our WeChat Community
-
-Connect with us on WeChat for the latest updates, community discussions, and exclusive content:
-
-<div align="center">
-<img src="assets/qrcode.png" alt="MemU WeChat and discord QR Code" width="480" style="border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); margin: 10px;">
-
-
-*Scan any of the QR codes above to join our WeChat community*
-
-</div>
-
----
-
-*Stay connected with the MemU community! Join our WeChat groups for real-time discussions, technical support, and networking opportunities.*
