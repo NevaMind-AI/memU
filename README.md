@@ -60,30 +60,30 @@ Its core architecture consists of three layers: **Resource Layer → Memory Item
 
 <img width="1363" height="563" alt="Three-Layer Architecture Diagram" src="https://github.com/user-attachments/assets/06029141-7068-4fe8-bf50-377cc6f80c87" />
 
-- **Resource Layer:** 
+- **Resource Layer:**
   A multimodal raw data warehouse, also serving as the ground truth layer, providing a semantic foundation for the memory system.
 
-- **Memory Item Layer:** 
+- **Memory Item Layer:**
   A unified semantic abstraction layer, functioning as the system’s semantic cache, supplying high-density semantic vectors for downstream retrieval and reasoning.
 
-- **MemoryCategory Layer:** 
+- **MemoryCategory Layer:**
   A thematic document layer, mimicking human working memory mechanisms, balancing short-term response efficiency and long-term information completeness.
 
 Through this three-layer design, **MemU brings genuine memory into the agent layer, achieving:**
 
-- **Full Traceability:** 
+- **Full Traceability:**
   Complete traceability across the three layers—from raw data → memory items → aggregated documents. Enables bidirectional tracking of each knowledge piece’s source and evolution, ensuring transparency and interpretability.
 
-- **End-to-End Memory Lifecycle Management:** 
+- **End-to-End Memory Lifecycle Management:**
   The three core processes correspond to the memory lifecycle: **Memorization → Retrieval → Self-evolution**.
 
-- **Coherent and Scalable Memorization:** 
+- **Coherent and Scalable Memorization:**
   During memorization, the system maintains memory coherence while automatically managing resources to support sustainable expansion.
 
-- **Efficient and Interpretable Retrieval:** 
+- **Efficient and Interpretable Retrieval:**
   Retrieves information efficiently while preserving interpretability, supporting cross-theme and cross-modal semantic queries and reasoning.
 
-- **Self-Evolving Memory:** 
+- **Self-Evolving Memory:**
   A feedback-driven mechanism continuously adapts the memory structure according to real usage patterns.
 <img width="1365" height="308" alt="process" src="https://github.com/user-attachments/assets/cabed021-f231-4bd2-9bb5-7c8cdb5f928c" />
 
