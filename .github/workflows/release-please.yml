@@ -28,6 +28,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: release-please
     if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
+
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: write
+
     strategy:
       fail-fast: false
       matrix:
