@@ -1157,14 +1157,16 @@ class MemoryUser:
     def _format_items_for_llm(self, category_ids: list[str] | None = None) -> str:
         """Format memory items for LLM consumption, optionally filtered by category"""
         items_to_format = []
+        seen_item_ids = set()
 
         if category_ids:
             # Get items that belong to the specified categories
             for rel in self.store.relations:
                 if rel.category_id in category_ids:
                     item = self.store.items.get(rel.item_id)
-                    if item and item not in items_to_format:
+                    if item and item.id not in seen_item_ids:
                         items_to_format.append(item)
+                        seen_item_ids.add(item.id)
         else:
             items_to_format = list(self.store.items.values())
 
