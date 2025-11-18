@@ -34,9 +34,9 @@ Star MemU to get notified about new releases and join our growing community of A
 ---
 ## Roadmap
 
-memU v0.3.0-Alpha has been released! This version initializes the memorize and retrieve workflows with the new 3-layer architecture.
+MemU v0.3.0 has been released! This version initializes the memorize and retrieve workflows with the new 3-layer architecture.
 
-Starting from this release, memU will roll out multiple features in the short- to mid-term:
+Starting from this release, MemU will roll out multiple features in the short- to mid-term:
 
 ### Core capabilities iteration
 - [ ] **Multi-modal enhancements** – Support for images, audio, and video
@@ -47,7 +47,7 @@ Starting from this release, memU will roll out multiple features in the short- t
 - [ ] ……
 
 ### Upcoming open-source repositories
-- [ ] **memU-ui** – The web frontend for memU, providing developers with an intuitive and visual interface
+- [ ] **memU-ui** – The web frontend for MemU, providing developers with an intuitive and visual interface
 - [ ] **memU-server** – Powers memU-ui with reliable data support, ensuring efficient reading, writing, and maintenance of agent memories
 
 ## 🧩 Why MemU?
