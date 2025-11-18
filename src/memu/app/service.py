@@ -8,7 +8,7 @@ from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel
 
-from memu.app.settings import BlobConfig, DatabaseConfig, LLMConfig, MemorizeConfig
+from memu.app.settings import BlobConfig, DatabaseConfig, LLMConfig, MemorizeConfig, RetrieveConfig
 from memu.llm.http_client import HTTPLLMClient
 from memu.memory.repo import InMemoryStore
 from memu.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
@@ -17,6 +17,13 @@ from memu.prompts.memory_type import DEFAULT_MEMORY_TYPES
 from memu.prompts.memory_type import PROMPTS as MEMORY_TYPE_PROMPTS
 from memu.prompts.preprocess import PROMPTS as PREPROCESS_PROMPTS
 from memu.prompts.retrieve.judger import PROMPT as RETRIEVE_JUDGER_PROMPT
+from memu.prompts.retrieve.llm_category_ranker import PROMPT as LLM_CATEGORY_RANKER_PROMPT
+from memu.prompts.retrieve.llm_item_ranker import PROMPT as LLM_ITEM_RANKER_PROMPT
+from memu.prompts.retrieve.llm_resource_ranker import PROMPT as LLM_RESOURCE_RANKER_PROMPT
+from memu.prompts.retrieve.pre_retrieval_decision import SYSTEM_PROMPT as PRE_RETRIEVAL_SYSTEM_PROMPT
+from memu.prompts.retrieve.pre_retrieval_decision import USER_PROMPT as PRE_RETRIEVAL_USER_PROMPT
+from memu.prompts.retrieve.query_rewriter_judger import SYSTEM_PROMPT as QUERY_REWRITER_JUDGER_SYSTEM_PROMPT
+from memu.prompts.retrieve.query_rewriter_judger import USER_PROMPT as QUERY_REWRITER_JUDGER_USER_PROMPT
 from memu.storage.local_fs import LocalFS
 from memu.utils.video import VideoFrameExtractor
 from memu.vector.index import cosine_topk
@@ -777,34 +784,81 @@ class MemoryUser:
             return model_type()
         return model_type.model_validate(config)
 
-    async def retrieve(self, query: str, *, top_k: int = 5) -> dict[str, Any]:
-        qvec = (await self.openai.embed([query]))[0]
-        response: dict[str, list[dict[str, Any]]] = {"resources": [], "items": [], "categories": []}
-        content_sections: list[str] = []
+    async def retrieve(
+        self,
+        query: str,
+        *,
+        retrieve_config: dict[str, Any] | RetrieveConfig | None = None,
+        conversation_history: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        """
+        Retrieve relevant memories based on the query using either RAG-based or LLM-based search.
 
-        cat_hits, summary_lookup = await self._rank_categories_by_summary(qvec, top_k)
-        if cat_hits:
-            response["categories"] = self._materialize_hits(cat_hits, self.store.categories)
-            content_sections.append(self._format_category_content(cat_hits, summary_lookup))
-            if await self._judge_retrieval_sufficient(query, "\n\n".join(content_sections)):
-                return response
+        Args:
+            query: The search query string
+            retrieve_config: Configuration for retrieval method and parameters.
+                           Can be a dict or RetrieveConfig object with:
+                           - method: 'rag' for embedding-based vector search (default),
+                                   'llm' for LLM-based semantic ranking
+                           - top_k: Maximum number of results per category (default: 5)
+            conversation_history: Optional list of last 3 conversation turns, each with 'role' and 'content'.
+                                Example: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
 
-        item_hits = cosine_topk(qvec, [(i.id, i.embedding) for i in self.store.items.values()], k=top_k)
-        if item_hits:
-            response["items"] = self._materialize_hits(item_hits, self.store.items)
-            content_sections.append(self._format_item_content(item_hits))
-            if await self._judge_retrieval_sufficient(query, "\n\n".join(content_sections)):
-                return response
+        Returns:
+            Dictionary containing:
+            - "needs_retrieval": bool - Whether retrieval was performed
+            - "rewritten_query": str - Query after rewriting with context (if retrieval performed)
+            - "categories": list - Retrieved categories
+            - "items": list - Retrieved items
+            - "resources": list - Retrieved resources
 
-        resource_corpus = self._resource_caption_corpus()
-        if resource_corpus:
-            res_hits = cosine_topk(qvec, resource_corpus, k=top_k)
-            if res_hits:
-                response["resources"] = self._materialize_hits(res_hits, self.store.resources)
-                content_sections.append(self._format_resource_content(res_hits))
-                await self._judge_retrieval_sufficient(query, "\n\n".join(content_sections))
+        Notes:
+            - RAG (rag) method is faster and more efficient for large datasets
+            - LLM (llm) method may provide better semantic understanding but is slower and more expensive
+            - LLM method includes reasoning for each ranked result
+            - Pre-retrieval decision checks if retrieval is needed based on query type
+            - Query rewriting incorporates conversation history for better context
+        """
+        # Validate and resolve config
+        config = self._validate_config(retrieve_config, RetrieveConfig)
 
-        return response
+        # Validate method
+        if config.method not in ("rag", "llm"):
+            msg = f"Invalid retrieval method '{config.method}'. Must be 'rag' or 'llm'."
+            raise ValueError(msg)
+
+        # Step 1: Decide if retrieval is needed
+        needs_retrieval, rewritten_query = await self._decide_if_retrieval_needed(query, conversation_history)
+
+        if not needs_retrieval:
+            logger.info(f"Query does not require retrieval: {query}")
+            return {
+                "needs_retrieval": False,
+                "original_query": query,
+                "rewritten_query": rewritten_query,
+                "categories": [],
+                "items": [],
+                "resources": [],
+            }
+
+        logger.info(f"Query rewritten: '{query}' -> '{rewritten_query}'")
+
+        # Step 2: Perform retrieval with rewritten query using configured method
+        if config.method == "llm":
+            results = await self._llm_based_retrieve(
+                rewritten_query, top_k=config.top_k, conversation_history=conversation_history
+            )
+        else:  # rag
+            results = await self._embedding_based_retrieve(
+                rewritten_query, top_k=config.top_k, conversation_history=conversation_history
+            )
+
+        # Add metadata
+        results["needs_retrieval"] = True
+        results["original_query"] = query
+        results["rewritten_query"] = rewritten_query
+
+        return results
 
     async def _rank_categories_by_summary(
         self, query_vec: list[float], top_k: int
@@ -818,6 +872,117 @@ class MemoryUser:
         hits = cosine_topk(query_vec, corpus, k=top_k)
         summary_lookup = dict(entries)
         return hits, summary_lookup
+
+    async def _decide_if_retrieval_needed(
+        self, query: str, conversation_history: list[dict[str, str]] | None
+    ) -> tuple[bool, str]:
+        """
+        Decide if the query requires memory retrieval and rewrite it with context.
+
+        Returns:
+            Tuple of (needs_retrieval: bool, rewritten_query: str)
+        """
+        history_text = self._format_conversation_history(conversation_history)
+
+        prompt = PRE_RETRIEVAL_USER_PROMPT.format(
+            query=self._escape_prompt_value(query),
+            conversation_history=self._escape_prompt_value(history_text),
+        )
+
+        response = await self.openai.summarize(prompt, system_prompt=PRE_RETRIEVAL_SYSTEM_PROMPT)
+        decision = self._extract_decision(response)
+        rewritten = self._extract_rewritten_query(response) or query
+
+        return decision == "RETRIEVE", rewritten
+
+    def _format_conversation_history(self, history: list[dict[str, str]] | None) -> str:
+        """Format conversation history for prompts (last 3 turns)"""
+        if not history:
+            return "No conversation history."
+
+        # Take last 3 turns
+        recent_history = history[-3:] if len(history) > 3 else history
+
+        lines = []
+        for turn in recent_history:
+            role = turn.get("role", "unknown")
+            content = turn.get("content", "")
+            lines.append(f"{role.capitalize()}: {content}")
+
+        return "\n".join(lines) if lines else "No conversation history."
+
+    def _extract_decision(self, raw: str) -> str:
+        """Extract RETRIEVE or NO_RETRIEVE decision from LLM response"""
+        if not raw:
+            return "RETRIEVE"  # Default to retrieve if uncertain
+
+        match = re.search(r"<decision>(.*?)</decision>", raw, re.IGNORECASE | re.DOTALL)
+        if match:
+            decision = match.group(1).strip().upper()
+            if "NO_RETRIEVE" in decision or "NO RETRIEVE" in decision:
+                return "NO_RETRIEVE"
+            if "RETRIEVE" in decision:
+                return "RETRIEVE"
+
+        upper = raw.strip().upper()
+        if "NO_RETRIEVE" in upper or "NO RETRIEVE" in upper:
+            return "NO_RETRIEVE"
+
+        return "RETRIEVE"  # Default to retrieve
+
+    def _extract_rewritten_query(self, raw: str) -> str | None:
+        """Extract rewritten query from LLM response"""
+        match = re.search(r"<rewritten_query>(.*?)</rewritten_query>", raw, re.IGNORECASE | re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        return None
+
+    async def _embedding_based_retrieve(
+        self, query: str, top_k: int, conversation_history: list[dict[str, str]] | None
+    ) -> dict[str, Any]:
+        """Embedding-based retrieval with query rewriting and judging at each tier"""
+        current_query = query
+        qvec = (await self.openai.embed([current_query]))[0]
+        response: dict[str, list[dict[str, Any]]] = {"resources": [], "items": [], "categories": []}
+        content_sections: list[str] = []
+
+        # Tier 1: Categories
+        cat_hits, summary_lookup = await self._rank_categories_by_summary(qvec, top_k)
+        if cat_hits:
+            response["categories"] = self._materialize_hits(cat_hits, self.store.categories)
+            content_sections.append(self._format_category_content(cat_hits, summary_lookup))
+
+            needs_more, current_query = await self._judge_and_rewrite(
+                current_query, "\n\n".join(content_sections), conversation_history
+            )
+            if not needs_more:
+                return response
+            # Re-embed with rewritten query
+            qvec = (await self.openai.embed([current_query]))[0]
+
+        # Tier 2: Items
+        item_hits = cosine_topk(qvec, [(i.id, i.embedding) for i in self.store.items.values()], k=top_k)
+        if item_hits:
+            response["items"] = self._materialize_hits(item_hits, self.store.items)
+            content_sections.append(self._format_item_content(item_hits))
+
+            needs_more, current_query = await self._judge_and_rewrite(
+                current_query, "\n\n".join(content_sections), conversation_history
+            )
+            if not needs_more:
+                return response
+            # Re-embed with rewritten query
+            qvec = (await self.openai.embed([current_query]))[0]
+
+        # Tier 3: Resources
+        resource_corpus = self._resource_caption_corpus()
+        if resource_corpus:
+            res_hits = cosine_topk(qvec, resource_corpus, k=top_k)
+            if res_hits:
+                response["resources"] = self._materialize_hits(res_hits, self.store.resources)
+                content_sections.append(self._format_resource_content(res_hits))
+
+        return response
 
     def _materialize_hits(self, hits: Sequence[tuple[str, float]], pool: dict[str, Any]) -> list[dict[str, Any]]:
         out = []
@@ -867,6 +1032,7 @@ class MemoryUser:
         return corpus
 
     async def _judge_retrieval_sufficient(self, query: str, content: str) -> bool:
+        """Legacy judger method for backward compatibility"""
         if not content.strip():
             return False
         prompt = RETRIEVE_JUDGER_PROMPT.format(
@@ -875,6 +1041,33 @@ class MemoryUser:
         )
         verdict = await self.openai.summarize(prompt, system_prompt=None)
         return self._extract_judgement(verdict) == "ENOUGH"
+
+    async def _judge_and_rewrite(
+        self, query: str, content: str, conversation_history: list[dict[str, str]] | None
+    ) -> tuple[bool, str]:
+        """
+        Judge if retrieval is sufficient AND rewrite query with context.
+
+        Returns:
+            Tuple of (needs_more: bool, rewritten_query: str)
+        """
+        if not content.strip():
+            return True, query  # No content means we need more
+
+        history_text = self._format_conversation_history(conversation_history)
+
+        prompt = QUERY_REWRITER_JUDGER_USER_PROMPT.format(
+            conversation_history=self._escape_prompt_value(history_text),
+            original_query=self._escape_prompt_value(query),
+            retrieved_content=self._escape_prompt_value(content),
+        )
+
+        response = await self.openai.summarize(prompt, system_prompt=QUERY_REWRITER_JUDGER_SYSTEM_PROMPT)
+        judgment = self._extract_judgement(response)
+        rewritten = self._extract_rewritten_query(response) or query
+
+        needs_more = judgment == "MORE"
+        return needs_more, rewritten
 
     def _extract_judgement(self, raw: str) -> str:
         if not raw:
@@ -890,3 +1083,287 @@ class MemoryUser:
         if "ENOUGH" in upper:
             return "ENOUGH"
         return "MORE"
+
+    async def _llm_based_retrieve(
+        self, query: str, top_k: int, conversation_history: list[dict[str, str]] | None
+    ) -> dict[str, Any]:
+        """
+        LLM-based retrieval that uses language model to search and rank results
+        in a hierarchical manner, with query rewriting and judging at each tier.
+
+        Flow:
+        1. Search categories with LLM, judge + rewrite query
+        2. If needs more, search items from relevant categories, judge + rewrite
+        3. If needs more, search resources related to context
+        """
+        current_query = query
+        response: dict[str, list[dict[str, Any]]] = {"resources": [], "items": [], "categories": []}
+        content_sections: list[str] = []
+
+        # Tier 1: Search and rank categories
+        category_hits = await self._llm_rank_categories(current_query, top_k)
+        if category_hits:
+            response["categories"] = category_hits
+            content_sections.append(self._format_llm_category_content(category_hits))
+
+            needs_more, current_query = await self._judge_and_rewrite(
+                current_query, "\n\n".join(content_sections), conversation_history
+            )
+            if not needs_more:
+                return response
+
+        # Tier 2: Search memory items from relevant categories
+        relevant_category_ids = [cat["id"] for cat in category_hits]
+        item_hits = await self._llm_rank_items(current_query, top_k, relevant_category_ids, category_hits)
+        if item_hits:
+            response["items"] = item_hits
+            content_sections.append(self._format_llm_item_content(item_hits))
+
+            needs_more, current_query = await self._judge_and_rewrite(
+                current_query, "\n\n".join(content_sections), conversation_history
+            )
+            if not needs_more:
+                return response
+
+        # Tier 3: Search resources related to the context
+        resource_hits = await self._llm_rank_resources(current_query, top_k, category_hits, item_hits)
+        if resource_hits:
+            response["resources"] = resource_hits
+            content_sections.append(self._format_llm_resource_content(resource_hits))
+
+        return response
+
+    def _format_categories_for_llm(self, category_ids: list[str] | None = None) -> str:
+        """Format categories for LLM consumption"""
+        categories_to_format = self.store.categories
+        if category_ids:
+            categories_to_format = {cid: cat for cid, cat in self.store.categories.items() if cid in category_ids}
+
+        if not categories_to_format:
+            return "No categories available."
+
+        lines = []
+        for cid, cat in categories_to_format.items():
+            lines.append(f"ID: {cid}")
+            lines.append(f"Name: {cat.name}")
+            if cat.description:
+                lines.append(f"Description: {cat.description}")
+            if cat.summary:
+                lines.append(f"Summary: {cat.summary}")
+            lines.append("---")
+
+        return "\n".join(lines)
+
+    def _format_items_for_llm(self, category_ids: list[str] | None = None) -> str:
+        """Format memory items for LLM consumption, optionally filtered by category"""
+        items_to_format = []
+        seen_item_ids = set()
+
+        if category_ids:
+            # Get items that belong to the specified categories
+            for rel in self.store.relations:
+                if rel.category_id in category_ids:
+                    item = self.store.items.get(rel.item_id)
+                    if item and item.id not in seen_item_ids:
+                        items_to_format.append(item)
+                        seen_item_ids.add(item.id)
+        else:
+            items_to_format = list(self.store.items.values())
+
+        if not items_to_format:
+            return "No memory items available."
+
+        lines = []
+        for item in items_to_format:
+            lines.append(f"ID: {item.id}")
+            lines.append(f"Type: {item.memory_type}")
+            lines.append(f"Summary: {item.summary}")
+            lines.append("---")
+
+        return "\n".join(lines)
+
+    def _format_resources_for_llm(self, item_ids: list[str] | None = None) -> str:
+        """Format resources for LLM consumption, optionally filtered by related items"""
+        resources_to_format = []
+
+        if item_ids:
+            # Get resources that are related to the specified items
+            resource_ids = {self.store.items[iid].resource_id for iid in item_ids if iid in self.store.items}
+            resources_to_format = [self.store.resources[rid] for rid in resource_ids if rid in self.store.resources]
+        else:
+            resources_to_format = list(self.store.resources.values())
+
+        if not resources_to_format:
+            return "No resources available."
+
+        lines = []
+        for res in resources_to_format:
+            lines.append(f"ID: {res.id}")
+            lines.append(f"URL: {res.url}")
+            lines.append(f"Modality: {res.modality}")
+            if res.caption:
+                lines.append(f"Caption: {res.caption}")
+            lines.append("---")
+
+        return "\n".join(lines)
+
+    async def _llm_rank_categories(self, query: str, top_k: int) -> list[dict[str, Any]]:
+        """Use LLM to rank categories based on query relevance"""
+        if not self.store.categories:
+            return []
+
+        categories_data = self._format_categories_for_llm()
+        prompt = LLM_CATEGORY_RANKER_PROMPT.format(
+            query=self._escape_prompt_value(query),
+            top_k=top_k,
+            categories_data=self._escape_prompt_value(categories_data),
+        )
+
+        llm_response = await self.openai.summarize(prompt, system_prompt=None)
+        return self._parse_llm_category_response(llm_response)
+
+    async def _llm_rank_items(
+        self, query: str, top_k: int, category_ids: list[str], category_hits: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Use LLM to rank memory items from relevant categories"""
+        if not category_ids:
+            return []
+
+        items_data = self._format_items_for_llm(category_ids)
+        if items_data == "No memory items available.":
+            return []
+
+        # Format relevant categories for context
+        relevant_categories_info = "\n".join([
+            f"- {cat['name']}: {cat.get('summary', cat.get('description', ''))}" for cat in category_hits
+        ])
+
+        prompt = LLM_ITEM_RANKER_PROMPT.format(
+            query=self._escape_prompt_value(query),
+            top_k=top_k,
+            relevant_categories=self._escape_prompt_value(relevant_categories_info),
+            items_data=self._escape_prompt_value(items_data),
+        )
+
+        llm_response = await self.openai.summarize(prompt, system_prompt=None)
+        return self._parse_llm_item_response(llm_response)
+
+    async def _llm_rank_resources(
+        self, query: str, top_k: int, category_hits: list[dict[str, Any]], item_hits: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Use LLM to rank resources related to the context"""
+        # Get item IDs to filter resources
+        item_ids = [item["id"] for item in item_hits]
+        if not item_ids:
+            return []
+
+        resources_data = self._format_resources_for_llm(item_ids)
+        if resources_data == "No resources available.":
+            return []
+
+        # Build context info
+        context_parts = []
+        if category_hits:
+            context_parts.append("Relevant Categories:")
+            context_parts.extend([f"- {cat['name']}" for cat in category_hits])
+        if item_hits:
+            context_parts.append("\nRelevant Memory Items:")
+            context_parts.extend([f"- {item.get('summary', '')[:100]}..." for item in item_hits[:3]])
+
+        context_info = "\n".join(context_parts)
+
+        prompt = LLM_RESOURCE_RANKER_PROMPT.format(
+            query=self._escape_prompt_value(query),
+            top_k=top_k,
+            context_info=self._escape_prompt_value(context_info),
+            resources_data=self._escape_prompt_value(resources_data),
+        )
+
+        llm_response = await self.openai.summarize(prompt, system_prompt=None)
+        return self._parse_llm_resource_response(llm_response)
+
+    def _parse_llm_category_response(self, raw_response: str) -> list[dict[str, Any]]:
+        """Parse LLM category ranking response"""
+        results = []
+        try:
+            json_blob = self._extract_json_blob(raw_response)
+            parsed = json.loads(json_blob)
+
+            if "categories" in parsed and isinstance(parsed["categories"], list):
+                category_ids = parsed["categories"]
+                # Return categories in the order provided by LLM (already sorted by relevance)
+                for cat_id in category_ids:
+                    if isinstance(cat_id, str):
+                        cat = self.store.categories.get(cat_id)
+                        if cat:
+                            cat_data = self._model_dump_without_embeddings(cat)
+                            results.append(cat_data)
+        except Exception as e:
+            logger.warning(f"Failed to parse LLM category ranking response: {e}")
+
+        return results
+
+    def _parse_llm_item_response(self, raw_response: str) -> list[dict[str, Any]]:
+        """Parse LLM item ranking response"""
+        results = []
+        try:
+            json_blob = self._extract_json_blob(raw_response)
+            parsed = json.loads(json_blob)
+
+            if "items" in parsed and isinstance(parsed["items"], list):
+                item_ids = parsed["items"]
+                # Return items in the order provided by LLM (already sorted by relevance)
+                for item_id in item_ids:
+                    if isinstance(item_id, str):
+                        mem_item = self.store.items.get(item_id)
+                        if mem_item:
+                            item_data = self._model_dump_without_embeddings(mem_item)
+                            results.append(item_data)
+        except Exception as e:
+            logger.warning(f"Failed to parse LLM item ranking response: {e}")
+
+        return results
+
+    def _parse_llm_resource_response(self, raw_response: str) -> list[dict[str, Any]]:
+        """Parse LLM resource ranking response"""
+        results = []
+        try:
+            json_blob = self._extract_json_blob(raw_response)
+            parsed = json.loads(json_blob)
+
+            if "resources" in parsed and isinstance(parsed["resources"], list):
+                resource_ids = parsed["resources"]
+                # Return resources in the order provided by LLM (already sorted by relevance)
+                for res_id in resource_ids:
+                    if isinstance(res_id, str):
+                        res = self.store.resources.get(res_id)
+                        if res:
+                            res_data = self._model_dump_without_embeddings(res)
+                            results.append(res_data)
+        except Exception as e:
+            logger.warning(f"Failed to parse LLM resource ranking response: {e}")
+
+        return results
+
+    def _format_llm_category_content(self, hits: list[dict[str, Any]]) -> str:
+        """Format LLM-ranked category content for judger"""
+        lines = []
+        for cat in hits:
+            summary = cat.get("summary", "") or cat.get("description", "")
+            lines.append(f"Category: {cat['name']}\nSummary: {summary}")
+        return "\n\n".join(lines).strip()
+
+    def _format_llm_item_content(self, hits: list[dict[str, Any]]) -> str:
+        """Format LLM-ranked item content for judger"""
+        lines = []
+        for item in hits:
+            lines.append(f"Memory Item ({item['memory_type']}): {item['summary']}")
+        return "\n\n".join(lines).strip()
+
+    def _format_llm_resource_content(self, hits: list[dict[str, Any]]) -> str:
+        """Format LLM-ranked resource content for judger"""
+        lines = []
+        for res in hits:
+            caption = res.get("caption", "") or f"Resource {res['url']}"
+            lines.append(f"Resource: {caption}")
+        return "\n\n".join(lines).strip()
