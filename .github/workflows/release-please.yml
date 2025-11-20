@@ -130,7 +130,7 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: dist/*
-          tag: ${{ needs.release-please.outputs.tag_name }}
+          # tag: ${{ needs.release-please.outputs.tag_name }}
           file_glob: true
 
       - name: Publish to PyPI
