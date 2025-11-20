@@ -15,15 +15,18 @@ Consider these scenarios that NEED retrieval:
 
 USER_PROMPT = """Analyze the following query in the context of the conversation to determine if memory retrieval is needed.
 
-## Conversation History (Last 3 Turns):
+## Query Context:
 {conversation_history}
 
 ## Current Query:
 {query}
 
+## Retrieved Content:
+{retrieved_content}
+
 ## Task:
 1. Determine if this query requires retrieving information from memory
-2. If retrieval is needed, rewrite the query to incorporate relevant context from the conversation history
+2. If retrieval is needed, rewrite the query to incorporate relevant context from the query context
 
 ## Output Format:
 <decision>

@@ -101,7 +101,7 @@ pip install memu-py
 ### Basic Usage
 
 ```python
-from memu.app import MemoryUser
+from memu.app import MemoryService
 import logging
 
 async def test_memory_service():
@@ -112,8 +112,8 @@ async def test_memory_service():
     logger = logging.getLogger("memu")
     logger.setLevel(logging.DEBUG)
 
-    # Initialize MemoryUser with your OpenAI API key
-    service = MemoryUser(llm_config={"api_key": "your-openai-api-key"})
+    # Initialize MemoryService with your OpenAI API key
+    service = MemoryService(llm_config={"api_key": "your-openai-api-key"})
 
     # Memorize a conversation
     memory = await service.memorize(
@@ -121,38 +121,34 @@ async def test_memory_service():
         modality="conversation"
     )
 
-    # Example conversation history for query rewriting
-    conversation_history = [
-        {"role": "user", "content": "Tell me about the user's preferences"},
-        {"role": "assistant", "content": "I'd be happy to help. Let me search the memory."},
-        {"role": "user", "content": "What are their habits?"}
+    # Test 1: RAG-based Retrieval with query context
+    # Multiple queries enable automatic query rewriting with context
+    print("\n[Test 1] RAG-based Retrieval with query context")
+    queries_with_context = [
+        {"role": "user", "content": {"text": "Tell me about the user's preferences"}},
+        {"role": "assistant", "content": {"text": "I can help you with that. Let me search the memory."}},
+        {"role": "user", "content": {"text": "What are their habits?"}},
     ]
-
-    # Test 1: RAG-based Retrieval with conversation history
-    print("\n[Test 1] RAG-based Retrieval with conversation history")
-    retrieved_rag = await service.retrieve(
-        query="What are their habits?",
-        conversation_history=conversation_history,
-        retrieve_config={"method": "rag", "top_k": 5}
-    )
+    retrieved_rag = await service.retrieve(queries=queries_with_context)
     print(f"Needs retrieval: {retrieved_rag.get('needs_retrieval')}")
     print(f"Original query: {retrieved_rag.get('original_query')}")
     print(f"Rewritten query: {retrieved_rag.get('rewritten_query')}")
+    print(f"Next step query: {retrieved_rag.get('next_step_query')}")
     print(f"Results: {len(retrieved_rag.get('categories', []))} categories, "
           f"{len(retrieved_rag.get('items', []))} items")
 
-    # Test 2: LLM-based Retrieval with conversation history
-    print("\n[Test 2] LLM-based Retrieval with conversation history")
-    retrieved_llm = await service.retrieve(
-        query="What are their habits?",
-        conversation_history=conversation_history,
-        retrieve_config={"method": "llm", "top_k": 5}
-    )
-    print(f"Needs retrieval: {retrieved_llm.get('needs_retrieval')}")
-    print(f"Original query: {retrieved_llm.get('original_query')}")
-    print(f"Rewritten query: {retrieved_llm.get('rewritten_query')}")
-    print(f"Results: {len(retrieved_llm.get('categories', []))} categories, "
-          f"{len(retrieved_llm.get('items', []))} items")
+    # Test 2: Single query without context (no rewriting)
+    print("\n[Test 2] Single query without context")
+    queries_no_context = [
+        {"role": "user", "content": {"text": "What are their habits?"}}
+    ]
+    retrieved_single = await service.retrieve(queries=queries_no_context)
+    print(f"Needs retrieval: {retrieved_single.get('needs_retrieval')}")
+    print(f"Original query: {retrieved_single.get('original_query')}")
+    print(f"Rewritten query: {retrieved_single.get('rewritten_query')}")
+    print(f"Next step query: {retrieved_single.get('next_step_query')}")
+    print(f"Results: {len(retrieved_single.get('categories', []))} categories, "
+          f"{len(retrieved_single.get('items', []))} items")
 
 if __name__ == "__main__":
     import asyncio
@@ -162,6 +158,22 @@ if __name__ == "__main__":
 ### Understanding Retrieval Methods
 
 MemU provides two distinct retrieval approaches, each optimized for different scenarios:
+
+#### **Query Structure**
+Queries are passed as a list of message objects in the format:
+```python
+[
+    {"role": "user", "content": {"text": "Tell me about the user's preferences"}},
+    {"role": "assistant", "content": {"text": "I can help you with that."}},
+    {"role": "user", "content": {"text": "What are their habits?"}}
+]
+```
+
+- **Roles** can be `user`, `assistant`, or other custom roles
+- The **last query** in the list is the current query
+- **Previous queries** (with their roles) provide context for automatic query rewriting
+- If only **one query** is provided, no rewriting occurs
+- The system returns a `next_step_query` to suggest the next retrieval step
 
 #### **1. RAG-based Retrieval (`method="rag"`)**
 Fast embedding-based vector search using cosine similarity. Ideal for:
@@ -190,9 +202,10 @@ This method uses the LLM to:
 
 Both methods support:
 - **Full traceability**: Each retrieved item includes its `resource_id`, allowing you to trace back to the original source
-- **Conversation-aware rewriting**: Automatically resolves pronouns and references using conversation history
+- **Context-aware rewriting**: Automatically resolves pronouns and references using previous queries as context
 - **Pre-retrieval decision**: Intelligently determines if memory retrieval is needed for the query
 - **Progressive search**: Stops early if sufficient information is found at higher layers
+- **Next step suggestion**: Returns `next_step_query` for iterative multi-turn retrieval
 
 
 
