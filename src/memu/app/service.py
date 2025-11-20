@@ -16,14 +16,11 @@ from memu.prompts.category_summary import CATEGORY_SUMMARY_PROMPT
 from memu.prompts.memory_type import DEFAULT_MEMORY_TYPES
 from memu.prompts.memory_type import PROMPTS as MEMORY_TYPE_PROMPTS
 from memu.prompts.preprocess import PROMPTS as PREPROCESS_PROMPTS
-from memu.prompts.retrieve.judger import PROMPT as RETRIEVE_JUDGER_PROMPT
 from memu.prompts.retrieve.llm_category_ranker import PROMPT as LLM_CATEGORY_RANKER_PROMPT
 from memu.prompts.retrieve.llm_item_ranker import PROMPT as LLM_ITEM_RANKER_PROMPT
 from memu.prompts.retrieve.llm_resource_ranker import PROMPT as LLM_RESOURCE_RANKER_PROMPT
 from memu.prompts.retrieve.pre_retrieval_decision import SYSTEM_PROMPT as PRE_RETRIEVAL_SYSTEM_PROMPT
 from memu.prompts.retrieve.pre_retrieval_decision import USER_PROMPT as PRE_RETRIEVAL_USER_PROMPT
-from memu.prompts.retrieve.query_rewriter_judger import SYSTEM_PROMPT as QUERY_REWRITER_JUDGER_SYSTEM_PROMPT
-from memu.prompts.retrieve.query_rewriter_judger import USER_PROMPT as QUERY_REWRITER_JUDGER_USER_PROMPT
 from memu.storage.local_fs import LocalFS
 from memu.utils.video import VideoFrameExtractor
 from memu.vector.index import cosine_topk
@@ -701,7 +698,7 @@ class MemoryService:
     def _segments_from_json_payload(self, payload: str) -> list[dict[str, int]] | None:
         try:
             parsed = json.loads(payload)
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError, TypeError:
             return None
         return self._segments_from_parsed_data(parsed)
 
@@ -717,7 +714,7 @@ class MemoryService:
             if isinstance(seg, dict) and "start" in seg and "end" in seg:
                 try:
                     segments.append({"start": int(seg["start"]), "end": int(seg["end"])})
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     continue
         return segments or None
 
@@ -814,7 +811,7 @@ class MemoryService:
             - Query rewriting incorporates query context for better results (if queries > 1)
         """
         if not queries:
-            raise ValueError("Queries list cannot be empty")
+            raise ValueError("empty_queries")
 
         current_query = queries[-1]
         context_queries = queries[:-1] if len(queries) > 1 else []
@@ -857,7 +854,7 @@ class MemoryService:
         results["original_query"] = current_query
         results["rewritten_query"] = rewritten_query
         if "next_step_query" not in results:
-             results["next_step_query"] = None
+            results["next_step_query"] = None
 
         return results
 
@@ -1059,9 +1056,7 @@ class MemoryService:
             return "ENOUGH"
         return "MORE"
 
-    async def _llm_based_retrieve(
-        self, query: str, top_k: int, context_queries: list[str] | None
-    ) -> dict[str, Any]:
+    async def _llm_based_retrieve(self, query: str, top_k: int, context_queries: list[str] | None) -> dict[str, Any]:
         """
         LLM-based retrieval that uses language model to search and rank results
         in a hierarchical manner, with query rewriting and judging at each tier.
