@@ -31,16 +31,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-13, macos-14, windows-latest]
+        os: [ubuntu-latest, macos-15-intel, macos-latest, windows-latest]
         python-version: ["3.14"]
         include:
           - os: ubuntu-latest
             label: linux-x86_64
-            extra-args: "--compatibility manylinux_2_35"
-          - os: macos-13
+            extra-args: "--compatibility manylinux_2_39"
+          - os: macos-15-intel
             label: macos-x86_64
             extra-args: ""
-          - os: macos-14
+          - os: macos-latest
             label: macos-aarch64
             extra-args: ""
           - os: windows-latest
