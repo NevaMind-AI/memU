@@ -1,7 +1,7 @@
 on:
   push:
     branches:
-      - feat/maturin-release
+      - main
 
 permissions:
   contents: write
@@ -27,7 +27,7 @@ jobs:
     name: build wheels (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
     needs: release-please
-    # if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
+    if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -74,7 +74,7 @@ jobs:
     name: build sdist
     runs-on: ubuntu-latest
     needs: release-please
-    # if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
+    if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -106,7 +106,7 @@ jobs:
       - release-please
       - build-wheels
       - build-sdist
-    # if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
+    if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
     environment: pypi
     permissions:
       id-token: write
@@ -130,11 +130,10 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: dist/*
-          # tag: ${{ needs.release-please.outputs.tag_name }}
+          tag: ${{ needs.release-please.outputs.tag_name }}
           file_glob: true
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
-          repository-url: https://test.pypi.org/legacy/
