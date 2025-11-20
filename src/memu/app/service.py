@@ -785,13 +785,14 @@ class MemoryService:
 
     async def retrieve(
         self,
-        queries: list[str],
+        queries: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """
         Retrieve relevant memories based on the query using either RAG-based or LLM-based search.
 
         Args:
-            queries: List of query strings. The last one is the current query, others are context.
+            queries: List of query messages in format [{"role": "user", "content": {"text": "..."}}].
+                     The last one is the current query, others are context.
                      If list has only 1 element, no query rewriting is performed.
 
         Returns:
@@ -813,12 +814,13 @@ class MemoryService:
         if not queries:
             raise ValueError("empty_queries")
 
-        current_query = queries[-1]
-        context_queries = queries[:-1] if len(queries) > 1 else []
+        # Extract text from the query structure
+        current_query = self._extract_query_text(queries[-1])
+        context_queries_objs = queries[:-1] if len(queries) > 1 else []
 
         # Step 1: Decide if retrieval is needed
         needs_retrieval, rewritten_query = await self._decide_if_retrieval_needed(
-            current_query, context_queries, retrieved_content=None
+            current_query, context_queries_objs, retrieved_content=None
         )
 
         # If only one query, do not use the rewritten version (use original)
@@ -842,11 +844,11 @@ class MemoryService:
         # Step 2: Perform retrieval with rewritten query using configured method
         if self.retrieve_config.method == "llm":
             results = await self._llm_based_retrieve(
-                rewritten_query, top_k=self.retrieve_config.top_k, context_queries=context_queries
+                rewritten_query, top_k=self.retrieve_config.top_k, context_queries=context_queries_objs
             )
         else:  # rag
             results = await self._embedding_based_retrieve(
-                rewritten_query, top_k=self.retrieve_config.top_k, context_queries=context_queries
+                rewritten_query, top_k=self.retrieve_config.top_k, context_queries=context_queries_objs
             )
 
         # Add metadata
@@ -874,7 +876,7 @@ class MemoryService:
     async def _decide_if_retrieval_needed(
         self,
         query: str,
-        context_queries: list[str] | None,
+        context_queries: list[dict[str, Any]] | None,
         retrieved_content: str | None = None,
         system_prompt: str | None = None,
     ) -> tuple[bool, str]:
@@ -883,7 +885,7 @@ class MemoryService:
 
         Args:
             query: The current query string
-            context_queries: List of context queries
+            context_queries: List of previous query objects with role and content
             retrieved_content: Content retrieved so far (if checking for sufficiency)
             system_prompt: Optional system prompt override
 
@@ -908,16 +910,60 @@ class MemoryService:
 
         return decision == "RETRIEVE", rewritten
 
-    def _format_query_context(self, queries: list[str] | None) -> str:
-        """Format query context for prompts"""
+    def _format_query_context(self, queries: list[dict[str, Any]] | None) -> str:
+        """Format query context for prompts, including role information"""
         if not queries:
             return "No query context."
 
         lines = []
         for q in queries:
-            lines.append(f"- {q}")
+            if isinstance(q, str):
+                # Backward compatibility
+                lines.append(f"- {q}")
+            elif isinstance(q, dict):
+                role = q.get("role", "user")
+                content = q.get("content")
+                if isinstance(content, dict):
+                    text = content.get("text", "")
+                elif isinstance(content, str):
+                    text = content
+                else:
+                    text = str(content)
+                lines.append(f"- [{role}]: {text}")
+            else:
+                lines.append(f"- {q!s}")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _extract_query_text(query: dict[str, Any]) -> str:
+        """
+        Extract text content from query message structure.
+
+        Args:
+            query: Query in format {"role": "user", "content": {"text": "..."}}
+
+        Returns:
+            The extracted text string
+        """
+        if isinstance(query, str):
+            # Backward compatibility: if it's already a string, return it
+            return query
+
+        if not isinstance(query, dict):
+            raise TypeError("INVALID")
+
+        content = query.get("content")
+        if isinstance(content, dict):
+            text = content.get("text", "")
+            if not text:
+                raise ValueError("EMPTY")
+            return str(text)
+        elif isinstance(content, str):
+            # Also support {"role": "user", "content": "text"} format
+            return content
+        else:
+            raise TypeError("INVALID")
 
     def _extract_decision(self, raw: str) -> str:
         """Extract RETRIEVE or NO_RETRIEVE decision from LLM response"""
@@ -946,7 +992,7 @@ class MemoryService:
         return None
 
     async def _embedding_based_retrieve(
-        self, query: str, top_k: int, context_queries: list[str] | None
+        self, query: str, top_k: int, context_queries: list[dict[str, Any]] | None
     ) -> dict[str, Any]:
         """Embedding-based retrieval with query rewriting and judging at each tier"""
         current_query = query
@@ -1056,7 +1102,9 @@ class MemoryService:
             return "ENOUGH"
         return "MORE"
 
-    async def _llm_based_retrieve(self, query: str, top_k: int, context_queries: list[str] | None) -> dict[str, Any]:
+    async def _llm_based_retrieve(
+        self, query: str, top_k: int, context_queries: list[dict[str, Any]] | None
+    ) -> dict[str, Any]:
         """
         LLM-based retrieval that uses language model to search and rank results
         in a hierarchical manner, with query rewriting and judging at each tier.
