@@ -5,9 +5,9 @@ SYSTEM_PROMPT = """You are a query rewriting and retrieval sufficiency judge. Yo
 
 You should be conservative - only mark as "ENOUGH" when the content truly provides adequate information."""
 
-USER_PROMPT = """Given the conversation history, current query, and retrieved content, perform two tasks:
+USER_PROMPT = """Given the query context, current query, and retrieved content, perform two tasks:
 
-## Conversation History (Last 3 Turns):
+## Query Context:
 {conversation_history}
 
 ## Original Query:
@@ -19,7 +19,7 @@ USER_PROMPT = """Given the conversation history, current query, and retrieved co
 ## Tasks:
 
 ### 1. Query Rewriting
-Rewrite the query to incorporate relevant context from the conversation history. Make it more specific and clear.
+Rewrite the query to incorporate relevant context from the query context. Make it more specific and clear.
 
 ### 2. Sufficiency Judgment
 Analyze if the retrieved content is sufficient to answer the query. Consider:

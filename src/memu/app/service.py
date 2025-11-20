@@ -701,7 +701,7 @@ class MemoryService:
     def _segments_from_json_payload(self, payload: str) -> list[dict[str, int]] | None:
         try:
             parsed = json.loads(payload)
-        except json.JSONDecodeError, TypeError:
+        except (json.JSONDecodeError, TypeError):
             return None
         return self._segments_from_parsed_data(parsed)
 
@@ -717,7 +717,7 @@ class MemoryService:
             if isinstance(seg, dict) and "start" in seg and "end" in seg:
                 try:
                     segments.append({"start": int(seg["start"]), "end": int(seg["end"])})
-                except TypeError, ValueError:
+                except (TypeError, ValueError):
                     continue
         return segments or None
 
@@ -788,22 +788,20 @@ class MemoryService:
 
     async def retrieve(
         self,
-        query: str,
-        *,
-        conversation_history: list[dict[str, str]] | None = None,
+        queries: list[str],
     ) -> dict[str, Any]:
         """
         Retrieve relevant memories based on the query using either RAG-based or LLM-based search.
 
         Args:
-            query: The search query string
-            conversation_history: Optional list of last 3 conversation turns, each with 'role' and 'content'.
-                                Example: [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]
+            queries: List of query strings. The last one is the current query, others are context.
+                     If list has only 1 element, no query rewriting is performed.
 
         Returns:
             Dictionary containing:
             - "needs_retrieval": bool - Whether retrieval was performed
             - "rewritten_query": str - Query after rewriting with context (if retrieval performed)
+            - "next_step_query": str | None - Suggested query for the next retrieval step (if applicable)
             - "categories": list - Retrieved categories
             - "items": list - Retrieved items
             - "resources": list - Retrieved resources
@@ -813,38 +811,53 @@ class MemoryService:
             - LLM (llm) method may provide better semantic understanding but is slower and more expensive
             - LLM method includes reasoning for each ranked result
             - Pre-retrieval decision checks if retrieval is needed based on query type
-            - Query rewriting incorporates conversation history for better context
+            - Query rewriting incorporates query context for better results (if queries > 1)
         """
+        if not queries:
+            raise ValueError("Queries list cannot be empty")
+
+        current_query = queries[-1]
+        context_queries = queries[:-1] if len(queries) > 1 else []
+
         # Step 1: Decide if retrieval is needed
-        needs_retrieval, rewritten_query = await self._decide_if_retrieval_needed(query, conversation_history)
+        needs_retrieval, rewritten_query = await self._decide_if_retrieval_needed(
+            current_query, context_queries, retrieved_content=None
+        )
+
+        # If only one query, do not use the rewritten version (use original)
+        if len(queries) == 1:
+            rewritten_query = current_query
 
         if not needs_retrieval:
-            logger.info(f"Query does not require retrieval: {query}")
+            logger.info(f"Query does not require retrieval: {current_query}")
             return {
                 "needs_retrieval": False,
-                "original_query": query,
+                "original_query": current_query,
                 "rewritten_query": rewritten_query,
+                "next_step_query": None,
                 "categories": [],
                 "items": [],
                 "resources": [],
             }
 
-        logger.info(f"Query rewritten: '{query}' -> '{rewritten_query}'")
+        logger.info(f"Query rewritten: '{current_query}' -> '{rewritten_query}'")
 
         # Step 2: Perform retrieval with rewritten query using configured method
         if self.retrieve_config.method == "llm":
             results = await self._llm_based_retrieve(
-                rewritten_query, top_k=self.retrieve_config.top_k, conversation_history=conversation_history
+                rewritten_query, top_k=self.retrieve_config.top_k, context_queries=context_queries
             )
         else:  # rag
             results = await self._embedding_based_retrieve(
-                rewritten_query, top_k=self.retrieve_config.top_k, conversation_history=conversation_history
+                rewritten_query, top_k=self.retrieve_config.top_k, context_queries=context_queries
             )
 
         # Add metadata
         results["needs_retrieval"] = True
-        results["original_query"] = query
+        results["original_query"] = current_query
         results["rewritten_query"] = rewritten_query
+        if "next_step_query" not in results:
+             results["next_step_query"] = None
 
         return results
 
@@ -862,42 +875,52 @@ class MemoryService:
         return hits, summary_lookup
 
     async def _decide_if_retrieval_needed(
-        self, query: str, conversation_history: list[dict[str, str]] | None
+        self,
+        query: str,
+        context_queries: list[str] | None,
+        retrieved_content: str | None = None,
+        system_prompt: str | None = None,
     ) -> tuple[bool, str]:
         """
-        Decide if the query requires memory retrieval and rewrite it with context.
+        Decide if the query requires memory retrieval (or MORE retrieval) and rewrite it with context.
+
+        Args:
+            query: The current query string
+            context_queries: List of context queries
+            retrieved_content: Content retrieved so far (if checking for sufficiency)
+            system_prompt: Optional system prompt override
 
         Returns:
             Tuple of (needs_retrieval: bool, rewritten_query: str)
+            - needs_retrieval: True if retrieval/more retrieval is needed
+            - rewritten_query: The rewritten query for the next step
         """
-        history_text = self._format_conversation_history(conversation_history)
+        history_text = self._format_query_context(context_queries)
+        content_text = retrieved_content or "No content retrieved yet."
 
         prompt = PRE_RETRIEVAL_USER_PROMPT.format(
             query=self._escape_prompt_value(query),
             conversation_history=self._escape_prompt_value(history_text),
+            retrieved_content=self._escape_prompt_value(content_text),
         )
 
-        response = await self.openai.summarize(prompt, system_prompt=PRE_RETRIEVAL_SYSTEM_PROMPT)
+        sys_prompt = system_prompt or PRE_RETRIEVAL_SYSTEM_PROMPT
+        response = await self.openai.summarize(prompt, system_prompt=sys_prompt)
         decision = self._extract_decision(response)
         rewritten = self._extract_rewritten_query(response) or query
 
         return decision == "RETRIEVE", rewritten
 
-    def _format_conversation_history(self, history: list[dict[str, str]] | None) -> str:
-        """Format conversation history for prompts (last 3 turns)"""
-        if not history:
-            return "No conversation history."
-
-        # Take last 3 turns
-        recent_history = history[-3:] if len(history) > 3 else history
+    def _format_query_context(self, queries: list[str] | None) -> str:
+        """Format query context for prompts"""
+        if not queries:
+            return "No query context."
 
         lines = []
-        for turn in recent_history:
-            role = turn.get("role", "unknown")
-            content = turn.get("content", "")
-            lines.append(f"{role.capitalize()}: {content}")
+        for q in queries:
+            lines.append(f"- {q}")
 
-        return "\n".join(lines) if lines else "No conversation history."
+        return "\n".join(lines)
 
     def _extract_decision(self, raw: str) -> str:
         """Extract RETRIEVE or NO_RETRIEVE decision from LLM response"""
@@ -926,12 +949,12 @@ class MemoryService:
         return None
 
     async def _embedding_based_retrieve(
-        self, query: str, top_k: int, conversation_history: list[dict[str, str]] | None
+        self, query: str, top_k: int, context_queries: list[str] | None
     ) -> dict[str, Any]:
         """Embedding-based retrieval with query rewriting and judging at each tier"""
         current_query = query
         qvec = (await self.openai.embed([current_query]))[0]
-        response: dict[str, list[dict[str, Any]]] = {"resources": [], "items": [], "categories": []}
+        response: dict[str, Any] = {"resources": [], "items": [], "categories": [], "next_step_query": None}
         content_sections: list[str] = []
 
         # Tier 1: Categories
@@ -940,9 +963,10 @@ class MemoryService:
             response["categories"] = self._materialize_hits(cat_hits, self.store.categories)
             content_sections.append(self._format_category_content(cat_hits, summary_lookup))
 
-            needs_more, current_query = await self._judge_and_rewrite(
-                current_query, "\n\n".join(content_sections), conversation_history
+            needs_more, current_query = await self._decide_if_retrieval_needed(
+                current_query, context_queries, retrieved_content="\n\n".join(content_sections)
             )
+            response["next_step_query"] = current_query
             if not needs_more:
                 return response
             # Re-embed with rewritten query
@@ -954,9 +978,10 @@ class MemoryService:
             response["items"] = self._materialize_hits(item_hits, self.store.items)
             content_sections.append(self._format_item_content(item_hits))
 
-            needs_more, current_query = await self._judge_and_rewrite(
-                current_query, "\n\n".join(content_sections), conversation_history
+            needs_more, current_query = await self._decide_if_retrieval_needed(
+                current_query, context_queries, retrieved_content="\n\n".join(content_sections)
             )
+            response["next_step_query"] = current_query
             if not needs_more:
                 return response
             # Re-embed with rewritten query
@@ -1019,44 +1044,6 @@ class MemoryService:
                 corpus.append((rid, res.embedding))
         return corpus
 
-    async def _judge_retrieval_sufficient(self, query: str, content: str) -> bool:
-        """Legacy judger method for backward compatibility"""
-        if not content.strip():
-            return False
-        prompt = RETRIEVE_JUDGER_PROMPT.format(
-            query=self._escape_prompt_value(query),
-            content=self._escape_prompt_value(content),
-        )
-        verdict = await self.openai.summarize(prompt, system_prompt=None)
-        return self._extract_judgement(verdict) == "ENOUGH"
-
-    async def _judge_and_rewrite(
-        self, query: str, content: str, conversation_history: list[dict[str, str]] | None
-    ) -> tuple[bool, str]:
-        """
-        Judge if retrieval is sufficient AND rewrite query with context.
-
-        Returns:
-            Tuple of (needs_more: bool, rewritten_query: str)
-        """
-        if not content.strip():
-            return True, query  # No content means we need more
-
-        history_text = self._format_conversation_history(conversation_history)
-
-        prompt = QUERY_REWRITER_JUDGER_USER_PROMPT.format(
-            conversation_history=self._escape_prompt_value(history_text),
-            original_query=self._escape_prompt_value(query),
-            retrieved_content=self._escape_prompt_value(content),
-        )
-
-        response = await self.openai.summarize(prompt, system_prompt=QUERY_REWRITER_JUDGER_SYSTEM_PROMPT)
-        judgment = self._extract_judgement(response)
-        rewritten = self._extract_rewritten_query(response) or query
-
-        needs_more = judgment == "MORE"
-        return needs_more, rewritten
-
     def _extract_judgement(self, raw: str) -> str:
         if not raw:
             return "MORE"
@@ -1073,7 +1060,7 @@ class MemoryService:
         return "MORE"
 
     async def _llm_based_retrieve(
-        self, query: str, top_k: int, conversation_history: list[dict[str, str]] | None
+        self, query: str, top_k: int, context_queries: list[str] | None
     ) -> dict[str, Any]:
         """
         LLM-based retrieval that uses language model to search and rank results
@@ -1085,7 +1072,7 @@ class MemoryService:
         3. If needs more, search resources related to context
         """
         current_query = query
-        response: dict[str, list[dict[str, Any]]] = {"resources": [], "items": [], "categories": []}
+        response: dict[str, Any] = {"resources": [], "items": [], "categories": [], "next_step_query": None}
         content_sections: list[str] = []
 
         # Tier 1: Search and rank categories
@@ -1094,9 +1081,10 @@ class MemoryService:
             response["categories"] = category_hits
             content_sections.append(self._format_llm_category_content(category_hits))
 
-            needs_more, current_query = await self._judge_and_rewrite(
-                current_query, "\n\n".join(content_sections), conversation_history
+            needs_more, current_query = await self._decide_if_retrieval_needed(
+                current_query, context_queries, retrieved_content="\n\n".join(content_sections)
             )
+            response["next_step_query"] = current_query
             if not needs_more:
                 return response
 
@@ -1107,9 +1095,10 @@ class MemoryService:
             response["items"] = item_hits
             content_sections.append(self._format_llm_item_content(item_hits))
 
-            needs_more, current_query = await self._judge_and_rewrite(
-                current_query, "\n\n".join(content_sections), conversation_history
+            needs_more, current_query = await self._decide_if_retrieval_needed(
+                current_query, context_queries, retrieved_content="\n\n".join(content_sections)
             )
+            response["next_step_query"] = current_query
             if not needs_more:
                 return response
 
