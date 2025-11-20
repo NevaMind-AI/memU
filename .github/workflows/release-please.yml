@@ -1,7 +1,7 @@
 on:
   push:
     branches:
-      - main
+      - feat/maturin-release
 
 permissions:
   contents: write
@@ -23,45 +23,115 @@ jobs:
           release-type: python
           target-branch: main
 
-  build:
-    name: upload wheel & publish to pypi
-    runs-on: ubuntu-latest
+  build-wheels:
+    name: build wheels (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
     needs: release-please
     if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
-
-    environment: pypi
-    permissions:
-      id-token: write
-      contents: write
-
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.14"]
+        include:
+          - os: ubuntu-latest
+            label: linux-x86_64
+            extra-args: "--compatibility manylinux_2_35"
+          - os: macos-13
+            label: macos-x86_64
+            extra-args: ""
+          - os: macos-14
+            label: macos-aarch64
+            extra-args: ""
+          - os: windows-latest
+            label: windows-x86_64
+            extra-args: ""
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv & set Python
+      - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
-          enable-cache: true
-          cache-python: true
 
-      - name: Install Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
+      - name: Install maturin
+        run: uv tool install maturin
 
-      - name: Sync dependencies
-        run: uv sync --frozen
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install maturin
+        run: uv tool install maturin
 
       - name: Build wheel
-        run: uv build
+        run: uvx maturin build --release --out dist --skip-sdist ${{ matrix.extra-args }}
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.label }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  build-sdist:
+    name: build sdist
+    runs-on: ubuntu-latest
+    needs: release-please
+    if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install maturin
+        run: uv tool install maturin
+
+      - name: Build sdist
+        run: uvx maturin sdist --out dist
+
+      - name: Upload sdist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: publish release artifacts
+    runs-on: ubuntu-latest
+    needs:
+      - release-please
+      - build-wheels
+      - build-sdist
+    if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+
+      - name: Download sdist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist
 
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: dist/memu_*.whl
+          file: dist/*
           tag: ${{ needs.release-please.outputs.tag_name }}
           file_glob: true
 
@@ -69,3 +139,4 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          repository-url: https://test.pypi.org/legacy/
