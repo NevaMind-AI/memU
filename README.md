@@ -114,19 +114,22 @@ async def test_memory_service():
     logger = logging.getLogger("memu")
     logger.setLevel(logging.DEBUG)
 
-    # 🔑 Initialize MemoryService with your OpenAI API key
-    service = MemoryService(llm_config={"api_key": "your-openai-api-key"})  # ⚠️ Replace with your actual API key
+    # 🔑 Set your OpenAI API key
+    api_key = "your-openai-api-key"  # ⚠️ Replace with your actual API key
+
+    # Initialize MemoryService (default uses RAG-based retrieval)
+    service = MemoryService(llm_config={"api_key": api_key})
 
     # Memorize a conversation
     import pathlib
     conversation_path = pathlib.Path(__file__).parent.parent / "tests" / "example" / "example_conversation.json"
-    memory = await user.memorize(
+    memory = await service.memorize(
         resource_url=str(conversation_path.absolute()),
         modality="conversation"
     )
 
-    # Test 1: RAG-based Retrieval with query context
-    # Multiple queries enable automatic query rewriting with context
+    # Test 1: RAG-based Retrieval (default method)
+    # Fast embedding-based vector search - ideal for large-scale, real-time retrieval
     print("\n[Test 1] RAG-based Retrieval with query context")
     queries_with_context = [
         {"role": "user", "content": {"text": "Tell me about the user's preferences"}},
@@ -141,18 +144,29 @@ async def test_memory_service():
     print(f"Results: {len(retrieved_rag.get('categories', []))} categories, "
           f"{len(retrieved_rag.get('items', []))} items")
 
-    # Test 2: Single query without context (no rewriting)
-    print("\n[Test 2] Single query without context")
-    queries_no_context = [
-        {"role": "user", "content": {"text": "What are their habits?"}}
+    # Test 2: LLM-based Retrieval
+    # Direct file reading with natural language understanding - ideal for nuanced queries
+    # Configure a separate service instance with LLM-based retrieval
+    print("\n[Test 2] LLM-based Retrieval with query context")
+    service_llm = MemoryService(
+        llm_config={"api_key": api_key},  # Reuse the same API key
+        retrieve_config={"method": "llm"}  # Configure LLM-based retrieval
+    )
+    # Load the same memory into LLM service
+    await service_llm.memorize(
+        resource_url=str(conversation_path.absolute()),
+        modality="conversation"
+    )
+    queries_llm = [
+        {"role": "user", "content": {"text": "What are the user's preferences and habits?"}}
     ]
-    retrieved_single = await service.retrieve(queries=queries_no_context)
-    print(f"Needs retrieval: {retrieved_single.get('needs_retrieval')}")
-    print(f"Original query: {retrieved_single.get('original_query')}")
-    print(f"Rewritten query: {retrieved_single.get('rewritten_query')}")
-    print(f"Next step query: {retrieved_single.get('next_step_query')}")
-    print(f"Results: {len(retrieved_single.get('categories', []))} categories, "
-          f"{len(retrieved_single.get('items', []))} items")
+    retrieved_llm = await service_llm.retrieve(queries=queries_llm)
+    print(f"Needs retrieval: {retrieved_llm.get('needs_retrieval')}")
+    print(f"Original query: {retrieved_llm.get('original_query')}")
+    print(f"Rewritten query: {retrieved_llm.get('rewritten_query')}")
+    print(f"Next step query: {retrieved_llm.get('next_step_query')}")
+    print(f"Results: {len(retrieved_llm.get('categories', []))} categories, "
+          f"{len(retrieved_llm.get('items', []))} items")
 
 if __name__ == "__main__":
     import asyncio
