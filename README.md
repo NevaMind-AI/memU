@@ -118,8 +118,10 @@ async def test_memory_service():
     service = MemoryService(llm_config={"api_key": "your-openai-api-key"})  # ⚠️ Replace with your actual API key
 
     # Memorize a conversation
-    memory = await service.memorize(
-        resource_url="tests/example/example_conversation.json",
+    import pathlib
+    conversation_path = pathlib.Path(__file__).parent.parent / "tests" / "example" / "example_conversation.json"
+    memory = await user.memorize(
+        resource_url=str(conversation_path.absolute()),
         modality="conversation"
     )
 
