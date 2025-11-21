@@ -100,6 +100,8 @@ pip install memu-py
 
 ### Basic Usage
 
+> **⚠️ Important**: Replace `"your-openai-api-key"` with your actual OpenAI API key to use the service.
+
 ```python
 from memu.app import MemoryService
 import logging
@@ -112,8 +114,8 @@ async def test_memory_service():
     logger = logging.getLogger("memu")
     logger.setLevel(logging.DEBUG)
 
-    # Initialize MemoryService with your OpenAI API key
-    service = MemoryService(llm_config={"api_key": "your-openai-api-key"})
+    # 🔑 Initialize MemoryService with your OpenAI API key
+    service = MemoryService(llm_config={"api_key": "your-openai-api-key"})  # ⚠️ Replace with your actual API key
 
     # Memorize a conversation
     memory = await service.memorize(
