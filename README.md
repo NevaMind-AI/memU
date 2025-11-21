@@ -102,6 +102,8 @@ pip install memu-py
 
 ```python
 from memu.app import MemoryService
+from memu.app.settings import DatabaseConfig
+from memu.storage.migrations import migrate_database
 import logging
 
 async def test_memory_service():
@@ -112,11 +114,27 @@ async def test_memory_service():
     logger = logging.getLogger("memu")
     logger.setLevel(logging.DEBUG)
 
-    # Initialize MemoryService with your OpenAI API key
-    service = MemoryService(llm_config={"api_key": "your-openai-api-key"})
+    # Initialize database schema (run once)
+    migrate_database(
+        db_path="./data/memu.db",
+        vector_db_path="./data/vectors.json"
+    )
+
+    # Initialize MemoryService with database configuration
+    service = MemoryService(
+        llm_config={"api_key": "your-openai-api-key"},
+        database_config=DatabaseConfig(
+            provider="sqlite",
+            sqlite_path="./data/memu.db",
+            vector_db_path="./data/vectors.json"
+        )
+    )
+
+    # Get user instance - each user has isolated memory storage
+    user = service.user(user_id="alice", agent_id="assistant")
 
     # Memorize a conversation
-    memory = await service.memorize(
+    memory = await user.memorize(
         resource_url="tests/example/example_conversation.json",
         modality="conversation"
     )
@@ -129,7 +147,7 @@ async def test_memory_service():
         {"role": "assistant", "content": {"text": "I can help you with that. Let me search the memory."}},
         {"role": "user", "content": {"text": "What are their habits?"}},
     ]
-    retrieved_rag = await service.retrieve(queries=queries_with_context)
+    retrieved_rag = await user.retrieve(queries=queries_with_context)
     print(f"Needs retrieval: {retrieved_rag.get('needs_retrieval')}")
     print(f"Original query: {retrieved_rag.get('original_query')}")
     print(f"Rewritten query: {retrieved_rag.get('rewritten_query')}")
@@ -142,7 +160,7 @@ async def test_memory_service():
     queries_no_context = [
         {"role": "user", "content": {"text": "What are their habits?"}}
     ]
-    retrieved_single = await service.retrieve(queries=queries_no_context)
+    retrieved_single = await user.retrieve(queries=queries_no_context)
     print(f"Needs retrieval: {retrieved_single.get('needs_retrieval')}")
     print(f"Original query: {retrieved_single.get('original_query')}")
     print(f"Rewritten query: {retrieved_single.get('rewritten_query')}")
