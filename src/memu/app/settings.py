@@ -68,6 +68,30 @@ class DatabaseConfig(BaseModel):
     vector_db_path: str = Field(default="./data/vectors.json", description="Path to vector database file")
 
 
+class DefaultUserModel(BaseModel):
+    """Default user model with basic user_id field."""
+
+    user_id: str | None = None
+
+
+class UserConfig(BaseModel):
+    """Configuration for user management."""
+
+    model: type[BaseModel] = Field(default=DefaultUserModel, description="Custom user model class")
+
+
+class DefaultAgentModel(BaseModel):
+    """Default agent model with basic agent_id field."""
+
+    agent_id: str | None = None
+
+
+class AgentConfig(BaseModel):
+    """Configuration for agent management."""
+
+    model: type[BaseModel] = Field(default=DefaultAgentModel, description="Custom agent model class")
+
+
 class RetrieveConfig(BaseModel):
     """Configure retrieval behavior for `MemoryUser.retrieve`.
 

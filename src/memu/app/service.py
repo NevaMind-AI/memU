@@ -8,7 +8,16 @@ from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel
 
-from memu.app.settings import BlobConfig, DatabaseConfig, LLMConfig, MemorizeConfig, RetrieveConfig
+from memu.app.settings import (
+    AgentConfig,
+    BlobConfig,
+    DatabaseConfig,
+    LLMConfig,
+    MemorizeConfig,
+    RetrieveConfig,
+    UserConfig,
+)
+from memu.app.user import User
 from memu.llm.http_client import HTTPLLMClient
 from memu.memory.repo import InMemoryStore, PersistentStore
 from memu.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
@@ -34,39 +43,65 @@ TConfigModel = TypeVar("TConfigModel", bound=BaseModel)
 
 
 class MemoryService:
+    """Central memory service that manages memory operations.
+
+    Usage:
+        # Create service once (shared across users)
+        service = MemoryService(
+            llm_config=LLMConfig(...),
+            database_config=DatabaseConfig(provider="sqlite"),
+        )
+
+        # Get user-specific instance
+        alice = service.user(user_id="alice", agent_id="assistant_v1")
+        await alice.memorize(resource_url="...", modality="...")
+        retrieved = await alice.retrieve(queries=[...])
+
+        # Different user, isolated memory
+        bob = service.user(user_id="bob", agent_id="assistant_v1")
+        await bob.memorize(...)
+    """
+
+    # Type annotations for dynamically created attributes (used in user service instances)
+    user_id: str
+    agent_id: str
+    store: PersistentStore | InMemoryStore
+    _category_ids: list[str]
+    _category_name_to_id: dict[str, str]
+    _categories_ready: bool
+    _category_init_task: asyncio.Task[None] | None
+
     def __init__(
         self,
         *,
-        user_id: str = "default",
-        agent_id: str = "default",
         llm_config: LLMConfig | dict[str, Any] | None = None,
         blob_config: BlobConfig | dict[str, Any] | None = None,
         database_config: DatabaseConfig | dict[str, Any] | None = None,
         memorize_config: MemorizeConfig | dict[str, Any] | None = None,
         retrieve_config: RetrieveConfig | dict[str, Any] | None = None,
+        user_config: UserConfig | dict[str, Any] | None = None,
+        agent_config: AgentConfig | dict[str, Any] | None = None,
     ):
-        self.user_id = user_id
-        self.agent_id = agent_id
+        """Initialize MemoryService.
+
+        Use the user() method to get user-specific instances for operations.
+        """
         self.llm_config = self._validate_config(llm_config, LLMConfig)
         self.blob_config = self._validate_config(blob_config, BlobConfig)
         self.database_config = self._validate_config(database_config, DatabaseConfig)
         self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
+        self.user_config = self._validate_config(user_config, UserConfig)
+        self.agent_config = self._validate_config(agent_config, AgentConfig)
         self.fs = LocalFS(self.blob_config.resources_dir)
 
-        # Initialize storage based on database provider
-        self.store: PersistentStore | InMemoryStore
+        # Cache for user-specific service instances
+        self._user_services: dict[tuple[str, str], MemoryService] = {}
+
+        # Initialize shared database connections for SQLite mode
         if self.database_config.provider == "sqlite":
             self.db = SQLiteDB(self.database_config.sqlite_path)
             self.vector_db = SimpleVectorDB(self.database_config.vector_db_path)
-            self.store = PersistentStore(
-                db=self.db,
-                vector_db=self.vector_db,
-                user_id=self.user_id,
-                agent_id=self.agent_id,
-            )
-        else:
-            self.store = InMemoryStore()
 
         backend = self.llm_config.client_backend
         self.openai: Any
@@ -92,11 +127,84 @@ class MemoryService:
 
         self.category_configs: list[dict[str, str]] = list(self.memorize_config.memory_categories or [])
         self._category_prompt_str = self._format_categories_for_prompt(self.category_configs)
-        self._category_ids: list[str] = []
-        self._category_name_to_id: dict[str, str] = {}
-        self._categories_ready = not bool(self.category_configs)
-        self._category_init_task: asyncio.Task | None = None
-        self._start_category_initialization()
+
+    def user(self, user_id: str, agent_id: str = "default") -> User:
+        """Get a User instance for the specified user_id and agent_id.
+
+        This is the recommended way to use MemoryService for multi-user scenarios.
+        User instances are cached for efficiency.
+
+        Args:
+            user_id: User identifier
+            agent_id: Agent identifier (defaults to "default")
+
+        Returns:
+            User instance for performing memory operations
+
+        Example:
+            service = MemoryService(llm_config=..., database_config=...)
+            user = service.user(user_id="alice", agent_id="assistant_v1")
+            await user.memorize(resource_url="...", modality="...")
+            retrieved = await user.retrieve(queries=[...])
+        """
+        key = (user_id, agent_id)
+
+        # Return cached service if exists
+        if key in self._user_services:
+            return User(self._user_services[key], user_id, agent_id)
+
+        # Create new internal service instance for this user/agent pair
+        user_service = self._create_user_service(user_id, agent_id)
+
+        # Cache it for reuse
+        self._user_services[key] = user_service
+
+        return User(user_service, user_id, agent_id)
+
+    def _create_user_service(self, user_id: str, agent_id: str) -> MemoryService:
+        """Create an internal MemoryService instance for a specific user/agent pair.
+
+        This is an internal method that creates a service instance with user-specific storage.
+        """
+        # Create a new service instance
+        user_service = object.__new__(MemoryService)
+
+        # Copy shared configurations
+        user_service.llm_config = self.llm_config
+        user_service.blob_config = self.blob_config
+        user_service.database_config = self.database_config
+        user_service.memorize_config = self.memorize_config
+        user_service.retrieve_config = self.retrieve_config
+        user_service.user_config = self.user_config
+        user_service.agent_config = self.agent_config
+        user_service.fs = self.fs
+        user_service.openai = self.openai
+
+        # Set user/agent identifiers
+        user_service.user_id = user_id
+        user_service.agent_id = agent_id
+
+        # Create user-specific storage
+        if self.database_config.provider == "sqlite":
+            user_service.store = PersistentStore(
+                db=self.db,
+                vector_db=self.vector_db,
+                user_id=user_id,
+                agent_id=agent_id,
+            )
+        else:
+            user_service.store = InMemoryStore()
+
+        # Initialize category management
+        user_service.category_configs = self.category_configs
+        user_service._category_prompt_str = self._category_prompt_str
+        user_service._category_ids = []
+        user_service._category_name_to_id = {}
+        user_service._categories_ready = not bool(self.category_configs)
+        user_service._category_init_task = None
+        user_service._start_category_initialization()
+
+        return user_service
 
     async def memorize(self, *, resource_url: str, modality: str, summary_prompt: str | None = None) -> dict[str, Any]:
         local_path, text, caption, segments = await self._fetch_and_preprocess_resource(resource_url, modality)
