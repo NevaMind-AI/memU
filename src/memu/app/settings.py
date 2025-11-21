@@ -63,7 +63,9 @@ class BlobConfig(BaseModel):
 
 
 class DatabaseConfig(BaseModel):
-    provider: str = Field(default="memory")
+    provider: str = Field(default="memory", description="Database provider: 'memory' or 'sqlite'")
+    sqlite_path: str = Field(default="./data/memu.db", description="Path to SQLite database file")
+    vector_db_path: str = Field(default="./data/vectors.json", description="Path to vector database file")
 
 
 class RetrieveConfig(BaseModel):

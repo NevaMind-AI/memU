@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from memu.app.settings import BlobConfig, DatabaseConfig, LLMConfig, MemorizeConfig, RetrieveConfig
 from memu.llm.http_client import HTTPLLMClient
-from memu.memory.repo import InMemoryStore
+from memu.memory.repo import InMemoryStore, PersistentStore
 from memu.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
 from memu.prompts.category_summary import CATEGORY_SUMMARY_PROMPT
 from memu.prompts.memory_type import DEFAULT_MEMORY_TYPES
@@ -22,6 +22,8 @@ from memu.prompts.retrieve.llm_resource_ranker import PROMPT as LLM_RESOURCE_RAN
 from memu.prompts.retrieve.pre_retrieval_decision import SYSTEM_PROMPT as PRE_RETRIEVAL_SYSTEM_PROMPT
 from memu.prompts.retrieve.pre_retrieval_decision import USER_PROMPT as PRE_RETRIEVAL_USER_PROMPT
 from memu.storage.local_fs import LocalFS
+from memu.storage.sqlite_db import SQLiteDB
+from memu.storage.vector_db import SimpleVectorDB
 from memu.utils.video import VideoFrameExtractor
 from memu.vector.index import cosine_topk
 
@@ -35,19 +37,37 @@ class MemoryService:
     def __init__(
         self,
         *,
+        user_id: str = "default",
+        agent_id: str = "default",
         llm_config: LLMConfig | dict[str, Any] | None = None,
         blob_config: BlobConfig | dict[str, Any] | None = None,
         database_config: DatabaseConfig | dict[str, Any] | None = None,
         memorize_config: MemorizeConfig | dict[str, Any] | None = None,
         retrieve_config: RetrieveConfig | dict[str, Any] | None = None,
     ):
+        self.user_id = user_id
+        self.agent_id = agent_id
         self.llm_config = self._validate_config(llm_config, LLMConfig)
         self.blob_config = self._validate_config(blob_config, BlobConfig)
         self.database_config = self._validate_config(database_config, DatabaseConfig)
         self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
         self.fs = LocalFS(self.blob_config.resources_dir)
-        self.store = InMemoryStore()
+
+        # Initialize storage based on database provider
+        self.store: PersistentStore | InMemoryStore
+        if self.database_config.provider == "sqlite":
+            self.db = SQLiteDB(self.database_config.sqlite_path)
+            self.vector_db = SimpleVectorDB(self.database_config.vector_db_path)
+            self.store = PersistentStore(
+                db=self.db,
+                vector_db=self.vector_db,
+                user_id=self.user_id,
+                agent_id=self.agent_id,
+            )
+        else:
+            self.store = InMemoryStore()
+
         backend = self.llm_config.client_backend
         self.openai: Any
         client_kwargs: dict[str, Any] = {
@@ -131,12 +151,29 @@ class MemoryService:
     async def _create_resource_with_caption(
         self, *, resource_url: str, modality: str, local_path: str, caption: str | None
     ) -> Resource:
-        res = self.store.create_resource(url=resource_url, modality=modality, local_path=local_path)
+        # PersistentStore doesn't need user_id/agent_id (uses self values)
+        if isinstance(self.store, PersistentStore):
+            res = self.store.create_resource(
+                url=resource_url,
+                modality=modality,
+                local_path=local_path,
+            )
+        else:
+            res = self.store.create_resource(
+                url=resource_url,
+                modality=modality,
+                local_path=local_path,
+                user_id=self.user_id,
+                agent_id=self.agent_id,
+            )
         if caption:
             caption_text = caption.strip()
             if caption_text:
                 res.caption = caption_text
                 res.embedding = (await self.openai.embed([caption_text]))[0]
+                # Update resource embedding in persistent storage
+                if isinstance(self.store, PersistentStore):
+                    self.store.update_resource_embedding(res.id, res.embedding)
         return res
 
     def _resolve_memory_types(self) -> list[MemoryType]:
@@ -305,16 +342,30 @@ class MemoryService:
         category_memory_updates: dict[str, list[str]] = {}
 
         for (memory_type, summary_text, cat_names), emb in zip(structured_entries, item_embeddings, strict=True):
-            item = self.store.create_item(
-                resource_id=resource_id,
-                memory_type=memory_type,
-                summary=summary_text,
-                embedding=emb,
-            )
+            # PersistentStore doesn't need user_id/agent_id (uses self values)
+            if isinstance(self.store, PersistentStore):
+                item = self.store.create_item(
+                    resource_id=resource_id,
+                    memory_type=memory_type,
+                    summary=summary_text,
+                    embedding=emb,
+                )
+            else:
+                item = self.store.create_item(
+                    resource_id=resource_id,
+                    memory_type=memory_type,
+                    summary=summary_text,
+                    embedding=emb,
+                    user_id=self.user_id,
+                    agent_id=self.agent_id,
+                )
             items.append(item)
             mapped_cat_ids = self._map_category_names_to_ids(cat_names)
             for cid in mapped_cat_ids:
-                rels.append(self.store.link_item_category(item.id, cid))
+                if isinstance(self.store, PersistentStore):
+                    rels.append(self.store.link_item_category(item.id, cid))
+                else:
+                    rels.append(self.store.link_item_category(item.id, cid, self.user_id, self.agent_id))
                 category_memory_updates.setdefault(cid, []).append(summary_text)
 
         return items, rels, category_memory_updates
@@ -353,7 +404,21 @@ class MemoryService:
         for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
             name = (cfg.get("name") or "").strip() or "Untitled"
             description = (cfg.get("description") or "").strip()
-            cat = self.store.get_or_create_category(name=name, description=description, embedding=vec)
+            # PersistentStore doesn't need user_id/agent_id (uses self values)
+            if isinstance(self.store, PersistentStore):
+                cat = self.store.get_or_create_category(
+                    name=name,
+                    description=description,
+                    embedding=vec,
+                )
+            else:
+                cat = self.store.get_or_create_category(
+                    name=name,
+                    description=description,
+                    embedding=vec,
+                    user_id=self.user_id,
+                    agent_id=self.agent_id,
+                )
             self._category_ids.append(cat.id)
             self._category_name_to_id[name.lower()] = cat.id
         self._categories_ready = True
@@ -639,6 +704,9 @@ class MemoryService:
             if not cat:
                 continue
             cat.summary = summary.strip()
+            # Update category summary in persistent storage
+            if isinstance(self.store, PersistentStore):
+                self.store.update_category_summary(cid, cat.summary)
 
     def _parse_conversation_preprocess(self, raw: str) -> tuple[str | None, str | None]:
         conversation = self._extract_tag_content(raw, "conversation")
