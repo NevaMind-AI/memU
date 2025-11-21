@@ -114,13 +114,16 @@ async def test_memory_service():
     logger = logging.getLogger("memu")
     logger.setLevel(logging.DEBUG)
 
-    # 🔑 Initialize MemoryService with your OpenAI API key
-    service = MemoryService(llm_config={"api_key": "your-openai-api-key"})  # ⚠️ Replace with your actual API key
+    # 🔑 Set your OpenAI API key
+    api_key = "your-openai-api-key"  # ⚠️ Replace with your actual API key
+
+    # Initialize MemoryService (default uses RAG-based retrieval)
+    service = MemoryService(llm_config={"api_key": api_key})
 
     # Memorize a conversation
     import pathlib
     conversation_path = pathlib.Path(__file__).parent.parent / "tests" / "example" / "example_conversation.json"
-    memory = await user.memorize(
+    memory = await service.memorize(
         resource_url=str(conversation_path.absolute()),
         modality="conversation"
     )
