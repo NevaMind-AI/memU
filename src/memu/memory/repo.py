@@ -13,7 +13,7 @@ class InMemoryStore:
         self.relations: list[CategoryItem] = []
 
     def create_resource(self, *, url: str, modality: str, local_path: str) -> Resource:
-        rid = str(uuid.uuid7())
+        rid = str(uuid.uuid4())
         res = Resource(id=rid, url=url, modality=modality, local_path=local_path)
         self.resources[rid] = res
         return res
@@ -26,7 +26,7 @@ class InMemoryStore:
                 if not c.description:
                     c.description = description
                 return c
-        cid = str(uuid.uuid7())
+        cid = str(uuid.uuid4())
         cat = MemoryCategory(id=cid, name=name, description=description, embedding=embedding)
         self.categories[cid] = cat
         return cat
@@ -34,7 +34,7 @@ class InMemoryStore:
     def create_item(
         self, *, resource_id: str, memory_type: MemoryType, summary: str, embedding: list[float]
     ) -> MemoryItem:
-        mid = str(uuid.uuid7())
+        mid = str(uuid.uuid4())
         it = MemoryItem(
             id=mid,
             resource_id=resource_id,

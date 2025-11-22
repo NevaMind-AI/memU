@@ -60,37 +60,23 @@ Its core architecture consists of three layers: **Resource Layer → Memory Item
 
 <img width="1363" height="563" alt="Three-Layer Architecture Diagram" src="https://github.com/user-attachments/assets/06029141-7068-4fe8-bf50-377cc6f80c87" />
 
-- **Resource Layer:**
-  A multimodal raw data warehouse, also serving as the ground truth layer, providing a semantic foundation for the memory system.
+- **Resource Layer:** Multimodal raw data warehouse
+- **Memory Item Layer:** Discrete extracted memory units
+- **MemoryCategory Layer:** Aggregated textual memory units
 
-- **Memory Item Layer:**
-  A unified semantic abstraction layer, functioning as the system’s semantic cache, supplying high-density semantic vectors for downstream retrieval and reasoning.
+**Key Features:**
 
-- **MemoryCategory Layer:**
-  A thematic document layer, mimicking human working memory mechanisms, balancing short-term response efficiency and long-term information completeness.
+- **Full Traceability:** Track from raw data → items → documents and back
+- **Memory Lifecycle:** Memorization → Retrieval → Self-evolution
+- **Two Retrieval Methods:**
+  - **RAG-based**: Fast embedding vector search
+  - **LLM-based**: Direct file reading with deep semantic understanding
+- **Self-Evolving:** Adapts memory structure based on usage patterns
 
-Through this three-layer design, **MemU brings genuine memory into the agent layer, achieving:**
-
-- **Full Traceability:**
-  Complete traceability across the three layers—from raw data → memory items → aggregated documents. Enables bidirectional tracking of each knowledge piece’s source and evolution, ensuring transparency and interpretability.
-
-- **End-to-End Memory Lifecycle Management:**
-  The three core processes correspond to the memory lifecycle: **Memorization → Retrieval → Self-evolution**.
-
-- **Coherent and Scalable Memorization:**
-  During memorization, the system maintains memory coherence while automatically managing resources to support sustainable expansion.
-
-- **Efficient and Interpretable Retrieval:**
-  Retrieves information efficiently while preserving interpretability, supporting cross-theme and cross-modal semantic queries and reasoning. The system offers two retrieval methods:
-  - **RAG-based Retrieval**: Fast embedding-based vector search for efficient large-scale retrieval
-  - **LLM-based Retrieval**: Direct file reading through natural language understanding, allowing deep search by tracking step-by-step from categories → items → original resources without relying on embedding search
-
-- **Self-Evolving Memory:**
-  A feedback-driven mechanism continuously adapts the memory structure according to real usage patterns.
 <img width="1365" height="308" alt="process" src="https://github.com/user-attachments/assets/cabed021-f231-4bd2-9bb5-7c8cdb5f928c" />
 
 
-## 🚀Get Started
+## 🚀 Get Started
 
 ### Installation
 
@@ -98,134 +84,138 @@ Through this three-layer design, **MemU brings genuine memory into the agent lay
 pip install memu-py
 ```
 
-### Basic Usage
+### Quick Example
+
+> **⚠️ Important**: Replace `"your-openai-api-key"` with your actual OpenAI API key.
 
 > **⚠️ Important**: Replace `"your-openai-api-key"` with your actual OpenAI API key to use the service.
 
 ```python
 from memu.app import MemoryService
-import logging
+import os
 
-async def test_memory_service():
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
-    logger = logging.getLogger("memu")
-    logger.setLevel(logging.DEBUG)
+async def main():
+    api_key = "your-openai-api-key"
+    file_path = os.path.abspath("tests/example/example_conversation.json")
 
-    # 🔑 Set your OpenAI API key
-    api_key = "your-openai-api-key"  # ⚠️ Replace with your actual API key
-
-    # Initialize MemoryService (default uses RAG-based retrieval)
-    service = MemoryService(llm_config={"api_key": api_key})
-
-    # Memorize a conversation
-    import pathlib
-    conversation_path = pathlib.Path(__file__).parent.parent / "tests" / "example" / "example_conversation.json"
-    memory = await service.memorize(
-        resource_url=str(conversation_path.absolute()),
-        modality="conversation"
+    # Initialize service with RAG method
+    service_rag = MemoryService(
+        llm_config={"api_key": api_key},
+        retrieve_config={"method": "rag"}
     )
 
-    # Test 1: RAG-based Retrieval (default method)
-    # Fast embedding-based vector search - ideal for large-scale, real-time retrieval
-    print("\n[Test 1] RAG-based Retrieval with query context")
-    queries_with_context = [
-        {"role": "user", "content": {"text": "Tell me about the user's preferences"}},
-        {"role": "assistant", "content": {"text": "I can help you with that. Let me search the memory."}},
-        {"role": "user", "content": {"text": "What are their habits?"}},
+    # Memorize
+    memory = await service_rag.memorize(resource_url=file_path, modality="conversation")
+    for cat in memory.get('categories', []):
+        print(f"  - {cat.get('name')}: {(cat.get('summary') or '')[:80]}...")
+
+    queries = [
+        {"role": "user", "content": {"text": "Tell me about preferences"}},
+        {"role": "user", "content": {"text": "What are their habits?"}}
     ]
-    retrieved_rag = await service.retrieve(queries=queries_with_context)
-    print(f"Needs retrieval: {retrieved_rag.get('needs_retrieval')}")
-    print(f"Original query: {retrieved_rag.get('original_query')}")
-    print(f"Rewritten query: {retrieved_rag.get('rewritten_query')}")
-    print(f"Next step query: {retrieved_rag.get('next_step_query')}")
-    print(f"Results: {len(retrieved_rag.get('categories', []))} categories, "
-          f"{len(retrieved_rag.get('items', []))} items")
 
-    # Test 2: LLM-based Retrieval
-    # Direct file reading with natural language understanding - ideal for nuanced queries
-    # Configure a separate service instance with LLM-based retrieval
-    print("\n[Test 2] LLM-based Retrieval with query context")
+    # RAG-based retrieval
+    print("\n[RETRIEVED - RAG]")
+    result_rag = await service_rag.retrieve(queries=queries)
+    for item in result_rag.get('items', [])[:3]:
+        print(f"  - [{item.get('memory_type')}] {item.get('summary', '')[:100]}...")
+
+    # Initialize service with LLM method (reuse same memory store)
     service_llm = MemoryService(
-        llm_config={"api_key": api_key},  # Reuse the same API key
-        retrieve_config={"method": "llm"}  # Configure LLM-based retrieval
+        llm_config={"api_key": api_key},
+        retrieve_config={"method": "llm"}
     )
-    # Load the same memory into LLM service
-    await service_llm.memorize(
-        resource_url=str(conversation_path.absolute()),
-        modality="conversation"
-    )
-    queries_llm = [
-        {"role": "user", "content": {"text": "What are the user's preferences and habits?"}}
-    ]
-    retrieved_llm = await service_llm.retrieve(queries=queries_llm)
-    print(f"Needs retrieval: {retrieved_llm.get('needs_retrieval')}")
-    print(f"Original query: {retrieved_llm.get('original_query')}")
-    print(f"Rewritten query: {retrieved_llm.get('rewritten_query')}")
-    print(f"Next step query: {retrieved_llm.get('next_step_query')}")
-    print(f"Results: {len(retrieved_llm.get('categories', []))} categories, "
-          f"{len(retrieved_llm.get('items', []))} items")
+    service_llm.store = service_rag.store  # Reuse memory store
+
+    # LLM-based retrieval
+    print("\n[RETRIEVED - LLM]")
+    result_llm = await service_llm.retrieve(queries=queries)
+    for item in result_llm.get('items', [])[:3]:
+        print(f"  - [{item.get('memory_type')}] {item.get('summary', '')[:100]}...")
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(test_memory_service())
+    asyncio.run(main())
 ```
 
-### Understanding Retrieval Methods
+### Retrieval Methods
 
-MemU provides two distinct retrieval approaches, each optimized for different scenarios:
+**RAG-based (`method="rag"`)**: Fast embedding vector search for large-scale data
 
-#### **Query Structure**
-Queries are passed as a list of message objects in the format:
-```python
-[
-    {"role": "user", "content": {"text": "Tell me about the user's preferences"}},
-    {"role": "assistant", "content": {"text": "I can help you with that."}},
-    {"role": "user", "content": {"text": "What are their habits?"}}
-]
+**LLM-based (`method="llm"`)**: Deep semantic understanding through direct file reading
+
+Both support:
+- **Context-aware rewriting**: Resolves pronouns using conversation history
+- **Progressive search**: Categories → Items → Resources
+- **Next-step suggestions**: Iterative multi-turn retrieval
+
+---
+
+## 💡 Use Cases
+
+MemU provides practical examples demonstrating different memory extraction and organization scenarios. Each example showcases a specific use case with real-world applications.
+
+### **Use Case 1: Conversation Memory Processing**
+
+Extract and organize memory from multi-turn conversations. Perfect for:
+- Personal AI assistants that remember user preferences and history
+- Customer support bots maintaining conversation context
+- Social chatbots building user profiles over time
+
+**Example:** Process multiple conversation files and automatically categorize memories into personal_info, preferences, work_life, relationships, etc.
+
+```bash
+export OPENAI_API_KEY=your_api_key
+python examples/example_1_conversation_memory.py
 ```
 
-- **Roles** can be `user`, `assistant`, or other custom roles
-- The **last query** in the list is the current query
-- **Previous queries** (with their roles) provide context for automatic query rewriting
-- If only **one query** is provided, no rewriting occurs
-- The system returns a `next_step_query` to suggest the next retrieval step
+**What it does:**
+- Processes conversation JSON files
+- Extracts memory items (preferences, habits, opinions)
+- Organizes into structured categories
+- Generates readable markdown files for each category
 
-#### **1. RAG-based Retrieval (`method="rag"`)**
-Fast embedding-based vector search using cosine similarity. Ideal for:
-- Large-scale datasets
-- Real-time performance requirements
-- Cost-effective retrieval at scale
+### **Use Case 2: Skill Extraction from Logs**
 
-The system progressively searches through three layers:
-1. **Category Layer**: Searches category summaries
-2. **Item Layer**: Searches memory items within relevant categories
-3. **Resource Layer**: Tracks back to original multimodal resources (conversations, documents, videos, etc.)
+Extract skills and lessons learned from agent execution logs. Ideal for:
+- DevOps teams learning from deployment experiences
+- Agent systems improving through iterative execution
+- Knowledge management from operational logs
 
-At each tier, the system judges if sufficient information has been found and dynamically rewrites the query with context for deeper search.
+**Example:** Process deployment logs incrementally, learning from each attempt to build a comprehensive skill guide.
 
-#### **2. LLM-based Retrieval (`method="llm"`)**
-Direct file reading through natural language understanding. Ideal for:
-- Complex semantic queries requiring nuanced understanding
-- Deep contextual reasoning
-- Scenarios where interpretability is critical
+```bash
+export OPENAI_API_KEY=your_api_key
+python examples/example_2_skill_extraction.py
+```
 
-This method uses the LLM to:
-- Read and comprehend natural language memory files directly
-- Rank results based on semantic relevance
-- Provide reasoning for each ranked result
-- Track step-by-step from categories → items → original resources **without relying on embeddings**
+**What it does:**
+- Processes agent logs sequentially
+- Extracts actions, outcomes, and lessons learned
+- Demonstrates **incremental learning** (memory evolves with each file)
+- Generates evolving skill guides (log_1.md → log_2.md → log_3.md → skill.md)
 
-Both methods support:
-- **Full traceability**: Each retrieved item includes its `resource_id`, allowing you to trace back to the original source
-- **Context-aware rewriting**: Automatically resolves pronouns and references using previous queries as context
-- **Pre-retrieval decision**: Intelligently determines if memory retrieval is needed for the query
-- **Progressive search**: Stops early if sufficient information is found at higher layers
-- **Next step suggestion**: Returns `next_step_query` for iterative multi-turn retrieval
+**Key Feature:** Shows MemU's core strength - continuous memory updates. Each file updates existing memory, and category summaries evolve progressively.
 
+### **Use Case 3: Multimodal Memory Processing**
 
+Process diverse content types (documents, images, videos) into unified memory. Great for:
+- Documentation systems processing mixed media
+- Learning platforms combining text and visual content
+- Research tools analyzing multimodal data
+
+**Example:** Process technical documents and architecture diagrams together, creating unified memory categories.
+
+```bash
+export OPENAI_API_KEY=your_api_key
+python examples/example_3_multimodal_memory.py
+```
+
+**What it does:**
+- Processes multiple modalities (text documents, images)
+- Extracts memory from different content types
+- Unifies memories into cross-modal categories
+- Creates organized documentation (technical_documentation, architecture_concepts, code_examples, visual_diagrams)
 
 ---
 
