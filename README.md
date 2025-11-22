@@ -88,6 +88,8 @@ pip install memu-py
 
 > **⚠️ Important**: Replace `"your-openai-api-key"` with your actual OpenAI API key.
 
+> **⚠️ Important**: Replace `"your-openai-api-key"` with your actual OpenAI API key to use the service.
+
 ```python
 from memu.app import MemoryService
 import os
