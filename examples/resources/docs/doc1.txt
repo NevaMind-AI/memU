@@ -1,0 +1,330 @@
+MemU: Agentic Memory Framework - Technical Documentation
+
+Introduction
+============
+MemU is a sophisticated agentic memory framework designed to provide AI agents and applications with human-like memory capabilities. Unlike traditional RAG (Retrieval-Augmented Generation) systems that simply store and retrieve information, MemU organizes, categorizes, and maintains memories in a structured, semantically meaningful way.
+
+Core Concepts
+=============
+
+1. Memory Organization
+   MemU organizes information into several layers:
+   - Memory Items: Individual pieces of information extracted from inputs
+   - Memory Categories: Semantic groupings of related memories
+   - Memory Types: Classifications of memory content (profile, event, knowledge, behavior)
+
+2. Multi-Modal Support
+   The framework supports various input modalities:
+   - Text documents (PDF, TXT, DOC)
+   - Conversations (JSON chat logs)
+   - Images (PNG, JPG, with vision model integration)
+   - Audio (transcription and processing)
+   - Video (frame extraction and analysis)
+
+3. Intelligent Processing Pipeline
+   Each input goes through several processing stages:
+   a. Preprocessing: Content extraction and normalization
+   b. Summarization: Key information extraction
+   c. Embedding: Vector representation generation
+   d. Classification: Memory type identification
+   e. Categorization: Semantic category assignment
+   f. Storage: Persistent storage with metadata
+
+Architecture Components
+=======================
+
+1. MemoryService (Core Service Layer)
+   The main entry point for all memory operations:
+   - memorize(): Process and store new information
+   - retrieve(): Query and fetch relevant memories
+   - update(): Modify existing memories
+   - delete(): Remove memories
+
+   Configuration options:
+   - LLM provider settings (OpenAI, Azure, custom)
+   - Embedding model selection
+   - Memory type definitions
+   - Category templates
+   - Retrieval methods (RAG, LLM-based)
+
+2. Storage Layer
+   Multiple storage backends supported:
+   - SQLite (default, local development)
+   - PostgreSQL (production deployments)
+   - In-memory (testing and temporary storage)
+
+   Data persistence:
+   - Memory items with metadata
+   - Category definitions and summaries
+   - Vector embeddings for similarity search
+   - Resource references and URLs
+
+3. Vector Search Engine
+   Semantic search capabilities powered by:
+   - Dense embeddings (OpenAI text-embedding-3-small/large)
+   - Similarity metrics (cosine similarity, dot product)
+   - Efficient indexing for fast retrieval
+   - Hybrid search combining semantic and keyword matching
+
+4. LLM Integration Layer
+   Flexible LLM backend support:
+   - OpenAI SDK client (primary)
+   - HTTP-based client (custom endpoints)
+   - Configurable model selection
+   - Prompt template system
+   - Streaming response support
+
+Memory Types
+============
+
+1. Profile Memory
+   Stores persistent information about entities:
+   - Personal attributes (name, age, occupation)
+   - Preferences and interests
+   - Relationships and connections
+   - Identity and characteristics
+
+   Example: "Alex is a software engineer at TechCorp, specializing in backend development"
+
+2. Event Memory
+   Records discrete occurrences and activities:
+   - Temporal events with timestamps
+   - Actions and experiences
+   - Milestones and achievements
+   - Incidents and interactions
+
+   Example: "Completed the deployment pipeline implementation on November 15, 2024"
+
+3. Knowledge Memory
+   Captures factual information and learnings:
+   - Facts and concepts
+   - Skills and capabilities
+   - Domain expertise
+   - Technical knowledge
+
+   Example: "Proficient in Python, Go, Kubernetes, and microservices architecture"
+
+4. Behavior Memory
+   Tracks patterns and tendencies:
+   - Habits and routines
+   - Decision patterns
+   - Behavioral preferences
+   - Interaction styles
+
+   Example: "Prefers morning workouts, typically exercises 3-4 times per week"
+
+Category Management
+===================
+
+Dynamic Categorization:
+MemU automatically assigns memories to semantic categories based on content similarity. Categories are created and maintained dynamically as new memories are added.
+
+Default Categories:
+- personal_info: Personal details and identity
+- preferences: Likes, dislikes, and choices
+- relationships: Connections with others
+- activities: Hobbies and interests
+- goals: Aspirations and objectives
+- experiences: Past events and learnings
+- knowledge: Facts and information
+- opinions: Views and perspectives
+- habits: Routines and patterns
+- work_life: Professional information
+
+Custom Categories:
+Users can define custom categories with:
+- Name and description
+- Embedding vector for semantic matching
+- Assignment threshold for automatic categorization
+- Summary generation for category overview
+
+Category Summaries:
+MemU maintains auto-generated summaries for each category that:
+- Provide overview of category contents
+- Get updated as new memories are added
+- Help with high-level information retrieval
+- Support category-level search
+
+Retrieval Strategies
+====================
+
+1. RAG-Based Retrieval (Default)
+   Vector similarity search approach:
+   - Query embedding generation
+   - Similarity calculation with stored memories
+   - Top-K selection per category
+   - Ranking by relevance score
+   - Context window assembly
+
+   Advantages:
+   - Fast and efficient
+   - Deterministic results
+   - Lower LLM costs
+   - Good for factual recall
+
+2. LLM-Based Retrieval
+   AI-powered search and ranking:
+   - Query understanding and expansion
+   - Semantic relevance judgment
+   - Context-aware ranking
+   - Multi-hop reasoning support
+   - Natural language result explanation
+
+   Advantages:
+   - Better semantic understanding
+   - Handles complex queries
+   - Context-aware results
+   - Flexible interpretation
+
+Retrieval Pipeline:
+1. Pre-retrieval decision (should we retrieve?)
+2. Query rewriting (optimize for search)
+3. Category ranking (which categories are relevant?)
+4. Item retrieval (fetch top-K items)
+5. Item ranking (rerank by relevance)
+6. Resource retrieval (fetch original sources)
+7. Result assembly (format for output)
+
+Best Practices
+==============
+
+1. Memory Quality
+   - Provide detailed, contextual inputs
+   - Include timestamps for events
+   - Maintain consistent terminology
+   - Regular memory consolidation
+   - Remove outdated information
+
+2. Configuration Optimization
+   - Tune embedding models for your domain
+   - Adjust category assignment thresholds
+   - Customize memory type prompts
+   - Set appropriate top-K values
+   - Configure LLM parameters
+
+3. Performance Optimization
+   - Batch memory operations when possible
+   - Use appropriate storage backend
+   - Index frequently queried fields
+   - Cache embeddings when reusing
+   - Monitor memory growth
+
+4. Privacy and Security
+   - Implement access controls
+   - Encrypt sensitive memories
+   - Regular data audits
+   - Compliance with data regulations
+   - User consent for memory storage
+
+Use Cases
+=========
+
+1. Personal AI Assistants
+   - Remember user preferences and context
+   - Maintain conversation history
+   - Learn from interactions
+   - Personalize responses
+
+2. Customer Support Systems
+   - Track customer history and issues
+   - Remember preferences and complaints
+   - Build customer profiles
+   - Improve service quality
+
+3. Educational Applications
+   - Track learning progress
+   - Remember concepts learned
+   - Adapt to learning style
+   - Provide personalized content
+
+4. Knowledge Management
+   - Organize organizational knowledge
+   - Track project information
+   - Build expertise databases
+   - Enable knowledge discovery
+
+5. Agent Workflows
+   - Maintain task context
+   - Remember tool usage patterns
+   - Learn from execution history
+   - Optimize decision making
+
+API Reference
+=============
+
+Basic Usage Example:
+
+```python
+from memu.app import MemoryService
+
+# Initialize service
+service = MemoryService(
+    llm_config={
+        "api_key": "your-api-key",
+        "chat_model": "gpt-4o-mini"
+    }
+)
+
+# Store a memory
+result = await service.memorize(
+    resource_url="conversation.json",
+    modality="conversation"
+)
+
+# Retrieve memories
+memories = await service.retrieve(
+    query="What programming languages does Alex know?",
+    top_k=5
+)
+
+# Access categories
+categories = service.store.categories
+```
+
+Advanced Configuration:
+
+```python
+# Custom memory types
+memorize_config = {
+    "memory_types": ["profile", "knowledge", "custom"],
+    "memory_type_prompts": {
+        "custom": "Extract specific information: {resource}"
+    },
+    "memory_categories": [
+        {"name": "technical_skills", "description": "Programming and technical abilities"},
+        {"name": "soft_skills", "description": "Communication and interpersonal skills"}
+    ]
+}
+
+service = MemoryService(
+    llm_config=llm_config,
+    memorize_config=memorize_config
+)
+```
+
+Roadmap
+=======
+
+Upcoming Features:
+- Long-term memory consolidation
+- Federated memory systems
+- Memory importance scoring
+- Automatic memory pruning
+- Cross-user memory sharing
+- Memory versioning and history
+- Enhanced temporal reasoning
+- Graph-based memory relationships
+- Memory export and import
+- Advanced privacy controls
+
+Contributing
+============
+
+MemU is open source and welcomes contributions:
+- Bug reports and feature requests
+- Documentation improvements
+- Code contributions
+- Example applications
+- Performance optimizations
+
+For more information, visit: https://github.com/mem-labs/memU

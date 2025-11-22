@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-MemoryType = Literal["profile", "event", "knowledge", "behavior"]
+MemoryType = Literal["profile", "event", "knowledge", "behavior", "skill"]
 
 
 class Resource(BaseModel):
