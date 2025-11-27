@@ -8,7 +8,8 @@ from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel
 
-from memu.app.settings import BlobConfig, DatabaseConfig, LLMConfig, MemorizeConfig, RetrieveConfig
+from memu.app.settings import BlobConfig, DatabaseConfig, EmbeddingConfig, LLMConfig, MemorizeConfig, RetrieveConfig
+from memu.embedding.http_client import HTTPEmbeddingClient
 from memu.llm.http_client import HTTPLLMClient
 from memu.memory.repo import InMemoryStore
 from memu.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
@@ -36,39 +37,25 @@ class MemoryService:
         self,
         *,
         llm_config: LLMConfig | dict[str, Any] | None = None,
+        embedding_config: EmbeddingConfig | dict[str, Any] | None = None,
         blob_config: BlobConfig | dict[str, Any] | None = None,
         database_config: DatabaseConfig | dict[str, Any] | None = None,
         memorize_config: MemorizeConfig | dict[str, Any] | None = None,
         retrieve_config: RetrieveConfig | dict[str, Any] | None = None,
     ):
         self.llm_config = self._validate_config(llm_config, LLMConfig)
+        self.embedding_config = self._validate_config(embedding_config, EmbeddingConfig)
         self.blob_config = self._validate_config(blob_config, BlobConfig)
         self.database_config = self._validate_config(database_config, DatabaseConfig)
         self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
         self.fs = LocalFS(self.blob_config.resources_dir)
         self.store = InMemoryStore()
-        backend = self.llm_config.client_backend
-        self.openai: Any
-        client_kwargs: dict[str, Any] = {
-            "base_url": self.llm_config.base_url,
-            "api_key": self.llm_config.api_key,
-            "chat_model": self.llm_config.chat_model,
-            "embed_model": self.llm_config.embed_model,
-        }
-        if backend == "sdk":
-            from memu.llm.openai_sdk import OpenAISDKClient
 
-            self.openai = OpenAISDKClient(**client_kwargs)
-        elif backend == "httpx":
-            self.openai = HTTPLLMClient(
-                provider=self.llm_config.provider,
-                endpoint_overrides=self.llm_config.endpoint_overrides,
-                **client_kwargs,
-            )
-        else:
-            msg = f"Unknown llm_client_backend '{self.llm_config.client_backend}'"
-            raise ValueError(msg)
+        # Initialize LLM client
+        self.llm_client: Any = self._init_llm_client()
+        # Initialize embedding client
+        self.embedding_client: Any = self._init_embedding_client()
 
         self.category_configs: list[dict[str, str]] = list(self.memorize_config.memory_categories or [])
         self._category_prompt_str = self._format_categories_for_prompt(self.category_configs)
@@ -77,6 +64,52 @@ class MemoryService:
         self._categories_ready = not bool(self.category_configs)
         self._category_init_task: asyncio.Task | None = None
         self._start_category_initialization()
+
+    def _init_llm_client(self) -> Any:
+        """Initialize LLM client based on configuration."""
+        backend = self.llm_config.client_backend
+        if backend == "sdk":
+            from memu.llm.openai_sdk import OpenAISDKClient
+
+            return OpenAISDKClient(
+                base_url=self.llm_config.base_url,
+                api_key=self.llm_config.api_key,
+                chat_model=self.llm_config.chat_model,
+            )
+        elif backend == "httpx":
+            return HTTPLLMClient(
+                base_url=self.llm_config.base_url,
+                api_key=self.llm_config.api_key,
+                chat_model=self.llm_config.chat_model,
+                provider=self.llm_config.provider,
+                endpoint_overrides=self.llm_config.endpoint_overrides,
+            )
+        else:
+            msg = f"Unknown llm_client_backend '{self.llm_config.client_backend}'"
+            raise ValueError(msg)
+
+    def _init_embedding_client(self) -> Any:
+        """Initialize embedding client based on configuration."""
+        backend = self.embedding_config.client_backend
+        if backend == "sdk":
+            from memu.embedding.openai_sdk import OpenAIEmbeddingSDKClient
+
+            return OpenAIEmbeddingSDKClient(
+                base_url=self.embedding_config.base_url,
+                api_key=self.embedding_config.api_key,
+                embed_model=self.embedding_config.embed_model,
+            )
+        elif backend == "httpx":
+            return HTTPEmbeddingClient(
+                base_url=self.embedding_config.base_url,
+                api_key=self.embedding_config.api_key,
+                embed_model=self.embedding_config.embed_model,
+                provider=self.embedding_config.provider,
+                endpoint_overrides=self.embedding_config.endpoint_overrides,
+            )
+        else:
+            msg = f"Unknown embedding_client_backend '{self.embedding_config.client_backend}'"
+            raise ValueError(msg)
 
     async def memorize(self, *, resource_url: str, modality: str, summary_prompt: str | None = None) -> dict[str, Any]:
         local_path, text, caption, segments = await self._fetch_and_preprocess_resource(resource_url, modality)
@@ -136,7 +169,7 @@ class MemoryService:
             caption_text = caption.strip()
             if caption_text:
                 res.caption = caption_text
-                res.embedding = (await self.openai.embed([caption_text]))[0]
+                res.embedding = (await self.embedding_client.embed([caption_text]))[0]
         return res
 
     def _resolve_memory_types(self) -> list[MemoryType]:
@@ -249,7 +282,7 @@ class MemoryService:
             )
             for mtype in memory_types
         ]
-        tasks = [self.openai.summarize(prompt_text, system_prompt=base_prompt) for prompt_text in prompts]
+        tasks = [self.llm_client.summarize(prompt_text, system_prompt=base_prompt) for prompt_text in prompts]
         responses = await asyncio.gather(*tasks)
         return self._parse_structured_entries(memory_types, responses)
 
@@ -299,7 +332,7 @@ class MemoryService:
         self, *, resource_id: str, structured_entries: list[tuple[MemoryType, str, list[str]]]
     ) -> tuple[list[MemoryItem], list[CategoryItem], dict[str, list[str]]]:
         summary_payloads = [content for _, content, _ in structured_entries]
-        item_embeddings = await self.openai.embed(summary_payloads) if summary_payloads else []
+        item_embeddings = await self.embedding_client.embed(summary_payloads) if summary_payloads else []
         items: list[MemoryItem] = []
         rels: list[CategoryItem] = []
         category_memory_updates: dict[str, list[str]] = {}
@@ -347,7 +380,7 @@ class MemoryService:
             self._categories_ready = True
             return
         cat_texts = [self._category_embedding_text(cfg) for cfg in self.category_configs]
-        cat_vecs = await self.openai.embed(cat_texts)
+        cat_vecs = await self.embedding_client.embed(cat_texts)
         self._category_ids = []
         self._category_name_to_id = {}
         for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
@@ -427,7 +460,7 @@ class MemoryService:
         if file_ext in audio_extensions:
             try:
                 logger.info(f"Transcribing audio file: {local_path}")
-                transcribed = cast(str, await self.openai.transcribe(local_path))
+                transcribed = cast(str, await self.llm_client.transcribe(local_path))
                 logger.info(f"Audio transcription completed: {len(transcribed)} characters")
             except Exception:
                 logger.exception("Audio transcription failed for %s", local_path)
@@ -478,7 +511,7 @@ class MemoryService:
         """Preprocess conversation data with segmentation"""
         preprocessed_text = self._add_conversation_indices(text)
         prompt = template.format(conversation=self._escape_prompt_value(preprocessed_text))
-        processed = await self.openai.summarize(prompt, system_prompt=None)
+        processed = await self.llm_client.summarize(prompt, system_prompt=None)
         conv, summary, segments = self._parse_conversation_preprocess_with_segments(processed, preprocessed_text)
         return conv or preprocessed_text, summary, segments
 
@@ -510,7 +543,7 @@ class MemoryService:
             try:
                 # Call Vision API with extracted frame
                 logger.info(f"Analyzing video frame with Vision API: {frame_path}")
-                processed = await self.openai.vision(prompt=template, image_path=frame_path, system_prompt=None)
+                processed = await self.llm_client.vision(prompt=template, image_path=frame_path, system_prompt=None)
                 description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
                 return description, caption, None
             finally:
@@ -541,7 +574,7 @@ class MemoryService:
             Tuple of (description, caption, None)
         """
         # Call Vision API with image
-        processed = await self.openai.vision(prompt=template, image_path=local_path, system_prompt=None)
+        processed = await self.llm_client.vision(prompt=template, image_path=local_path, system_prompt=None)
         description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
         return description, caption, None
 
@@ -550,7 +583,7 @@ class MemoryService:
     ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
         """Preprocess document data - condense and extract caption"""
         prompt = template.format(document_text=self._escape_prompt_value(text))
-        processed = await self.openai.summarize(prompt, system_prompt=None)
+        processed = await self.llm_client.summarize(prompt, system_prompt=None)
         processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
         return processed_content or text, caption, None
 
@@ -559,7 +592,7 @@ class MemoryService:
     ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
         """Preprocess audio data - format transcription and extract caption"""
         prompt = template.format(transcription=self._escape_prompt_value(text))
-        processed = await self.openai.summarize(prompt, system_prompt=None)
+        processed = await self.llm_client.summarize(prompt, system_prompt=None)
         processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
         return processed_content or text, caption, None
 
@@ -629,7 +662,7 @@ class MemoryService:
             if not cat or not memories:
                 continue
             prompt = self._build_category_summary_prompt(category=cat, new_memories=memories)
-            tasks.append(self.openai.summarize(prompt, system_prompt=None))
+            tasks.append(self.llm_client.summarize(prompt, system_prompt=None))
             target_ids.append(cid)
         if not tasks:
             return
@@ -867,7 +900,7 @@ class MemoryService:
         if not entries:
             return [], {}
         summary_texts = [summary for _, summary in entries]
-        summary_embeddings = await self.openai.embed(summary_texts)
+        summary_embeddings = await self.embedding_client.embed(summary_texts)
         corpus = [(cid, emb) for (cid, _), emb in zip(entries, summary_embeddings, strict=True)]
         hits = cosine_topk(query_vec, corpus, k=top_k)
         summary_lookup = dict(entries)
@@ -904,7 +937,7 @@ class MemoryService:
         )
 
         sys_prompt = system_prompt or PRE_RETRIEVAL_SYSTEM_PROMPT
-        response = await self.openai.summarize(prompt, system_prompt=sys_prompt)
+        response = await self.llm_client.summarize(prompt, system_prompt=sys_prompt)
         decision = self._extract_decision(response)
         rewritten = self._extract_rewritten_query(response) or query
 
@@ -996,7 +1029,7 @@ class MemoryService:
     ) -> dict[str, Any]:
         """Embedding-based retrieval with query rewriting and judging at each tier"""
         current_query = query
-        qvec = (await self.openai.embed([current_query]))[0]
+        qvec = (await self.embedding_client.embed([current_query]))[0]
         response: dict[str, Any] = {"resources": [], "items": [], "categories": [], "next_step_query": None}
         content_sections: list[str] = []
 
@@ -1013,7 +1046,7 @@ class MemoryService:
             if not needs_more:
                 return response
             # Re-embed with rewritten query
-            qvec = (await self.openai.embed([current_query]))[0]
+            qvec = (await self.embedding_client.embed([current_query]))[0]
 
         # Tier 2: Items
         item_hits = cosine_topk(qvec, [(i.id, i.embedding) for i in self.store.items.values()], k=top_k)
@@ -1028,7 +1061,7 @@ class MemoryService:
             if not needs_more:
                 return response
             # Re-embed with rewritten query
-            qvec = (await self.openai.embed([current_query]))[0]
+            qvec = (await self.embedding_client.embed([current_query]))[0]
 
         # Tier 3: Resources
         resource_corpus = self._resource_caption_corpus()
@@ -1239,7 +1272,7 @@ class MemoryService:
             categories_data=self._escape_prompt_value(categories_data),
         )
 
-        llm_response = await self.openai.summarize(prompt, system_prompt=None)
+        llm_response = await self.llm_client.summarize(prompt, system_prompt=None)
         return self._parse_llm_category_response(llm_response)
 
     async def _llm_rank_items(
@@ -1265,7 +1298,7 @@ class MemoryService:
             items_data=self._escape_prompt_value(items_data),
         )
 
-        llm_response = await self.openai.summarize(prompt, system_prompt=None)
+        llm_response = await self.llm_client.summarize(prompt, system_prompt=None)
         return self._parse_llm_item_response(llm_response)
 
     async def _llm_rank_resources(
@@ -1299,7 +1332,7 @@ class MemoryService:
             resources_data=self._escape_prompt_value(resources_data),
         )
 
-        llm_response = await self.openai.summarize(prompt, system_prompt=None)
+        llm_response = await self.llm_client.summarize(prompt, system_prompt=None)
         return self._parse_llm_resource_response(llm_response)
 
     def _parse_llm_category_response(self, raw_response: str) -> list[dict[str, Any]]:
