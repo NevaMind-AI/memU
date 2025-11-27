@@ -14,4 +14,3 @@ class EmbeddingBackend:
 
     def parse_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
         raise NotImplementedError
-

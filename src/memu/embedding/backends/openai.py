@@ -16,4 +16,3 @@ class OpenAIEmbeddingBackend(EmbeddingBackend):
 
     def parse_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
         return [cast(list[float], d["embedding"]) for d in data["data"]]
-

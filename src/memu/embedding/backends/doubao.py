@@ -70,4 +70,3 @@ class DoubaoEmbeddingBackend(EmbeddingBackend):
     def parse_multimodal_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
         """Parse multimodal embedding response."""
         return [cast(list[float], d["embedding"]) for d in data["data"]]
-

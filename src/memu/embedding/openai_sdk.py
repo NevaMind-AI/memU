@@ -27,4 +27,3 @@ class OpenAIEmbeddingSDKClient:
         """
         response = await self.client.embeddings.create(model=self.embed_model, input=inputs)
         return [cast(list[float], d.embedding) for d in response.data]
-

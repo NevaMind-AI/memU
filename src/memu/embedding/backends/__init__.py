@@ -3,9 +3,8 @@ from memu.embedding.backends.doubao import DoubaoEmbeddingBackend, DoubaoMultimo
 from memu.embedding.backends.openai import OpenAIEmbeddingBackend
 
 __all__ = [
-    "EmbeddingBackend",
-    "OpenAIEmbeddingBackend",
     "DoubaoEmbeddingBackend",
     "DoubaoMultimodalEmbeddingInput",
+    "EmbeddingBackend",
+    "OpenAIEmbeddingBackend",
 ]
-

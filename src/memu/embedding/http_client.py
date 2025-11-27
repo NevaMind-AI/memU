@@ -98,18 +98,17 @@ class HTTPEmbeddingClient:
             ... ])
 
         Raises:
-            ValueError: If the backend does not support multimodal embeddings
+            TypeError: If the backend does not support multimodal embeddings
         """
         if not isinstance(self.backend, DoubaoEmbeddingBackend):
             msg = (
                 f"Multimodal embedding is only supported by 'doubao' provider, "
                 f"but current provider is '{self.provider}'"
             )
-            raise ValueError(msg)
+            raise TypeError(msg)
 
         multimodal_inputs = [
-            DoubaoMultimodalEmbeddingInput(input_type=input_type, content=content)
-            for input_type, content in inputs
+            DoubaoMultimodalEmbeddingInput(input_type=input_type, content=content) for input_type, content in inputs
         ]
 
         payload = self.backend.build_multimodal_embedding_payload(
@@ -136,4 +135,3 @@ class HTTPEmbeddingClient:
             msg = f"Unsupported embedding provider '{provider}'. Available: {', '.join(EMBEDDING_BACKENDS.keys())}"
             raise ValueError(msg)
         return factory()
-

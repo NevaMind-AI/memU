@@ -731,7 +731,7 @@ class MemoryService:
     def _segments_from_json_payload(self, payload: str) -> list[dict[str, int]] | None:
         try:
             parsed = json.loads(payload)
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError, TypeError:
             return None
         return self._segments_from_parsed_data(parsed)
 
@@ -747,7 +747,7 @@ class MemoryService:
             if isinstance(seg, dict) and "start" in seg and "end" in seg:
                 try:
                     segments.append({"start": int(seg["start"]), "end": int(seg["end"])})
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     continue
         return segments or None
 
