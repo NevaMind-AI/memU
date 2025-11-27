@@ -86,7 +86,7 @@ pip install memu-py
 
 ### Quick Example
 
-> **⚠️ Important**: Replace `"your-openai-api-key"` with your actual OpenAI API key.
+> **⚠️ Important**: Ensure you have Python 3.14+
 
 > **⚠️ Important**: Replace `"your-openai-api-key"` with your actual OpenAI API key to use the service.
 
