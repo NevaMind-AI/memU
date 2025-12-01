@@ -190,7 +190,7 @@ class MemoryService:
     ) -> tuple[str, list[dict[str, str | None]]]:
         """
         Fetch and preprocess a resource.
-        
+
         Returns:
             Tuple of (local_path, preprocessed_resources)
             where preprocessed_resources is a list of dicts with 'text' and 'caption'
@@ -290,8 +290,8 @@ class MemoryService:
         lines = resource_text.split("\n")
         max_idx = len(lines) - 1
         for segment in segments:
-            start_idx = segment.get("start", 0)
-            end_idx = segment.get("end", max_idx)
+            start_idx = int(segment.get("start", 0))
+            end_idx = int(segment.get("end", max_idx))
             segment_text = self._extract_segment_text(lines, start_idx, end_idx)
             if not segment_text:
                 continue
@@ -545,42 +545,40 @@ class MemoryService:
             return await self._preprocess_audio(text, template)
         return [{"text": text, "caption": None}]
 
-    async def _preprocess_conversation(
-        self, text: str, template: str
-    ) -> list[dict[str, str | None]]:
+    async def _preprocess_conversation(self, text: str, template: str) -> list[dict[str, str | None]]:
         """Preprocess conversation data with segmentation, returns list of resources (one per segment)."""
         preprocessed_text = self._add_conversation_indices(text)
         prompt = template.format(conversation=self._escape_prompt_value(preprocessed_text))
         processed = await self.llm_client.summarize(prompt, system_prompt=None)
         conv, segments = self._parse_conversation_preprocess_with_segments(processed, preprocessed_text)
-        
+
         conversation_text = conv or preprocessed_text
-        
+
         # If no segments, return single resource
         if not segments:
             return [{"text": conversation_text, "caption": None}]
-        
+
         # Generate caption for each segment and return as separate resources
         lines = conversation_text.split("\n")
         max_idx = len(lines) - 1
         resources: list[dict[str, str | None]] = []
-        
+
         for segment in segments:
             start = int(segment.get("start", 0))
             end = int(segment.get("end", max_idx))
             start = max(0, min(start, max_idx))
             end = max(0, min(end, max_idx))
             segment_text = "\n".join(lines[start : end + 1])
-            
+
             if segment_text.strip():
                 caption = await self._summarize_segment(segment_text)
                 resources.append({"text": segment_text, "caption": caption})
-        
+
         return resources if resources else [{"text": conversation_text, "caption": None}]
 
     async def _summarize_segment(self, segment_text: str) -> str | None:
         """Summarize a single conversation segment."""
-        prompt = f"""Summarize the following conversation segment in 1-2 concise sentences. 
+        prompt = f"""Summarize the following conversation segment in 1-2 concise sentences.
 Focus on the main topic or theme discussed.
 
 Conversation:
@@ -594,10 +592,7 @@ Summary:"""
             logger.exception("Failed to summarize segment")
             return None
 
-
-    async def _preprocess_video(
-        self, local_path: str, template: str
-    ) -> list[dict[str, str | None]]:
+    async def _preprocess_video(self, local_path: str, template: str) -> list[dict[str, str | None]]:
         """
         Preprocess video data - extract description and caption using Vision API.
 
@@ -640,9 +635,7 @@ Summary:"""
             logger.error(f"Video preprocessing failed: {e}", exc_info=True)
             return [{"text": None, "caption": None}]
 
-    async def _preprocess_image(
-        self, local_path: str, template: str
-    ) -> list[dict[str, str | None]]:
+    async def _preprocess_image(self, local_path: str, template: str) -> list[dict[str, str | None]]:
         """
         Preprocess image data - extract description and caption using Vision API.
 
@@ -658,18 +651,14 @@ Summary:"""
         description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
         return [{"text": description, "caption": caption}]
 
-    async def _preprocess_document(
-        self, text: str, template: str
-    ) -> list[dict[str, str | None]]:
+    async def _preprocess_document(self, text: str, template: str) -> list[dict[str, str | None]]:
         """Preprocess document data - condense and extract caption"""
         prompt = template.format(document_text=self._escape_prompt_value(text))
         processed = await self.llm_client.summarize(prompt, system_prompt=None)
         processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
         return [{"text": processed_content or text, "caption": caption}]
 
-    async def _preprocess_audio(
-        self, text: str, template: str
-    ) -> list[dict[str, str | None]]:
+    async def _preprocess_audio(self, text: str, template: str) -> list[dict[str, str | None]]:
         """Preprocess audio data - format transcription and extract caption"""
         prompt = template.format(transcription=self._escape_prompt_value(text))
         processed = await self.llm_client.summarize(prompt, system_prompt=None)
@@ -810,7 +799,7 @@ Summary:"""
     def _segments_from_json_payload(self, payload: str) -> list[dict[str, int | str]] | None:
         try:
             parsed = json.loads(payload)
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError, TypeError:
             return None
         return self._segments_from_parsed_data(parsed)
 
@@ -832,7 +821,7 @@ Summary:"""
                     if "caption" in seg and isinstance(seg["caption"], str):
                         segment["caption"] = seg["caption"]
                     segments.append(segment)
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     continue
         return segments or None
 
@@ -944,7 +933,6 @@ Summary:"""
         # If only one query, do not use the rewritten version (use original)
         if len(queries) == 1:
             rewritten_query = current_query
-
 
         if not needs_retrieval:
             logger.info(f"Query does not require retrieval: {current_query}")
@@ -1366,7 +1354,7 @@ Summary:"""
     ) -> list[dict[str, Any]]:
         """Use LLM to rank memory items from relevant categories"""
         if not category_ids:
-            print(f"[LLM Rank Items] No category_ids provided")
+            print("[LLM Rank Items] No category_ids provided")
             return []
 
         items_data = self._format_items_for_llm(category_ids)
