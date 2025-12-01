@@ -46,14 +46,31 @@ class LLMConfig(BaseModel):
     base_url: str = Field(default="https://api.openai.com/v1")
     api_key: str = Field(default="OPENAI_API_KEY")
     chat_model: str = Field(default="gpt-4o-mini")
-    embed_model: str = Field(default="text-embedding-3-small")
     client_backend: str = Field(
         default="sdk",
         description="Which LLM client backend to use: 'httpx' (httpx) or 'sdk' (official OpenAI).",
     )
     endpoint_overrides: dict[str, str] = Field(
         default_factory=dict,
-        description="Optional overrides for HTTP endpoints (keys: 'chat'/'summary', 'embeddings'/'embed').",
+        description="Optional overrides for HTTP endpoints (keys: 'chat'/'summary').",
+    )
+
+
+class EmbeddingConfig(BaseModel):
+    provider: str = Field(
+        default="openai",
+        description="Identifier for the embedding provider implementation.",
+    )
+    base_url: str = Field(default="https://api.openai.com/v1")
+    api_key: str = Field(default="OPENAI_API_KEY")
+    embed_model: str = Field(default="text-embedding-3-small")
+    client_backend: str = Field(
+        default="sdk",
+        description="Which embedding client backend to use: 'httpx' (httpx) or 'sdk' (official OpenAI).",
+    )
+    endpoint_overrides: dict[str, str] = Field(
+        default_factory=dict,
+        description="Optional overrides for HTTP endpoints (keys: 'embeddings'/'embed').",
     )
 
 

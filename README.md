@@ -96,11 +96,12 @@ import os
 
 async def main():
     api_key = "your-openai-api-key"
-    file_path = os.path.abspath("tests/example/example_conversation.json")
+    file_path = os.path.abspath("path/to/memU/tests/example/example_conversation.json")
 
     # Initialize service with RAG method
     service_rag = MemoryService(
         llm_config={"api_key": api_key},
+        embedding_config={"api_key": api_key},
         retrieve_config={"method": "rag"}
     )
 
@@ -123,6 +124,7 @@ async def main():
     # Initialize service with LLM method (reuse same memory store)
     service_llm = MemoryService(
         llm_config={"api_key": api_key},
+        embedding_config={"api_key": api_key},
         retrieve_config={"method": "llm"}
     )
     service_llm.store = service_rag.store  # Reuse memory store

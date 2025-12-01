@@ -1,4 +1,5 @@
-from memu.llm.backends.base import HTTPBackend
-from memu.llm.backends.openai import OpenAIHTTPBackend
+from memu.llm.backends.base import LLMBackend
+from memu.llm.backends.doubao import DoubaoLLMBackend
+from memu.llm.backends.openai import OpenAILLMBackend
 
-__all__ = ["HTTPBackend", "OpenAIHTTPBackend"]
+__all__ = ["DoubaoLLMBackend", "LLMBackend", "OpenAILLMBackend"]

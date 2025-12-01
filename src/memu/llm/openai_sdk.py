@@ -1,7 +1,7 @@
 import base64
 import logging
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from openai import AsyncOpenAI
 from openai.types.chat import (
@@ -16,13 +16,12 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAISDKClient:
-    """OpenAI client that relies on the official Python SDK."""
+    """OpenAI LLM client that relies on the official Python SDK."""
 
-    def __init__(self, *, base_url: str, api_key: str, chat_model: str, embed_model: str):
+    def __init__(self, *, base_url: str, api_key: str, chat_model: str):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or ""
         self.chat_model = chat_model
-        self.embed_model = embed_model
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
 
     async def summarize(
@@ -113,10 +112,6 @@ class OpenAISDKClient:
         content = response.choices[0].message.content
         logger.debug("OpenAI vision response: %s", response)
         return content or ""
-
-    async def embed(self, inputs: list[str]) -> list[list[float]]:
-        response = await self.client.embeddings.create(model=self.embed_model, input=inputs)
-        return [cast(list[float], d.embedding) for d in response.data]
 
     async def transcribe(
         self,
