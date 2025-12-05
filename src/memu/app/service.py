@@ -112,54 +112,94 @@ class MemoryService:
             raise ValueError(msg)
 
     async def memorize(self, *, resource_url: str, modality: str, summary_prompt: str | None = None) -> dict[str, Any]:
-        local_path, text, caption, segments = await self._fetch_and_preprocess_resource(resource_url, modality)
+        local_path, preprocessed_resources = await self._fetch_and_preprocess_resource(resource_url, modality)
 
         await self._ensure_categories_ready()
         cat_ids: list[str] = list(self._category_ids)
-
-        res = await self._create_resource_with_caption(
-            resource_url=resource_url,
-            modality=modality,
-            local_path=local_path,
-            caption=caption,
-        )
 
         memory_types = self._resolve_memory_types()
         base_prompt = self._resolve_summary_prompt(modality, summary_prompt)
         categories_prompt_str = self._category_prompt_str
 
-        structured_entries = await self._generate_structured_entries(
-            resource_url=resource_url,
-            modality=modality,
-            memory_types=memory_types,
-            text=text,
-            base_prompt=base_prompt,
-            categories_prompt_str=categories_prompt_str,
-            segments=segments,
-        )
+        all_resources: list[Resource] = []
+        all_items: list[Any] = []
+        all_rels: list[Any] = []
+        all_category_updates: dict[str, list[Any]] = {}
 
-        items, rels, category_memory_updates = await self._persist_memory_items(
-            resource_id=res.id,
-            structured_entries=structured_entries,
-        )
+        # Process each preprocessed resource (single for most modalities, multiple for conversations)
+        for idx, prep_resource in enumerate(preprocessed_resources):
+            text = prep_resource.get("text")
+            caption = prep_resource.get("caption")
 
-        await self._update_category_summaries(category_memory_updates)
+            # Create resource URL (append segment index if multiple)
+            if len(preprocessed_resources) > 1:
+                # Format: filename_#segment_N.ext
+                path = pathlib.Path(resource_url)
+                res_url = f"{path.stem}_#segment_{idx}{path.suffix}"
+            else:
+                res_url = resource_url
 
-        return {
-            "resource": self._model_dump_without_embeddings(res),
-            "items": [self._model_dump_without_embeddings(item) for item in items],
-            "categories": [self._model_dump_without_embeddings(self.store.categories[c]) for c in cat_ids],
-            "relations": [r.model_dump() for r in rels],
-        }
+            # Create resource with caption
+            res = await self._create_resource_with_caption(
+                resource_url=res_url,
+                modality=modality,
+                local_path=local_path,
+                caption=caption,
+            )
+            all_resources.append(res)
+
+            # Generate entries for this resource
+            if text:
+                structured_entries = await self._generate_entries_from_text(
+                    resource_text=text,
+                    memory_types=memory_types,
+                    base_prompt=base_prompt,
+                    categories_prompt_str=categories_prompt_str,
+                )
+
+                items, rels, category_memory_updates = await self._persist_memory_items(
+                    resource_id=res.id,
+                    structured_entries=structured_entries,
+                )
+
+                all_items.extend(items)
+                all_rels.extend(rels)
+                for cat_id, mem_items in category_memory_updates.items():
+                    all_category_updates.setdefault(cat_id, []).extend(mem_items)
+
+        await self._update_category_summaries(all_category_updates)
+
+        # Return format depends on number of resources
+        if len(all_resources) == 1:
+            return {
+                "resource": self._model_dump_without_embeddings(all_resources[0]),
+                "items": [self._model_dump_without_embeddings(item) for item in all_items],
+                "categories": [self._model_dump_without_embeddings(self.store.categories[c]) for c in cat_ids],
+                "relations": [r.model_dump() for r in all_rels],
+            }
+        else:
+            return {
+                "resources": [self._model_dump_without_embeddings(r) for r in all_resources],
+                "items": [self._model_dump_without_embeddings(item) for item in all_items],
+                "categories": [self._model_dump_without_embeddings(self.store.categories[c]) for c in cat_ids],
+                "relations": [r.model_dump() for r in all_rels],
+            }
 
     async def _fetch_and_preprocess_resource(
         self, resource_url: str, modality: str
-    ) -> tuple[str, str | None, str | None, list[dict[str, int]] | None]:
+    ) -> tuple[str, list[dict[str, str | None]]]:
+        """
+        Fetch and preprocess a resource.
+
+        Returns:
+            Tuple of (local_path, preprocessed_resources)
+            where preprocessed_resources is a list of dicts with 'text' and 'caption'
+        """
         local_path, text = await self.fs.fetch(resource_url, modality)
-        processed_text, caption, segments = await self._preprocess_resource_url(
+        preprocessed_resources = await self._preprocess_resource_url(
             local_path=local_path, text=text, modality=modality
         )
-        return local_path, processed_text, caption, segments
+        return local_path, preprocessed_resources
 
     async def _create_resource_with_caption(
         self, *, resource_url: str, modality: str, local_path: str, caption: str | None
@@ -189,7 +229,7 @@ class MemoryService:
         text: str | None,
         base_prompt: str,
         categories_prompt_str: str,
-        segments: list[dict[str, int]] | None = None,
+        segments: list[dict[str, int | str]] | None = None,
     ) -> list[tuple[MemoryType, str, list[str]]]:
         if not memory_types:
             return []
@@ -218,7 +258,7 @@ class MemoryService:
         memory_types: list[MemoryType],
         base_prompt: str,
         categories_prompt_str: str,
-        segments: list[dict[str, int]] | None,
+        segments: list[dict[str, int | str]] | None,
     ) -> list[tuple[MemoryType, str, list[str]]]:
         if modality == "conversation" and segments:
             segment_entries = await self._generate_entries_for_segments(
@@ -241,7 +281,7 @@ class MemoryService:
         self,
         *,
         resource_text: str,
-        segments: list[dict[str, int]],
+        segments: list[dict[str, int | str]],
         memory_types: list[MemoryType],
         base_prompt: str,
         categories_prompt_str: str,
@@ -250,8 +290,8 @@ class MemoryService:
         lines = resource_text.split("\n")
         max_idx = len(lines) - 1
         for segment in segments:
-            start_idx = segment.get("start", 0)
-            end_idx = segment.get("end", max_idx)
+            start_idx = int(segment.get("start", 0))
+            end_idx = int(segment.get("end", max_idx))
             segment_text = self._extract_segment_text(lines, start_idx, end_idx)
             if not segment_text:
                 continue
@@ -412,7 +452,7 @@ class MemoryService:
 
     async def _preprocess_resource_url(
         self, *, local_path: str, text: str | None, modality: str
-    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+    ) -> list[dict[str, str | None]]:
         """
         Preprocess resource based on modality.
 
@@ -427,19 +467,19 @@ class MemoryService:
             modality: Resource modality type
 
         Returns:
-            Tuple of (processed_text, caption, segments)
+            List of preprocessed resources, each with 'text' and 'caption'
         """
         template = PREPROCESS_PROMPTS.get(modality)
         if not template:
-            return text, None, None
+            return [{"text": text, "caption": None}]
 
         if modality == "audio":
             text = await self._prepare_audio_text(local_path, text)
             if text is None:
-                return None, None, None
+                return [{"text": None, "caption": None}]
 
         if self._modality_requires_text(modality) and not text:
-            return text, None, None
+            return [{"text": text, "caption": None}]
 
         return await self._dispatch_preprocessor(
             modality=modality,
@@ -492,7 +532,7 @@ class MemoryService:
         local_path: str,
         text: str | None,
         template: str,
-    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+    ) -> list[dict[str, str | None]]:
         if modality == "conversation" and text is not None:
             return await self._preprocess_conversation(text, template)
         if modality == "video":
@@ -503,21 +543,56 @@ class MemoryService:
             return await self._preprocess_document(text, template)
         if modality == "audio" and text is not None:
             return await self._preprocess_audio(text, template)
-        return text, None, None
+        return [{"text": text, "caption": None}]
 
-    async def _preprocess_conversation(
-        self, text: str, template: str
-    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
-        """Preprocess conversation data with segmentation"""
+    async def _preprocess_conversation(self, text: str, template: str) -> list[dict[str, str | None]]:
+        """Preprocess conversation data with segmentation, returns list of resources (one per segment)."""
         preprocessed_text = self._add_conversation_indices(text)
         prompt = template.format(conversation=self._escape_prompt_value(preprocessed_text))
         processed = await self.llm_client.summarize(prompt, system_prompt=None)
-        conv, summary, segments = self._parse_conversation_preprocess_with_segments(processed, preprocessed_text)
-        return conv or preprocessed_text, summary, segments
+        conv, segments = self._parse_conversation_preprocess_with_segments(processed, preprocessed_text)
 
-    async def _preprocess_video(
-        self, local_path: str, template: str
-    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+        conversation_text = conv or preprocessed_text
+
+        # If no segments, return single resource
+        if not segments:
+            return [{"text": conversation_text, "caption": None}]
+
+        # Generate caption for each segment and return as separate resources
+        lines = conversation_text.split("\n")
+        max_idx = len(lines) - 1
+        resources: list[dict[str, str | None]] = []
+
+        for segment in segments:
+            start = int(segment.get("start", 0))
+            end = int(segment.get("end", max_idx))
+            start = max(0, min(start, max_idx))
+            end = max(0, min(end, max_idx))
+            segment_text = "\n".join(lines[start : end + 1])
+
+            if segment_text.strip():
+                caption = await self._summarize_segment(segment_text)
+                resources.append({"text": segment_text, "caption": caption})
+
+        return resources if resources else [{"text": conversation_text, "caption": None}]
+
+    async def _summarize_segment(self, segment_text: str) -> str | None:
+        """Summarize a single conversation segment."""
+        prompt = f"""Summarize the following conversation segment in 1-2 concise sentences.
+Focus on the main topic or theme discussed.
+
+Conversation:
+{segment_text}
+
+Summary:"""
+        try:
+            response = await self.llm_client.summarize(prompt, system_prompt=None)
+            return response.strip() if response else None
+        except Exception:
+            logger.exception("Failed to summarize segment")
+            return None
+
+    async def _preprocess_video(self, local_path: str, template: str) -> list[dict[str, str | None]]:
         """
         Preprocess video data - extract description and caption using Vision API.
 
@@ -528,13 +603,13 @@ class MemoryService:
             template: Prompt template for video analysis
 
         Returns:
-            Tuple of (description, caption, None)
+            List with single resource containing text (description) and caption
         """
         try:
             # Check if ffmpeg is available
             if not VideoFrameExtractor.is_ffmpeg_available():
                 logger.warning("ffmpeg not available, cannot process video. Returning None.")
-                return None, None, None
+                return [{"text": None, "caption": None}]
 
             # Extract middle frame from video
             logger.info(f"Extracting frame from video: {local_path}")
@@ -545,7 +620,7 @@ class MemoryService:
                 logger.info(f"Analyzing video frame with Vision API: {frame_path}")
                 processed = await self.llm_client.vision(prompt=template, image_path=frame_path, system_prompt=None)
                 description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
-                return description, caption, None
+                return [{"text": description, "caption": caption}]
             finally:
                 # Clean up temporary frame file
                 import pathlib
@@ -558,11 +633,9 @@ class MemoryService:
 
         except Exception as e:
             logger.error(f"Video preprocessing failed: {e}", exc_info=True)
-            return None, None, None
+            return [{"text": None, "caption": None}]
 
-    async def _preprocess_image(
-        self, local_path: str, template: str
-    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+    async def _preprocess_image(self, local_path: str, template: str) -> list[dict[str, str | None]]:
         """
         Preprocess image data - extract description and caption using Vision API.
 
@@ -571,30 +644,26 @@ class MemoryService:
             template: Prompt template for image analysis
 
         Returns:
-            Tuple of (description, caption, None)
+            List with single resource containing text (description) and caption
         """
         # Call Vision API with image
         processed = await self.llm_client.vision(prompt=template, image_path=local_path, system_prompt=None)
         description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
-        return description, caption, None
+        return [{"text": description, "caption": caption}]
 
-    async def _preprocess_document(
-        self, text: str, template: str
-    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+    async def _preprocess_document(self, text: str, template: str) -> list[dict[str, str | None]]:
         """Preprocess document data - condense and extract caption"""
         prompt = template.format(document_text=self._escape_prompt_value(text))
         processed = await self.llm_client.summarize(prompt, system_prompt=None)
         processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
-        return processed_content or text, caption, None
+        return [{"text": processed_content or text, "caption": caption}]
 
-    async def _preprocess_audio(
-        self, text: str, template: str
-    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+    async def _preprocess_audio(self, text: str, template: str) -> list[dict[str, str | None]]:
         """Preprocess audio data - format transcription and extract caption"""
         prompt = template.format(transcription=self._escape_prompt_value(text))
         processed = await self.llm_client.summarize(prompt, system_prompt=None)
         processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
-        return processed_content or text, caption, None
+        return [{"text": processed_content or text, "caption": caption}]
 
     def _format_categories_for_prompt(self, categories: list[dict[str, str]]) -> str:
         if not categories:
@@ -707,17 +776,16 @@ class MemoryService:
 
     def _parse_conversation_preprocess_with_segments(
         self, raw: str, original_text: str
-    ) -> tuple[str | None, str | None, list[dict[str, int]] | None]:
+    ) -> tuple[str | None, list[dict[str, int | str]] | None]:
         """
         Parse conversation preprocess response and extract segments.
-        Returns: (conversation_text, summary, segments)
+        Returns: (conversation_text, segments)
         """
         conversation = self._extract_tag_content(raw, "conversation")
-        summary = self._extract_tag_content(raw, "summary")
         segments = self._extract_segments_with_fallback(raw)
-        return conversation, summary, segments
+        return conversation, segments
 
-    def _extract_segments_with_fallback(self, raw: str) -> list[dict[str, int]] | None:
+    def _extract_segments_with_fallback(self, raw: str) -> list[dict[str, int | str]] | None:
         segments = self._segments_from_json_payload(raw)
         if segments is not None:
             return segments
@@ -728,7 +796,7 @@ class MemoryService:
             return None
         return self._segments_from_json_payload(blob)
 
-    def _segments_from_json_payload(self, payload: str) -> list[dict[str, int]] | None:
+    def _segments_from_json_payload(self, payload: str) -> list[dict[str, int | str]] | None:
         try:
             parsed = json.loads(payload)
         except json.JSONDecodeError, TypeError:
@@ -736,17 +804,23 @@ class MemoryService:
         return self._segments_from_parsed_data(parsed)
 
     @staticmethod
-    def _segments_from_parsed_data(parsed: Any) -> list[dict[str, int]] | None:
+    def _segments_from_parsed_data(parsed: Any) -> list[dict[str, int | str]] | None:
         if not isinstance(parsed, dict):
             return None
         segments_data = parsed.get("segments")
         if not isinstance(segments_data, list):
             return None
-        segments: list[dict[str, int]] = []
+        segments: list[dict[str, int | str]] = []
         for seg in segments_data:
             if isinstance(seg, dict) and "start" in seg and "end" in seg:
                 try:
-                    segments.append({"start": int(seg["start"]), "end": int(seg["end"])})
+                    segment: dict[str, int | str] = {
+                        "start": int(seg["start"]),
+                        "end": int(seg["end"]),
+                    }
+                    if "caption" in seg and isinstance(seg["caption"], str):
+                        segment["caption"] = seg["caption"]
+                    segments.append(segment)
                 except TypeError, ValueError:
                     continue
         return segments or None
@@ -1280,11 +1354,10 @@ class MemoryService:
     ) -> list[dict[str, Any]]:
         """Use LLM to rank memory items from relevant categories"""
         if not category_ids:
+            print("[LLM Rank Items] No category_ids provided")
             return []
 
         items_data = self._format_items_for_llm(category_ids)
-        if items_data == "No memory items available.":
-            return []
 
         # Format relevant categories for context
         relevant_categories_info = "\n".join([
@@ -1324,7 +1397,6 @@ class MemoryService:
             context_parts.extend([f"- {item.get('summary', '')[:100]}..." for item in item_hits[:3]])
 
         context_info = "\n".join(context_parts)
-
         prompt = LLM_RESOURCE_RANKER_PROMPT.format(
             query=self._escape_prompt_value(query),
             top_k=top_k,
