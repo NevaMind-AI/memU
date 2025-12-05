@@ -184,14 +184,6 @@ class MemoryService:
         await self._ensure_categories_ready(ctx)
         cat_ids: list[str] = list(ctx.category_ids)
 
-        res = await self._create_resource_with_caption(
-            resource_url=resource_url,
-            modality=modality,
-            local_path=local_path,
-            caption=caption,
-            ctx=ctx,
-        )
-
         memory_types = self._resolve_memory_types()
         base_prompt = self._resolve_summary_prompt(modality, summary_prompt)
         categories_prompt_str = self._category_prompt_str
@@ -220,43 +212,49 @@ class MemoryService:
                 modality=modality,
                 local_path=local_path,
                 caption=caption,
+                ctx=ctx,
             )
             all_resources.append(res)
 
             # Generate entries for this resource
-            if text:
-                structured_entries = await self._generate_entries_from_text(
-                    resource_text=text,
-                    memory_types=memory_types,
-                    base_prompt=base_prompt,
-                    categories_prompt_str=categories_prompt_str,
-                )
+            structured_entries = await self._generate_structured_entries(
+                resource_url=res_url,
+                modality=modality,
+                memory_types=memory_types,
+                text=text,
+                base_prompt=base_prompt,
+                categories_prompt_str=categories_prompt_str,
+            )
 
-                items, rels, category_memory_updates = await self._persist_memory_items(
-                    resource_id=res.id,
-                    structured_entries=structured_entries,
-                )
+            if not structured_entries:
+                continue
 
-                all_items.extend(items)
-                all_rels.extend(rels)
-                for cat_id, mem_items in category_memory_updates.items():
-                    all_category_updates.setdefault(cat_id, []).extend(mem_items)
+            items, rels, category_memory_updates = await self._persist_memory_items(
+                resource_id=res.id,
+                structured_entries=structured_entries,
+                ctx=ctx,
+            )
 
-        await self._update_category_summaries(all_category_updates)
+            all_items.extend(items)
+            all_rels.extend(rels)
+            for cat_id, mem_items in category_memory_updates.items():
+                all_category_updates.setdefault(cat_id, []).extend(mem_items)
+
+        await self._update_category_summaries(all_category_updates, ctx=ctx)
 
         # Return format depends on number of resources
         if len(all_resources) == 1:
             return {
                 "resource": self._model_dump_without_embeddings(all_resources[0]),
                 "items": [self._model_dump_without_embeddings(item) for item in all_items],
-                "categories": [self._model_dump_without_embeddings(self.store.categories[c]) for c in cat_ids],
+                "categories": [self._model_dump_without_embeddings(ctx.store.categories[c]) for c in cat_ids],
                 "relations": [r.model_dump() for r in all_rels],
             }
         else:
             return {
                 "resources": [self._model_dump_without_embeddings(r) for r in all_resources],
                 "items": [self._model_dump_without_embeddings(item) for item in all_items],
-                "categories": [self._model_dump_without_embeddings(self.store.categories[c]) for c in cat_ids],
+                "categories": [self._model_dump_without_embeddings(ctx.store.categories[c]) for c in cat_ids],
                 "relations": [r.model_dump() for r in all_rels],
             }
 
