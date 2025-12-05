@@ -8,7 +8,15 @@ from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel
 
-from memu.app.settings import BlobConfig, DatabaseConfig, EmbeddingConfig, LLMConfig, MemorizeConfig, RetrieveConfig
+from memu.app.settings import (
+    BlobConfig,
+    DatabaseConfig,
+    EmbeddingConfig,
+    LLMConfig,
+    MemorizeConfig,
+    RetrieveConfig,
+    UserConfig,
+)
 from memu.embedding.http_client import HTTPEmbeddingClient
 from memu.llm.http_client import HTTPLLMClient
 from memu.memory.repo import InMemoryStore
@@ -32,6 +40,17 @@ logger = logging.getLogger(__name__)
 TConfigModel = TypeVar("TConfigModel", bound=BaseModel)
 
 
+class _UserContext:
+    """Per-user in-memory state and category bookkeeping."""
+
+    def __init__(self, *, categories_ready: bool) -> None:
+        self.store = InMemoryStore()
+        self.category_ids: list[str] = []
+        self.category_name_to_id: dict[str, str] = {}
+        self.categories_ready = categories_ready
+        self.category_init_task: asyncio.Task | None = None
+
+
 class MemoryService:
     def __init__(
         self,
@@ -42,6 +61,7 @@ class MemoryService:
         database_config: DatabaseConfig | dict[str, Any] | None = None,
         memorize_config: MemorizeConfig | dict[str, Any] | None = None,
         retrieve_config: RetrieveConfig | dict[str, Any] | None = None,
+        user_config: UserConfig | dict[str, Any] | None = None,
     ):
         self.llm_config = self._validate_config(llm_config, LLMConfig)
         self.embedding_config = self._validate_config(embedding_config, EmbeddingConfig)
@@ -49,8 +69,8 @@ class MemoryService:
         self.database_config = self._validate_config(database_config, DatabaseConfig)
         self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
+        self.user_config = self._validate_config(user_config, UserConfig)
         self.fs = LocalFS(self.blob_config.resources_dir)
-        self.store = InMemoryStore()
 
         # Initialize LLM client
         self.llm_client: Any = self._init_llm_client()
@@ -59,11 +79,50 @@ class MemoryService:
 
         self.category_configs: list[dict[str, str]] = list(self.memorize_config.memory_categories or [])
         self._category_prompt_str = self._format_categories_for_prompt(self.category_configs)
-        self._category_ids: list[str] = []
-        self._category_name_to_id: dict[str, str] = {}
-        self._categories_ready = not bool(self.category_configs)
-        self._category_init_task: asyncio.Task | None = None
-        self._start_category_initialization()
+        self._contexts: dict[str | None, _UserContext] = {}
+        default_context = self._create_context()
+        self._contexts[None] = default_context
+        self.store = default_context.store
+        self._start_category_initialization(default_context)
+
+    def user(self, **user_data: Any) -> MemoryUser:
+        """
+        Get or create a MemoryUser scoped instance using the configured user model.
+
+        Args:
+            **user_data: Fields passed to the configured user model (e.g., user_id).
+
+        Returns:
+            MemoryUser bound to this service configuration.
+        """
+        user_model = self.user_config.model(**user_data)
+        memory_user = MemoryUser(service=self, user=user_model)
+
+        return memory_user
+
+    def _create_context(self) -> _UserContext:
+        return _UserContext(categories_ready=not bool(self.category_configs))
+
+    def _context_key(self, user: BaseModel | None) -> str | None:
+        if user is None:
+            return None
+        user_id = getattr(user, "user_id", None)
+        if user_id is not None:
+            return f"{user.__class__.__name__}:{user_id}"
+        try:
+            return json.dumps(user.model_dump(), sort_keys=True)
+        except Exception:
+            return str(user)
+
+    def _get_user_context(self, user: BaseModel | None) -> _UserContext:
+        key = self._context_key(user)
+        ctx = self._contexts.get(key)
+        if ctx:
+            return ctx
+        ctx = self._create_context()
+        self._contexts[key] = ctx
+        self._start_category_initialization(ctx)
+        return ctx
 
     def _init_llm_client(self) -> Any:
         """Initialize LLM client based on configuration."""
@@ -111,11 +170,19 @@ class MemoryService:
             msg = f"Unknown embedding_client_backend '{self.embedding_config.client_backend}'"
             raise ValueError(msg)
 
-    async def memorize(self, *, resource_url: str, modality: str, summary_prompt: str | None = None) -> dict[str, Any]:
+    async def memorize(
+        self,
+        *,
+        resource_url: str,
+        modality: str,
+        summary_prompt: str | None = None,
+        user: BaseModel | None = None,
+    ) -> dict[str, Any]:
+        ctx = self._get_user_context(user)
         local_path, preprocessed_resources = await self._fetch_and_preprocess_resource(resource_url, modality)
 
-        await self._ensure_categories_ready()
-        cat_ids: list[str] = list(self._category_ids)
+        await self._ensure_categories_ready(ctx)
+        cat_ids: list[str] = list(ctx.category_ids)
 
         memory_types = self._resolve_memory_types()
         base_prompt = self._resolve_summary_prompt(modality, summary_prompt)
@@ -145,43 +212,49 @@ class MemoryService:
                 modality=modality,
                 local_path=local_path,
                 caption=caption,
+                ctx=ctx,
             )
             all_resources.append(res)
 
             # Generate entries for this resource
-            if text:
-                structured_entries = await self._generate_entries_from_text(
-                    resource_text=text,
-                    memory_types=memory_types,
-                    base_prompt=base_prompt,
-                    categories_prompt_str=categories_prompt_str,
-                )
+            structured_entries = await self._generate_structured_entries(
+                resource_url=res_url,
+                modality=modality,
+                memory_types=memory_types,
+                text=text,
+                base_prompt=base_prompt,
+                categories_prompt_str=categories_prompt_str,
+            )
 
-                items, rels, category_memory_updates = await self._persist_memory_items(
-                    resource_id=res.id,
-                    structured_entries=structured_entries,
-                )
+            if not structured_entries:
+                continue
 
-                all_items.extend(items)
-                all_rels.extend(rels)
-                for cat_id, mem_items in category_memory_updates.items():
-                    all_category_updates.setdefault(cat_id, []).extend(mem_items)
+            items, rels, category_memory_updates = await self._persist_memory_items(
+                resource_id=res.id,
+                structured_entries=structured_entries,
+                ctx=ctx,
+            )
 
-        await self._update_category_summaries(all_category_updates)
+            all_items.extend(items)
+            all_rels.extend(rels)
+            for cat_id, mem_items in category_memory_updates.items():
+                all_category_updates.setdefault(cat_id, []).extend(mem_items)
+
+        await self._update_category_summaries(all_category_updates, ctx=ctx)
 
         # Return format depends on number of resources
         if len(all_resources) == 1:
             return {
                 "resource": self._model_dump_without_embeddings(all_resources[0]),
                 "items": [self._model_dump_without_embeddings(item) for item in all_items],
-                "categories": [self._model_dump_without_embeddings(self.store.categories[c]) for c in cat_ids],
+                "categories": [self._model_dump_without_embeddings(ctx.store.categories[c]) for c in cat_ids],
                 "relations": [r.model_dump() for r in all_rels],
             }
         else:
             return {
                 "resources": [self._model_dump_without_embeddings(r) for r in all_resources],
                 "items": [self._model_dump_without_embeddings(item) for item in all_items],
-                "categories": [self._model_dump_without_embeddings(self.store.categories[c]) for c in cat_ids],
+                "categories": [self._model_dump_without_embeddings(ctx.store.categories[c]) for c in cat_ids],
                 "relations": [r.model_dump() for r in all_rels],
             }
 
@@ -202,9 +275,15 @@ class MemoryService:
         return local_path, preprocessed_resources
 
     async def _create_resource_with_caption(
-        self, *, resource_url: str, modality: str, local_path: str, caption: str | None
+        self,
+        *,
+        resource_url: str,
+        modality: str,
+        local_path: str,
+        caption: str | None,
+        ctx: _UserContext,
     ) -> Resource:
-        res = self.store.create_resource(url=resource_url, modality=modality, local_path=local_path)
+        res = ctx.store.create_resource(url=resource_url, modality=modality, local_path=local_path)
         if caption:
             caption_text = caption.strip()
             if caption_text:
@@ -369,7 +448,11 @@ class MemoryService:
         return memory_type, fallback, []
 
     async def _persist_memory_items(
-        self, *, resource_id: str, structured_entries: list[tuple[MemoryType, str, list[str]]]
+        self,
+        *,
+        resource_id: str,
+        structured_entries: list[tuple[MemoryType, str, list[str]]],
+        ctx: _UserContext,
     ) -> tuple[list[MemoryItem], list[CategoryItem], dict[str, list[str]]]:
         summary_payloads = [content for _, content, _ in structured_entries]
         item_embeddings = await self.embedding_client.embed(summary_payloads) if summary_payloads else []
@@ -378,58 +461,58 @@ class MemoryService:
         category_memory_updates: dict[str, list[str]] = {}
 
         for (memory_type, summary_text, cat_names), emb in zip(structured_entries, item_embeddings, strict=True):
-            item = self.store.create_item(
+            item = ctx.store.create_item(
                 resource_id=resource_id,
                 memory_type=memory_type,
                 summary=summary_text,
                 embedding=emb,
             )
             items.append(item)
-            mapped_cat_ids = self._map_category_names_to_ids(cat_names)
+            mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
             for cid in mapped_cat_ids:
-                rels.append(self.store.link_item_category(item.id, cid))
+                rels.append(ctx.store.link_item_category(item.id, cid))
                 category_memory_updates.setdefault(cid, []).append(summary_text)
 
         return items, rels, category_memory_updates
 
-    def _start_category_initialization(self) -> None:
-        if self._categories_ready:
+    def _start_category_initialization(self, ctx: _UserContext) -> None:
+        if ctx.categories_ready:
             return
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
         if loop:
-            self._category_init_task = loop.create_task(self._initialize_categories())
+            ctx.category_init_task = loop.create_task(self._initialize_categories(ctx))
         else:
-            asyncio.run(self._initialize_categories())
+            asyncio.run(self._initialize_categories(ctx))
 
-    async def _ensure_categories_ready(self) -> None:
-        if self._categories_ready:
+    async def _ensure_categories_ready(self, ctx: _UserContext) -> None:
+        if ctx.categories_ready:
             return
-        if self._category_init_task:
-            await self._category_init_task
-            self._category_init_task = None
+        if ctx.category_init_task:
+            await ctx.category_init_task
+            ctx.category_init_task = None
             return
-        await self._initialize_categories()
+        await self._initialize_categories(ctx)
 
-    async def _initialize_categories(self) -> None:
-        if self._categories_ready:
+    async def _initialize_categories(self, ctx: _UserContext) -> None:
+        if ctx.categories_ready:
             return
         if not self.category_configs:
-            self._categories_ready = True
+            ctx.categories_ready = True
             return
         cat_texts = [self._category_embedding_text(cfg) for cfg in self.category_configs]
         cat_vecs = await self.embedding_client.embed(cat_texts)
-        self._category_ids = []
-        self._category_name_to_id = {}
+        ctx.category_ids = []
+        ctx.category_name_to_id = {}
         for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
             name = (cfg.get("name") or "").strip() or "Untitled"
             description = (cfg.get("description") or "").strip()
-            cat = self.store.get_or_create_category(name=name, description=description, embedding=vec)
-            self._category_ids.append(cat.id)
-            self._category_name_to_id[name.lower()] = cat.id
-        self._categories_ready = True
+            cat = ctx.store.get_or_create_category(name=name, description=description, embedding=vec)
+            ctx.category_ids.append(cat.id)
+            ctx.category_name_to_id[name.lower()] = cat.id
+        ctx.categories_ready = True
 
     @staticmethod
     def _category_embedding_text(cat: dict[str, str]) -> str:
@@ -437,14 +520,14 @@ class MemoryService:
         desc = (cat.get("description") or "").strip()
         return f"{name}: {desc}" if desc else name
 
-    def _map_category_names_to_ids(self, names: list[str]) -> list[str]:
+    def _map_category_names_to_ids(self, names: list[str], ctx: _UserContext) -> list[str]:
         if not names:
             return []
         mapped: list[str] = []
         seen: set[str] = set()
         for name in names:
             key = name.strip().lower()
-            cid = self._category_name_to_id.get(key)
+            cid = ctx.category_name_to_id.get(key)
             if cid and cid not in seen:
                 mapped.append(cid)
                 seen.add(cid)
@@ -721,13 +804,13 @@ Summary:"""
             target_length=self.memorize_config.category_summary_target_length,
         )
 
-    async def _update_category_summaries(self, updates: dict[str, list[str]]) -> None:
+    async def _update_category_summaries(self, updates: dict[str, list[str]], ctx: _UserContext) -> None:
         if not updates:
             return
         tasks = []
         target_ids: list[str] = []
         for cid, memories in updates.items():
-            cat = self.store.categories.get(cid)
+            cat = ctx.store.categories.get(cid)
             if not cat or not memories:
                 continue
             prompt = self._build_category_summary_prompt(category=cat, new_memories=memories)
@@ -737,7 +820,7 @@ Summary:"""
             return
         summaries = await asyncio.gather(*tasks)
         for cid, summary in zip(target_ids, summaries, strict=True):
-            cat = self.store.categories.get(cid)
+            cat = ctx.store.categories.get(cid)
             if not cat:
                 continue
             cat.summary = summary.strip()
@@ -893,6 +976,7 @@ Summary:"""
     async def retrieve(
         self,
         queries: list[dict[str, Any]],
+        user: BaseModel | None = None,
     ) -> dict[str, Any]:
         """
         Retrieve relevant memories based on the query using either RAG-based or LLM-based search.
@@ -901,6 +985,7 @@ Summary:"""
             queries: List of query messages in format [{"role": "user", "content": {"text": "..."}}].
                      The last one is the current query, others are context.
                      If list has only 1 element, no query rewriting is performed.
+            user: Optional user object to scope retrieval to that user's memories.
 
         Returns:
             Dictionary containing:
@@ -920,6 +1005,8 @@ Summary:"""
         """
         if not queries:
             raise ValueError("empty_queries")
+        ctx = self._get_user_context(user)
+        await self._ensure_categories_ready(ctx)
 
         # Extract text from the query structure
         current_query = self._extract_query_text(queries[-1])
@@ -951,11 +1038,17 @@ Summary:"""
         # Step 2: Perform retrieval with rewritten query using configured method
         if self.retrieve_config.method == "llm":
             results = await self._llm_based_retrieve(
-                rewritten_query, top_k=self.retrieve_config.top_k, context_queries=context_queries_objs
+                rewritten_query,
+                top_k=self.retrieve_config.top_k,
+                context_queries=context_queries_objs,
+                ctx=ctx,
             )
         else:  # rag
             results = await self._embedding_based_retrieve(
-                rewritten_query, top_k=self.retrieve_config.top_k, context_queries=context_queries_objs
+                rewritten_query,
+                top_k=self.retrieve_config.top_k,
+                context_queries=context_queries_objs,
+                ctx=ctx,
             )
 
         # Add metadata
@@ -968,9 +1061,9 @@ Summary:"""
         return results
 
     async def _rank_categories_by_summary(
-        self, query_vec: list[float], top_k: int
+        self, query_vec: list[float], top_k: int, ctx: _UserContext
     ) -> tuple[list[tuple[str, float]], dict[str, str]]:
-        entries = [(cid, cat.summary) for cid, cat in self.store.categories.items() if cat.summary]
+        entries = [(cid, cat.summary) for cid, cat in ctx.store.categories.items() if cat.summary]
         if not entries:
             return [], {}
         summary_texts = [summary for _, summary in entries]
@@ -1099,7 +1192,7 @@ Summary:"""
         return None
 
     async def _embedding_based_retrieve(
-        self, query: str, top_k: int, context_queries: list[dict[str, Any]] | None
+        self, query: str, top_k: int, context_queries: list[dict[str, Any]] | None, ctx: _UserContext
     ) -> dict[str, Any]:
         """Embedding-based retrieval with query rewriting and judging at each tier"""
         current_query = query
@@ -1108,10 +1201,10 @@ Summary:"""
         content_sections: list[str] = []
 
         # Tier 1: Categories
-        cat_hits, summary_lookup = await self._rank_categories_by_summary(qvec, top_k)
+        cat_hits, summary_lookup = await self._rank_categories_by_summary(qvec, top_k, ctx)
         if cat_hits:
-            response["categories"] = self._materialize_hits(cat_hits, self.store.categories)
-            content_sections.append(self._format_category_content(cat_hits, summary_lookup))
+            response["categories"] = self._materialize_hits(cat_hits, ctx.store.categories)
+            content_sections.append(self._format_category_content(cat_hits, summary_lookup, ctx.store))
 
             needs_more, current_query = await self._decide_if_retrieval_needed(
                 current_query, context_queries, retrieved_content="\n\n".join(content_sections)
@@ -1123,10 +1216,10 @@ Summary:"""
             qvec = (await self.embedding_client.embed([current_query]))[0]
 
         # Tier 2: Items
-        item_hits = cosine_topk(qvec, [(i.id, i.embedding) for i in self.store.items.values()], k=top_k)
+        item_hits = cosine_topk(qvec, [(i.id, i.embedding) for i in ctx.store.items.values()], k=top_k)
         if item_hits:
-            response["items"] = self._materialize_hits(item_hits, self.store.items)
-            content_sections.append(self._format_item_content(item_hits))
+            response["items"] = self._materialize_hits(item_hits, ctx.store.items)
+            content_sections.append(self._format_item_content(item_hits, ctx.store))
 
             needs_more, current_query = await self._decide_if_retrieval_needed(
                 current_query, context_queries, retrieved_content="\n\n".join(content_sections)
@@ -1138,12 +1231,12 @@ Summary:"""
             qvec = (await self.embedding_client.embed([current_query]))[0]
 
         # Tier 3: Resources
-        resource_corpus = self._resource_caption_corpus()
+        resource_corpus = self._resource_caption_corpus(ctx.store)
         if resource_corpus:
             res_hits = cosine_topk(qvec, resource_corpus, k=top_k)
             if res_hits:
-                response["resources"] = self._materialize_hits(res_hits, self.store.resources)
-                content_sections.append(self._format_resource_content(res_hits))
+                response["resources"] = self._materialize_hits(res_hits, ctx.store.resources)
+                content_sections.append(self._format_resource_content(res_hits, ctx.store))
 
         return response
 
@@ -1158,38 +1251,40 @@ Summary:"""
             out.append(data)
         return out
 
-    def _format_category_content(self, hits: list[tuple[str, float]], summaries: dict[str, str]) -> str:
+    def _format_category_content(
+        self, hits: list[tuple[str, float]], summaries: dict[str, str], store: InMemoryStore
+    ) -> str:
         lines = []
         for cid, score in hits:
-            cat = self.store.categories.get(cid)
+            cat = store.categories.get(cid)
             if not cat:
                 continue
             summary = summaries.get(cid) or cat.summary or ""
             lines.append(f"Category: {cat.name}\nSummary: {summary}\nScore: {score:.3f}")
         return "\n\n".join(lines).strip()
 
-    def _format_item_content(self, hits: list[tuple[str, float]]) -> str:
+    def _format_item_content(self, hits: list[tuple[str, float]], store: InMemoryStore) -> str:
         lines = []
         for iid, score in hits:
-            item = self.store.items.get(iid)
+            item = store.items.get(iid)
             if not item:
                 continue
             lines.append(f"Memory Item ({item.memory_type}): {item.summary}\nScore: {score:.3f}")
         return "\n\n".join(lines).strip()
 
-    def _format_resource_content(self, hits: list[tuple[str, float]]) -> str:
+    def _format_resource_content(self, hits: list[tuple[str, float]], store: InMemoryStore) -> str:
         lines = []
         for rid, score in hits:
-            res = self.store.resources.get(rid)
+            res = store.resources.get(rid)
             if not res:
                 continue
             caption = res.caption or f"Resource {res.url}"
             lines.append(f"Resource: {caption}\nScore: {score:.3f}")
         return "\n\n".join(lines).strip()
 
-    def _resource_caption_corpus(self) -> list[tuple[str, list[float]]]:
+    def _resource_caption_corpus(self, store: InMemoryStore) -> list[tuple[str, list[float]]]:
         corpus: list[tuple[str, list[float]]] = []
-        for rid, res in self.store.resources.items():
+        for rid, res in store.resources.items():
             if res.embedding:
                 corpus.append((rid, res.embedding))
         return corpus
@@ -1210,7 +1305,7 @@ Summary:"""
         return "MORE"
 
     async def _llm_based_retrieve(
-        self, query: str, top_k: int, context_queries: list[dict[str, Any]] | None
+        self, query: str, top_k: int, context_queries: list[dict[str, Any]] | None, ctx: _UserContext
     ) -> dict[str, Any]:
         """
         LLM-based retrieval that uses language model to search and rank results
@@ -1226,7 +1321,7 @@ Summary:"""
         content_sections: list[str] = []
 
         # Tier 1: Search and rank categories
-        category_hits = await self._llm_rank_categories(current_query, top_k)
+        category_hits = await self._llm_rank_categories(current_query, top_k, ctx)
         if category_hits:
             response["categories"] = category_hits
             content_sections.append(self._format_llm_category_content(category_hits))
@@ -1240,7 +1335,7 @@ Summary:"""
 
         # Tier 2: Search memory items from relevant categories
         relevant_category_ids = [cat["id"] for cat in category_hits]
-        item_hits = await self._llm_rank_items(current_query, top_k, relevant_category_ids, category_hits)
+        item_hits = await self._llm_rank_items(current_query, top_k, relevant_category_ids, category_hits, ctx)
         if item_hits:
             response["items"] = item_hits
             content_sections.append(self._format_llm_item_content(item_hits))
@@ -1253,18 +1348,18 @@ Summary:"""
                 return response
 
         # Tier 3: Search resources related to the context
-        resource_hits = await self._llm_rank_resources(current_query, top_k, category_hits, item_hits)
+        resource_hits = await self._llm_rank_resources(current_query, top_k, category_hits, item_hits, ctx)
         if resource_hits:
             response["resources"] = resource_hits
             content_sections.append(self._format_llm_resource_content(resource_hits))
 
         return response
 
-    def _format_categories_for_llm(self, category_ids: list[str] | None = None) -> str:
+    def _format_categories_for_llm(self, store: InMemoryStore, category_ids: list[str] | None = None) -> str:
         """Format categories for LLM consumption"""
-        categories_to_format = self.store.categories
+        categories_to_format = store.categories
         if category_ids:
-            categories_to_format = {cid: cat for cid, cat in self.store.categories.items() if cid in category_ids}
+            categories_to_format = {cid: cat for cid, cat in store.categories.items() if cid in category_ids}
 
         if not categories_to_format:
             return "No categories available."
@@ -1281,21 +1376,21 @@ Summary:"""
 
         return "\n".join(lines)
 
-    def _format_items_for_llm(self, category_ids: list[str] | None = None) -> str:
+    def _format_items_for_llm(self, store: InMemoryStore, category_ids: list[str] | None = None) -> str:
         """Format memory items for LLM consumption, optionally filtered by category"""
         items_to_format = []
         seen_item_ids = set()
 
         if category_ids:
             # Get items that belong to the specified categories
-            for rel in self.store.relations:
+            for rel in store.relations:
                 if rel.category_id in category_ids:
-                    item = self.store.items.get(rel.item_id)
+                    item = store.items.get(rel.item_id)
                     if item and item.id not in seen_item_ids:
                         items_to_format.append(item)
                         seen_item_ids.add(item.id)
         else:
-            items_to_format = list(self.store.items.values())
+            items_to_format = list(store.items.values())
 
         if not items_to_format:
             return "No memory items available."
@@ -1309,16 +1404,16 @@ Summary:"""
 
         return "\n".join(lines)
 
-    def _format_resources_for_llm(self, item_ids: list[str] | None = None) -> str:
+    def _format_resources_for_llm(self, store: InMemoryStore, item_ids: list[str] | None = None) -> str:
         """Format resources for LLM consumption, optionally filtered by related items"""
         resources_to_format = []
 
         if item_ids:
             # Get resources that are related to the specified items
-            resource_ids = {self.store.items[iid].resource_id for iid in item_ids if iid in self.store.items}
-            resources_to_format = [self.store.resources[rid] for rid in resource_ids if rid in self.store.resources]
+            resource_ids = {store.items[iid].resource_id for iid in item_ids if iid in store.items}
+            resources_to_format = [store.resources[rid] for rid in resource_ids if rid in store.resources]
         else:
-            resources_to_format = list(self.store.resources.values())
+            resources_to_format = list(store.resources.values())
 
         if not resources_to_format:
             return "No resources available."
@@ -1334,12 +1429,12 @@ Summary:"""
 
         return "\n".join(lines)
 
-    async def _llm_rank_categories(self, query: str, top_k: int) -> list[dict[str, Any]]:
+    async def _llm_rank_categories(self, query: str, top_k: int, ctx: _UserContext) -> list[dict[str, Any]]:
         """Use LLM to rank categories based on query relevance"""
-        if not self.store.categories:
+        if not ctx.store.categories:
             return []
 
-        categories_data = self._format_categories_for_llm()
+        categories_data = self._format_categories_for_llm(ctx.store)
         prompt = LLM_CATEGORY_RANKER_PROMPT.format(
             query=self._escape_prompt_value(query),
             top_k=top_k,
@@ -1347,17 +1442,24 @@ Summary:"""
         )
 
         llm_response = await self.llm_client.summarize(prompt, system_prompt=None)
-        return self._parse_llm_category_response(llm_response)
+        return self._parse_llm_category_response(llm_response, ctx.store)
 
     async def _llm_rank_items(
-        self, query: str, top_k: int, category_ids: list[str], category_hits: list[dict[str, Any]]
+        self,
+        query: str,
+        top_k: int,
+        category_ids: list[str],
+        category_hits: list[dict[str, Any]],
+        ctx: _UserContext,
     ) -> list[dict[str, Any]]:
         """Use LLM to rank memory items from relevant categories"""
         if not category_ids:
             print("[LLM Rank Items] No category_ids provided")
             return []
 
-        items_data = self._format_items_for_llm(category_ids)
+        items_data = self._format_items_for_llm(ctx.store, category_ids)
+        if items_data == "No memory items available.":
+            return []
 
         # Format relevant categories for context
         relevant_categories_info = "\n".join([
@@ -1372,10 +1474,15 @@ Summary:"""
         )
 
         llm_response = await self.llm_client.summarize(prompt, system_prompt=None)
-        return self._parse_llm_item_response(llm_response)
+        return self._parse_llm_item_response(llm_response, ctx.store)
 
     async def _llm_rank_resources(
-        self, query: str, top_k: int, category_hits: list[dict[str, Any]], item_hits: list[dict[str, Any]]
+        self,
+        query: str,
+        top_k: int,
+        category_hits: list[dict[str, Any]],
+        item_hits: list[dict[str, Any]],
+        ctx: _UserContext,
     ) -> list[dict[str, Any]]:
         """Use LLM to rank resources related to the context"""
         # Get item IDs to filter resources
@@ -1383,7 +1490,7 @@ Summary:"""
         if not item_ids:
             return []
 
-        resources_data = self._format_resources_for_llm(item_ids)
+        resources_data = self._format_resources_for_llm(ctx.store, item_ids)
         if resources_data == "No resources available.":
             return []
 
@@ -1405,9 +1512,9 @@ Summary:"""
         )
 
         llm_response = await self.llm_client.summarize(prompt, system_prompt=None)
-        return self._parse_llm_resource_response(llm_response)
+        return self._parse_llm_resource_response(llm_response, ctx.store)
 
-    def _parse_llm_category_response(self, raw_response: str) -> list[dict[str, Any]]:
+    def _parse_llm_category_response(self, raw_response: str, store: InMemoryStore) -> list[dict[str, Any]]:
         """Parse LLM category ranking response"""
         results = []
         try:
@@ -1419,7 +1526,7 @@ Summary:"""
                 # Return categories in the order provided by LLM (already sorted by relevance)
                 for cat_id in category_ids:
                     if isinstance(cat_id, str):
-                        cat = self.store.categories.get(cat_id)
+                        cat = store.categories.get(cat_id)
                         if cat:
                             cat_data = self._model_dump_without_embeddings(cat)
                             results.append(cat_data)
@@ -1428,7 +1535,7 @@ Summary:"""
 
         return results
 
-    def _parse_llm_item_response(self, raw_response: str) -> list[dict[str, Any]]:
+    def _parse_llm_item_response(self, raw_response: str, store: InMemoryStore) -> list[dict[str, Any]]:
         """Parse LLM item ranking response"""
         results = []
         try:
@@ -1440,7 +1547,7 @@ Summary:"""
                 # Return items in the order provided by LLM (already sorted by relevance)
                 for item_id in item_ids:
                     if isinstance(item_id, str):
-                        mem_item = self.store.items.get(item_id)
+                        mem_item = store.items.get(item_id)
                         if mem_item:
                             item_data = self._model_dump_without_embeddings(mem_item)
                             results.append(item_data)
@@ -1449,7 +1556,7 @@ Summary:"""
 
         return results
 
-    def _parse_llm_resource_response(self, raw_response: str) -> list[dict[str, Any]]:
+    def _parse_llm_resource_response(self, raw_response: str, store: InMemoryStore) -> list[dict[str, Any]]:
         """Parse LLM resource ranking response"""
         results = []
         try:
@@ -1461,7 +1568,7 @@ Summary:"""
                 # Return resources in the order provided by LLM (already sorted by relevance)
                 for res_id in resource_ids:
                     if isinstance(res_id, str):
-                        res = self.store.resources.get(res_id)
+                        res = store.resources.get(res_id)
                         if res:
                             res_data = self._model_dump_without_embeddings(res)
                             results.append(res_data)
@@ -1492,3 +1599,26 @@ Summary:"""
             caption = res.get("caption", "") or f"Resource {res['url']}"
             lines.append(f"Resource: {caption}")
         return "\n\n".join(lines).strip()
+
+
+class MemoryUser:
+    """
+    User-scoped memory service that reuses the parent service's clients/config
+    but maintains an isolated in-memory store and category state.
+    """
+
+    def __init__(self, *, service: MemoryService, user: BaseModel):
+        # Reuse core dependencies from the parent service
+        self.user = user
+        self.service = service
+
+    async def memorize(self, *, resource_url: str, modality: str, summary_prompt: str | None = None) -> dict[str, Any]:
+        return await self.service.memorize(
+            resource_url=resource_url,
+            modality=modality,
+            summary_prompt=summary_prompt,
+            user=self.user,
+        )
+
+    async def retrieve(self, queries: list[dict[str, Any]]) -> dict[str, Any]:
+        return await self.service.retrieve(queries=queries, user=self.user)
