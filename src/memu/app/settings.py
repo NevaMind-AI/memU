@@ -123,3 +123,11 @@ class MemorizeConfig(BaseModel):
         default_factory=_default_memory_type_prompts,
         description="System prompt overrides for each memory type extraction.",
     )
+
+
+class DefaultUserModel(BaseModel):
+    user_id: str | None = None
+
+
+class UserConfig(BaseModel):
+    model: type[BaseModel] = Field(default=DefaultUserModel)
