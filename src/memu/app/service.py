@@ -157,6 +157,7 @@ class MemoryService:
                 base_url=self.embedding_config.base_url,
                 api_key=self.embedding_config.api_key,
                 embed_model=self.embedding_config.embed_model,
+                batch_size=self.embedding_config.batch_size,
             )
         elif backend == "httpx":
             return HTTPEmbeddingClient(
