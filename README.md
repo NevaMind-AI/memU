@@ -90,7 +90,7 @@ Its core architecture consists of three layers: **Resource Layer → Memory Item
 | **Best For**        | Developers/teams who want to embed AI memory algorithms into their product | Teams that want to self-host a memory backend (internal tools, research, enterprise setups)            | Developers/teams looking for a ready-to-use memory console              |
 | **Usage**           | Core algorithms can be used standalone or integrated into server           | Self-hostable; works together with memU                                                                | Self-hostable; integrates with memU                                    |
 
-**Summary:**  
+**Summary:**
 [memU](https://github.com/NevaMind-AI/memU), [memU-server](https://github.com/NevaMind-AI/memU-server), and [memU-ui](https://github.com/NevaMind-AI/memU-ui) together form a flexible memory ecosystem for LLMs and AI agents.
 
 ## 🚀 Get Started
