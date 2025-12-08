@@ -11,22 +11,30 @@
 [![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
 </div>
 
-MemU is an agentic memory framework for LLM and AI agent backends. It receive multi-modal inputs, extracts them into memory items, and then organizes and summarizes these items into structured memory files.
+MemU is an agentic memory framework for LLM and AI agent backends. It receives multi-modal inputs, extracts them into memory items, and then organizes and summarizes these items into structured memory files.
 
 Unlike traditional RAG systems that rely solely on embedding-based search, MemU supports **non-embedding retrieval** through direct file reading. The LLM comprehends natural language memory files directly, enabling deep search by progressively tracking from categories → items → original resources.
 
-MemU offers several convenient ways to get started right away:
+MemU is commonly used in scenarios where memory matters:
+- Capture user behavior and context to build user profiles
+- Track agent successes and failures for self-improvement
+- Integrate multi-source data for knowledge management
+- Enable personalized recommendations with deep memory
 
+MemU offers several convenient ways to get started right away:
+- **Full backend for local deployment**
+  👉 memU-server:  https://github.com/NevaMind-AI/memU-server
+- **Local visual interface**
+  👉 memU-ui: https://github.com/NevaMind-AI/memU-ui
 - **One call = response + memory**
   👉 memU Response API: https://memu.pro/docs#responseapi
-
-- **Try it instantly**
+- **Try MemU cloud version instantly**
   👉 https://app.memu.so/quick-start
----
 
 ## ⭐ Star Us on GitHub
 
 Star MemU to get notified about new releases and join our growing community of AI developers building intelligent agents with persistent memory capabilities.
+
 ![star-us](https://github.com/user-attachments/assets/913dcd2e-90d2-4f62-9e2d-30e1950c0606)
 
 **💬 Join our Discord community:** [https://discord.gg/memu](https://discord.gg/memu)
@@ -34,21 +42,20 @@ Star MemU to get notified about new releases and join our growing community of A
 ---
 ## Roadmap
 
-MemU v0.3.0 has been released! This version initializes the memorize and retrieve workflows with the new 3-layer architecture.
-
-Starting from this release, MemU will roll out multiple features in the short- to mid-term:
+The current version initializes the memorize and retrieve workflows with the new 3-layer architecture. More features are coming soon as we continue to expand MemU's capabilities.
 
 ### Core capabilities iteration
 - [x] **Multi-modal enhancements** – Support for images, audio, and video
+- [x] User model and user context store
 - [ ] **Intention** – Higher-level decision-making and goal management
 - [ ] **Multi-client support** – Switch between OpenAI, Deepseek, Gemini, etc.
 - [ ] **Data persistence expansion** – Support for Postgres, S3, DynamoDB
 - [ ] **Benchmark tools** – Test agent performance and memory efficiency
 - [ ] ……
 
-### Upcoming open-source repositories
-- [ ] **memU-ui** – The web frontend for MemU, providing developers with an intuitive and visual interface
-- [ ] **memU-server** – Powers memU-ui with reliable data support, ensuring efficient reading, writing, and maintenance of agent memories
+### New open-source repositories
+- [x] **memU-ui** – The web frontend for MemU, providing developers with an intuitive and visual interface
+- [x] **memU-server** – Powers memU-ui with reliable data support, ensuring efficient reading, writing, and maintenance of agent memories
 
 ## 🧩 Why MemU?
 
@@ -75,6 +82,16 @@ Its core architecture consists of three layers: **Resource Layer → Memory Item
 
 <img width="1365" height="308" alt="process" src="https://github.com/user-attachments/assets/cabed021-f231-4bd2-9bb5-7c8cdb5f928c" />
 
+## MemU Repositories: What They Do & How to Use
+|                     | **memU**                                                                 | **memU-server**                                                                                      | **memU-ui**                                                             |
+|---------------------|---------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|
+| **Positioning**     | Core algorithm engine                                                     | Memory data backend service                                                                            | Front-end dashboard                                                     |
+| **Key Features**    | - Core algorithms<br>- Memory extraction<br>- Multi-strategy retrieval<br>… | - Memory CRUD<br>- Retrieve record tracking<br>- Token usage & billing tracking<br>- User system<br>- RBAC permission system<br>- Security boundary controls<br>… | - Front-end interface<br>- Visual memory viewer<br>- User management UI<br>- Data retrieval UI<br>- Easy self-hosting experience<br>… |
+| **Best For**        | Developers/teams who want to embed AI memory algorithms into their product | Teams that want to self-host a memory backend (internal tools, research, enterprise setups)            | Developers/teams looking for a ready-to-use memory console              |
+| **Usage**           | Core algorithms can be used standalone or integrated into server           | Self-hostable; works together with memU                                                                | Self-hostable; integrates with memU                                    |
+
+**Summary:**
+[memU](https://github.com/NevaMind-AI/memU), [memU-server](https://github.com/NevaMind-AI/memU-server), and [memU-ui](https://github.com/NevaMind-AI/memU-ui) together form a flexible memory ecosystem for LLMs and AI agents.
 
 ## 🚀 Get Started
 
@@ -221,8 +238,17 @@ python examples/example_3_multimodal_memory.py
 
 ---
 
+## Memory in Action
+Build an end-to-end, real-time voice assistant with long-term memory using MemU and the [TEN Framework](https://github.com/TEN-framework/ten-framework) multi-modal conversational AI framework.
+Tutorial: https://memu.pro/blog/build-real-time-voice-agent
+<img width="1280" height="720" alt="1" src="https://github.com/user-attachments/assets/3578f966-7268-45ce-8bbb-1ba24b6b5cd1" />
 
-### **📄 License**
+Build a long-term memory Q&A assistant in just 20 lines of code using MemU and the all-in-one multi-agent framework [LazyLLM](https://github.com/LazyAGI/LazyLLM).
+Tutorial: https://ai.feishu.cn/wiki/By6IwM7Kfinyf0kbM1xcrrcfnnd
+
+<img width="2795" height="1197" alt="lazy memu_副本" src="https://github.com/user-attachments/assets/06c6417a-472f-481b-aa5e-610d3df68acb" />
+
+## 📄 License**
 
 By contributing to MemU, you agree that your contributions will be licensed under the **Apache License 2.0**.
 
