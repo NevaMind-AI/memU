@@ -239,8 +239,8 @@ python examples/example_3_multimodal_memory.py
 ---
 
 ## Memory in Action
-Build an end-to-end, real-time voice assistant with long-term memory using MemU and the [TEN Framework](https://github.com/TEN-framework/ten-framework) multi-modal conversational AI framework. Watch the tutorial: https://www.youtube.com/watch?v=S0ebxUByQwA
-
+Build an end-to-end, real-time voice assistant with long-term memory using MemU and the [TEN Framework](https://github.com/TEN-framework/ten-framework) multi-modal conversational AI framework.
+Tutorial: https://memu.pro/blog/build-real-time-voice-agent
 <img width="1280" height="720" alt="1" src="https://github.com/user-attachments/assets/3578f966-7268-45ce-8bbb-1ba24b6b5cd1" />
 
 Build a long-term memory Q&A assistant in just 20 lines of code using MemU and the all-in-one multi-agent framework [LazyLLM](https://github.com/LazyAGI/LazyLLM).
