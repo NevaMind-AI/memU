@@ -43,12 +43,9 @@ async def generate_memory_md(categories, output_dir):
             if description:
                 f.write(f"*{description}*\n\n")
 
-            # Content - concise version
+            # Content - full version
             if summary:
                 cleaned_summary = summary.replace("<content>", "").replace("</content>", "").strip()
-                # Limit to first 500 characters for concise output
-                if len(cleaned_summary) > 500:
-                    cleaned_summary = cleaned_summary[:500] + "..."
                 f.write(f"{cleaned_summary}\n")
             else:
                 f.write("*No content available*\n")
