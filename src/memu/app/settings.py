@@ -68,6 +68,10 @@ class EmbeddingConfig(BaseModel):
         default="sdk",
         description="Which embedding client backend to use: 'httpx' (httpx) or 'sdk' (official OpenAI).",
     )
+    batch_size: int = Field(
+        default=25,
+        description="Maximum batch size for embedding API calls. Some providers have limits (e.g., Bailian/DashScope: 10).",
+    )
     endpoint_overrides: dict[str, str] = Field(
         default_factory=dict,
         description="Optional overrides for HTTP endpoints (keys: 'embeddings'/'embed').",
