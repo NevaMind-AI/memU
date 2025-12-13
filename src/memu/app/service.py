@@ -31,6 +31,7 @@ from memu.prompts.retrieve.llm_resource_ranker import PROMPT as LLM_RESOURCE_RAN
 from memu.prompts.retrieve.pre_retrieval_decision import SYSTEM_PROMPT as PRE_RETRIEVAL_SYSTEM_PROMPT
 from memu.prompts.retrieve.pre_retrieval_decision import USER_PROMPT as PRE_RETRIEVAL_USER_PROMPT
 from memu.storage.local_fs import LocalFS
+from memu.utils.conversation import format_conversation_for_preprocess
 from memu.utils.video import VideoFrameExtractor
 from memu.vector.index import cosine_topk
 
@@ -631,13 +632,15 @@ class MemoryService:
 
     async def _preprocess_conversation(self, text: str, template: str) -> list[dict[str, str | None]]:
         """Preprocess conversation data with segmentation, returns list of resources (one per segment)."""
-        preprocessed_text = self._add_conversation_indices(text)
+        preprocessed_text = format_conversation_for_preprocess(text)
         prompt = template.format(conversation=self._escape_prompt_value(preprocessed_text))
         processed = await self.llm_client.summarize(prompt, system_prompt=None)
-        conv, segments = self._parse_conversation_preprocess_with_segments(processed, preprocessed_text)
+        _conv, segments = self._parse_conversation_preprocess_with_segments(processed, preprocessed_text)
 
-        conversation_text = conv or preprocessed_text
-
+        # Important: always use the original JSON-derived, indexed conversation text for downstream
+        # segmentation and memory extraction. The LLM may rewrite the conversation and drop fields
+        # like created_at, which would cause them to be lost.
+        conversation_text = preprocessed_text
         # If no segments, return single resource
         if not segments:
             return [{"text": conversation_text, "caption": None}]
@@ -657,7 +660,6 @@ class MemoryService:
             if segment_text.strip():
                 caption = await self._summarize_segment(segment_text)
                 resources.append({"text": segment_text, "caption": caption})
-
         return resources if resources else [{"text": conversation_text, "caption": None}]
 
     async def _summarize_segment(self, segment_text: str) -> str | None:

@@ -1,54 +1,67 @@
 [
   {
     "role": "user",
+    "created_at": "2025-03-10T22:00:00Z",
     "content": "I've been having trouble sleeping lately. I think work stress might be affecting my sleep schedule."
   },
   {
     "role": "assistant",
+    "created_at": "2025-03-10T22:00:12Z",
     "content": "I'm sorry to hear you're having trouble sleeping. Work stress can definitely impact sleep quality. Can you tell me more about your current sleep routine and what's been going on at work?"
   },
   {
     "role": "user",
+    "created_at": "2025-03-10T22:00:45Z",
     "content": "I usually try to go to bed around 11 PM, but I find myself lying awake thinking about work projects. I'm leading a big product launch next month and there's a lot of pressure. I also tend to check my phone before bed."
   },
   {
     "role": "assistant",
+    "created_at": "2025-03-10T22:01:05Z",
     "content": "It's common for work pressure to interfere with sleep, especially when you're in a leadership role. The phone usage before bed could also be contributing to the problem - the blue light can suppress melatonin production. Have you tried any relaxation techniques or sleep hygiene practices?"
   },
   {
     "role": "user",
+    "created_at": "2025-03-10T22:01:40Z",
     "content": "I tried meditation once but didn't stick with it. I do exercise regularly - I go to the gym 3-4 times a week, usually after work around 7 PM. I also drink coffee throughout the day to stay alert."
   },
   {
     "role": "assistant",
+    "created_at": "2025-03-10T22:01:55Z",
     "content": "Exercise is great for sleep, but working out too close to bedtime can actually be stimulating. The caffeine consumption throughout the day could also be affecting your sleep, especially if you're having coffee in the afternoon. Could you try moving your workouts to the morning and cutting off caffeine after 2 PM?"
   },
   {
     "role": "user",
+    "created_at": "2025-03-10T22:02:25Z",
     "content": "That makes sense. I usually have my last coffee around 3-4 PM. Maybe I should switch to decaf in the afternoon. Morning workouts might be tough though - I'm not really a morning person."
   },
   {
     "role": "assistant",
+    "created_at": "2025-03-10T22:02:40Z",
     "content": "Starting with the caffeine cutoff is a good first step! As for morning workouts, you don't have to make a drastic change immediately. Even a 15-minute walk in the morning can help regulate your circadian rhythm. For the evening, you might want to establish a wind-down routine - maybe some light reading, gentle stretching, or breathing exercises about an hour before bed."
   },
   {
     "role": "user",
+    "created_at": "2025-03-10T22:03:20Z",
     "content": "I like reading, actually. I used to read before bed but stopped because I was always checking work emails. Maybe I should keep my phone out of the bedroom entirely."
   },
   {
     "role": "assistant",
+    "created_at": "2025-03-10T22:03:35Z",
     "content": "That's an excellent idea! Keeping your phone out of the bedroom can make a big difference. You could get a regular alarm clock if you use your phone for that. Creating a clear boundary between work and sleep time is important, especially with the product launch stress."
   },
   {
     "role": "user",
+    "created_at": "2025-03-10T22:04:10Z",
     "content": "You're right. I think I need to be better about work-life boundaries in general. I often answer emails late at night, which probably doesn't help my stress levels."
   },
   {
     "role": "assistant",
+    "created_at": "2025-03-10T22:04:25Z",
     "content": "Those late-night emails can definitely keep your mind in 'work mode' when it should be winding down. Have you considered setting specific 'no work' hours, maybe from 8 PM onwards? That way you give your brain time to transition from work mode to rest mode."
   },
   {
     "role": "user",
+    "created_at": "2025-03-10T22:04:55Z",
     "content": "That sounds reasonable. I'll talk to my team about response time expectations. I don't think anyone expects instant replies at night anyway - I'm probably putting that pressure on myself."
   }
 ]

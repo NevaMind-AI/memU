@@ -1,54 +1,67 @@
 [
   {
     "role": "user",
+    "created_at": "2025-02-01T09:00:00Z",
     "content": "I need help planning a weekend trip to San Francisco. Can you suggest some activities?"
   },
   {
     "role": "assistant",
+    "created_at": "2025-02-01T09:00:08Z",
     "content": "I'd be happy to help you plan your San Francisco trip! What are your main interests? Are you into tech, food, nature, art, or something else?"
   },
   {
     "role": "user",
+    "created_at": "2025-02-01T09:00:25Z",
     "content": "I love food and nature! I'm also interested in visiting some tech companies since I work in software development. My partner enjoys photography and museums."
   },
   {
     "role": "assistant",
+    "created_at": "2025-02-01T09:00:40Z",
     "content": "Perfect! For food, you should definitely check out the Ferry Building Marketplace for gourmet options and local produce. For nature, I'd recommend Golden Gate Park, hiking at Lands End, or visiting Muir Woods for the redwoods. For tech, you could do a self-guided tour of tech headquarters in Silicon Valley or visit the Computer History Museum. For your partner, there's the de Young Museum in Golden Gate Park and SFMOMA for modern art."
   },
   {
     "role": "user",
+    "created_at": "2025-02-01T09:01:20Z",
     "content": "Those sound great! I'm particularly excited about Muir Woods. I've never seen redwoods before. What's the best time to visit?"
   },
   {
     "role": "assistant",
+    "created_at": "2025-02-01T09:01:35Z",
     "content": "Muir Woods is magical! I'd recommend going early in the morning, ideally right when it opens around 8 AM. This way you'll avoid the crowds and experience the peaceful atmosphere of the forest. The morning light filtering through the redwoods is also spectacular for photography. Make sure to book parking reservations in advance as they're required."
   },
   {
     "role": "user",
+    "created_at": "2025-02-01T09:02:10Z",
     "content": "Good to know about the parking! Are there any good vegetarian restaurants you'd recommend? My partner is vegetarian and I'm trying to eat less meat."
   },
   {
     "role": "assistant",
+    "created_at": "2025-02-01T09:02:25Z",
     "content": "San Francisco has amazing vegetarian options! I'd recommend Greens Restaurant for upscale vegetarian with a view, Nourish Cafe for healthy bowls, and Shizen for vegan sushi. If you're in the Mission District, try Gracias Madre for organic Mexican food. For something casual, Ike's Love & Sandwiches has great veggie options."
   },
   {
     "role": "user",
+    "created_at": "2025-02-01T09:03:05Z",
     "content": "Perfect! I'll add these to my list. One more thing - I usually go for a run every morning. Are there good running routes near downtown?"
   },
   {
     "role": "assistant",
+    "created_at": "2025-02-01T09:03:20Z",
     "content": "Absolutely! The Embarcadero is perfect for morning runs - it's a flat waterfront path with beautiful bay views. You can run from the Ferry Building towards Fisherman's Wharf, which is about 3 miles one way. Alternatively, Crissy Field offers stunning views of the Golden Gate Bridge. If you want something more challenging with hills, try running up to Coit Tower from North Beach."
   },
   {
     "role": "user",
+    "created_at": "2025-02-01T09:03:55Z",
     "content": "The Embarcadero sounds perfect for my morning routine. Thanks for all the suggestions! I'm getting really excited about this trip now."
   },
   {
     "role": "assistant",
+    "created_at": "2025-02-01T09:04:05Z",
     "content": "You're welcome! It sounds like you have a great mix of activities planned. Don't forget to bring layers - San Francisco weather can be quite changeable, especially if you're visiting different neighborhoods. Have a wonderful trip!"
   },
   {
     "role": "user",
+    "created_at": "2025-02-01T09:04:30Z",
     "content": "Will do! I always forget how different the weather can be in different parts of the city. I'll pack accordingly."
   }
 ]
