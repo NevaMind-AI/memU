@@ -1,5 +1,3 @@
-<div align="center">
-
 ![MemU Banner](assets/banner.png)
 
 ### MemU: A Future-Oriented Agentic Memory System
@@ -81,6 +79,13 @@ Its core architecture consists of three layers: **Resource Layer → Memory Item
 - **Self-Evolving:** Adapts memory structure based on usage patterns
 
 <img width="1365" height="308" alt="process" src="https://github.com/user-attachments/assets/cabed021-f231-4bd2-9bb5-7c8cdb5f928c" />
+
+**Performance Excellence in Locomo Tests:**
+
+MemU achieves 92.09% average accuracy in the Locomo dataset across all reasoning tasks, significantly outperforming competitors.
+View Detailed Experimental Data：https://github.com/NevaMind-AI/memU-experiment
+
+<img width="3840" height="2160" alt="benchmark" src="https://github.com/user-attachments/assets/6fec4884-94e5-4058-ad5c-baac3d7e76d9" />
 
 ## MemU Repositories: What They Do & How to Use
 |                     | **memU**                                                                 | **memU-server**                                                                                      | **memU-ui**                                                             |
@@ -248,7 +253,7 @@ Tutorial: https://ai.feishu.cn/wiki/By6IwM7Kfinyf0kbM1xcrrcfnnd
 
 <img width="2795" height="1197" alt="lazy memu_副本" src="https://github.com/user-attachments/assets/06c6417a-472f-481b-aa5e-610d3df68acb" />
 
-## 📄 License**
+## 📄 License
 
 By contributing to MemU, you agree that your contributions will be licensed under the **Apache License 2.0**.
 

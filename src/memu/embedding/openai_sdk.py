@@ -31,13 +31,13 @@ class OpenAIEmbeddingSDKClient:
             # Single batch - direct call
             response = await self.client.embeddings.create(model=self.embed_model, input=inputs)
             return [cast(list[float], d.embedding) for d in response.data]
-        
+
         # Multiple batches - split and merge
         all_embeddings = []
         for i in range(0, len(inputs), self.batch_size):
-            batch = inputs[i:i + self.batch_size]
+            batch = inputs[i : i + self.batch_size]
             response = await self.client.embeddings.create(model=self.embed_model, input=batch)
             batch_embeddings = [cast(list[float], d.embedding) for d in response.data]
             all_embeddings.extend(batch_embeddings)
-        
+
         return all_embeddings
