@@ -3,9 +3,9 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-try:  # Optional pgvector support
-    from pgvector.sqlalchemy import Vector  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
+try:
+    from pgvector.sqlalchemy import Vector
+except ImportError:
     Vector = None
 
 # revision identifiers, used by Alembic.

@@ -5,9 +5,9 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel
 
-from memu.app.settings import DatabaseConfig, StorageProvidersConfig
+from memu.app.settings import StorageProvidersConfig
+from memu.database.inmemory.models import build_memory_models
 from memu.database.inmemory.repo import InMemoryStore
-from memu.models import build_memory_models
 
 
 @dataclass
@@ -23,7 +23,6 @@ class DatabaseLayer:
 def init_database_layer(
     *,
     user_model: type[BaseModel],
-    database_config: DatabaseConfig,
     storage_providers: StorageProvidersConfig,
 ) -> DatabaseLayer:
     """
@@ -49,7 +48,7 @@ def init_database_layer(
 
     provider = storage_providers.metadata_store.provider
     if provider == "postgres":
-        dsn = storage_providers.metadata_store.dsn or database_config.dsn
+        dsn = storage_providers.metadata_store.dsn
         if not dsn:
             msg = "Postgres metadata_store requires a DSN"
             raise ValueError(msg)

@@ -69,12 +69,6 @@ class BlobConfig(BaseModel):
     resources_dir: str = Field(default="./data/resources")
 
 
-class DatabaseConfig(BaseModel):
-    provider: str = Field(default="memory")
-    dsn: str | None = Field(default=None, description="Connection string used for Postgres metadata/vector stores.")
-    pool_size: int = Field(default=5, description="Max connections for database-backed providers.")
-
-
 class RetrieveConfig(BaseModel):
     """Configure retrieval behavior for `MemoryUser.retrieve`.
 
@@ -123,35 +117,6 @@ class DefaultUserModel(BaseModel):
 
 class UserConfig(BaseModel):
     model: type[BaseModel] = Field(default=DefaultUserModel)
-
-
-class DefaultScopeModel(BaseModel):
-    project_id: str = Field(
-        default="default_project",
-        description="Project identifier used as the default boundary field.",
-    )
-    agent_id: str | None = Field(
-        default=None,
-        description="Optional agent identifier for multi-agent scopes.",
-    )
-
-
-class ScopeConfig(BaseModel):
-    model: type[BaseModel] = Field(default=DefaultScopeModel)
-    boundary_fields: list[str] = Field(default_factory=lambda: ["project_id"])
-    ddl_mode: Annotated[Literal["create", "validate"], Normalize] = "create"
-    default_scope: dict[str, Any] | None = Field(
-        default_factory=lambda: {"project_id": "default_project"},
-        description="Fallback scope payload used when none is provided.",
-    )
-    max_scope_combinations: int = Field(
-        default=25,
-        description="Maximum expansion for cross-scope selectors.",
-    )
-    allow_boundary_wildcard: bool = Field(
-        default=False,
-        description="Allow wildcard on boundary fields when performing cross-scope retrieval.",
-    )
 
 
 Key = Annotated[str, StringConstraints(min_length=1)]

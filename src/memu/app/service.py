@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
@@ -9,7 +12,6 @@ from memu.app.memorize import MemorizeMixin
 from memu.app.retrieve import RetrieveMixin
 from memu.app.settings import (
     BlobConfig,
-    DatabaseConfig,
     LLMConfig,
     LLMProfilesConfig,
     MemorizeConfig,
@@ -19,6 +21,7 @@ from memu.app.settings import (
 )
 from memu.blob.local_fs import LocalFS
 from memu.database.factory import init_database_layer
+from memu.database.inmemory.repo import InMemoryStore
 from memu.llm.http_client import HTTPLLMClient
 from memu.workflow.pipeline import PipelineManager
 from memu.workflow.runner import WorkflowRunner, resolve_workflow_runner
@@ -27,13 +30,20 @@ from memu.workflow.step import WorkflowState, WorkflowStep
 TConfigModel = TypeVar("TConfigModel", bound=BaseModel)
 
 
+@dataclass
+class Context:
+    categories_ready: bool = False
+    category_ids: list[str] = field(default_factory=list)
+    category_name_to_id: dict[str, str] = field(default_factory=dict)
+    category_init_task: asyncio.Task | None = None
+
+
 class MemoryService(MemorizeMixin, RetrieveMixin):
     def __init__(
         self,
         *,
         llm_profiles: LLMProfilesConfig | dict[str, Any] | None = None,
         blob_config: BlobConfig | dict[str, Any] | None = None,
-        database_config: DatabaseConfig | dict[str, Any] | None = None,
         storage_providers: StorageProvidersConfig | dict[str, Any] | None = None,
         memorize_config: MemorizeConfig | dict[str, Any] | None = None,
         retrieve_config: RetrieveConfig | dict[str, Any] | None = None,
@@ -43,32 +53,26 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         self.llm_profiles = self._validate_config(llm_profiles, LLMProfilesConfig)
         self.user_config = self._validate_config(user_config, UserConfig)
         self.user_model = self.user_config.model
-        self.llm_config = self.llm_profiles.default
+        self.llm_config = self._validate_config(self.llm_profiles.default, LLMConfig)
         self.blob_config = self._validate_config(blob_config, BlobConfig)
-        self.database_config = self._validate_config(database_config, DatabaseConfig)
         self.storage_providers = self._validate_config(storage_providers, StorageProvidersConfig)
         self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
-        db_layer = init_database_layer(
+        self.default_scope: dict[str, Any] = {}
+        self.database = init_database_layer(
             user_model=self.user_model,
-            database_config=self.database_config,
             storage_providers=self.storage_providers,
         )
-        self.base_model_cls = db_layer.base_model
-        self.resource_model = db_layer.resource_model
-        self.memory_item_model = db_layer.memory_item_model
-        self.memory_category_model = db_layer.memory_category_model
-        self.category_item_model = db_layer.category_item_model
-        self._store_factory = db_layer.store_factory
         self.fs = LocalFS(self.blob_config.resources_dir)
-
-        # Initialize client caches (lazy creation on first use)
-        self._llm_clients: dict[str, Any] = {}
-
         self.category_configs: list[dict[str, str]] = list(self.memorize_config.memory_categories or [])
         self._category_prompt_str = self._format_categories_for_prompt(self.category_configs)
 
-        self._start_category_initialization(default_context)
+        self._scope_contexts: dict[str, Context] = {}
+        self._stores: dict[str, InMemoryStore] = {}
+        self._get_scope_context(self.default_scope, None)
+
+        # Initialize client caches (lazy creation on first use)
+        self._llm_clients: dict[str, Any] = {}
 
         self._workflow_runner = resolve_workflow_runner(workflow_runner)
 
@@ -147,6 +151,40 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         profile = self._llm_profile_from_context(step_context)
         return self._get_llm_client(profile)
 
+    def _scope_dict(self, scope: BaseModel | Mapping[str, Any] | None) -> dict[str, Any]:
+        if scope is None:
+            return {}
+        if isinstance(scope, BaseModel):
+            return scope.model_dump()
+        if isinstance(scope, Mapping):
+            return dict(scope)
+        msg = f"Unsupported scope payload type: {type(scope)!r}"
+        raise TypeError(msg)
+
+    def _scope_key(self, scope: Mapping[str, Any]) -> str:
+        return json.dumps(scope, sort_keys=True)
+
+    def _get_store(self, scope: Mapping[str, Any]) -> InMemoryStore:
+        key = self._scope_key(scope)
+        store = self._stores.get(key)
+        if store is None:
+            store = self.database.store_factory(key)
+            self._stores[key] = store
+        return store
+
+    def _create_scope_context(self, scope: Mapping[str, Any]) -> Context:
+        return Context(categories_ready=not bool(self.category_configs))
+
+    def _get_scope_context(self, scope: Mapping[str, Any], user: BaseModel | None) -> tuple[Context, InMemoryStore]:
+        key = self._scope_key(scope)
+        ctx = self._scope_contexts.get(key)
+        store = self._get_store(scope)
+        if ctx is None:
+            ctx = self._create_scope_context(scope)
+            self._scope_contexts[key] = ctx
+            self._start_category_initialization(ctx, store)
+        return ctx, store
+
     def _provider_summary(self) -> dict[str, Any]:
         vector_provider = None
         if self.storage_providers.vector_index:
@@ -171,9 +209,10 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
             "base_prompt",
             "categories_prompt_str",
             "ctx",
+            "store",
             "category_ids",
         }
-        retrieve_initial_keys = {"original_query", "context_queries", "ctx", "top_k", "skip_rewrite", "method"}
+        retrieve_initial_keys = {"original_query", "context_queries", "ctx", "store", "top_k", "skip_rewrite", "method"}
         memo_workflow = self._build_memorize_workflow()
         self._pipelines.register("memorize", memo_workflow.steps, initial_state_keys=memorize_initial_keys)
         rag_workflow = self._build_rag_retrieve_workflow()

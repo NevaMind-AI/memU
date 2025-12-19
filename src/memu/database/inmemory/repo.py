@@ -6,7 +6,7 @@ import uuid
 from pydantic import BaseModel
 
 from memu.database.inmemory.index import cosine_topk
-from memu.models import (
+from memu.database.inmemory.models import (
     CategoryItem,
     MemoryCategory,
     MemoryItem,

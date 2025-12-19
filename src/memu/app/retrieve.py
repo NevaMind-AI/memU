@@ -19,20 +19,19 @@ from memu.workflow.step import WorkflowState, WorkflowStep
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from memu.app.scope import ScopeSchema
-    from memu.app.service import _ScopeContext
+    from memu.app.service import Context
     from memu.app.settings import RetrieveConfig
     from memu.database.inmemory.repo import InMemoryStore
 
 
 class RetrieveMixin:
     if TYPE_CHECKING:
-        scope_schema: ScopeSchema
         retrieve_config: RetrieveConfig
-        default_scope: BaseModel
+        default_scope: Mapping[str, Any]
         _run_workflow: Callable[..., Awaitable[WorkflowState]]
-        _get_scope_context: Callable[[BaseModel, BaseModel | None], _ScopeContext]
-        _ensure_categories_ready: Callable[[_ScopeContext], Awaitable[None]]
+        _get_scope_context: Callable[[Mapping[str, Any], BaseModel | None], tuple[Context, InMemoryStore]]
+        _scope_dict: Callable[[BaseModel | Mapping[str, Any] | None], dict[str, Any]]
+        _ensure_categories_ready: Callable[[Context, InMemoryStore], Awaitable[None]]
         _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
         _get_llm_client: Callable[..., Any]
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
@@ -48,10 +47,10 @@ class RetrieveMixin:
         if not queries:
             raise ValueError("empty_queries")
         selector_input = scope_selector or user or self.default_scope
-        normalized_scope = self.scope_schema.normalize_scope(selector_input)
-        ctx = self._get_scope_context(normalized_scope, user)
+        scope_payload = self._scope_dict(selector_input)
+        ctx, store = self._get_scope_context(scope_payload, user)
         original_query = self._extract_query_text(queries[-1])
-        await self._ensure_categories_ready(ctx)
+        await self._ensure_categories_ready(ctx, store)
 
         context_queries_objs = queries[:-1] if len(queries) > 1 else []
 
@@ -68,6 +67,7 @@ class RetrieveMixin:
             "original_query": original_query,
             "context_queries": context_queries_objs,
             "ctx": ctx,
+            "store": store,
             "top_k": self.retrieve_config.top_k,
             "skip_rewrite": len(queries) == 1,
             "method": self.retrieve_config.method,
@@ -82,156 +82,11 @@ class RetrieveMixin:
         return response
 
     def _build_rag_retrieve_workflow(self) -> list[WorkflowStep]:
-        async def route_intention(state: WorkflowState, step_context: Any) -> WorkflowState:
-            llm_client = self._get_step_llm_client(step_context)
-            needs_retrieval, rewritten_query = await self._decide_if_retrieval_needed(
-                state["original_query"],
-                state["context_queries"],
-                retrieved_content=None,
-                llm_client=llm_client,
-            )
-            if state.get("skip_rewrite"):
-                rewritten_query = state["original_query"]
-
-            state.update({
-                "needs_retrieval": needs_retrieval,
-                "rewritten_query": rewritten_query,
-                "active_query": rewritten_query,
-                "next_step_query": None,
-                "proceed_to_items": False,
-                "proceed_to_resources": False,
-            })
-            return state
-
-        async def route_category(state: WorkflowState, step_context: Any) -> WorkflowState:
-            if not state.get("needs_retrieval"):
-                state["category_hits"] = []
-                state["category_summary_lookup"] = {}
-                state["query_vector"] = None
-                return state
-
-            llm_client = self._get_step_llm_client(step_context)
-            qvec = (await llm_client.embed([state["active_query"]]))[0]
-            hits, summary_lookup = await self._rank_categories_by_summary(
-                qvec,
-                state["top_k"],
-                state["ctx"],
-                embed_client=llm_client,
-            )
-            state.update({
-                "query_vector": qvec,
-                "category_hits": hits,
-                "category_summary_lookup": summary_lookup,
-            })
-            return state
-
-        async def category_sufficiency(state: WorkflowState, step_context: Any) -> WorkflowState:
-            if not state.get("needs_retrieval"):
-                state["proceed_to_items"] = False
-                return state
-
-            retrieved_content = ""
-            hits = state.get("category_hits") or []
-            if hits:
-                retrieved_content = self._format_category_content(
-                    hits,
-                    state.get("category_summary_lookup", {}),
-                    state["ctx"].store,
-                )
-
-            llm_client = self._get_step_llm_client(step_context)
-            needs_more, rewritten_query = await self._decide_if_retrieval_needed(
-                state["active_query"],
-                state["context_queries"],
-                retrieved_content=retrieved_content or "No content retrieved yet.",
-                llm_client=llm_client,
-            )
-            state["next_step_query"] = rewritten_query
-            state["active_query"] = rewritten_query
-            state["proceed_to_items"] = needs_more
-            if needs_more:
-                state["query_vector"] = (await llm_client.embed([state["active_query"]]))[0]
-            return state
-
-        async def recall_items(state: WorkflowState, step_context: Any) -> WorkflowState:
-            if not state.get("needs_retrieval") or not state.get("proceed_to_items"):
-                state["item_hits"] = []
-                return state
-
-            llm_client = self._get_step_llm_client(step_context)
-            qvec = state.get("query_vector")
-            if qvec is None:
-                qvec = (await llm_client.embed([state["active_query"]]))[0]
-                state["query_vector"] = qvec
-            hits = state["ctx"].store.vector_search_items(qvec, state["top_k"])
-            state["item_hits"] = hits
-            return state
-
-        async def item_sufficiency(state: WorkflowState, step_context: Any) -> WorkflowState:
-            if not state.get("needs_retrieval"):
-                state["proceed_to_resources"] = False
-                return state
-
-            retrieved_content = ""
-            hits = state.get("item_hits") or []
-            if hits:
-                retrieved_content = self._format_item_content(hits, state["ctx"].store)
-
-            llm_client = self._get_step_llm_client(step_context)
-            needs_more, rewritten_query = await self._decide_if_retrieval_needed(
-                state["active_query"],
-                state["context_queries"],
-                retrieved_content=retrieved_content or "No content retrieved yet.",
-                llm_client=llm_client,
-            )
-            state["next_step_query"] = rewritten_query
-            state["active_query"] = rewritten_query
-            state["proceed_to_resources"] = needs_more
-            if needs_more:
-                state["query_vector"] = (await llm_client.embed([state["active_query"]]))[0]
-            return state
-
-        async def recall_resources(state: WorkflowState, step_context: Any) -> WorkflowState:
-            if not state.get("needs_retrieval") or not state.get("proceed_to_resources"):
-                state["resource_hits"] = []
-                return state
-
-            corpus = self._resource_caption_corpus(state["ctx"].store)
-            if not corpus:
-                state["resource_hits"] = []
-                return state
-
-            llm_client = self._get_step_llm_client(step_context)
-            qvec = state.get("query_vector")
-            if qvec is None:
-                qvec = (await llm_client.embed([state["active_query"]]))[0]
-                state["query_vector"] = qvec
-            state["resource_hits"] = cosine_topk(qvec, corpus, k=state["top_k"])
-            return state
-
-        def build_context(state: WorkflowState, _: Any) -> WorkflowState:
-            response = {
-                "needs_retrieval": bool(state.get("needs_retrieval")),
-                "original_query": state["original_query"],
-                "rewritten_query": state.get("rewritten_query", state["original_query"]),
-                "next_step_query": state.get("next_step_query"),
-                "categories": [],
-                "items": [],
-                "resources": [],
-            }
-            if state.get("needs_retrieval"):
-                ctx = state["ctx"]
-                response["categories"] = self._materialize_hits(state.get("category_hits", []), ctx.store.categories)
-                response["items"] = self._materialize_hits(state.get("item_hits", []), ctx.store.items)
-                response["resources"] = self._materialize_hits(state.get("resource_hits", []), ctx.store.resources)
-            state["response"] = response
-            return state
-
         steps = [
             WorkflowStep(
                 step_id="route_intention",
                 role="route_intention",
-                handler=route_intention,
+                handler=self._rag_route_intention,
                 requires={"original_query", "context_queries", "skip_rewrite"},
                 produces={"needs_retrieval", "rewritten_query", "active_query", "next_step_query"},
                 capabilities={"llm"},
@@ -239,43 +94,52 @@ class RetrieveMixin:
             WorkflowStep(
                 step_id="route_category",
                 role="route_category",
-                handler=route_category,
-                requires={"needs_retrieval", "active_query", "top_k", "ctx"},
+                handler=self._rag_route_category,
+                requires={"needs_retrieval", "active_query", "top_k", "ctx", "store"},
                 produces={"category_hits", "category_summary_lookup", "query_vector"},
                 capabilities={"vector"},
             ),
             WorkflowStep(
                 step_id="sufficiency_after_category",
                 role="sufficiency_check",
-                handler=category_sufficiency,
-                requires={"needs_retrieval", "active_query", "context_queries", "category_hits", "ctx"},
+                handler=self._rag_category_sufficiency,
+                requires={"needs_retrieval", "active_query", "context_queries", "category_hits", "ctx", "store"},
                 produces={"next_step_query", "proceed_to_items", "query_vector"},
                 capabilities={"llm"},
             ),
             WorkflowStep(
                 step_id="recall_items",
                 role="recall_items",
-                handler=recall_items,
-                requires={"needs_retrieval", "proceed_to_items", "ctx", "active_query", "top_k", "query_vector"},
+                handler=self._rag_recall_items,
+                requires={
+                    "needs_retrieval",
+                    "proceed_to_items",
+                    "ctx",
+                    "store",
+                    "active_query",
+                    "top_k",
+                    "query_vector",
+                },
                 produces={"item_hits", "query_vector"},
                 capabilities={"vector"},
             ),
             WorkflowStep(
                 step_id="sufficiency_after_items",
                 role="sufficiency_check",
-                handler=item_sufficiency,
-                requires={"needs_retrieval", "active_query", "context_queries", "item_hits", "ctx"},
+                handler=self._rag_item_sufficiency,
+                requires={"needs_retrieval", "active_query", "context_queries", "item_hits", "ctx", "store"},
                 produces={"next_step_query", "proceed_to_resources", "query_vector"},
                 capabilities={"llm"},
             ),
             WorkflowStep(
                 step_id="recall_resources",
                 role="recall_resources",
-                handler=recall_resources,
+                handler=self._rag_recall_resources,
                 requires={
                     "needs_retrieval",
                     "proceed_to_resources",
                     "ctx",
+                    "store",
                     "active_query",
                     "top_k",
                     "query_vector",
@@ -286,151 +150,170 @@ class RetrieveMixin:
             WorkflowStep(
                 step_id="build_context",
                 role="build_context",
-                handler=build_context,
-                requires={"needs_retrieval", "original_query", "rewritten_query", "ctx"},
+                handler=self._rag_build_context,
+                requires={"needs_retrieval", "original_query", "rewritten_query", "ctx", "store"},
                 produces={"response"},
                 capabilities=set(),
             ),
         ]
         return steps
 
+    async def _rag_route_intention(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        llm_client = self._get_step_llm_client(step_context)
+        needs_retrieval, rewritten_query = await self._decide_if_retrieval_needed(
+            state["original_query"],
+            state["context_queries"],
+            retrieved_content=None,
+            llm_client=llm_client,
+        )
+        if state.get("skip_rewrite"):
+            rewritten_query = state["original_query"]
+
+        state.update({
+            "needs_retrieval": needs_retrieval,
+            "rewritten_query": rewritten_query,
+            "active_query": rewritten_query,
+            "next_step_query": None,
+            "proceed_to_items": False,
+            "proceed_to_resources": False,
+        })
+        return state
+
+    async def _rag_route_category(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("needs_retrieval"):
+            state["category_hits"] = []
+            state["category_summary_lookup"] = {}
+            state["query_vector"] = None
+            return state
+
+        llm_client = self._get_step_llm_client(step_context)
+        store = state["store"]
+        qvec = (await llm_client.embed([state["active_query"]]))[0]
+        hits, summary_lookup = await self._rank_categories_by_summary(
+            qvec,
+            state["top_k"],
+            state["ctx"],
+            store,
+            embed_client=llm_client,
+        )
+        state.update({
+            "query_vector": qvec,
+            "category_hits": hits,
+            "category_summary_lookup": summary_lookup,
+        })
+        return state
+
+    async def _rag_category_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("needs_retrieval"):
+            state["proceed_to_items"] = False
+            return state
+
+        retrieved_content = ""
+        hits = state.get("category_hits") or []
+        if hits:
+            store = state["store"]
+            retrieved_content = self._format_category_content(
+                hits,
+                state.get("category_summary_lookup", {}),
+                store,
+            )
+
+        llm_client = self._get_step_llm_client(step_context)
+        needs_more, rewritten_query = await self._decide_if_retrieval_needed(
+            state["active_query"],
+            state["context_queries"],
+            retrieved_content=retrieved_content or "No content retrieved yet.",
+            llm_client=llm_client,
+        )
+        state["next_step_query"] = rewritten_query
+        state["active_query"] = rewritten_query
+        state["proceed_to_items"] = needs_more
+        if needs_more:
+            state["query_vector"] = (await llm_client.embed([state["active_query"]]))[0]
+        return state
+
+    async def _rag_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("needs_retrieval") or not state.get("proceed_to_items"):
+            state["item_hits"] = []
+            return state
+
+        store = state["store"]
+        llm_client = self._get_step_llm_client(step_context)
+        qvec = state.get("query_vector")
+        if qvec is None:
+            qvec = (await llm_client.embed([state["active_query"]]))[0]
+            state["query_vector"] = qvec
+        state["item_hits"] = store.vector_search_items(qvec, state["top_k"])
+        return state
+
+    async def _rag_item_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("needs_retrieval"):
+            state["proceed_to_resources"] = False
+            return state
+
+        store = state["store"]
+        retrieved_content = ""
+        hits = state.get("item_hits") or []
+        if hits:
+            retrieved_content = self._format_item_content(hits, store)
+
+        llm_client = self._get_step_llm_client(step_context)
+        needs_more, rewritten_query = await self._decide_if_retrieval_needed(
+            state["active_query"],
+            state["context_queries"],
+            retrieved_content=retrieved_content or "No content retrieved yet.",
+            llm_client=llm_client,
+        )
+        state["next_step_query"] = rewritten_query
+        state["active_query"] = rewritten_query
+        state["proceed_to_resources"] = needs_more
+        if needs_more:
+            state["query_vector"] = (await llm_client.embed([state["active_query"]]))[0]
+        return state
+
+    async def _rag_recall_resources(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("needs_retrieval") or not state.get("proceed_to_resources"):
+            state["resource_hits"] = []
+            return state
+
+        store = state["store"]
+        corpus = self._resource_caption_corpus(store)
+        if not corpus:
+            state["resource_hits"] = []
+            return state
+
+        llm_client = self._get_step_llm_client(step_context)
+        qvec = state.get("query_vector")
+        if qvec is None:
+            qvec = (await llm_client.embed([state["active_query"]]))[0]
+            state["query_vector"] = qvec
+        state["resource_hits"] = cosine_topk(qvec, corpus, k=state["top_k"])
+        return state
+
+    def _rag_build_context(self, state: WorkflowState, _: Any) -> WorkflowState:
+        response = {
+            "needs_retrieval": bool(state.get("needs_retrieval")),
+            "original_query": state["original_query"],
+            "rewritten_query": state.get("rewritten_query", state["original_query"]),
+            "next_step_query": state.get("next_step_query"),
+            "categories": [],
+            "items": [],
+            "resources": [],
+        }
+        if state.get("needs_retrieval"):
+            store = state["store"]
+            response["categories"] = self._materialize_hits(state.get("category_hits", []), store.categories)
+            response["items"] = self._materialize_hits(state.get("item_hits", []), store.items)
+            response["resources"] = self._materialize_hits(state.get("resource_hits", []), store.resources)
+        state["response"] = response
+        return state
+
     def _build_llm_retrieve_workflow(self) -> list[WorkflowStep]:
-        async def route_intention(state: WorkflowState, step_context: Any) -> WorkflowState:
-            llm_client = self._get_step_llm_client(step_context)
-            needs_retrieval, rewritten_query = await self._decide_if_retrieval_needed(
-                state["original_query"],
-                state["context_queries"],
-                retrieved_content=None,
-                llm_client=llm_client,
-            )
-            if state.get("skip_rewrite"):
-                rewritten_query = state["original_query"]
-
-            state.update({
-                "needs_retrieval": needs_retrieval,
-                "rewritten_query": rewritten_query,
-                "active_query": rewritten_query,
-                "next_step_query": None,
-                "proceed_to_items": False,
-                "proceed_to_resources": False,
-            })
-            return state
-
-        async def route_category(state: WorkflowState, step_context: Any) -> WorkflowState:
-            if not state.get("needs_retrieval"):
-                state["category_hits"] = []
-                return state
-            llm_client = self._get_step_llm_client(step_context)
-            hits = await self._llm_rank_categories(
-                state["active_query"],
-                state["top_k"],
-                state["ctx"],
-                llm_client=llm_client,
-            )
-            state["category_hits"] = hits
-            return state
-
-        async def category_sufficiency(state: WorkflowState, step_context: Any) -> WorkflowState:
-            if not state.get("needs_retrieval"):
-                state["proceed_to_items"] = False
-                return state
-
-            retrieved_content = ""
-            hits = state.get("category_hits") or []
-            if hits:
-                retrieved_content = self._format_llm_category_content(hits)
-
-            llm_client = self._get_step_llm_client(step_context)
-            needs_more, rewritten_query = await self._decide_if_retrieval_needed(
-                state["active_query"],
-                state["context_queries"],
-                retrieved_content=retrieved_content or "No content retrieved yet.",
-                llm_client=llm_client,
-            )
-            state["next_step_query"] = rewritten_query
-            state["active_query"] = rewritten_query
-            state["proceed_to_items"] = needs_more
-            return state
-
-        async def recall_items(state: WorkflowState, step_context: Any) -> WorkflowState:
-            if not state.get("needs_retrieval") or not state.get("proceed_to_items"):
-                state["item_hits"] = []
-                return state
-
-            category_ids = [cat["id"] for cat in state.get("category_hits", [])]
-            llm_client = self._get_step_llm_client(step_context)
-            hits = await self._llm_rank_items(
-                state["active_query"],
-                state["top_k"],
-                category_ids,
-                state.get("category_hits", []),
-                state["ctx"],
-                llm_client=llm_client,
-            )
-            state["item_hits"] = hits
-            return state
-
-        async def item_sufficiency(state: WorkflowState, step_context: Any) -> WorkflowState:
-            if not state.get("needs_retrieval"):
-                state["proceed_to_resources"] = False
-                return state
-
-            retrieved_content = ""
-            hits = state.get("item_hits") or []
-            if hits:
-                retrieved_content = self._format_llm_item_content(hits)
-
-            llm_client = self._get_step_llm_client(step_context)
-            needs_more, rewritten_query = await self._decide_if_retrieval_needed(
-                state["active_query"],
-                state["context_queries"],
-                retrieved_content=retrieved_content or "No content retrieved yet.",
-                llm_client=llm_client,
-            )
-            state["next_step_query"] = rewritten_query
-            state["active_query"] = rewritten_query
-            state["proceed_to_resources"] = needs_more
-            return state
-
-        async def recall_resources(state: WorkflowState, step_context: Any) -> WorkflowState:
-            if not state.get("needs_retrieval") or not state.get("proceed_to_resources"):
-                state["resource_hits"] = []
-                return state
-
-            llm_client = self._get_step_llm_client(step_context)
-            hits = await self._llm_rank_resources(
-                state["active_query"],
-                state["top_k"],
-                state.get("category_hits", []),
-                state.get("item_hits", []),
-                state["ctx"],
-                llm_client=llm_client,
-            )
-            state["resource_hits"] = hits
-            return state
-
-        def build_context(state: WorkflowState, _: Any) -> WorkflowState:
-            response = {
-                "needs_retrieval": bool(state.get("needs_retrieval")),
-                "original_query": state["original_query"],
-                "rewritten_query": state.get("rewritten_query", state["original_query"]),
-                "next_step_query": state.get("next_step_query"),
-                "categories": [],
-                "items": [],
-                "resources": [],
-            }
-            if state.get("needs_retrieval"):
-                response["categories"] = list(state.get("category_hits") or [])
-                response["items"] = list(state.get("item_hits") or [])
-                response["resources"] = list(state.get("resource_hits") or [])
-            state["response"] = response
-            return state
-
         steps = [
             WorkflowStep(
                 step_id="route_intention",
                 role="route_intention",
-                handler=route_intention,
+                handler=self._llm_route_intention,
                 requires={"original_query", "context_queries", "skip_rewrite"},
                 produces={"needs_retrieval", "rewritten_query", "active_query", "next_step_query"},
                 capabilities={"llm"},
@@ -438,15 +321,15 @@ class RetrieveMixin:
             WorkflowStep(
                 step_id="route_category",
                 role="route_category",
-                handler=route_category,
-                requires={"needs_retrieval", "active_query", "top_k", "ctx"},
+                handler=self._llm_route_category,
+                requires={"needs_retrieval", "active_query", "top_k", "ctx", "store"},
                 produces={"category_hits"},
                 capabilities={"llm"},
             ),
             WorkflowStep(
                 step_id="sufficiency_after_category",
                 role="sufficiency_check",
-                handler=category_sufficiency,
+                handler=self._llm_category_sufficiency,
                 requires={"needs_retrieval", "active_query", "context_queries", "category_hits"},
                 produces={"next_step_query", "proceed_to_items"},
                 capabilities={"llm"},
@@ -454,12 +337,13 @@ class RetrieveMixin:
             WorkflowStep(
                 step_id="recall_items",
                 role="recall_items",
-                handler=recall_items,
+                handler=self._llm_recall_items,
                 requires={
                     "needs_retrieval",
                     "proceed_to_items",
                     "top_k",
                     "ctx",
+                    "store",
                     "active_query",
                     "category_hits",
                 },
@@ -469,7 +353,7 @@ class RetrieveMixin:
             WorkflowStep(
                 step_id="sufficiency_after_items",
                 role="sufficiency_check",
-                handler=item_sufficiency,
+                handler=self._llm_item_sufficiency,
                 requires={"needs_retrieval", "active_query", "context_queries", "item_hits"},
                 produces={"next_step_query", "proceed_to_resources"},
                 capabilities={"llm"},
@@ -477,13 +361,14 @@ class RetrieveMixin:
             WorkflowStep(
                 step_id="recall_resources",
                 role="recall_resources",
-                handler=recall_resources,
+                handler=self._llm_recall_resources,
                 requires={
                     "needs_retrieval",
                     "proceed_to_resources",
                     "active_query",
                     "top_k",
                     "ctx",
+                    "store",
                     "item_hits",
                     "category_hits",
                 },
@@ -493,7 +378,7 @@ class RetrieveMixin:
             WorkflowStep(
                 step_id="build_context",
                 role="build_context",
-                handler=build_context,
+                handler=self._llm_build_context,
                 requires={"needs_retrieval", "original_query", "rewritten_query"},
                 produces={"response"},
                 capabilities=set(),
@@ -501,14 +386,150 @@ class RetrieveMixin:
         ]
         return steps
 
+    async def _llm_route_intention(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        llm_client = self._get_step_llm_client(step_context)
+        needs_retrieval, rewritten_query = await self._decide_if_retrieval_needed(
+            state["original_query"],
+            state["context_queries"],
+            retrieved_content=None,
+            llm_client=llm_client,
+        )
+        if state.get("skip_rewrite"):
+            rewritten_query = state["original_query"]
+
+        state.update({
+            "needs_retrieval": needs_retrieval,
+            "rewritten_query": rewritten_query,
+            "active_query": rewritten_query,
+            "next_step_query": None,
+            "proceed_to_items": False,
+            "proceed_to_resources": False,
+        })
+        return state
+
+    async def _llm_route_category(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("needs_retrieval"):
+            state["category_hits"] = []
+            return state
+        llm_client = self._get_step_llm_client(step_context)
+        store = state["store"]
+        hits = await self._llm_rank_categories(
+            state["active_query"],
+            state["top_k"],
+            state["ctx"],
+            store,
+            llm_client=llm_client,
+        )
+        state["category_hits"] = hits
+        return state
+
+    async def _llm_category_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("needs_retrieval"):
+            state["proceed_to_items"] = False
+            return state
+
+        retrieved_content = ""
+        hits = state.get("category_hits") or []
+        if hits:
+            retrieved_content = self._format_llm_category_content(hits)
+
+        llm_client = self._get_step_llm_client(step_context)
+        needs_more, rewritten_query = await self._decide_if_retrieval_needed(
+            state["active_query"],
+            state["context_queries"],
+            retrieved_content=retrieved_content or "No content retrieved yet.",
+            llm_client=llm_client,
+        )
+        state["next_step_query"] = rewritten_query
+        state["active_query"] = rewritten_query
+        state["proceed_to_items"] = needs_more
+        return state
+
+    async def _llm_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("needs_retrieval") or not state.get("proceed_to_items"):
+            state["item_hits"] = []
+            return state
+
+        category_ids = [cat["id"] for cat in state.get("category_hits", [])]
+        llm_client = self._get_step_llm_client(step_context)
+        store = state["store"]
+        state["item_hits"] = await self._llm_rank_items(
+            state["active_query"],
+            state["top_k"],
+            category_ids,
+            state.get("category_hits", []),
+            state["ctx"],
+            store,
+            llm_client=llm_client,
+        )
+        return state
+
+    async def _llm_item_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("needs_retrieval"):
+            state["proceed_to_resources"] = False
+            return state
+
+        retrieved_content = ""
+        hits = state.get("item_hits") or []
+        if hits:
+            retrieved_content = self._format_llm_item_content(hits)
+
+        llm_client = self._get_step_llm_client(step_context)
+        needs_more, rewritten_query = await self._decide_if_retrieval_needed(
+            state["active_query"],
+            state["context_queries"],
+            retrieved_content=retrieved_content or "No content retrieved yet.",
+            llm_client=llm_client,
+        )
+        state["next_step_query"] = rewritten_query
+        state["active_query"] = rewritten_query
+        state["proceed_to_resources"] = needs_more
+        return state
+
+    async def _llm_recall_resources(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("needs_retrieval") or not state.get("proceed_to_resources"):
+            state["resource_hits"] = []
+            return state
+
+        llm_client = self._get_step_llm_client(step_context)
+        store = state["store"]
+        state["resource_hits"] = await self._llm_rank_resources(
+            state["active_query"],
+            state["top_k"],
+            state.get("category_hits", []),
+            state.get("item_hits", []),
+            state["ctx"],
+            store,
+            llm_client=llm_client,
+        )
+        return state
+
+    def _llm_build_context(self, state: WorkflowState, _: Any) -> WorkflowState:
+        response = {
+            "needs_retrieval": bool(state.get("needs_retrieval")),
+            "original_query": state["original_query"],
+            "rewritten_query": state.get("rewritten_query", state["original_query"]),
+            "next_step_query": state.get("next_step_query"),
+            "categories": [],
+            "items": [],
+            "resources": [],
+        }
+        if state.get("needs_retrieval"):
+            response["categories"] = list(state.get("category_hits") or [])
+            response["items"] = list(state.get("item_hits") or [])
+            response["resources"] = list(state.get("resource_hits") or [])
+        state["response"] = response
+        return state
+
     async def _rank_categories_by_summary(
         self,
         query_vec: list[float],
         top_k: int,
-        ctx: _ScopeContext,
+        ctx: Context,
+        store: InMemoryStore,
         embed_client: Any | None = None,
     ) -> tuple[list[tuple[str, float]], dict[str, str]]:
-        entries = [(cid, cat.summary) for cid, cat in ctx.store.categories.items() if cat.summary]
+        entries = [(cid, cat.summary) for cid, cat in store.categories.items() if cat.summary]
         if not entries:
             return [], {}
         summary_texts = [summary for _, summary in entries]
@@ -644,7 +665,8 @@ class RetrieveMixin:
         query: str,
         top_k: int,
         context_queries: list[dict[str, Any]] | None,
-        ctx: _ScopeContext,
+        ctx: Context,
+        store: InMemoryStore,
         llm_client: Any | None = None,
     ) -> dict[str, Any]:
         """Embedding-based retrieval with query rewriting and judging at each tier"""
@@ -659,11 +681,12 @@ class RetrieveMixin:
             qvec,
             top_k,
             ctx,
+            store,
             embed_client=client,
         )
         if cat_hits:
-            response["categories"] = self._materialize_hits(cat_hits, ctx.store.categories)
-            content_sections.append(self._format_category_content(cat_hits, summary_lookup, ctx.store))
+            response["categories"] = self._materialize_hits(cat_hits, store.categories)
+            content_sections.append(self._format_category_content(cat_hits, summary_lookup, store))
 
             needs_more, current_query = await self._decide_if_retrieval_needed(
                 current_query,
@@ -678,10 +701,10 @@ class RetrieveMixin:
             qvec = (await client.embed([current_query]))[0]
 
         # Tier 2: Items
-        item_hits = ctx.store.vector_search_items(qvec, top_k)
+        item_hits = store.vector_search_items(qvec, top_k)
         if item_hits:
-            response["items"] = self._materialize_hits(item_hits, ctx.store.items)
-            content_sections.append(self._format_item_content(item_hits, ctx.store))
+            response["items"] = self._materialize_hits(item_hits, store.items)
+            content_sections.append(self._format_item_content(item_hits, store))
 
             needs_more, current_query = await self._decide_if_retrieval_needed(
                 current_query,
@@ -696,12 +719,12 @@ class RetrieveMixin:
             qvec = (await client.embed([current_query]))[0]
 
         # Tier 3: Resources
-        resource_corpus = self._resource_caption_corpus(ctx.store)
+        resource_corpus = self._resource_caption_corpus(store)
         if resource_corpus:
             res_hits = cosine_topk(qvec, resource_corpus, k=top_k)
             if res_hits:
-                response["resources"] = self._materialize_hits(res_hits, ctx.store.resources)
-                content_sections.append(self._format_resource_content(res_hits, ctx.store))
+                response["resources"] = self._materialize_hits(res_hits, store.resources)
+                content_sections.append(self._format_resource_content(res_hits, store))
 
         return response
 
@@ -774,7 +797,8 @@ class RetrieveMixin:
         query: str,
         top_k: int,
         context_queries: list[dict[str, Any]] | None,
-        ctx: _ScopeContext,
+        ctx: Context,
+        store: InMemoryStore,
         llm_client: Any | None = None,
     ) -> dict[str, Any]:
         """
@@ -792,7 +816,7 @@ class RetrieveMixin:
         content_sections: list[str] = []
 
         # Tier 1: Search and rank categories
-        category_hits = await self._llm_rank_categories(current_query, top_k, ctx, llm_client=client)
+        category_hits = await self._llm_rank_categories(current_query, top_k, ctx, store, llm_client=client)
         if category_hits:
             response["categories"] = category_hits
             content_sections.append(self._format_llm_category_content(category_hits))
@@ -815,6 +839,7 @@ class RetrieveMixin:
             relevant_category_ids,
             category_hits,
             ctx,
+            store,
             llm_client=client,
         )
         if item_hits:
@@ -838,6 +863,7 @@ class RetrieveMixin:
             category_hits,
             item_hits,
             ctx,
+            store,
             llm_client=client,
         )
         if resource_hits:
@@ -921,13 +947,13 @@ class RetrieveMixin:
         return "\n".join(lines)
 
     async def _llm_rank_categories(
-        self, query: str, top_k: int, ctx: _ScopeContext, llm_client: Any | None = None
+        self, query: str, top_k: int, ctx: Context, store: InMemoryStore, llm_client: Any | None = None
     ) -> list[dict[str, Any]]:
         """Use LLM to rank categories based on query relevance"""
-        if not ctx.store.categories:
+        if not store.categories:
             return []
 
-        categories_data = self._format_categories_for_llm(ctx.store)
+        categories_data = self._format_categories_for_llm(store)
         prompt = LLM_CATEGORY_RANKER_PROMPT.format(
             query=self._escape_prompt_value(query),
             top_k=top_k,
@@ -936,7 +962,7 @@ class RetrieveMixin:
 
         client = llm_client or self._get_llm_client()
         llm_response = await client.summarize(prompt, system_prompt=None)
-        return self._parse_llm_category_response(llm_response, ctx.store)
+        return self._parse_llm_category_response(llm_response, store)
 
     async def _llm_rank_items(
         self,
@@ -944,7 +970,8 @@ class RetrieveMixin:
         top_k: int,
         category_ids: list[str],
         category_hits: list[dict[str, Any]],
-        ctx: _ScopeContext,
+        ctx: Context,
+        store: InMemoryStore,
         llm_client: Any | None = None,
     ) -> list[dict[str, Any]]:
         """Use LLM to rank memory items from relevant categories"""
@@ -952,7 +979,7 @@ class RetrieveMixin:
             print("[LLM Rank Items] No category_ids provided")
             return []
 
-        items_data = self._format_items_for_llm(ctx.store, category_ids)
+        items_data = self._format_items_for_llm(store, category_ids)
         if items_data == "No memory items available.":
             return []
 
@@ -970,7 +997,7 @@ class RetrieveMixin:
 
         client = llm_client or self._get_llm_client()
         llm_response = await client.summarize(prompt, system_prompt=None)
-        return self._parse_llm_item_response(llm_response, ctx.store)
+        return self._parse_llm_item_response(llm_response, store)
 
     async def _llm_rank_resources(
         self,
@@ -978,7 +1005,8 @@ class RetrieveMixin:
         top_k: int,
         category_hits: list[dict[str, Any]],
         item_hits: list[dict[str, Any]],
-        ctx: _ScopeContext,
+        ctx: Context,
+        store: InMemoryStore,
         llm_client: Any | None = None,
     ) -> list[dict[str, Any]]:
         """Use LLM to rank resources related to the context"""
@@ -987,7 +1015,7 @@ class RetrieveMixin:
         if not item_ids:
             return []
 
-        resources_data = self._format_resources_for_llm(ctx.store, item_ids)
+        resources_data = self._format_resources_for_llm(store, item_ids)
         if resources_data == "No resources available.":
             return []
 
@@ -1010,7 +1038,7 @@ class RetrieveMixin:
 
         client = llm_client or self._get_llm_client()
         llm_response = await client.summarize(prompt, system_prompt=None)
-        return self._parse_llm_resource_response(llm_response, ctx.store)
+        return self._parse_llm_resource_response(llm_response, store)
 
     def _parse_llm_category_response(self, raw_response: str, store: InMemoryStore) -> list[dict[str, Any]]:
         """Parse LLM category ranking response"""

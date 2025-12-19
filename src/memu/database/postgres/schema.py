@@ -30,9 +30,9 @@ except ImportError as exc:  # pragma: no cover - optional dependency
 else:
     _sqlalchemy_import_error = None
 
-try:  # Optional pgvector integration
-    from pgvector.sqlalchemy import Vector  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
+try:
+    from pgvector.sqlalchemy import Vector
+except ImportError:
     Vector = None
 
 

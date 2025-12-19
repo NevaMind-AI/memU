@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel
 
-from memu.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
+from memu.database.inmemory.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
 from memu.prompts.category_summary import CATEGORY_SUMMARY_PROMPT
 from memu.prompts.memory_type import DEFAULT_MEMORY_TYPES
 from memu.prompts.memory_type import PROMPTS as MEMORY_TYPE_PROMPTS
@@ -23,22 +23,22 @@ from memu.workflow.step import WorkflowState, WorkflowStep
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from memu.app.scope import ScopeSchema
-    from memu.app.service import _ScopeContext
+    from memu.app.service import Context
     from memu.app.settings import MemorizeConfig
     from memu.blob.local_fs import LocalFS
+    from memu.database.inmemory.repo import InMemoryStore
 
 
 class MemorizeMixin:
     if TYPE_CHECKING:
-        scope_schema: ScopeSchema
         memorize_config: MemorizeConfig
-        default_scope: BaseModel
+        default_scope: Mapping[str, Any]
         category_configs: list[dict[str, str]]
         _category_prompt_str: str
         fs: LocalFS
         _run_workflow: Callable[..., Awaitable[WorkflowState]]
-        _get_scope_context: Callable[[BaseModel, BaseModel | None], _ScopeContext]
+        _get_scope_context: Callable[[Mapping[str, Any], BaseModel | None], tuple[Context, InMemoryStore]]
+        _scope_dict: Callable[[BaseModel | Mapping[str, Any] | None], dict[str, Any]]
         _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
         _get_llm_client: Callable[..., Any]
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
@@ -55,9 +55,9 @@ class MemorizeMixin:
         scope: BaseModel | Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         scope_input = user or scope or self.default_scope
-        normalized_scope = self.scope_schema.normalize_scope(scope_input)
-        ctx = self._get_scope_context(normalized_scope, user)
-        await self._ensure_categories_ready(ctx)
+        scope_payload = self._scope_dict(scope_input)
+        ctx, store = self._get_scope_context(scope_payload, user)
+        await self._ensure_categories_ready(ctx, store)
 
         memory_types = self._resolve_memory_types()
         base_prompt = self._resolve_summary_prompt(modality, summary_prompt)
@@ -70,8 +70,9 @@ class MemorizeMixin:
             "base_prompt": base_prompt,
             "categories_prompt_str": self._category_prompt_str,
             "ctx": ctx,
+            "store": store,
             "category_ids": list(ctx.category_ids),
-            "scope": normalized_scope.model_dump(),
+            "scope": scope_payload,
         }
 
         result = await self._run_workflow("memorize", state)
@@ -126,7 +127,7 @@ class MemorizeMixin:
                 step_id="categorize_items",
                 role="categorize",
                 handler=self._memorize_categorize_items,
-                requires={"resource_plans", "ctx", "local_path", "modality"},
+                requires={"resource_plans", "ctx", "store", "local_path", "modality"},
                 produces={"resources", "items", "relations", "category_updates"},
                 capabilities={"db", "vector"},
             ),
@@ -134,7 +135,7 @@ class MemorizeMixin:
                 step_id="persist_index",
                 role="persist",
                 handler=self._memorize_persist_and_index,
-                requires={"category_updates", "ctx"},
+                requires={"category_updates", "ctx", "store"},
                 produces={"categories"},
                 capabilities={"db", "llm"},
             ),
@@ -142,7 +143,7 @@ class MemorizeMixin:
                 step_id="build_response",
                 role="emit",
                 handler=self._memorize_build_response,
-                requires={"resources", "items", "relations", "ctx", "category_ids"},
+                requires={"resources", "items", "relations", "ctx", "store", "category_ids"},
                 produces={"response"},
                 capabilities=set(),
             ),
@@ -206,6 +207,7 @@ class MemorizeMixin:
     async def _memorize_categorize_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         llm_client = self._get_step_llm_client(step_context)
         ctx = state["ctx"]
+        store = state["store"]
         modality = state["modality"]
         local_path = state["local_path"]
         resources: list[Resource] = []
@@ -219,7 +221,7 @@ class MemorizeMixin:
                 modality=modality,
                 local_path=local_path,
                 caption=plan.get("caption"),
-                ctx=ctx,
+                store=store,
                 embed_client=llm_client,
             )
             resources.append(res)
@@ -232,6 +234,7 @@ class MemorizeMixin:
                 resource_id=res.id,
                 structured_entries=entries,
                 ctx=ctx,
+                store=store,
                 embed_client=llm_client,
             )
             items.extend(mem_items)
@@ -252,17 +255,19 @@ class MemorizeMixin:
         await self._update_category_summaries(
             state.get("category_updates", {}),
             ctx=state["ctx"],
+            store=state["store"],
             llm_client=llm_client,
         )
         return state
 
     def _memorize_build_response(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         ctx = state["ctx"]
+        store = state["store"]
         resources = [self._model_dump_without_embeddings(r) for r in state.get("resources", [])]
         items = [self._model_dump_without_embeddings(item) for item in state.get("items", [])]
         relations = [rel.model_dump() for rel in state.get("relations", [])]
         category_ids = state.get("category_ids") or list(ctx.category_ids)
-        categories = [self._model_dump_without_embeddings(ctx.store.categories[c]) for c in category_ids]
+        categories = [self._model_dump_without_embeddings(store.categories[c]) for c in category_ids]
 
         if len(resources) == 1:
             response = {
@@ -313,10 +318,10 @@ class MemorizeMixin:
         modality: str,
         local_path: str,
         caption: str | None,
-        ctx: _ScopeContext,
+        store: InMemoryStore,
         embed_client: Any | None = None,
     ) -> Resource:
-        res = ctx.store.create_resource(url=resource_url, modality=modality, local_path=local_path)
+        res = store.create_resource(url=resource_url, modality=modality, local_path=local_path)
         if caption:
             caption_text = caption.strip()
             if caption_text:
@@ -497,7 +502,8 @@ class MemorizeMixin:
         *,
         resource_id: str,
         structured_entries: list[tuple[MemoryType, str, list[str]]],
-        ctx: _ScopeContext,
+        ctx: Context,
+        store: InMemoryStore,
         embed_client: Any | None = None,
     ) -> tuple[list[MemoryItem], list[CategoryItem], dict[str, list[str]]]:
         summary_payloads = [content for _, content, _ in structured_entries]
@@ -508,7 +514,7 @@ class MemorizeMixin:
         category_memory_updates: dict[str, list[str]] = {}
 
         for (memory_type, summary_text, cat_names), emb in zip(structured_entries, item_embeddings, strict=True):
-            item = ctx.store.create_item(
+            item = store.create_item(
                 resource_id=resource_id,
                 memory_type=memory_type,
                 summary=summary_text,
@@ -517,12 +523,12 @@ class MemorizeMixin:
             items.append(item)
             mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
             for cid in mapped_cat_ids:
-                rels.append(ctx.store.link_item_category(item.id, cid))
+                rels.append(store.link_item_category(item.id, cid))
                 category_memory_updates.setdefault(cid, []).append(summary_text)
 
         return items, rels, category_memory_updates
 
-    def _start_category_initialization(self, ctx: _ScopeContext) -> None:
+    def _start_category_initialization(self, ctx: Context, store: InMemoryStore) -> None:
         if ctx.categories_ready:
             return
         try:
@@ -530,20 +536,20 @@ class MemorizeMixin:
         except RuntimeError:
             loop = None
         if loop:
-            ctx.category_init_task = loop.create_task(self._initialize_categories(ctx))
+            ctx.category_init_task = loop.create_task(self._initialize_categories(ctx, store))
         else:
-            asyncio.run(self._initialize_categories(ctx))
+            asyncio.run(self._initialize_categories(ctx, store))
 
-    async def _ensure_categories_ready(self, ctx: _ScopeContext) -> None:
+    async def _ensure_categories_ready(self, ctx: Context, store: InMemoryStore) -> None:
         if ctx.categories_ready:
             return
         if ctx.category_init_task:
             await ctx.category_init_task
             ctx.category_init_task = None
             return
-        await self._initialize_categories(ctx)
+        await self._initialize_categories(ctx, store)
 
-    async def _initialize_categories(self, ctx: _ScopeContext) -> None:
+    async def _initialize_categories(self, ctx: Context, store: InMemoryStore) -> None:
         if ctx.categories_ready:
             return
         if not self.category_configs:
@@ -556,7 +562,7 @@ class MemorizeMixin:
         for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
             name = (cfg.get("name") or "").strip() or "Untitled"
             description = (cfg.get("description") or "").strip()
-            cat = ctx.store.get_or_create_category(name=name, description=description, embedding=vec)
+            cat = store.get_or_create_category(name=name, description=description, embedding=vec)
             ctx.category_ids.append(cat.id)
             ctx.category_name_to_id[name.lower()] = cat.id
         ctx.categories_ready = True
@@ -567,7 +573,7 @@ class MemorizeMixin:
         desc = (cat.get("description") or "").strip()
         return f"{name}: {desc}" if desc else name
 
-    def _map_category_names_to_ids(self, names: list[str], ctx: _ScopeContext) -> list[str]:
+    def _map_category_names_to_ids(self, names: list[str], ctx: Context) -> list[str]:
         if not names:
             return []
         mapped: list[str] = []
@@ -874,7 +880,8 @@ Summary:"""
     async def _update_category_summaries(
         self,
         updates: dict[str, list[str]],
-        ctx: _ScopeContext,
+        ctx: Context,
+        store: InMemoryStore,
         llm_client: Any | None = None,
     ) -> None:
         if not updates:
@@ -883,7 +890,7 @@ Summary:"""
         target_ids: list[str] = []
         client = llm_client or self._get_llm_client()
         for cid, memories in updates.items():
-            cat = ctx.store.categories.get(cid)
+            cat = store.categories.get(cid)
             if not cat or not memories:
                 continue
             prompt = self._build_category_summary_prompt(category=cat, new_memories=memories)
@@ -893,7 +900,7 @@ Summary:"""
             return
         summaries = await asyncio.gather(*tasks)
         for cid, summary in zip(target_ids, summaries, strict=True):
-            cat = ctx.store.categories.get(cid)
+            cat = store.categories.get(cid)
             if not cat:
                 continue
             cat.summary = summary.strip()
