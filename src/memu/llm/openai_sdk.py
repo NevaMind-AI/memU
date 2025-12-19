@@ -1,7 +1,7 @@
 import base64
 import logging
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from openai import AsyncOpenAI
 from openai.types.chat import (
@@ -18,10 +18,20 @@ logger = logging.getLogger(__name__)
 class OpenAISDKClient:
     """OpenAI LLM client that relies on the official Python SDK."""
 
-    def __init__(self, *, base_url: str, api_key: str, chat_model: str):
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        chat_model: str,
+        embed_model: str,
+        embed_batch_size: int = 25,
+    ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or ""
         self.chat_model = chat_model
+        self.embed_model = embed_model
+        self.embed_batch_size = embed_batch_size
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
 
     async def summarize(
@@ -112,6 +122,20 @@ class OpenAISDKClient:
         content = response.choices[0].message.content
         logger.debug("OpenAI vision response: %s", response)
         return content or ""
+
+    async def embed(self, inputs: list[str]) -> list[list[float]]:
+        """Create text embeddings via the official SDK."""
+        if len(inputs) <= self.embed_batch_size:
+            response = await self.client.embeddings.create(model=self.embed_model, input=inputs)
+            return [cast(list[float], d.embedding) for d in response.data]
+
+        all_embeddings: list[list[float]] = []
+        for idx in range(0, len(inputs), self.embed_batch_size):
+            batch = inputs[idx : idx + self.embed_batch_size]
+            response = await self.client.embeddings.create(model=self.embed_model, input=batch)
+            all_embeddings.extend([cast(list[float], d.embedding) for d in response.data])
+
+        return all_embeddings
 
     async def transcribe(
         self,

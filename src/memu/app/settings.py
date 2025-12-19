@@ -1,6 +1,6 @@
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, BeforeValidator, Field
+from pydantic import BaseModel, BeforeValidator, Field, RootModel, StringConstraints, model_validator
 
 from memu.prompts.memory_type import DEFAULT_MEMORY_TYPES
 from memu.prompts.memory_type import PROMPTS as DEFAULT_MEMORY_TYPE_PROMPTS
@@ -54,27 +54,13 @@ class LLMConfig(BaseModel):
         default_factory=dict,
         description="Optional overrides for HTTP endpoints (keys: 'chat'/'summary').",
     )
-
-
-class EmbeddingConfig(BaseModel):
-    provider: str = Field(
-        default="openai",
-        description="Identifier for the embedding provider implementation.",
+    embed_model: str = Field(
+        default="text-embedding-3-small",
+        description="Default embedding model used for vectorization.",
     )
-    base_url: str = Field(default="https://api.openai.com/v1")
-    api_key: str = Field(default="OPENAI_API_KEY")
-    embed_model: str = Field(default="text-embedding-3-small")
-    client_backend: str = Field(
-        default="sdk",
-        description="Which embedding client backend to use: 'httpx' (httpx) or 'sdk' (official OpenAI).",
-    )
-    batch_size: int = Field(
+    embed_batch_size: int = Field(
         default=25,
-        description="Maximum batch size for embedding API calls. Some providers have limits (e.g., Bailian/DashScope: 10).",
-    )
-    endpoint_overrides: dict[str, str] = Field(
-        default_factory=dict,
-        description="Optional overrides for HTTP endpoints (keys: 'embeddings'/'embed').",
+        description="Maximum batch size for embedding API calls (used by SDK client backends).",
     )
 
 
@@ -85,6 +71,8 @@ class BlobConfig(BaseModel):
 
 class DatabaseConfig(BaseModel):
     provider: str = Field(default="memory")
+    dsn: str | None = Field(default=None, description="Connection string used for Postgres metadata/vector stores.")
+    pool_size: int = Field(default=5, description="Max connections for database-backed providers.")
 
 
 class RetrieveConfig(BaseModel):
@@ -135,3 +123,84 @@ class DefaultUserModel(BaseModel):
 
 class UserConfig(BaseModel):
     model: type[BaseModel] = Field(default=DefaultUserModel)
+
+
+class DefaultScopeModel(BaseModel):
+    project_id: str = Field(
+        default="default_project",
+        description="Project identifier used as the default boundary field.",
+    )
+    agent_id: str | None = Field(
+        default=None,
+        description="Optional agent identifier for multi-agent scopes.",
+    )
+
+
+class ScopeConfig(BaseModel):
+    model: type[BaseModel] = Field(default=DefaultScopeModel)
+    boundary_fields: list[str] = Field(default_factory=lambda: ["project_id"])
+    ddl_mode: Annotated[Literal["create", "validate"], Normalize] = "create"
+    default_scope: dict[str, Any] | None = Field(
+        default_factory=lambda: {"project_id": "default_project"},
+        description="Fallback scope payload used when none is provided.",
+    )
+    max_scope_combinations: int = Field(
+        default=25,
+        description="Maximum expansion for cross-scope selectors.",
+    )
+    allow_boundary_wildcard: bool = Field(
+        default=False,
+        description="Allow wildcard on boundary fields when performing cross-scope retrieval.",
+    )
+
+
+Key = Annotated[str, StringConstraints(min_length=1)]
+
+
+class LLMProfilesConfig(RootModel[dict[Key, LLMConfig]]):
+    root: dict[str, LLMConfig] = Field(default_factory=lambda: {"default": LLMConfig()})
+
+    @model_validator(mode="before")
+    @classmethod
+    def ensure_default(cls, data: Any) -> Any:
+        if data is None:
+            return {"default": LLMConfig()}
+        if isinstance(data, dict) and "default" not in data:
+            data = dict(data)
+            data["default"] = LLMConfig()
+        return data
+
+    @property
+    def profiles(self) -> dict[str, LLMConfig]:
+        return self.root
+
+    @property
+    def default(self) -> str:
+        return "default"
+
+
+class MetadataStoreConfig(BaseModel):
+    provider: Annotated[Literal["memory", "sqlite", "postgres"], Normalize] = "memory"
+    ddl_mode: Annotated[Literal["create", "validate"], Normalize] = "create"
+    dsn: str | None = Field(default=None, description="Postgres connection string when provider=postgres.")
+
+
+class VectorIndexConfig(BaseModel):
+    provider: Annotated[Literal["bruteforce", "pgvector", "none"], Normalize] = "bruteforce"
+    dsn: str | None = Field(default=None, description="Postgres connection string when provider=pgvector.")
+
+
+class StorageProvidersConfig(BaseModel):
+    metadata_store: MetadataStoreConfig = Field(default_factory=MetadataStoreConfig)
+    vector_index: VectorIndexConfig | None = Field(default=None)
+
+    def model_post_init(self, __context: Any) -> None:
+        if self.vector_index is None:
+            if self.metadata_store.provider == "postgres":
+                self.vector_index = VectorIndexConfig(provider="pgvector", dsn=self.metadata_store.dsn)
+            elif self.metadata_store.provider == "memory":
+                self.vector_index = VectorIndexConfig(provider="bruteforce")
+            else:
+                self.vector_index = VectorIndexConfig(provider="bruteforce")
+        elif self.vector_index.provider == "pgvector" and self.vector_index.dsn is None:
+            self.vector_index = self.vector_index.model_copy(update={"dsn": self.metadata_store.dsn})

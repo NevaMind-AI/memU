@@ -22,6 +22,10 @@ dependencies = [
     "numpy>=2.3.4",
     "openai>=2.8.0",
     "pydantic>=2.12.4",
+    "sqlmodel>=0.0.21",
+    "sqlalchemy>=2.0.36",
+    "alembic>=1.14.0",
+    "pgvector>=0.3.4",
 ]
 
 [build-system]

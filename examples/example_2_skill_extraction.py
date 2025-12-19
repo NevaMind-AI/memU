@@ -208,10 +208,6 @@ async def main():
             "api_key": api_key,
             "chat_model": "gpt-4o-mini",
         },
-        embedding_config={
-            "api_key": api_key,
-            "embed_model": "text-embedding-3-small",
-        },
         memorize_config=memorize_config,
     )
 

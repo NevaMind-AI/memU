@@ -123,7 +123,6 @@ async def main():
     # Initialize service with RAG method
     service_rag = MemoryService(
         llm_config={"api_key": api_key},
-        embedding_config={"api_key": api_key},
         retrieve_config={"method": "rag"}
     )
 
@@ -146,7 +145,6 @@ async def main():
     # Initialize service with LLM method (reuse same memory store)
     service_llm = MemoryService(
         llm_config={"api_key": api_key},
-        embedding_config={"api_key": api_key},
         retrieve_config={"method": "llm"}
     )
     service_llm.store = service_rag.store  # Reuse memory store
