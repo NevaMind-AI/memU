@@ -46,7 +46,7 @@ class PipelineManager:
 
     def build(self, name: str) -> list[WorkflowStep]:
         revision = self._current_revision(name)
-        return copy.deepcopy(revision.steps)
+        return [step.copy() for step in revision.steps]
 
     def config_step(self, name: str, step_id: str, configs: dict[str, Any]) -> int:
         def mutator(steps: list[WorkflowStep]) -> None:
@@ -107,7 +107,7 @@ class PipelineManager:
 
     def _mutate(self, name: str, mutator: Any) -> int:
         revision = self._current_revision(name)
-        steps = copy.deepcopy(revision.steps)
+        steps = [step.copy() for step in revision.steps]
         metadata = copy.deepcopy(revision.metadata)
         mutator(steps)
         self._validate_steps(steps, initial_state_keys=metadata.get("initial_state_keys"))
