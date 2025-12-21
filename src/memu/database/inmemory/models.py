@@ -14,6 +14,7 @@ class Resource(BaseModel):
     local_path: str
     caption: str | None = None
     embedding: list[float] | None = None
+    updated_at: float | None = None
 
 
 class MemoryItem(BaseModel):
@@ -22,6 +23,7 @@ class MemoryItem(BaseModel):
     memory_type: MemoryType
     summary: str
     embedding: list[float]
+    updated_at: float | None = None
 
 
 class MemoryCategory(BaseModel):
@@ -30,6 +32,7 @@ class MemoryCategory(BaseModel):
     description: str
     embedding: list[float] | None = None
     summary: str | None = None
+    updated_at: float | None = None
 
 
 class CategoryItem(BaseModel):
@@ -54,7 +57,8 @@ def build_memory_model(user_model: type[BaseModel], model: type[BaseModel]) -> t
 
     combined_name = f"{user_model.__name__}{model.__name__}"
     base_name = f"{combined_name}Base"
-    combined_base = type(base_name, (user_model, model, BaseModel), {"__module__": __name__})
+    # Both user_model and model already inherit from BaseModel, so no need to include it again
+    combined_base = type(base_name, (user_model, model), {"__module__": __name__})
     return create_model(combined_name, __base__=combined_base, __module__=__name__)
 
 

@@ -77,11 +77,14 @@ async def main():
         msg = "Please set OPENAI_API_KEY environment variable"
         raise ValueError(msg)
 
-    # Initialize service with OpenAI
+    # Initialize service with OpenAI using llm_profiles
+    # The "default" profile is required and used as the primary LLM configuration
     service = MemoryService(
-        llm_config={
-            "api_key": api_key,
-            "chat_model": "gpt-4o-mini",
+        llm_profiles={
+            "default": {
+                "api_key": api_key,
+                "chat_model": "gpt-4o-mini",
+            },
         },
     )
 
@@ -95,6 +98,7 @@ async def main():
     # Process each conversation
     print("\nProcessing conversations...")
     total_items = 0
+    categories = []
     for conv_file in conversation_files:
         if not os.path.exists(conv_file):
             continue
@@ -102,11 +106,10 @@ async def main():
         try:
             result = await service.memorize(resource_url=conv_file, modality="conversation")
             total_items += len(result.get("items", []))
+            # Categories are returned in the result and updated after each memorize call
+            categories = result.get("categories", [])
         except Exception as e:
             print(f"Error: {e}")
-
-    # Extract and serialize categories
-    categories = [cat.model_dump() for cat in service.store.categories.values()]
 
     # Write to output files
     output_dir = "examples/output/conversation_example"

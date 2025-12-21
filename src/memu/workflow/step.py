@@ -21,6 +21,19 @@ class WorkflowStep:
     capabilities: set[str] = field(default_factory=set)
     config: dict[str, Any] = field(default_factory=dict)
 
+    def copy(self) -> "WorkflowStep":
+        """Create a shallow copy with copied mutable fields but shared handler."""
+        return WorkflowStep(
+            step_id=self.step_id,
+            role=self.role,
+            handler=self.handler,  # Keep reference, don't copy
+            description=self.description,
+            requires=set(self.requires),
+            produces=set(self.produces),
+            capabilities=set(self.capabilities),
+            config=dict(self.config),
+        )
+
     async def run(self, state: WorkflowState, context: WorkflowContext) -> WorkflowState:
         result = self.handler(state, context)
         if inspect.isawaitable(result):

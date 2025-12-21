@@ -86,10 +86,14 @@ async def main():
         {"name": "visual_diagrams", "description": "Visual concepts, diagrams, charts, and illustrations from images"},
     ]
 
+    # Initialize service with OpenAI using llm_profiles
+    # The "default" profile is required and used as the primary LLM configuration
     service = MemoryService(
-        llm_config={
-            "api_key": api_key,
-            "chat_model": "gpt-4o-mini",
+        llm_profiles={
+            "default": {
+                "api_key": api_key,
+                "chat_model": "gpt-4o-mini",
+            },
         },
         memorize_config={"memory_categories": multimodal_categories},
     )
@@ -104,6 +108,7 @@ async def main():
     # Process each resource
     print("\nProcessing resources...")
     total_items = 0
+    categories = []
     for resource_file, modality in resources:
         if not os.path.exists(resource_file):
             continue
@@ -111,11 +116,10 @@ async def main():
         try:
             result = await service.memorize(resource_url=resource_file, modality=modality)
             total_items += len(result.get("items", []))
+            # Categories are returned in the result and updated after each memorize call
+            categories = result.get("categories", [])
         except Exception as e:
             print(f"Error: {e}")
-
-    # Extract and serialize categories
-    categories = [cat.model_dump() for cat in service.store.categories.values()]
 
     # Write to output files
     output_dir = "examples/output/multimodal_example"
