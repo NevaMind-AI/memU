@@ -21,7 +21,7 @@ class WorkflowStep:
     capabilities: set[str] = field(default_factory=set)
     config: dict[str, Any] = field(default_factory=dict)
 
-    def copy(self) -> "WorkflowStep":
+    def copy(self) -> WorkflowStep:
         """Create a shallow copy with copied mutable fields but shared handler."""
         return WorkflowStep(
             step_id=self.step_id,

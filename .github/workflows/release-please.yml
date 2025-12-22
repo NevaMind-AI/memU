@@ -32,7 +32,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-15-intel, macos-latest, windows-latest]
-        python-version: ["3.14"]
+        python-version: ["3.13"]
         include:
           - os: ubuntu-latest
             label: linux-x86_64
@@ -81,7 +81,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.14"
+          python-version: "3.13"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

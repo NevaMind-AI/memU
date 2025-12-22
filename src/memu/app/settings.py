@@ -125,6 +125,9 @@ Key = Annotated[str, StringConstraints(min_length=1)]
 class LLMProfilesConfig(RootModel[dict[Key, LLMConfig]]):
     root: dict[str, LLMConfig] = Field(default_factory=lambda: {"default": LLMConfig()})
 
+    def get(self, key: str, default: LLMConfig | None = None) -> LLMConfig | None:
+        return self.root.get(key, default)
+
     @model_validator(mode="before")
     @classmethod
     def ensure_default(cls, data: Any) -> Any:

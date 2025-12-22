@@ -22,7 +22,9 @@ src_path = os.path.abspath("src")
 sys.path.insert(0, src_path)
 
 
-async def generate_skill_md(all_skills, service, output_file, attempt_number, total_attempts, categories=None, is_final=False):
+async def generate_skill_md(
+    all_skills, service, output_file, attempt_number, total_attempts, categories=None, is_final=False
+):
     """
     Use LLM to generate a concise task execution guide (skill.md).
 
@@ -37,9 +39,7 @@ async def generate_skill_md(all_skills, service, output_file, attempt_number, to
     # Get category summaries if available
     categories_text = ""
     if categories:
-        categories_with_content = [
-            cat for cat in categories if cat.get("summary") and cat.get("summary").strip()
-        ]
+        categories_with_content = [cat for cat in categories if cat.get("summary") and cat.get("summary").strip()]
         if categories_with_content:
             categories_text = "\n\n".join([
                 f"**{cat.get('name', 'unknown')}**:\n{cat.get('summary', '')}" for cat in categories_with_content

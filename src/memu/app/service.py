@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
@@ -20,8 +19,8 @@ from memu.app.settings import (
     UserConfig,
 )
 from memu.blob.local_fs import LocalFS
-from memu.database.factory import init_database_layer
-from memu.database.inmemory.repo import InMemoryStore
+from memu.database.factory import build_database
+from memu.database.interfaces import Database
 from memu.llm.http_client import HTTPLLMClient
 from memu.workflow.pipeline import PipelineManager
 from memu.workflow.runner import WorkflowRunner, resolve_workflow_runner
@@ -53,25 +52,23 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         self.llm_profiles = self._validate_config(llm_profiles, LLMProfilesConfig)
         self.user_config = self._validate_config(user_config, UserConfig)
         self.user_model = self.user_config.model
-        self.llm_config = self._validate_config(
-            self.llm_profiles.profiles.get(self.llm_profiles.default), LLMConfig
-        )
+        self.llm_config = self._validate_config(self.llm_profiles.profiles.get(self.llm_profiles.default), LLMConfig)
         self.blob_config = self._validate_config(blob_config, BlobConfig)
         self.storage_providers = self._validate_config(storage_providers, StorageProvidersConfig)
         self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
-        self.default_scope: dict[str, Any] = {}
-        self.database = init_database_layer(
-            user_model=self.user_model,
-            storage_providers=self.storage_providers,
-        )
+
         self.fs = LocalFS(self.blob_config.resources_dir)
         self.category_configs: list[dict[str, str]] = list(self.memorize_config.memory_categories or [])
         self._category_prompt_str = self._format_categories_for_prompt(self.category_configs)
 
-        self._scope_contexts: dict[str, Context] = {}
-        self._stores: dict[str, InMemoryStore] = {}
-        self._get_scope_context(self.default_scope, None)
+        self._context = Context(categories_ready=not bool(self.category_configs))
+
+        self.database: Database = build_database(
+            storage_providers=self.storage_providers,
+            user_model=self.user_model,
+        )
+        self._start_category_initialization(self._context, self.database)
 
         # Initialize client caches (lazy creation on first use)
         self._llm_clients: dict[str, Any] = {}
@@ -153,39 +150,11 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         profile = self._llm_profile_from_context(step_context)
         return self._get_llm_client(profile)
 
-    def _scope_dict(self, scope: BaseModel | Mapping[str, Any] | None) -> dict[str, Any]:
-        if scope is None:
-            return {}
-        if isinstance(scope, BaseModel):
-            return scope.model_dump()
-        if isinstance(scope, Mapping):
-            return dict(scope)
-        msg = f"Unsupported scope payload type: {type(scope)!r}"
-        raise TypeError(msg)
+    def _get_context(self) -> Context:
+        return self._context
 
-    def _scope_key(self, scope: Mapping[str, Any]) -> str:
-        return json.dumps(scope, sort_keys=True)
-
-    def _get_store(self, scope: Mapping[str, Any]) -> InMemoryStore:
-        key = self._scope_key(scope)
-        store = self._stores.get(key)
-        if store is None:
-            store = self.database.store_factory(key)
-            self._stores[key] = store
-        return store
-
-    def _create_scope_context(self, scope: Mapping[str, Any]) -> Context:
-        return Context(categories_ready=not bool(self.category_configs))
-
-    def _get_scope_context(self, scope: Mapping[str, Any], user: BaseModel | None) -> tuple[Context, InMemoryStore]:
-        key = self._scope_key(scope)
-        ctx = self._scope_contexts.get(key)
-        store = self._get_store(scope)
-        if ctx is None:
-            ctx = self._create_scope_context(scope)
-            self._scope_contexts[key] = ctx
-            self._start_category_initialization(ctx, store)
-        return ctx, store
+    def _get_database(self) -> Database:
+        return self.database
 
     def _provider_summary(self) -> dict[str, Any]:
         vector_provider = None
@@ -198,9 +167,6 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
                 "vector_index": vector_provider,
             },
         }
-
-    def _pipeline_revision_token(self) -> str:
-        return self._pipelines.revision_token()
 
     def _register_pipelines(self) -> None:
         memorize_initial_keys = {
@@ -257,12 +223,8 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
             return model_type()
         return model_type.model_validate(config)
 
-    def _refresh_pipeline_revision(self) -> None:
-        self.service_meta = self.service_meta.with_pipeline_revision(self._pipeline_revision_token())
-
     def configure_pipeline(self, *, step_id: str, configs: Mapping[str, Any], pipeline: str = "memorize") -> int:
         revision = self._pipelines.config_step(pipeline, step_id, dict(configs))
-        self._refresh_pipeline_revision()
         return revision
 
     def insert_step_after(
@@ -273,7 +235,6 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         pipeline: str = "memorize",
     ) -> int:
         revision = self._pipelines.insert_after(pipeline, target_step_id, new_step)
-        self._refresh_pipeline_revision()
         return revision
 
     def insert_step_before(
@@ -284,7 +245,6 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         pipeline: str = "memorize",
     ) -> int:
         revision = self._pipelines.insert_before(pipeline, target_step_id, new_step)
-        self._refresh_pipeline_revision()
         return revision
 
     def replace_step(
@@ -295,10 +255,8 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         pipeline: str = "memorize",
     ) -> int:
         revision = self._pipelines.replace_step(pipeline, target_step_id, new_step)
-        self._refresh_pipeline_revision()
         return revision
 
     def remove_step(self, *, target_step_id: str, pipeline: str = "memorize") -> int:
         revision = self._pipelines.remove_step(pipeline, target_step_id)
-        self._refresh_pipeline_revision()
         return revision

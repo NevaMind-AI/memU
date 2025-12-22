@@ -21,7 +21,7 @@ class VideoFrameExtractor:
         """Check if ffmpeg is available in the system."""
         try:
             result = cls._run_ffmpeg_command(["ffmpeg", "-version"], timeout=5, check=False)
-        except FileNotFoundError, subprocess.TimeoutExpired, ValueError:
+        except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
             return False
         else:
             return result.returncode == 0
