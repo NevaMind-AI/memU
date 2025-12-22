@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
+from typing import Any
 
 import pendulum
 
+from memu.database.inmemory.repositories.filter import matches_where
 from memu.database.inmemory.state import InMemoryState
 from memu.database.models import MemoryCategory
 from memu.database.repositories.memory_category import MemoryCategoryRepo as MemoryCategoryRepoProtocol
@@ -14,6 +17,11 @@ class InMemoryMemoryCategoryRepository(MemoryCategoryRepoProtocol):
         self._state = state
         self.memory_category_model = memory_category_model
         self.categories: dict[str, MemoryCategory] = self._state.categories
+
+    def list_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryCategory]:
+        if not where:
+            return dict(self.categories)
+        return {cid: cat for cid, cat in self.categories.items() if matches_where(cat, where)}
 
     def get_or_create_category(self, *, name: str, description: str, embedding: list[float]) -> MemoryCategory:
         for c in self.categories.values():

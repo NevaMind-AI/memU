@@ -52,7 +52,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         self.llm_profiles = self._validate_config(llm_profiles, LLMProfilesConfig)
         self.user_config = self._validate_config(user_config, UserConfig)
         self.user_model = self.user_config.model
-        self.llm_config = self._validate_config(self.llm_profiles.profiles.get(self.llm_profiles.default), LLMConfig)
+        self.llm_config = self._validate_config(self.llm_profiles.default, LLMConfig)
         self.blob_config = self._validate_config(blob_config, BlobConfig)
         self.storage_providers = self._validate_config(storage_providers, StorageProvidersConfig)
         self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
@@ -112,7 +112,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         """
         Lazily initialize and cache LLM clients per profile to avoid eager network setup.
         """
-        name = profile or self.llm_profiles.default
+        name = profile or "default"
         client = self._llm_clients.get(name)
         if client is not None:
             return client
@@ -179,8 +179,18 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
             "ctx",
             "store",
             "category_ids",
+            "user",
         }
-        retrieve_initial_keys = {"original_query", "context_queries", "ctx", "store", "top_k", "skip_rewrite", "method"}
+        retrieve_initial_keys = {
+            "original_query",
+            "context_queries",
+            "ctx",
+            "store",
+            "top_k",
+            "skip_rewrite",
+            "method",
+            "where",
+        }
         memo_workflow = self._build_memorize_workflow()
         self._pipelines.register("memorize", memo_workflow, initial_state_keys=memorize_initial_keys)
         rag_workflow = self._build_rag_retrieve_workflow()

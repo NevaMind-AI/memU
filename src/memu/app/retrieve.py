@@ -36,11 +36,12 @@ class RetrieveMixin:
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
         _extract_json_blob: Callable[[str], str]
         _escape_prompt_value: Callable[[str], str]
+        user_model: type[BaseModel]
 
     async def retrieve(
         self,
         queries: list[dict[str, Any]],
-        user: BaseModel | None = None,
+        **where: Any,
     ) -> dict[str, Any]:
         if not queries:
             raise ValueError("empty_queries")
@@ -48,6 +49,7 @@ class RetrieveMixin:
         store = self._get_database()
         original_query = self._extract_query_text(queries[-1])
         await self._ensure_categories_ready(ctx, store)
+        where_filters = self._normalize_where(where)
 
         context_queries_objs = queries[:-1] if len(queries) > 1 else []
 
@@ -61,6 +63,7 @@ class RetrieveMixin:
             "top_k": self.retrieve_config.top_k,
             "skip_rewrite": len(queries) == 1,
             "method": self.retrieve_config.method,
+            "where": where_filters,
         }
 
         result = await self._run_workflow(workflow_name, state)
@@ -69,6 +72,25 @@ class RetrieveMixin:
             msg = "Retrieve workflow failed to produce a response"
             raise RuntimeError(msg)
         return response
+
+    def _normalize_where(self, where: Mapping[str, Any] | None) -> dict[str, Any]:
+        """Validate and clean the `where` scope filters against the configured user model."""
+        if not where:
+            return {}
+
+        valid_fields = set(getattr(self.user_model, "model_fields", {}).keys())
+        cleaned: dict[str, Any] = {}
+
+        for raw_key, value in where.items():
+            if value is None:
+                continue
+            field = raw_key.split("__", 1)[0]
+            if field not in valid_fields:
+                msg = f"Unknown filter field '{field}' for current user scope"
+                raise ValueError(msg)
+            cleaned[raw_key] = value
+
+        return cleaned
 
     def _build_rag_retrieve_workflow(self) -> list[WorkflowStep]:
         steps = [
@@ -84,7 +106,7 @@ class RetrieveMixin:
                 step_id="route_category",
                 role="route_category",
                 handler=self._rag_route_category,
-                requires={"needs_retrieval", "active_query", "top_k", "ctx", "store"},
+                requires={"needs_retrieval", "active_query", "top_k", "ctx", "store", "where"},
                 produces={"category_hits", "category_summary_lookup", "query_vector"},
                 capabilities={"vector"},
             ),
@@ -92,7 +114,15 @@ class RetrieveMixin:
                 step_id="sufficiency_after_category",
                 role="sufficiency_check",
                 handler=self._rag_category_sufficiency,
-                requires={"needs_retrieval", "active_query", "context_queries", "category_hits", "ctx", "store"},
+                requires={
+                    "needs_retrieval",
+                    "active_query",
+                    "context_queries",
+                    "category_hits",
+                    "ctx",
+                    "store",
+                    "where",
+                },
                 produces={"next_step_query", "proceed_to_items", "query_vector"},
                 capabilities={"llm"},
             ),
@@ -105,6 +135,7 @@ class RetrieveMixin:
                     "proceed_to_items",
                     "ctx",
                     "store",
+                    "where",
                     "active_query",
                     "top_k",
                     "query_vector",
@@ -116,7 +147,15 @@ class RetrieveMixin:
                 step_id="sufficiency_after_items",
                 role="sufficiency_check",
                 handler=self._rag_item_sufficiency,
-                requires={"needs_retrieval", "active_query", "context_queries", "item_hits", "ctx", "store"},
+                requires={
+                    "needs_retrieval",
+                    "active_query",
+                    "context_queries",
+                    "item_hits",
+                    "ctx",
+                    "store",
+                    "where",
+                },
                 produces={"next_step_query", "proceed_to_resources", "query_vector"},
                 capabilities={"llm"},
             ),
@@ -129,6 +168,7 @@ class RetrieveMixin:
                     "proceed_to_resources",
                     "ctx",
                     "store",
+                    "where",
                     "active_query",
                     "top_k",
                     "query_vector",
@@ -140,7 +180,7 @@ class RetrieveMixin:
                 step_id="build_context",
                 role="build_context",
                 handler=self._rag_build_context,
-                requires={"needs_retrieval", "original_query", "rewritten_query", "ctx", "store"},
+                requires={"needs_retrieval", "original_query", "rewritten_query", "ctx", "store", "where"},
                 produces={"response"},
                 capabilities=set(),
             ),
@@ -177,6 +217,8 @@ class RetrieveMixin:
 
         llm_client = self._get_step_llm_client(step_context)
         store = state["store"]
+        where_filters = state.get("where") or {}
+        category_pool = store.memory_category_repo.list_categories(where_filters)
         qvec = (await llm_client.embed([state["active_query"]]))[0]
         hits, summary_lookup = await self._rank_categories_by_summary(
             qvec,
@@ -184,11 +226,13 @@ class RetrieveMixin:
             state["ctx"],
             store,
             embed_client=llm_client,
+            categories=category_pool,
         )
         state.update({
             "query_vector": qvec,
             "category_hits": hits,
             "category_summary_lookup": summary_lookup,
+            "category_pool": category_pool,
         })
         return state
 
@@ -198,13 +242,16 @@ class RetrieveMixin:
             return state
 
         retrieved_content = ""
+        store = state["store"]
+        where_filters = state.get("where") or {}
+        category_pool = state.get("category_pool") or store.memory_category_repo.list_categories(where_filters)
         hits = state.get("category_hits") or []
         if hits:
-            store = state["store"]
             retrieved_content = self._format_category_content(
                 hits,
                 state.get("category_summary_lookup", {}),
                 store,
+                categories=category_pool,
             )
 
         llm_client = self._get_step_llm_client(step_context)
@@ -227,12 +274,19 @@ class RetrieveMixin:
             return state
 
         store = state["store"]
+        where_filters = state.get("where") or {}
+        items_pool = store.memory_item_repo.list_items(where_filters)
         llm_client = self._get_step_llm_client(step_context)
         qvec = state.get("query_vector")
         if qvec is None:
             qvec = (await llm_client.embed([state["active_query"]]))[0]
             state["query_vector"] = qvec
-        state["item_hits"] = store.memory_item_repo.vector_search_items(qvec, state["top_k"])
+        state["item_hits"] = store.memory_item_repo.vector_search_items(
+            qvec,
+            state["top_k"],
+            where=where_filters,
+        )
+        state["item_pool"] = items_pool
         return state
 
     async def _rag_item_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
@@ -241,10 +295,12 @@ class RetrieveMixin:
             return state
 
         store = state["store"]
+        where_filters = state.get("where") or {}
+        items_pool = state.get("item_pool") or store.memory_item_repo.list_items(where_filters)
         retrieved_content = ""
         hits = state.get("item_hits") or []
         if hits:
-            retrieved_content = self._format_item_content(hits, store)
+            retrieved_content = self._format_item_content(hits, store, items=items_pool)
 
         llm_client = self._get_step_llm_client(step_context)
         needs_more, rewritten_query = await self._decide_if_retrieval_needed(
@@ -266,7 +322,10 @@ class RetrieveMixin:
             return state
 
         store = state["store"]
-        corpus = self._resource_caption_corpus(store)
+        where_filters = state.get("where") or {}
+        resource_pool = store.resource_repo.list_resources(where_filters)
+        state["resource_pool"] = resource_pool
+        corpus = self._resource_caption_corpus(store, resources=resource_pool)
         if not corpus:
             state["resource_hits"] = []
             return state
@@ -291,12 +350,18 @@ class RetrieveMixin:
         }
         if state.get("needs_retrieval"):
             store = state["store"]
+            where_filters = state.get("where") or {}
+            categories_pool = state.get("category_pool") or store.memory_category_repo.list_categories(where_filters)
+            items_pool = state.get("item_pool") or store.memory_item_repo.list_items(where_filters)
+            resources_pool = state.get("resource_pool") or store.resource_repo.list_resources(where_filters)
             response["categories"] = self._materialize_hits(
-                state.get("category_hits", []), store.memory_category_repo.categories
+                state.get("category_hits", []),
+                categories_pool,
             )
-            response["items"] = self._materialize_hits(state.get("item_hits", []), store.memory_item_repo.items)
+            response["items"] = self._materialize_hits(state.get("item_hits", []), items_pool)
             response["resources"] = self._materialize_hits(
-                state.get("resource_hits", []), store.resource_repo.resources
+                state.get("resource_hits", []),
+                resources_pool,
             )
         state["response"] = response
         return state
@@ -315,7 +380,7 @@ class RetrieveMixin:
                 step_id="route_category",
                 role="route_category",
                 handler=self._llm_route_category,
-                requires={"needs_retrieval", "active_query", "top_k", "ctx", "store"},
+                requires={"needs_retrieval", "active_query", "top_k", "ctx", "store", "where"},
                 produces={"category_hits"},
                 capabilities={"llm"},
             ),
@@ -337,6 +402,7 @@ class RetrieveMixin:
                     "top_k",
                     "ctx",
                     "store",
+                    "where",
                     "active_query",
                     "category_hits",
                 },
@@ -362,6 +428,7 @@ class RetrieveMixin:
                     "top_k",
                     "ctx",
                     "store",
+                    "where",
                     "item_hits",
                     "category_hits",
                 },
@@ -406,14 +473,18 @@ class RetrieveMixin:
             return state
         llm_client = self._get_step_llm_client(step_context)
         store = state["store"]
+        where_filters = state.get("where") or {}
+        category_pool = store.memory_category_repo.list_categories(where_filters)
         hits = await self._llm_rank_categories(
             state["active_query"],
             state["top_k"],
             state["ctx"],
             store,
             llm_client=llm_client,
+            categories=category_pool,
         )
         state["category_hits"] = hits
+        state["category_pool"] = category_pool
         return state
 
     async def _llm_category_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
@@ -443,9 +514,13 @@ class RetrieveMixin:
             state["item_hits"] = []
             return state
 
+        where_filters = state.get("where") or {}
         category_ids = [cat["id"] for cat in state.get("category_hits", [])]
         llm_client = self._get_step_llm_client(step_context)
         store = state["store"]
+        items_pool = store.memory_item_repo.list_items(where_filters)
+        relations = store.category_item_repo.list_relations(where_filters)
+        category_pool = state.get("category_pool") or store.memory_category_repo.list_categories(where_filters)
         state["item_hits"] = await self._llm_rank_items(
             state["active_query"],
             state["top_k"],
@@ -454,7 +529,12 @@ class RetrieveMixin:
             state["ctx"],
             store,
             llm_client=llm_client,
+            categories=category_pool,
+            items=items_pool,
+            relations=relations,
         )
+        state["item_pool"] = items_pool
+        state["relation_pool"] = relations
         return state
 
     async def _llm_item_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
@@ -486,6 +566,9 @@ class RetrieveMixin:
 
         llm_client = self._get_step_llm_client(step_context)
         store = state["store"]
+        where_filters = state.get("where") or {}
+        resource_pool = store.resource_repo.list_resources(where_filters)
+        items_pool = state.get("item_pool") or store.memory_item_repo.list_items(where_filters)
         state["resource_hits"] = await self._llm_rank_resources(
             state["active_query"],
             state["top_k"],
@@ -494,7 +577,10 @@ class RetrieveMixin:
             state["ctx"],
             store,
             llm_client=llm_client,
+            items=items_pool,
+            resources=resource_pool,
         )
+        state["resource_pool"] = resource_pool
         return state
 
     def _llm_build_context(self, state: WorkflowState, _: Any) -> WorkflowState:
@@ -521,8 +607,10 @@ class RetrieveMixin:
         ctx: Context,
         store: Database,
         embed_client: Any | None = None,
+        categories: Mapping[str, Any] | None = None,
     ) -> tuple[list[tuple[str, float]], dict[str, str]]:
-        entries = [(cid, cat.summary) for cid, cat in store.memory_category_repo.categories.items() if cat.summary]
+        category_pool = categories or store.memory_category_repo.categories
+        entries = [(cid, cat.summary) for cid, cat in category_pool.items() if cat.summary]
         if not entries:
             return [], {}
         summary_texts = [summary for _, summary in entries]
@@ -661,8 +749,13 @@ class RetrieveMixin:
         ctx: Context,
         store: Database,
         llm_client: Any | None = None,
+        where: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Embedding-based retrieval with query rewriting and judging at each tier"""
+        where_filters = self._normalize_where(where)
+        category_pool = store.memory_category_repo.list_categories(where_filters)
+        items_pool = store.memory_item_repo.list_items(where_filters)
+        resource_pool = store.resource_repo.list_resources(where_filters)
         client = llm_client or self._get_llm_client()
         current_query = query
         qvec = (await client.embed([current_query]))[0]
@@ -676,10 +769,13 @@ class RetrieveMixin:
             ctx,
             store,
             embed_client=client,
+            categories=category_pool,
         )
         if cat_hits:
-            response["categories"] = self._materialize_hits(cat_hits, store.memory_category_repo.categories)
-            content_sections.append(self._format_category_content(cat_hits, summary_lookup, store))
+            response["categories"] = self._materialize_hits(cat_hits, category_pool)
+            content_sections.append(
+                self._format_category_content(cat_hits, summary_lookup, store, categories=category_pool)
+            )
 
             needs_more, current_query = await self._decide_if_retrieval_needed(
                 current_query,
@@ -694,10 +790,10 @@ class RetrieveMixin:
             qvec = (await client.embed([current_query]))[0]
 
         # Tier 2: Items
-        item_hits = store.memory_item_repo.vector_search_items(qvec, top_k)
+        item_hits = store.memory_item_repo.vector_search_items(qvec, top_k, where=where_filters)
         if item_hits:
-            response["items"] = self._materialize_hits(item_hits, store.memory_item_repo.items)
-            content_sections.append(self._format_item_content(item_hits, store))
+            response["items"] = self._materialize_hits(item_hits, items_pool)
+            content_sections.append(self._format_item_content(item_hits, store, items=items_pool))
 
             needs_more, current_query = await self._decide_if_retrieval_needed(
                 current_query,
@@ -712,12 +808,12 @@ class RetrieveMixin:
             qvec = (await client.embed([current_query]))[0]
 
         # Tier 3: Resources
-        resource_corpus = self._resource_caption_corpus(store)
+        resource_corpus = self._resource_caption_corpus(store, resources=resource_pool)
         if resource_corpus:
             res_hits = cosine_topk(qvec, resource_corpus, k=top_k)
             if res_hits:
-                response["resources"] = self._materialize_hits(res_hits, store.resource_repo.resources)
-                content_sections.append(self._format_resource_content(res_hits, store))
+                response["resources"] = self._materialize_hits(res_hits, resource_pool)
+                content_sections.append(self._format_resource_content(res_hits, store, resources=resource_pool))
 
         return response
 
@@ -733,39 +829,53 @@ class RetrieveMixin:
         return out
 
     def _format_category_content(
-        self, hits: list[tuple[str, float]], summaries: dict[str, str], store: Database
+        self,
+        hits: list[tuple[str, float]],
+        summaries: dict[str, str],
+        store: Database,
+        categories: Mapping[str, Any] | None = None,
     ) -> str:
+        category_pool = categories or store.memory_category_repo.categories
         lines = []
         for cid, score in hits:
-            cat = store.memory_category_repo.categories.get(cid)
+            cat = category_pool.get(cid)
             if not cat:
                 continue
             summary = summaries.get(cid) or cat.summary or ""
             lines.append(f"Category: {cat.name}\nSummary: {summary}\nScore: {score:.3f}")
         return "\n\n".join(lines).strip()
 
-    def _format_item_content(self, hits: list[tuple[str, float]], store: Database) -> str:
+    def _format_item_content(
+        self, hits: list[tuple[str, float]], store: Database, items: Mapping[str, Any] | None = None
+    ) -> str:
+        item_pool = items or store.memory_item_repo.items
         lines = []
         for iid, score in hits:
-            item = store.memory_item_repo.items.get(iid)
+            item = item_pool.get(iid)
             if not item:
                 continue
             lines.append(f"Memory Item ({item.memory_type}): {item.summary}\nScore: {score:.3f}")
         return "\n\n".join(lines).strip()
 
-    def _format_resource_content(self, hits: list[tuple[str, float]], store: Database) -> str:
+    def _format_resource_content(
+        self, hits: list[tuple[str, float]], store: Database, resources: Mapping[str, Any] | None = None
+    ) -> str:
+        resource_pool = resources or store.resource_repo.resources
         lines = []
         for rid, score in hits:
-            res = store.resource_repo.resources.get(rid)
+            res = resource_pool.get(rid)
             if not res:
                 continue
             caption = res.caption or f"Resource {res.url}"
             lines.append(f"Resource: {caption}\nScore: {score:.3f}")
         return "\n\n".join(lines).strip()
 
-    def _resource_caption_corpus(self, store: Database) -> list[tuple[str, list[float]]]:
+    def _resource_caption_corpus(
+        self, store: Database, resources: Mapping[str, Any] | None = None
+    ) -> list[tuple[str, list[float]]]:
+        resource_pool = resources or store.resource_repo.resources
         corpus: list[tuple[str, list[float]]] = []
-        for rid, res in store.resource_repo.resources.items():
+        for rid, res in resource_pool.items():
             if res.embedding:
                 corpus.append((rid, res.embedding))
         return corpus
@@ -793,6 +903,7 @@ class RetrieveMixin:
         ctx: Context,
         store: Database,
         llm_client: Any | None = None,
+        where: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         LLM-based retrieval that uses language model to search and rank results
@@ -803,13 +914,25 @@ class RetrieveMixin:
         2. If needs more, search items from relevant categories, judge + rewrite
         3. If needs more, search resources related to context
         """
+        where_filters = self._normalize_where(where)
+        category_pool = store.memory_category_repo.list_categories(where_filters)
+        items_pool = store.memory_item_repo.list_items(where_filters)
+        relations = store.category_item_repo.list_relations(where_filters)
+        resource_pool = store.resource_repo.list_resources(where_filters)
         current_query = query
         client = llm_client or self._get_llm_client()
         response: dict[str, Any] = {"resources": [], "items": [], "categories": [], "next_step_query": None}
         content_sections: list[str] = []
 
         # Tier 1: Search and rank categories
-        category_hits = await self._llm_rank_categories(current_query, top_k, ctx, store, llm_client=client)
+        category_hits = await self._llm_rank_categories(
+            current_query,
+            top_k,
+            ctx,
+            store,
+            llm_client=client,
+            categories=category_pool,
+        )
         if category_hits:
             response["categories"] = category_hits
             content_sections.append(self._format_llm_category_content(category_hits))
@@ -834,6 +957,9 @@ class RetrieveMixin:
             ctx,
             store,
             llm_client=client,
+            categories=category_pool,
+            items=items_pool,
+            relations=relations,
         )
         if item_hits:
             response["items"] = item_hits
@@ -858,6 +984,8 @@ class RetrieveMixin:
             ctx,
             store,
             llm_client=client,
+            items=items_pool,
+            resources=resource_pool,
         )
         if resource_hits:
             response["resources"] = resource_hits
@@ -865,13 +993,16 @@ class RetrieveMixin:
 
         return response
 
-    def _format_categories_for_llm(self, store: Database, category_ids: list[str] | None = None) -> str:
+    def _format_categories_for_llm(
+        self,
+        store: Database,
+        category_ids: list[str] | None = None,
+        categories: Mapping[str, Any] | None = None,
+    ) -> str:
         """Format categories for LLM consumption"""
-        categories_to_format = store.memory_category_repo.categories
+        categories_to_format = categories or store.memory_category_repo.categories
         if category_ids:
-            categories_to_format = {
-                cid: cat for cid, cat in store.memory_category_repo.categories.items() if cid in category_ids
-            }
+            categories_to_format = {cid: cat for cid, cat in categories_to_format.items() if cid in category_ids}
 
         if not categories_to_format:
             return "No categories available."
@@ -888,21 +1019,29 @@ class RetrieveMixin:
 
         return "\n".join(lines)
 
-    def _format_items_for_llm(self, store: Database, category_ids: list[str] | None = None) -> str:
+    def _format_items_for_llm(
+        self,
+        store: Database,
+        category_ids: list[str] | None = None,
+        items: Mapping[str, Any] | None = None,
+        relations: Sequence[Any] | None = None,
+    ) -> str:
         """Format memory items for LLM consumption, optionally filtered by category"""
+        item_pool = items or store.memory_item_repo.items
+        relation_pool = relations or store.category_item_repo.relations
         items_to_format = []
         seen_item_ids = set()
 
         if category_ids:
             # Get items that belong to the specified categories
-            for rel in store.category_item_repo.relations:
+            for rel in relation_pool:
                 if rel.category_id in category_ids:
-                    item = store.memory_item_repo.items.get(rel.item_id)
+                    item = item_pool.get(rel.item_id)
                     if item and item.id not in seen_item_ids:
                         items_to_format.append(item)
                         seen_item_ids.add(item.id)
         else:
-            items_to_format = list(store.memory_item_repo.items.values())
+            items_to_format = list(item_pool.values())
 
         if not items_to_format:
             return "No memory items available."
@@ -916,20 +1055,24 @@ class RetrieveMixin:
 
         return "\n".join(lines)
 
-    def _format_resources_for_llm(self, store: Database, item_ids: list[str] | None = None) -> str:
+    def _format_resources_for_llm(
+        self,
+        store: Database,
+        item_ids: list[str] | None = None,
+        items: Mapping[str, Any] | None = None,
+        resources: Mapping[str, Any] | None = None,
+    ) -> str:
         """Format resources for LLM consumption, optionally filtered by related items"""
+        resource_pool = resources or store.resource_repo.resources
+        item_pool = items or store.memory_item_repo.items
         resources_to_format = []
 
         if item_ids:
             # Get resources that are related to the specified items
-            resource_ids = {
-                store.memory_item_repo.items[iid].resource_id for iid in item_ids if iid in store.memory_item_repo.items
-            }
-            resources_to_format = [
-                store.resource_repo.resources[rid] for rid in resource_ids if rid in store.resource_repo.resources
-            ]
+            resource_ids = {item_pool[iid].resource_id for iid in item_ids if iid in item_pool}
+            resources_to_format = [resource_pool[rid] for rid in resource_ids if rid in resource_pool]
         else:
-            resources_to_format = list(store.resource_repo.resources.values())
+            resources_to_format = list(resource_pool.values())
 
         if not resources_to_format:
             return "No resources available."
@@ -946,13 +1089,20 @@ class RetrieveMixin:
         return "\n".join(lines)
 
     async def _llm_rank_categories(
-        self, query: str, top_k: int, ctx: Context, store: Database, llm_client: Any | None = None
+        self,
+        query: str,
+        top_k: int,
+        ctx: Context,
+        store: Database,
+        llm_client: Any | None = None,
+        categories: Mapping[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Use LLM to rank categories based on query relevance"""
-        if not store.memory_category_repo.categories:
+        category_pool = categories or store.memory_category_repo.categories
+        if not category_pool:
             return []
 
-        categories_data = self._format_categories_for_llm(store)
+        categories_data = self._format_categories_for_llm(store, categories=category_pool)
         prompt = LLM_CATEGORY_RANKER_PROMPT.format(
             query=self._escape_prompt_value(query),
             top_k=top_k,
@@ -961,7 +1111,7 @@ class RetrieveMixin:
 
         client = llm_client or self._get_llm_client()
         llm_response = await client.summarize(prompt, system_prompt=None)
-        return self._parse_llm_category_response(llm_response, store)
+        return self._parse_llm_category_response(llm_response, store, categories=category_pool)
 
     async def _llm_rank_items(
         self,
@@ -972,13 +1122,17 @@ class RetrieveMixin:
         ctx: Context,
         store: Database,
         llm_client: Any | None = None,
+        categories: Mapping[str, Any] | None = None,
+        items: Mapping[str, Any] | None = None,
+        relations: Sequence[Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Use LLM to rank memory items from relevant categories"""
         if not category_ids:
             print("[LLM Rank Items] No category_ids provided")
             return []
 
-        items_data = self._format_items_for_llm(store, category_ids)
+        item_pool = items or store.memory_item_repo.items
+        items_data = self._format_items_for_llm(store, category_ids, items=item_pool, relations=relations)
         if items_data == "No memory items available.":
             return []
 
@@ -996,7 +1150,7 @@ class RetrieveMixin:
 
         client = llm_client or self._get_llm_client()
         llm_response = await client.summarize(prompt, system_prompt=None)
-        return self._parse_llm_item_response(llm_response, store)
+        return self._parse_llm_item_response(llm_response, store, items=item_pool)
 
     async def _llm_rank_resources(
         self,
@@ -1007,6 +1161,8 @@ class RetrieveMixin:
         ctx: Context,
         store: Database,
         llm_client: Any | None = None,
+        items: Mapping[str, Any] | None = None,
+        resources: Mapping[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Use LLM to rank resources related to the context"""
         # Get item IDs to filter resources
@@ -1014,7 +1170,9 @@ class RetrieveMixin:
         if not item_ids:
             return []
 
-        resources_data = self._format_resources_for_llm(store, item_ids)
+        item_pool = items or store.memory_item_repo.items
+        resource_pool = resources or store.resource_repo.resources
+        resources_data = self._format_resources_for_llm(store, item_ids, items=item_pool, resources=resource_pool)
         if resources_data == "No resources available.":
             return []
 
@@ -1037,10 +1195,13 @@ class RetrieveMixin:
 
         client = llm_client or self._get_llm_client()
         llm_response = await client.summarize(prompt, system_prompt=None)
-        return self._parse_llm_resource_response(llm_response, store)
+        return self._parse_llm_resource_response(llm_response, store, resources=resource_pool)
 
-    def _parse_llm_category_response(self, raw_response: str, store: Database) -> list[dict[str, Any]]:
+    def _parse_llm_category_response(
+        self, raw_response: str, store: Database, categories: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """Parse LLM category ranking response"""
+        category_pool = categories or store.memory_category_repo.categories
         results = []
         try:
             json_blob = self._extract_json_blob(raw_response)
@@ -1051,7 +1212,7 @@ class RetrieveMixin:
                 # Return categories in the order provided by LLM (already sorted by relevance)
                 for cat_id in category_ids:
                     if isinstance(cat_id, str):
-                        cat = store.memory_category_repo.categories.get(cat_id)
+                        cat = category_pool.get(cat_id)
                         if cat:
                             cat_data = self._model_dump_without_embeddings(cat)
                             results.append(cat_data)
@@ -1060,8 +1221,11 @@ class RetrieveMixin:
 
         return results
 
-    def _parse_llm_item_response(self, raw_response: str, store: Database) -> list[dict[str, Any]]:
+    def _parse_llm_item_response(
+        self, raw_response: str, store: Database, items: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """Parse LLM item ranking response"""
+        item_pool = items or store.memory_item_repo.items
         results = []
         try:
             json_blob = self._extract_json_blob(raw_response)
@@ -1072,7 +1236,7 @@ class RetrieveMixin:
                 # Return items in the order provided by LLM (already sorted by relevance)
                 for item_id in item_ids:
                     if isinstance(item_id, str):
-                        mem_item = store.memory_item_repo.items.get(item_id)
+                        mem_item = item_pool.get(item_id)
                         if mem_item:
                             item_data = self._model_dump_without_embeddings(mem_item)
                             results.append(item_data)
@@ -1081,8 +1245,11 @@ class RetrieveMixin:
 
         return results
 
-    def _parse_llm_resource_response(self, raw_response: str, store: Database) -> list[dict[str, Any]]:
+    def _parse_llm_resource_response(
+        self, raw_response: str, store: Database, resources: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         """Parse LLM resource ranking response"""
+        resource_pool = resources or store.resource_repo.resources
         results = []
         try:
             json_blob = self._extract_json_blob(raw_response)
@@ -1093,7 +1260,7 @@ class RetrieveMixin:
                 # Return resources in the order provided by LLM (already sorted by relevance)
                 for res_id in resource_ids:
                     if isinstance(res_id, str):
-                        res = store.resource_repo.resources.get(res_id)
+                        res = resource_pool.get(res_id)
                         if res:
                             res_data = self._model_dump_without_embeddings(res)
                             results.append(res_data)

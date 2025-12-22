@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from collections.abc import Mapping
+from typing import Any, Protocol, runtime_checkable
 
 from memu.database.models import Resource
 
@@ -11,6 +12,8 @@ class ResourceRepo(Protocol):
 
     resources: dict[str, Resource]
 
-    def create_resource(self, *, url: str, modality: str, local_path: str) -> Resource: ...
+    def list_resources(self, where: Mapping[str, Any] | None = None) -> dict[str, Resource]: ...
+
+    def create_resource(self, *, url: str, modality: str, local_path: str, user_data: dict[str, Any]) -> Resource: ...
 
     def load_existing(self) -> None: ...

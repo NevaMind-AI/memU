@@ -12,10 +12,12 @@ from memu.database.inmemory.repositories import (
     InMemoryResourceRepository,
 )
 from memu.database.inmemory.state import InMemoryState
+from memu.database.interfaces import Database
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, Resource
+from memu.database.repositories import CategoryItemRepo, MemoryCategoryRepo, MemoryItemRepo, ResourceRepo
 
 
-class InMemoryStore:
+class InMemoryStore(Database):
     def __init__(
         self,
         *,
@@ -45,11 +47,16 @@ class InMemoryStore:
         memory_category_model = memory_category_model or default_memory_category_model or MemoryCategory
         category_item_model = category_item_model or default_category_item_model or CategoryItem
 
-        self.resource_repo = InMemoryResourceRepository(state=self.state, resource_model=resource_model)
-        self.memory_category_repo = InMemoryMemoryCategoryRepository(
+        self.resource_repo: ResourceRepo = InMemoryResourceRepository(state=self.state, resource_model=resource_model)
+        self.memory_category_repo: MemoryCategoryRepo = InMemoryMemoryCategoryRepository(
             state=self.state, memory_category_model=memory_category_model
         )
-        self.memory_item_repo = InMemoryMemoryItemRepository(state=self.state, memory_item_model=memory_item_model)
-        self.category_item_repo = InMemoryCategoryItemRepository(
+        self.memory_item_repo: MemoryItemRepo = InMemoryMemoryItemRepository(
+            state=self.state, memory_item_model=memory_item_model
+        )
+        self.category_item_repo: CategoryItemRepo = InMemoryCategoryItemRepository(
             state=self.state, category_item_model=category_item_model
         )
+
+    def close(self) -> None:
+        return None

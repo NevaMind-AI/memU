@@ -138,7 +138,8 @@ async def main():
 
     # RAG-based retrieval
     print("\n[RETRIEVED - RAG]")
-    result_rag = await service_rag.retrieve(queries=queries)
+    # Scope retrieval to a particular user; omit filters to fetch across scopes
+    result_rag = await service_rag.retrieve(queries=queries, user_id="123")
     for item in result_rag.get('items', [])[:3]:
         print(f"  - [{item.get('memory_type')}] {item.get('summary', '')[:100]}...")
 
@@ -151,7 +152,7 @@ async def main():
 
     # LLM-based retrieval
     print("\n[RETRIEVED - LLM]")
-    result_llm = await service_llm.retrieve(queries=queries)
+    result_llm = await service_llm.retrieve(queries=queries, agent_id__in=["1", "2"])
     for item in result_llm.get('items', [])[:3]:
         print(f"  - [{item.get('memory_type')}] {item.get('summary', '')[:100]}...")
 
@@ -159,6 +160,8 @@ if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
 ```
+
+`retrieve` accepts keyword scope filters that match the fields on your configured `user_config.model` (e.g., `user_id="123"` or `agent_id__in=["1", "2"]`). Leave filters off to fetch across scopes.
 
 ### Retrieval Methods
 

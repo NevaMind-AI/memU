@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from memu.database.models import CategoryItem
@@ -23,7 +24,18 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
         self._category_item_model = category_item_model
         self.relations: list[CategoryItem] = self._state.relations
 
-    def link_item_category(self, item_id: str, cat_id: str) -> CategoryItem:
+    def list_relations(self, where: Mapping[str, Any] | None = None) -> list[CategoryItem]:
+        if not where:
+            return list(self.relations)
+
+        from sqlmodel import select
+
+        filters = self._build_filters(self._sqla_models.CategoryItem, where)
+        with self._sessions.session() as session:
+            rows = session.scalars(select(self._sqla_models.CategoryItem).where(*filters)).all()
+        return [self._cache_relation(row) for row in rows]
+
+    def link_item_category(self, item_id: str, cat_id: str, user_data: dict[str, Any]) -> CategoryItem:
         from sqlmodel import select
 
         # Avoid duplicate inserts using local cache
@@ -35,6 +47,7 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
         new_rel = self._category_item_model(
             item_id=item_id,
             category_id=cat_id,
+            **user_data,
             created_at=now,
             updated_at=now,
         )

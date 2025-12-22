@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from memu.database.models import MemoryCategory
@@ -22,6 +23,22 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
         super().__init__(state=state, sqla_models=sqla_models, sessions=sessions, scope_fields=scope_fields)
         self._memory_category_model = memory_category_model
         self.categories: dict[str, MemoryCategory] = self._state.categories
+
+    def list_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryCategory]:
+        if not where:
+            return dict(self.categories)
+
+        from sqlmodel import select
+
+        filters = self._build_filters(self._sqla_models.MemoryCategory, where)
+        with self._sessions.session() as session:
+            rows = session.scalars(select(self._sqla_models.MemoryCategory).where(*filters)).all()
+            result: dict[str, MemoryCategory] = {}
+            for row in rows:
+                row.embedding = self._normalize_embedding(row.embedding)
+                cat = self._cache_category(row)
+                result[cat.id] = cat
+        return result
 
     def get_or_create_category(self, *, name: str, description: str, embedding: list[float]) -> MemoryCategory:
         from sqlmodel import select

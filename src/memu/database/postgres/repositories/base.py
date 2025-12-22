@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 import pendulum
@@ -62,6 +63,51 @@ class PostgresRepoBase:
 
     def _now(self) -> pendulum.DateTime:
         return pendulum.now("UTC")
+
+    def _build_filters(self, model: Any, where: Mapping[str, Any] | None) -> list[Any]:
+        if not where:
+            return []
+        filters: list[Any] = []
+        for raw_key, expected in where.items():
+            if expected is None:
+                continue
+            field, op = [*raw_key.split("__", 1), None][:2]
+            column = getattr(model, str(field), None)
+            if column is None:
+                msg = f"Unknown filter field '{field}' for model '{model.__name__}'"
+                raise ValueError(msg)
+            if op == "in":
+                if isinstance(expected, str):
+                    filters.append(column == expected)
+                else:
+                    filters.append(column.in_(expected))
+            else:
+                filters.append(column == expected)
+        return filters
+
+    @staticmethod
+    def _matches_where(obj: Any, where: Mapping[str, Any] | None) -> bool:
+        if not where:
+            return True
+        for raw_key, expected in where.items():
+            if expected is None:
+                continue
+            field, op = [*raw_key.split("__", 1), None][:2]
+            actual = getattr(obj, str(field), None)
+            if op == "in":
+                if isinstance(expected, str):
+                    if actual != expected:
+                        return False
+                else:
+                    try:
+                        if actual not in expected:
+                            return False
+                    except TypeError:
+                        return False
+            else:
+                if actual != expected:
+                    return False
+        return True
 
 
 __all__ = ["PostgresRepoBase"]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from collections.abc import Mapping
+from typing import Any, Protocol, runtime_checkable
 
 from memu.database.models import CategoryItem
 
@@ -11,6 +12,8 @@ class CategoryItemRepo(Protocol):
 
     relations: list[CategoryItem]
 
-    def link_item_category(self, item_id: str, cat_id: str) -> CategoryItem: ...
+    def list_relations(self, where: Mapping[str, Any] | None = None) -> list[CategoryItem]: ...
+
+    def link_item_category(self, item_id: str, cat_id: str, user_data: dict[str, Any]) -> CategoryItem: ...
 
     def load_existing(self) -> None: ...

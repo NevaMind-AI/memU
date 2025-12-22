@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from collections.abc import Mapping
+from typing import Any, Protocol, runtime_checkable
 
 from memu.database.models import MemoryItem, MemoryType
 
@@ -11,10 +12,20 @@ class MemoryItemRepo(Protocol):
 
     items: dict[str, MemoryItem]
 
+    def list_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]: ...
+
     def create_item(
-        self, *, resource_id: str, memory_type: MemoryType, summary: str, embedding: list[float]
+        self,
+        *,
+        resource_id: str,
+        memory_type: MemoryType,
+        summary: str,
+        embedding: list[float],
+        user_data: dict[str, Any],
     ) -> MemoryItem: ...
 
-    def vector_search_items(self, query_vec: list[float], top_k: int) -> list[tuple[str, float]]: ...
+    def vector_search_items(
+        self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None
+    ) -> list[tuple[str, float]]: ...
 
     def load_existing(self) -> None: ...

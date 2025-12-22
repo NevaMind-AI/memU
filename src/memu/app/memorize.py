@@ -43,6 +43,7 @@ class MemorizeMixin:
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
         _extract_json_blob: Callable[[str], str]
         _escape_prompt_value: Callable[[str], str]
+        user_model: type[BaseModel]
 
     async def memorize(
         self,
@@ -50,10 +51,11 @@ class MemorizeMixin:
         resource_url: str,
         modality: str,
         summary_prompt: str | None = None,
-        user: BaseModel | None = None,
+        user: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         ctx = self._get_context()
         store = self._get_database()
+        user_scope = self.user_model(**user).model_dump() if user is not None else None
         await self._ensure_categories_ready(ctx, store)
 
         memory_types = self._resolve_memory_types()
@@ -69,6 +71,7 @@ class MemorizeMixin:
             "ctx": ctx,
             "store": store,
             "category_ids": list(ctx.category_ids),
+            "user": user_scope,
         }
 
         result = await self._run_workflow("memorize", state)
@@ -123,7 +126,7 @@ class MemorizeMixin:
                 step_id="categorize_items",
                 role="categorize",
                 handler=self._memorize_categorize_items,
-                requires={"resource_plans", "ctx", "store", "local_path", "modality"},
+                requires={"resource_plans", "ctx", "store", "local_path", "modality", "user"},
                 produces={"resources", "items", "relations", "category_updates"},
                 capabilities={"db", "vector"},
             ),
@@ -210,6 +213,7 @@ class MemorizeMixin:
         items: list[MemoryItem] = []
         relations: list[CategoryItem] = []
         category_updates: dict[str, list[str]] = {}
+        user_scope = state.get("user", {})
 
         for plan in state.get("resource_plans", []):
             res = await self._create_resource_with_caption(
@@ -219,6 +223,7 @@ class MemorizeMixin:
                 caption=plan.get("caption"),
                 store=store,
                 embed_client=llm_client,
+                user=user_scope,
             )
             resources.append(res)
 
@@ -232,6 +237,7 @@ class MemorizeMixin:
                 ctx=ctx,
                 store=store,
                 embed_client=llm_client,
+                user=user_scope,
             )
             items.extend(mem_items)
             relations.extend(rels)
@@ -318,8 +324,14 @@ class MemorizeMixin:
         caption: str | None,
         store: Database,
         embed_client: Any | None = None,
+        user: Mapping[str, Any] | None = None,
     ) -> Resource:
-        res = store.resource_repo.create_resource(url=resource_url, modality=modality, local_path=local_path)
+        res = store.resource_repo.create_resource(
+            url=resource_url,
+            modality=modality,
+            local_path=local_path,
+            user_data=dict(user or {}),
+        )
         if caption:
             caption_text = caption.strip()
             if caption_text:
@@ -503,6 +515,7 @@ class MemorizeMixin:
         ctx: Context,
         store: Database,
         embed_client: Any | None = None,
+        user: Mapping[str, Any] | None = None,
     ) -> tuple[list[MemoryItem], list[CategoryItem], dict[str, list[str]]]:
         summary_payloads = [content for _, content, _ in structured_entries]
         client = embed_client or self._get_llm_client()
@@ -517,11 +530,12 @@ class MemorizeMixin:
                 memory_type=memory_type,
                 summary=summary_text,
                 embedding=emb,
+                user_data=dict(user or {}),
             )
             items.append(item)
             mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
             for cid in mapped_cat_ids:
-                rels.append(store.category_item_repo.link_item_category(item.id, cid))
+                rels.append(store.category_item_repo.link_item_category(item.id, cid, user_data=dict(user or {})))
                 category_memory_updates.setdefault(cid, []).append(summary_text)
 
         return items, rels, category_memory_updates

@@ -143,12 +143,12 @@ class LLMProfilesConfig(RootModel[dict[Key, LLMConfig]]):
         return self.root
 
     @property
-    def default(self) -> str:
-        return "default"
+    def default(self) -> LLMConfig:
+        return self.root.get("default", LLMConfig())
 
 
 class MetadataStoreConfig(BaseModel):
-    provider: Annotated[Literal["memory", "sqlite", "postgres"], Normalize] = "memory"
+    provider: Annotated[Literal["inmemory", "postgres"], Normalize] = "inmemory"
     ddl_mode: Annotated[Literal["create", "validate"], Normalize] = "create"
     dsn: str | None = Field(default=None, description="Postgres connection string when provider=postgres.")
 
