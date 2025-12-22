@@ -7,14 +7,14 @@ authors = [
 description = "AI Memory and Conversation Management Framework - Simple as mem0, Powerful as MemU"
 readme = "README.md"
 # license = {file = "LICENSE"}
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
 
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.13",
 ]
 keywords = ["ai", "memory", "conversation", "llm", "chatbot", "agent"]
 dependencies = [
@@ -22,6 +22,11 @@ dependencies = [
     "numpy>=2.3.4",
     "openai>=2.8.0",
     "pydantic>=2.12.4",
+    "sqlmodel>=0.0.27",
+    "sqlalchemy>=2.0.36",
+    "alembic>=1.14.0",
+    "pgvector>=0.3.4",
+    "pendulum>=3.1.0",
 ]
 
 [build-system]
@@ -66,7 +71,7 @@ memu-server = "memu.server.cli:main"
 
 [tool.mypy]
 files = ["src", "tests"]
-python_version = "3.14"
+python_version = "3.13"
 disallow_untyped_defs = true
 disallow_any_unimported = true
 no_implicit_optional = true
@@ -82,8 +87,12 @@ disallow_incomplete_defs = false
 warn_unused_ignores = false
 disable_error_code = ["attr-defined", "call-arg"]
 
+[[tool.mypy.overrides]]
+module = ["pgvector.*"]
+ignore_missing_imports = true
+
 [tool.ruff]
-target-version = "py314"
+target-version = "py313"
 line-length = 120
 fix = true
 

@@ -22,7 +22,9 @@ src_path = os.path.abspath("src")
 sys.path.insert(0, src_path)
 
 
-async def generate_skill_md(all_skills, service, output_file, attempt_number, total_attempts, is_final=False):
+async def generate_skill_md(
+    all_skills, service, output_file, attempt_number, total_attempts, categories=None, is_final=False
+):
     """
     Use LLM to generate a concise task execution guide (skill.md).
 
@@ -36,13 +38,11 @@ async def generate_skill_md(all_skills, service, output_file, attempt_number, to
 
     # Get category summaries if available
     categories_text = ""
-    if service.store.categories:
-        categories_with_content = {
-            cat_id: cat for cat_id, cat in service.store.categories.items() if cat.summary and cat.summary.strip()
-        }
+    if categories:
+        categories_with_content = [cat for cat in categories if cat.get("summary") and cat.get("summary").strip()]
         if categories_with_content:
             categories_text = "\n\n".join([
-                f"**{cat.name}**:\n{cat.summary}" for cat_id, cat in categories_with_content.items()
+                f"**{cat.get('name', 'unknown')}**:\n{cat.get('summary', '')}" for cat in categories_with_content
             ])
 
     # Construct prompt for LLM
@@ -202,15 +202,14 @@ async def main():
         "memory_categories": skill_categories,
     }
 
-    # Initialize service
+    # Initialize service with OpenAI using llm_profiles
+    # The "default" profile is required and used as the primary LLM configuration
     service = MemoryService(
-        llm_config={
-            "api_key": api_key,
-            "chat_model": "gpt-4o-mini",
-        },
-        embedding_config={
-            "api_key": api_key,
-            "embed_model": "text-embedding-3-small",
+        llm_profiles={
+            "default": {
+                "api_key": api_key,
+                "chat_model": "gpt-4o-mini",
+            },
         },
         memorize_config=memorize_config,
     )
@@ -225,6 +224,7 @@ async def main():
     # Process each resource sequentially
     print("\nProcessing files...")
     all_skills = []
+    categories = []
 
     for idx, (resource_file, modality) in enumerate(resources, 1):
         if not os.path.exists(resource_file):
@@ -238,6 +238,9 @@ async def main():
                 if item.get("memory_type") == "skill":
                     all_skills.append({"skill": item.get("summary", ""), "source": os.path.basename(resource_file)})
 
+            # Categories are returned in the result and updated after each memorize call
+            categories = result.get("categories", [])
+
             # Generate intermediate skill.md
             await generate_skill_md(
                 all_skills=all_skills,
@@ -245,6 +248,7 @@ async def main():
                 output_file=f"examples/output/skill_example/log_{idx}.md",
                 attempt_number=idx,
                 total_attempts=len(resources),
+                categories=categories,
             )
 
         except Exception as e:
@@ -257,11 +261,12 @@ async def main():
         output_file="examples/output/skill_example/skill.md",
         attempt_number=len(resources),
         total_attempts=len(resources),
+        categories=categories,
         is_final=True,
     )
 
     print(f"\n✓ Processed {len(resources)} files, extracted {len(all_skills)} skills")
-    print(f"✓ Generated {len(service.store.categories)} categories")
+    print(f"✓ Generated {len(categories)} categories")
     print("✓ Output: examples/output/skill_example/")
 
 
