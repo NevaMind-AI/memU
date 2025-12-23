@@ -166,7 +166,7 @@ class StorageProvidersConfig(BaseModel):
         if self.vector_index is None:
             if self.metadata_store.provider == "postgres":
                 self.vector_index = VectorIndexConfig(provider="pgvector", dsn=self.metadata_store.dsn)
-            elif self.metadata_store.provider == "memory":
+            elif self.metadata_store.provider == "inmemory":
                 self.vector_index = VectorIndexConfig(provider="bruteforce")
             else:
                 self.vector_index = VectorIndexConfig(provider="bruteforce")

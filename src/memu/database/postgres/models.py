@@ -6,6 +6,8 @@ from typing import Any
 
 import pendulum
 from pydantic import BaseModel, create_model
+from pydantic_core import PydanticUndefined
+from pgvector.sqlalchemy import VECTOR as Vector
 from sqlalchemy import ForeignKey, MetaData, String, Text
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
@@ -13,42 +15,47 @@ from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, Memor
 
 
 class BaseModelMixin(SQLModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, index=True)
+    # Use sa_type and field parameters instead of sa_column to avoid Column object reuse issues
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        primary_key=True,
+        index=True,
+        sa_type=String,
+    )
     created_at: datetime = Field(
         default_factory=lambda: pendulum.now("UTC"),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
+        sa_type=DateTime(timezone=True),
+        sa_column_kwargs={"server_default": func.now()},
     )
     updated_at: datetime = Field(
         default_factory=lambda: pendulum.now("UTC"),
-        sa_column=Column(DateTime(timezone=True)),
+        sa_type=DateTime(timezone=True),
     )
 
 
-class ResourceModel(Resource, BaseModelMixin):
+class ResourceModel(BaseModelMixin, Resource):
     url: str = Field(sa_column=Column(String, nullable=False))
     modality: str = Field(sa_column=Column(String, nullable=False))
     local_path: str = Field(sa_column=Column(String, nullable=False))
     caption: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-    embedding: list[float] | None = Field(default=None)
+    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
 
 
-class MemoryItemModel(MemoryItem, BaseModelMixin):
+class MemoryItemModel(BaseModelMixin, MemoryItem):
     resource_id: str = Field(sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), nullable=False))
     memory_type: MemoryType = Field(sa_column=Column(String, nullable=False))
     summary: str = Field(sa_column=Column(Text, nullable=False))
-    embedding: list[float] | None = Field(default=None)
+    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
 
 
-class MemoryCategoryModel(MemoryCategory, BaseModelMixin):
-    name: str = Field(sa_column=Column(String, nullable=False))
+class MemoryCategoryModel(BaseModelMixin, MemoryCategory):
+    name: str = Field(sa_column=Column(String, nullable=False, index=True, unique=True))
     description: str = Field(sa_column=Column(Text, nullable=False))
-    embedding: list[float] | None = Field(default=None)
+    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
     summary: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
 
-    __table_args__ = (Index("idx_categories_name", func.lower(name), unique=True),)
 
-
-class CategoryItemModel(CategoryItem, BaseModelMixin):
+class CategoryItemModel(BaseModelMixin, CategoryItem):
     item_id: str = Field(sa_column=Column(ForeignKey("memory_items.id", ondelete="CASCADE"), nullable=False))
     category_id: str = Field(sa_column=Column(ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False))
 
@@ -56,18 +63,24 @@ class CategoryItemModel(CategoryItem, BaseModelMixin):
 
 
 def build_domain_model(user_model: type[BaseModel]) -> type[SQLModel]:
+    """Build a SQLModel mixin from a user-defined Pydantic model with proper sa_column definitions."""
     fields = {}
     for name, finfo in user_model.model_fields.items():
         ann = finfo.annotation
-        nullable = finfo.default_factory is not None
-        kwargs: dict[str, Any] = {"index": True, "nullable": nullable}
+        nullable = not finfo.is_required()
 
+        # Build field kwargs
+        field_kwargs: dict[str, Any] = {}
+        if finfo.default is not PydanticUndefined:
+            field_kwargs["default"] = finfo.default
         if finfo.default_factory is not None:
-            kwargs["default_factory"] = finfo.default_factory
+            field_kwargs["default_factory"] = finfo.default_factory
 
-        fields[name] = (ann, Field(**kwargs))
+        # Create proper sa_column for table compatibility
+        field_kwargs["sa_column"] = Column(String, index=True, nullable=nullable)
+        fields[name] = (ann, Field(**field_kwargs))
 
-    return create_model(f"{user_model.__name__}Scope", __base__=SQLModel, field_definitions=fields)
+    return create_model(f"{user_model.__name__}Scope", __base__=SQLModel, **fields)
 
 
 def _normalize_table_args(table_args: Any) -> tuple[list[Any], dict[str, Any]]:
@@ -138,11 +151,13 @@ def build_table_model(
 
     base = _merge_models(user_model, core_model, name_suffix="Base", base_attrs=base_attrs)
 
-    return create_model(
+    # Use type() instead of create_model to properly preserve SQLModel table behavior
+    table_attrs: dict[str, Any] = {"__module__": core_model.__module__}
+    return type(
         f"{user_model.__name__}{core_model.__name__}Table",
-        __base__=base,
-        __module__=core_model.__module__,
-        __cls_kwargs__={"table": True},
+        (base,),
+        table_attrs,
+        table=True,
     )
 
 

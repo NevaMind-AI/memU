@@ -218,8 +218,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         return value.replace("{", "{{").replace("}", "}}")
 
     def _model_dump_without_embeddings(self, obj: BaseModel) -> dict[str, Any]:
-        data = obj.model_dump()
-        data.pop("embedding", None)
+        data = obj.model_dump(exclude={"embedding"})
         return data
 
     @staticmethod
