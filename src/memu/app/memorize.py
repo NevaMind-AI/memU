@@ -915,8 +915,10 @@ Summary:"""
             cat = store.memory_category_repo.categories.get(cid)
             if not cat:
                 continue
-            cat.summary = summary.strip()
-            cat.updated_at = pendulum.now()
+            store.memory_category_repo.update_category(
+                category_id=cid,
+                summary=summary.strip(),
+            )
 
     def _parse_conversation_preprocess(self, raw: str) -> tuple[str | None, str | None]:
         conversation = self._extract_tag_content(raw, "conversation")

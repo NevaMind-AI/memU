@@ -39,6 +39,32 @@ class InMemoryMemoryCategoryRepository(MemoryCategoryRepoProtocol):
         self.categories[cid] = cat
         return cat
 
+    def update_category(
+        self,
+        *,
+        category_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        embedding: list[float] | None = None,
+        summary: str | None = None,
+    ) -> MemoryCategory:
+        cat = self.categories.get(category_id)
+        if cat is None:
+            msg = f"Category with id {category_id} not found"
+            raise KeyError(msg)
+
+        if name is not None:
+            cat.name = name
+        if description is not None:
+            cat.description = description
+        if embedding is not None:
+            cat.embedding = embedding
+        if summary is not None:
+            cat.summary = summary
+
+        cat.updated_at = pendulum.now("UTC")
+        return cat
+
     def load_existing(self) -> None:
         return None
 

@@ -77,6 +77,45 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
 
         return self._cache_category(cat)
 
+    def update_category(
+        self,
+        *,
+        category_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        embedding: list[float] | None = None,
+        summary: str | None = None,
+    ) -> MemoryCategory:
+        from sqlmodel import select
+
+        now = self._now()
+        with self._sessions.session() as session:
+            cat = session.scalar(
+                select(self._sqla_models.MemoryCategory).where(
+                    self._sqla_models.MemoryCategory.id == category_id
+                )
+            )
+            if cat is None:
+                msg = f"Category with id {category_id} not found"
+                raise KeyError(msg)
+
+            if name is not None:
+                cat.name = name
+            if description is not None:
+                cat.description = description
+            if embedding is not None:
+                cat.embedding = self._prepare_embedding(embedding)
+            if summary is not None:
+                cat.summary = summary
+
+            cat.updated_at = now
+            session.add(cat)
+            session.commit()
+            session.refresh(cat)
+            cat.embedding = self._normalize_embedding(cat.embedding)
+
+        return self._cache_category(cat)
+    
     def load_existing(self) -> None:
         from sqlmodel import select
 
