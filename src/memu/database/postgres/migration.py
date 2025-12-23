@@ -49,9 +49,7 @@ def run_migrations(*, dsn: str, scope_model: type[Any], ddl_mode: DDLMode = "cre
                 logger.info("pgvector extension enabled")
             except Exception as e:
                 # Check if extension already exists
-                result = conn.execute(
-                    text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
-                ).fetchone()
+                result = conn.execute(text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")).fetchone()
                 if result:
                     logger.info("pgvector extension already installed")
                 else:

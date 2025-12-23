@@ -5,9 +5,14 @@ from datetime import datetime
 from typing import Any
 
 import pendulum
-from pydantic import BaseModel, create_model
-from pydantic_core import PydanticUndefined
-from pgvector.sqlalchemy import VECTOR as Vector
+
+try:
+    from pgvector.sqlalchemy import VECTOR as Vector
+except ImportError as exc:
+    msg = "pgvector is required for Postgres vector support"
+    raise ImportError(msg) from exc
+
+from pydantic import BaseModel
 from sqlalchemy import ForeignKey, MetaData, String, Text
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
@@ -15,21 +20,18 @@ from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, Memor
 
 
 class BaseModelMixin(SQLModel):
-    # Use sa_type and field parameters instead of sa_column to avoid Column object reuse issues
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
         primary_key=True,
         index=True,
-        sa_type=String,
     )
     created_at: datetime = Field(
         default_factory=lambda: pendulum.now("UTC"),
-        sa_type=DateTime(timezone=True),
-        sa_column_kwargs={"server_default": func.now()},
+        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
     )
     updated_at: datetime = Field(
         default_factory=lambda: pendulum.now("UTC"),
-        sa_type=DateTime(timezone=True),
+        sa_column=Column(DateTime(timezone=True)),
     )
 
 
@@ -62,27 +64,6 @@ class CategoryItemModel(BaseModelMixin, CategoryItem):
     __table_args__ = (Index("idx_category_items_unique", "item_id", "category_id", unique=True),)
 
 
-def build_domain_model(user_model: type[BaseModel]) -> type[SQLModel]:
-    """Build a SQLModel mixin from a user-defined Pydantic model with proper sa_column definitions."""
-    fields = {}
-    for name, finfo in user_model.model_fields.items():
-        ann = finfo.annotation
-        nullable = not finfo.is_required()
-
-        # Build field kwargs
-        field_kwargs: dict[str, Any] = {}
-        if finfo.default is not PydanticUndefined:
-            field_kwargs["default"] = finfo.default
-        if finfo.default_factory is not None:
-            field_kwargs["default_factory"] = finfo.default_factory
-
-        # Create proper sa_column for table compatibility
-        field_kwargs["sa_column"] = Column(String, index=True, nullable=nullable)
-        fields[name] = (ann, Field(**field_kwargs))
-
-    return create_model(f"{user_model.__name__}Scope", __base__=SQLModel, **fields)
-
-
 def _normalize_table_args(table_args: Any) -> tuple[list[Any], dict[str, Any]]:
     if table_args is None:
         return [], {}
@@ -105,15 +86,14 @@ def _merge_models(
     name_suffix: str,
     base_attrs: dict[str, Any],
 ) -> type[SQLModel]:
-    user_mixin = build_domain_model(user_model)
-    overlap = set(user_mixin.model_fields) & set(core_model.model_fields)
+    overlap = set(user_model.model_fields) & set(core_model.model_fields)
     if overlap:
         msg = f"Scope fields conflict with core model fields: {sorted(overlap)}"
         raise TypeError(msg)
 
     return type(
         f"{user_model.__name__}{core_model.__name__}{name_suffix}",
-        (user_mixin, core_model),
+        (user_model, core_model),
         base_attrs,
     )
 
@@ -126,13 +106,12 @@ def build_table_model(
     metadata: MetaData | None = None,
     extra_table_args: tuple[Any, ...] | None = None,
 ) -> type[SQLModel]:
-    user_mixin = build_domain_model(user_model)
-    overlap = set(user_mixin.model_fields) & set(core_model.model_fields)
+    overlap = set(user_model.model_fields) & set(core_model.model_fields)
     if overlap:
         msg = f"Scope fields conflict with core model fields: {sorted(overlap)}"
         raise TypeError(msg)
 
-    scope_fields = list(user_mixin.model_fields.keys())
+    scope_fields = list(user_model.model_fields.keys())
     base_table_args, table_kwargs = _normalize_table_args(getattr(core_model, "__table_args__", None))
     table_args = list(base_table_args)
     if extra_table_args:
@@ -180,7 +159,6 @@ __all__ = [
     "MemoryCategoryModel",
     "MemoryItemModel",
     "ResourceModel",
-    "build_domain_model",
     "build_scoped_models",
     "build_table_model",
 ]

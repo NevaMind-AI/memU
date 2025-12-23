@@ -158,7 +158,7 @@ class VectorIndexConfig(BaseModel):
     dsn: str | None = Field(default=None, description="Postgres connection string when provider=pgvector.")
 
 
-class StorageProvidersConfig(BaseModel):
+class DatabaseConfig(BaseModel):
     metadata_store: MetadataStoreConfig = Field(default_factory=MetadataStoreConfig)
     vector_index: VectorIndexConfig | None = Field(default=None)
 
@@ -166,8 +166,6 @@ class StorageProvidersConfig(BaseModel):
         if self.vector_index is None:
             if self.metadata_store.provider == "postgres":
                 self.vector_index = VectorIndexConfig(provider="pgvector", dsn=self.metadata_store.dsn)
-            elif self.metadata_store.provider == "inmemory":
-                self.vector_index = VectorIndexConfig(provider="bruteforce")
             else:
                 self.vector_index = VectorIndexConfig(provider="bruteforce")
         elif self.vector_index.provider == "pgvector" and self.vector_index.dsn is None:

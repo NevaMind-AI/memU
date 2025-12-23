@@ -1,12 +1,12 @@
 from memu.app.service import MemoryService
 from memu.app.settings import (
     BlobConfig,
+    DatabaseConfig,
     DefaultUserModel,
     LLMConfig,
     LLMProfilesConfig,
     MemorizeConfig,
     RetrieveConfig,
-    StorageProvidersConfig,
     UserConfig,
 )
 from memu.workflow.runner import (
@@ -18,6 +18,7 @@ from memu.workflow.runner import (
 
 __all__ = [
     "BlobConfig",
+    "DatabaseConfig",
     "DefaultUserModel",
     "LLMConfig",
     "LLMProfilesConfig",
@@ -25,7 +26,6 @@ __all__ = [
     "MemorizeConfig",
     "MemoryService",
     "RetrieveConfig",
-    "StorageProvidersConfig",
     "UserConfig",
     "WorkflowRunner",
     "register_workflow_runner",

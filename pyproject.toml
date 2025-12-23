@@ -23,11 +23,8 @@ dependencies = [
     "openai>=2.8.0",
     "pydantic>=2.12.4",
     "sqlmodel>=0.0.27",
-    "sqlalchemy>=2.0.36",
     "alembic>=1.14.0",
-    "pgvector>=0.3.4",
     "pendulum>=3.1.0",
-    "psycopg2-binary>=2.9.11",
 ]
 
 [build-system]
@@ -61,6 +58,9 @@ test = [
     "pytest>=8.4.2",
     "pytest-cov>=7.0.0",
 ]
+
+[project.optional-dependencies]
+postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
