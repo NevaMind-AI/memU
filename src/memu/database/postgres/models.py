@@ -24,14 +24,18 @@ class BaseModelMixin(SQLModel):
         default_factory=lambda: str(uuid.uuid4()),
         primary_key=True,
         index=True,
+        sa_type=String,
     )
     created_at: datetime = Field(
         default_factory=lambda: pendulum.now("UTC"),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
+        # sa_column=Column(DateTime(timezone=True), server_default=func.now()),
+        sa_type=DateTime(timezone=True),
+        sa_column_kwargs={"server_default": func.now()},
     )
     updated_at: datetime = Field(
         default_factory=lambda: pendulum.now("UTC"),
-        sa_column=Column(DateTime(timezone=True)),
+        # sa_column=Column(DateTime(timezone=True)),
+        sa_type=DateTime(timezone=True),
     )
 
 
