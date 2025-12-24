@@ -8,6 +8,7 @@ from typing import Any, TypeVar
 from pydantic import BaseModel
 
 from memu.app.memorize import MemorizeMixin
+from memu.app.patch import PatchMixin
 from memu.app.retrieve import RetrieveMixin
 from memu.app.settings import (
     BlobConfig,
@@ -37,7 +38,7 @@ class Context:
     category_init_task: asyncio.Task | None = None
 
 
-class MemoryService(MemorizeMixin, RetrieveMixin):
+class MemoryService(MemorizeMixin, RetrieveMixin, PatchMixin):
     def __init__(
         self,
         *,
@@ -192,12 +193,22 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
             "method",
             "where",
         }
+        patch_initial_keys = {
+            "operation",
+            "memory_id",
+            "memory_payload",
+            "ctx",
+            "store",
+            "user",
+        }
         memo_workflow = self._build_memorize_workflow()
         self._pipelines.register("memorize", memo_workflow, initial_state_keys=memorize_initial_keys)
         rag_workflow = self._build_rag_retrieve_workflow()
         self._pipelines.register("retrieve_rag", rag_workflow, initial_state_keys=retrieve_initial_keys)
         llm_workflow = self._build_llm_retrieve_workflow()
         self._pipelines.register("retrieve_llm", llm_workflow, initial_state_keys=retrieve_initial_keys)
+        patch_workflow = self._build_patch_workflow()
+        self._pipelines.register("patch", patch_workflow, initial_state_keys=patch_initial_keys)
 
     async def _run_workflow(self, workflow_name: str, initial_state: WorkflowState) -> WorkflowState:
         """Execute a workflow through the configured runner backend."""

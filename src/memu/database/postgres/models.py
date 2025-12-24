@@ -48,7 +48,7 @@ class ResourceModel(BaseModelMixin, Resource):
 
 
 class MemoryItemModel(BaseModelMixin, MemoryItem):
-    resource_id: str = Field(sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), nullable=False))
+    resource_id: str = Field(sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), nullable=True))
     memory_type: MemoryType = Field(sa_column=Column(String, nullable=False))
     summary: str = Field(sa_column=Column(Text, nullable=False))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))

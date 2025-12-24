@@ -27,6 +27,15 @@ class PostgresMemoryItemRepo(PostgresRepoBase, MemoryItemRepo):
         self._memory_item_model = memory_item_model
         self.items: dict[str, MemoryItem] = self._state.items
 
+    def get_item(self, memory_id: str) -> MemoryItem | None:
+        from sqlmodel import select
+        with self._sessions.session() as session:
+            row = session.scalar(select(self._sqla_models.MemoryItem).where(self._sqla_models.MemoryItem.id == memory_id))
+            if row:
+                row.embedding = self._normalize_embedding(row.embedding)
+                return self._cache_item(row)
+        return None
+
     def list_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
         if not where:
             return dict(self.items)
@@ -46,7 +55,7 @@ class PostgresMemoryItemRepo(PostgresRepoBase, MemoryItemRepo):
     def create_item(
         self,
         *,
-        resource_id: str,
+        resource_id: str | None = None,
         memory_type: MemoryType,
         summary: str,
         embedding: list[float],
@@ -69,6 +78,49 @@ class PostgresMemoryItemRepo(PostgresRepoBase, MemoryItemRepo):
 
         self.items[item.id] = item
         return item
+
+    def update_item(
+        self,
+        *,
+        item_id: str,
+        memory_type: MemoryType | None = None,
+        summary: str | None = None,
+        embedding: list[float] | None = None,
+    ) -> MemoryItem:
+        from sqlmodel import select
+
+        now = self._now()
+        with self._sessions.session() as session:
+            item = session.scalar(
+                select(self._sqla_models.MemoryItem).where(
+                    self._sqla_models.MemoryItem.id == item_id
+                )
+            )
+            if item is None:
+                msg = f"Item with id {item_id} not found"
+                raise KeyError(msg)
+
+            if memory_type is not None:
+                item.memory_type = memory_type
+            if summary is not None:
+                item.summary = summary
+            if embedding is not None:
+                item.embedding = self._prepare_embedding(embedding)
+
+            item.updated_at = now
+            session.add(item)
+            session.commit()
+            session.refresh(item)
+            item.embedding = self._normalize_embedding(item.embedding)
+
+        return self._cache_item(item)
+
+    def delete_item(self, item_id: str) -> None:
+        from sqlmodel import delete
+
+        with self._sessions.session() as session:
+            session.exec(delete(self._sqla_models.MemoryItem).where(self._sqla_models.MemoryItem.id == item_id))
+            session.commit()
 
     def vector_search_items(
         self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None
@@ -114,9 +166,9 @@ class PostgresMemoryItemRepo(PostgresRepoBase, MemoryItemRepo):
         return scored[:top_k]
 
     def _cache_item(self, item: MemoryItem) -> MemoryItem:
-        existing = self.items.get(item.id)
-        if existing:
-            return existing
+        # existing = self.items.get(item.id)
+        # if existing:
+        #     return existing
         self.items[item.id] = item
         return item
 

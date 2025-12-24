@@ -12,6 +12,8 @@ class MemoryItemRepo(Protocol):
 
     items: dict[str, MemoryItem]
 
+    def get_item(self, item_id: str) -> MemoryItem | None: ...
+
     def list_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]: ...
 
     def create_item(
@@ -23,6 +25,17 @@ class MemoryItemRepo(Protocol):
         embedding: list[float],
         user_data: dict[str, Any],
     ) -> MemoryItem: ...
+
+    def update_item(
+        self,
+        *,
+        item_id: str,
+        memory_type: MemoryType | None = None,
+        summary: str | None = None,
+        embedding: list[float] | None = None,
+    ) -> MemoryItem: ...
+
+    def delete_item(self, item_id: str) -> None: ...
 
     def vector_search_items(
         self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None
