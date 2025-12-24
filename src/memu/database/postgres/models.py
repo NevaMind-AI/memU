@@ -51,7 +51,7 @@ class MemoryItemModel(BaseModelMixin, MemoryItem):
 
 
 class MemoryCategoryModel(BaseModelMixin, MemoryCategory):
-    name: str = Field(sa_column=Column(String, nullable=False, index=True, unique=True))
+    name: str = Field(sa_column=Column(String, nullable=False, index=True))
     description: str = Field(sa_column=Column(Text, nullable=False))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
     summary: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
@@ -105,6 +105,7 @@ def build_table_model(
     tablename: str,
     metadata: MetaData | None = None,
     extra_table_args: tuple[Any, ...] | None = None,
+    unique_with_scope: list[str] | None = None,
 ) -> type[SQLModel]:
     overlap = set(user_model.model_fields) & set(core_model.model_fields)
     if overlap:
@@ -118,6 +119,9 @@ def build_table_model(
         table_args.extend(extra_table_args)
     if scope_fields:
         table_args.append(Index(f"ix_{tablename}__scope", *scope_fields))
+    if unique_with_scope:
+        unique_cols = [*unique_with_scope, *scope_fields]
+        table_args.append(Index(f"ix_{tablename}__unique_scoped", *unique_cols, unique=True))
 
     base_attrs: dict[str, Any] = {"__module__": core_model.__module__, "__tablename__": tablename}
     if metadata is not None:
@@ -147,7 +151,9 @@ def build_scoped_models(
     Build scoped SQLModel tables for each entity (resource, category, item, relation).
     """
     resource_model = build_table_model(user_model, ResourceModel, tablename="resources")
-    memory_category_model = build_table_model(user_model, MemoryCategoryModel, tablename="memory_categories")
+    memory_category_model = build_table_model(
+        user_model, MemoryCategoryModel, tablename="memory_categories", unique_with_scope=["name"]
+    )
     memory_item_model = build_table_model(user_model, MemoryItemModel, tablename="memory_items")
     category_item_model = build_table_model(user_model, CategoryItemModel, tablename="category_items")
     return resource_model, memory_category_model, memory_item_model, category_item_model

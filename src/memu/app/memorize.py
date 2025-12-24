@@ -56,7 +56,7 @@ class MemorizeMixin:
         ctx = self._get_context()
         store = self._get_database()
         user_scope = self.user_model(**user).model_dump() if user is not None else None
-        await self._ensure_categories_ready(ctx, store)
+        await self._ensure_categories_ready(ctx, store, user_scope)
 
         memory_types = self._resolve_memory_types()
         base_prompt = self._resolve_summary_prompt(modality, summary_prompt)
@@ -552,16 +552,16 @@ class MemorizeMixin:
         else:
             asyncio.run(self._initialize_categories(ctx, store))
 
-    async def _ensure_categories_ready(self, ctx: Context, store: Database) -> None:
+    async def _ensure_categories_ready(self, ctx: Context, store: Database, user_scope: Mapping[str, Any] | None = None) -> None:
         if ctx.categories_ready:
             return
         if ctx.category_init_task:
             await ctx.category_init_task
             ctx.category_init_task = None
             return
-        await self._initialize_categories(ctx, store)
+        await self._initialize_categories(ctx, store, user_scope)
 
-    async def _initialize_categories(self, ctx: Context, store: Database) -> None:
+    async def _initialize_categories(self, ctx: Context, store: Database, user: Mapping[str, Any] | None = None) -> None:
         if ctx.categories_ready:
             return
         if not self.category_configs:
@@ -574,7 +574,9 @@ class MemorizeMixin:
         for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
             name = (cfg.get("name") or "").strip() or "Untitled"
             description = (cfg.get("description") or "").strip()
-            cat = store.memory_category_repo.get_or_create_category(name=name, description=description, embedding=vec)
+            cat = store.memory_category_repo.get_or_create_category(
+                name=name, description=description, embedding=vec, user_data=dict(user or {})
+            )
             ctx.category_ids.append(cat.id)
             ctx.category_name_to_id[name.lower()] = cat.id
         ctx.categories_ready = True
@@ -915,8 +917,10 @@ Summary:"""
             cat = store.memory_category_repo.categories.get(cid)
             if not cat:
                 continue
-            cat.summary = summary.strip()
-            cat.updated_at = pendulum.now()
+            store.memory_category_repo.update_category(
+                category_id=cid,
+                summary=summary.strip(),
+            )
 
     def _parse_conversation_preprocess(self, raw: str) -> tuple[str | None, str | None]:
         conversation = self._extract_tag_content(raw, "conversation")

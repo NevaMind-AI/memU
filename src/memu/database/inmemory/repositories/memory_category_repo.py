@@ -23,11 +23,11 @@ class InMemoryMemoryCategoryRepository(MemoryCategoryRepoProtocol):
             return dict(self.categories)
         return {cid: cat for cid, cat in self.categories.items() if matches_where(cat, where)}
 
-    def get_or_create_category(self, *, name: str, description: str, embedding: list[float]) -> MemoryCategory:
+    def get_or_create_category(self, *, name: str, description: str, embedding: list[float], user_data: dict[str, Any]) -> MemoryCategory:
         for c in self.categories.values():
-            if c.name == name:
+            if c.name == name and all(getattr(c, k) == v for k, v in user_data.items()):
                 now = pendulum.now("UTC")
-                if not c.embedding:
+                if c.embedding is None:
                     c.embedding = embedding
                     c.updated_at = now
                 if not c.description:
@@ -37,6 +37,32 @@ class InMemoryMemoryCategoryRepository(MemoryCategoryRepoProtocol):
         cid = str(uuid.uuid4())
         cat = self.memory_category_model(id=cid, name=name, description=description, embedding=embedding)
         self.categories[cid] = cat
+        return cat
+
+    def update_category(
+        self,
+        *,
+        category_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        embedding: list[float] | None = None,
+        summary: str | None = None,
+    ) -> MemoryCategory:
+        cat = self.categories.get(category_id)
+        if cat is None:
+            msg = f"Category with id {category_id} not found"
+            raise KeyError(msg)
+
+        if name is not None:
+            cat.name = name
+        if description is not None:
+            cat.description = description
+        if embedding is not None:
+            cat.embedding = embedding
+        if summary is not None:
+            cat.summary = summary
+
+        cat.updated_at = pendulum.now("UTC")
         return cat
 
     def load_existing(self) -> None:

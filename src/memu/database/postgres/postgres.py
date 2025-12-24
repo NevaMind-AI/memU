@@ -96,7 +96,7 @@ class PostgresStore(Database):
         self.categories = self._state.categories
         self.relations = self._state.relations
 
-        self._load_existing()
+        # self._load_existing()
 
     def close(self) -> None:
         self._sessions.close()

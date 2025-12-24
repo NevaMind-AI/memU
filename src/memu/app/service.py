@@ -68,7 +68,8 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
             config=self.database_config,
             user_model=self.user_model,
         )
-        self._start_category_initialization(self._context, self.database)
+        # We need the concrete user scope (user_id: xxx) to initialize the categories
+        # self._start_category_initialization(self._context, self.database)
 
         # Initialize client caches (lazy creation on first use)
         self._llm_clients: dict[str, Any] = {}
