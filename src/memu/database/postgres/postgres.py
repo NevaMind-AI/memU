@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from memu.database.interfaces import Database
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, Resource
-from memu.database.postgres.migration import run_migrations
+from memu.database.postgres.migration import DDLMode, run_migrations
 from memu.database.postgres.repositories.category_item_repo import PostgresCategoryItemRepo
 from memu.database.postgres.repositories.memory_category_repo import PostgresMemoryCategoryRepo
 from memu.database.postgres.repositories.memory_item_repo import PostgresMemoryItemRepo
@@ -34,7 +34,7 @@ class PostgresStore(Database):
         self,
         *,
         dsn: str,
-        ddl_mode: str = "create",  # kept for API compatibility
+        ddl_mode: DDLMode = "create",
         vector_provider: str | None = None,
         scope_model: type[BaseModel] | None = None,
         base_model: type[BaseModel] | None = None,
@@ -54,7 +54,7 @@ class PostgresStore(Database):
         self._state = DatabaseState()
         self._sessions = SessionManager(dsn=self.dsn)
         self._sqla_models: SQLAModels = sqla_models or get_sqlalchemy_models(scope_model=self._scope_model)
-        run_migrations(dsn=self.dsn, scope_model=self._scope_model)
+        run_migrations(dsn=self.dsn, scope_model=self._scope_model, ddl_mode=self.ddl_mode)
 
         resource_model = resource_model or self._sqla_models.Resource
         memory_category_model = memory_category_model or self._sqla_models.MemoryCategory

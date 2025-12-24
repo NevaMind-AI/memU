@@ -1,6 +1,6 @@
 """Storage backends for MemU."""
 
-from memu.database.factory import build_database, build_database_models
+from memu.database.factory import build_database
 from memu.database.interfaces import (
     CategoryItemRecord,
     Database,
@@ -21,7 +21,6 @@ __all__ = [
     "ResourceRecord",
     "ResourceRepo",
     "build_database",
-    "build_database_models",
     "inmemory",
     "postgres",
     "schema",

@@ -41,7 +41,7 @@ class RetrieveMixin:
     async def retrieve(
         self,
         queries: list[dict[str, Any]],
-        **where: Any,
+        where: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if not queries:
             raise ValueError("empty_queries")

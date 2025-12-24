@@ -11,11 +11,11 @@ from memu.app.memorize import MemorizeMixin
 from memu.app.retrieve import RetrieveMixin
 from memu.app.settings import (
     BlobConfig,
+    DatabaseConfig,
     LLMConfig,
     LLMProfilesConfig,
     MemorizeConfig,
     RetrieveConfig,
-    StorageProvidersConfig,
     UserConfig,
 )
 from memu.blob.local_fs import LocalFS
@@ -43,7 +43,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         *,
         llm_profiles: LLMProfilesConfig | dict[str, Any] | None = None,
         blob_config: BlobConfig | dict[str, Any] | None = None,
-        storage_providers: StorageProvidersConfig | dict[str, Any] | None = None,
+        database_config: DatabaseConfig | dict[str, Any] | None = None,
         memorize_config: MemorizeConfig | dict[str, Any] | None = None,
         retrieve_config: RetrieveConfig | dict[str, Any] | None = None,
         workflow_runner: WorkflowRunner | str | None = None,
@@ -54,7 +54,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         self.user_model = self.user_config.model
         self.llm_config = self._validate_config(self.llm_profiles.default, LLMConfig)
         self.blob_config = self._validate_config(blob_config, BlobConfig)
-        self.storage_providers = self._validate_config(storage_providers, StorageProvidersConfig)
+        self.database_config = self._validate_config(database_config, DatabaseConfig)
         self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
 
@@ -65,7 +65,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         self._context = Context(categories_ready=not bool(self.category_configs))
 
         self.database: Database = build_database(
-            storage_providers=self.storage_providers,
+            config=self.database_config,
             user_model=self.user_model,
         )
         self._start_category_initialization(self._context, self.database)
@@ -158,12 +158,12 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
 
     def _provider_summary(self) -> dict[str, Any]:
         vector_provider = None
-        if self.storage_providers.vector_index:
-            vector_provider = self.storage_providers.vector_index.provider
+        if self.database_config.vector_index:
+            vector_provider = self.database_config.vector_index.provider
         return {
             "llm_profiles": list(self.llm_profiles.profiles.keys()),
             "storage": {
-                "metadata_store": self.storage_providers.metadata_store.provider,
+                "metadata_store": self.database_config.metadata_store.provider,
                 "vector_index": vector_provider,
             },
         }
@@ -218,8 +218,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin):
         return value.replace("{", "{{").replace("}", "}}")
 
     def _model_dump_without_embeddings(self, obj: BaseModel) -> dict[str, Any]:
-        data = obj.model_dump()
-        data.pop("embedding", None)
+        data = obj.model_dump(exclude={"embedding"})
         return data
 
     @staticmethod

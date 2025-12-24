@@ -51,10 +51,10 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
 
             if existing:
                 updated = False
-                if not getattr(existing, "embedding", None):
+                if getattr(existing, "embedding", None) is None:
                     existing.embedding = self._prepare_embedding(embedding)
                     updated = True
-                if not getattr(existing, "description", None):
+                if getattr(existing, "description", None) is None:
                     existing.description = description
                     updated = True
                 if updated:
