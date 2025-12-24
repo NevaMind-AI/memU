@@ -40,13 +40,23 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
                 result[cat.id] = cat
         return result
 
-    def get_or_create_category(self, *, name: str, description: str, embedding: list[float]) -> MemoryCategory:
+    def get_or_create_category(
+        self,
+        *,
+        name: str,
+        description: str,
+        embedding: list[float],
+        user_data: dict[str, Any],
+    ) -> MemoryCategory:
         from sqlmodel import select
 
         now = self._now()
         with self._sessions.session() as session:
+            filters = [self._sqla_models.MemoryCategory.name == name]
+            for key, value in user_data.items():
+                filters.append(getattr(self._sqla_models.MemoryCategory, key) == value)
             existing = session.scalar(
-                select(self._sqla_models.MemoryCategory).where(self._sqla_models.MemoryCategory.name == name)
+                select(self._sqla_models.MemoryCategory).where(*filters)
             )
 
             if existing:
@@ -70,6 +80,7 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
                 embedding=self._prepare_embedding(embedding),
                 created_at=now,
                 updated_at=now,
+                **user_data,
             )
             session.add(cat)
             session.commit()
@@ -126,9 +137,6 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
                 self._cache_category(row)
 
     def _cache_category(self, cat: MemoryCategory) -> MemoryCategory:
-        existing = self.categories.get(cat.id)
-        if existing:
-            return existing
         self.categories[cat.id] = cat
         return cat
 
