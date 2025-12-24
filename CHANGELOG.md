@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.8.0](https://github.com/NevaMind-AI/memU/compare/v0.7.0...v0.8.0) (2025-12-24)
+
+
+### Features
+
+* add configurable batch_size for embedding API calls ([#114](https://github.com/NevaMind-AI/memU/issues/114)) ([060067a](https://github.com/NevaMind-AI/memU/commit/060067a5ebe8ad36c4ca4ad2cc6033303c3f1a36))
+* add conversation created at ([#120](https://github.com/NevaMind-AI/memU/issues/120)) ([825df56](https://github.com/NevaMind-AI/memU/commit/825df5640037fa2345c3153c3df89174059551b3))
+* add workflow implementation and postgres store ([#122](https://github.com/NevaMind-AI/memU/issues/122)) ([a175811](https://github.com/NevaMind-AI/memU/commit/a1758110f859f3725960d308fa0344a1056be52c))
+
+
+### Bug Fixes
+
+* example 3 output ([#117](https://github.com/NevaMind-AI/memU/issues/117)) ([65ef7c6](https://github.com/NevaMind-AI/memU/commit/65ef7c6a497047f0f86938cf77ee4602a630216b))
+* postgres model definitions & database initialization ([#124](https://github.com/NevaMind-AI/memU/issues/124)) ([7d5e0cb](https://github.com/NevaMind-AI/memU/commit/7d5e0cb02837a6e2071d3c3344ef6dad613f9a43))
+
+
+### Documentation
+
+* Add memU-experiment link to README ([#119](https://github.com/NevaMind-AI/memU/issues/119)) ([2d908e1](https://github.com/NevaMind-AI/memU/commit/2d908e17ee2e15b95d4eb2f35dd09f924d57f8cf))
+* clearer introduction and new agent examples ([#115](https://github.com/NevaMind-AI/memU/issues/115)) ([da27875](https://github.com/NevaMind-AI/memU/commit/da2787536d91490f7a96a0c7379abd1ad1c6d9ac))
+
 ## [0.7.0](https://github.com/NevaMind-AI/memU/compare/v0.6.0...v0.7.0) (2025-12-05)
 
 
