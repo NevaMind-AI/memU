@@ -552,7 +552,9 @@ class MemorizeMixin:
         else:
             asyncio.run(self._initialize_categories(ctx, store))
 
-    async def _ensure_categories_ready(self, ctx: Context, store: Database, user_scope: Mapping[str, Any] | None = None) -> None:
+    async def _ensure_categories_ready(
+        self, ctx: Context, store: Database, user_scope: Mapping[str, Any] | None = None
+    ) -> None:
         if ctx.categories_ready:
             return
         if ctx.category_init_task:
@@ -561,7 +563,9 @@ class MemorizeMixin:
             return
         await self._initialize_categories(ctx, store, user_scope)
 
-    async def _initialize_categories(self, ctx: Context, store: Database, user: Mapping[str, Any] | None = None) -> None:
+    async def _initialize_categories(
+        self, ctx: Context, store: Database, user: Mapping[str, Any] | None = None
+    ) -> None:
         if ctx.categories_ready:
             return
         if not self.category_configs:

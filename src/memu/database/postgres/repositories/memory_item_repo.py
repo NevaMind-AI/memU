@@ -29,8 +29,11 @@ class PostgresMemoryItemRepo(PostgresRepoBase, MemoryItemRepo):
 
     def get_item(self, memory_id: str) -> MemoryItem | None:
         from sqlmodel import select
+
         with self._sessions.session() as session:
-            row = session.scalar(select(self._sqla_models.MemoryItem).where(self._sqla_models.MemoryItem.id == memory_id))
+            row = session.scalar(
+                select(self._sqla_models.MemoryItem).where(self._sqla_models.MemoryItem.id == memory_id)
+            )
             if row:
                 row.embedding = self._normalize_embedding(row.embedding)
                 return self._cache_item(row)
@@ -92,9 +95,7 @@ class PostgresMemoryItemRepo(PostgresRepoBase, MemoryItemRepo):
         now = self._now()
         with self._sessions.session() as session:
             item = session.scalar(
-                select(self._sqla_models.MemoryItem).where(
-                    self._sqla_models.MemoryItem.id == item_id
-                )
+                select(self._sqla_models.MemoryItem).where(self._sqla_models.MemoryItem.id == item_id)
             )
             if item is None:
                 msg = f"Item with id {item_id} not found"

@@ -1,15 +1,14 @@
-
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable, Mapping
-from typing import TYPE_CHECKING, Literal, Any, Callable, Awaitable, Mapping, cast, get_args
+from typing import TYPE_CHECKING, Any, cast, get_args
 
 from pydantic import BaseModel
 
-from memu.database.models import MemoryType, MemoryCategory, CategoryItem
+from memu.database.models import MemoryCategory, MemoryType
 from memu.prompts.category_patch import CATEGORY_PATCH_PROMPT
 from memu.workflow.step import WorkflowState, WorkflowStep
 
@@ -34,21 +33,16 @@ class PatchMixin:
         _escape_prompt_value: Callable[[str], str]
         user_model: type[BaseModel]
 
-    # create_memory_item
-    # update_memory_item
-    # delete_memory_item
-    # list_memory_items - use where instead of user
-    async def patch(
+    async def create_memory_item(
         self,
-        operation: Literal["CREATE", "UPDATE", "DELETE"],
         *,
-        memory_id: str | None = None,
-        memory_type: MemoryType | None = None,
-        memory_content: str | None = None,
-        memory_categories: list[str] | None = None,
+        memory_type: MemoryType,
+        memory_content: str,
+        memory_categories: list[str],
         user: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        self._validate_operation(operation, memory_id, memory_type, memory_content, memory_categories)
+        if memory_type not in get_args(MemoryType):
+            raise ValueError(f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}")
 
         ctx = self._get_context()
         store = self._get_database()
@@ -56,7 +50,46 @@ class PatchMixin:
         await self._ensure_categories_ready(ctx, store, user_scope)
 
         state: WorkflowState = {
-            "operation": operation,
+            "memory_payload": {
+                "type": memory_type,
+                "content": memory_content,
+                "categories": memory_categories,
+            },
+            "ctx": ctx,
+            "store": store,
+            "category_ids": list(ctx.category_ids),
+            "user": user_scope,
+        }
+
+        result = await self._run_workflow("patch_create", state)
+        response = cast(dict[str, Any] | None, result.get("response"))
+        if response is None:
+            msg = "Create memory item workflow failed to produce a response"
+            raise RuntimeError(msg)
+        return response
+
+    async def update_memory_item(
+        self,
+        *,
+        memory_id: str,
+        memory_type: MemoryType | None = None,
+        memory_content: str | None = None,
+        memory_categories: list[str] | None = None,
+        user: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if all((memory_type is None, memory_content is None, memory_categories is None)):
+            raise ValueError(
+                "At least one of memory type, memory content, or memory categories is required for UPDATE operation"
+            )
+        if memory_type and memory_type not in get_args(MemoryType):
+            raise ValueError(f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}")
+
+        ctx = self._get_context()
+        store = self._get_database()
+        user_scope = self.user_model(**user).model_dump() if user is not None else None
+        await self._ensure_categories_ready(ctx, store, user_scope)
+
+        state: WorkflowState = {
             "memory_id": memory_id,
             "memory_payload": {
                 "type": memory_type,
@@ -69,51 +102,46 @@ class PatchMixin:
             "user": user_scope,
         }
 
-        result = await self._run_workflow("patch", state)
+        result = await self._run_workflow("patch_update", state)
         response = cast(dict[str, Any] | None, result.get("response"))
         if response is None:
-            msg = "Patch workflow failed to produce a response"
+            msg = "Update memory item workflow failed to produce a response"
             raise RuntimeError(msg)
         return response
 
-    def _validate_operation(
+    async def delete_memory_item(
         self,
-        operation: Literal["CREATE", "UPDATE", "DELETE"],
-        memory_id: str | None = None,
-        memory_type: MemoryType | None = None,
-        memory_content: str | None = None,
-        memory_categories: list[str] | None = None,
-    ) -> None:
-        if operation == "CREATE":
-            if memory_type is None:
-                raise ValueError("Memory type is required for CREATE operation")
-            if memory_type not in get_args(MemoryType):
-                raise ValueError(f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}")
-            if memory_content is None:
-                raise ValueError("Memory content is required for CREATE operation")
-            # Comment this if we allow orphan (not linked to any category) memory item
-            # if memory_categories is None:
-            #     raise ValueError("Memory categories are required for CREATE operation")
-        elif operation == "UPDATE":
-            if memory_id is None:
-                raise ValueError("Memory ID is required for UPDATE operation")
-            if all(
-                (memory_type is None, memory_content is None, memory_categories is None)
-            ):
-                raise ValueError("At least one of memory type, memory content, or memory categories is required for UPDATE operation")
-        elif operation == "DELETE":
-            if memory_id is None:
-                raise ValueError("Memory ID is required for DELETE operation")
-        else:
-            raise ValueError(f"Invalid operation: '{operation}', must be one of ['CREATE', 'UPDATE', 'DELETE']")
+        *,
+        memory_id: str,
+        user: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        ctx = self._get_context()
+        store = self._get_database()
+        user_scope = self.user_model(**user).model_dump() if user is not None else None
+        await self._ensure_categories_ready(ctx, store, user_scope)
 
-    def _build_patch_workflow(self) -> list[WorkflowStep]:
+        state: WorkflowState = {
+            "memory_id": memory_id,
+            "ctx": ctx,
+            "store": store,
+            "category_ids": list(ctx.category_ids),
+            "user": user_scope,
+        }
+
+        result = await self._run_workflow("patch_delete", state)
+        response = cast(dict[str, Any] | None, result.get("response"))
+        if response is None:
+            msg = "Delete memory item workflow failed to produce a response"
+            raise RuntimeError(msg)
+        return response
+
+    def _build_create_memory_item_workflow(self) -> list[WorkflowStep]:
         steps = [
             WorkflowStep(
-                step_id="operate_memory_item",
-                role="operate",
-                handler=self._patch_operate_memory_item,
-                requires={"operation", "memory_id", "memory_payload", "ctx", "store", "user"},
+                step_id="create_memory_item",
+                role="patch",
+                handler=self._patch_create_memory_item,
+                requires={"memory_payload", "ctx", "store", "user"},
                 produces={"memory_item", "category_updates"},
                 capabilities={"db", "llm"},
             ),
@@ -135,7 +163,174 @@ class PatchMixin:
             ),
         ]
         return steps
-        
+
+    def _build_update_memory_item_workflow(self) -> list[WorkflowStep]:
+        steps = [
+            WorkflowStep(
+                step_id="update_memory_item",
+                role="patch",
+                handler=self._patch_update_memory_item,
+                requires={"memory_id", "memory_payload", "ctx", "store", "user"},
+                produces={"memory_item", "category_updates"},
+                capabilities={"db", "llm"},
+            ),
+            WorkflowStep(
+                step_id="persist_index",
+                role="persist",
+                handler=self._patch_persist_and_index,
+                requires={"category_updates", "ctx", "store"},
+                produces={"categories"},
+                capabilities={"db", "llm"},
+            ),
+            WorkflowStep(
+                step_id="build_response",
+                role="emit",
+                handler=self._patch_build_response,
+                requires={"memory_item", "category_updates", "ctx", "store"},
+                produces={"response"},
+                capabilities=set(),
+            ),
+        ]
+        return steps
+
+    def _build_delete_memory_item_workflow(self) -> list[WorkflowStep]:
+        steps = [
+            WorkflowStep(
+                step_id="delete_memory_item",
+                role="patch",
+                handler=self._patch_delete_memory_item,
+                requires={"memory_id", "ctx", "store", "user"},
+                produces={"memory_item", "category_updates"},
+                capabilities={"db", "llm"},
+            ),
+            WorkflowStep(
+                step_id="persist_index",
+                role="persist",
+                handler=self._patch_persist_and_index,
+                requires={"category_updates", "ctx", "store"},
+                produces={"categories"},
+                capabilities={"db", "llm"},
+            ),
+            WorkflowStep(
+                step_id="build_response",
+                role="emit",
+                handler=self._patch_build_response,
+                requires={"memory_item", "category_updates", "ctx", "store"},
+                produces={"response"},
+                capabilities=set(),
+            ),
+        ]
+        return steps
+
+    async def _patch_create_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        memory_payload = state["memory_payload"]
+        ctx = state["ctx"]
+        store = state["store"]
+        user = state["user"]
+        category_memory_updates: dict[str, [str, str]] = {}
+
+        embed_payload = [memory_payload["content"]]
+        content_embedding = (await self._get_llm_client().embed(embed_payload))[0]
+
+        item = store.memory_item_repo.create_item(
+            memory_type=memory_payload["type"],
+            summary=memory_payload["content"],
+            embedding=content_embedding,
+            user_data=dict(user or {}),
+        )
+        cat_names = memory_payload["categories"]
+        mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
+        for cid in mapped_cat_ids:
+            store.category_item_repo.link_item_category(item.id, cid, user_data=dict(user or {}))
+            category_memory_updates[cid] = (None, memory_payload["content"])
+
+        state.update({
+            "memory_item": item,
+            "category_updates": category_memory_updates,
+        })
+        return state
+
+    async def _patch_update_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        memory_id = state["memory_id"]
+        memory_payload = state["memory_payload"]
+        ctx = state["ctx"]
+        store = state["store"]
+        user = state["user"]
+        category_memory_updates: dict[str, [str, str]] = {}
+
+        item = store.memory_item_repo.get_item(memory_id)
+        if not item:
+            raise ValueError(f"Memory item with id {memory_id} not found")
+        old_content = item.summary
+        old_item_categories = store.category_item_repo.get_item_categories(memory_id)
+        mapped_old_cat_ids = [cat.category_id for cat in old_item_categories]
+
+        if memory_payload["content"]:
+            embed_payload = [memory_payload["content"]]
+            content_embedding = (await self._get_llm_client().embed(embed_payload))[0]
+        else:
+            content_embedding = None
+
+        if memory_payload["type"] or memory_payload["content"]:
+            item = store.memory_item_repo.update_item(
+                item_id=memory_id,
+                memory_type=memory_payload["type"],
+                summary=memory_payload["content"],
+                embedding=content_embedding,
+            )
+        new_cat_names = memory_payload["categories"]
+        mapped_new_cat_ids = self._map_category_names_to_ids(new_cat_names, ctx)
+
+        cats_to_remove = set(mapped_old_cat_ids) - set(mapped_new_cat_ids)
+        cats_to_add = set(mapped_new_cat_ids) - set(mapped_old_cat_ids)
+        for cid in cats_to_remove:
+            store.category_item_repo.unlink_item_category(memory_id, cid)
+            category_memory_updates[cid] = (old_content, None)
+        for cid in cats_to_add:
+            store.category_item_repo.link_item_category(memory_id, cid, user_data=dict(user or {}))
+            category_memory_updates[cid] = (None, item.summary)
+
+        if memory_payload["content"]:
+            for cid in set(mapped_old_cat_ids) & set(mapped_new_cat_ids):
+                category_memory_updates[cid] = (old_content, item.summary)
+
+        state.update({
+            "memory_item": item,
+            "category_updates": category_memory_updates,
+        })
+        return state
+
+    async def _patch_delete_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        memory_id = state["memory_id"]
+        ctx = state["ctx"]
+        store = state["store"]
+        user = state["user"]
+        category_memory_updates: dict[str, [str, str]] = {}
+
+        item = store.memory_item_repo.get_item(memory_id)
+        if not item:
+            raise ValueError(f"Memory item with id {memory_id} not found")
+        item_categories = store.category_item_repo.get_item_categories(memory_id)
+        for cat in item_categories:
+            category_memory_updates[cat.category_id] = (item.summary, None)
+        store.memory_item_repo.delete_item(memory_id)
+
+        state.update({
+            "memory_item": item,
+            "category_updates": category_memory_updates,
+        })
+        return state
+
+    async def _patch_persist_and_index(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        llm_client = self._get_step_llm_client(step_context)
+        await self._patch_category_summaries(
+            state.get("category_updates", {}),
+            ctx=state["ctx"],
+            store=state["store"],
+            llm_client=llm_client,
+        )
+        return state
+
     def _patch_build_response(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         ctx = state["ctx"]
         store = state["store"]
@@ -151,7 +346,9 @@ class PatchMixin:
         state["response"] = response
         return state
 
-    async def _ensure_categories_ready(self, ctx: Context, store: Database, user_scope: Mapping[str, Any] | None = None) -> None:
+    async def _ensure_categories_ready(
+        self, ctx: Context, store: Database, user_scope: Mapping[str, Any] | None = None
+    ) -> None:
         if ctx.categories_ready:
             return
         if ctx.category_init_task:
@@ -160,7 +357,9 @@ class PatchMixin:
             return
         await self._initialize_categories(ctx, store, user_scope)
 
-    async def _initialize_categories(self, ctx: Context, store: Database, user: Mapping[str, Any] | None = None) -> None:
+    async def _initialize_categories(
+        self, ctx: Context, store: Database, user: Mapping[str, Any] | None = None
+    ) -> None:
         if ctx.categories_ready:
             return
         if not self.category_configs:
@@ -180,87 +379,18 @@ class PatchMixin:
             ctx.category_name_to_id[name.lower()] = cat.id
         ctx.categories_ready = True
 
-    async def _patch_operate_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        operation = state["operation"]
-        memory_id = state["memory_id"]
-        memory_payload = state["memory_payload"]
-        ctx = state["ctx"]
-        store = state["store"]
-        user = state["user"]
-        category_memory_updates: dict[str, [str, str]] = {}
-
-        if memory_payload["content"]:
-            embed_payload = [memory_payload["content"]]
-            content_embedding = (await self._get_llm_client().embed(embed_payload))[0]
-        else:
-            content_embedding = None
-
-        if operation == "CREATE":
-            item = store.memory_item_repo.create_item(
-                memory_type=memory_payload["type"],
-                summary=memory_payload["content"],
-                embedding=content_embedding,
-                user_data=dict(user or {}),
-            )
-            cat_names = memory_payload["categories"]
-            mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
-            for cid in mapped_cat_ids:
-                store.category_item_repo.link_item_category(item.id, cid, user_data=dict(user or {}))
-                category_memory_updates[cid] = (None, memory_payload["content"])
-        elif operation == "UPDATE":
-            item = store.memory_item_repo.get_item(memory_id)
-            if not item:
-                raise ValueError(f"Memory item with id {memory_id} not found")
-            old_content = item.summary
-            old_item_categories = store.category_item_repo.get_item_categories(memory_id)
-            mapped_old_cat_ids = [cat.category_id for cat in old_item_categories]
-
-            if memory_payload["type"] or memory_payload["content"]:
-                item = store.memory_item_repo.update_item(
-                    item_id=memory_id,
-                    memory_type=memory_payload["type"],
-                    summary=memory_payload["content"],
-                    embedding=content_embedding,
-                )
-            new_cat_names = memory_payload["categories"]
-            mapped_new_cat_ids = self._map_category_names_to_ids(new_cat_names, ctx)
-
-            cats_to_remove = set(mapped_old_cat_ids) - set(mapped_new_cat_ids)
-            cats_to_add = set(mapped_new_cat_ids) - set(mapped_old_cat_ids)
-            for cid in cats_to_remove:
-                store.category_item_repo.unlink_item_category(memory_id, cid)
-                category_memory_updates[cid] = (old_content, None)
-            for cid in cats_to_add:
-                store.category_item_repo.link_item_category(memory_id, cid, user_data=dict(user or {}))
-                category_memory_updates[cid] = (None, item.summary)
-
-            if memory_payload["content"]:
-                for cid in set(mapped_old_cat_ids) & set(mapped_new_cat_ids):
-                    category_memory_updates[cid] = (old_content, item.summary)
-        elif operation == "DELETE":
-            item = store.memory_item_repo.get_item(memory_id)
-            if not item:
-                raise ValueError(f"Memory item with id {memory_id} not found")
-            item_categories = store.category_item_repo.get_item_categories  (memory_id)
-            for cat in item_categories:
-                category_memory_updates[cat.category_id] = (item.summary, None)
-            store.memory_item_repo.delete_item(memory_id)
-            
-        state.update({
-            "memory_item": item,
-            "category_updates": category_memory_updates,
-        })
-        return state
-
-    async def _patch_persist_and_index(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        llm_client = self._get_step_llm_client(step_context)
-        await self._patch_category_summaries(
-            state.get("category_updates", {}),
-            ctx=state["ctx"],
-            store=state["store"],
-            llm_client=llm_client,
-        )
-        return state
+    def _map_category_names_to_ids(self, names: list[str], ctx: Context) -> list[str]:
+        if not names:
+            return []
+        mapped: list[str] = []
+        seen: set[str] = set()
+        for name in names:
+            key = name.strip().lower()
+            cid = ctx.category_name_to_id.get(key)
+            if cid and cid not in seen:
+                mapped.append(cid)
+                seen.add(cid)
+        return mapped
 
     async def _patch_category_summaries(
         self,
@@ -278,7 +408,9 @@ class PatchMixin:
             cat = store.memory_category_repo.categories.get(cid)
             if not cat or (not content_before and not content_after):
                 continue
-            prompt = self._build_category_patch_prompt(category=cat, content_before=content_before, content_after=content_after)
+            prompt = self._build_category_patch_prompt(
+                category=cat, content_before=content_before, content_after=content_after
+            )
             tasks.append(client.summarize(prompt, system_prompt=None))
             target_ids.append(cid)
         if not tasks:
@@ -294,7 +426,9 @@ class PatchMixin:
                 summary=summary.strip(),
             )
 
-    def _build_category_patch_prompt(self, *, category: MemoryCategory, content_before: str | None, content_after: str | None) -> str:
+    def _build_category_patch_prompt(
+        self, *, category: MemoryCategory, content_before: str | None, content_after: str | None
+    ) -> str:
         if content_before and content_after:
             update_content = "\n".join([
                 "The memory content before:",

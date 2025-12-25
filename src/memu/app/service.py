@@ -193,10 +193,21 @@ class MemoryService(MemorizeMixin, RetrieveMixin, PatchMixin):
             "method",
             "where",
         }
-        patch_initial_keys = {
-            "operation",
+        patch_create_initial_keys = {
+            "memory_payload",
+            "ctx",
+            "store",
+            "user",
+        }
+        patch_update_initial_keys = {
             "memory_id",
             "memory_payload",
+            "ctx",
+            "store",
+            "user",
+        }
+        patch_delete_initial_keys = {
+            "memory_id",
             "ctx",
             "store",
             "user",
@@ -207,8 +218,12 @@ class MemoryService(MemorizeMixin, RetrieveMixin, PatchMixin):
         self._pipelines.register("retrieve_rag", rag_workflow, initial_state_keys=retrieve_initial_keys)
         llm_workflow = self._build_llm_retrieve_workflow()
         self._pipelines.register("retrieve_llm", llm_workflow, initial_state_keys=retrieve_initial_keys)
-        patch_workflow = self._build_patch_workflow()
-        self._pipelines.register("patch", patch_workflow, initial_state_keys=patch_initial_keys)
+        patch_create_workflow = self._build_create_memory_item_workflow()
+        self._pipelines.register("patch_create", patch_create_workflow, initial_state_keys=patch_create_initial_keys)
+        patch_update_workflow = self._build_update_memory_item_workflow()
+        self._pipelines.register("patch_update", patch_update_workflow, initial_state_keys=patch_update_initial_keys)
+        patch_delete_workflow = self._build_delete_memory_item_workflow()
+        self._pipelines.register("patch_delete", patch_delete_workflow, initial_state_keys=patch_delete_initial_keys)
 
     async def _run_workflow(self, workflow_name: str, initial_state: WorkflowState) -> WorkflowState:
         """Execute a workflow through the configured runner backend."""

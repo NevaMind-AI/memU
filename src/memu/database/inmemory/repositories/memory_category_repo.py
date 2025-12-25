@@ -23,7 +23,9 @@ class InMemoryMemoryCategoryRepository(MemoryCategoryRepoProtocol):
             return dict(self.categories)
         return {cid: cat for cid, cat in self.categories.items() if matches_where(cat, where)}
 
-    def get_or_create_category(self, *, name: str, description: str, embedding: list[float], user_data: dict[str, Any]) -> MemoryCategory:
+    def get_or_create_category(
+        self, *, name: str, description: str, embedding: list[float], user_data: dict[str, Any]
+    ) -> MemoryCategory:
         for c in self.categories.values():
             if c.name == name and all(getattr(c, k) == v for k, v in user_data.items()):
                 now = pendulum.now("UTC")

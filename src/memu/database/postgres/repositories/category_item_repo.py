@@ -72,13 +72,21 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
         from sqlmodel import delete
 
         with self._sessions.session() as session:
-            session.exec(delete(self._sqla_models.CategoryItem).where(self._sqla_models.CategoryItem.item_id == item_id, self._sqla_models.CategoryItem.category_id == cat_id))
+            session.exec(
+                delete(self._sqla_models.CategoryItem).where(
+                    self._sqla_models.CategoryItem.item_id == item_id,
+                    self._sqla_models.CategoryItem.category_id == cat_id,
+                )
+            )
             session.commit()
 
     def get_item_categories(self, item_id: str) -> list[CategoryItem]:
         from sqlmodel import select
+
         with self._sessions.session() as session:
-            rows = session.scalars(select(self._sqla_models.CategoryItem).where(self._sqla_models.CategoryItem.item_id == item_id)).all()
+            rows = session.scalars(
+                select(self._sqla_models.CategoryItem).where(self._sqla_models.CategoryItem.item_id == item_id)
+            ).all()
         return [self._cache_relation(row) for row in rows]
 
     def load_existing(self) -> None:
