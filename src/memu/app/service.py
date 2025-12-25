@@ -7,6 +7,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
+from memu.app.crud import CRUDMixin
 from memu.app.memorize import MemorizeMixin
 from memu.app.patch import PatchMixin
 from memu.app.retrieve import RetrieveMixin
@@ -38,7 +39,7 @@ class Context:
     category_init_task: asyncio.Task | None = None
 
 
-class MemoryService(MemorizeMixin, RetrieveMixin, PatchMixin):
+class MemoryService(MemorizeMixin, RetrieveMixin, PatchMixin, CRUDMixin):
     def __init__(
         self,
         *,
@@ -212,6 +213,11 @@ class MemoryService(MemorizeMixin, RetrieveMixin, PatchMixin):
             "store",
             "user",
         }
+        crud_list_memories_initial_keys = {
+            "ctx",
+            "store",
+            "where",
+        }
         memo_workflow = self._build_memorize_workflow()
         self._pipelines.register("memorize", memo_workflow, initial_state_keys=memorize_initial_keys)
         rag_workflow = self._build_rag_retrieve_workflow()
@@ -224,6 +230,16 @@ class MemoryService(MemorizeMixin, RetrieveMixin, PatchMixin):
         self._pipelines.register("patch_update", patch_update_workflow, initial_state_keys=patch_update_initial_keys)
         patch_delete_workflow = self._build_delete_memory_item_workflow()
         self._pipelines.register("patch_delete", patch_delete_workflow, initial_state_keys=patch_delete_initial_keys)
+        crud_list_items_workflow = self._build_list_memory_items_workflow()
+        self._pipelines.register(
+            "crud_list_memory_items", crud_list_items_workflow, initial_state_keys=crud_list_items_initial_keys
+        )
+        crud_list_categories_workflow = self._build_list_memory_categories_workflow()
+        self._pipelines.register(
+            "crud_list_memory_categories",
+            crud_list_categories_workflow,
+            initial_state_keys=crud_list_memories_initial_keys,
+        )
 
     async def _run_workflow(self, workflow_name: str, initial_state: WorkflowState) -> WorkflowState:
         """Execute a workflow through the configured runner backend."""

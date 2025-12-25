@@ -25,9 +25,6 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
         self.categories: dict[str, MemoryCategory] = self._state.categories
 
     def list_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryCategory]:
-        if not where:
-            return dict(self.categories)
-
         from sqlmodel import select
 
         filters = self._build_filters(self._sqla_models.MemoryCategory, where)

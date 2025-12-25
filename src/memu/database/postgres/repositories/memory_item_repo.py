@@ -40,9 +40,6 @@ class PostgresMemoryItemRepo(PostgresRepoBase, MemoryItemRepo):
         return None
 
     def list_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
-        if not where:
-            return dict(self.items)
-
         from sqlmodel import select
 
         filters = self._build_filters(self._sqla_models.MemoryItem, where)
@@ -167,9 +164,6 @@ class PostgresMemoryItemRepo(PostgresRepoBase, MemoryItemRepo):
         return scored[:top_k]
 
     def _cache_item(self, item: MemoryItem) -> MemoryItem:
-        # existing = self.items.get(item.id)
-        # if existing:
-        #     return existing
         self.items[item.id] = item
         return item
 

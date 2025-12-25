@@ -25,9 +25,6 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
         self.relations: list[CategoryItem] = self._state.relations
 
     def list_relations(self, where: Mapping[str, Any] | None = None) -> list[CategoryItem]:
-        if not where:
-            return list(self.relations)
-
         from sqlmodel import select
 
         filters = self._build_filters(self._sqla_models.CategoryItem, where)
@@ -98,9 +95,6 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
                 self._cache_relation(row)
 
     def _cache_relation(self, rel: CategoryItem) -> CategoryItem:
-        # for existing in self.relations:
-        #     if existing.id == getattr(rel, "id", None):
-        #         return existing
         self.relations.append(rel)
         return rel
 

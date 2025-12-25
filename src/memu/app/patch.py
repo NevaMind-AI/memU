@@ -332,7 +332,6 @@ class PatchMixin:
         return state
 
     def _patch_build_response(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        ctx = state["ctx"]
         store = state["store"]
         item = self._model_dump_without_embeddings(state["memory_item"])
         category_updates_ids = list(state.get("category_updates", {}).keys())
