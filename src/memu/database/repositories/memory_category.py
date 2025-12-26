@@ -14,7 +14,9 @@ class MemoryCategoryRepo(Protocol):
 
     def list_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryCategory]: ...
 
-    def get_or_create_category(self, *, name: str, description: str, embedding: list[float], user_data: dict[str, Any]) -> MemoryCategory: ...
+    def get_or_create_category(
+        self, *, name: str, description: str, embedding: list[float], user_data: dict[str, Any]
+    ) -> MemoryCategory: ...
 
     def update_category(
         self,

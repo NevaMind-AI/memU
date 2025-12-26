@@ -19,19 +19,26 @@ from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
 
 
+class TZDateTime(DateTime):
+    def __init__(self, **kw: Any) -> None:
+        super().__init__(timezone=True, **kw)
+
+
 class BaseModelMixin(SQLModel):
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
         primary_key=True,
         index=True,
+        sa_type=String,
     )
     created_at: datetime = Field(
         default_factory=lambda: pendulum.now("UTC"),
-        sa_column=Column(DateTime(timezone=True), server_default=func.now()),
+        sa_type=TZDateTime,
+        sa_column_kwargs={"server_default": func.now()},
     )
     updated_at: datetime = Field(
         default_factory=lambda: pendulum.now("UTC"),
-        sa_column=Column(DateTime(timezone=True)),
+        sa_type=TZDateTime,
     )
 
 
@@ -44,7 +51,7 @@ class ResourceModel(BaseModelMixin, Resource):
 
 
 class MemoryItemModel(BaseModelMixin, MemoryItem):
-    resource_id: str = Field(sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), nullable=False))
+    resource_id: str = Field(sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), nullable=True))
     memory_type: MemoryType = Field(sa_column=Column(String, nullable=False))
     summary: str = Field(sa_column=Column(Text, nullable=False))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))

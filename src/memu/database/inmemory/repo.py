@@ -14,7 +14,7 @@ from memu.database.inmemory.repositories import (
 from memu.database.inmemory.state import InMemoryState
 from memu.database.interfaces import Database
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, Resource
-from memu.database.repositories import CategoryItemRepo, MemoryCategoryRepo, MemoryItemRepo, ResourceRepo
+from memu.database.repositories import MemoryCategoryRepo, ResourceRepo
 
 
 class InMemoryStore(Database):
@@ -51,10 +51,8 @@ class InMemoryStore(Database):
         self.memory_category_repo: MemoryCategoryRepo = InMemoryMemoryCategoryRepository(
             state=self.state, memory_category_model=memory_category_model
         )
-        self.memory_item_repo: MemoryItemRepo = InMemoryMemoryItemRepository(
-            state=self.state, memory_item_model=memory_item_model
-        )
-        self.category_item_repo: CategoryItemRepo = InMemoryCategoryItemRepository(
+        self.memory_item_repo = InMemoryMemoryItemRepository(state=self.state, memory_item_model=memory_item_model)
+        self.category_item_repo = InMemoryCategoryItemRepository(
             state=self.state, category_item_model=category_item_model
         )
 

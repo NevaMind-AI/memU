@@ -25,9 +25,6 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
         self.relations: list[CategoryItem] = self._state.relations
 
     def list_relations(self, where: Mapping[str, Any] | None = None) -> list[CategoryItem]:
-        if not where:
-            return list(self.relations)
-
         from sqlmodel import select
 
         filters = self._build_filters(self._sqla_models.CategoryItem, where)
@@ -68,6 +65,27 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
 
         return self._cache_relation(new_rel)
 
+    def unlink_item_category(self, item_id: str, cat_id: str) -> None:
+        from sqlmodel import delete
+
+        with self._sessions.session() as session:
+            session.exec(
+                delete(self._sqla_models.CategoryItem).where(
+                    self._sqla_models.CategoryItem.item_id == item_id,
+                    self._sqla_models.CategoryItem.category_id == cat_id,
+                )
+            )
+            session.commit()
+
+    def get_item_categories(self, item_id: str) -> list[CategoryItem]:
+        from sqlmodel import select
+
+        with self._sessions.session() as session:
+            rows = session.scalars(
+                select(self._sqla_models.CategoryItem).where(self._sqla_models.CategoryItem.item_id == item_id)
+            ).all()
+        return [self._cache_relation(row) for row in rows]
+
     def load_existing(self) -> None:
         from sqlmodel import select
 
@@ -77,9 +95,6 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
                 self._cache_relation(row)
 
     def _cache_relation(self, rel: CategoryItem) -> CategoryItem:
-        for existing in self.relations:
-            if existing.id == getattr(rel, "id", None):
-                return existing
         self.relations.append(rel)
         return rel
 

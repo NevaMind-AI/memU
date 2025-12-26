@@ -1069,8 +1069,10 @@ class RetrieveMixin:
 
         if item_ids:
             # Get resources that are related to the specified items
-            resource_ids = {item_pool[iid].resource_id for iid in item_ids if iid in item_pool}
-            resources_to_format = [resource_pool[rid] for rid in resource_ids if rid in resource_pool]
+            resource_ids = {item_pool[iid].resource_id for iid in item_ids if iid in item_pool and iid is not None}
+            resources_to_format = [
+                resource_pool[rid] for rid in resource_ids if rid in resource_pool and rid is not None
+            ]
         else:
             resources_to_format = list(resource_pool.values())
 

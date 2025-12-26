@@ -111,6 +111,10 @@ class MemorizeConfig(BaseModel):
     )
 
 
+class PatchConfig(BaseModel):
+    pass
+
+
 class DefaultUserModel(BaseModel):
     user_id: str | None = None
 

@@ -25,9 +25,6 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
         self.categories: dict[str, MemoryCategory] = self._state.categories
 
     def list_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryCategory]:
-        if not where:
-            return dict(self.categories)
-
         from sqlmodel import select
 
         filters = self._build_filters(self._sqla_models.MemoryCategory, where)
@@ -55,9 +52,7 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
             filters = [self._sqla_models.MemoryCategory.name == name]
             for key, value in user_data.items():
                 filters.append(getattr(self._sqla_models.MemoryCategory, key) == value)
-            existing = session.scalar(
-                select(self._sqla_models.MemoryCategory).where(*filters)
-            )
+            existing = session.scalar(select(self._sqla_models.MemoryCategory).where(*filters))
 
             if existing:
                 updated = False
@@ -102,9 +97,7 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
         now = self._now()
         with self._sessions.session() as session:
             cat = session.scalar(
-                select(self._sqla_models.MemoryCategory).where(
-                    self._sqla_models.MemoryCategory.id == category_id
-                )
+                select(self._sqla_models.MemoryCategory).where(self._sqla_models.MemoryCategory.id == category_id)
             )
             if cat is None:
                 msg = f"Category with id {category_id} not found"
@@ -126,7 +119,7 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
             cat.embedding = self._normalize_embedding(cat.embedding)
 
         return self._cache_category(cat)
-    
+
     def load_existing(self) -> None:
         from sqlmodel import select
 
