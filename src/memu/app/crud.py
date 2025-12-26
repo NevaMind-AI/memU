@@ -29,7 +29,7 @@ class CRUDMixin:
 
     async def list_memory_items(
         self,
-        where: dict[str, Any] = {},
+        where: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         ctx = self._get_context()
         store = self._get_database()
@@ -50,7 +50,7 @@ class CRUDMixin:
 
     async def list_memory_categories(
         self,
-        where: dict[str, Any] = {},
+        where: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         ctx = self._get_context()
         store = self._get_database()

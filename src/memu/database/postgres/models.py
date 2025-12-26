@@ -19,6 +19,11 @@ from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
 
 
+class TZDateTime(DateTime):
+    def __init__(self, **kw: Any) -> None:
+        super().__init__(timezone=True, **kw)
+
+
 class BaseModelMixin(SQLModel):
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
@@ -28,14 +33,12 @@ class BaseModelMixin(SQLModel):
     )
     created_at: datetime = Field(
         default_factory=lambda: pendulum.now("UTC"),
-        # sa_column=Column(DateTime(timezone=True), server_default=func.now()),
-        sa_type=DateTime(timezone=True),
+        sa_type=TZDateTime,
         sa_column_kwargs={"server_default": func.now()},
     )
     updated_at: datetime = Field(
         default_factory=lambda: pendulum.now("UTC"),
-        # sa_column=Column(DateTime(timezone=True)),
-        sa_type=DateTime(timezone=True),
+        sa_type=TZDateTime,
     )
 
 

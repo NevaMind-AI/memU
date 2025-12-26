@@ -232,7 +232,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, PatchMixin, CRUDMixin):
         self._pipelines.register("patch_delete", patch_delete_workflow, initial_state_keys=patch_delete_initial_keys)
         crud_list_items_workflow = self._build_list_memory_items_workflow()
         self._pipelines.register(
-            "crud_list_memory_items", crud_list_items_workflow, initial_state_keys=crud_list_items_initial_keys
+            "crud_list_memory_items", crud_list_items_workflow, initial_state_keys=crud_list_memories_initial_keys
         )
         crud_list_categories_workflow = self._build_list_memory_categories_workflow()
         self._pipelines.register(

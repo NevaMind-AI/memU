@@ -32,6 +32,8 @@ class PatchMixin:
         _extract_json_blob: Callable[[str], str]
         _escape_prompt_value: Callable[[str], str]
         user_model: type[BaseModel]
+        category_configs: list[dict[str, str]]
+        _category_embedding_text: Callable[[dict[str, str]], str]
 
     async def create_memory_item(
         self,
@@ -42,7 +44,8 @@ class PatchMixin:
         user: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if memory_type not in get_args(MemoryType):
-            raise ValueError(f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}")
+            msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}"
+            raise ValueError(msg)
 
         ctx = self._get_context()
         store = self._get_database()
@@ -78,11 +81,11 @@ class PatchMixin:
         user: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if all((memory_type is None, memory_content is None, memory_categories is None)):
-            raise ValueError(
-                "At least one of memory type, memory content, or memory categories is required for UPDATE operation"
-            )
+            msg = "At least one of memory type, memory content, or memory categories is required for UPDATE operation"
+            raise ValueError(msg)
         if memory_type and memory_type not in get_args(MemoryType):
-            raise ValueError(f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}")
+            msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}"
+            raise ValueError(msg)
 
         ctx = self._get_context()
         store = self._get_database()
@@ -227,7 +230,7 @@ class PatchMixin:
         ctx = state["ctx"]
         store = state["store"]
         user = state["user"]
-        category_memory_updates: dict[str, [str, str]] = {}
+        category_memory_updates: dict[str, tuple[Any, Any]] = {}
 
         embed_payload = [memory_payload["content"]]
         content_embedding = (await self._get_llm_client().embed(embed_payload))[0]
@@ -256,11 +259,12 @@ class PatchMixin:
         ctx = state["ctx"]
         store = state["store"]
         user = state["user"]
-        category_memory_updates: dict[str, [str, str]] = {}
+        category_memory_updates: dict[str, tuple[Any, Any]] = {}
 
         item = store.memory_item_repo.get_item(memory_id)
         if not item:
-            raise ValueError(f"Memory item with id {memory_id} not found")
+            msg = f"Memory item with id {memory_id} not found"
+            raise ValueError(msg)
         old_content = item.summary
         old_item_categories = store.category_item_repo.get_item_categories(memory_id)
         mapped_old_cat_ids = [cat.category_id for cat in old_item_categories]
@@ -302,14 +306,13 @@ class PatchMixin:
 
     async def _patch_delete_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         memory_id = state["memory_id"]
-        ctx = state["ctx"]
         store = state["store"]
-        user = state["user"]
-        category_memory_updates: dict[str, [str, str]] = {}
+        category_memory_updates: dict[str, tuple[Any, Any]] = {}
 
         item = store.memory_item_repo.get_item(memory_id)
         if not item:
-            raise ValueError(f"Memory item with id {memory_id} not found")
+            msg = f"Memory item with id {memory_id} not found"
+            raise ValueError(msg)
         item_categories = store.category_item_repo.get_item_categories(memory_id)
         for cat in item_categories:
             category_memory_updates[cat.category_id] = (item.summary, None)

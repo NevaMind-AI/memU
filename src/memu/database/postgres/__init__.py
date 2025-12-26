@@ -3,7 +3,6 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from memu.app.settings import DatabaseConfig
-from memu.database.interfaces import Database
 from memu.database.postgres.postgres import PostgresStore
 from memu.database.postgres.schema import SQLAModels, get_sqlalchemy_models
 
@@ -12,7 +11,7 @@ def build_postgres_database(
     *,
     config: DatabaseConfig,
     user_model: type[BaseModel],
-) -> Database:
+) -> PostgresStore:
     dsn = config.metadata_store.dsn
     if not dsn:
         msg = "Postgres metadata_store requires a DSN"

@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, override
 
 from memu.database.inmemory.repositories.filter import matches_where
 from memu.database.inmemory.state import InMemoryState
 from memu.database.models import CategoryItem
-from memu.database.repositories.category_item import CategoryItemRepo as CategoryItemRepoProtocol
+from memu.database.repositories.category_item import CategoryItemRepo
 
 
-class InMemoryCategoryItemRepository(CategoryItemRepoProtocol):
+class InMemoryCategoryItemRepository(CategoryItemRepo):
     def __init__(self, *, state: InMemoryState, category_item_model: type[CategoryItem]) -> None:
         self._state = state
         self.category_item_model = category_item_model
@@ -33,7 +33,13 @@ class InMemoryCategoryItemRepository(CategoryItemRepoProtocol):
     def load_existing(self) -> None:
         return None
 
+    @override
+    def get_item_categories(self, item_id: str) -> list[CategoryItem]:
+        return [rel for rel in self.relations if rel.item_id == item_id]
 
-CategoryItemRepo = InMemoryCategoryItemRepository
+    @override
+    def unlink_item_category(self, item_id: str, cat_id: str) -> None:
+        self.relations = [rel for rel in self.relations if not (rel.item_id == item_id and rel.category_id == cat_id)]
 
-__all__ = ["CategoryItemRepo", "InMemoryCategoryItemRepository"]
+
+__all__ = ["InMemoryCategoryItemRepository"]

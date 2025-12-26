@@ -6,11 +6,10 @@ from typing import Any
 from memu.database.models import MemoryItem, MemoryType
 from memu.database.postgres.repositories.base import PostgresRepoBase
 from memu.database.postgres.session import SessionManager
-from memu.database.repositories.memory_item import MemoryItemRepo
 from memu.database.state import DatabaseState
 
 
-class PostgresMemoryItemRepo(PostgresRepoBase, MemoryItemRepo):
+class PostgresMemoryItemRepo(PostgresRepoBase):
     def __init__(
         self,
         *,
