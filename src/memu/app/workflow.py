@@ -29,16 +29,13 @@ class WorkflowMixin:
     RetrieveMixin, and CRUDMixin to reduce code duplication.
     """
 
-    # Type hints for methods provided by the implementing class
+    # Type hints for methods/attributes provided by the implementing class
     if TYPE_CHECKING:
         _run_workflow: Callable[..., Awaitable[WorkflowState]]
         _get_context: Callable[[], Context]
         _get_database: Callable[[], Database]
         _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
         _get_llm_client: Callable[..., Any]
-        _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
-        _extract_json_blob: Callable[[str], str]
-        _escape_prompt_value: Callable[[str], str]
         user_model: type[BaseModel]
 
     @staticmethod
@@ -93,7 +90,7 @@ class WorkflowMixin:
         pattern = rf"<{tag}>\s*(.*?)\s*</{tag}>"
         match = re.search(pattern, raw, re.IGNORECASE | re.DOTALL)
         if match:
-            return match.group(1).strip()
+            return match.group(1).strip() or None
         return None
 
     def _model_dump_without_embeddings(self, obj: BaseModel) -> dict[str, Any]:
@@ -169,8 +166,8 @@ class WorkflowMixin:
         Returns:
             Combined text for embedding
         """
-        name = category.get("name", "") or ""
-        desc = category.get("description", "") or ""
+        name = (category.get("name") or "").strip() or "Untitled"
+        desc = (category.get("description") or "").strip()
         if desc:
             return f"{name}: {desc}"
         return name

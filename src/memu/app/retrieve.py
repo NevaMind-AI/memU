@@ -33,7 +33,6 @@ class RetrieveMixin(WorkflowMixin):
         # - _run_workflow
         # - _get_context
         # - _get_database
-        # - _ensure_categories_ready
         # - _get_step_llm_client
         # - _get_llm_client
         # - _model_dump_without_embeddings
