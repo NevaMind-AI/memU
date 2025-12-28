@@ -18,8 +18,9 @@ We welcome all types of contributions:
 ## 🚀 Quick Start for Contributors
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.13+
 - Git
+- [uv](https://github.com/astral-sh/uv) (Python package manager)
 - A code editor (VS Code recommended)
 
 ### Development Setup
@@ -30,61 +31,55 @@ We welcome all types of contributions:
 git clone https://github.com/YOUR_USERNAME/MemU.git
 cd MemU
 
-# 3. Create a virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# 3. Install uv if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 4. Install development dependencies
-pip install -e ".[dev]"
+# 4. Install development dependencies and pre-commit hooks
+make install
 
-# 5. Install pre-commit hooks
-make pre-commit-install
-
-# 6. Verify setup by running tests
+# 5. Verify setup by running tests
 make test
 ```
 
 ### Available Commands
 
 ```bash
-make help              # Show all available commands
-make test              # Run tests
-make coverage          # Run tests with coverage report
-make lint              # Run linting (flake8, mypy)
-make format            # Format code (black, isort)
-make pre-commit-run    # Run all pre-commit checks
-make clean             # Clean build artifacts
+make install           # Create virtual environment and install dependencies with uv
+make test              # Run tests with pytest and coverage
+make check             # Run all checks (lock file, pre-commit, mypy, deptry)
 ```
 
 ## 🔧 Development Guidelines
 
 ### Code Style
 - Follow **PEP 8** Python style guidelines
-- Use **Black** for code formatting (line length: 88)
-- Use **isort** for import sorting
+- Use **Ruff** for code formatting and linting (line length: 120)
 - Use **type hints** for all functions and methods
 - Write **docstrings** for public APIs
 
 ### Code Quality Standards
 - Maintain **test coverage > 80%**
-- All code must pass **linting** (flake8, mypy)
+- All code must pass **linting** (ruff, mypy)
 - Use **meaningful variable and function names**
 - Keep functions **focused and small**
 - Follow **SOLID principles**
 
 ### Testing
 ```bash
-# Run all tests
-pytest
+# Run all tests with coverage
+make test
 
-# Run with coverage
-pytest --cov=memu --cov-report=html
+# Run tests directly with pytest
+uv run python -m pytest
+
+# Run with coverage report
+uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=html
 
 # Run specific test file
-pytest tests/test_memory_agent.py
+uv run python -m pytest tests/rust_entry_test.py
 
 # Run tests with specific marker
-pytest -m "not slow"
+uv run python -m pytest -m "not slow"
 ```
 
 ## 📝 Submitting Changes
