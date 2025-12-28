@@ -3,11 +3,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, cast, get_args
 
 from pydantic import BaseModel
 
+from memu.app.workflow import WorkflowMixin
 from memu.database.models import MemoryCategory, MemoryType
 from memu.prompts.category_patch import CATEGORY_PATCH_PROMPT
 from memu.workflow.step import WorkflowState, WorkflowStep
@@ -20,20 +21,21 @@ if TYPE_CHECKING:
     from memu.database.interfaces import Database
 
 
-class CRUDMixin:
+class CRUDMixin(WorkflowMixin):
     if TYPE_CHECKING:
-        _run_workflow: Callable[..., Awaitable[WorkflowState]]
-        _get_context: Callable[[], Context]
-        _get_database: Callable[[], Database]
-        _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
-        _get_llm_client: Callable[..., Any]
-        _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
-        _extract_json_blob: Callable[[str], str]
-        _escape_prompt_value: Callable[[str], str]
-        _category_embedding_text: Callable[[dict[str, str]], str]
-        user_model: type[BaseModel]
         patch_config: PatchConfig
         category_configs: list[dict[str, str]]
+        user_model: type[BaseModel]
+        # Inherited from WorkflowMixin:
+        # - _run_workflow
+        # - _get_context
+        # - _get_database
+        # - _get_step_llm_client
+        # - _get_llm_client
+        # - _model_dump_without_embeddings
+        # - _extract_json_blob
+        # - _escape_prompt_value
+        # - _normalize_where
 
     async def list_memory_items(
         self,
@@ -50,11 +52,7 @@ class CRUDMixin:
         }
 
         result = await self._run_workflow("crud_list_memory_items", state)
-        response = cast(dict[str, Any] | None, result.get("response"))
-        if response is None:
-            msg = "List memory items workflow failed to produce a response"
-            raise RuntimeError(msg)
-        return response
+        return self._workflow_response(result, "List memory items")
 
     async def list_memory_categories(
         self,
@@ -70,11 +68,7 @@ class CRUDMixin:
             "where": where_filters,
         }
         result = await self._run_workflow("crud_list_memory_categories", state)
-        response = cast(dict[str, Any] | None, result.get("response"))
-        if response is None:
-            msg = "List memory categories workflow failed to produce a response"
-            raise RuntimeError(msg)
-        return response
+        return self._workflow_response(result, "List memory categories")
 
     def _build_list_memory_items_workflow(self) -> list[WorkflowStep]:
         steps = [
@@ -117,25 +111,6 @@ class CRUDMixin:
             ),
         ]
         return steps
-
-    def _normalize_where(self, where: Mapping[str, Any] | None) -> dict[str, Any]:
-        """Validate and clean the `where` scope filters against the configured user model."""
-        if not where:
-            return {}
-
-        valid_fields = set(getattr(self.user_model, "model_fields", {}).keys())
-        cleaned: dict[str, Any] = {}
-
-        for raw_key, value in where.items():
-            if value is None:
-                continue
-            field = raw_key.split("__", 1)[0]
-            if field not in valid_fields:
-                msg = f"Unknown filter field '{field}' for current user scope"
-                raise ValueError(msg)
-            cleaned[raw_key] = value
-
-        return cleaned
 
     def _crud_list_memory_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}

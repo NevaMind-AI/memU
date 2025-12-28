@@ -5,12 +5,13 @@ import json
 import logging
 import pathlib
 import re
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, cast
 
 import pendulum
 from pydantic import BaseModel
 
+from memu.app.workflow import WorkflowMixin
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
 from memu.prompts.category_summary import CATEGORY_SUMMARY_PROMPT
 from memu.prompts.memory_type import DEFAULT_MEMORY_TYPES
@@ -29,21 +30,22 @@ if TYPE_CHECKING:
     from memu.database.interfaces import Database
 
 
-class MemorizeMixin:
+class MemorizeMixin(WorkflowMixin):
     if TYPE_CHECKING:
         memorize_config: MemorizeConfig
         category_configs: list[dict[str, str]]
         _category_prompt_str: str
         fs: LocalFS
-        _run_workflow: Callable[..., Awaitable[WorkflowState]]
-        _get_context: Callable[[], Context]
-        _get_database: Callable[[], Database]
-        _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
-        _get_llm_client: Callable[..., Any]
-        _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
-        _extract_json_blob: Callable[[str], str]
-        _escape_prompt_value: Callable[[str], str]
         user_model: type[BaseModel]
+        # Inherited from WorkflowMixin:
+        # - _run_workflow
+        # - _get_context
+        # - _get_database
+        # - _get_step_llm_client
+        # - _get_llm_client
+        # - _model_dump_without_embeddings
+        # - _extract_json_blob
+        # - _escape_prompt_value
 
     async def memorize(
         self,
@@ -75,11 +77,7 @@ class MemorizeMixin:
         }
 
         result = await self._run_workflow("memorize", state)
-        response = cast(dict[str, Any] | None, result.get("response"))
-        if response is None:
-            msg = "Memorize workflow failed to produce a response"
-            raise RuntimeError(msg)
-        return response
+        return self._workflow_response(result, "Memorize")
 
     def _build_memorize_workflow(self) -> list[WorkflowStep]:
         steps = [
@@ -1008,15 +1006,6 @@ Summary:"""
                 except (TypeError, ValueError):
                     continue
         return segments or None
-
-    @staticmethod
-    def _extract_tag_content(raw: str, tag: str) -> str | None:
-        pattern = re.compile(rf"<{tag}>(.*?)</{tag}>", re.IGNORECASE | re.DOTALL)
-        match = pattern.search(raw)
-        if not match:
-            return None
-        content = match.group(1).strip()
-        return content or None
 
     def _parse_memory_type_response(self, raw: str) -> list[dict[str, Any]]:
         if not raw:
