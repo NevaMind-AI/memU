@@ -6,28 +6,46 @@ into WorkflowMixin and that the mixins properly inherit from it.
 
 import pytest
 
+# Check if postgres dependencies are available
+# (importing memu.app.memorize triggers memu.app.__init__ -> service -> database.postgres)
+try:
+    import pgvector  # noqa: F401
+
+    POSTGRES_DEPS_AVAILABLE = True
+except ImportError:
+    POSTGRES_DEPS_AVAILABLE = False
+
+requires_postgres_deps = pytest.mark.skipif(
+    not POSTGRES_DEPS_AVAILABLE,
+    reason="Postgres dependencies (pgvector) not available",
+)
+
 
 class TestWorkflowMixinImports:
     """Test that all modules can be imported successfully."""
 
+    @requires_postgres_deps
     def test_workflow_mixin_import(self):
         """Test that WorkflowMixin can be imported."""
         from memu.app.workflow import WorkflowMixin
 
         assert WorkflowMixin is not None
 
+    @requires_postgres_deps
     def test_memorize_mixin_import(self):
         """Test that MemorizeMixin can be imported."""
         from memu.app.memorize import MemorizeMixin
 
         assert MemorizeMixin is not None
 
+    @requires_postgres_deps
     def test_retrieve_mixin_import(self):
         """Test that RetrieveMixin can be imported."""
         from memu.app.retrieve import RetrieveMixin
 
         assert RetrieveMixin is not None
 
+    @requires_postgres_deps
     def test_crud_mixin_import(self):
         """Test that CRUDMixin can be imported."""
         from memu.app.crud import CRUDMixin
@@ -38,6 +56,7 @@ class TestWorkflowMixinImports:
 class TestWorkflowMixinInheritance:
     """Test that all mixins properly inherit from WorkflowMixin."""
 
+    @requires_postgres_deps
     def test_memorize_mixin_inherits_workflow_mixin(self):
         """Test that MemorizeMixin inherits from WorkflowMixin."""
         from memu.app.memorize import MemorizeMixin
@@ -45,6 +64,7 @@ class TestWorkflowMixinInheritance:
 
         assert issubclass(MemorizeMixin, WorkflowMixin)
 
+    @requires_postgres_deps
     def test_retrieve_mixin_inherits_workflow_mixin(self):
         """Test that RetrieveMixin inherits from WorkflowMixin."""
         from memu.app.retrieve import RetrieveMixin
@@ -52,6 +72,7 @@ class TestWorkflowMixinInheritance:
 
         assert issubclass(RetrieveMixin, WorkflowMixin)
 
+    @requires_postgres_deps
     def test_crud_mixin_inherits_workflow_mixin(self):
         """Test that CRUDMixin inherits from WorkflowMixin."""
         from memu.app.crud import CRUDMixin
@@ -60,6 +81,7 @@ class TestWorkflowMixinInheritance:
         assert issubclass(CRUDMixin, WorkflowMixin)
 
 
+@requires_postgres_deps
 class TestWorkflowMixinMethods:
     """Test that WorkflowMixin provides all expected methods."""
 
@@ -112,6 +134,7 @@ class TestWorkflowMixinMethods:
         assert hasattr(WorkflowMixin, "_extract_query_text")
 
 
+@requires_postgres_deps
 class TestWorkflowMixinFunctionality:
     """Test the functionality of WorkflowMixin methods."""
 
@@ -349,6 +372,7 @@ class TestWorkflowMixinFunctionality:
             obj._workflow_response(result, "MyWorkflow")
 
 
+@requires_postgres_deps
 class TestNoDuplicateMethods:
     """Test that duplicate methods have been removed from child mixins."""
 
