@@ -137,7 +137,7 @@ class WorkflowMixin:
 
         return cleaned
 
-    def _extract_query_text(self, query: dict[str, Any]) -> str:
+    def _extract_query_text(self, query: dict[str, Any] | str) -> str:
         """Extract query text from a query dictionary.
 
         Supports queries with 'text' field or direct string values.

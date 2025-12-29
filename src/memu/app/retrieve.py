@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
@@ -29,6 +29,7 @@ class RetrieveMixin(WorkflowMixin):
     if TYPE_CHECKING:
         retrieve_config: RetrieveConfig
         user_model: type[BaseModel]
+        _ensure_categories_ready: Callable[[Context, Database], Awaitable[None]]
         # Inherited from WorkflowMixin:
         # - _run_workflow
         # - _get_context
@@ -666,7 +667,7 @@ class RetrieveMixin(WorkflowMixin):
         return "\n".join(lines)
 
     @staticmethod
-    def _extract_query_text(query: dict[str, Any]) -> str:
+    def _extract_query_text(query: dict[str, Any] | str) -> str:
         """
         Extract text content from query message structure.
 
