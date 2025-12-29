@@ -33,6 +33,7 @@ class MemorizeMixin:
     if TYPE_CHECKING:
         memorize_config: MemorizeConfig
         category_configs: list[dict[str, str]]
+        category_config_map: dict[str, dict[str, str]]
         _category_prompt_str: str
         fs: LocalFS
         _run_workflow: Callable[..., Awaitable[WorkflowState]]
@@ -59,14 +60,15 @@ class MemorizeMixin:
         await self._ensure_categories_ready(ctx, store, user_scope)
 
         memory_types = self._resolve_memory_types()
-        base_prompt = self._resolve_summary_prompt(modality, summary_prompt)
+        # base_prompt = self._resolve_summary_prompt(modality, summary_prompt)
+        # preprocess_prompt_override = self._resolve_multimodal_preprocess_prompt(modality)
 
         state: WorkflowState = {
             "resource_url": resource_url,
             "modality": modality,
-            "summary_prompt_override": summary_prompt,
+            # "summary_prompt_override": summary_prompt,
             "memory_types": memory_types,
-            "base_prompt": base_prompt,
+            # "base_prompt": base_prompt,
             "categories_prompt_str": self._category_prompt_str,
             "ctx": ctx,
             "store": store,
@@ -98,6 +100,7 @@ class MemorizeMixin:
                 requires={"local_path", "modality", "raw_text"},
                 produces={"preprocessed_resources"},
                 capabilities={"llm"},
+                config={"llm_profile": self.memorize_config.preprocess_llm_profile},
             ),
             WorkflowStep(
                 step_id="extract_items",
@@ -106,13 +109,13 @@ class MemorizeMixin:
                 requires={
                     "preprocessed_resources",
                     "memory_types",
-                    "base_prompt",
                     "categories_prompt_str",
                     "modality",
                     "resource_url",
                 },
                 produces={"resource_plans"},
                 capabilities={"llm"},
+                config={"llm_profile": self.memorize_config.memory_extract_llm_profile},
             ),
             WorkflowStep(
                 step_id="dedupe_merge",
@@ -137,6 +140,7 @@ class MemorizeMixin:
                 requires={"category_updates", "ctx", "store"},
                 produces={"categories"},
                 capabilities={"db", "llm"},
+                config={"llm_profile": self.memorize_config.category_update_llm_profile},
             ),
             WorkflowStep(
                 step_id="build_response",
@@ -148,6 +152,19 @@ class MemorizeMixin:
             ),
         ]
         return steps
+
+    @staticmethod
+    def _list_memorize_initial_keys() -> set[str]:
+        return {
+            "resource_url",
+            "modality",
+            "memory_types",
+            "categories_prompt_str",
+            "ctx",
+            "store",
+            "category_ids",
+            "user",
+        }
 
     async def _memorize_ingest_resource(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         local_path, raw_text = await self.fs.fetch(state["resource_url"], state["modality"])
@@ -183,7 +200,8 @@ class MemorizeMixin:
                 modality=state["modality"],
                 memory_types=state["memory_types"],
                 text=text,
-                base_prompt=state["base_prompt"],
+                # base_prompt=state["base_prompt"],
+                base_prompt=None,
                 categories_prompt_str=state["categories_prompt_str"],
                 llm_client=llm_client,
             )
@@ -349,6 +367,10 @@ class MemorizeMixin:
         memo_settings = self.memorize_config
         return override or memo_settings.summary_prompts.get(modality) or memo_settings.default_summary_prompt
 
+    def _resolve_multimodal_preprocess_prompt(self, modality: str) -> str:
+        memo_settings = self.memorize_config
+        return memo_settings.multimodal_preprocess_prompts.get(modality)
+
     async def _generate_structured_entries(
         self,
         *,
@@ -461,7 +483,8 @@ class MemorizeMixin:
             )
             for mtype in memory_types
         ]
-        tasks = [client.summarize(prompt_text, system_prompt=base_prompt) for prompt_text in prompts]
+        # tasks = [client.summarize(prompt_text, system_prompt=base_prompt) for prompt_text in prompts]
+        tasks = [client.summarize(prompt_text) for prompt_text in prompts]
         responses = await asyncio.gather(*tasks)
         return self._parse_structured_entries(memory_types, responses)
 
@@ -623,7 +646,7 @@ class MemorizeMixin:
         Returns:
             List of preprocessed resources, each with 'text' and 'caption'
         """
-        template = PREPROCESS_PROMPTS.get(modality)
+        template = self.memorize_config.multimodal_preprocess_prompts.get(modality) or PREPROCESS_PROMPTS.get(modality)
         if not template:
             return [{"text": text, "caption": None}]
 
@@ -887,12 +910,20 @@ Summary:"""
     def _build_category_summary_prompt(self, *, category: MemoryCategory, new_memories: list[str]) -> str:
         new_items_text = "\n".join(f"- {m}" for m in new_memories if m.strip())
         original = category.summary or ""
-        prompt = CATEGORY_SUMMARY_PROMPT
+        category_config = self.category_config_map.get(category.name, {})
+        prompt = (
+            category_config.get("summary_prompt")
+            or self.memorize_config.default_category_summary_prompt
+            or CATEGORY_SUMMARY_PROMPT
+        )
+        target_length = (
+            category_config.get("target_length") or self.memorize_config.default_category_summary_target_length
+        )
         return prompt.format(
             category=self._escape_prompt_value(category.name),
             original_content=self._escape_prompt_value(original or ""),
             new_memory_items_text=self._escape_prompt_value(new_items_text or "No new memory items."),
-            target_length=self.memorize_config.category_summary_target_length,
+            target_length=target_length,
         )
 
     async def _update_category_summaries(

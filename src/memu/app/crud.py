@@ -89,6 +89,14 @@ class CRUDMixin:
         ]
         return steps
 
+    @staticmethod
+    def _list_list_memory_items_initial_keys() -> set[str]:
+        return {
+            "ctx",
+            "store",
+            "where",
+        }
+
     def _build_list_memory_categories_workflow(self) -> list[WorkflowStep]:
         steps = [
             WorkflowStep(

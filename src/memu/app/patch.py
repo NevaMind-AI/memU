@@ -167,6 +167,15 @@ class PatchMixin:
         ]
         return steps
 
+    @staticmethod
+    def _list_create_memory_item_initial_keys() -> set[str]:
+        return {
+            "memory_payload",
+            "ctx",
+            "store",
+            "user",
+        }
+
     def _build_update_memory_item_workflow(self) -> list[WorkflowStep]:
         steps = [
             WorkflowStep(
@@ -196,6 +205,16 @@ class PatchMixin:
         ]
         return steps
 
+    @staticmethod
+    def _list_update_memory_item_initial_keys() -> set[str]:
+        return {
+            "memory_id",
+            "memory_payload",
+            "ctx",
+            "store",
+            "user",
+        }
+
     def _build_delete_memory_item_workflow(self) -> list[WorkflowStep]:
         steps = [
             WorkflowStep(
@@ -224,6 +243,15 @@ class PatchMixin:
             ),
         ]
         return steps
+
+    @staticmethod
+    def _list_delete_memory_item_initial_keys() -> set[str]:
+        return {
+            "memory_id",
+            "ctx",
+            "store",
+            "user",
+        }
 
     async def _patch_create_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         memory_payload = state["memory_payload"]
