@@ -36,6 +36,8 @@ class CRUDMixin(WorkflowMixin):
         # - _extract_json_blob
         # - _escape_prompt_value
         # - _normalize_where
+        # - _workflow_response
+        # - _category_embedding_text
 
     async def list_memory_items(
         self,

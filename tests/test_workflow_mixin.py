@@ -246,6 +246,108 @@ class TestWorkflowMixinFunctionality:
         result = obj._extract_query_text({"text": "dict query"})
         assert result == "dict query"
 
+    def test_normalize_where_empty(self):
+        """Test _normalize_where with None or empty dict."""
+        from pydantic import BaseModel
+
+        from memu.app.workflow import WorkflowMixin
+
+        class UserModel(BaseModel):
+            user_id: str
+
+        class TestClass(WorkflowMixin):
+            user_model = UserModel
+
+        obj = TestClass()
+        assert obj._normalize_where(None) == {}
+        assert obj._normalize_where({}) == {}
+
+    def test_normalize_where_valid_fields(self):
+        """Test _normalize_where with valid filter fields."""
+        from pydantic import BaseModel
+
+        from memu.app.workflow import WorkflowMixin
+
+        class UserModel(BaseModel):
+            user_id: str
+            org_id: str
+
+        class TestClass(WorkflowMixin):
+            user_model = UserModel
+
+        obj = TestClass()
+        result = obj._normalize_where({"user_id": "123", "org_id__in": ["a", "b"]})
+        assert result == {"user_id": "123", "org_id__in": ["a", "b"]}
+
+    def test_normalize_where_invalid_field_raises(self):
+        """Test _normalize_where raises ValueError for unknown fields."""
+        from pydantic import BaseModel
+
+        from memu.app.workflow import WorkflowMixin
+
+        class UserModel(BaseModel):
+            user_id: str
+
+        class TestClass(WorkflowMixin):
+            user_model = UserModel
+
+        obj = TestClass()
+        with pytest.raises(ValueError, match="Unknown filter field"):
+            obj._normalize_where({"invalid_field": "value"})
+
+    def test_normalize_where_skips_none_values(self):
+        """Test _normalize_where skips None values."""
+        from pydantic import BaseModel
+
+        from memu.app.workflow import WorkflowMixin
+
+        class UserModel(BaseModel):
+            user_id: str
+            org_id: str
+
+        class TestClass(WorkflowMixin):
+            user_model = UserModel
+
+        obj = TestClass()
+        result = obj._normalize_where({"user_id": "123", "org_id": None})
+        assert result == {"user_id": "123"}
+
+    def test_workflow_response_success(self):
+        """Test _workflow_response extracts response correctly."""
+        from memu.app.workflow import WorkflowMixin
+
+        class TestClass(WorkflowMixin):
+            pass
+
+        obj = TestClass()
+        result = {"response": {"data": "test"}, "other": "ignored"}
+        response = obj._workflow_response(result, "TestWorkflow")
+        assert response == {"data": "test"}
+
+    def test_workflow_response_raises_on_none(self):
+        """Test _workflow_response raises RuntimeError when response is None."""
+        from memu.app.workflow import WorkflowMixin
+
+        class TestClass(WorkflowMixin):
+            pass
+
+        obj = TestClass()
+        result = {"response": None}
+        with pytest.raises(RuntimeError, match="TestWorkflow workflow failed"):
+            obj._workflow_response(result, "TestWorkflow")
+
+    def test_workflow_response_raises_on_missing(self):
+        """Test _workflow_response raises RuntimeError when response key is missing."""
+        from memu.app.workflow import WorkflowMixin
+
+        class TestClass(WorkflowMixin):
+            pass
+
+        obj = TestClass()
+        result = {"other": "data"}
+        with pytest.raises(RuntimeError, match="MyWorkflow workflow failed"):
+            obj._workflow_response(result, "MyWorkflow")
+
 
 class TestNoDuplicateMethods:
     """Test that duplicate methods have been removed from child mixins."""

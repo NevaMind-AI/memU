@@ -46,6 +46,7 @@ class MemorizeMixin(WorkflowMixin):
         # - _model_dump_without_embeddings
         # - _extract_json_blob
         # - _escape_prompt_value
+        # - _workflow_response
 
     async def memorize(
         self,

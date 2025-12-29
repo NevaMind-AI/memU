@@ -39,6 +39,7 @@ class RetrieveMixin(WorkflowMixin):
         # - _extract_json_blob
         # - _escape_prompt_value
         # - _normalize_where
+        # - _workflow_response
 
     async def retrieve(
         self,
