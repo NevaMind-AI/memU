@@ -108,7 +108,7 @@ pip install memu-py
 
 ### Quick Example
 
-> **⚠️ Important**: Ensure you have Python 3.14+
+> **⚠️ Important**: Ensure you have Python 3.13+
 
 > **⚠️ Important**: Replace `"your-openai-api-key"` with your actual OpenAI API key to use the service.
 
@@ -122,7 +122,7 @@ async def main():
 
     # Initialize service with RAG method
     service_rag = MemoryService(
-        llm_config={"api_key": api_key},
+        llm_profiles={"default": {"api_key": api_key}},
         retrieve_config={"method": "rag"}
     )
 
@@ -138,21 +138,21 @@ async def main():
 
     # RAG-based retrieval
     print("\n[RETRIEVED - RAG]")
-    # Scope retrieval to a particular user; omit filters to fetch across scopes
-    result_rag = await service_rag.retrieve(queries=queries, user_id="123")
+    # Scope retrieval to a particular user; omit where to fetch across scopes
+    result_rag = await service_rag.retrieve(queries=queries, where={"user_id": "123"})
     for item in result_rag.get('items', [])[:3]:
         print(f"  - [{item.get('memory_type')}] {item.get('summary', '')[:100]}...")
 
     # Initialize service with LLM method (reuse same memory store)
     service_llm = MemoryService(
-        llm_config={"api_key": api_key},
+        llm_profiles={"default": {"api_key": api_key}},
         retrieve_config={"method": "llm"}
     )
-    service_llm.store = service_rag.store  # Reuse memory store
+    service_llm.database = service_rag.database  # Reuse memory database
 
     # LLM-based retrieval
     print("\n[RETRIEVED - LLM]")
-    result_llm = await service_llm.retrieve(queries=queries, agent_id__in=["1", "2"])
+    result_llm = await service_llm.retrieve(queries=queries, where={"agent_id__in": ["1", "2"]})
     for item in result_llm.get('items', [])[:3]:
         print(f"  - [{item.get('memory_type')}] {item.get('summary', '')[:100]}...")
 
@@ -161,7 +161,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-`retrieve` accepts keyword scope filters that match the fields on your configured `user_config.model` (e.g., `user_id="123"` or `agent_id__in=["1", "2"]`). Leave filters off to fetch across scopes.
+`retrieve` accepts a `where` parameter for scope filtering that matches the fields on your configured `user_config.model` (e.g., `where={"user_id": "123"}` or `where={"agent_id__in": ["1", "2"]}`). Omit `where` to fetch across all scopes.
 
 ### Retrieval Methods
 
