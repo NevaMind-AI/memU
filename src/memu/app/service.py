@@ -9,7 +9,6 @@ from pydantic import BaseModel
 
 from memu.app.crud import CRUDMixin
 from memu.app.memorize import MemorizeMixin
-from memu.app.patch import PatchMixin
 from memu.app.retrieve import RetrieveMixin
 from memu.app.settings import (
     BlobConfig,
@@ -39,7 +38,7 @@ class Context:
     category_init_task: asyncio.Task | None = None
 
 
-class MemoryService(MemorizeMixin, RetrieveMixin, PatchMixin, CRUDMixin):
+class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
     def __init__(
         self,
         *,
@@ -182,13 +181,13 @@ class MemoryService(MemorizeMixin, RetrieveMixin, PatchMixin, CRUDMixin):
         llm_workflow = self._build_llm_retrieve_workflow()
         self._pipelines.register("retrieve_llm", llm_workflow, initial_state_keys=retrieve_initial_keys)
         patch_create_workflow = self._build_create_memory_item_workflow()
-        patch_create_initial_keys = PatchMixin._list_create_memory_item_initial_keys()
+        patch_create_initial_keys = CRUDMixin._list_create_memory_item_initial_keys()
         self._pipelines.register("patch_create", patch_create_workflow, initial_state_keys=patch_create_initial_keys)
         patch_update_workflow = self._build_update_memory_item_workflow()
-        patch_update_initial_keys = PatchMixin._list_update_memory_item_initial_keys()
+        patch_update_initial_keys = CRUDMixin._list_update_memory_item_initial_keys()
         self._pipelines.register("patch_update", patch_update_workflow, initial_state_keys=patch_update_initial_keys)
         patch_delete_workflow = self._build_delete_memory_item_workflow()
-        patch_delete_initial_keys = PatchMixin._list_delete_memory_item_initial_keys()
+        patch_delete_initial_keys = CRUDMixin._list_delete_memory_item_initial_keys()
         self._pipelines.register("patch_delete", patch_delete_workflow, initial_state_keys=patch_delete_initial_keys)
         crud_list_items_workflow = self._build_list_memory_items_workflow()
         crud_list_memories_initial_keys = CRUDMixin._list_list_memory_items_initial_keys()
