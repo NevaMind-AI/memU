@@ -56,12 +56,9 @@ async def run_steps(
         if missing:
             msg = f"Workflow '{name}' missing required keys for step '{step.step_id}': {', '.join(sorted(missing))}"
             raise KeyError(msg)
-        step_context = context
+        step_context: dict[str, Any] = dict(context) if context else {}
+        step_context["step_id"] = step.step_id
         if step.config:
-            if context:
-                step_context = dict(context)
-                step_context["step_config"] = step.config
-            else:
-                step_context = {"step_config": step.config}
+            step_context["step_config"] = step.config
         state = await step.run(state, step_context)
     return state
