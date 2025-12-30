@@ -111,14 +111,14 @@ PROMPT_BLOCK_CATEGORY = """
 
 PROMPT_BLOCK_OUTPUT = """
 # Output Format (XML)
-<events>
+<item>
     <memory>
         <content>Event memory item content</content>
         <categories>
             <category>Travel</category>
         </categories>
     </memory>
-</events>
+</item>
 """
 
 PROMPT_BLOCK_EXAMPLES = """
@@ -133,14 +133,14 @@ user: It's fine. Cooking relaxes me. It's better than takeout. Also I'm travelin
 assistant: You can check the weather ahead. Your sunscreen can finally be used.
 user: I haven't started packing yet. It's annoying.
 ## Output
-<events>
+<item>
     <memory>
         <content>The user is planning a trip next weekend and hasn't started packing yet</content>
         <categories>
             <category>Travel</category>
         </categories>
     </memory>
-</events>
+</item>
 ## Explanation
 Only specific events explicitly stated by the user are extracted.
 The travel plan is an event with a specific time reference (next weekend).

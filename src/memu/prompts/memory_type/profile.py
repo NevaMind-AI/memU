@@ -108,14 +108,14 @@ PROMPT_BLOCK_CATEGORY = """
 
 PROMPT_BLOCK_OUTPUT = """
 # Output Format (XML)
-<profile>
+<item>
     <memory>
         <content>User memory item content</content>
         <categories>
             <category>Basic Information</category>
         </categories>
     </memory>
-</profile>
+</item>
 """
 
 PROMPT_BLOCK_EXAMPLES = """
@@ -130,7 +130,7 @@ user: It's fine. Cooking relaxes me. It's better than takeout. Also I'm travelin
 assistant: You can check the weather ahead. Your sunscreen can finally be used.
 user: I haven't started packing yet. It's annoying.
 ## Output
-<profile>
+<item>
     <memory>
         <content>The user works as a product manager at an internet company</content>
         <categories>
@@ -149,7 +149,7 @@ user: I haven't started packing yet. It's annoying.
             <category>Basic Information</category>
         </categories>
     </memory>
-</profile>
+</item>
 ## Explanation
 Only stable user facts explicitly stated by the user are extracted.
 The travel plan and packing annoyance are events/temporary states, so they are not extracted as User Information.

@@ -99,14 +99,14 @@ PROMPT_BLOCK_CATEGORY = """
 
 PROMPT_BLOCK_OUTPUT = """
 # Output Format (XML)
-<behaviors>
+<item>
     <memory>
         <content>Behavior memory item content</content>
         <categories>
             <category>Daily Routine</category>
         </categories>
     </memory>
-</behaviors>
+</item>
 """
 
 PROMPT_BLOCK_EXAMPLES = """
@@ -121,7 +121,7 @@ user: It's fine. Cooking relaxes me. It's better than takeout. Also I'm travelin
 assistant: You can check the weather ahead. Your sunscreen can finally be used.
 user: I haven't started packing yet. It's annoying.
 ## Output
-<behaviors>
+<item>
     <memory>
         <content>The user typically cooks for themselves after work instead of ordering takeout</content>
         <categories>
@@ -134,7 +134,7 @@ user: I haven't started packing yet. It's annoying.
             <category>Daily Routine</category>
         </categories>
     </memory>
-</behaviors>
+</item>
 ## Explanation
 Only behavioral patterns explicitly stated by the user are extracted.
 Cooking after work and experimenting with dishes are recurring behaviors/routines.

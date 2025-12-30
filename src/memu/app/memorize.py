@@ -994,7 +994,7 @@ Summary:"""
                 continue
             store.memory_category_repo.update_category(
                 category_id=cid,
-                summary=summary.strip(),
+                summary=summary.replace('```markdown', '').replace('```', '').strip(),
             )
 
     def _parse_conversation_preprocess(self, raw: str) -> tuple[str | None, str | None]:
@@ -1137,8 +1137,8 @@ Summary:"""
             return []
 
         try:
-            # Find the opening root tag (profile, behaviors, events, knowledge, skills)
-            root_tags = ["profile", "behaviors", "events", "knowledge", "skills"]
+            # Find the opening root tag (item is the standard, others are legacy)
+            root_tags = ["item", "profile", "behaviors", "events", "knowledge", "skills"]
             start_tag = None
             end_tag = None
             start_idx = -1

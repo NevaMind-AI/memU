@@ -433,7 +433,7 @@ PROMPT_BLOCK_CATEGORY = """
 
 PROMPT_BLOCK_OUTPUT = """
 # Output Format (XML)
-<skills>
+<item>
     <memory>
         <content>
 ---
@@ -479,7 +479,7 @@ demonstrated-in: [context where this was shown]
             <category>technical_skills</category>
         </categories>
     </memory>
-</skills>
+</item>
 """
 
 PROMPT_BLOCK_EXAMPLES = """
@@ -494,7 +494,7 @@ Example 1: Skill Extraction from Deployment Log
 [2024-01-15 10:40:45] Metrics stable, increasing to 100%
 [2024-01-15 10:42:00] Deployment complete. Zero downtime achieved.
 ## Output
-<skills>
+<item>
     <memory>
         <content>
 ---
@@ -546,7 +546,7 @@ Payment Service v2.3.1 deployment achieved zero downtime during 12-minute deploy
             <category>technical_skills</category>
         </categories>
     </memory>
-</skills>
+</item>
 ## Explanation
 A comprehensive skill profile is extracted from the deployment log, capturing the approach, techniques, metrics, and outcomes. The profile includes all required sections and provides actionable guidance for replicating the skill.
 """

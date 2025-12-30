@@ -98,14 +98,14 @@ PROMPT_BLOCK_CATEGORY = """
 
 PROMPT_BLOCK_OUTPUT = """
 # Output Format (XML)
-<knowledge>
+<item>
     <memory>
         <content>Knowledge memory item content</content>
         <categories>
             <category>Programming</category>
         </categories>
     </memory>
-</knowledge>
+</item>
 """
 
 PROMPT_BLOCK_EXAMPLES = """
@@ -118,7 +118,7 @@ user: Oh I see, so it's like wrapping a function. I heard that the @ symbol is s
 assistant: Exactly! When you write @decorator above a function, it's equivalent to function = decorator(function).
 user: That makes sense. By the way, I'm working on a project at my company using this.
 ## Output
-<knowledge>
+<item>
     <memory>
         <content>In Python, a decorator is a function that takes another function and extends its behavior without modifying it</content>
         <categories>
@@ -131,7 +131,7 @@ user: That makes sense. By the way, I'm working on a project at my company using
             <category>Programming</category>
         </categories>
     </memory>
-</knowledge>
+</item>
 ## Explanation
 Only factual knowledge discussed and confirmed in the conversation is extracted.
 The user's work project is a personal event/situation, not knowledge, so it is not extracted.
