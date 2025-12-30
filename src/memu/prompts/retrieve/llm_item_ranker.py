@@ -22,9 +22,10 @@ Search through the provided memory items and identify the most relevant ones for
 Return the result as a JSON object in the following format:
 
 ```json
-{
+{{
   "items": ["item_id_1", "item_id_2", "item_id_3"]
-}
+}}
+```
 
 # Input
 Query:

@@ -21,9 +21,10 @@ Search through the provided resources and identify the most relevant ones for th
 Return the result as a JSON object in the following format:
 
 ```json
-{
+{{
   "resources": ["resource_id_1", "resource_id_2", "resource_id_3"]
-}
+}}
+```
 
 # Input
 Query:

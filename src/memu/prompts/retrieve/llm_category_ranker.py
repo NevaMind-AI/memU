@@ -20,9 +20,10 @@ Search through the provided categories and identify the most relevant ones for t
 Return the result as a JSON object in the following format:
 
 ```json
-{
+{{
   "categories": ["category_id_1", "category_id_2", "category_id_3"]
-}
+}}
+```
 
 # Input
 Query:

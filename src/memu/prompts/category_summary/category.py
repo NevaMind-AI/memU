@@ -53,10 +53,15 @@ Control item length strictly; prioritize core information if needed.
 
 # Output Format (Markdown)
 ```markdown
-# Profile Title
-## Category Name
+# {category}
+## <category name>
 - User information item
 - User information item
+...
+## <category name>
+- User information item
+- User information item
+...
 ```
 
 # Examples (Input / Output / Explanation)
@@ -123,8 +128,12 @@ New memory items:
 
 # Output format (Markdown)
 ```markdown
-# Profile Title
-## Category Name
+# {category}
+## <category name>
+- User information item
+- User information item
+...
+## <category name>
 - User information item
 - User information item
 ...
@@ -176,8 +185,7 @@ Accuracy: subject clarity; natural time embedding; proper format.
 Target length: {target_length}
 Summarize the updated user markdown profile to the target length.
 Use Markdown hierarchy.
-Do not include explanations, operation traces, or meta text.
-Control item length strictly; prioritize core information if needed.
+Cluster the memory items and update the <category name>.
 
 ## Step 5: Output
 Output only the updated user markdown profile.
@@ -189,8 +197,11 @@ Control item length strictly; prioritize core information if needed.
 PROMPT_BLOCK_OUTPUT = """
 # Output Format (Markdown)
 ```markdown
-# Profile Title
-## Category Name
+# {category}
+## <category name>
+- User information item
+- User information item
+## <category name>
 - User information item
 - User information item
 ```

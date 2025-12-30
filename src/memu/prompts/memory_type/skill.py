@@ -433,6 +433,7 @@ PROMPT_BLOCK_CATEGORY = """
 
 PROMPT_BLOCK_OUTPUT = """
 # Output Format (XML)
+Return all memories wrapped in a single <item> element:
 <item>
     <memory>
         <content>

@@ -108,11 +108,18 @@ PROMPT_BLOCK_CATEGORY = """
 
 PROMPT_BLOCK_OUTPUT = """
 # Output Format (XML)
+Return all memories wrapped in a single <item> element:
 <item>
     <memory>
-        <content>User memory item content</content>
+        <content>User memory item content 1</content>
         <categories>
-            <category>Basic Information</category>
+            <category>Category Name</category>
+        </categories>
+    </memory>
+    <memory>
+        <content>User memory item content 2</content>
+        <categories>
+            <category>Category Name</category>
         </categories>
     </memory>
 </item>

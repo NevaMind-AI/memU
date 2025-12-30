@@ -28,13 +28,14 @@ Analyze a conversation with message indices and divide it into multiple meaningf
 Return **only valid JSON** in the following structure:
 
 ```json
-{
+{{
     "segments": [
-        {"start": x, "end": x},
-        {"start": x, "end": x},
-        {"start": x, "end": x}
+        {{"start": x, "end": x}},
+        {{"start": x, "end": x}},
+        {{"start": x, "end": x}}
     ]
-}
+}}
+```
 
 # Input
 Conversation Content:
