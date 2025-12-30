@@ -33,7 +33,7 @@ class CRUDMixin:
         _category_embedding_text: Callable[[dict[str, str]], str]
         user_model: type[BaseModel]
         patch_config: PatchConfig
-        category_configs: list[dict[str, str]]
+        _ensure_categories_ready: Callable[[Context, Database], Awaitable[None]]
 
     async def list_memory_items(
         self,
@@ -517,39 +517,6 @@ class CRUDMixin:
         }
         state["response"] = response
         return state
-
-    async def _ensure_categories_ready(
-        self, ctx: Context, store: Database, user_scope: Mapping[str, Any] | None = None
-    ) -> None:
-        if ctx.categories_ready:
-            return
-        if ctx.category_init_task:
-            await ctx.category_init_task
-            ctx.category_init_task = None
-            return
-        await self._initialize_categories(ctx, store, user_scope)
-
-    async def _initialize_categories(
-        self, ctx: Context, store: Database, user: Mapping[str, Any] | None = None
-    ) -> None:
-        if ctx.categories_ready:
-            return
-        if not self.category_configs:
-            ctx.categories_ready = True
-            return
-        cat_texts = [self._category_embedding_text(cfg) for cfg in self.category_configs]
-        cat_vecs = await self._get_llm_client().embed(cat_texts)
-        ctx.category_ids = []
-        ctx.category_name_to_id = {}
-        for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
-            name = (cfg.get("name") or "").strip() or "Untitled"
-            description = (cfg.get("description") or "").strip()
-            cat = store.memory_category_repo.get_or_create_category(
-                name=name, description=description, embedding=vec, user_data=dict(user or {})
-            )
-            ctx.category_ids.append(cat.id)
-            ctx.category_name_to_id[name.lower()] = cat.id
-        ctx.categories_ready = True
 
     def _map_category_names_to_ids(self, names: list[str], ctx: Context) -> list[str]:
         if not names:

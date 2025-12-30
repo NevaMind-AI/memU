@@ -12,6 +12,7 @@ from memu.app.memorize import MemorizeMixin
 from memu.app.retrieve import RetrieveMixin
 from memu.app.settings import (
     BlobConfig,
+    CategoryConfig,
     DatabaseConfig,
     LLMConfig,
     LLMProfilesConfig,
@@ -60,8 +61,8 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
 
         self.fs = LocalFS(self.blob_config.resources_dir)
-        self.category_configs: list[dict[str, str]] = list(self.memorize_config.memory_categories or [])
-        self.category_config_map: dict[str, dict[str, str]] = {cfg["name"]: cfg for cfg in self.category_configs}
+        self.category_configs: list[CategoryConfig] = list(self.memorize_config.memory_categories or [])
+        self.category_config_map: dict[str, CategoryConfig] = {cfg.name: cfg for cfg in self.category_configs}
         self._category_prompt_str = self._format_categories_for_prompt(self.category_configs)
 
         self._context = Context(categories_ready=not bool(self.category_configs))

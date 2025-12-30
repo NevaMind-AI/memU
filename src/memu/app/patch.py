@@ -32,8 +32,7 @@ class PatchMixin:
         _extract_json_blob: Callable[[str], str]
         _escape_prompt_value: Callable[[str], str]
         user_model: type[BaseModel]
-        category_configs: list[dict[str, str]]
-        _category_embedding_text: Callable[[dict[str, str]], str]
+        _ensure_categories_ready: Callable[[Context, Database], Awaitable[None]]
 
     async def create_memory_item(
         self,
@@ -400,8 +399,8 @@ class PatchMixin:
         ctx.category_ids = []
         ctx.category_name_to_id = {}
         for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
-            name = (cfg.get("name") or "").strip() or "Untitled"
-            description = (cfg.get("description") or "").strip()
+            name = cfg.name.strip() or "Untitled"
+            description = cfg.description.strip()
             cat = store.memory_category_repo.get_or_create_category(
                 name=name, description=description, embedding=vec, user_data=dict(user or {})
             )
