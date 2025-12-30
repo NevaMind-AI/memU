@@ -37,9 +37,10 @@ RETRIEVE or NO_RETRIEVE
 If RETRIEVE: provide a rewritten query incorporating relevant context.  
 If NO_RETRIEVE: return `{query}` unchanged.
 </rewritten_query>
+"""
 
-# Input
 
+USER_PROMPT = """
 # Input
 Query Context:
 {conversation_history}
