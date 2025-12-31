@@ -3,7 +3,7 @@ PROMPT = """
 Analyze a conversation with message indices and divide it into multiple meaningful segments based on topic changes, time gaps, or natural breaks.
 
 # Workflow
-1. Review the entire **Conversation Content** (`{conversation}`) along with its message indices.
+1. Review the entire **Conversation Content** along with its message indices.
 2. Identify potential **segment boundaries** by observing:
    - Topic changes
    - Time gaps or pauses

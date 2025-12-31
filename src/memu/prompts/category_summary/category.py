@@ -74,21 +74,23 @@ Personal Basic Information
 Original content:
 <content>
 # Personal Basic Information
-- The user is 28 years old  
+## Basic Information
+- The user is 28 years old
 - The user currently lives in Beijing
-- Basic Preferences
+## Basic Preferences
 - The user likes spicy food
-- Core Traits
+## Core Traits
 - The user is extroverted
 </content>
+
 New memory items:
 <item>
-Basic Information: The user is 30 years old
-Basic Information: The user currently lives in Shanghai
-Basic Preferences: The user prefers Sichuan-style spicy food and dislikes sweet-spicy flavors
-Basic Preferences: The user enjoys hiking on weekends
-Core Traits: The user is meticulous
-User Event (B): The user ate Malatang today
+- The user is 30 years old
+- The user currently lives in Shanghai
+- The user prefers Sichuan-style spicy food and dislikes sweet-spicy flavors
+- The user enjoys hiking on weekends
+- The user is meticulous
+- The user ate Malatang today
 </item>
 
 Output
@@ -104,7 +106,7 @@ Output
 - The user is meticulous
 
 Explanation
-The B-level user event is a one-time daily action without long-term value and is therefore excluded.
+The "The user ate Malatang today" is a one-time daily action without long-term value and is therefore excluded.
 
 
 Your task is to read and analyze existing content and some new memory items, and then selectively update the content to reflect both the existing and new information.
@@ -217,21 +219,23 @@ Personal Basic Information
 Original content:
 <content>
 # Personal Basic Information
-- The user is 28 years old  
+## Basic Information
+- The user is 28 years old
 - The user currently lives in Beijing
-- Basic Preferences
+## Basic Preferences
 - The user likes spicy food
-- Core Traits
+## Core Traits
 - The user is extroverted
 </content>
+
 New memory items:
 <item>
-Basic Information: The user is 30 years old
-Basic Information: The user currently lives in Shanghai
-Basic Preferences: The user prefers Sichuan-style spicy food and dislikes sweet-spicy flavors
-Basic Preferences: The user enjoys hiking on weekends
-Core Traits: The user is meticulous
-User Event (B): The user ate Malatang today
+- The user is 30 years old
+- The user currently lives in Shanghai
+- The user prefers Sichuan-style spicy food and dislikes sweet-spicy flavors
+- The user enjoys hiking on weekends
+- The user is meticulous
+- The user ate Malatang today
 </item>
 
 Output
@@ -247,7 +251,7 @@ Output
 - The user is meticulous
 
 Explanation
-The B-level user event is a one-time daily action without long-term value and is therefore excluded.
+The "The user ate Malatang today" is a one-time daily action without long-term value and is therefore excluded.
 """
 
 PROMPT_BLOCK_INPUT = """
