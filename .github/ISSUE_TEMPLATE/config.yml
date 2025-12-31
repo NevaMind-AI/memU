@@ -1,4 +1,4 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
 contact_links:
   - name: GitHub Discussions
     url: https://github.com/NevaMind-AI/memU/discussions
