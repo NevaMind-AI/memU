@@ -247,23 +247,6 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         return await self._workflow_runner.run(workflow_name, steps, initial_state, runner_context)
 
     @staticmethod
-    def _extract_json_blob(raw: str) -> str:
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start == -1 or end == -1 or end <= start:
-            msg = "No JSON object found"
-            raise ValueError(msg)
-        return raw[start : end + 1]
-
-    @staticmethod
-    def _escape_prompt_value(value: str) -> str:
-        return value.replace("{", "{{").replace("}", "}}")
-
-    def _model_dump_without_embeddings(self, obj: BaseModel) -> dict[str, Any]:
-        data = obj.model_dump(exclude={"embedding"})
-        return data
-
-    @staticmethod
     def _validate_config(
         config: Mapping[str, Any] | BaseModel | None,
         model_type: type[TConfigModel],
