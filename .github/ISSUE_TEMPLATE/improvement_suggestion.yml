@@ -1,0 +1,63 @@
+name: Improvement Suggestion
+description: Suggest an improvement for memU
+title: "[IMPROVEMENT] "
+labels: ["enhancement", "improvement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest an improvement for memU! Please fill in the following details.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and detailed description of the improvement suggestion.
+      placeholder: "Enter a clear and concise description of what you'd like to improve."
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current Behavior
+      description: How does it work currently?
+      placeholder: "Describe the current behavior or implementation."
+    validations:
+      required: false
+
+  - type: textarea
+    id: proposed_improvement
+    attributes:
+      label: Proposed Improvement
+      description: How would you like it to work?
+      placeholder: "Describe your proposed improvement."
+    validations:
+      required: true
+
+  - type: textarea
+    id: benefits
+    attributes:
+      label: Benefits
+      description: What are the benefits of this improvement?
+      placeholder: "Explain why this improvement would be valuable."
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version of memU are you using?
+      placeholder: e.g., v1.0.0
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_info
+    attributes:
+      label: Additional Information
+      description: Any other context or screenshots related to the improvement.
+      placeholder: "Enter additional context or information."
+    validations:
+      required: false
