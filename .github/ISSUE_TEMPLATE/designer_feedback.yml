@@ -1,28 +1,27 @@
 name: Designer Feedback(FE)
-description: Submit feedback, report issues, or request features
-title: "[Feedback] "
+description: Submit feedback, report issues, or request features for memU
+title: "[Feedback]: "
 labels: ["feedback"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thank you for taking time to provide feedback! Please fill out this form as detailed as possible.
-  
+        Thank you for taking time to provide feedback on memU! Please fill out this form as detailed as possible.
+
   - type: dropdown
     id: feedback-type
     attributes:
       label: Feedback Type
       description: What kind of feedback are you providing?
       options:
-        - UI/UX Issue
-        - Design Inconsistency
-        - Accessibility Issue
-        - Visual Bug
-        - Interactive Feedback
+        - Bug Report
+        - Feature Request
+        - Improvement Suggestion
+        - Question
         - Other
     validations:
       required: true
-  
+
   - type: textarea
     id: description
     attributes:
@@ -31,39 +30,24 @@ body:
       placeholder: Provide a clear and detailed explanation of your feedback...
     validations:
       required: true
-  
+
   - type: textarea
     id: expected
     attributes:
       label: Expected Behavior
       description: What did you expect to happen?
       placeholder: Describe what you expected...
-    validations:
-      required: false
-  
+
   - type: textarea
-    id: actual
+    id: current
     attributes:
-      label: Actual Behavior
+      label: Current Behavior
       description: What actually happened?
-      placeholder: Describe what actually happened...
-    validations:
-      required: false
-  
-  - type: textarea
-    id: screenshots
+      placeholder: Describe the current behavior...
+
+  - type: input
+    id: version
     attributes:
-      label: Screenshots or Videos
-      description: If applicable, add screenshots or videos to help explain your feedback
-      placeholder: Drag and drop images or videos here...
-    validations:
-      required: false
-  
-  - type: textarea
-    id: additional
-    attributes:
-      label: Additional Context
-      description: Add any other context about the feedback here
-      placeholder: Enter additional context or information.
-    validations:
-      required: false
+      label: Version
+      description: What version of memU are you using?
+      placeholder: e.g., v1.0.0
