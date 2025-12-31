@@ -8,15 +8,6 @@ body:
       value: |
         Thanks for opening an issue! Please provide as much detail as possible.
   
-  - type: input
-    id: title
-    attributes:
-      label: Add a title
-      description: A brief title for your issue
-      placeholder: Title
-    validations:
-      required: true
-  
   - type: textarea
     id: description
     attributes:

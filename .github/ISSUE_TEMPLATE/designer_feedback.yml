@@ -14,11 +14,11 @@ body:
       label: Feedback Type
       description: What kind of feedback are you providing?
       options:
-        - Bug Report
-        - Feature Request
-        - UI/UX Improvement
-        - Performance Issue
-        - Documentation
+        - UI/UX Issue
+        - Design Inconsistency
+        - Accessibility Issue
+        - Visual Bug
+        - Interactive Feedback
         - Other
     validations:
       required: true

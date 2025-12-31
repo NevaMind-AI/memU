@@ -21,13 +21,13 @@ body:
     id: priority
     attributes:
       label: Priority
-      description: How important is this feature to you?
+      description: How important is this feature to you? This helps maintainers prioritize feature requests during triage.
       options:
         - Critical
         - Major
         - Minor
     validations:
-      required: false
+      required: true
   
   - type: textarea
     id: motivation
@@ -60,7 +60,7 @@ body:
     id: additional
     attributes:
       label: Additional information
-      description: Any other context or screenshots related to the bug
+      description: Any other context or screenshots related to the feature request
       placeholder: Enter additional context or information.
     validations:
       required: false
