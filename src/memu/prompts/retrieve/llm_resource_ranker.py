@@ -22,6 +22,7 @@ Return the result as a JSON object in the following format:
 
 ```json
 {{
+  "analysis": "your analysis process",
   "resources": ["resource_id_1", "resource_id_2", "resource_id_3"]
 }}
 ```

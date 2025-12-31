@@ -23,6 +23,7 @@ Return the result as a JSON object in the following format:
 
 ```json
 {{
+  "analysis": "your analysis process",
   "items": ["item_id_1", "item_id_2", "item_id_3"]
 }}
 ```

@@ -217,12 +217,14 @@ class RetrieveMixin:
 
     async def _rag_route_intention(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("route_intention"):
-            state["needs_retrieval"] = True
-            state["rewritten_query"] = state["original_query"]
-            state["active_query"] = state["original_query"]
-            state["next_step_query"] = None
-            state["proceed_to_items"] = False
-            state["proceed_to_resources"] = False
+            state.update({
+                "needs_retrieval": True,
+                "rewritten_query": state["original_query"],
+                "active_query": state["original_query"],
+                "next_step_query": None,
+                "proceed_to_items": False,
+                "proceed_to_resources": False,
+            })
             return state
 
         llm_client = self._get_step_llm_client(step_context)
@@ -498,6 +500,17 @@ class RetrieveMixin:
         return steps
 
     async def _llm_route_intention(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("route_intention"):
+            state.update({
+                "needs_retrieval": True,
+                "rewritten_query": state["original_query"],
+                "active_query": state["original_query"],
+                "next_step_query": None,
+                "proceed_to_items": False,
+                "proceed_to_resources": False,
+            })
+            return state
+
         llm_client = self._get_step_llm_client(step_context)
         needs_retrieval, rewritten_query = await self._decide_if_retrieval_needed(
             state["original_query"],
@@ -541,6 +554,9 @@ class RetrieveMixin:
     async def _llm_category_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("needs_retrieval"):
             state["proceed_to_items"] = False
+            return state
+        if not state.get("retrieve_category") or not state.get("sufficiency_check"):
+            state["proceed_to_items"] = True
             return state
 
         retrieved_content = ""
@@ -591,6 +607,9 @@ class RetrieveMixin:
     async def _llm_item_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("needs_retrieval"):
             state["proceed_to_resources"] = False
+            return state
+        if not state.get("retrieve_item") or not state.get("sufficiency_check"):
+            state["proceed_to_resources"] = True
             return state
 
         retrieved_content = ""
