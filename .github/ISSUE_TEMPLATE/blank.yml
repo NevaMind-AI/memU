@@ -1,13 +1,11 @@
 name: Blank Issue
 description: Create a general issue for memU
-title: ""
 labels: []
 body:
   - type: markdown
     attributes:
       value: |
         Thanks for opening an issue for memU! Please provide as much detail as possible.
-  
   - type: textarea
     id: description
     attributes:
