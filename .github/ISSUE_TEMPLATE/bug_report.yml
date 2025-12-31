@@ -31,8 +31,7 @@ body:
     attributes:
       label: Steps to reproduce
       description: What are the steps to reproduce this issue?
-      placeholder: |
-        1. ...
+      placeholder: "Enter step-by-step instructions to reproduce the issue."
     validations:
       required: true
 
@@ -42,6 +41,15 @@ body:
       label: Expected behavior
       description: What should have happened instead?
       placeholder: "Describe what you expected to happen."
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version of memU are you using?
+      placeholder: e.g., v1.0.0
     validations:
       required: true
 

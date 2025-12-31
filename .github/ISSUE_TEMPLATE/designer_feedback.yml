@@ -14,8 +14,8 @@ body:
       label: Feedback Type
       description: What kind of feedback are you providing?
       options:
-        - Bug Report
-        - Feature Request
+        - UI/UX Issue
+        - Design Inconsistency
         - Improvement Suggestion
         - Question
         - Other
@@ -51,3 +51,5 @@ body:
       label: Version
       description: What version of memU are you using?
       placeholder: e.g., v1.0.0
+    validations:
+      required: true
