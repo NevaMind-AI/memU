@@ -1,0 +1,66 @@
+name: Bug Report
+description: Report a bug or issue with the project
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill in the following details.
+  
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and detailed description of the bug.
+      placeholder: Enter a clear and concise description of what the bug is.
+    validations:
+      required: true
+  
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: The environment where this bug occurred (e.g., operating system, CPU arch, etc.).
+      placeholder: Enter details about the environment.
+    validations:
+      required: true
+  
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What are the steps to reproduce this issue?
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+      placeholder: Describe what you expected...
+    validations:
+      required: false
+  
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened?
+      placeholder: Describe what actually happened...
+    validations:
+      required: false
+  
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional information
+      description: Any other context or screenshots related to the bug
+      placeholder: Enter additional context or information.
+    validations:
+      required: false

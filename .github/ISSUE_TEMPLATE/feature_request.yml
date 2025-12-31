@@ -1,0 +1,66 @@
+name: Feature Request
+description: Request a feature
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to request a feature! Please fill in the following details.
+  
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and detailed description of the feature request.
+      placeholder: Enter a clear and concise description of what the feature request is.
+    validations:
+      required: true
+  
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Critical
+        - Major
+        - Minor
+    validations:
+      required: false
+  
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why do you need this feature? What problem does it solve?
+      placeholder: Describe the motivation behind this feature request...
+    validations:
+      required: false
+  
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: How do you think this feature should be implemented?
+      placeholder: Describe your proposed solution...
+    validations:
+      required: false
+  
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative solutions or features?
+      placeholder: Describe any alternative solutions you've considered...
+    validations:
+      required: false
+  
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional information
+      description: Any other context or screenshots related to the bug
+      placeholder: Enter additional context or information.
+    validations:
+      required: false

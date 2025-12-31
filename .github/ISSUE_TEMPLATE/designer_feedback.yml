@@ -1,0 +1,69 @@
+name: Designer Feedback(FE)
+description: Submit feedback, report issues, or request features
+title: "[Feedback] "
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking time to provide feedback! Please fill out this form as detailed as possible.
+  
+  - type: dropdown
+    id: feedback-type
+    attributes:
+      label: Feedback Type
+      description: What kind of feedback are you providing?
+      options:
+        - Bug Report
+        - Feature Request
+        - UI/UX Improvement
+        - Performance Issue
+        - Documentation
+        - Other
+    validations:
+      required: true
+  
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Please describe your feedback in detail
+      placeholder: Provide a clear and detailed explanation of your feedback...
+    validations:
+      required: true
+  
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: Describe what you expected...
+    validations:
+      required: false
+  
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: Describe what actually happened...
+    validations:
+      required: false
+  
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or Videos
+      description: If applicable, add screenshots or videos to help explain your feedback
+      placeholder: Drag and drop images or videos here...
+    validations:
+      required: false
+  
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context about the feedback here
+      placeholder: Enter additional context or information.
+    validations:
+      required: false
