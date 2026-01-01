@@ -5,8 +5,9 @@ from memu.prompts.category_summary.category import CUSTOM_PROMPT, PROMPT
 DEFAULT_CATEGORY_SUMMARY_PROMPT_ORDINAL: dict[str, int] = {
     "objective": 10,
     "workflow": 20,
-    "output": 30,
-    "examples": 40,
+    "rules": 30,
+    "output": 40,
+    "examples": 50,
     "input": 90,
 }
 

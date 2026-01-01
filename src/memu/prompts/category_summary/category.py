@@ -196,6 +196,9 @@ Do not include explanations, operation traces, or meta text.
 Control item length strictly; prioritize core information if needed.
 """
 
+PROMPT_BLOCK_RULES = """
+"""
+
 PROMPT_BLOCK_OUTPUT = """
 # Output Format (Markdown)
 ```markdown
@@ -273,6 +276,7 @@ New memory items:
 PROMPT = "\n\n".join([
     PROMPT_BLOCK_OBJECTIVE.strip(),
     PROMPT_BLOCK_WORKFLOW.strip(),
+    PROMPT_BLOCK_RULES.strip(),
     PROMPT_BLOCK_OUTPUT.strip(),
     PROMPT_BLOCK_EXAMPLES.strip(),
     PROMPT_BLOCK_INPUT.strip(),
