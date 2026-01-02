@@ -48,45 +48,6 @@ MemU organizes memory using a **three-layer architecture** inspired by hierarchi
 
 ---
 
-## 🔍 Dual Retrieval Methods
-
-MemU supports two retrieval strategies, each with unique strengths:
-
-<img width="100%" alt="retrieve" src="assets/retrieve.png" />
-
-### RAG-based Retrieval (`method="rag"`)
-
-Fast **embedding vector search** using cosine similarity:
-
-- ✅ **Fast**: Pure vector computation
-- ✅ **Scalable**: Efficient for large memory stores
-- ✅ **Returns scores**: Each result includes similarity score
-
-### LLM-based Retrieval (`method="llm"`)
-
-Deep **semantic understanding** through direct LLM reasoning:
-
-- ✅ **Deep understanding**: LLM comprehends context and nuance
-- ✅ **Query rewriting**: Automatically refines query at each tier
-- ✅ **Adaptive**: Stops early when sufficient information is found
-
-### Comparison
-
-| Aspect | RAG | LLM |
-|--------|-----|-----|
-| **Speed** | ⚡ Fast | 🐢 Slower |
-| **Cost** | 💰 Low | 💰💰 Higher |
-| **Semantic depth** | Medium | Deep |
-| **Tier 2 scope** | All items | Only items in relevant categories |
-| **Output** | With similarity scores | Ranked by LLM reasoning |
-
-Both methods support:
-- **Context-aware rewriting**: Resolves pronouns using conversation history
-- **Progressive search**: Categories → Items → Resources
-- **Sufficiency checking**: Stops when enough information is retrieved
-
----
-
 ## 🎨 Multimodal Support
 
 MemU processes diverse content types into unified memory:
@@ -155,7 +116,42 @@ result = await service.memorize(
 
 ### `retrieve()` - Query Memory
 
-Retrieves relevant memory based on queries:
+Retrieves relevant memory based on queries. MemU supports **two retrieval strategies**:
+
+<img width="100%" alt="retrieve" src="assets/retrieve.png" />
+
+#### RAG-based Retrieval (`method="rag"`)
+
+Fast **embedding vector search** using cosine similarity:
+
+- ✅ **Fast**: Pure vector computation
+- ✅ **Scalable**: Efficient for large memory stores
+- ✅ **Returns scores**: Each result includes similarity score
+
+#### LLM-based Retrieval (`method="llm"`)
+
+Deep **semantic understanding** through direct LLM reasoning:
+
+- ✅ **Deep understanding**: LLM comprehends context and nuance
+- ✅ **Query rewriting**: Automatically refines query at each tier
+- ✅ **Adaptive**: Stops early when sufficient information is found
+
+#### Comparison
+
+| Aspect | RAG | LLM |
+|--------|-----|-----|
+| **Speed** | ⚡ Fast | 🐢 Slower |
+| **Cost** | 💰 Low | 💰💰 Higher |
+| **Semantic depth** | Medium | Deep |
+| **Tier 2 scope** | All items | Only items in relevant categories |
+| **Output** | With similarity scores | Ranked by LLM reasoning |
+
+Both methods support:
+- **Context-aware rewriting**: Resolves pronouns using conversation history
+- **Progressive search**: Categories → Items → Resources
+- **Sufficiency checking**: Stops when enough information is retrieved
+
+#### Usage
 
 ```python
 result = await service.retrieve(
