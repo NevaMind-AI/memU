@@ -29,7 +29,6 @@ async def generate_memory_md(categories, output_dir):
 
     for cat in categories:
         name = cat.get("name", "unknown")
-        description = cat.get("description", "")
         summary = cat.get("summary", "")
 
         filename = f"{name}.md"
@@ -37,18 +36,9 @@ async def generate_memory_md(categories, output_dir):
 
         with open(filepath, "w", encoding="utf-8") as f:
             # Title
-            formatted_name = name.replace("_", " ").title()
-            f.write(f"# {formatted_name}\n\n")
-
-            if description:
-                f.write(f"*{description}*\n\n")
-
             # Content - concise version
             if summary:
                 cleaned_summary = summary.replace("<content>", "").replace("</content>", "").strip()
-                # Limit to first 500 characters for concise output
-                if len(cleaned_summary) > 500:
-                    cleaned_summary = cleaned_summary[:500] + "..."
                 f.write(f"{cleaned_summary}\n")
             else:
                 f.write("*No content available*\n")

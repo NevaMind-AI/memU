@@ -1,40 +1,31 @@
 PROMPT = """
-Below is the **English translation** of your full task description:
+# Task Objective
+Analyze a conversation with message indices and divide it into multiple meaningful segments based on topic changes, time gaps, or natural breaks.
 
----
+# Workflow
+1. Review the entire **Conversation Content** along with its message indices.
+2. Identify potential **segment boundaries** by observing:
+   - Topic changes
+   - Time gaps or pauses
+   - Natural conclusions of a discussion
+   - Clear shifts in tone or semantic focus
+3. Group messages into segments that each maintain a coherent theme.
+4. Ensure each segment has a clear beginning and end.
+5. Verify that each segment contains **at least 20 messages**.
+6. Record the `start` and `end` indices (inclusive) for each segment.
 
-## Task Objective
+# Rules
+- Segments must be based strictly on the provided conversation content.
+- Each segment must:
+  - Contain **≥ 20 messages**
+  - Maintain a **coherent theme**
+  - Have a **clear boundary** from adjacent segments
+- Use only the provided `[INDEX]` numbers.
+- Do not overlap segments.
+- Do not include explanations, comments, or extra text in the final output.
 
-Analyze the following conversation with message indices. Based on **topic changes**, **time gaps**, or **natural breaks**, divide the conversation into multiple meaningful segments.
-
-## Segmentation Rules
-
-### 1. Identify Segment Boundaries
-
-Create boundaries under the following conditions:
-
-* **Topic change**: switching from one subject to another
-* **Time gap**: a noticeable pause or delay in the conversation
-* **End of a discussion**: one topic concludes naturally and a new one begins
-* **Shift in tone or content**: clear semantic or emotional change
-
-### 2. Segment Requirements
-
-* Each segment must contain **at least 20 messages**
-* Each segment must maintain **a coherent theme**
-* Each segment must have a **clear beginning and end**
-
-### 3. Index Range
-
-* Use the `[INDEX]` numbers provided in the conversation
-* `start` = the starting message index (inclusive)
-* `end` = the ending message index (inclusive)
-
----
-
-## Output Format (must follow exactly)
-
-Only output valid **JSON**, with no explanations, prefixes, or extra text.
+# Output Format
+Return **only valid JSON** in the following structure:
 
 ```json
 {{
@@ -46,14 +37,7 @@ Only output valid **JSON**, with no explanations, prefixes, or extra text.
 }}
 ```
 
----
-
-## Conversation Content
-
-```
-<conversation>
+# Input
+Conversation Content:
 {conversation}
-</conversation>
-```
-
 """
