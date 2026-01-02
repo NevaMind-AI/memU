@@ -245,7 +245,7 @@ class LLMClientWrapper:
         *,
         max_tokens: int | None = None,
         system_prompt: str | None = None,
-    ) -> str:
+    ) -> Any:
         request_view = _build_text_request_view(
             "summarize",
             text,
@@ -255,7 +255,7 @@ class LLMClientWrapper:
             },
         )
 
-        async def _call() -> str:
+        async def _call() -> Any:
             return await self._client.summarize(text, max_tokens=max_tokens, system_prompt=system_prompt)
 
         return await self._invoke(
@@ -273,7 +273,7 @@ class LLMClientWrapper:
         *,
         max_tokens: int | None = None,
         system_prompt: str | None = None,
-    ) -> str:
+    ) -> Any:
         metadata = {
             "image_path": Path(image_path).name,
             "image_bytes": _safe_file_size(image_path),
@@ -282,7 +282,7 @@ class LLMClientWrapper:
         }
         request_view = _build_text_request_view("vision", prompt, metadata=metadata)
 
-        async def _call() -> str:
+        async def _call() -> Any:
             return await self._client.vision(
                 prompt,
                 image_path,
@@ -298,10 +298,10 @@ class LLMClientWrapper:
             response_builder=_build_text_response_view,
         )
 
-    async def embed(self, inputs: list[str]) -> list[list[float]]:
+    async def embed(self, inputs: list[str]) -> Any:
         request_view = _build_embedding_request_view(inputs)
 
-        async def _call() -> list[list[float]]:
+        async def _call() -> Any:
             return await self._client.embed(inputs)
 
         return await self._invoke(
@@ -319,7 +319,7 @@ class LLMClientWrapper:
         prompt: str | None = None,
         language: str | None = None,
         response_format: str = "text",
-    ) -> str:
+    ) -> Any:
         metadata = {
             "audio_path": Path(audio_path).name,
             "audio_bytes": _safe_file_size(audio_path),
@@ -329,7 +329,7 @@ class LLMClientWrapper:
         }
         request_view = _build_text_request_view("transcribe", prompt or "", metadata=metadata)
 
-        async def _call() -> str:
+        async def _call() -> Any:
             return await self._client.transcribe(
                 audio_path,
                 prompt=prompt,
@@ -572,7 +572,7 @@ def _should_run_interceptor(
         return bool(filt(ctx, status))
     except TypeError:
         try:
-            return bool(filt(ctx))
+            return bool(filt(ctx, None))
         except Exception:
             logger.exception("LLM interceptor filter failed: %s", interceptor.name or interceptor.interceptor_id)
             return False
