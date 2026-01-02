@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
@@ -24,6 +24,12 @@ from memu.blob.local_fs import LocalFS
 from memu.database.factory import build_database
 from memu.database.interfaces import Database
 from memu.llm.http_client import HTTPLLMClient
+from memu.llm.wrapper import (
+    LLMCallMetadata,
+    LLMClientWrapper,
+    LLMInterceptorHandle,
+    LLMInterceptorRegistry,
+)
 from memu.workflow.pipeline import PipelineManager
 from memu.workflow.runner import WorkflowRunner, resolve_workflow_runner
 from memu.workflow.step import WorkflowState, WorkflowStep
@@ -76,6 +82,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
 
         # Initialize client caches (lazy creation on first use)
         self._llm_clients: dict[str, Any] = {}
+        self._llm_interceptors = LLMInterceptorRegistry()
 
         self._workflow_runner = resolve_workflow_runner(workflow_runner)
 
@@ -112,7 +119,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             msg = f"Unknown llm_client_backend '{cfg.client_backend}'"
             raise ValueError(msg)
 
-    def _get_llm_client(self, profile: str | None = None) -> Any:
+    def _get_llm_base_client(self, profile: str | None = None) -> Any:
         """
         Lazily initialize and cache LLM clients per profile to avoid eager network setup.
         """
@@ -127,6 +134,44 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         client = self._init_llm_client(cfg)
         self._llm_clients[name] = client
         return client
+
+    @staticmethod
+    def _llm_call_metadata(step_context: Mapping[str, Any] | None) -> LLMCallMetadata:
+        if not isinstance(step_context, Mapping):
+            return LLMCallMetadata()
+        operation = None
+        for key in ("operation", "workflow_name"):
+            value = step_context.get(key)
+            if isinstance(value, str) and value.strip():
+                operation = value.strip()
+                break
+        step_id = step_context.get("step_id") if isinstance(step_context.get("step_id"), str) else None
+        trace_id = step_context.get("trace_id") if isinstance(step_context.get("trace_id"), str) else None
+        tags = step_context.get("tags") if isinstance(step_context.get("tags"), Mapping) else None
+        return LLMCallMetadata(operation=operation, step_id=step_id, trace_id=trace_id, tags=tags)
+
+    def _wrap_llm_client(
+        self,
+        client: Any,
+        *,
+        profile: str | None = None,
+        step_context: Mapping[str, Any] | None = None,
+    ) -> Any:
+        cfg: LLMConfig | None = self.llm_profiles.profiles.get(profile or "default")
+        provider = cfg.provider if cfg is not None else None
+        metadata = self._llm_call_metadata(step_context)
+        return LLMClientWrapper(
+            client,
+            registry=self._llm_interceptors,
+            metadata=metadata,
+            provider=provider,
+            chat_model=getattr(client, "chat_model", None),
+            embed_model=getattr(client, "embed_model", None),
+        )
+
+    def _get_llm_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
+        base_client = self._get_llm_base_client(profile)
+        return self._wrap_llm_client(base_client, profile=profile, step_context=step_context)
 
     @property
     def llm_client(self) -> Any:
@@ -152,7 +197,37 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
 
     def _get_step_llm_client(self, step_context: Mapping[str, Any] | None) -> Any:
         profile = self._llm_profile_from_context(step_context)
-        return self._get_llm_client(profile)
+        return self._get_llm_client(profile, step_context=step_context)
+
+    def intercept_before_llm_call(
+        self,
+        fn: Callable[..., Any],
+        *,
+        name: str | None = None,
+        priority: int = 0,
+        where: Mapping[str, Any] | Callable[..., Any] | None = None,
+    ) -> LLMInterceptorHandle:
+        return self._llm_interceptors.register_before(fn, name=name, priority=priority, where=where)
+
+    def intercept_after_llm_call(
+        self,
+        fn: Callable[..., Any],
+        *,
+        name: str | None = None,
+        priority: int = 0,
+        where: Mapping[str, Any] | Callable[..., Any] | None = None,
+    ) -> LLMInterceptorHandle:
+        return self._llm_interceptors.register_after(fn, name=name, priority=priority, where=where)
+
+    def intercept_on_error_llm_call(
+        self,
+        fn: Callable[..., Any],
+        *,
+        name: str | None = None,
+        priority: int = 0,
+        where: Mapping[str, Any] | Callable[..., Any] | None = None,
+    ) -> LLMInterceptorHandle:
+        return self._llm_interceptors.register_on_error(fn, name=name, priority=priority, where=where)
 
     def _get_context(self) -> Context:
         return self._context
