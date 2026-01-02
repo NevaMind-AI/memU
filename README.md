@@ -66,13 +66,23 @@ All modalities are unified into the same three-layer hierarchy, enabling cross-m
 
 ## 🚀 Quick Start
 
-### Installation
+### Option 1: Cloud Version
+
+Try MemU instantly without any setup:
+
+👉 **[memu.so](https://memu.so)** - Hosted cloud service with full API access
+
+For enterprise deployment and custom solutions, contact **info@nevamind.ai**
+
+### Option 2: Self-Hosted
+
+#### Installation
 
 ```bash
-pip install memu-py
+pip install -e .
 ```
 
-### Basic Example
+#### Basic Example
 
 > **Requirements**: Python 3.13+ and an OpenAI API key
 
