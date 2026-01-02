@@ -20,8 +20,8 @@ from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, Memor
 
 
 class TZDateTime(DateTime):
-    def __init__(self, **kw: Any) -> None:
-        super().__init__(timezone=True, **kw)
+    def __init__(self, timezone: bool = True, **kw: Any) -> None:
+        super().__init__(timezone=timezone, **kw)
 
 
 class BaseModelMixin(SQLModel):
