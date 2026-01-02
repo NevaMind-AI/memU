@@ -86,18 +86,38 @@ pip install -e .
 
 > **Requirements**: Python 3.13+ and an OpenAI API key
 
+**Test with In-Memory Storage** (no database required):
+
 ```bash
 export OPENAI_API_KEY=your_api_key
 cd tests
-python test.py
+python test_inmemory.py
 ```
 
-This example demonstrates the complete workflow:
+**Test with PostgreSQL Storage** (requires pgvector):
+
+```bash
+# Start PostgreSQL with pgvector
+docker run -d \
+  --name memu-postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=memu \
+  -p 5432:5432 \
+  pgvector/pgvector:pg16
+
+# Run the test
+export OPENAI_API_KEY=your_api_key
+cd tests
+python test_postgres.py
+```
+
+Both examples demonstrate the complete workflow:
 1. **Memorize**: Process a conversation file and extract structured memory
 2. **Retrieve (RAG)**: Fast embedding-based search
 3. **Retrieve (LLM)**: Deep semantic understanding search
 
-See [`tests/test.py`](tests/test.py) for the full source code.
+See [`tests/test_inmemory.py`](tests/test_inmemory.py) and [`tests/test_postgres.py`](tests/test_postgres.py) for the full source code.
 
 ---
 
