@@ -206,6 +206,8 @@ result = await service.retrieve(
 - `where={"agent_id__in": ["1", "2"]}` - match any in list
 - Omit `where` to retrieve across all scopes
 
+> 📚 **For complete API documentation**, see [SERVICE_API.md](docs/SERVICE_API.md) - includes all methods, CRUD operations, pipeline configuration, and configuration types.
+
 ---
 
 ## 💡 Use Cases
