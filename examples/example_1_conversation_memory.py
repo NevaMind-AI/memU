@@ -29,7 +29,6 @@ async def generate_memory_md(categories, output_dir):
 
     for cat in categories:
         name = cat.get("name", "unknown")
-        description = cat.get("description", "")
         summary = cat.get("summary", "")
 
         filename = f"{name}.md"

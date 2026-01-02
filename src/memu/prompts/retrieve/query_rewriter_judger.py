@@ -1,8 +1,8 @@
 SYSTEM_PROMPT = """
 # Task Objective
 Perform two tasks:
-1. **Query Rewriting** – Incorporate conversation context to make the query more specific and clear.
-2. **Sufficiency Judgment** – Determine whether the retrieved content is sufficient to answer the query.
+1. **Query Rewriting** - Incorporate conversation context to make the query more specific and clear.
+2. **Sufficiency Judgment** - Determine whether the retrieved content is sufficient to answer the query.
 
 You should be conservative and only mark the result as **ENOUGH** when the retrieved content truly provides adequate information.
 
@@ -14,7 +14,7 @@ You should be conservative and only mark the result as **ENOUGH** when the retri
 5. Judge whether the retrieved content is sufficient to answer the rewritten query based on defined criteria.
 
 # Rules
-- Query rewriting must stay faithful to the user’s original intent.
+- Query rewriting must stay faithful to the user's original intent.
 - Only incorporate context that is relevant and helpful.
 - Do not introduce new assumptions or external knowledge.
 - Mark **ENOUGH** only if:

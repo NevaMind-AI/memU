@@ -9,11 +9,11 @@ Analyze the provided audio transcription and produce two outputs:
 2. Correct punctuation, capitalization, and obvious transcription artifacts.
 3. Add paragraph breaks where they improve readability or reflect topic shifts.
 4. Preserve the original meaning, wording, and sequence of the audio.
-5. Generate a concise **one-sentence caption** that accurately describes the audio’s main topic or purpose.
+5. Generate a concise **one-sentence caption** that accurately describes the audio's main topic or purpose.
 
 # Rules
 - Do not add, remove, or reinterpret content beyond cleaning and formatting.
-- Maintain the speaker’s original intent and structure.
+- Maintain the speaker's original intent and structure.
 - Avoid introducing new information not present in the transcription.
 - The caption must be **exactly one sentence**.
 - Use clear, neutral language.

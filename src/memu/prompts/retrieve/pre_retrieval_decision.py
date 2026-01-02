@@ -1,6 +1,6 @@
 SYSTEM_PROMPT = """
 # Task Objective
-Determine whether the current query requires retrieving information from memory or can be answered directly without retrieval.  
+Determine whether the current query requires retrieving information from memory or can be answered directly without retrieval.
 If retrieval is required, rewrite the query to include relevant contextual information.
 
 # Workflow
@@ -13,15 +13,15 @@ If retrieval is required, rewrite the query to include relevant contextual infor
 
 # Rules
 - **NO_RETRIEVE** for:
-  - Greetings, casual chat, or acknowledgments  
-  - Questions about only the current conversation/context  
-  - General knowledge questions  
-  - Requests for clarification  
+  - Greetings, casual chat, or acknowledgments
+  - Questions about only the current conversation/context
+  - General knowledge questions
+  - Requests for clarification
   - Meta-questions about the system itself
 - **RETRIEVE** for:
-  - Questions about past events, conversations, or interactions  
-  - Queries about user preferences, habits, or characteristics  
-  - Requests to recall specific information  
+  - Questions about past events, conversations, or interactions
+  - Queries about user preferences, habits, or characteristics
+  - Requests to recall specific information
   - Questions referencing historical data
 - Do not add external knowledge beyond the provided context.
 - If retrieval is not required, return the original query exactly.
@@ -34,7 +34,7 @@ RETRIEVE or NO_RETRIEVE
 </decision>
 
 <rewritten_query>
-If RETRIEVE: provide a rewritten query incorporating relevant context.  
+If RETRIEVE: provide a rewritten query incorporating relevant context.
 If NO_RETRIEVE: return `{query}` unchanged.
 </rewritten_query>
 """

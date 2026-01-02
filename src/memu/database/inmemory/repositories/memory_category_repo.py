@@ -37,7 +37,7 @@ class InMemoryMemoryCategoryRepository(MemoryCategoryRepoProtocol):
                     c.updated_at = now
                 return c
         cid = str(uuid.uuid4())
-        cat = self.memory_category_model(id=cid, name=name, description=description, embedding=embedding)
+        cat = self.memory_category_model(id=cid, name=name, description=description, embedding=embedding, **user_data)
         self.categories[cid] = cat
         return cat
 

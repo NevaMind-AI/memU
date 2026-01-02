@@ -5,22 +5,29 @@ import json
 import logging
 import pathlib
 import re
-import xml.etree.ElementTree as ET
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, cast
+from xml.etree.ElementTree import Element
 
+import defusedxml.ElementTree as ET
 import pendulum
 from pydantic import BaseModel
 
-from memu.app.settings import CustomPrompt
+from memu.app.settings import CategoryConfig, CustomPrompt
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
 from memu.prompts.category_summary import (
     CUSTOM_PROMPT as CATEGORY_SUMMARY_CUSTOM_PROMPT,
+)
+from memu.prompts.category_summary import (
     PROMPT as CATEGORY_SUMMARY_PROMPT,
 )
 from memu.prompts.memory_type import (
     CUSTOM_PROMPTS as MEMORY_TYPE_CUSTOM_PROMPTS,
+)
+from memu.prompts.memory_type import (
     DEFAULT_MEMORY_TYPES,
+)
+from memu.prompts.memory_type import (
     PROMPTS as MEMORY_TYPE_PROMPTS,
 )
 from memu.prompts.preprocess import PROMPTS as PREPROCESS_PROMPTS
@@ -32,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from memu.app.service import Context
-    from memu.app.settings import CategoryConfig, MemorizeConfig
+    from memu.app.settings import MemorizeConfig
     from memu.blob.local_fs import LocalFS
     from memu.database.interfaces import Database
 
@@ -371,13 +378,23 @@ class MemorizeMixin:
         configured_types = self.memorize_config.memory_types or DEFAULT_MEMORY_TYPES
         return [cast(MemoryType, mtype) for mtype in configured_types]
 
-    def _resolve_summary_prompt(self, modality: str, override: str | None) -> str:
+    def _resolve_summary_prompt(self, modality: str, override: str | None) -> str | None:
         memo_settings = self.memorize_config
-        return override or memo_settings.summary_prompts.get(modality) or memo_settings.default_summary_prompt
+        result = memo_settings.multimodal_preprocess_prompts.get(modality)
+        if override:
+            return override
+        if result is None:
+            return (
+                memo_settings.default_category_summary_prompt
+                if isinstance(memo_settings.default_category_summary_prompt, str)
+                else None
+            )
+        return result if isinstance(result, str) else None
 
-    def _resolve_multimodal_preprocess_prompt(self, modality: str) -> str:
+    def _resolve_multimodal_preprocess_prompt(self, modality: str) -> str | None:
         memo_settings = self.memorize_config
-        return memo_settings.multimodal_preprocess_prompts.get(modality)
+        result = memo_settings.multimodal_preprocess_prompts.get(modality)
+        return result if isinstance(result, str) else None
 
     @staticmethod
     def _resolve_custom_prompt(prompt: str | CustomPrompt, templates: Mapping[str, str]) -> str:
@@ -392,7 +409,7 @@ class MemorizeMixin:
             # raise ValueError(f"No valid blocks contained in custom prompt: {prompt}")
             return ""
         sorted_blocks = sorted(valid_blocks)
-        return "\n\n".join(block for (_, _, block) in sorted_blocks)
+        return "\n\n".join(block for (_, _, block) in sorted_blocks if block is not None)
 
     async def _generate_structured_entries(
         self,
@@ -401,7 +418,7 @@ class MemorizeMixin:
         modality: str,
         memory_types: list[MemoryType],
         text: str | None,
-        base_prompt: str,
+        base_prompt: str | None,
         categories_prompt_str: str,
         segments: list[dict[str, int | str]] | None = None,
         llm_client: Any | None = None,
@@ -433,7 +450,7 @@ class MemorizeMixin:
         resource_text: str,
         modality: str,
         memory_types: list[MemoryType],
-        base_prompt: str,
+        base_prompt: str | None,
         categories_prompt_str: str,
         segments: list[dict[str, int | str]] | None,
         llm_client: Any | None = None,
@@ -463,7 +480,7 @@ class MemorizeMixin:
         resource_text: str,
         segments: list[dict[str, int | str]],
         memory_types: list[MemoryType],
-        base_prompt: str,
+        base_prompt: str | None,
         categories_prompt_str: str,
         llm_client: Any | None = None,
     ) -> list[tuple[MemoryType, str, list[str]]]:
@@ -491,7 +508,7 @@ class MemorizeMixin:
         *,
         resource_text: str,
         memory_types: list[MemoryType],
-        base_prompt: str,
+        base_prompt: str | None,
         categories_prompt_str: str,
         llm_client: Any | None = None,
     ) -> list[tuple[MemoryType, str, list[str]]]:
@@ -894,7 +911,7 @@ Summary:"""
         processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
         return [{"text": processed_content or text, "caption": caption}]
 
-    def _format_categories_for_prompt(self, categories: list[dict[str, str]]) -> str:
+    def _format_categories_for_prompt(self, categories: list[CategoryConfig]) -> str:
         if not categories:
             return "No categories provided."
         lines = []
@@ -994,7 +1011,7 @@ Summary:"""
                 continue
             store.memory_category_repo.update_category(
                 category_id=cid,
-                summary=summary.replace('```markdown', '').replace('```', '').strip(),
+                summary=summary.replace("```markdown", "").replace("```", "").strip(),
             )
 
     def _parse_conversation_preprocess(self, raw: str) -> tuple[str | None, str | None]:
@@ -1116,6 +1133,36 @@ Summary:"""
             normalized.append(entry)
         return normalized
 
+    def _find_xml_boundaries(self, raw: str) -> tuple[int, int, str] | None:
+        """Find the start index, end index, and closing tag for XML root element."""
+        root_tags = ["item", "profile", "behaviors", "events", "knowledge", "skills"]
+        for tag in root_tags:
+            opening = f"<{tag}>"
+            closing = f"</{tag}>"
+            start_idx = raw.find(opening)
+            if start_idx != -1:
+                end_idx = raw.rfind(closing)
+                if end_idx != -1:
+                    return (start_idx, end_idx, closing)
+        return None
+
+    def _parse_memory_element(self, memory_elem: Element) -> dict[str, Any] | None:
+        """Parse a single memory XML element into a dict."""
+        memory_dict: dict[str, Any] = {}
+
+        content_elem = memory_elem.find("content")
+        if content_elem is not None and content_elem.text:
+            memory_dict["content"] = content_elem.text.strip()
+
+        categories_elem = memory_elem.find("categories")
+        if categories_elem is not None:
+            categories = [cat_elem.text.strip() for cat_elem in categories_elem.findall("category") if cat_elem.text]
+            memory_dict["categories"] = categories
+
+        if memory_dict.get("content") and memory_dict.get("categories"):
+            return memory_dict
+        return None
+
     def _parse_memory_type_response_xml(self, raw: str) -> list[dict[str, Any]]:
         """
         Parse XML memory extraction output into a list of memory items.
@@ -1130,70 +1177,30 @@ Summary:"""
             </memory>
         </...>
         """
-        if not raw:
+        if not raw or not raw.strip():
             return []
         raw = raw.strip()
-        if not raw:
-            return []
 
         try:
-            # Find the opening root tag (item is the standard, others are legacy)
-            root_tags = ["item", "profile", "behaviors", "events", "knowledge", "skills"]
-            start_tag = None
-            end_tag = None
-            start_idx = -1
-            end_idx = -1
-
-            for tag in root_tags:
-                opening = f"<{tag}>"
-                closing = f"</{tag}>"
-                idx = raw.find(opening)
-                if idx != -1:
-                    e_idx = raw.rfind(closing)
-                    if e_idx != -1:
-                        start_tag = opening
-                        end_tag = closing
-                        start_idx = idx
-                        end_idx = e_idx
-                        break
-
-            if start_idx == -1 or end_idx == -1:
+            boundaries = self._find_xml_boundaries(raw)
+            if boundaries is None:
                 logger.warning("Could not find valid root tag in XML response")
                 return []
 
-            # Extract only the XML portion
+            start_idx, end_idx, end_tag = boundaries
             xml_content = raw[start_idx : end_idx + len(end_tag)]
-
-            # Escape ampersands for XML parsing
             xml_content = xml_content.replace("&", "&amp;")
 
-            # Parse XML
             root = ET.fromstring(xml_content)
-
             result: list[dict[str, Any]] = []
 
-            # Process all <memory> elements
             for memory_elem in root.findall("memory"):
-                memory_dict: dict[str, Any] = {}
+                parsed = self._parse_memory_element(memory_elem)
+                if parsed:
+                    result.append(parsed)
 
-                content_elem = memory_elem.find("content")
-                if content_elem is not None and content_elem.text:
-                    memory_dict["content"] = content_elem.text.strip()
-
-                categories_elem = memory_elem.find("categories")
-                if categories_elem is not None:
-                    categories = []
-                    for cat_elem in categories_elem.findall("category"):
-                        if cat_elem.text:
-                            categories.append(cat_elem.text.strip())
-                    memory_dict["categories"] = categories
-
-                # Only add if we have valid content and categories
-                if memory_dict.get("content") and memory_dict.get("categories"):
-                    result.append(memory_dict)
-
-            return result
-
-        except ET.ParseError as e:
-            logger.error(f"Failed to parse XML: {e}")
+        except ET.ParseError:
+            logger.exception("Failed to parse XML")
             return []
+        else:
+            return result

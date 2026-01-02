@@ -30,10 +30,9 @@ class CRUDMixin:
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
         _extract_json_blob: Callable[[str], str]
         _escape_prompt_value: Callable[[str], str]
-        _category_embedding_text: Callable[[dict[str, str]], str]
         user_model: type[BaseModel]
         patch_config: PatchConfig
-        _ensure_categories_ready: Callable[[Context, Database], Awaitable[None]]
+        _ensure_categories_ready: Callable[[Context, Database, Mapping[str, Any] | None], Awaitable[None]]
 
     async def list_memory_items(
         self,

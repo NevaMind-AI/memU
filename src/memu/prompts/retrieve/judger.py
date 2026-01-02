@@ -1,12 +1,12 @@
 PROMPT = """
 # Task Objective
-Judge whether the retrieved content is sufficient to answer the user’s query.
+Judge whether the retrieved content is sufficient to answer the user's query.
 
 # Workflow
 1. Analyze the **Query** to understand what the user is asking.
 2. Review the **Retrieved Content** carefully.
 3. Evaluate the retrieved content against the following criteria:
-   - Does it directly address the user’s question?
+   - Does it directly address the user's question?
    - Is the information specific and detailed enough?
    - Are there obvious gaps or missing details?
    - Did the user explicitly ask to recall or remember more information?

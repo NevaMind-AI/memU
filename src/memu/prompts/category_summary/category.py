@@ -1,6 +1,6 @@
 PROMPT_LEGACY = """
 # Task Objective
-You are a professional User Profile Synchronization Specialist. Your core objective is to accurately merge newly extracted user information items into the user’s initial profile using only two operations: add and update.
+You are a professional User Profile Synchronization Specialist. Your core objective is to accurately merge newly extracted user information items into the user's initial profile using only two operations: add and update.
 Because no original conversation text is provided, active deletion is not allowed; only implicit replacement through newer items is permitted. The final output must be the updated, complete user profile.
 
 # Workflow
@@ -9,11 +9,11 @@ Because no original conversation text is provided, active deletion is not allowe
 User Initial Profile: structured, categorized, confirmed long-term user information.
 Newly Extracted User Information Items.
 - Structure parsing
-Initial profile: extract categories and core content; preserve original wording style and format; build a category–content mapping.
+Initial profile: extract categories and core content; preserve original wording style and format; build a category-content mapping.
 New items: validate completeness and category correctness; mark each as Add or Update; distinguish stable facts from event-type information; extract dates/times (events only).
 - Pre-validation
 Verify subject accuracy: clearly distinguish the user from related persons (family, friends, etc.).
-Remove invalid items: vague, miscategorized, or non–user-information items.
+Remove invalid items: vague, miscategorized, or non-user-information items.
 Remove one-off events: temporary actions without long-term relevance (e.g., what the user ate today).
 
 ## Step 2: Core Operations (Update / Add)
@@ -25,7 +25,7 @@ Time integration (events only): retain dates/times and integrate them naturally;
 B. Add
 Deduplication check: ensure the new item is not identical or semantically similar to existing or updated items.
 Category matching: place the item into the correct predefined category.
-Insertion: add the item following the original profile’s language and formatting style, concise and clear.
+Insertion: add the item following the original profile's language and formatting style, concise and clear.
 
 ## Step 3: Merge & Formatting
 Structured ordering: present content by category order; omit empty categories.
@@ -145,7 +145,7 @@ New memory items:
 
 PROMPT_BLOCK_OBJECTIVE = """
 # Task Objective
-You are a professional User Profile Synchronization Specialist. Your core objective is to accurately merge newly extracted user information items into the user’s initial profile using only two operations: add and update.
+You are a professional User Profile Synchronization Specialist. Your core objective is to accurately merge newly extracted user information items into the user's initial profile using only two operations: add and update.
 Because no original conversation text is provided, active deletion is not allowed; only implicit replacement through newer items is permitted. The final output must be the updated, complete user profile.
 """
 
@@ -156,11 +156,11 @@ PROMPT_BLOCK_WORKFLOW = """
 User Initial Profile: structured, categorized, confirmed long-term user information.
 Newly Extracted User Information Items.
 - Structure parsing
-Initial profile: extract categories and core content; preserve original wording style and format; build a category–content mapping.
+Initial profile: extract categories and core content; preserve original wording style and format; build a category-content mapping.
 New items: validate completeness and category correctness; mark each as Add or Update; distinguish stable facts from event-type information; extract dates/times (events only).
 - Pre-validation
 Verify subject accuracy: clearly distinguish the user from related persons (family, friends, etc.).
-Remove invalid items: vague, miscategorized, or non–user-information items.
+Remove invalid items: vague, miscategorized, or non-user-information items.
 Remove one-off events: temporary actions without long-term relevance (e.g., what the user ate today).
 
 ## Step 2: Core Operations (Update / Add)
@@ -172,7 +172,7 @@ Time integration (events only): retain dates/times and integrate them naturally;
 B. Add
 Deduplication check: ensure the new item is not identical or semantically similar to existing or updated items.
 Category matching: place the item into the correct predefined category.
-Insertion: add the item following the original profile’s language and formatting style, concise and clear.
+Insertion: add the item following the original profile's language and formatting style, concise and clear.
 
 ## Step 3: Merge & Formatting
 Structured ordering: present content by category order; omit empty categories.

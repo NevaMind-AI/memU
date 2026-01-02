@@ -5,11 +5,15 @@ from pydantic import AfterValidator, BaseModel, BeforeValidator, Field, RootMode
 
 from memu.prompts.category_summary import (
     DEFAULT_CATEGORY_SUMMARY_PROMPT_ORDINAL,
+)
+from memu.prompts.category_summary import (
     PROMPT as CATEGORY_SUMMARY_PROMPT,
 )
 from memu.prompts.memory_type import (
     DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL,
     DEFAULT_MEMORY_TYPES,
+)
+from memu.prompts.memory_type import (
     PROMPTS as DEFAULT_MEMORY_TYPE_PROMPTS,
 )
 
@@ -27,7 +31,7 @@ def _default_memory_types() -> list[str]:
     return list(DEFAULT_MEMORY_TYPES)
 
 
-def _default_memory_type_prompts() -> dict[str, str]:
+def _default_memory_type_prompts() -> "dict[str, str | CustomPrompt]":
     return dict(DEFAULT_MEMORY_TYPE_PROMPTS)
 
 
@@ -44,7 +48,7 @@ class CustomPrompt(RootModel[dict[str, PromptBlock]]):
         return self.root.get(key, default)
 
     def items(self) -> list[tuple[str, PromptBlock]]:
-        return self.root.items()
+        return list(self.root.items())
 
 
 def complete_prompt_blocks(prompt: CustomPrompt, default_blocks: Mapping[str, int]) -> CustomPrompt:
@@ -171,7 +175,7 @@ class MemorizeConfig(BaseModel):
         default_factory=_default_memory_types,
         description="Ordered list of memory types (profile/event/knowledge/behavior by default).",
     )
-    memory_type_prompts: dict[str, str | Annotated[CustomPrompt, CompleteMemoryTypePrompt]] = Field(
+    memory_type_prompts: dict[str, str | CustomPrompt] = Field(
         default_factory=_default_memory_type_prompts,
         description="User prompt overrides for each memory type extraction.",
     )

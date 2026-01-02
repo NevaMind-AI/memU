@@ -9,7 +9,7 @@ Analyze the provided document text and produce two outputs:
 2. Identify the main points, key arguments, and essential details.
 3. Remove repetition, filler, and unnecessary verbosity while preserving meaning and completeness.
 4. Rewrite the content in a concise, structured form.
-5. Generate a single-sentence **Caption** that accurately summarizes the document’s purpose or topic.
+5. Generate a single-sentence **Caption** that accurately summarizes the document's purpose or topic.
 
 # Rules
 - Preserve all key information, facts, and conclusions.
