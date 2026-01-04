@@ -14,6 +14,15 @@ class ResourceRepo(Protocol):
 
     def list_resources(self, where: Mapping[str, Any] | None = None) -> dict[str, Resource]: ...
 
-    def create_resource(self, *, url: str, modality: str, local_path: str, user_data: dict[str, Any]) -> Resource: ...
+    def create_resource(
+        self,
+        *,
+        url: str,
+        modality: str,
+        local_path: str,
+        caption: str | None,
+        embedding: list[float] | None,
+        user_data: dict[str, Any],
+    ) -> Resource: ...
 
     def load_existing(self) -> None: ...

@@ -21,9 +21,26 @@ class InMemoryResourceRepository(ResourceRepoProtocol):
             return dict(self.resources)
         return {rid: res for rid, res in self.resources.items() if matches_where(res, where)}
 
-    def create_resource(self, *, url: str, modality: str, local_path: str, user_data: dict[str, Any]) -> Resource:
+    def create_resource(
+        self,
+        *,
+        url: str,
+        modality: str,
+        local_path: str,
+        caption: str | None,
+        embedding: list[float] | None,
+        user_data: dict[str, Any],
+    ) -> Resource:
         rid = str(uuid.uuid4())
-        res = self.resource_model(id=rid, url=url, modality=modality, local_path=local_path, **user_data)
+        res = self.resource_model(
+            id=rid,
+            url=url,
+            modality=modality,
+            local_path=local_path,
+            caption=caption,
+            embedding=embedding,
+            **user_data,
+        )
         self.resources[rid] = res
         return res
 
