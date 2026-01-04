@@ -9,7 +9,6 @@ import xml.etree.ElementTree as ET
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, cast
 
-import pendulum
 from pydantic import BaseModel
 
 from memu.app.settings import CustomPrompt
@@ -352,19 +351,28 @@ class MemorizeMixin:
         embed_client: Any | None = None,
         user: Mapping[str, Any] | None = None,
     ) -> Resource:
+        caption_text = caption.strip() if caption else None
+        if caption_text:
+            client = embed_client or self._get_llm_client()
+            caption_embedding = (await client.embed([caption_text]))[0]
+        else:
+            caption_embedding = None
+
         res = store.resource_repo.create_resource(
             url=resource_url,
             modality=modality,
             local_path=local_path,
+            caption=caption_text,
+            embedding=caption_embedding,
             user_data=dict(user or {}),
         )
-        if caption:
-            caption_text = caption.strip()
-            if caption_text:
-                res.caption = caption_text
-                client = embed_client or self._get_llm_client()
-                res.embedding = (await client.embed([caption_text]))[0]
-                res.updated_at = pendulum.now()
+        # if caption:
+        #     caption_text = caption.strip()
+        #     if caption_text:
+        #         res.caption = caption_text
+        #         client = embed_client or self._get_llm_client()
+        #         res.embedding = (await client.embed([caption_text]))[0]
+        #         res.updated_at = pendulum.now()
         return res
 
     def _resolve_memory_types(self) -> list[MemoryType]:
@@ -994,7 +1002,7 @@ Summary:"""
                 continue
             store.memory_category_repo.update_category(
                 category_id=cid,
-                summary=summary.replace('```markdown', '').replace('```', '').strip(),
+                summary=summary.replace("```markdown", "").replace("```", "").strip(),
             )
 
     def _parse_conversation_preprocess(self, raw: str) -> tuple[str | None, str | None]:
