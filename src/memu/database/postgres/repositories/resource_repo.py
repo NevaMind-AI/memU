@@ -43,14 +43,23 @@ class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
                 result[res.id] = res
         return result
 
-    def create_resource(self, *, url: str, modality: str, local_path: str, user_data: dict[str, Any]) -> Resource:
+    def create_resource(
+        self,
+        *,
+        url: str,
+        modality: str,
+        local_path: str,
+        caption: str | None,
+        embedding: list[float] | None,
+        user_data: dict[str, Any],
+    ) -> Resource:
         res = self._resource_model(
             url=url,
             modality=modality,
             local_path=local_path,
+            caption=caption,
+            embedding=self._prepare_embedding(embedding),
             **user_data,
-            caption=None,
-            embedding=self._prepare_embedding(None),
             created_at=self._now(),
             updated_at=self._now(),
         )

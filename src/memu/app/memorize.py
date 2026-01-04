@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any, cast
 from xml.etree.ElementTree import Element
 
 import defusedxml.ElementTree as ET
-import pendulum
 from pydantic import BaseModel
 
 from memu.app.settings import CategoryConfig, CustomPrompt
@@ -66,7 +65,6 @@ class MemorizeMixin:
         *,
         resource_url: str,
         modality: str,
-        summary_prompt: str | None = None,
         user: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         ctx = self._get_context()
@@ -75,15 +73,11 @@ class MemorizeMixin:
         await self._ensure_categories_ready(ctx, store, user_scope)
 
         memory_types = self._resolve_memory_types()
-        # base_prompt = self._resolve_summary_prompt(modality, summary_prompt)
-        # preprocess_prompt_override = self._resolve_multimodal_preprocess_prompt(modality)
 
         state: WorkflowState = {
             "resource_url": resource_url,
             "modality": modality,
-            # "summary_prompt_override": summary_prompt,
             "memory_types": memory_types,
-            # "base_prompt": base_prompt,
             "categories_prompt_str": self._category_prompt_str,
             "ctx": ctx,
             "store": store,
@@ -215,8 +209,6 @@ class MemorizeMixin:
                 modality=state["modality"],
                 memory_types=state["memory_types"],
                 text=text,
-                # base_prompt=state["base_prompt"],
-                base_prompt=None,
                 categories_prompt_str=state["categories_prompt_str"],
                 llm_client=llm_client,
             )
@@ -359,19 +351,28 @@ class MemorizeMixin:
         embed_client: Any | None = None,
         user: Mapping[str, Any] | None = None,
     ) -> Resource:
+        caption_text = caption.strip() if caption else None
+        if caption_text:
+            client = embed_client or self._get_llm_client()
+            caption_embedding = (await client.embed([caption_text]))[0]
+        else:
+            caption_embedding = None
+
         res = store.resource_repo.create_resource(
             url=resource_url,
             modality=modality,
             local_path=local_path,
+            caption=caption_text,
+            embedding=caption_embedding,
             user_data=dict(user or {}),
         )
-        if caption:
-            caption_text = caption.strip()
-            if caption_text:
-                res.caption = caption_text
-                client = embed_client or self._get_llm_client()
-                res.embedding = (await client.embed([caption_text]))[0]
-                res.updated_at = pendulum.now()
+        # if caption:
+        #     caption_text = caption.strip()
+        #     if caption_text:
+        #         res.caption = caption_text
+        #         client = embed_client or self._get_llm_client()
+        #         res.embedding = (await client.embed([caption_text]))[0]
+        #         res.updated_at = pendulum.now()
         return res
 
     def _resolve_memory_types(self) -> list[MemoryType]:
@@ -418,7 +419,6 @@ class MemorizeMixin:
         modality: str,
         memory_types: list[MemoryType],
         text: str | None,
-        base_prompt: str | None,
         categories_prompt_str: str,
         segments: list[dict[str, int | str]] | None = None,
         llm_client: Any | None = None,
@@ -432,7 +432,6 @@ class MemorizeMixin:
                 resource_text=text,
                 modality=modality,
                 memory_types=memory_types,
-                base_prompt=base_prompt,
                 categories_prompt_str=categories_prompt_str,
                 segments=segments,
                 llm_client=client,
@@ -450,7 +449,6 @@ class MemorizeMixin:
         resource_text: str,
         modality: str,
         memory_types: list[MemoryType],
-        base_prompt: str | None,
         categories_prompt_str: str,
         segments: list[dict[str, int | str]] | None,
         llm_client: Any | None = None,
@@ -460,7 +458,6 @@ class MemorizeMixin:
                 resource_text=resource_text,
                 segments=segments,
                 memory_types=memory_types,
-                base_prompt=base_prompt,
                 categories_prompt_str=categories_prompt_str,
                 llm_client=llm_client,
             )
@@ -469,7 +466,6 @@ class MemorizeMixin:
         return await self._generate_entries_from_text(
             resource_text=resource_text,
             memory_types=memory_types,
-            base_prompt=base_prompt,
             categories_prompt_str=categories_prompt_str,
             llm_client=llm_client,
         )
@@ -480,7 +476,6 @@ class MemorizeMixin:
         resource_text: str,
         segments: list[dict[str, int | str]],
         memory_types: list[MemoryType],
-        base_prompt: str | None,
         categories_prompt_str: str,
         llm_client: Any | None = None,
     ) -> list[tuple[MemoryType, str, list[str]]]:
@@ -496,7 +491,6 @@ class MemorizeMixin:
             segment_entries = await self._generate_entries_from_text(
                 resource_text=segment_text,
                 memory_types=memory_types,
-                base_prompt=base_prompt,
                 categories_prompt_str=categories_prompt_str,
                 llm_client=llm_client,
             )
@@ -508,7 +502,6 @@ class MemorizeMixin:
         *,
         resource_text: str,
         memory_types: list[MemoryType],
-        base_prompt: str | None,
         categories_prompt_str: str,
         llm_client: Any | None = None,
     ) -> list[tuple[MemoryType, str, list[str]]]:
@@ -523,8 +516,8 @@ class MemorizeMixin:
             )
             for mtype in memory_types
         ]
-        # tasks = [client.summarize(prompt_text, system_prompt=base_prompt) for prompt_text in prompts]
-        tasks = [client.summarize(prompt_text) for prompt_text in prompts]
+        valid_prompts = [prompt for prompt in prompts if prompt.strip()]
+        tasks = [client.summarize(prompt_text) for prompt_text in valid_prompts]
         responses = await asyncio.gather(*tasks)
         return self._parse_structured_entries(memory_types, responses)
 
