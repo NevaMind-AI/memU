@@ -285,6 +285,7 @@ PROMPT = "\n\n".join([
 CUSTOM_PROMPT = {
     "objective": PROMPT_BLOCK_OBJECTIVE.strip(),
     "workflow": PROMPT_BLOCK_WORKFLOW.strip(),
+    "rules": PROMPT_BLOCK_RULES.strip(),
     "output": PROMPT_BLOCK_OUTPUT.strip(),
     "examples": PROMPT_BLOCK_EXAMPLES.strip(),
     "input": PROMPT_BLOCK_INPUT.strip(),
