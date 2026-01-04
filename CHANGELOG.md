@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.9.0](https://github.com/NevaMind-AI/memU/compare/v0.8.0...v0.9.0) (2026-01-04)
+
+
+### Features
+
+* add GitHub issue templates (bug report, designer feedback, feat… ([#132](https://github.com/NevaMind-AI/memU/issues/132)) ([aee22ee](https://github.com/NevaMind-AI/memU/commit/aee22ee94f275749f69367b83a02a2e819cfd001))
+* add LLM wrapper and interceptors for LLM calls ([#131](https://github.com/NevaMind-AI/memU/issues/131)) ([416e102](https://github.com/NevaMind-AI/memU/commit/416e1029e7752f173c133ebc83bc42801a313059))
+* patch & crud workflows ([#127](https://github.com/NevaMind-AI/memU/issues/127)) ([3cd3dc6](https://github.com/NevaMind-AI/memU/commit/3cd3dc65ae9488207ff8fb0c81e4adb0d22c0f91))
+
+
+### Bug Fixes
+
+* category summary & category user scopes ([#125](https://github.com/NevaMind-AI/memU/issues/125)) ([a24efd5](https://github.com/NevaMind-AI/memU/commit/a24efd57df2e305fa3eae8622ea889318979c2f7))
+* config & resource caption ([#142](https://github.com/NevaMind-AI/memU/issues/142)) ([ea4be13](https://github.com/NevaMind-AI/memU/commit/ea4be1396c0f55b02d706819f6c2b4d5c6e68be8))
+* remove duplicate and unnecessary issue templates ([#133](https://github.com/NevaMind-AI/memU/issues/133)) ([559ec14](https://github.com/NevaMind-AI/memU/commit/559ec14d2561ac09162bbb93f178e0f74cc58b23))
+
+
+### Documentation
+
+* fix README and CONTRIBUTING to match actual codebase ([#130](https://github.com/NevaMind-AI/memU/issues/130)) ([65d7ef4](https://github.com/NevaMind-AI/memU/commit/65d7ef414563395c6cfa0a75343864671c11b62d))
+* modify readme.md 0102 ([#136](https://github.com/NevaMind-AI/memU/issues/136)) ([f114ee4](https://github.com/NevaMind-AI/memU/commit/f114ee46c8639b256472a8e989695b2f2215f4d4))
+
 ## [0.8.0](https://github.com/NevaMind-AI/memU/compare/v0.7.0...v0.8.0) (2025-12-24)
 
 
