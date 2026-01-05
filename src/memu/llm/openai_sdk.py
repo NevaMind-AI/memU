@@ -26,6 +26,10 @@ class OpenAISDKClient:
         chat_model: str,
         embed_model: str,
         embed_batch_size: int = 25,
+        # Separate embedding configuration (if different from LLM provider)
+        embed_provider: str | None = None,
+        embed_base_url: str | None = None,
+        embed_api_key: str | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or ""
@@ -33,6 +37,31 @@ class OpenAISDKClient:
         self.embed_model = embed_model
         self.embed_batch_size = embed_batch_size
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
+
+        # Setup separate embedding client if configured
+        self._embed_client: AsyncOpenAI | None = None
+        self._http_embed_client: Any = None
+        if embed_provider or embed_base_url:
+            resolved_embed_base_url = (embed_base_url or base_url).rstrip("/")
+            resolved_embed_api_key = embed_api_key or api_key or ""
+            resolved_embed_provider = (embed_provider or "openai").lower()
+
+            # For OpenAI-compatible providers, use SDK; for others, use HTTP client
+            if resolved_embed_provider == "openai":
+                self._embed_client = AsyncOpenAI(
+                    api_key=resolved_embed_api_key,
+                    base_url=resolved_embed_base_url,
+                )
+            else:
+                # Use HTTP embedding client for non-OpenAI providers
+                from memu.embedding.http_client import HTTPEmbeddingClient
+
+                self._http_embed_client = HTTPEmbeddingClient(
+                    base_url=resolved_embed_base_url,
+                    api_key=resolved_embed_api_key,
+                    provider=resolved_embed_provider,
+                    embed_model=embed_model,
+                )
 
     async def summarize(
         self,
@@ -124,15 +153,22 @@ class OpenAISDKClient:
         return content or ""
 
     async def embed(self, inputs: list[str]) -> list[list[float]]:
-        """Create text embeddings via the official SDK."""
+        """Create text embeddings via the official SDK or HTTP client."""
+        # Use HTTP embedding client for non-OpenAI providers
+        if self._http_embed_client is not None:
+            return await self._http_embed_client.embed(inputs)
+
+        # Use separate SDK client if configured, otherwise use main client
+        client = self._embed_client or self.client
+
         if len(inputs) <= self.embed_batch_size:
-            response = await self.client.embeddings.create(model=self.embed_model, input=inputs)
+            response = await client.embeddings.create(model=self.embed_model, input=inputs)
             return [cast(list[float], d.embedding) for d in response.data]
 
         all_embeddings: list[list[float]] = []
         for idx in range(0, len(inputs), self.embed_batch_size):
             batch = inputs[idx : idx + self.embed_batch_size]
-            response = await self.client.embeddings.create(model=self.embed_model, input=batch)
+            response = await client.embeddings.create(model=self.embed_model, input=batch)
             all_embeddings.extend([cast(list[float], d.embedding) for d in response.data])
 
         return all_embeddings

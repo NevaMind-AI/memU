@@ -113,6 +113,19 @@ class LLMConfig(BaseModel):
         default=25,
         description="Maximum batch size for embedding API calls (used by SDK client backends).",
     )
+    # Separate embedding provider configuration (if different from LLM provider)
+    embed_provider: str | None = Field(
+        default=None,
+        description="Embedding provider name (e.g., 'voyage', 'jina'). If None, uses main provider.",
+    )
+    embed_base_url: str | None = Field(
+        default=None,
+        description="Embedding API base URL. If None, uses main base_url.",
+    )
+    embed_api_key: str | None = Field(
+        default=None,
+        description="Embedding API key. If None, uses main api_key.",
+    )
 
 
 class BlobConfig(BaseModel):

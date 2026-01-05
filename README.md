@@ -74,6 +74,23 @@ Try MemU instantly without any setup:
 
 For enterprise deployment and custom solutions, contact **info@nevamind.ai**
 
+#### Cloud API (v3)
+
+| Base URL | `https://api.memu.so` |
+|----------|----------------------|
+| Auth | `Authorization: Bearer YOUR_API_KEY` |
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/v3/memory/memorize` | Register a memorization task |
+| `GET` | `/api/v3/memory/memorize/status/{task_id}` | Get task status |
+| `POST` | `/api/v3/memory/categories` | List memory categories |
+| `POST` | `/api/v3/memory/retrieve` | Retrieve memories (semantic search) |
+
+📚 **[Full API Documentation](https://memu.so/docs#cloud-version)**
+
+---
+
 ### Option 2: Self-Hosted
 
 #### Installation

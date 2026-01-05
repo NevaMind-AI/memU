@@ -92,45 +92,55 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         )
         self._register_pipelines()
 
-    def _init_llm_client(self, config: LLMConfig | None = None) -> Any:
+    def _init_llm_client(self, config: LLMConfig) -> Any:
         """Initialize LLM client based on configuration."""
-        cfg = config or self.llm_config
-        backend = cfg.client_backend
+        backend = config.client_backend
+
         if backend == "sdk":
             from memu.llm.openai_sdk import OpenAISDKClient
 
             return OpenAISDKClient(
-                base_url=cfg.base_url,
-                api_key=cfg.api_key,
-                chat_model=cfg.chat_model,
-                embed_model=cfg.embed_model,
-                embed_batch_size=cfg.embed_batch_size,
+                base_url=config.base_url,
+                api_key=config.api_key,
+                chat_model=config.chat_model,
+                embed_model=config.embed_model,
+                embed_batch_size=config.embed_batch_size,
+                # Pass separate embedding config if set
+                embed_provider=config.embed_provider,
+                embed_base_url=config.embed_base_url,
+                embed_api_key=config.embed_api_key,
             )
+
         elif backend == "httpx":
             return HTTPLLMClient(
-                base_url=cfg.base_url,
-                api_key=cfg.api_key,
-                chat_model=cfg.chat_model,
-                provider=cfg.provider,
-                endpoint_overrides=cfg.endpoint_overrides,
-                embed_model=cfg.embed_model,
+                base_url=config.base_url,
+                api_key=config.api_key,
+                chat_model=config.chat_model,
+                provider=config.provider,
+                endpoint_overrides=config.endpoint_overrides,
+                embed_model=config.embed_model,
+                # Pass separate embedding config if set
+                embed_provider=config.embed_provider,
+                embed_base_url=config.embed_base_url,
+                embed_api_key=config.embed_api_key,
             )
+
         else:
-            msg = f"Unknown llm_client_backend '{cfg.client_backend}'"
+            msg = f"Unknown llm_client_backend '{config.client_backend}'"
             raise ValueError(msg)
 
     def _get_llm_base_client(self, profile: str | None = None) -> Any:
-        """
-        Lazily initialize and cache LLM clients per profile to avoid eager network setup.
-        """
+        """Lazily initialize and cache LLM clients per profile."""
         name = profile or "default"
         client = self._llm_clients.get(name)
         if client is not None:
             return client
+
         cfg: LLMConfig | None = self.llm_profiles.profiles.get(name)
         if cfg is None:
             msg = f"Unknown llm profile '{name}'"
             raise KeyError(msg)
+
         client = self._init_llm_client(cfg)
         self._llm_clients[name] = client
         return client

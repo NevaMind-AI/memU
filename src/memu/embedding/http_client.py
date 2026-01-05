@@ -8,13 +8,22 @@ import httpx
 
 from memu.embedding.backends.base import EmbeddingBackend
 from memu.embedding.backends.doubao import DoubaoEmbeddingBackend, DoubaoMultimodalEmbeddingInput
+from memu.embedding.backends.jina import JinaEmbeddingBackend
 from memu.embedding.backends.openai import OpenAIEmbeddingBackend
+from memu.embedding.backends.qwen import QwenEmbeddingBackend
+from memu.embedding.backends.voyage import VoyageEmbeddingBackend
 
 logger = logging.getLogger(__name__)
 
 EMBEDDING_BACKENDS: dict[str, Callable[[], EmbeddingBackend]] = {
     OpenAIEmbeddingBackend.name: OpenAIEmbeddingBackend,
     DoubaoEmbeddingBackend.name: DoubaoEmbeddingBackend,
+    VoyageEmbeddingBackend.name: VoyageEmbeddingBackend,
+    JinaEmbeddingBackend.name: JinaEmbeddingBackend,
+    QwenEmbeddingBackend.name: QwenEmbeddingBackend,
+    # Aliases for convenience
+    "openrouter": OpenAIEmbeddingBackend,  # OpenRouter uses OpenAI-compatible format
+    "deepseek": OpenAIEmbeddingBackend,  # DeepSeek uses OpenAI-compatible format
 }
 
 

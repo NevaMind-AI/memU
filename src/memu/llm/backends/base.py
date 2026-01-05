@@ -28,3 +28,15 @@ class LLMBackend:
         max_tokens: int | None,
     ) -> dict[str, Any]:
         raise NotImplementedError
+
+    def get_extra_headers(self) -> dict[str, str]:
+        """Return extra headers required by this backend. Override in subclass if needed."""
+        return {}
+
+    def uses_query_param_auth(self) -> bool:
+        """Return True if this backend uses API key in query parameter instead of header."""
+        return False
+
+    def get_endpoint(self, model: str) -> str:
+        """Get the actual endpoint, optionally with model name substituted."""
+        return self.summary_endpoint
