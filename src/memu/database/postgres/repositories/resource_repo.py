@@ -78,4 +78,5 @@ class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
         self.resources[res.id] = res
         return res
 
+
 __all__ = ["PostgresResourceRepo"]
