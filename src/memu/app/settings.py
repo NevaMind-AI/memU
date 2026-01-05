@@ -175,7 +175,7 @@ class MemorizeConfig(BaseModel):
         default_factory=_default_memory_types,
         description="Ordered list of memory types (profile/event/knowledge/behavior by default).",
     )
-    memory_type_prompts: dict[str, str | CustomPrompt] = Field(
+    memory_type_prompts: dict[str, str | Annotated[CustomPrompt, CompleteMemoryTypePrompt]] = Field(
         default_factory=_default_memory_type_prompts,
         description="User prompt overrides for each memory type extraction.",
     )
@@ -220,11 +220,22 @@ class LLMProfilesConfig(RootModel[dict[Key, LLMConfig]]):
     @model_validator(mode="before")
     @classmethod
     def ensure_default(cls, data: Any) -> Any:
+        # if data is None:
+        #     return {"default": LLMConfig()}
+        # if isinstance(data, dict) and "default" not in data:
+        #     data = dict(data)
+        #     data["default"] = LLMConfig()
+        # return data
         if data is None:
-            return {"default": LLMConfig()}
-        if isinstance(data, dict) and "default" not in data:
+            data = {}
+        elif isinstance(data, dict):
             data = dict(data)
+        else:
+            return data
+        if "default" not in data:
             data["default"] = LLMConfig()
+        if "embedding" not in data:
+            data["embedding"] = data["default"]
         return data
 
     @property

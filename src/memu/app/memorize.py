@@ -141,6 +141,7 @@ class MemorizeMixin:
                 requires={"resource_plans", "ctx", "store", "local_path", "modality", "user"},
                 produces={"resources", "items", "relations", "category_updates"},
                 capabilities={"db", "vector"},
+                config={"llm_profile": "embedding"},
             ),
             WorkflowStep(
                 step_id="persist_index",
@@ -527,11 +528,11 @@ class MemorizeMixin:
         entries: list[tuple[MemoryType, str, list[str]]] = []
         for mtype, response in zip(memory_types, responses, strict=True):
             parsed = self._parse_memory_type_response_xml(response)
-            if not parsed:
-                fallback_entry = response.strip()
-                if fallback_entry:
-                    entries.append((mtype, fallback_entry, []))
-                continue
+            # if not parsed:
+            #     fallback_entry = response.strip()
+            #     if fallback_entry:
+            #         entries.append((mtype, fallback_entry, []))
+            #     continue
             for entry in parsed:
                 content = (entry.get("content") or "").strip()
                 if not content:
