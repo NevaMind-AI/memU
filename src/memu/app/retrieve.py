@@ -120,6 +120,7 @@ class RetrieveMixin:
                 requires={"retrieve_category", "needs_retrieval", "active_query", "ctx", "store", "where"},
                 produces={"category_hits", "category_summary_lookup", "query_vector"},
                 capabilities={"vector"},
+                config={"llm_profile": "embedding"},
             ),
             WorkflowStep(
                 step_id="sufficiency_after_category",
@@ -154,6 +155,7 @@ class RetrieveMixin:
                 },
                 produces={"item_hits", "query_vector"},
                 capabilities={"vector"},
+                config={"llm_profile": "embedding"},
             ),
             WorkflowStep(
                 step_id="sufficiency_after_items",
@@ -187,6 +189,7 @@ class RetrieveMixin:
                 },
                 produces={"resource_hits", "query_vector"},
                 capabilities={"vector"},
+                config={"llm_profile": "embedding"},
             ),
             WorkflowStep(
                 step_id="build_context",
