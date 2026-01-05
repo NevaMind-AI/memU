@@ -86,6 +86,7 @@ For enterprise deployment and custom solutions, contact **info@nevamind.ai**
 | `GET` | `/api/v3/memory/memorize/status/{task_id}` | Get task status |
 | `POST` | `/api/v3/memory/categories` | List memory categories |
 | `POST` | `/api/v3/memory/retrieve` | Retrieve memories (semantic search) |
+| `POST` | `/api/v3/memory/delete` | Delete memories |
 
 📚 **[Full API Documentation](https://memu.so/docs#cloud-version)**
 
