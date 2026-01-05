@@ -87,7 +87,7 @@ For enterprise deployment and custom solutions, contact **info@nevamind.ai**
 | `POST` | `/api/v3/memory/categories` | List memory categories |
 | `POST` | `/api/v3/memory/retrieve` | Retrieve memories (semantic search) |
 
-📚 **[Full API Documentation](https://memu.so/docs#cloud-version)**
+📚 **[Full API Documentation](https://memu.pro/docs#cloud-version)**
 
 ---
 
