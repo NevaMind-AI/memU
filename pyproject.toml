@@ -23,12 +23,9 @@ dependencies = [
     "numpy>=2.3.4",
     "openai>=2.8.0",
     "pydantic>=2.12.4",
-    "sqlalchemy>=2.0.36",
     "sqlmodel>=0.0.27",
     "alembic>=1.14.0",
     "pendulum>=3.1.0",
-    "pgvector>=0.3.4",
-    "psycopg2-binary>=2.9.0",  # PostgreSQL driver, used by sqlalchemy at runtime
 ]
 
 [build-system]
@@ -65,7 +62,7 @@ test = [
 ]
 
 [project.optional-dependencies]
-# postgres dependencies are now included by default
+postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
@@ -159,8 +156,3 @@ source = ["tests"]
 testpaths = ["tests"]
 log_cli = true
 log_cli_level = "INFO"
-
-[tool.deptry]
-# psycopg2-binary is a runtime dependency used by SQLAlchemy for PostgreSQL connections
-ignore = ["DEP002"]
-per_rule_ignores = {"DEP002" = ["psycopg2-binary"]}
