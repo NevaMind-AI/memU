@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.0](https://github.com/NevaMind-AI/memU/compare/v0.9.0...v1.0.0) (2026-01-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* v1.0.0 ([#147](https://github.com/NevaMind-AI/memU/issues/147))
+
+### Bug Fixes
+
+* v1.0.0 ([#147](https://github.com/NevaMind-AI/memU/issues/147)) ([23f37ee](https://github.com/NevaMind-AI/memU/commit/23f37ee403ecaf88b48af0144e3d701c22ccfddd))
+
+
+### Documentation
+
+* add readme cloud api ([#144](https://github.com/NevaMind-AI/memU/issues/144)) ([42fd5ba](https://github.com/NevaMind-AI/memU/commit/42fd5babe6748ef54254cf114a54bdefea304f07))
+* fix api doc link ([#146](https://github.com/NevaMind-AI/memU/issues/146)) ([23ce7d1](https://github.com/NevaMind-AI/memU/commit/23ce7d19b1d68f4fd0a5a5ac6b756f69fede8d09))
+
 ## [0.9.0](https://github.com/NevaMind-AI/memU/compare/v0.8.0...v0.9.0) (2026-01-04)
 
 
