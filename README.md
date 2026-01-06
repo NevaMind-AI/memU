@@ -20,7 +20,7 @@ MemU is an agentic memory framework for LLM and AI agent backends. It receives *
 
 ---
 
-MemU is collaborating with four open-source projects to launch the 2026 New Year Challenge. 🎉Between January 8–18, contributors can submit PRs to memU and earn cash rewards, community recognition, and platform credits. 🎁Join the community here: https://discord.gg/KaWy6SBAsx
+MemU is collaborating with four open-source projects to launch the 2026 New Year Challenge. 🎉Between January 8–18, contributors can submit PRs to memU and earn cash rewards, community recognition, and platform credits. 🎁[Learn more & get involved](https://discord.gg/KaWy6SBAsx)
 
 ## ✨ Core Features
 
