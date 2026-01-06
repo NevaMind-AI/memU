@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/NevaMind-AI/memU/compare/v1.0.0...v1.0.1) (2026-01-06)
+
+
+### Bug Fixes
+
+* get embedding client ([#152](https://github.com/NevaMind-AI/memU/issues/152)) ([76716a4](https://github.com/NevaMind-AI/memU/commit/76716a4f00127a3cc21444996f32a9cf810c9282))
+* Readme incomplete ([#148](https://github.com/NevaMind-AI/memU/issues/148)) ([f8bc748](https://github.com/NevaMind-AI/memU/commit/f8bc748b9ebfb652ca8a5e06edbbe7eb648ed4f6))
+
 ## [1.0.0](https://github.com/NevaMind-AI/memU/compare/v0.9.0...v1.0.0) (2026-01-05)
 
 
