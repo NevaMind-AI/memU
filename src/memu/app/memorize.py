@@ -402,10 +402,18 @@ class MemorizeMixin:
     def _resolve_custom_prompt(prompt: str | CustomPrompt, templates: Mapping[str, str]) -> str:
         if isinstance(prompt, str):
             return prompt
+        # valid_blocks = [
+        #     (block.ordinal, name, block.prompt or templates.get(name))
+        #     for name, block in prompt.items()
+        #     if (block.ordinal >= 0 and (block.prompt or templates.get(name)))
+        # ]
+
+        # Even if prompt == "", we consider it valid and do not fallback to default template
+        # Only None means unset.
         valid_blocks = [
-            (block.ordinal, name, block.prompt or templates.get(name))
+            (block.ordinal, name, prompt)
             for name, block in prompt.items()
-            if (block.ordinal >= 0 and (block.prompt or templates.get(name)))
+            if (block.ordinal >= 0 and (prompt := block.prompt if block.prompt is not None else templates.get(name)))
         ]
         if not valid_blocks:
             # raise ValueError(f"No valid blocks contained in custom prompt: {prompt}")
