@@ -629,7 +629,7 @@ class MemorizeMixin:
             ctx.categories_ready = True
             return
         cat_texts = [self._category_embedding_text(cfg) for cfg in self.category_configs]
-        cat_vecs = await self._get_llm_client().embed(cat_texts)
+        cat_vecs = await self._get_llm_client("embedding").embed(cat_texts)
         ctx.category_ids = []
         ctx.category_name_to_id = {}
         for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
