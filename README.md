@@ -303,7 +303,7 @@ View detailed experimental data: [memU-experiment](https://github.com/NevaMind-A
 | Repository | Description | Use Case |
 |------------|-------------|----------|
 | **[memU](https://github.com/NevaMind-AI/memU)** | Core algorithm engine | Embed AI memory into your product |
-| **[memU-server](GitHub - NevaMind-AI/memU-server: backend wrapper for memU)** | Backend service with CRUD, user system, RBAC | Self-host a memory backend |
+| **[memU-server](https://github.com/NevaMind-AI/memU-server)** | Backend service with CRUD, user system, RBAC | Self-host a memory backend |
 | **[memU-ui](https://github.com/NevaMind-AI/memU-ui)** | Visual dashboard | Ready-to-use memory console |
 
 **Quick Links:**
