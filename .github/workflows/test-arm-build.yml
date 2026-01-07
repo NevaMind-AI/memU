@@ -48,5 +48,7 @@ jobs:
 
       - name: Verify wheel metadata
         run: |
-          pip install pkginfo
-          python -m pkginfo dist/*.whl
+          pip install wheel
+          unzip -l dist/*.whl | grep -E "\.so|WHEEL|METADATA"
+          echo "--- Wheel filename ---"
+          ls -lh dist/*.whl
