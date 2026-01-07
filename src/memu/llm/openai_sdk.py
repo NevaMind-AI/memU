@@ -4,7 +4,9 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from openai import AsyncOpenAI
+from openai.types import CreateEmbeddingResponse
 from openai.types.chat import (
+    ChatCompletion,
     ChatCompletionContentPartImageParam,
     ChatCompletionContentPartTextParam,
     ChatCompletionMessageParam,
@@ -40,7 +42,7 @@ class OpenAISDKClient:
         *,
         max_tokens: int | None = None,
         system_prompt: str | None = None,
-    ) -> str:
+    ) -> tuple[str, ChatCompletion]:
         prompt = system_prompt or "Summarize the text in one short paragraph."
 
         system_message: ChatCompletionSystemMessageParam = {"role": "system", "content": prompt}
@@ -55,7 +57,7 @@ class OpenAISDKClient:
         )
         content = response.choices[0].message.content
         logger.debug("OpenAI summarize response: %s", response)
-        return content or ""
+        return content or "", response
 
     async def vision(
         self,
@@ -64,7 +66,7 @@ class OpenAISDKClient:
         *,
         max_tokens: int | None = None,
         system_prompt: str | None = None,
-    ) -> str:
+    ) -> tuple[str, ChatCompletion]:
         """
         Call OpenAI Vision API with an image.
 
@@ -75,7 +77,7 @@ class OpenAISDKClient:
             system_prompt: Optional system prompt
 
         Returns:
-            LLM response text
+            Tuple of (LLM response text, raw ChatCompletion response)
         """
         # Read and encode image as base64
         image_data = Path(image_path).read_bytes()
@@ -121,21 +123,24 @@ class OpenAISDKClient:
         )
         content = response.choices[0].message.content
         logger.debug("OpenAI vision response: %s", response)
-        return content or ""
+        return content or "", response
 
-    async def embed(self, inputs: list[str]) -> list[list[float]]:
+    async def embed(self, inputs: list[str]) -> tuple[list[list[float]], CreateEmbeddingResponse | None]:
         """Create text embeddings via the official SDK."""
         if len(inputs) <= self.embed_batch_size:
             response = await self.client.embeddings.create(model=self.embed_model, input=inputs)
-            return [cast(list[float], d.embedding) for d in response.data]
+            return [cast(list[float], d.embedding) for d in response.data], response
 
+        # For batched requests, we aggregate embeddings but only return the last response for usage
         all_embeddings: list[list[float]] = []
+        last_response: CreateEmbeddingResponse | None = None
         for idx in range(0, len(inputs), self.embed_batch_size):
             batch = inputs[idx : idx + self.embed_batch_size]
             response = await self.client.embeddings.create(model=self.embed_model, input=batch)
             all_embeddings.extend([cast(list[float], d.embedding) for d in response.data])
+            last_response = response
 
-        return all_embeddings
+        return all_embeddings, last_response
 
     async def transcribe(
         self,
@@ -144,7 +149,7 @@ class OpenAISDKClient:
         prompt: str | None = None,
         language: str | None = None,
         response_format: Literal["text", "json", "verbose_json"] = "text",
-    ) -> str:
+    ) -> tuple[str, Any]:
         """
         Transcribe audio file using OpenAI Audio API.
 
@@ -155,7 +160,7 @@ class OpenAISDKClient:
             response_format: Response format ('text', 'json', 'verbose_json')
 
         Returns:
-            Transcribed text
+            Tuple of (transcribed text, raw transcription response)
         """
         try:
             # Use gpt-4o-mini-transcribe for better performance and cost
@@ -183,4 +188,4 @@ class OpenAISDKClient:
             logger.exception("Audio transcription failed for %s", audio_path)
             raise
         else:
-            return result or ""
+            return result or "", transcription

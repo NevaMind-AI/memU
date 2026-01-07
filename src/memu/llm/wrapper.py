@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class LLMCallContext:
+    profile: str
     request_id: str
     trace_id: str | None
     operation: str | None
@@ -30,6 +31,7 @@ class LLMRequestView:
     kind: str
     input_items: int | None = None
     input_chars: int | None = None
+    content: str | list[str] | None = None
     content_hash: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -38,6 +40,7 @@ class LLMRequestView:
 class LLMResponseView:
     output_items: int | None = None
     output_chars: int | None = None
+    content: str | None = None
     content_hash: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -52,6 +55,7 @@ class LLMUsage:
     latency_ms: float | None = None
     finish_reason: str | None = None
     status: str | None = None
+    tokens_breakdown: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -84,6 +88,7 @@ class LLMCallFilter:
 
 @dataclass(frozen=True)
 class LLMCallMetadata:
+    profile: str | None = None
     operation: str | None = None
     step_id: str | None = None
     trace_id: str | None = None
@@ -369,14 +374,36 @@ class LLMClientWrapper:
             raise
         else:
             latency_ms = (time.perf_counter() - start_time) * 1000
-            response_view = response_builder(result)
-            usage = LLMUsage(latency_ms=latency_ms, status="success")
+
+            # Handle tuple response: (pure_response, raw_response)
+            pure_result = result
+            raw_response = None
+            if isinstance(result, tuple) and len(result) == 2:
+                pure_result, raw_response = result
+
+            response_view = response_builder(pure_result)
+
+            # Extract token usage from raw response (best-effort)
+            extracted_usage = _extract_usage_from_raw_response(kind=kind, raw_response=raw_response)
+            usage = LLMUsage(
+                input_tokens=extracted_usage.get("input_tokens"),
+                output_tokens=extracted_usage.get("output_tokens"),
+                total_tokens=extracted_usage.get("total_tokens"),
+                cached_input_tokens=extracted_usage.get("cached_input_tokens"),
+                reasoning_tokens=extracted_usage.get("reasoning_tokens"),
+                latency_ms=latency_ms,
+                finish_reason=extracted_usage.get("finish_reason"),
+                status="success",
+                tokens_breakdown=extracted_usage.get("tokens_breakdown"),
+            )
+
             await self._run_after(snapshot.after, call_ctx, request_view, response_view, usage)
-            return result
+            return pure_result
 
     def _build_call_context(self, model: str | None) -> LLMCallContext:
         request_id = uuid.uuid4().hex
         return LLMCallContext(
+            profile=self._metadata.profile,
             request_id=request_id,
             trace_id=self._metadata.trace_id,
             operation=self._metadata.operation,
@@ -492,6 +519,7 @@ def _build_text_request_view(
         kind=kind,
         input_items=1,
         input_chars=len(text),
+        content=text,
         content_hash=_hash_text(text),
         metadata=metadata or {},
     )
@@ -501,6 +529,7 @@ def _build_text_response_view(response: str) -> LLMResponseView:
     return LLMResponseView(
         output_items=1,
         output_chars=len(response),
+        content=response,
         content_hash=_hash_text(response),
         metadata={},
     )
@@ -512,6 +541,7 @@ def _build_embedding_request_view(inputs: Sequence[str]) -> LLMRequestView:
         kind="embed",
         input_items=len(inputs),
         input_chars=total_chars,
+        content=inputs,
         content_hash=_hash_texts(inputs),
         metadata={},
     )
@@ -525,6 +555,105 @@ def _build_embedding_response_view(response: Sequence[Sequence[float]]) -> LLMRe
         content_hash=None,
         metadata={"vector_dim": vector_dim},
     )
+
+
+def _extract_usage_from_raw_response(kind: str, raw_response: Any) -> dict[str, Any]:
+    """
+    Best-effort extraction of token usage from raw LLM response.
+
+    Supports OpenAI SDK response objects and JSON dict responses.
+    Mapping:
+        input_tokens <- prompt_tokens
+        output_tokens <- completion_tokens
+        total_tokens <- total_tokens
+        tokens_breakdown <- completion_tokens_details
+    """
+    usage_data: dict[str, Any] = {}
+
+    if raw_response is None:
+        return usage_data
+
+    # Helper to extract value from object or dict
+    def _get_value(obj: Any, key: str) -> Any:
+        if obj is None:
+            return None
+        if hasattr(obj, key):
+            return getattr(obj, key)
+        elif isinstance(obj, dict):
+            return obj.get(key)
+        return None
+
+    try:
+        # Extract finish_reason from choices[0]
+        choices = _get_value(raw_response, "choices")
+        if choices and len(choices) > 0:
+            first_choice = choices[0]
+            finish_reason = _get_value(first_choice, "finish_reason")
+            if finish_reason is not None:
+                usage_data["finish_reason"] = finish_reason
+
+        # Try to get usage object/dict from response
+        usage_obj = None
+
+        # OpenAI SDK response objects have a .usage attribute
+        if hasattr(raw_response, "usage") and raw_response.usage is not None:
+            usage_obj = raw_response.usage
+        # JSON dict responses have a "usage" key
+        elif isinstance(raw_response, dict) and "usage" in raw_response:
+            usage_obj = raw_response["usage"]
+
+        if usage_obj is None:
+            return usage_data
+
+        # Map prompt_tokens -> input_tokens
+        prompt_tokens = _get_value(usage_obj, "prompt_tokens")
+        if prompt_tokens is not None:
+            usage_data["input_tokens"] = prompt_tokens
+
+        # Map completion_tokens -> output_tokens
+        completion_tokens = _get_value(usage_obj, "completion_tokens")
+        if completion_tokens is not None:
+            usage_data["output_tokens"] = completion_tokens
+
+        # total_tokens stays the same
+        total_tokens = _get_value(usage_obj, "total_tokens")
+        if total_tokens is not None:
+            usage_data["total_tokens"] = total_tokens
+
+        if kind == "embed":
+            # Some providers does not explictly return input_tokens for embedding calls
+            if usage_data.get("total_tokens") and not usage_data.get("input_tokens"):
+                usage_data["input_tokens"] = usage_data["total_tokens"]
+
+        # Map completion_tokens_details -> tokens_breakdown
+        completion_tokens_details = _get_value(usage_obj, "completion_tokens_details")
+        if completion_tokens_details is not None:
+            # Convert to dict if it's an object
+            if hasattr(completion_tokens_details, "model_dump"):
+                usage_data["tokens_breakdown"] = completion_tokens_details.model_dump()
+            elif hasattr(completion_tokens_details, "__dict__"):
+                usage_data["tokens_breakdown"] = dict(completion_tokens_details.__dict__)
+            elif isinstance(completion_tokens_details, dict):
+                usage_data["tokens_breakdown"] = completion_tokens_details
+
+        # Also try to extract cached_input_tokens if available (prompt_tokens_details.cached_tokens)
+        prompt_tokens_details = _get_value(usage_obj, "prompt_tokens_details")
+        if prompt_tokens_details is not None:
+            cached_tokens = _get_value(prompt_tokens_details, "cached_tokens")
+            if cached_tokens is not None:
+                usage_data["cached_input_tokens"] = cached_tokens
+
+        # Extract reasoning_tokens if available in completion_tokens_details
+        if completion_tokens_details is not None:
+            reasoning_tokens = _get_value(completion_tokens_details, "reasoning_tokens")
+            if reasoning_tokens is not None:
+                usage_data["reasoning_tokens"] = reasoning_tokens
+
+    except Exception:
+        # Best-effort: silently ignore extraction errors
+        logger.debug("Failed to extract usage from raw response", exc_info=True)
+
+    return usage_data
 
 
 def _coerce_filter(
