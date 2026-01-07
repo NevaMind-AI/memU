@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class LLMCallContext:
-    profile: str
+    profile: str | None
     request_id: str
     trace_id: str | None
     operation: str | None
@@ -31,7 +31,7 @@ class LLMRequestView:
     kind: str
     input_items: int | None = None
     input_chars: int | None = None
-    content: str | list[str] | None = None
+    content: str | Sequence[str] | None = None
     content_hash: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -557,6 +557,87 @@ def _build_embedding_response_view(response: Sequence[Sequence[float]]) -> LLMRe
     )
 
 
+def _get_value_from_obj(obj: Any, key: str) -> Any:
+    if obj is None:
+        return None
+    if hasattr(obj, key):
+        return getattr(obj, key)
+    if isinstance(obj, dict):
+        return obj.get(key)
+    return None
+
+
+def _get_finish_reason(raw_response: Any) -> Any:
+    choices = _get_value_from_obj(raw_response, "choices")
+    if not choices:
+        return None
+    return _get_value_from_obj(choices[0], "finish_reason")
+
+
+def _get_usage_section(raw_response: Any) -> Any:
+    if hasattr(raw_response, "usage") and raw_response.usage is not None:
+        return raw_response.usage
+    if isinstance(raw_response, dict):
+        return raw_response.get("usage")
+    return None
+
+
+def _extract_token_totals(kind: str, usage_obj: Any) -> dict[str, Any]:
+    usage_data: dict[str, Any] = {}
+    for source_key, target_key in (
+        ("prompt_tokens", "input_tokens"),
+        ("completion_tokens", "output_tokens"),
+        ("total_tokens", "total_tokens"),
+    ):
+        value = _get_value_from_obj(usage_obj, source_key)
+        if value is not None:
+            usage_data[target_key] = value
+
+    if kind == "embed" and usage_data.get("total_tokens") and not usage_data.get("input_tokens"):
+        usage_data["input_tokens"] = usage_data["total_tokens"]
+    return usage_data
+
+
+def _coerce_completion_details_to_dict(completion_tokens_details: Any) -> Any:
+    if hasattr(completion_tokens_details, "model_dump"):
+        return completion_tokens_details.model_dump()
+    if hasattr(completion_tokens_details, "__dict__"):
+        return dict(completion_tokens_details.__dict__)
+    if isinstance(completion_tokens_details, dict):
+        return completion_tokens_details
+    return None
+
+
+def _extract_completion_details(usage_obj: Any) -> dict[str, Any]:
+    completion_tokens_details = _get_value_from_obj(usage_obj, "completion_tokens_details")
+    usage_data: dict[str, Any] = {}
+
+    if completion_tokens_details is None:
+        return usage_data
+
+    breakdown = _coerce_completion_details_to_dict(completion_tokens_details)
+    if breakdown is not None:
+        usage_data["tokens_breakdown"] = breakdown
+
+    reasoning_tokens = _get_value_from_obj(completion_tokens_details, "reasoning_tokens")
+    if reasoning_tokens is not None:
+        usage_data["reasoning_tokens"] = reasoning_tokens
+
+    return usage_data
+
+
+def _extract_prompt_details(usage_obj: Any) -> dict[str, Any]:
+    prompt_tokens_details = _get_value_from_obj(usage_obj, "prompt_tokens_details")
+    if prompt_tokens_details is None:
+        return {}
+
+    cached_tokens = _get_value_from_obj(prompt_tokens_details, "cached_tokens")
+    if cached_tokens is None:
+        return {}
+
+    return {"cached_input_tokens": cached_tokens}
+
+
 def _extract_usage_from_raw_response(kind: str, raw_response: Any) -> dict[str, Any]:
     """
     Best-effort extraction of token usage from raw LLM response.
@@ -573,81 +654,19 @@ def _extract_usage_from_raw_response(kind: str, raw_response: Any) -> dict[str, 
     if raw_response is None:
         return usage_data
 
-    # Helper to extract value from object or dict
-    def _get_value(obj: Any, key: str) -> Any:
-        if obj is None:
-            return None
-        if hasattr(obj, key):
-            return getattr(obj, key)
-        elif isinstance(obj, dict):
-            return obj.get(key)
-        return None
-
     try:
-        # Extract finish_reason from choices[0]
-        choices = _get_value(raw_response, "choices")
-        if choices and len(choices) > 0:
-            first_choice = choices[0]
-            finish_reason = _get_value(first_choice, "finish_reason")
-            if finish_reason is not None:
-                usage_data["finish_reason"] = finish_reason
+        finish_reason = _get_finish_reason(raw_response)
+        if finish_reason is not None:
+            usage_data["finish_reason"] = finish_reason
 
-        # Try to get usage object/dict from response
-        usage_obj = None
-
-        # OpenAI SDK response objects have a .usage attribute
-        if hasattr(raw_response, "usage") and raw_response.usage is not None:
-            usage_obj = raw_response.usage
-        # JSON dict responses have a "usage" key
-        elif isinstance(raw_response, dict) and "usage" in raw_response:
-            usage_obj = raw_response["usage"]
-
+        usage_obj = _get_usage_section(raw_response)
         if usage_obj is None:
             return usage_data
 
-        # Map prompt_tokens -> input_tokens
-        prompt_tokens = _get_value(usage_obj, "prompt_tokens")
-        if prompt_tokens is not None:
-            usage_data["input_tokens"] = prompt_tokens
+        usage_data.update(_extract_token_totals(kind, usage_obj))
 
-        # Map completion_tokens -> output_tokens
-        completion_tokens = _get_value(usage_obj, "completion_tokens")
-        if completion_tokens is not None:
-            usage_data["output_tokens"] = completion_tokens
-
-        # total_tokens stays the same
-        total_tokens = _get_value(usage_obj, "total_tokens")
-        if total_tokens is not None:
-            usage_data["total_tokens"] = total_tokens
-
-        if kind == "embed":
-            # Some providers does not explictly return input_tokens for embedding calls
-            if usage_data.get("total_tokens") and not usage_data.get("input_tokens"):
-                usage_data["input_tokens"] = usage_data["total_tokens"]
-
-        # Map completion_tokens_details -> tokens_breakdown
-        completion_tokens_details = _get_value(usage_obj, "completion_tokens_details")
-        if completion_tokens_details is not None:
-            # Convert to dict if it's an object
-            if hasattr(completion_tokens_details, "model_dump"):
-                usage_data["tokens_breakdown"] = completion_tokens_details.model_dump()
-            elif hasattr(completion_tokens_details, "__dict__"):
-                usage_data["tokens_breakdown"] = dict(completion_tokens_details.__dict__)
-            elif isinstance(completion_tokens_details, dict):
-                usage_data["tokens_breakdown"] = completion_tokens_details
-
-        # Also try to extract cached_input_tokens if available (prompt_tokens_details.cached_tokens)
-        prompt_tokens_details = _get_value(usage_obj, "prompt_tokens_details")
-        if prompt_tokens_details is not None:
-            cached_tokens = _get_value(prompt_tokens_details, "cached_tokens")
-            if cached_tokens is not None:
-                usage_data["cached_input_tokens"] = cached_tokens
-
-        # Extract reasoning_tokens if available in completion_tokens_details
-        if completion_tokens_details is not None:
-            reasoning_tokens = _get_value(completion_tokens_details, "reasoning_tokens")
-            if reasoning_tokens is not None:
-                usage_data["reasoning_tokens"] = reasoning_tokens
+        usage_data.update(_extract_completion_details(usage_obj))
+        usage_data.update(_extract_prompt_details(usage_obj))
 
     except Exception:
         # Best-effort: silently ignore extraction errors

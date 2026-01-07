@@ -197,7 +197,8 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         elif task == "embedding":
             profile = step_cfg.get("embed_llm_profile", step_cfg.get("llm_profile"))
         else:
-            raise ValueError(f"Invalid task: {task}")
+            msg = f"Invalid task: {task}"
+            raise ValueError(msg)
         if isinstance(profile, str) and profile.strip():
             return profile.strip()
         return None
