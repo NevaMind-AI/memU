@@ -6,6 +6,8 @@ from memu.app import MemoryService
 async def main():
     """Test with in-memory storage (default)."""
     api_key = os.environ.get("OPENAI_API_KEY")
+    # dashscope_api_key = os.environ.get("DASHSCOPE_API_KEY")
+    # voyage_api_key = os.environ.get("VOYAGE_API_KEY")
     file_path = os.path.abspath("example/example_conversation.json")
 
     print("\n" + "=" * 60)
@@ -14,6 +16,19 @@ async def main():
 
     service = MemoryService(
         llm_profiles={"default": {"api_key": api_key}},
+        # llm_profiles={
+        #     "default": {
+        #         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        #         "api_key": dashscope_api_key,
+        #         "chat_model": "qwen3-max",
+        #         "client_backend": "sdk"
+        #     },
+        #     "embedding": {
+        #         "base_url": "https://api.voyageai.com/v1",
+        #         "api_key": voyage_api_key,
+        #         "embed_model": "voyage-3.5-lite"
+        #     }
+        # },
         database_config={
             "metadata_store": {"provider": "inmemory"},
         },
