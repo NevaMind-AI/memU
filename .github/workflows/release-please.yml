@@ -36,15 +36,23 @@ jobs:
         include:
           - os: ubuntu-latest
             label: linux-x86_64
+            target: x86_64-unknown-linux-gnu
+            extra-args: "--compatibility manylinux_2_39"
+          - os: ubuntu-latest
+            label: linux-aarch64
+            target: aarch64-unknown-linux-gnu
             extra-args: "--compatibility manylinux_2_39"
           - os: macos-15-intel
             label: macos-x86_64
+            target: ""
             extra-args: ""
           - os: macos-latest
             label: macos-aarch64
+            target: ""
             extra-args: ""
           - os: windows-latest
             label: windows-x86_64
+            target: ""
             extra-args: ""
     steps:
       - uses: actions/checkout@v4
@@ -59,9 +67,19 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup cross-compilation for Linux ARM64
+        if: matrix.label == 'linux-aarch64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
       - name: Build wheel
-        run: uvx maturin build --release --out dist ${{ matrix.extra-args }}
+        run: uvx maturin build --release --out dist ${{ matrix.extra-args }} ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
