@@ -31,29 +31,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-15-intel, macos-latest, windows-latest]
-        python-version: ["3.13"]
         include:
           - os: ubuntu-latest
             label: linux-x86_64
             target: x86_64-unknown-linux-gnu
             extra-args: "--compatibility manylinux_2_39"
+            python-version: "3.13"
           - os: ubuntu-latest
             label: linux-aarch64
             target: aarch64-unknown-linux-gnu
             extra-args: "--compatibility manylinux_2_39"
+            python-version: "3.13"
           - os: macos-15-intel
             label: macos-x86_64
             target: ""
             extra-args: ""
+            python-version: "3.13"
           - os: macos-latest
             label: macos-aarch64
             target: ""
             extra-args: ""
+            python-version: "3.13"
           - os: windows-latest
             label: windows-x86_64
             target: ""
             extra-args: ""
+            python-version: "3.13"
     steps:
       - uses: actions/checkout@v4
 
