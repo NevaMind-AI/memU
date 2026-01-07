@@ -210,3 +210,4 @@ models/
 .env.*.local
 secrets.txt
 api_keys.txt
+.cursor
