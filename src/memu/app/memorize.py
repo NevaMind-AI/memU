@@ -54,6 +54,7 @@ class MemorizeMixin:
         _get_context: Callable[[], Context]
         _get_database: Callable[[], Database]
         _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
+        _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
         _get_llm_client: Callable[..., Any]
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
         _extract_json_blob: Callable[[str], str]
@@ -109,7 +110,7 @@ class MemorizeMixin:
                 requires={"local_path", "modality", "raw_text"},
                 produces={"preprocessed_resources"},
                 capabilities={"llm"},
-                config={"llm_profile": self.memorize_config.preprocess_llm_profile},
+                config={"chat_llm_profile": self.memorize_config.preprocess_llm_profile},
             ),
             WorkflowStep(
                 step_id="extract_items",
@@ -124,7 +125,7 @@ class MemorizeMixin:
                 },
                 produces={"resource_plans"},
                 capabilities={"llm"},
-                config={"llm_profile": self.memorize_config.memory_extract_llm_profile},
+                config={"chat_llm_profile": self.memorize_config.memory_extract_llm_profile},
             ),
             WorkflowStep(
                 step_id="dedupe_merge",
@@ -141,7 +142,7 @@ class MemorizeMixin:
                 requires={"resource_plans", "ctx", "store", "local_path", "modality", "user"},
                 produces={"resources", "items", "relations", "category_updates"},
                 capabilities={"db", "vector"},
-                config={"llm_profile": "embedding"},
+                config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
                 step_id="persist_index",
@@ -150,7 +151,7 @@ class MemorizeMixin:
                 requires={"category_updates", "ctx", "store"},
                 produces={"categories"},
                 capabilities={"db", "llm"},
-                config={"llm_profile": self.memorize_config.category_update_llm_profile},
+                config={"chat_llm_profile": self.memorize_config.category_update_llm_profile},
             ),
             WorkflowStep(
                 step_id="build_response",
@@ -230,7 +231,7 @@ class MemorizeMixin:
         return state
 
     async def _memorize_categorize_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        llm_client = self._get_step_llm_client(step_context)
+        embed_client = self._get_step_embedding_client(step_context)
         ctx = state["ctx"]
         store = state["store"]
         modality = state["modality"]
@@ -248,7 +249,7 @@ class MemorizeMixin:
                 local_path=local_path,
                 caption=plan.get("caption"),
                 store=store,
-                embed_client=llm_client,
+                embed_client=embed_client,
                 user=user_scope,
             )
             resources.append(res)
@@ -262,7 +263,7 @@ class MemorizeMixin:
                 structured_entries=entries,
                 ctx=ctx,
                 store=store,
-                embed_client=llm_client,
+                embed_client=embed_client,
                 user=user_scope,
             )
             items.extend(mem_items)

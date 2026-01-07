@@ -26,6 +26,7 @@ class CRUDMixin:
         _get_context: Callable[[], Context]
         _get_database: Callable[[], Database]
         _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
+        _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
         _get_llm_client: Callable[..., Any]
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
         _extract_json_blob: Callable[[str], str]
@@ -288,7 +289,7 @@ class CRUDMixin:
                 requires={"memory_payload", "ctx", "store", "user"},
                 produces={"memory_item", "category_updates"},
                 capabilities={"db", "llm"},
-                config={"llm_profile": "embedding"},
+                config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
                 step_id="persist_index",
@@ -297,6 +298,7 @@ class CRUDMixin:
                 requires={"category_updates", "ctx", "store"},
                 produces={"categories"},
                 capabilities={"db", "llm"},
+                config={"chat_llm_profile": "default"},
             ),
             WorkflowStep(
                 step_id="build_response",
@@ -327,7 +329,7 @@ class CRUDMixin:
                 requires={"memory_id", "memory_payload", "ctx", "store", "user"},
                 produces={"memory_item", "category_updates"},
                 capabilities={"db", "llm"},
-                config={"llm_profile": "embedding"},
+                config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
                 step_id="persist_index",
@@ -336,6 +338,7 @@ class CRUDMixin:
                 requires={"category_updates", "ctx", "store"},
                 produces={"categories"},
                 capabilities={"db", "llm"},
+                config={"chat_llm_profile": "default"},
             ),
             WorkflowStep(
                 step_id="build_response",
@@ -366,7 +369,7 @@ class CRUDMixin:
                 handler=self._patch_delete_memory_item,
                 requires={"memory_id", "ctx", "store", "user"},
                 produces={"memory_item", "category_updates"},
-                capabilities={"db", "llm"},
+                capabilities={"db"},
             ),
             WorkflowStep(
                 step_id="persist_index",
@@ -375,6 +378,7 @@ class CRUDMixin:
                 requires={"category_updates", "ctx", "store"},
                 produces={"categories"},
                 capabilities={"db", "llm"},
+                config={"chat_llm_profile": "default"},
             ),
             WorkflowStep(
                 step_id="build_response",
@@ -404,7 +408,7 @@ class CRUDMixin:
         category_memory_updates: dict[str, tuple[Any, Any]] = {}
 
         embed_payload = [memory_payload["content"]]
-        content_embedding = (await self._get_step_llm_client(step_context).embed(embed_payload))[0]
+        content_embedding = (await self._get_step_embedding_client(step_context).embed(embed_payload))[0]
 
         item = store.memory_item_repo.create_item(
             memory_type=memory_payload["type"],
@@ -442,7 +446,7 @@ class CRUDMixin:
 
         if memory_payload["content"]:
             embed_payload = [memory_payload["content"]]
-            content_embedding = (await self._get_step_llm_client(step_context).embed(embed_payload))[0]
+            content_embedding = (await self._get_step_embedding_client(step_context).embed(embed_payload))[0]
         else:
             content_embedding = None
 

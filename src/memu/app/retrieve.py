@@ -32,6 +32,7 @@ class RetrieveMixin:
         _get_database: Callable[[], Database]
         _ensure_categories_ready: Callable[[Context, Database], Awaitable[None]]
         _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
+        _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
         _get_llm_client: Callable[..., Any]
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
         _extract_json_blob: Callable[[str], str]
@@ -111,7 +112,7 @@ class RetrieveMixin:
                 requires={"route_intention", "original_query", "context_queries", "skip_rewrite"},
                 produces={"needs_retrieval", "rewritten_query", "active_query", "next_step_query"},
                 capabilities={"llm"},
-                config={"llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
+                config={"chat_llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
             ),
             WorkflowStep(
                 step_id="route_category",
@@ -120,7 +121,7 @@ class RetrieveMixin:
                 requires={"retrieve_category", "needs_retrieval", "active_query", "ctx", "store", "where"},
                 produces={"category_hits", "category_summary_lookup", "query_vector"},
                 capabilities={"vector"},
-                config={"llm_profile": "embedding"},
+                config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
                 step_id="sufficiency_after_category",
@@ -138,7 +139,10 @@ class RetrieveMixin:
                 },
                 produces={"next_step_query", "proceed_to_items", "query_vector"},
                 capabilities={"llm"},
-                config={"llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
+                config={
+                    "chat_llm_profile": self.retrieve_config.sufficiency_check_llm_profile,
+                    "embed_llm_profile": "embedding",
+                },
             ),
             WorkflowStep(
                 step_id="recall_items",
@@ -155,7 +159,7 @@ class RetrieveMixin:
                 },
                 produces={"item_hits", "query_vector"},
                 capabilities={"vector"},
-                config={"llm_profile": "embedding"},
+                config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
                 step_id="sufficiency_after_items",
@@ -172,7 +176,10 @@ class RetrieveMixin:
                 },
                 produces={"next_step_query", "proceed_to_resources", "query_vector"},
                 capabilities={"llm"},
-                config={"llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
+                config={
+                    "chat_llm_profile": self.retrieve_config.sufficiency_check_llm_profile,
+                    "embed_llm_profile": "embedding",
+                },
             ),
             WorkflowStep(
                 step_id="recall_resources",
@@ -189,7 +196,7 @@ class RetrieveMixin:
                 },
                 produces={"resource_hits", "query_vector"},
                 capabilities={"vector"},
-                config={"llm_profile": "embedding"},
+                config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
                 step_id="build_context",
@@ -257,17 +264,17 @@ class RetrieveMixin:
             state["query_vector"] = None
             return state
 
-        llm_client = self._get_step_llm_client(step_context)
+        embed_client = self._get_step_embedding_client(step_context)
         store = state["store"]
         where_filters = state.get("where") or {}
         category_pool = store.memory_category_repo.list_categories(where_filters)
-        qvec = (await llm_client.embed([state["active_query"]]))[0]
+        qvec = (await embed_client.embed([state["active_query"]]))[0]
         hits, summary_lookup = await self._rank_categories_by_summary(
             qvec,
             self.retrieve_config.category.top_k,
             state["ctx"],
             store,
-            embed_client=llm_client,
+            embed_client=embed_client,
             categories=category_pool,
         )
         state.update({
@@ -310,7 +317,8 @@ class RetrieveMixin:
         state["active_query"] = rewritten_query
         state["proceed_to_items"] = needs_more
         if needs_more:
-            state["query_vector"] = (await llm_client.embed([state["active_query"]]))[0]
+            embed_client = self._get_step_embedding_client(step_context)
+            state["query_vector"] = (await embed_client.embed([state["active_query"]]))[0]
         return state
 
     async def _rag_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
@@ -321,10 +329,10 @@ class RetrieveMixin:
         store = state["store"]
         where_filters = state.get("where") or {}
         items_pool = store.memory_item_repo.list_items(where_filters)
-        llm_client = self._get_step_llm_client(step_context)
         qvec = state.get("query_vector")
         if qvec is None:
-            qvec = (await llm_client.embed([state["active_query"]]))[0]
+            embed_client = self._get_step_embedding_client(step_context)
+            qvec = (await embed_client.embed([state["active_query"]]))[0]
             state["query_vector"] = qvec
         state["item_hits"] = store.memory_item_repo.vector_search_items(
             qvec,
@@ -361,7 +369,8 @@ class RetrieveMixin:
         state["active_query"] = rewritten_query
         state["proceed_to_resources"] = needs_more
         if needs_more:
-            state["query_vector"] = (await llm_client.embed([state["active_query"]]))[0]
+            embed_client = self._get_step_embedding_client(step_context)
+            state["query_vector"] = (await embed_client.embed([state["active_query"]]))[0]
         return state
 
     async def _rag_recall_resources(self, state: WorkflowState, step_context: Any) -> WorkflowState:
@@ -382,10 +391,10 @@ class RetrieveMixin:
             state["resource_hits"] = []
             return state
 
-        llm_client = self._get_step_llm_client(step_context)
         qvec = state.get("query_vector")
         if qvec is None:
-            qvec = (await llm_client.embed([state["active_query"]]))[0]
+            embed_client = self._get_step_embedding_client(step_context)
+            qvec = (await embed_client.embed([state["active_query"]]))[0]
             state["query_vector"] = qvec
         state["resource_hits"] = cosine_topk(qvec, corpus, k=self.retrieve_config.resource.top_k)
         return state

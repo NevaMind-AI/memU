@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 
 from pydantic import BaseModel
 
@@ -184,19 +184,30 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         return self._workflow_runner
 
     @staticmethod
-    def _llm_profile_from_context(step_context: Mapping[str, Any] | None) -> str | None:
+    def _llm_profile_from_context(
+        step_context: Mapping[str, Any] | None, task: Literal["chat", "embedding"] = "chat"
+    ) -> str | None:
         if not isinstance(step_context, Mapping):
             return None
         step_cfg = step_context.get("step_config")
         if not isinstance(step_cfg, Mapping):
             return None
-        profile = step_cfg.get("llm_profile")
+        if task == "chat":
+            profile = step_cfg.get("chat_llm_profile", step_cfg.get("llm_profile"))
+        elif task == "embedding":
+            profile = step_cfg.get("embed_llm_profile", step_cfg.get("llm_profile"))
+        else:
+            raise ValueError(f"Invalid task: {task}")
         if isinstance(profile, str) and profile.strip():
             return profile.strip()
         return None
 
     def _get_step_llm_client(self, step_context: Mapping[str, Any] | None) -> Any:
-        profile = self._llm_profile_from_context(step_context)
+        profile = self._llm_profile_from_context(step_context, task="chat") or "default"
+        return self._get_llm_client(profile, step_context=step_context)
+
+    def _get_step_embedding_client(self, step_context: Mapping[str, Any] | None) -> Any:
+        profile = self._llm_profile_from_context(step_context, task="embedding") or "embedding"
         return self._get_llm_client(profile, step_context=step_context)
 
     def intercept_before_llm_call(
