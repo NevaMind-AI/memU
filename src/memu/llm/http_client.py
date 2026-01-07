@@ -86,7 +86,9 @@ class HTTPLLMClient:
         self.timeout = timeout
         self.embed_model = embed_model or chat_model
 
-    async def summarize(self, text: str, max_tokens: int | None = None, system_prompt: str | None = None) -> str:
+    async def summarize(
+        self, text: str, max_tokens: int | None = None, system_prompt: str | None = None
+    ) -> tuple[str, dict[str, Any]]:
         payload = self.backend.build_summary_payload(
             text=text, system_prompt=system_prompt, chat_model=self.chat_model, max_tokens=max_tokens
         )
@@ -95,7 +97,7 @@ class HTTPLLMClient:
             resp.raise_for_status()
             data = resp.json()
         logger.debug("HTTP LLM summarize response: %s", data)
-        return self.backend.parse_summary_response(data)
+        return self.backend.parse_summary_response(data), data
 
     async def vision(
         self,
@@ -104,7 +106,7 @@ class HTTPLLMClient:
         *,
         max_tokens: int | None = None,
         system_prompt: str | None = None,
-    ) -> str:
+    ) -> tuple[str, dict[str, Any]]:
         """
         Call Vision API with an image.
 
@@ -115,7 +117,7 @@ class HTTPLLMClient:
             system_prompt: Optional system prompt
 
         Returns:
-            LLM response text
+            Tuple of (LLM response text, raw response dict)
         """
         # Read and encode image as base64
         image_data = Path(image_path).read_bytes()
@@ -145,9 +147,9 @@ class HTTPLLMClient:
             resp.raise_for_status()
             data = resp.json()
         logger.debug("HTTP LLM vision response: %s", data)
-        return self.backend.parse_summary_response(data)
+        return self.backend.parse_summary_response(data), data
 
-    async def embed(self, inputs: list[str]) -> list[list[float]]:
+    async def embed(self, inputs: list[str]) -> tuple[list[list[float]], dict[str, Any]]:
         """Create text embeddings using the provider-specific embedding API."""
         payload = self.embedding_backend.build_embedding_payload(inputs=inputs, embed_model=self.embed_model)
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
@@ -155,7 +157,7 @@ class HTTPLLMClient:
             resp.raise_for_status()
             data = resp.json()
         logger.debug("HTTP embedding response: %s", data)
-        return self.embedding_backend.parse_embedding_response(data)
+        return self.embedding_backend.parse_embedding_response(data), data
 
     async def transcribe(
         self,
@@ -164,7 +166,7 @@ class HTTPLLMClient:
         prompt: str | None = None,
         language: str | None = None,
         response_format: str = "text",
-    ) -> str:
+    ) -> tuple[str, dict[str, Any] | None]:
         """
         Transcribe audio file using OpenAI Audio API.
 
@@ -175,9 +177,10 @@ class HTTPLLMClient:
             response_format: Response format ('text', 'json', 'verbose_json')
 
         Returns:
-            Transcribed text
+            Tuple of (transcribed text, raw response dict or None for text format)
         """
         try:
+            raw_response: dict[str, Any] | None = None
             # Prepare multipart form data
             with open(audio_path, "rb") as audio_file:
                 files = {"file": (Path(audio_path).name, audio_file, "application/octet-stream")}
@@ -202,15 +205,15 @@ class HTTPLLMClient:
                     if response_format == "text":
                         result = resp.text
                     else:
-                        result_data = resp.json()
-                        result = result_data.get("text", "")
+                        raw_response = resp.json()
+                        result = raw_response.get("text", "")
 
             logger.debug("HTTP audio transcribe response for %s: %s chars", audio_path, len(result))
         except Exception:
             logger.exception("Audio transcription failed for %s", audio_path)
             raise
         else:
-            return result or ""
+            return result or "", raw_response
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.api_key}"}

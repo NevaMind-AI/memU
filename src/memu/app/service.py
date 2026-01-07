@@ -136,9 +136,9 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         return client
 
     @staticmethod
-    def _llm_call_metadata(step_context: Mapping[str, Any] | None) -> LLMCallMetadata:
+    def _llm_call_metadata(profile: str, step_context: Mapping[str, Any] | None) -> LLMCallMetadata:
         if not isinstance(step_context, Mapping):
-            return LLMCallMetadata()
+            return LLMCallMetadata(profile)
         operation = None
         for key in ("operation", "workflow_name"):
             value = step_context.get(key)
@@ -148,7 +148,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         step_id = step_context.get("step_id") if isinstance(step_context.get("step_id"), str) else None
         trace_id = step_context.get("trace_id") if isinstance(step_context.get("trace_id"), str) else None
         tags = step_context.get("tags") if isinstance(step_context.get("tags"), Mapping) else None
-        return LLMCallMetadata(operation=operation, step_id=step_id, trace_id=trace_id, tags=tags)
+        return LLMCallMetadata(profile=profile, operation=operation, step_id=step_id, trace_id=trace_id, tags=tags)
 
     def _wrap_llm_client(
         self,
@@ -159,7 +159,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
     ) -> Any:
         cfg: LLMConfig | None = self.llm_profiles.profiles.get(profile or "default")
         provider = cfg.provider if cfg is not None else None
-        metadata = self._llm_call_metadata(step_context)
+        metadata = self._llm_call_metadata(profile or "default", step_context)
         return LLMClientWrapper(
             client,
             registry=self._llm_interceptors,
