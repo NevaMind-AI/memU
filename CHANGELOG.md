@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.1.0](https://github.com/NevaMind-AI/memU/compare/v1.0.1...v1.1.0) (2026-01-07)
+
+
+### Features
+
+* add Linux ARM64 (aarch64) build target ([#156](https://github.com/NevaMind-AI/memU/issues/156)) ([0c90fcf](https://github.com/NevaMind-AI/memU/commit/0c90fcfb19fc3e91b951f4ba7454798e4b83e42c))
+
+
+### Bug Fixes
+
+* llm client profile & wrapper ([#157](https://github.com/NevaMind-AI/memU/issues/157)) ([e55c668](https://github.com/NevaMind-AI/memU/commit/e55c66847eac3ceaf276587d58b76d953d7be9f8))
+
+
+### Documentation
+
+* remove legacy docs ([#154](https://github.com/NevaMind-AI/memU/issues/154)) ([11fda41](https://github.com/NevaMind-AI/memU/commit/11fda41dda8a5c38b790d3c2fb7053b57b16606e))
+
 ## [1.0.1](https://github.com/NevaMind-AI/memU/compare/v1.0.0...v1.0.1) (2026-01-06)
 
 
