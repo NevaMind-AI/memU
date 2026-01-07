@@ -142,6 +142,35 @@ See [`tests/test_inmemory.py`](tests/test_inmemory.py) and [`tests/test_postgres
 
 ---
 
+### Custom LLM and Embedding Providers
+
+MemU supports custom LLM and embedding providers beyond OpenAI. Configure them via `llm_profiles`:
+
+```python
+from memu import MemUService
+
+service = MemUService(
+    llm_profiles={
+        # Default profile for LLM operations
+        "default": {
+            "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+            "api_key": "your_api_key",
+            "chat_model": "qwen3-max",
+            "client_backend": "sdk"  # "sdk" or "http"
+        },
+        # Separate profile for embeddings
+        "embedding": {
+            "base_url": "https://api.voyageai.com/v1",
+            "api_key": "your_voyage_api_key",
+            "embed_model": "voyage-3.5-lite"
+        }
+    },
+    # ... other configuration
+)
+```
+
+---
+
 ## 📖 Core APIs
 
 ### `memorize()` - Extract and Store Memory
