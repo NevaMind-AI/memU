@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.1.2](https://github.com/NevaMind-AI/memU/compare/v1.1.1...v1.1.2) (2026-01-08)
+
+
+### Bug Fixes
+
+* custom memory type default prompt ([#169](https://github.com/NevaMind-AI/memU/issues/169)) ([5a0032f](https://github.com/NevaMind-AI/memU/commit/5a0032fc0f29229524d0356d454a3f5991e04f7b))
+* prompt & item fallback ([#183](https://github.com/NevaMind-AI/memU/issues/183)) ([bc95ade](https://github.com/NevaMind-AI/memU/commit/bc95adeb26789104c0bbe199e126cf05def27941))
+
+
+### Documentation
+
+* add docs folder ([#181](https://github.com/NevaMind-AI/memU/issues/181)) ([919d2ca](https://github.com/NevaMind-AI/memU/commit/919d2caef23107d539c36f30c44d4fb5aa38b324))
+* fix issue template dropdown ([#167](https://github.com/NevaMind-AI/memU/issues/167)) ([14d0333](https://github.com/NevaMind-AI/memU/commit/14d03331ed14f1e593fdebbf561189a3775651be))
+* issue template fix ([#165](https://github.com/NevaMind-AI/memU/issues/165)) ([5d91237](https://github.com/NevaMind-AI/memU/commit/5d912372e1bf70d7ff573cd5b92e917118048e25))
+
 ## [1.1.1](https://github.com/NevaMind-AI/memU/compare/v1.1.0...v1.1.1) (2026-01-07)
 
 
