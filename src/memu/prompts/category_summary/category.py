@@ -210,6 +210,10 @@ PROMPT_BLOCK_OUTPUT = """
 - User information item
 - User information item
 ```
+
+# Critical
+Always ensure that your output does not exceed {target_length} tokens. 
+You may merge or omit unimportant information to meet this limit.
 """
 
 PROMPT_BLOCK_EXAMPLES = """
