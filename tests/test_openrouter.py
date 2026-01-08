@@ -12,10 +12,10 @@ Usage:
 """
 
 import asyncio
+import json
 import os
 import sys
 
-# Add src to path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from memu.app import MemoryService
@@ -34,11 +34,12 @@ async def test_openrouter_full_workflow():
         print(f"ERROR: Test file not found: {file_path}")
         sys.exit(1)
 
+    output_data = {}
+
     print("\n" + "=" * 60)
     print("[OPENROUTER] Starting full workflow test...")
     print("=" * 60)
 
-    # Initialize service with OpenRouter
     service = MemoryService(
         llm_profiles={
             "default": {
@@ -55,130 +56,106 @@ async def test_openrouter_full_workflow():
         },
         retrieve_config={
             "method": "rag",
-            "route_intention": False,  # Disable intention routing for simpler test
+            "route_intention": False,
         },
     )
 
     # Test 1: Memorize conversation
     print("\n[OPENROUTER] Test 1: Memorizing conversation...")
-    try:
-        memory = await service.memorize(
-            resource_url=file_path,
-            modality="conversation",
-            user={"user_id": "openrouter_test_user"}
-        )
-        items_count = len(memory.get("items", []))
-        categories_count = len(memory.get("categories", []))
-        
-        print(f"  ✓ Memorized {items_count} items")
-        print(f"  ✓ Created {categories_count} categories")
-        
-        assert items_count > 0, "Expected at least 1 memory item"
-        assert categories_count > 0, "Expected at least 1 category"
-        
-        for cat in memory.get("categories", [])[:3]:
-            print(f"    - {cat.get('name')}: {(cat.get('summary') or '')[:60]}...")
-    except Exception as e:
-        print(f"  ✗ Memorization failed: {e}")
-        raise
+    memory = await service.memorize(
+        resource_url=file_path,
+        modality="conversation",
+        user={"user_id": "openrouter_test_user"}
+    )
+    items_count = len(memory.get("items", []))
+    categories_count = len(memory.get("categories", []))
+    
+    print(f"  Memorized {items_count} items")
+    print(f"  Created {categories_count} categories")
+    
+    output_data["memorize"] = memory
+    
+    assert items_count > 0, "Expected at least 1 memory item"
+    assert categories_count > 0, "Expected at least 1 category"
+    
+    for cat in memory.get("categories", [])[:3]:
+        print(f"    - {cat.get('name')}: {(cat.get('summary') or '')[:60]}...")
 
-    # Simple query for testing
     queries = [
         {"role": "user", "content": {"text": "What foods does the user like to eat?"}},
     ]
 
     # Test 2: RAG-based retrieval
     print("\n[OPENROUTER] Test 2: RAG-based retrieval...")
-    try:
-        service.retrieve_config.method = "rag"
-        result_rag = await service.retrieve(queries=queries, where={"user_id": "openrouter_test_user"})
-        
-        categories_retrieved = len(result_rag.get("categories", []))
-        items_retrieved = len(result_rag.get("items", []))
-        
-        print(f"  Retrieved {categories_retrieved} categories")
-        print(f"  Retrieved {items_retrieved} items")
-        
-        # Print debug info
-        if result_rag.get("needs_retrieval") is not None:
-            print(f"  Needs retrieval: {result_rag.get('needs_retrieval')}")
-        if result_rag.get("rewritten_query"):
-            print(f"  Rewritten query: {result_rag.get('rewritten_query')[:50]}...")
-        
-        if categories_retrieved > 0:
-            print("  ✓ Categories retrieved:")
-            for cat in result_rag.get("categories", [])[:3]:
-                print(f"    - {cat.get('name')}: {(cat.get('summary') or cat.get('description', ''))[:60]}...")
-        
-        if items_retrieved > 0:
-            print("  ✓ Items retrieved:")
-            for item in result_rag.get("items", [])[:3]:
-                print(f"    - [{item.get('memory_type')}] {item.get('summary', '')[:80]}...")
-        
-        # Assert we got results (RAG should return results)
-        assert categories_retrieved > 0 or items_retrieved > 0, (
-            f"Expected RAG retrieval to return results. "
-            f"Got {categories_retrieved} categories, {items_retrieved} items."
-        )
-        print("  ✓ RAG retrieval successful")
-    except AssertionError as e:
-        print(f"  ⚠ RAG retrieval returned no results: {e}")
-        print("  Note: This may be expected if embeddings are not properly indexed.")
-    except Exception as e:
-        print(f"  ✗ RAG retrieval failed: {e}")
-        raise
+    service.retrieve_config.method = "rag"
+    result_rag = await service.retrieve(queries=queries, where={"user_id": "openrouter_test_user"})
+    
+    categories_retrieved = len(result_rag.get("categories", []))
+    items_retrieved = len(result_rag.get("items", []))
+    
+    print(f"  Retrieved {categories_retrieved} categories")
+    print(f"  Retrieved {items_retrieved} items")
+    
+    output_data["retrieve_rag"] = result_rag
+    
+    if categories_retrieved > 0:
+        print("  Categories:")
+        for cat in result_rag.get("categories", [])[:3]:
+            print(f"    - {cat.get('name')}: {(cat.get('summary') or cat.get('description', ''))[:60]}...")
+    
+    if items_retrieved > 0:
+        print("  Items:")
+        for item in result_rag.get("items", [])[:3]:
+            print(f"    - [{item.get('memory_type')}] {item.get('summary', '')[:80]}...")
 
     # Test 3: LLM-based retrieval
     print("\n[OPENROUTER] Test 3: LLM-based retrieval...")
-    try:
-        service.retrieve_config.method = "llm"
-        result_llm = await service.retrieve(queries=queries, where={"user_id": "openrouter_test_user"})
-        
-        categories_retrieved = len(result_llm.get("categories", []))
-        items_retrieved = len(result_llm.get("items", []))
-        
-        print(f"  Retrieved {categories_retrieved} categories")
-        print(f"  Retrieved {items_retrieved} items")
-        
-        if categories_retrieved > 0:
-            print("  ✓ Categories retrieved:")
-            for cat in result_llm.get("categories", [])[:3]:
-                print(f"    - {cat.get('name')}: {(cat.get('summary') or cat.get('description', ''))[:60]}...")
-        
-        if items_retrieved > 0:
-            print("  ✓ Items retrieved:")
-            for item in result_llm.get("items", [])[:3]:
-                print(f"    - [{item.get('memory_type')}] {item.get('summary', '')[:80]}...")
-        
-        print("  ✓ LLM retrieval completed")
-    except Exception as e:
-        print(f"  ✗ LLM retrieval failed: {e}")
-        raise
+    service.retrieve_config.method = "llm"
+    result_llm = await service.retrieve(queries=queries, where={"user_id": "openrouter_test_user"})
+    
+    categories_retrieved = len(result_llm.get("categories", []))
+    items_retrieved = len(result_llm.get("items", []))
+    
+    print(f"  Retrieved {categories_retrieved} categories")
+    print(f"  Retrieved {items_retrieved} items")
+    
+    output_data["retrieve_llm"] = result_llm
+    
+    if categories_retrieved > 0:
+        print("  Categories:")
+        for cat in result_llm.get("categories", [])[:3]:
+            print(f"    - {cat.get('name')}: {(cat.get('summary') or cat.get('description', ''))[:60]}...")
+    
+    if items_retrieved > 0:
+        print("  Items:")
+        for item in result_llm.get("items", [])[:3]:
+            print(f"    - [{item.get('memory_type')}] {item.get('summary', '')[:80]}...")
 
-    # Test 4: List memory items (CRUD operation)
+    # Test 4: List memory items
     print("\n[OPENROUTER] Test 4: List memory items...")
-    try:
-        items_result = await service.list_memory_items(where={"user_id": "openrouter_test_user"})
-        items_list = items_result.get("items", [])
-        print(f"  ✓ Listed {len(items_list)} memory items")
-        assert len(items_list) > 0, "Expected at least 1 item in list"
-    except Exception as e:
-        print(f"  ✗ List items failed: {e}")
-        raise
+    items_result = await service.list_memory_items(where={"user_id": "openrouter_test_user"})
+    items_list = items_result.get("items", [])
+    print(f"  Listed {len(items_list)} memory items")
+    output_data["list_items"] = items_result
+    assert len(items_list) > 0, "Expected at least 1 item in list"
 
-    # Test 5: List memory categories (CRUD operation)
+    # Test 5: List memory categories
     print("\n[OPENROUTER] Test 5: List memory categories...")
-    try:
-        cats_result = await service.list_memory_categories(where={"user_id": "openrouter_test_user"})
-        cats_list = cats_result.get("categories", [])
-        print(f"  ✓ Listed {len(cats_list)} categories")
-        assert len(cats_list) > 0, "Expected at least 1 category in list"
-    except Exception as e:
-        print(f"  ✗ List categories failed: {e}")
-        raise
+    cats_result = await service.list_memory_categories(where={"user_id": "openrouter_test_user"})
+    cats_list = cats_result.get("categories", [])
+    print(f"  Listed {len(cats_list)} categories")
+    output_data["list_categories"] = cats_result
+    assert len(cats_list) > 0, "Expected at least 1 category in list"
+
+    # Save output to file
+    output_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "output", "openrouter_test_output.json"))
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(output_data, f, indent=2, default=str)
+    print(f"\n[OPENROUTER] Output saved to: {output_file}")
 
     print("\n" + "=" * 60)
-    print("[OPENROUTER] All tests completed! ✓")
+    print("[OPENROUTER] All tests completed!")
     print("=" * 60)
 
 
