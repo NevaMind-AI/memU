@@ -19,6 +19,12 @@ CUSTOM_PROMPTS: dict[str, dict[str, str]] = {
     "skill": skill.CUSTOM_PROMPT,
 }
 
+CUSTOM_TYPE_CUSTOM_PROMPTS: dict[str, str] = {
+    "category": profile.CUSTOM_PROMPT["category"],
+    "output": profile.CUSTOM_PROMPT["output"],
+    "input": profile.CUSTOM_PROMPT["input"],
+}
+
 DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL: dict[str, int] = {
     "objective": 10,
     "workflow": 20,
@@ -29,4 +35,10 @@ DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL: dict[str, int] = {
     "input": 90,
 }
 
-__all__ = ["CUSTOM_PROMPTS", "DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL", "DEFAULT_MEMORY_TYPES", "PROMPTS"]
+__all__ = [
+    "CUSTOM_PROMPTS",
+    "CUSTOM_TYPE_CUSTOM_PROMPTS",
+    "DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL",
+    "DEFAULT_MEMORY_TYPES",
+    "PROMPTS",
+]

@@ -24,6 +24,7 @@ from memu.prompts.memory_type import (
     CUSTOM_PROMPTS as MEMORY_TYPE_CUSTOM_PROMPTS,
 )
 from memu.prompts.memory_type import (
+    CUSTOM_TYPE_CUSTOM_PROMPTS,
     DEFAULT_MEMORY_TYPES,
 )
 from memu.prompts.memory_type import (
@@ -948,7 +949,9 @@ Summary:"""
         elif isinstance(configured_prompt, str):
             template = configured_prompt
         else:
-            template = self._resolve_custom_prompt(configured_prompt, MEMORY_TYPE_CUSTOM_PROMPTS.get(memory_type, {}))
+            template = self._resolve_custom_prompt(
+                configured_prompt, MEMORY_TYPE_CUSTOM_PROMPTS.get(memory_type, CUSTOM_TYPE_CUSTOM_PROMPTS)
+            )
         if not template:
             return resource_text
         safe_resource = self._escape_prompt_value(resource_text)
