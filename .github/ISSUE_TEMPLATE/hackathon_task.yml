@@ -9,33 +9,6 @@ body:
       value: |
         Thank you for taking the time to join the challenge, and best of luck!
 
-  - type: input
-    id: task_name
-    attributes:
-      label: Name
-      description: The name of this hackathon task.
-      placeholder: "e.g., Add long-term memory compression for agents"
-    validations:
-      required: true
-
-  - type: textarea
-    id: about
-    attributes:
-      label: About
-      description: Brief background / context for the task (why it matters, what problem it solves).
-      placeholder: "Explain the context and motivation."
-    validations:
-      required: true
-
-  - type: input
-    id: hackathon_task
-    attributes:
-      label: Hackathon Task
-      description: The designated track identifier for this challenge.
-      value: "2026NewYearChallenge"
-    validations:
-      required: true
-
   - type: dropdown
     id: label_hint
     attributes:
