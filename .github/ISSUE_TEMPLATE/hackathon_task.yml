@@ -16,10 +16,6 @@ body:
       description: Pick the most appropriate label for this task.
       options:
         - hackathon-task
-        - enhancement
-        - bug
-        - documentation
-        - question
     validations:
       required: true
 
