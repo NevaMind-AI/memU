@@ -342,6 +342,8 @@ View detailed experimental data: [memU-experiment](https://github.com/NevaMind-A
 
 ---
 
+<img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/star.gif" />
+If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly appreciated.
 
 ---
 
