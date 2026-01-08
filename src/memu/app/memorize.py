@@ -439,12 +439,14 @@ class MemorizeMixin:
                 segments=segments,
                 llm_client=client,
             )
-            if entries:
-                return entries
-            no_result_entry = self._build_no_result_fallback(memory_types[0], resource_url, modality)
-            return [no_result_entry]
+            return entries
+            # if entries:
+            #     return entries
+            # no_result_entry = self._build_no_result_fallback(memory_types[0], resource_url, modality)
+            # return [no_result_entry]
 
-        return self._build_no_text_fallback(memory_types, resource_url, modality)
+        return []
+        # return self._build_no_text_fallback(memory_types, resource_url, modality)
 
     async def _generate_text_entries(
         self,
