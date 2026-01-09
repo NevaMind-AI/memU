@@ -58,7 +58,7 @@ class SQLiteResourceModel(SQLiteBaseModelMixin, Resource):
         if self.embedding_json is None:
             return None
         try:
-            return json.loads(self.embedding_json)
+            return list(json.loads(self.embedding_json))
         except (json.JSONDecodeError, TypeError):
             return None
 
@@ -86,7 +86,7 @@ class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):
         if self.embedding_json is None:
             return None
         try:
-            return json.loads(self.embedding_json)
+            return list(json.loads(self.embedding_json))
         except (json.JSONDecodeError, TypeError):
             return None
 
@@ -114,7 +114,7 @@ class SQLiteMemoryCategoryModel(SQLiteBaseModelMixin, MemoryCategory):
         if self.embedding_json is None:
             return None
         try:
-            return json.loads(self.embedding_json)
+            return list(json.loads(self.embedding_json))
         except (json.JSONDecodeError, TypeError):
             return None
 
