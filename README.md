@@ -22,6 +22,13 @@ MemU is an agentic memory framework for LLM and AI agent backends. It receives *
 
 ---
 
+## ⭐️ Star the repository
+
+<img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/star.gif" />
+If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly appreciated.
+
+---
+
 MemU is collaborating with four open-source projects to launch the 2026 New Year Challenge. 🎉Between January 8–18, contributors can submit PRs to memU and earn cash rewards, community recognition, and platform credits. 🎁[Learn more & get involved](https://discord.gg/KaWy6SBAsx)
 
 ## ✨ Core Features
@@ -341,11 +348,6 @@ View detailed experimental data: [memU-experiment](https://github.com/NevaMind-A
 - 🚀 [Try MemU Cloud](https://app.memu.so/quick-start)
 - 📚 [API Documentation](https://memu.pro/docs)
 - 💬 [Discord Community](https://discord.gg/memu)
-
----
-
-<img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/star.gif" />
-If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly appreciated.
 
 ---
 
