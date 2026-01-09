@@ -58,6 +58,7 @@ lint = [
 ]
 test = [
     "pytest>=8.4.2",
+    "pytest-asyncio>=0.24.0",
     "pytest-cov>=7.0.0",
 ]
 
@@ -154,5 +155,12 @@ source = ["tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 log_cli = true
 log_cli_level = "INFO"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests requiring external services",
+    "postgres: marks tests that require PostgreSQL",
+]
