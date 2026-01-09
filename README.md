@@ -356,7 +356,7 @@ View detailed experimental data: [memU-experiment](https://github.com/NevaMind-A
 <div align="center">
 
 <a href="https://github.com/TEN-framework/ten-framework"><img src="https://avatars.githubusercontent.com/u/113095513?s=200&v=4" alt="Ten" height="40" style="margin: 10px;"></a>
-<a href="GitHub - openagents-org/openagents: OpenAgents - AI Agent Networks for Open Collaboration"><img src="assets/partners/openagents.png" alt="OpenAgents" height="40" style="margin: 10px;"></a>
+<a href="https://openagents.org"><img src="assets/partners/openagents.png" alt="OpenAgents" height="40" style="margin: 10px;"></a>
 <a href="https://github.com/milvus-io/milvus"><img src="https://miro.medium.com/v2/resize:fit:2400/1*-VEGyAgcIBD62XtZWavy8w.png" alt="Milvus" height="40" style="margin: 10px;"></a>
 <a href="https://xroute.ai/"><img src="assets/partners/xroute.png" alt="xRoute" height="40" style="margin: 10px;"></a>
 <a href="https://jaaz.app/"><img src="assets/partners/jazz.png" alt="Jazz" height="40" style="margin: 10px;"></a>
@@ -376,7 +376,7 @@ View detailed experimental data: [memU-experiment](https://github.com/NevaMind-A
 
 ## 🌍 Community
 
-- **GitHub Issues**: [Report bugs & request features](NevaMind-AI/memU)
+- **GitHub Issues**: [Report bugs & request features](https://github.com/NevaMind-AI/memU/issues)
 - **Discord**: [Join the community](https://discord.com/invite/hQZntfGsbJ)
 - **X (Twitter)**: [Follow @memU_ai](https://x.com/memU_ai)
 - **Contact**: info@nevamind.ai
