@@ -27,7 +27,7 @@ class OpenAISDKClient:
         api_key: str,
         chat_model: str,
         embed_model: str,
-        embed_batch_size: int = 25,
+        embed_batch_size: int = 1,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or ""
