@@ -110,7 +110,7 @@ class LLMConfig(BaseModel):
         description="Default embedding model used for vectorization.",
     )
     embed_batch_size: int = Field(
-        default=25,
+        default=1,
         description="Maximum batch size for embedding API calls (used by SDK client backends).",
     )
 
