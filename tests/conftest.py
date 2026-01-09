@@ -62,9 +62,10 @@ def postgres_service(openai_api_key: str | None, postgres_dsn: str) -> MemorySer
             },
             retrieve_config={"method": "rag"},
         )
-        return service
     except Exception as e:
         pytest.skip(f"PostgreSQL not available: {e}")
+    else:
+        return service
 
 
 @pytest.fixture
