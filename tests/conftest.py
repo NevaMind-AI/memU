@@ -76,4 +76,3 @@ def sample_queries() -> list[dict]:
         {"role": "assistant", "content": {"text": "Sure, I'll tell you about their preferences"}},
         {"role": "user", "content": {"text": "What are they"}},
     ]
-

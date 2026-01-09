@@ -147,6 +147,7 @@ class TestNewFeature:
 ### Skipping Tests
 
 Tests are automatically skipped when:
+
 - `OPENAI_API_KEY` is not set
 - PostgreSQL is not available (for postgres tests)
 
@@ -186,4 +187,3 @@ pytest tests/test_inmemory.py -v
 # Or run with fewer parallel workers
 pytest tests/ -v -n 1
 ```
-
