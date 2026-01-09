@@ -517,7 +517,7 @@ wheels = [
 
 [[package]]
 name = "memu-py"
-version = "1.1.0"
+version = "1.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
