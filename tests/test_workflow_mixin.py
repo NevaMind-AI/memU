@@ -121,12 +121,6 @@ class TestWorkflowMixinMethods:
 
         assert hasattr(WorkflowMixin, "_workflow_response")
 
-    def test_category_embedding_text_method_exists(self):
-        """Test that _category_embedding_text method exists."""
-        from memu.app.workflow import WorkflowMixin
-
-        assert hasattr(WorkflowMixin, "_category_embedding_text")
-
     def test_extract_query_text_method_exists(self):
         """Test that _extract_query_text method exists."""
         from memu.app.workflow import WorkflowMixin
@@ -210,42 +204,6 @@ class TestWorkflowMixinFunctionality:
         # Only whitespace between tags
         result = obj._extract_tag_content("<tag>   </tag>", "tag")
         assert result is None
-
-    def test_category_embedding_text_basic(self):
-        """Test _category_embedding_text generates proper text."""
-        from memu.app.workflow import WorkflowMixin
-
-        class TestClass(WorkflowMixin):
-            pass
-
-        obj = TestClass()
-        result = obj._category_embedding_text({"name": "Test", "description": "A test category"})
-        assert result == "Test: A test category"
-
-    def test_category_embedding_text_no_description(self):
-        """Test _category_embedding_text with no description."""
-        from memu.app.workflow import WorkflowMixin
-
-        class TestClass(WorkflowMixin):
-            pass
-
-        obj = TestClass()
-        result = obj._category_embedding_text({"name": "Test"})
-        assert result == "Test"
-
-    def test_category_embedding_text_empty_name_fallback(self):
-        """Test _category_embedding_text uses 'Untitled' for empty name."""
-        from memu.app.workflow import WorkflowMixin
-
-        class TestClass(WorkflowMixin):
-            pass
-
-        obj = TestClass()
-        result = obj._category_embedding_text({"name": "", "description": "A test"})
-        assert result == "Untitled: A test"
-
-        result = obj._category_embedding_text({})
-        assert result == "Untitled"
 
     def test_extract_query_text_string(self):
         """Test _extract_query_text with string input."""
@@ -430,19 +388,19 @@ class TestNoDuplicateMethods:
             "_normalize_where should be inherited from WorkflowMixin, not defined in CRUDMixin"
         )
 
-    def test_memorize_no_duplicate_category_embedding_text(self):
-        """Test that MemorizeMixin still has _category_embedding_text (as override)."""
+    def test_memorize_has_category_embedding_text(self):
+        """Test that MemorizeMixin has _category_embedding_text."""
         import inspect
 
         from memu.app.memorize import MemorizeMixin
 
-        # Note: MemorizeMixin intentionally keeps _category_embedding_text as a static method
-        # that overrides the one in WorkflowMixin. This is expected behavior.
+        # Note: MemorizeMixin has its own _category_embedding_text method
+        # (not inherited from WorkflowMixin due to signature incompatibility)
         own_methods = set()
         for name, _method in inspect.getmembers(MemorizeMixin, predicate=inspect.isfunction):
             own_methods.add(name)
 
-        # Verify that the method exists (either inherited or overridden)
+        # Verify that the method exists
         assert "_category_embedding_text" in own_methods
 
     def test_retrieve_has_extract_query_text_override(self):

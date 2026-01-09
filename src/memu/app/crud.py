@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from typing import TYPE_CHECKING, Any, cast, get_args
 
 from pydantic import BaseModel
@@ -26,6 +26,9 @@ class CRUDMixin(WorkflowMixin):
         patch_config: PatchConfig
         category_configs: list[dict[str, str]]
         user_model: type[BaseModel]
+        # Methods from MemorizeMixin (not in WorkflowMixin):
+        _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
+        _ensure_categories_ready: Callable[[Context, Database, Mapping[str, Any] | None], Awaitable[None]]
         # Inherited from WorkflowMixin:
         # - _run_workflow
         # - _get_context
@@ -37,7 +40,6 @@ class CRUDMixin(WorkflowMixin):
         # - _escape_prompt_value
         # - _normalize_where
         # - _workflow_response
-        # - _category_embedding_text
 
     async def list_memory_items(
         self,
@@ -92,6 +94,14 @@ class CRUDMixin(WorkflowMixin):
             ),
         ]
         return steps
+
+    @staticmethod
+    def _list_list_memory_items_initial_keys() -> set[str]:
+        return {
+            "ctx",
+            "store",
+            "where",
+        }
 
     def _build_list_memory_categories_workflow(self) -> list[WorkflowStep]:
         steps = [
@@ -258,6 +268,7 @@ class CRUDMixin(WorkflowMixin):
                 requires={"memory_payload", "ctx", "store", "user"},
                 produces={"memory_item", "category_updates"},
                 capabilities={"db", "llm"},
+                config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
                 step_id="persist_index",
@@ -266,6 +277,7 @@ class CRUDMixin(WorkflowMixin):
                 requires={"category_updates", "ctx", "store"},
                 produces={"categories"},
                 capabilities={"db", "llm"},
+                config={"chat_llm_profile": "default"},
             ),
             WorkflowStep(
                 step_id="build_response",
@@ -277,6 +289,15 @@ class CRUDMixin(WorkflowMixin):
             ),
         ]
         return steps
+
+    @staticmethod
+    def _list_create_memory_item_initial_keys() -> set[str]:
+        return {
+            "memory_payload",
+            "ctx",
+            "store",
+            "user",
+        }
 
     def _build_update_memory_item_workflow(self) -> list[WorkflowStep]:
         steps = [
@@ -287,6 +308,7 @@ class CRUDMixin(WorkflowMixin):
                 requires={"memory_id", "memory_payload", "ctx", "store", "user"},
                 produces={"memory_item", "category_updates"},
                 capabilities={"db", "llm"},
+                config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
                 step_id="persist_index",
@@ -295,6 +317,7 @@ class CRUDMixin(WorkflowMixin):
                 requires={"category_updates", "ctx", "store"},
                 produces={"categories"},
                 capabilities={"db", "llm"},
+                config={"chat_llm_profile": "default"},
             ),
             WorkflowStep(
                 step_id="build_response",
@@ -306,6 +329,16 @@ class CRUDMixin(WorkflowMixin):
             ),
         ]
         return steps
+
+    @staticmethod
+    def _list_update_memory_item_initial_keys() -> set[str]:
+        return {
+            "memory_id",
+            "memory_payload",
+            "ctx",
+            "store",
+            "user",
+        }
 
     def _build_delete_memory_item_workflow(self) -> list[WorkflowStep]:
         steps = [
@@ -315,7 +348,7 @@ class CRUDMixin(WorkflowMixin):
                 handler=self._patch_delete_memory_item,
                 requires={"memory_id", "ctx", "store", "user"},
                 produces={"memory_item", "category_updates"},
-                capabilities={"db", "llm"},
+                capabilities={"db"},
             ),
             WorkflowStep(
                 step_id="persist_index",
@@ -324,6 +357,7 @@ class CRUDMixin(WorkflowMixin):
                 requires={"category_updates", "ctx", "store"},
                 produces={"categories"},
                 capabilities={"db", "llm"},
+                config={"chat_llm_profile": "default"},
             ),
             WorkflowStep(
                 step_id="build_response",
@@ -336,6 +370,15 @@ class CRUDMixin(WorkflowMixin):
         ]
         return steps
 
+    @staticmethod
+    def _list_delete_memory_item_initial_keys() -> set[str]:
+        return {
+            "memory_id",
+            "ctx",
+            "store",
+            "user",
+        }
+
     async def _patch_create_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         memory_payload = state["memory_payload"]
         ctx = state["ctx"]
@@ -344,7 +387,7 @@ class CRUDMixin(WorkflowMixin):
         category_memory_updates: dict[str, tuple[Any, Any]] = {}
 
         embed_payload = [memory_payload["content"]]
-        content_embedding = (await self._get_llm_client().embed(embed_payload))[0]
+        content_embedding = (await self._get_step_embedding_client(step_context).embed(embed_payload))[0]
 
         item = store.memory_item_repo.create_item(
             memory_type=memory_payload["type"],
@@ -382,7 +425,7 @@ class CRUDMixin(WorkflowMixin):
 
         if memory_payload["content"]:
             embed_payload = [memory_payload["content"]]
-            content_embedding = (await self._get_llm_client().embed(embed_payload))[0]
+            content_embedding = (await self._get_step_embedding_client(step_context).embed(embed_payload))[0]
         else:
             content_embedding = None
 
@@ -458,39 +501,6 @@ class CRUDMixin(WorkflowMixin):
         }
         state["response"] = response
         return state
-
-    async def _ensure_categories_ready(
-        self, ctx: Context, store: Database, user_scope: Mapping[str, Any] | None = None
-    ) -> None:
-        if ctx.categories_ready:
-            return
-        if ctx.category_init_task:
-            await ctx.category_init_task
-            ctx.category_init_task = None
-            return
-        await self._initialize_categories(ctx, store, user_scope)
-
-    async def _initialize_categories(
-        self, ctx: Context, store: Database, user: Mapping[str, Any] | None = None
-    ) -> None:
-        if ctx.categories_ready:
-            return
-        if not self.category_configs:
-            ctx.categories_ready = True
-            return
-        cat_texts = [self._category_embedding_text(cfg) for cfg in self.category_configs]
-        cat_vecs = await self._get_llm_client().embed(cat_texts)
-        ctx.category_ids = []
-        ctx.category_name_to_id = {}
-        for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
-            name = (cfg.get("name") or "").strip() or "Untitled"
-            description = (cfg.get("description") or "").strip()
-            cat = store.memory_category_repo.get_or_create_category(
-                name=name, description=description, embedding=vec, user_data=dict(user or {})
-            )
-            ctx.category_ids.append(cat.id)
-            ctx.category_name_to_id[name.lower()] = cat.id
-        ctx.categories_ready = True
 
     def _map_category_names_to_ids(self, names: list[str], ctx: Context) -> list[str]:
         if not names:

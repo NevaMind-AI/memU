@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 
 from pydantic import BaseModel
 
@@ -12,6 +12,7 @@ from memu.app.memorize import MemorizeMixin
 from memu.app.retrieve import RetrieveMixin
 from memu.app.settings import (
     BlobConfig,
+    CategoryConfig,
     DatabaseConfig,
     LLMConfig,
     LLMProfilesConfig,
@@ -23,6 +24,12 @@ from memu.blob.local_fs import LocalFS
 from memu.database.factory import build_database
 from memu.database.interfaces import Database
 from memu.llm.http_client import HTTPLLMClient
+from memu.llm.wrapper import (
+    LLMCallMetadata,
+    LLMClientWrapper,
+    LLMInterceptorHandle,
+    LLMInterceptorRegistry,
+)
 from memu.workflow.pipeline import PipelineManager
 from memu.workflow.runner import WorkflowRunner, resolve_workflow_runner
 from memu.workflow.step import WorkflowState, WorkflowStep
@@ -60,7 +67,8 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
 
         self.fs = LocalFS(self.blob_config.resources_dir)
-        self.category_configs: list[dict[str, str]] = list(self.memorize_config.memory_categories or [])
+        self.category_configs: list[CategoryConfig] = list(self.memorize_config.memory_categories or [])
+        self.category_config_map: dict[str, CategoryConfig] = {cfg.name: cfg for cfg in self.category_configs}
         self._category_prompt_str = self._format_categories_for_prompt(self.category_configs)
 
         self._context = Context(categories_ready=not bool(self.category_configs))
@@ -74,6 +82,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
 
         # Initialize client caches (lazy creation on first use)
         self._llm_clients: dict[str, Any] = {}
+        self._llm_interceptors = LLMInterceptorRegistry()
 
         self._workflow_runner = resolve_workflow_runner(workflow_runner)
 
@@ -110,7 +119,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             msg = f"Unknown llm_client_backend '{cfg.client_backend}'"
             raise ValueError(msg)
 
-    def _get_llm_client(self, profile: str | None = None) -> Any:
+    def _get_llm_base_client(self, profile: str | None = None) -> Any:
         """
         Lazily initialize and cache LLM clients per profile to avoid eager network setup.
         """
@@ -126,6 +135,44 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self._llm_clients[name] = client
         return client
 
+    @staticmethod
+    def _llm_call_metadata(profile: str, step_context: Mapping[str, Any] | None) -> LLMCallMetadata:
+        if not isinstance(step_context, Mapping):
+            return LLMCallMetadata(profile)
+        operation = None
+        for key in ("operation", "workflow_name"):
+            value = step_context.get(key)
+            if isinstance(value, str) and value.strip():
+                operation = value.strip()
+                break
+        step_id = step_context.get("step_id") if isinstance(step_context.get("step_id"), str) else None
+        trace_id = step_context.get("trace_id") if isinstance(step_context.get("trace_id"), str) else None
+        tags = step_context.get("tags") if isinstance(step_context.get("tags"), Mapping) else None
+        return LLMCallMetadata(profile=profile, operation=operation, step_id=step_id, trace_id=trace_id, tags=tags)
+
+    def _wrap_llm_client(
+        self,
+        client: Any,
+        *,
+        profile: str | None = None,
+        step_context: Mapping[str, Any] | None = None,
+    ) -> Any:
+        cfg: LLMConfig | None = self.llm_profiles.profiles.get(profile or "default")
+        provider = cfg.provider if cfg is not None else None
+        metadata = self._llm_call_metadata(profile or "default", step_context)
+        return LLMClientWrapper(
+            client,
+            registry=self._llm_interceptors,
+            metadata=metadata,
+            provider=provider,
+            chat_model=getattr(client, "chat_model", None),
+            embed_model=getattr(client, "embed_model", None),
+        )
+
+    def _get_llm_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
+        base_client = self._get_llm_base_client(profile)
+        return self._wrap_llm_client(base_client, profile=profile, step_context=step_context)
+
     @property
     def llm_client(self) -> Any:
         """Default LLM client (lazy)."""
@@ -137,20 +184,61 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         return self._workflow_runner
 
     @staticmethod
-    def _llm_profile_from_context(step_context: Mapping[str, Any] | None) -> str | None:
+    def _llm_profile_from_context(
+        step_context: Mapping[str, Any] | None, task: Literal["chat", "embedding"] = "chat"
+    ) -> str | None:
         if not isinstance(step_context, Mapping):
             return None
         step_cfg = step_context.get("step_config")
         if not isinstance(step_cfg, Mapping):
             return None
-        profile = step_cfg.get("llm_profile")
+        if task == "chat":
+            profile = step_cfg.get("chat_llm_profile", step_cfg.get("llm_profile"))
+        elif task == "embedding":
+            profile = step_cfg.get("embed_llm_profile", step_cfg.get("llm_profile"))
+        else:
+            raise ValueError(task)
         if isinstance(profile, str) and profile.strip():
             return profile.strip()
         return None
 
     def _get_step_llm_client(self, step_context: Mapping[str, Any] | None) -> Any:
-        profile = self._llm_profile_from_context(step_context)
-        return self._get_llm_client(profile)
+        profile = self._llm_profile_from_context(step_context, task="chat") or "default"
+        return self._get_llm_client(profile, step_context=step_context)
+
+    def _get_step_embedding_client(self, step_context: Mapping[str, Any] | None) -> Any:
+        profile = self._llm_profile_from_context(step_context, task="embedding") or "embedding"
+        return self._get_llm_client(profile, step_context=step_context)
+
+    def intercept_before_llm_call(
+        self,
+        fn: Callable[..., Any],
+        *,
+        name: str | None = None,
+        priority: int = 0,
+        where: Mapping[str, Any] | Callable[..., Any] | None = None,
+    ) -> LLMInterceptorHandle:
+        return self._llm_interceptors.register_before(fn, name=name, priority=priority, where=where)
+
+    def intercept_after_llm_call(
+        self,
+        fn: Callable[..., Any],
+        *,
+        name: str | None = None,
+        priority: int = 0,
+        where: Mapping[str, Any] | Callable[..., Any] | None = None,
+    ) -> LLMInterceptorHandle:
+        return self._llm_interceptors.register_after(fn, name=name, priority=priority, where=where)
+
+    def intercept_on_error_llm_call(
+        self,
+        fn: Callable[..., Any],
+        *,
+        name: str | None = None,
+        priority: int = 0,
+        where: Mapping[str, Any] | Callable[..., Any] | None = None,
+    ) -> LLMInterceptorHandle:
+        return self._llm_interceptors.register_on_error(fn, name=name, priority=priority, where=where)
 
     def _get_context(self) -> Context:
         return self._context
@@ -171,65 +259,25 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         }
 
     def _register_pipelines(self) -> None:
-        memorize_initial_keys = {
-            "resource_url",
-            "modality",
-            "summary_prompt_override",
-            "memory_types",
-            "base_prompt",
-            "categories_prompt_str",
-            "ctx",
-            "store",
-            "category_ids",
-            "user",
-        }
-        retrieve_initial_keys = {
-            "original_query",
-            "context_queries",
-            "ctx",
-            "store",
-            "top_k",
-            "skip_rewrite",
-            "method",
-            "where",
-        }
-        patch_create_initial_keys = {
-            "memory_payload",
-            "ctx",
-            "store",
-            "user",
-        }
-        patch_update_initial_keys = {
-            "memory_id",
-            "memory_payload",
-            "ctx",
-            "store",
-            "user",
-        }
-        patch_delete_initial_keys = {
-            "memory_id",
-            "ctx",
-            "store",
-            "user",
-        }
-        crud_list_memories_initial_keys = {
-            "ctx",
-            "store",
-            "where",
-        }
         memo_workflow = self._build_memorize_workflow()
-        self._pipelines.register("memorize", memo_workflow, initial_state_keys=memorize_initial_keys)
+        memo_initial_keys = self._list_memorize_initial_keys()
+        self._pipelines.register("memorize", memo_workflow, initial_state_keys=memo_initial_keys)
         rag_workflow = self._build_rag_retrieve_workflow()
+        retrieve_initial_keys = self._list_retrieve_initial_keys()
         self._pipelines.register("retrieve_rag", rag_workflow, initial_state_keys=retrieve_initial_keys)
         llm_workflow = self._build_llm_retrieve_workflow()
         self._pipelines.register("retrieve_llm", llm_workflow, initial_state_keys=retrieve_initial_keys)
         patch_create_workflow = self._build_create_memory_item_workflow()
+        patch_create_initial_keys = CRUDMixin._list_create_memory_item_initial_keys()
         self._pipelines.register("patch_create", patch_create_workflow, initial_state_keys=patch_create_initial_keys)
         patch_update_workflow = self._build_update_memory_item_workflow()
+        patch_update_initial_keys = CRUDMixin._list_update_memory_item_initial_keys()
         self._pipelines.register("patch_update", patch_update_workflow, initial_state_keys=patch_update_initial_keys)
         patch_delete_workflow = self._build_delete_memory_item_workflow()
+        patch_delete_initial_keys = CRUDMixin._list_delete_memory_item_initial_keys()
         self._pipelines.register("patch_delete", patch_delete_workflow, initial_state_keys=patch_delete_initial_keys)
         crud_list_items_workflow = self._build_list_memory_items_workflow()
+        crud_list_memories_initial_keys = CRUDMixin._list_list_memory_items_initial_keys()
         self._pipelines.register(
             "crud_list_memory_items", crud_list_items_workflow, initial_state_keys=crud_list_memories_initial_keys
         )

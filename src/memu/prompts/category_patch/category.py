@@ -1,26 +1,45 @@
 PROMPT = """
-Your task is to read an existing user profile and an update about an specific memory, and then judge whether the profile need to be updated, and if so, generate the updated profile.
+# Task Objective
+Your task is to read an existing user profile and an update related to a specific memory topic, then determine whether the profile needs to be updated.
+If an update is required, you must generate the updated version of the profile based on the rules below.
 
-## Topic:
-{category}
+# Workflow
+1. Understand the Topic
+Focus only on memories relevant to the specified Topic.
 
-## Original content:
-<content>
-{original_content}
-</content>
+2. Analyze Original Content
+Review the existing profile content enclosed in <content>...</content>.
 
-## Update:
-{update_content}
+3. Analyze Update
+Determine whether the update represents:
+- A new memory
+- A variation of an existing memory
+- A discarded (invalidated) memory
 
-## Update Instructions:
-- If the update indicates that a new memory emerges, you should judge whether it is related to the topic, and if so, you should update the profile.
-- If the update indicates that a memory varies, you should judge whether the original information is contained in the profile. It's possible that the original information is not mentioned in the profile if it's less important or less relevant to the topic, if so, you don't need to update the profile. Or, you should update the profile to reflect the new information.
-- If the update indicates that a memory is discarded, you should judge whether the original information is contained in the profile. If so, you should update the profile to remove the corresponding information.
-- If the updated profile is empty, return a textual "empty" instead of an empty string.
+4. Decision Making
+Judge whether the profile requires modification based on relevance and importance.
+
+5. Generate Output
+- If an update is required, produce the revised profile content.
+- If not, explicitly indicate that no update is needed.
+
 
 # Response Format (JSON):
 {{
     "need_update": [bool, whether the profile needs to be updated]
     "updated_content": [str, the updated content of the profile if need_update is true, otherwise empty]
 }}
+
+
+# Input
+Topic:
+{category}
+
+Original content:
+<content>
+{original_content}
+</content>
+
+Update:
+{update_content}
 """

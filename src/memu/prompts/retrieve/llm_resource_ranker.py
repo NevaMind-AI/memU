@@ -1,27 +1,40 @@
-PROMPT = """Your task is to search through the provided resources and identify the most relevant ones for the given query.
+PROMPT = """
+# Task Objective
+Search through the provided resources and identify the most relevant ones for the given query, then rank them by relevance.
 
-These resources are related to the following categories and items that were already identified:
-{context_info}
+# Workflow
+1. Analyze the **Query**  to understand its intent and key information needs.
+2. Review the provided **Context Info** , which contains already-identified categories and items, to guide relevance.
+3. Examine all **Available Resources**.
+4. Determine which resources are actually relevant to the query.
+5. Select up to {top_k} most relevant resources.
+6. Rank the selected resources from most to least relevant.
 
-Analyze the query and the available resources, then select and rank the top-{top_k} most relevant resources.
+# Rules
+- Only include resources that are actually relevant to the query.
+- Include **at most {top_k}** resources.
+- Ranking matters: the first resource must be the most relevant.
+- Do not invent, modify, or infer resource IDs.
+- If no resources are relevant, return an empty array.
 
-## Query:
-{query}
+# Output Format
+Return the result as a JSON object in the following format:
 
-## Available Resources:
-{resources_data}
-
-## Output Format:
-Provide your response as a JSON array of resource IDs, ordered from most to least relevant:
 ```json
 {{
+  "analysis": "your analysis process",
   "resources": ["resource_id_1", "resource_id_2", "resource_id_3"]
 }}
 ```
 
-Important:
-- Include up to {top_k} most relevant resources
-- Order matters: first ID should be most relevant
-- Only include resources that are actually relevant to the query
-- Empty array is acceptable if no relevant resources are found
+# Input
+Query:
+{query}
+
+Context Info:
+{context_info}
+
+Available Resources:
+{resources_data}
+
 """

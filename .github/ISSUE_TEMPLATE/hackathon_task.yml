@@ -1,0 +1,65 @@
+name: Hackathon Task
+description: The official designated task for the memU track in the 2026 New Year Challenge
+title: "[2026NewYearChallenge] "
+labels: ["hackathon-task"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time to join the challenge, and best of luck!
+
+  - type: dropdown
+    id: label_hint
+    attributes:
+      label: Label
+      description: Pick the most appropriate label for this task.
+      options:
+        - hackathon-task
+    validations:
+      required: true
+
+  - type: input
+    id: assignees_hint
+    attributes:
+      label: Assignees
+      description: GitHub usernames to assign (comma-separated). If empty, maintainers will triage.
+      placeholder: "e.g., alice,bob"
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description*
+      description: What will this task implement?
+      placeholder: "Enter a clear and concise description of the task you want to implement."
+    validations:
+      required: true
+
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Requirements (optional)
+      description: What will your planned pull request include? (APIs, modules, tests, docs, etc.)
+      placeholder: |
+        - [ ] Implementation details
+        - [ ] Tests
+        - [ ] Docs / examples
+        - [ ] Compatibility notes
+    validations:
+      required: false
+
+  - type: textarea
+    id: review_criteria
+    attributes:
+      label: Review Criteria (optional)
+      description: How will this task be evaluated?
+      placeholder: |
+        Example:
+        - Correctness (passes tests, no regressions)
+        - Quality (readability, modularity)
+        - DX (good docs / examples)
+        - Impact (useful for memU users)
+    validations:
+      required: false

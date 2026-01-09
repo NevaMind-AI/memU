@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: GitHub Discussions
+    url: https://github.com/NevaMind-AI/memU/discussions
+    about: For questions and general discussions about memU
+  - name: Documentation
+    url: https://github.com/NevaMind-AI/memU/blob/main/README.md
+    about: Check out the memU documentation

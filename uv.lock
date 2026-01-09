@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.13"
 
 [[package]]
@@ -200,6 +200,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/7f/96/81e1ef5fbfd5090113a96e823dbe055e4c58d96ca73b1fb0ad9d26f9ec36/coverage-7.11.1-cp314-cp314t-win_amd64.whl", hash = "sha256:939f45e66eceb63c75e8eb8fc58bb7077c00f1a41b0e15c6ef02334a933cfe93", size = 221592, upload-time = "2025-11-07T10:52:33.724Z" },
     { url = "https://files.pythonhosted.org/packages/38/7a/a5d050de44951ac453a2046a0f3fb5471a4a557f0c914d00db27d543d94c/coverage-7.11.1-cp314-cp314t-win_arm64.whl", hash = "sha256:01c575bdbef35e3f023b50a146e9a75c53816e4f2569109458155cd2315f87d9", size = 219627, upload-time = "2025-11-07T10:52:36.285Z" },
     { url = "https://files.pythonhosted.org/packages/76/32/bd9f48c28e23b2f08946f8e83983617b00619f5538dbd7e1045fa7e88c00/coverage-7.11.1-py3-none-any.whl", hash = "sha256:0fa848acb5f1da24765cee840e1afe9232ac98a8f9431c6112c15b34e880b9e8", size = 208689, upload-time = "2025-11-07T10:52:38.646Z" },
+]
+
+[[package]]
+name = "defusedxml"
+version = "0.7.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520, upload-time = "2021-03-08T10:59:26.269Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604, upload-time = "2021-03-08T10:59:24.45Z" },
 ]
 
 [[package]]
@@ -508,10 +517,11 @@ wheels = [
 
 [[package]]
 name = "memu-py"
-version = "0.8.0"
+version = "1.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "defusedxml" },
     { name = "httpx" },
     { name = "numpy" },
     { name = "openai" },
@@ -538,6 +548,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "types-defusedxml" },
 ]
 docs = [
     { name = "mkdocs" },
@@ -550,6 +561,7 @@ lint = [
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "ruff" },
+    { name = "types-defusedxml" },
 ]
 test = [
     { name = "pytest" },
@@ -559,6 +571,7 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.14.0" },
+    { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "numpy", specifier = ">=2.3.4" },
     { name = "openai", specifier = ">=2.8.0" },
@@ -582,6 +595,7 @@ dev = [
     { name = "pytest", specifier = ">=8.4.2" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "ruff", specifier = ">=0.14.3" },
+    { name = "types-defusedxml", specifier = ">=0.7.0" },
 ]
 docs = [
     { name = "mkdocs", specifier = ">=1.6.1" },
@@ -594,6 +608,7 @@ lint = [
     { name = "mypy", specifier = ">=1.18.2" },
     { name = "pre-commit", specifier = ">=4.3.0" },
     { name = "ruff", specifier = ">=0.14.3" },
+    { name = "types-defusedxml", specifier = ">=0.7.0" },
 ]
 test = [
     { name = "pytest", specifier = ">=8.4.2" },
@@ -1288,6 +1303,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737, upload-time = "2024-11-24T20:12:22.481Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl", hash = "sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2", size = 78540, upload-time = "2024-11-24T20:12:19.698Z" },
+]
+
+[[package]]
+name = "types-defusedxml"
+version = "0.7.0.20250822"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/4a/5b997ae87bf301d1796f72637baa4e0e10d7db17704a8a71878a9f77f0c0/types_defusedxml-0.7.0.20250822.tar.gz", hash = "sha256:ba6c395105f800c973bba8a25e41b215483e55ec79c8ca82b6fe90ba0bc3f8b2", size = 10590, upload-time = "2025-08-22T03:02:59.547Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/13/73/8a36998cee9d7c9702ed64a31f0866c7f192ecffc22771d44dbcc7878f18/types_defusedxml-0.7.0.20250822-py3-none-any.whl", hash = "sha256:5ee219f8a9a79c184773599ad216123aedc62a969533ec36737ec98601f20dcf", size = 13430, upload-time = "2025-08-22T03:02:58.466Z" },
 ]
 
 [[package]]

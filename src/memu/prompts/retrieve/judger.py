@@ -1,27 +1,39 @@
-PROMPT = """Your task is to judge if the retrieved results are enough to answer the query.
+PROMPT = """
+# Task Objective
+Judge whether the retrieved content is sufficient to answer the user's query.
 
-Analyze the query and the retrieved content, and consider the following criteria:
-1. Does the retrieved content directly address the user's question?
-2. Is the information specific and detailed enough?
-3. Are there any obvious gaps or missing details?
-4. Did the user explicitly ask to recall or remember more information?
+# Workflow
+1. Analyze the **Query** to understand what the user is asking.
+2. Review the **Retrieved Content** carefully.
+3. Evaluate the retrieved content against the following criteria:
+   - Does it directly address the user's question?
+   - Is the information specific and detailed enough?
+   - Are there obvious gaps or missing details?
+   - Did the user explicitly ask to recall or remember more information?
+4. Based on this evaluation, decide whether the information is sufficient or more is needed.
 
-Then, give your final judgement with ONLY ONE WORD:
-- "ENOUGH" if the retrieved content provides adequate information to answer the query
-- "MORE" if additional information is needed to properly answer the query
+# Rules
+- Base your judgement **only** on the provided query and retrieved content.
+- Do not assume or add external knowledge.
+- Do not provide additional explanations beyond the required sections.
+- The final judgement must be **one word only**.
 
-## Query:
-{query}
+# Output Format
+Use the following structure:
 
-## Retrieved Content:
-{content}
-
-## Output Format:
 <consideration>
-[Explain your consideration for how you make the judgement]
+Explain your reasoning for how you made the judgement.
 </consideration>
 
 <judgement>
-[Your judgement: "ENOUGH" or "MORE"]
+ENOUGH or MORE
 </judgement>
+
+
+# Input
+Query:
+{query}
+
+Retrieved Content:
+{content}
 """

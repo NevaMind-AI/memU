@@ -5,17 +5,32 @@ import json
 import logging
 import pathlib
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, cast
+from xml.etree.ElementTree import Element
 
-import pendulum
+import defusedxml.ElementTree as ET
 from pydantic import BaseModel
 
+from memu.app.settings import CategoryConfig, CustomPrompt
 from memu.app.workflow import WorkflowMixin
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
-from memu.prompts.category_summary import CATEGORY_SUMMARY_PROMPT
-from memu.prompts.memory_type import DEFAULT_MEMORY_TYPES
-from memu.prompts.memory_type import PROMPTS as MEMORY_TYPE_PROMPTS
+from memu.prompts.category_summary import (
+    CUSTOM_PROMPT as CATEGORY_SUMMARY_CUSTOM_PROMPT,
+)
+from memu.prompts.category_summary import (
+    PROMPT as CATEGORY_SUMMARY_PROMPT,
+)
+from memu.prompts.memory_type import (
+    CUSTOM_PROMPTS as MEMORY_TYPE_CUSTOM_PROMPTS,
+)
+from memu.prompts.memory_type import (
+    CUSTOM_TYPE_CUSTOM_PROMPTS,
+    DEFAULT_MEMORY_TYPES,
+)
+from memu.prompts.memory_type import (
+    PROMPTS as MEMORY_TYPE_PROMPTS,
+)
 from memu.prompts.preprocess import PROMPTS as PREPROCESS_PROMPTS
 from memu.utils.conversation import format_conversation_for_preprocess
 from memu.utils.video import VideoFrameExtractor
@@ -33,10 +48,13 @@ if TYPE_CHECKING:
 class MemorizeMixin(WorkflowMixin):
     if TYPE_CHECKING:
         memorize_config: MemorizeConfig
-        category_configs: list[dict[str, str]]
+        category_configs: list[CategoryConfig]
+        category_config_map: dict[str, CategoryConfig]
         _category_prompt_str: str
         fs: LocalFS
         user_model: type[BaseModel]
+        # Method from service.py (not in WorkflowMixin):
+        _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
         # Inherited from WorkflowMixin:
         # - _run_workflow
         # - _get_context
@@ -53,7 +71,6 @@ class MemorizeMixin(WorkflowMixin):
         *,
         resource_url: str,
         modality: str,
-        summary_prompt: str | None = None,
         user: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         ctx = self._get_context()
@@ -62,14 +79,11 @@ class MemorizeMixin(WorkflowMixin):
         await self._ensure_categories_ready(ctx, store, user_scope)
 
         memory_types = self._resolve_memory_types()
-        base_prompt = self._resolve_summary_prompt(modality, summary_prompt)
 
         state: WorkflowState = {
             "resource_url": resource_url,
             "modality": modality,
-            "summary_prompt_override": summary_prompt,
             "memory_types": memory_types,
-            "base_prompt": base_prompt,
             "categories_prompt_str": self._category_prompt_str,
             "ctx": ctx,
             "store": store,
@@ -97,6 +111,7 @@ class MemorizeMixin(WorkflowMixin):
                 requires={"local_path", "modality", "raw_text"},
                 produces={"preprocessed_resources"},
                 capabilities={"llm"},
+                config={"chat_llm_profile": self.memorize_config.preprocess_llm_profile},
             ),
             WorkflowStep(
                 step_id="extract_items",
@@ -105,13 +120,13 @@ class MemorizeMixin(WorkflowMixin):
                 requires={
                     "preprocessed_resources",
                     "memory_types",
-                    "base_prompt",
                     "categories_prompt_str",
                     "modality",
                     "resource_url",
                 },
                 produces={"resource_plans"},
                 capabilities={"llm"},
+                config={"chat_llm_profile": self.memorize_config.memory_extract_llm_profile},
             ),
             WorkflowStep(
                 step_id="dedupe_merge",
@@ -128,6 +143,7 @@ class MemorizeMixin(WorkflowMixin):
                 requires={"resource_plans", "ctx", "store", "local_path", "modality", "user"},
                 produces={"resources", "items", "relations", "category_updates"},
                 capabilities={"db", "vector"},
+                config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
                 step_id="persist_index",
@@ -136,6 +152,7 @@ class MemorizeMixin(WorkflowMixin):
                 requires={"category_updates", "ctx", "store"},
                 produces={"categories"},
                 capabilities={"db", "llm"},
+                config={"chat_llm_profile": self.memorize_config.category_update_llm_profile},
             ),
             WorkflowStep(
                 step_id="build_response",
@@ -147,6 +164,19 @@ class MemorizeMixin(WorkflowMixin):
             ),
         ]
         return steps
+
+    @staticmethod
+    def _list_memorize_initial_keys() -> set[str]:
+        return {
+            "resource_url",
+            "modality",
+            "memory_types",
+            "categories_prompt_str",
+            "ctx",
+            "store",
+            "category_ids",
+            "user",
+        }
 
     async def _memorize_ingest_resource(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         local_path, raw_text = await self.fs.fetch(state["resource_url"], state["modality"])
@@ -182,7 +212,6 @@ class MemorizeMixin(WorkflowMixin):
                 modality=state["modality"],
                 memory_types=state["memory_types"],
                 text=text,
-                base_prompt=state["base_prompt"],
                 categories_prompt_str=state["categories_prompt_str"],
                 llm_client=llm_client,
             )
@@ -203,7 +232,7 @@ class MemorizeMixin(WorkflowMixin):
         return state
 
     async def _memorize_categorize_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        llm_client = self._get_step_llm_client(step_context)
+        embed_client = self._get_step_embedding_client(step_context)
         ctx = state["ctx"]
         store = state["store"]
         modality = state["modality"]
@@ -221,7 +250,7 @@ class MemorizeMixin(WorkflowMixin):
                 local_path=local_path,
                 caption=plan.get("caption"),
                 store=store,
-                embed_client=llm_client,
+                embed_client=embed_client,
                 user=user_scope,
             )
             resources.append(res)
@@ -235,7 +264,7 @@ class MemorizeMixin(WorkflowMixin):
                 structured_entries=entries,
                 ctx=ctx,
                 store=store,
-                embed_client=llm_client,
+                embed_client=embed_client,
                 user=user_scope,
             )
             items.extend(mem_items)
@@ -325,28 +354,66 @@ class MemorizeMixin(WorkflowMixin):
         embed_client: Any | None = None,
         user: Mapping[str, Any] | None = None,
     ) -> Resource:
+        caption_text = caption.strip() if caption else None
+        if caption_text:
+            client = embed_client or self._get_llm_client()
+            caption_embedding = (await client.embed([caption_text]))[0]
+        else:
+            caption_embedding = None
+
         res = store.resource_repo.create_resource(
             url=resource_url,
             modality=modality,
             local_path=local_path,
+            caption=caption_text,
+            embedding=caption_embedding,
             user_data=dict(user or {}),
         )
-        if caption:
-            caption_text = caption.strip()
-            if caption_text:
-                res.caption = caption_text
-                client = embed_client or self._get_llm_client()
-                res.embedding = (await client.embed([caption_text]))[0]
-                res.updated_at = pendulum.now()
+        # if caption:
+        #     caption_text = caption.strip()
+        #     if caption_text:
+        #         res.caption = caption_text
+        #         client = embed_client or self._get_llm_client()
+        #         res.embedding = (await client.embed([caption_text]))[0]
+        #         res.updated_at = pendulum.now()
         return res
 
     def _resolve_memory_types(self) -> list[MemoryType]:
         configured_types = self.memorize_config.memory_types or DEFAULT_MEMORY_TYPES
         return [cast(MemoryType, mtype) for mtype in configured_types]
 
-    def _resolve_summary_prompt(self, modality: str, override: str | None) -> str:
+    def _resolve_summary_prompt(self, modality: str, override: str | None) -> str | None:
         memo_settings = self.memorize_config
-        return override or memo_settings.summary_prompts.get(modality) or memo_settings.default_summary_prompt
+        result = memo_settings.multimodal_preprocess_prompts.get(modality)
+        if override:
+            return override
+        if result is None:
+            return (
+                memo_settings.default_category_summary_prompt
+                if isinstance(memo_settings.default_category_summary_prompt, str)
+                else None
+            )
+        return result if isinstance(result, str) else None
+
+    def _resolve_multimodal_preprocess_prompt(self, modality: str) -> str | None:
+        memo_settings = self.memorize_config
+        result = memo_settings.multimodal_preprocess_prompts.get(modality)
+        return result if isinstance(result, str) else None
+
+    @staticmethod
+    def _resolve_custom_prompt(prompt: str | CustomPrompt, templates: Mapping[str, str]) -> str:
+        if isinstance(prompt, str):
+            return prompt
+        valid_blocks = [
+            (block.ordinal, name, block.prompt or templates.get(name))
+            for name, block in prompt.items()
+            if (block.ordinal >= 0 and (block.prompt or templates.get(name)))
+        ]
+        if not valid_blocks:
+            # raise ValueError(f"No valid blocks contained in custom prompt: {prompt}")
+            return ""
+        sorted_blocks = sorted(valid_blocks)
+        return "\n\n".join(block for (_, _, block) in sorted_blocks if block is not None)
 
     async def _generate_structured_entries(
         self,
@@ -355,7 +422,6 @@ class MemorizeMixin(WorkflowMixin):
         modality: str,
         memory_types: list[MemoryType],
         text: str | None,
-        base_prompt: str,
         categories_prompt_str: str,
         segments: list[dict[str, int | str]] | None = None,
         llm_client: Any | None = None,
@@ -369,17 +435,18 @@ class MemorizeMixin(WorkflowMixin):
                 resource_text=text,
                 modality=modality,
                 memory_types=memory_types,
-                base_prompt=base_prompt,
                 categories_prompt_str=categories_prompt_str,
                 segments=segments,
                 llm_client=client,
             )
-            if entries:
-                return entries
-            no_result_entry = self._build_no_result_fallback(memory_types[0], resource_url, modality)
-            return [no_result_entry]
+            return entries
+            # if entries:
+            #     return entries
+            # no_result_entry = self._build_no_result_fallback(memory_types[0], resource_url, modality)
+            # return [no_result_entry]
 
-        return self._build_no_text_fallback(memory_types, resource_url, modality)
+        return []
+        # return self._build_no_text_fallback(memory_types, resource_url, modality)
 
     async def _generate_text_entries(
         self,
@@ -387,7 +454,6 @@ class MemorizeMixin(WorkflowMixin):
         resource_text: str,
         modality: str,
         memory_types: list[MemoryType],
-        base_prompt: str,
         categories_prompt_str: str,
         segments: list[dict[str, int | str]] | None,
         llm_client: Any | None = None,
@@ -397,7 +463,6 @@ class MemorizeMixin(WorkflowMixin):
                 resource_text=resource_text,
                 segments=segments,
                 memory_types=memory_types,
-                base_prompt=base_prompt,
                 categories_prompt_str=categories_prompt_str,
                 llm_client=llm_client,
             )
@@ -406,7 +471,6 @@ class MemorizeMixin(WorkflowMixin):
         return await self._generate_entries_from_text(
             resource_text=resource_text,
             memory_types=memory_types,
-            base_prompt=base_prompt,
             categories_prompt_str=categories_prompt_str,
             llm_client=llm_client,
         )
@@ -417,7 +481,6 @@ class MemorizeMixin(WorkflowMixin):
         resource_text: str,
         segments: list[dict[str, int | str]],
         memory_types: list[MemoryType],
-        base_prompt: str,
         categories_prompt_str: str,
         llm_client: Any | None = None,
     ) -> list[tuple[MemoryType, str, list[str]]]:
@@ -433,7 +496,6 @@ class MemorizeMixin(WorkflowMixin):
             segment_entries = await self._generate_entries_from_text(
                 resource_text=segment_text,
                 memory_types=memory_types,
-                base_prompt=base_prompt,
                 categories_prompt_str=categories_prompt_str,
                 llm_client=llm_client,
             )
@@ -445,7 +507,6 @@ class MemorizeMixin(WorkflowMixin):
         *,
         resource_text: str,
         memory_types: list[MemoryType],
-        base_prompt: str,
         categories_prompt_str: str,
         llm_client: Any | None = None,
     ) -> list[tuple[MemoryType, str, list[str]]]:
@@ -460,7 +521,8 @@ class MemorizeMixin(WorkflowMixin):
             )
             for mtype in memory_types
         ]
-        tasks = [client.summarize(prompt_text, system_prompt=base_prompt) for prompt_text in prompts]
+        valid_prompts = [prompt for prompt in prompts if prompt.strip()]
+        tasks = [client.summarize(prompt_text) for prompt_text in valid_prompts]
         responses = await asyncio.gather(*tasks)
         return self._parse_structured_entries(memory_types, responses)
 
@@ -469,12 +531,12 @@ class MemorizeMixin(WorkflowMixin):
     ) -> list[tuple[MemoryType, str, list[str]]]:
         entries: list[tuple[MemoryType, str, list[str]]] = []
         for mtype, response in zip(memory_types, responses, strict=True):
-            parsed = self._parse_memory_type_response(response)
-            if not parsed:
-                fallback_entry = response.strip()
-                if fallback_entry:
-                    entries.append((mtype, fallback_entry, []))
-                continue
+            parsed = self._parse_memory_type_response_xml(response)
+            # if not parsed:
+            #     fallback_entry = response.strip()
+            #     if fallback_entry:
+            #         entries.append((mtype, fallback_entry, []))
+            #     continue
             for entry in parsed:
                 content = (entry.get("content") or "").strip()
                 if not content:
@@ -571,12 +633,12 @@ class MemorizeMixin(WorkflowMixin):
             ctx.categories_ready = True
             return
         cat_texts = [self._category_embedding_text(cfg) for cfg in self.category_configs]
-        cat_vecs = await self._get_llm_client().embed(cat_texts)
+        cat_vecs = await self._get_llm_client("embedding").embed(cat_texts)
         ctx.category_ids = []
         ctx.category_name_to_id = {}
         for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
-            name = (cfg.get("name") or "").strip() or "Untitled"
-            description = (cfg.get("description") or "").strip()
+            name = cfg.name.strip() or "Untitled"
+            description = cfg.description.strip()
             cat = store.memory_category_repo.get_or_create_category(
                 name=name, description=description, embedding=vec, user_data=dict(user or {})
             )
@@ -585,9 +647,9 @@ class MemorizeMixin(WorkflowMixin):
         ctx.categories_ready = True
 
     @staticmethod
-    def _category_embedding_text(cat: dict[str, str]) -> str:
-        name = (cat.get("name") or "").strip() or "Untitled"
-        desc = (cat.get("description") or "").strip()
+    def _category_embedding_text(cat: CategoryConfig) -> str:
+        name = cat.name.strip() or "Untitled"
+        desc = cat.description.strip()
         return f"{name}: {desc}" if desc else name
 
     def _map_category_names_to_ids(self, names: list[str], ctx: Context) -> list[str]:
@@ -622,7 +684,16 @@ class MemorizeMixin(WorkflowMixin):
         Returns:
             List of preprocessed resources, each with 'text' and 'caption'
         """
-        template = PREPROCESS_PROMPTS.get(modality)
+        configured_prompt = self.memorize_config.multimodal_preprocess_prompts.get(modality)
+        if configured_prompt is None:
+            template = PREPROCESS_PROMPTS.get(modality)
+        elif isinstance(configured_prompt, str):
+            template = configured_prompt
+        else:
+            # No custom prompts configured for preprocssing for now,
+            # If the user decide to use their custom prompt, they must provide ALL prompt blocks.
+            template = self._resolve_custom_prompt(configured_prompt, {})
+
         if not template:
             return [{"text": text, "caption": None}]
 
@@ -838,13 +909,13 @@ Summary:"""
         processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
         return [{"text": processed_content or text, "caption": caption}]
 
-    def _format_categories_for_prompt(self, categories: list[dict[str, str]]) -> str:
+    def _format_categories_for_prompt(self, categories: list[CategoryConfig]) -> str:
         if not categories:
             return "No categories provided."
         lines = []
         for cat in categories:
-            name = (cat.get("name") or "").strip() or "Untitled"
-            desc = (cat.get("description") or "").strip()
+            name = cat.name.strip() or "Untitled"
+            desc = cat.description.strip()
             lines.append(f"- {name}: {desc}" if desc else f"- {name}")
         return "\n".join(lines)
 
@@ -874,9 +945,15 @@ Summary:"""
         return "\n".join(indexed_lines)
 
     def _build_memory_type_prompt(self, *, memory_type: MemoryType, resource_text: str, categories_str: str) -> str:
-        template = (
-            self.memorize_config.memory_type_prompts.get(memory_type) or MEMORY_TYPE_PROMPTS.get(memory_type) or ""
-        ).strip()
+        configured_prompt = self.memorize_config.memory_type_prompts.get(memory_type)
+        if configured_prompt is None:
+            template = MEMORY_TYPE_PROMPTS.get(memory_type)
+        elif isinstance(configured_prompt, str):
+            template = configured_prompt
+        else:
+            template = self._resolve_custom_prompt(
+                configured_prompt, MEMORY_TYPE_CUSTOM_PROMPTS.get(memory_type, CUSTOM_TYPE_CUSTOM_PROMPTS)
+            )
         if not template:
             return resource_text
         safe_resource = self._escape_prompt_value(resource_text)
@@ -886,12 +963,24 @@ Summary:"""
     def _build_category_summary_prompt(self, *, category: MemoryCategory, new_memories: list[str]) -> str:
         new_items_text = "\n".join(f"- {m}" for m in new_memories if m.strip())
         original = category.summary or ""
-        prompt = CATEGORY_SUMMARY_PROMPT
+        category_config = self.category_config_map.get(category.name)
+        configured_prompt = (
+            category_config and category_config.summary_prompt
+        ) or self.memorize_config.default_category_summary_prompt
+        if configured_prompt is None:
+            prompt = CATEGORY_SUMMARY_PROMPT
+        elif isinstance(configured_prompt, str):
+            prompt = configured_prompt
+        else:
+            prompt = self._resolve_custom_prompt(configured_prompt, CATEGORY_SUMMARY_CUSTOM_PROMPT)
+        target_length = (
+            category_config and category_config.target_length
+        ) or self.memorize_config.default_category_summary_target_length
         return prompt.format(
             category=self._escape_prompt_value(category.name),
             original_content=self._escape_prompt_value(original or ""),
             new_memory_items_text=self._escape_prompt_value(new_items_text or "No new memory items."),
-            target_length=self.memorize_config.category_summary_target_length,
+            target_length=target_length,
         )
 
     async def _update_category_summaries(
@@ -922,7 +1011,7 @@ Summary:"""
                 continue
             store.memory_category_repo.update_category(
                 category_id=cid,
-                summary=summary.strip(),
+                summary=summary.replace("```markdown", "").replace("```", "").strip(),
             )
 
     def _parse_conversation_preprocess(self, raw: str) -> tuple[str | None, str | None]:
@@ -1034,3 +1123,75 @@ Summary:"""
                 continue
             normalized.append(entry)
         return normalized
+
+    def _find_xml_boundaries(self, raw: str) -> tuple[int, int, str] | None:
+        """Find the start index, end index, and closing tag for XML root element."""
+        root_tags = ["item", "profile", "behaviors", "events", "knowledge", "skills"]
+        for tag in root_tags:
+            opening = f"<{tag}>"
+            closing = f"</{tag}>"
+            start_idx = raw.find(opening)
+            if start_idx != -1:
+                end_idx = raw.rfind(closing)
+                if end_idx != -1:
+                    return (start_idx, end_idx, closing)
+        return None
+
+    def _parse_memory_element(self, memory_elem: Element) -> dict[str, Any] | None:
+        """Parse a single memory XML element into a dict."""
+        memory_dict: dict[str, Any] = {}
+
+        content_elem = memory_elem.find("content")
+        if content_elem is not None and content_elem.text:
+            memory_dict["content"] = content_elem.text.strip()
+
+        categories_elem = memory_elem.find("categories")
+        if categories_elem is not None:
+            categories = [cat_elem.text.strip() for cat_elem in categories_elem.findall("category") if cat_elem.text]
+            memory_dict["categories"] = categories
+
+        if memory_dict.get("content") and memory_dict.get("categories"):
+            return memory_dict
+        return None
+
+    def _parse_memory_type_response_xml(self, raw: str) -> list[dict[str, Any]]:
+        """
+        Parse XML memory extraction output into a list of memory items.
+
+        Expected XML format (root tag varies by memory type):
+        <profile|behaviors|events|knowledge|skills>
+            <memory>
+                <content>...</content>
+                <categories>
+                    <category>...</category>
+                </categories>
+            </memory>
+        </...>
+        """
+        if not raw or not raw.strip():
+            return []
+        raw = raw.strip()
+
+        try:
+            boundaries = self._find_xml_boundaries(raw)
+            if boundaries is None:
+                logger.warning("Could not find valid root tag in XML response")
+                return []
+
+            start_idx, end_idx, end_tag = boundaries
+            xml_content = raw[start_idx : end_idx + len(end_tag)]
+            xml_content = xml_content.replace("&", "&amp;")
+
+            root = ET.fromstring(xml_content)
+            result: list[dict[str, Any]] = []
+
+            for memory_elem in root.findall("memory"):
+                parsed = self._parse_memory_element(memory_elem)
+                if parsed:
+                    result.append(parsed)
+
+        except ET.ParseError:
+            logger.exception("Failed to parse XML")
+            return []
+        else:
+            return result

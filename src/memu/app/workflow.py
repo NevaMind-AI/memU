@@ -154,24 +154,6 @@ class WorkflowMixin:
             return query.get("text", "") or ""
         return str(query)
 
-    def _category_embedding_text(self, category: dict[str, str]) -> str:
-        """Generate text for embedding a category.
-
-        Creates a combined string of category name and description
-        suitable for semantic similarity matching.
-
-        Args:
-            category: Category dictionary with 'name' and optionally 'description'
-
-        Returns:
-            Combined text for embedding
-        """
-        name = (category.get("name") or "").strip() or "Untitled"
-        desc = (category.get("description") or "").strip()
-        if desc:
-            return f"{name}: {desc}"
-        return name
-
     def _workflow_response(
         self,
         result: WorkflowState,

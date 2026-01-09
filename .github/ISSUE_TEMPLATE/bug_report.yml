@@ -1,0 +1,75 @@
+name: Bug Report
+description: Report a bug or issue with memU
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug in memU! Please fill in the following details.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and detailed description of the bug.
+      placeholder: "Enter a clear and concise description of what the bug is."
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: The environment where this bug occurred (e.g., operating system, CPU arch, etc.).
+      placeholder: "Enter details about the environment."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What are the steps to reproduce this issue?
+      placeholder: "Enter step-by-step instructions to reproduce the issue."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+      placeholder: "Describe what you expected to happen."
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version of memU are you using?
+      placeholder: e.g., v1.0.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How severe is the bug?
+      options:
+        - Critical
+        - Major
+        - Minor
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional_info
+    attributes:
+      label: Additional Information
+      description: Any other context or screenshots related to the bug.
+      placeholder: "Enter additional context or information."
+    validations:
+      required: false

@@ -1,18 +1,29 @@
 PROMPT = """
-Analyze the image and provide two outputs:
+# Task Objective
+Analyze the given image and produce two outputs:
+1. A **Detailed Description** that thoroughly explains what is shown in the image.
+2. A **Caption** that summarizes the image in a single sentence.
 
-## Task:
-1. **Detailed Description**: Provide a comprehensive description of the image including:
-   - Main subjects and objects in the image
-   - Actions or activities taking place
-   - Setting, background, and environment
-   - Any text, signs, or labels visible
-   - Colors, lighting, and composition
-   - Overall mood, atmosphere, or style
+# Workflow
+1. Examine the image carefully.
+2. Identify the **main subjects and objects** present.
+3. Describe any **actions or activities** taking place.
+4. Analyze the **setting, background, and environment**.
+5. Note any **visible text, signs, or labels**.
+6. Describe **colors, lighting, composition**, and visual layout.
+7. Infer the **overall mood, atmosphere, or style** of the image.
+8. Write a concise **one-sentence caption** that captures the essence of the image.
 
-2. **Caption**: Provide a one-sentence summary describing what the image is about
+# Rules
+- Base the description strictly on what is visible in the image.
+- Do not invent details that cannot be inferred visually.
+- Be comprehensive in the detailed description but clear and structured.
+- The caption must be **exactly one sentence**.
+- Use neutral and objective language.
 
-## Output Format:
+# Output Format
+Use the following structure:
+
 <detailed_description>
 [Provide the comprehensive description here]
 </detailed_description>
