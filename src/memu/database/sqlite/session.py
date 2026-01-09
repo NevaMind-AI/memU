@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, create_engine
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class SQLiteSessionManager:
         """Close the database engine and release resources."""
         try:
             self._engine.dispose()
-        except Exception:
+        except SQLAlchemyError:
             logger.exception("Failed to close SQLite engine")
 
     @property

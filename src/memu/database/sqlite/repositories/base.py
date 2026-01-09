@@ -57,7 +57,7 @@ class SQLiteRepoBase:
         # Handle list format
         try:
             return [float(x) for x in embedding]
-        except Exception:
+        except (ValueError, TypeError, OverflowError):
             logger.debug("Could not normalize embedding %s", embedding)
             return None
 

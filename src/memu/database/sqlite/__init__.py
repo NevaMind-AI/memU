@@ -21,9 +21,6 @@ def build_sqlite_database(
 
     Returns:
         Configured SQLiteStore instance.
-
-    Raises:
-        ValueError: If DSN is not provided in configuration.
     """
     dsn = config.metadata_store.dsn
     if not dsn:

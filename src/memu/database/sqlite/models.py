@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from datetime import datetime
 from typing import Any
@@ -13,6 +14,8 @@ from sqlalchemy import MetaData, String, Text
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
+
+logger = logging.getLogger(__name__)
 
 
 class TZDateTime(DateTime):
@@ -59,7 +62,8 @@ class SQLiteResourceModel(SQLiteBaseModelMixin, Resource):
             return None
         try:
             return list(json.loads(self.embedding_json))
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse resource embedding JSON: %s", e)
             return None
 
     @embedding.setter
@@ -87,7 +91,8 @@ class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):
             return None
         try:
             return list(json.loads(self.embedding_json))
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse memory item embedding JSON: %s", e)
             return None
 
     @embedding.setter
@@ -115,7 +120,8 @@ class SQLiteMemoryCategoryModel(SQLiteBaseModelMixin, MemoryCategory):
             return None
         try:
             return list(json.loads(self.embedding_json))
-        except (json.JSONDecodeError, TypeError):
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse category embedding JSON: %s", e)
             return None
 
     @embedding.setter

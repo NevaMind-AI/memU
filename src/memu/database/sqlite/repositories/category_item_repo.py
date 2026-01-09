@@ -81,19 +81,23 @@ class SQLiteCategoryItemRepo(SQLiteRepoBase, CategoryItemRepo):
 
         return result
 
-    def link_item_category(self, item_id: str, cat_id: str, user_data: dict[str, Any]) -> CategoryItem:
+    def link_item_category(self, item_id: str, category_id: str, user_data: dict[str, Any]) -> CategoryItem:
         """Create a link between an item and a category.
 
         Args:
             item_id: Memory item ID.
-            cat_id: Category ID.
+            category_id: Category ID.
             user_data: User scope data.
 
         Returns:
             Created CategoryItem relation.
         """
         # Check if relation already exists
-        where: dict[str, Any] = {"item_id": item_id, "category_id": cat_id, **user_data}
+        where: dict[str, Any] = {
+            "item_id": item_id,
+            "category_id": category_id,
+            **user_data,
+        }
         with self._sessions.session() as session:
             stmt = select(self._category_item_model)
             filters = self._build_filters(self._category_item_model, where)
@@ -116,7 +120,7 @@ class SQLiteCategoryItemRepo(SQLiteRepoBase, CategoryItemRepo):
             now = self._now()
             row = self._category_item_model(
                 item_id=item_id,
-                category_id=cat_id,
+                category_id=category_id,
                 created_at=now,
                 updated_at=now,
                 **user_data,
@@ -136,24 +140,26 @@ class SQLiteCategoryItemRepo(SQLiteRepoBase, CategoryItemRepo):
         self.relations.append(rel)
         return rel
 
-    def unlink_item_category(self, item_id: str, cat_id: str) -> None:
+    def unlink_item_category(self, item_id: str, category_id: str) -> None:
         """Remove a link between an item and a category.
 
         Args:
             item_id: Memory item ID.
-            cat_id: Category ID.
+            category_id: Category ID.
         """
         with self._sessions.session() as session:
             stmt = select(self._category_item_model).where(
                 self._category_item_model.item_id == item_id,
-                self._category_item_model.category_id == cat_id,
+                self._category_item_model.category_id == category_id,
             )
             row = session.exec(stmt).first()
             if row:
                 session.delete(row)
                 session.commit()
                 # Remove from cache
-                self.relations = [r for r in self.relations if not (r.item_id == item_id and r.category_id == cat_id)]
+                self.relations[:] = [
+                    r for r in self.relations if not (r.item_id == item_id and r.category_id == category_id)
+                ]
 
     def get_item_categories(self, item_id: str) -> list[CategoryItem]:
         """Get all category relations for a given item.
