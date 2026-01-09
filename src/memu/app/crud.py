@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from memu.app.service import Context
-    from memu.app.settings import PatchConfig
+    from memu.app.settings import CategoryConfig, PatchConfig
     from memu.database.interfaces import Database
 
 
 class CRUDMixin(WorkflowMixin):
     if TYPE_CHECKING:
         patch_config: PatchConfig
-        category_configs: list[dict[str, str]]
+        category_configs: list[CategoryConfig]
         user_model: type[BaseModel]
         # Methods from MemorizeMixin (not in WorkflowMixin):
         _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
