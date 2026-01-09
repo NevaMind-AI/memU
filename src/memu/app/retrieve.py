@@ -1195,7 +1195,7 @@ class RetrieveMixin:
         )
 
         client = llm_client or self._get_llm_client()
-        llm_response = await client.summarize(prompt, system_prompt=None)
+        llm_response = await client.summarize(prompt, system_prompt=None, response_format="json_object")
         return self._parse_llm_category_response(llm_response, store, categories=category_pool)
 
     async def _llm_rank_items(
@@ -1234,7 +1234,7 @@ class RetrieveMixin:
         )
 
         client = llm_client or self._get_llm_client()
-        llm_response = await client.summarize(prompt, system_prompt=None)
+        llm_response = await client.summarize(prompt, system_prompt=None, response_format="json_object")
         return self._parse_llm_item_response(llm_response, store, items=item_pool)
 
     async def _llm_rank_resources(
@@ -1279,7 +1279,7 @@ class RetrieveMixin:
         )
 
         client = llm_client or self._get_llm_client()
-        llm_response = await client.summarize(prompt, system_prompt=None)
+        llm_response = await client.summarize(prompt, system_prompt=None, response_format="json_object")
         return self._parse_llm_resource_response(llm_response, store, resources=resource_pool)
 
     def _parse_llm_category_response(

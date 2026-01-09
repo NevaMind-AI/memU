@@ -113,6 +113,10 @@ class LLMConfig(BaseModel):
         default=1,
         description="Maximum batch size for embedding API calls (used by SDK client backends).",
     )
+    reasoning_effort: Literal["low", "medium", "high"] | None = Field(
+        default="high",
+        description="Reasoning effort level for chat completions (low/medium/high). Default is 'high'.",
+    )
 
 
 class BlobConfig(BaseModel):

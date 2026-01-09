@@ -105,6 +105,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
                 chat_model=cfg.chat_model,
                 embed_model=cfg.embed_model,
                 embed_batch_size=cfg.embed_batch_size,
+                reasoning_effort=cfg.reasoning_effort,
             )
         elif backend == "httpx":
             return HTTPLLMClient(
