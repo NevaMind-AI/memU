@@ -30,6 +30,8 @@ class GeminiClient(OpenAISDKClient):
         if not api_key or api_key == "OPENAI_API_KEY":
             api_key = os.environ.get("GEMINI_API_KEY")
 
+        print(f"DEBUG: GeminiClient calculated base_url={base_url}")
+
         if not api_key:
             logger.warning("GEMINI_API_KEY not found. Gemini calls may fail.")
 

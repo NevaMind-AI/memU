@@ -1,4 +1,5 @@
 import os
+import traceback
 
 import pytest
 
@@ -27,6 +28,7 @@ async def test_gemini_flow():
             "default": {
                 "provider": "gemini",
                 "api_key": api_key,
+                "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
                 # Defaults in logic should handle model names if not specified,
                 # but let's be explicit to test config passing or rely on defaults to test those.
                 # Let's rely on defaults we set in service.py
@@ -48,6 +50,7 @@ async def test_gemini_flow():
         for cat in memory.get("categories", []):
             print(f"  - {cat.get('name')}: {(cat.get('summary') or '')[:80]}...")
     except Exception as e:
+        traceback.print_exc()
         pytest.fail(f"Memorization failed: {e}")
 
     queries = [

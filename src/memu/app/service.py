@@ -101,8 +101,10 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             from memu.llm.openai_sdk import OpenAISDKClient
 
             if cfg.provider == "gemini":
+                # If base_url is the default OpenAI one, pass None so GeminiClient uses its own default.
+                base_url = cfg.base_url if cfg.base_url != "https://api.openai.com/v1" else None
                 return GeminiClient(
-                    base_url=cfg.base_url if cfg.base_url != "https://api.openai.com/v1" else None,
+                    base_url=base_url,
                     api_key=cfg.api_key if cfg.api_key != "OPENAI_API_KEY" else None,
                     chat_model=cfg.chat_model if cfg.chat_model != "gpt-4o-mini" else "gemini-2.0-flash-exp",
                     embed_model=cfg.embed_model

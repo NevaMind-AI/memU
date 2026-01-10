@@ -178,6 +178,10 @@ service = MemUService(
 )
 ```
 
+```
+
+For detailed instructions on using **Google Gemini**, see [Gemini Provider Documentation](docs/gemini_provider.md).
+
 ---
 
 ## 📖 Core APIs
