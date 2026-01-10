@@ -368,6 +368,62 @@ View detailed experimental data: [memU-experiment](https://github.com/NevaMind-A
 
 ---
 
+## 🤝 How to Contribute
+
+We welcome contributions from the community! Whether you're fixing bugs, adding features, or improving documentation, your help is appreciated.
+
+### Getting Started
+
+To start contributing to MemU, you'll need to set up your development environment:
+
+#### Prerequisites
+- Python 3.13+
+- [uv](https://github.com/astral-sh/uv) (Python package manager)
+- Git
+
+#### Setup Development Environment
+
+```bash
+# 1. Fork and clone the repository
+git clone https://github.com/YOUR_USERNAME/memU.git
+cd memU
+
+# 2. Install development dependencies
+make install
+```
+
+The `make install` command will:
+- Create a virtual environment using `uv`
+- Install all project dependencies
+- Set up pre-commit hooks for code quality checks
+
+#### Running Quality Checks
+
+Before submitting your contribution, ensure your code passes all quality checks:
+
+```bash
+make check
+```
+
+The `make check` command runs:
+- **Lock file verification**: Ensures `pyproject.toml` consistency
+- **Pre-commit hooks**: Lints code with Ruff, formats with Black
+- **Type checking**: Runs `mypy` for static type analysis
+- **Dependency analysis**: Uses `deptry` to find obsolete dependencies
+
+### Contributing Guidelines
+
+For detailed contribution guidelines, code standards, and development practices, please see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+**Quick tips:**
+- Create a new branch for each feature or bug fix
+- Write clear commit messages
+- Add tests for new functionality
+- Update documentation as needed
+- Run `make check` before pushing
+
+---
+
 ## 📄 License
 
 [Apache License 2.0](LICENSE.txt)
