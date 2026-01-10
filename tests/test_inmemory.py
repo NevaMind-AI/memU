@@ -1,14 +1,25 @@
 import os
 
+import pytest
+
 from memu.app import MemoryService
 
 
-async def main():
+@pytest.mark.asyncio
+async def test_inmemory_flow():  # noqa: C901
     """Test with in-memory storage (default)."""
     api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        pytest.skip("OPENAI_API_KEY not set")
     # dashscope_api_key = os.environ.get("DASHSCOPE_API_KEY")
     # voyage_api_key = os.environ.get("VOYAGE_API_KEY")
-    file_path = os.path.abspath("example/example_conversation.json")
+    # Use relative path from project root or find file appropriately
+    # Assuming tests are run from project root or memU dir
+    base_dir = os.path.dirname(os.path.dirname(__file__))
+    file_path = os.path.join(base_dir, "example", "example_conversation.json")
+    if not os.path.exists(file_path):
+        # Fallback for when running from within tests dir or other locations
+        file_path = os.path.abspath("example/example_conversation.json")
 
     print("\n" + "=" * 60)
     print("[INMEMORY] Starting test...")
@@ -38,6 +49,7 @@ async def main():
     # Memorize
     print("\n[INMEMORY] Memorizing...")
     memory = await service.memorize(resource_url=file_path, modality="conversation", user={"user_id": "123"})
+    assert memory is not None
     for cat in memory.get("categories", []):
         print(f"  - {cat.get('name')}: {(cat.get('summary') or '')[:80]}...")
 
@@ -54,6 +66,7 @@ async def main():
     print("\n[INMEMORY] RETRIEVED - RAG")
     service.retrieve_config.method = "rag"
     result_rag = await service.retrieve(queries=queries, where={"user_id": "123"})
+    assert result_rag is not None
     print("  Categories:")
     for cat in result_rag.get("categories", [])[:3]:
         print(f"    - {cat.get('name')}: {(cat.get('summary') or cat.get('description', ''))[:80]}...")
@@ -69,6 +82,7 @@ async def main():
     print("\n[INMEMORY] RETRIEVED - LLM")
     service.retrieve_config.method = "llm"
     result_llm = await service.retrieve(queries=queries, where={"user_id": "123"})
+    assert result_llm is not None
     print("  Categories:")
     for cat in result_llm.get("categories", [])[:3]:
         print(f"    - {cat.get('name')}: {(cat.get('summary') or cat.get('description', ''))[:80]}...")
@@ -81,9 +95,3 @@ async def main():
             print(f"    - [{res.get('modality')}] {res.get('url', '')[:80]}...")
 
     print("\n[INMEMORY] Test completed!")
-
-
-if __name__ == "__main__":
-    import asyncio
-
-    asyncio.run(main())
