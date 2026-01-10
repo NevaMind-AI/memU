@@ -1,21 +1,46 @@
 import os
+from pathlib import Path
 
 from memu.app import MemoryService
 
 
+def _resolve_llm_profiles() -> dict[str, dict[str, str]]:
+    gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_KEY")
+    if gemini_key:
+        base_url = os.environ.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+        chat_model = os.environ.get("GEMINI_CHAT_MODEL", "gemini-flash-latest")
+        embed_model = os.environ.get("GEMINI_EMBED_MODEL", "text-embedding-004")
+        return {
+            "default": {
+                "api_key": gemini_key,
+                "base_url": base_url,
+                "chat_model": chat_model,
+                "embed_model": embed_model,
+                "client_backend": "httpx",
+                "provider": "gemini",
+            }
+        }
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        msg = "Please set OPENAI_API_KEY or GEMINI_API_KEY"
+        raise ValueError(msg)
+    return {"default": {"api_key": api_key}}
+
+
 async def main():
     """Test with in-memory storage (default)."""
-    api_key = os.environ.get("OPENAI_API_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("GEMINI_API_KEY")
     # dashscope_api_key = os.environ.get("DASHSCOPE_API_KEY")
     # voyage_api_key = os.environ.get("VOYAGE_API_KEY")
-    file_path = os.path.abspath("example/example_conversation.json")
+    file_path = str(Path(__file__).resolve().parent / "example" / "example_conversation.json")
 
     print("\n" + "=" * 60)
     print("[INMEMORY] Starting test...")
     print("=" * 60)
 
     service = MemoryService(
-        llm_profiles={"default": {"api_key": api_key}},
+        llm_profiles=_resolve_llm_profiles(),
         # llm_profiles={
         #     "default": {
         #         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
