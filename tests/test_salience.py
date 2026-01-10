@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 import pytest
 
@@ -34,7 +34,7 @@ def salience_score(
     if last_reinforced_at is None:
         recency_factor = 0.5
     else:
-        now = datetime.now(last_reinforced_at.tzinfo) if last_reinforced_at.tzinfo else datetime.utcnow()
+        now = datetime.now(last_reinforced_at.tzinfo) if last_reinforced_at.tzinfo else datetime.now(UTC)
         days_ago = (now - last_reinforced_at).total_seconds() / 86400
         recency_factor = math.exp(-0.693 * days_ago / recency_decay_days)
 
@@ -113,21 +113,21 @@ class TestSalienceScore:
         score = salience_score(
             similarity=0.8,
             reinforcement_count=1,
-            last_reinforced_at=datetime.utcnow(),
+            last_reinforced_at=datetime.now(UTC),
             recency_decay_days=30.0,
         )
         assert score > 0
 
     def test_higher_reinforcement_higher_score(self):
         """Higher reinforcement count should increase score."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         score_low = salience_score(0.8, 1, now, 30.0)
         score_high = salience_score(0.8, 10, now, 30.0)
         assert score_high > score_low
 
     def test_recent_memory_higher_score(self):
         """More recent memories should score higher."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         old = now - timedelta(days=60)
 
         score_recent = salience_score(0.8, 1, now, 30.0)
@@ -143,7 +143,7 @@ class TestSalienceScore:
 
     def test_reinforcement_vs_recency_tradeoff(self):
         """High reinforcement old memory vs low reinforcement recent memory."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         old = now - timedelta(days=30)  # 30 days ago = half-life
 
         # Memory A: high reinforcement (10), old (30 days)
@@ -164,7 +164,7 @@ class TestCosineTopkSalience:
     def test_basic_retrieval(self):
         """Should return top-k results sorted by salience."""
         query = [1.0, 0.0, 0.0]
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
 
         corpus = [
             ("id1", [1.0, 0.0, 0.0], 1, now),  # Perfect match, low reinforcement
@@ -181,7 +181,7 @@ class TestCosineTopkSalience:
     def test_skips_none_embeddings(self):
         """Should skip items with None embeddings."""
         query = [1.0, 0.0, 0.0]
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
 
         corpus = [
             ("id1", [1.0, 0.0, 0.0], 1, now),
@@ -196,7 +196,7 @@ class TestCosineTopkSalience:
     def test_respects_k_limit(self):
         """Should return at most k results."""
         query = [1.0, 0.0, 0.0]
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
 
         corpus = [
             ("id1", [1.0, 0.0, 0.0], 1, now),
