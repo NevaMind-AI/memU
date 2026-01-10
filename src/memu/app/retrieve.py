@@ -329,16 +329,58 @@ class RetrieveMixin:
         store = state["store"]
         where_filters = state.get("where") or {}
         items_pool = store.memory_item_repo.list_items(where_filters)
+
+        # Check if reference-aware retrieval is enabled
+        use_refs = getattr(self.retrieve_config.item, 'use_category_references', False)
+        referenced_item_ids: set[str] = set()
+
+        if use_refs:
+            # Extract item IDs from category summary references
+            from memu.utils.references import extract_references
+            category_hits = state.get("category_hits") or []
+            summary_lookup = state.get("category_summary_lookup", {})
+            category_pool = state.get("category_pool") or {}
+
+            for cid, _score in category_hits:
+                # Get summary from lookup or category
+                summary = summary_lookup.get(cid)
+                if not summary:
+                    cat = category_pool.get(cid)
+                    if cat:
+                        summary = cat.summary
+                if summary:
+                    refs = extract_references(summary)
+                    referenced_item_ids.update(refs)
+
         qvec = state.get("query_vector")
         if qvec is None:
             embed_client = self._get_step_embedding_client(step_context)
             qvec = (await embed_client.embed([state["active_query"]]))[0]
             state["query_vector"] = qvec
-        state["item_hits"] = store.memory_item_repo.vector_search_items(
+
+        # Get vector search results
+        vector_hits = store.memory_item_repo.vector_search_items(
             qvec,
             self.retrieve_config.item.top_k,
             where=where_filters,
         )
+
+        # If we have referenced items, prioritize them
+        if referenced_item_ids:
+            # Add referenced items that aren't already in hits
+            existing_ids = {item_id for item_id, _ in vector_hits}
+            ref_hits = []
+            for ref_id in referenced_item_ids:
+                if ref_id not in existing_ids:
+                    # Give referenced items a high score (1.0) since they're explicitly cited
+                    ref_hits.append((ref_id, 1.0))
+
+            # Combine: referenced items first, then vector search results
+            state["item_hits"] = ref_hits + vector_hits
+            state["referenced_item_ids"] = list(referenced_item_ids)
+        else:
+            state["item_hits"] = vector_hits
+
         state["item_pool"] = items_pool
         return state
 
