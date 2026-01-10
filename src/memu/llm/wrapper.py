@@ -271,6 +271,40 @@ class LLMClientWrapper:
             response_builder=_build_text_response_view,
         )
 
+    async def chat(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int | None = None,
+        system_prompt: str | None = None,
+        temperature: float = 0.2,
+    ) -> Any:
+        request_view = _build_text_request_view(
+            "chat",
+            prompt,
+            metadata={
+                "system_prompt_chars": len(system_prompt or ""),
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            },
+        )
+
+        async def _call() -> Any:
+            return await self._client.chat(
+                prompt,
+                max_tokens=max_tokens,
+                system_prompt=system_prompt,
+                temperature=temperature,
+            )
+
+        return await self._invoke(
+            kind="chat",
+            call_fn=_call,
+            request_view=request_view,
+            model=self._chat_model,
+            response_builder=_build_text_response_view,
+        )
+
     async def vision(
         self,
         prompt: str,

@@ -407,7 +407,7 @@ class PatchMixin:
             prompt = self._build_category_patch_prompt(
                 category=cat, content_before=content_before, content_after=content_after
             )
-            tasks.append(client.summarize(prompt, system_prompt=None))
+            tasks.append(client.chat(prompt))
             target_ids.append(cid)
         if not tasks:
             return
