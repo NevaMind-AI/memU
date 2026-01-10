@@ -128,6 +128,15 @@ class RetrieveCategoryConfig(BaseModel):
 class RetrieveItemConfig(BaseModel):
     enabled: bool = Field(default=True, description="Whether to enable item retrieval.")
     top_k: int = Field(default=5, description="Total number of items to retrieve.")
+    # Salience-aware retrieval settings
+    ranking: Literal["similarity", "salience"] = Field(
+        default="similarity",
+        description="Ranking strategy: 'similarity' (cosine only) or 'salience' (weighted by reinforcement + recency).",
+    )
+    recency_decay_days: float = Field(
+        default=30.0,
+        description="Half-life in days for recency decay in salience scoring. After this many days, recency factor is ~0.5.",
+    )
 
 
 class RetrieveResourceConfig(BaseModel):
@@ -202,6 +211,9 @@ class PatchConfig(BaseModel):
 
 class DefaultUserModel(BaseModel):
     user_id: str | None = None
+    # Agent/session scoping for multi-agent and multi-session memory filtering
+    agent_id: str | None = None
+    session_id: str | None = None
 
 
 class UserConfig(BaseModel):

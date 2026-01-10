@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any
 
-from memu.database.models import MemoryItem, MemoryType
+from memu.database.models import MemoryItem, MemoryType, compute_content_hash
 from memu.database.postgres.repositories.base import PostgresRepoBase
 from memu.database.postgres.session import SessionManager
 from memu.database.state import DatabaseState
@@ -60,17 +62,42 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         embedding: list[float],
         user_data: dict[str, Any],
     ) -> MemoryItem:
-        item = self._memory_item_model(
-            resource_id=resource_id,
-            memory_type=memory_type,
-            summary=summary,
-            embedding=self._prepare_embedding(embedding),
-            **user_data,
-            created_at=self._now(),
-            updated_at=self._now(),
-        )
+        from sqlmodel import select
+
+        content_hash = compute_content_hash(summary, memory_type)
 
         with self._sessions.session() as session:
+            # Check for existing item with same hash in same scope (deduplication)
+            filters = [self._sqla_models.MemoryItem.content_hash == content_hash]
+            filters.extend(self._build_filters(self._sqla_models.MemoryItem, user_data))
+
+            existing = session.scalar(select(self._sqla_models.MemoryItem).where(*filters))
+
+            if existing:
+                # Reinforce existing memory instead of creating duplicate
+                existing.reinforcement_count = getattr(existing, "reinforcement_count", 1) + 1
+                existing.last_reinforced_at = self._now()
+                existing.updated_at = self._now()
+                session.add(existing)
+                session.commit()
+                session.refresh(existing)
+                existing.embedding = self._normalize_embedding(existing.embedding)
+                return self._cache_item(existing)
+
+            # Create new item
+            item = self._memory_item_model(
+                resource_id=resource_id,
+                memory_type=memory_type,
+                summary=summary,
+                embedding=self._prepare_embedding(embedding),
+                content_hash=content_hash,
+                reinforcement_count=1,
+                last_reinforced_at=self._now(),
+                **user_data,
+                created_at=self._now(),
+                updated_at=self._now(),
+            )
+
             session.add(item)
             session.commit()
             session.refresh(item)
@@ -120,10 +147,18 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
             session.commit()
 
     def vector_search_items(
-        self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+        *,
+        ranking: str = "similarity",
+        recency_decay_days: float = 30.0,
     ) -> list[tuple[str, float]]:
-        if not self._use_vector:
-            return self._vector_search_local(query_vec, top_k, where=where)
+        if not self._use_vector or ranking == "salience":
+            # For salience ranking or when pgvector is not available, use local search
+            return self._vector_search_local(query_vec, top_k, where=where, ranking=ranking, recency_decay_days=recency_decay_days)
+
         from sqlmodel import select
 
         distance = self._sqla_models.MemoryItem.embedding.cosine_distance(query_vec)
@@ -149,7 +184,13 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
                 self._cache_item(row)
 
     def _vector_search_local(
-        self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+        *,
+        ranking: str = "similarity",
+        recency_decay_days: float = 30.0,
     ) -> list[tuple[str, float]]:
         scored: list[tuple[str, float]] = []
         for item in self.items.values():
@@ -157,10 +198,43 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
                 continue
             if not self._matches_where(item, where):
                 continue
-            score = self._cosine(query_vec, item.embedding)
+
+            similarity = self._cosine(query_vec, item.embedding)
+
+            if ranking == "salience":
+                # Salience-aware scoring
+                score = self._salience_score(
+                    similarity,
+                    getattr(item, "reinforcement_count", 1),
+                    getattr(item, "last_reinforced_at", None),
+                    recency_decay_days,
+                )
+            else:
+                score = similarity
+
             scored.append((item.id, score))
+
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored[:top_k]
+
+    @staticmethod
+    def _salience_score(
+        similarity: float,
+        reinforcement_count: int,
+        last_reinforced_at: datetime | None,
+        recency_decay_days: float,
+    ) -> float:
+        """Compute salience score: similarity × reinforcement × recency."""
+        reinforcement_factor = math.log(reinforcement_count + 1)
+
+        if last_reinforced_at is None:
+            recency_factor = 0.5
+        else:
+            now = datetime.now(last_reinforced_at.tzinfo) if last_reinforced_at.tzinfo else datetime.utcnow()
+            days_ago = (now - last_reinforced_at).total_seconds() / 86400
+            recency_factor = math.exp(-0.693 * days_ago / recency_decay_days)
+
+        return similarity * reinforcement_factor * recency_factor
 
     def _cache_item(self, item: MemoryItem) -> MemoryItem:
         self.items[item.id] = item
