@@ -102,6 +102,37 @@ For enterprise deployment and custom solutions, contact **info@nevamind.ai**
 
 📚 **[Full API Documentation](https://memu.pro/docs#cloud-version)**
 
+#### Python SDK
+
+Use our Python SDK for easy programmatic access:
+
+```python
+from memu.sdk import MemUClient
+
+async with MemUClient(api_key="your_key") as client:
+    # Memorize a conversation
+    result = await client.memorize(
+        conversation=[
+            {"role": "user", "content": "I love Italian food"},
+            {"role": "assistant", "content": "Great taste!"},
+        ],
+        user_id="user_123",
+        agent_id="my_agent"
+    )
+
+    # Retrieve memories
+    memories = await client.retrieve(
+        query="What are the user's preferences?",
+        user_id="user_123",
+        agent_id="my_agent"
+    )
+
+    for item in memories.items:
+        print(f"[{item.memory_type}] {item.content}")
+```
+
+📚 **[SDK Documentation](docs/SDK.md)**
+
 ---
 
 ### Option 2: Self-Hosted
