@@ -8,6 +8,7 @@ import httpx
 
 from memu.embedding.backends.base import EmbeddingBackend
 from memu.embedding.backends.doubao import DoubaoEmbeddingBackend, DoubaoMultimodalEmbeddingInput
+from memu.embedding.backends.gemini import GeminiEmbeddingBackend
 from memu.embedding.backends.openai import OpenAIEmbeddingBackend
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 EMBEDDING_BACKENDS: dict[str, Callable[[], EmbeddingBackend]] = {
     OpenAIEmbeddingBackend.name: OpenAIEmbeddingBackend,
     DoubaoEmbeddingBackend.name: DoubaoEmbeddingBackend,
+    GeminiEmbeddingBackend.name: GeminiEmbeddingBackend,
 }
 
 
@@ -56,8 +58,9 @@ class HTTPEmbeddingClient:
             List of embedding vectors
         """
         payload = self.backend.build_embedding_payload(inputs=inputs, embed_model=self.embed_model)
+        endpoint = self._format_endpoint(self.embedding_endpoint, self.embed_model)
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
-            resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers())
+            resp = await client.post(endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
             data = resp.json()
         logger.debug("HTTP embedding response: %s", data)
@@ -127,7 +130,18 @@ class HTTPEmbeddingClient:
         return self.backend.parse_multimodal_embedding_response(data)
 
     def _headers(self) -> dict[str, str]:
+        if self.provider == "gemini":
+            return {"x-goog-api-key": self.api_key}
         return {"Authorization": f"Bearer {self.api_key}"}
+
+    @staticmethod
+    def _format_endpoint(endpoint: str, model: str) -> str:
+        if "{model}" not in endpoint:
+            return endpoint
+        normalized = model
+        if "models/{model}" in endpoint and normalized.startswith("models/"):
+            normalized = normalized[len("models/") :]
+        return endpoint.replace("{model}", normalized)
 
     def _load_backend(self, provider: str) -> EmbeddingBackend:
         factory = EMBEDDING_BACKENDS.get(provider)
