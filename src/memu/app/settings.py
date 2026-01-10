@@ -137,6 +137,11 @@ class RetrieveItemConfig(BaseModel):
         default=30.0,
         description="Half-life in days for recency decay in salience scoring. After this many days, recency factor is ~0.5.",
     )
+    # Reference-aware retrieval
+    use_category_references: bool = Field(
+        default=False,
+        description="When category retrieval is insufficient, follow [ref:ITEM_ID] citations to fetch referenced items.",
+    )
 
 
 class RetrieveResourceConfig(BaseModel):
@@ -203,6 +208,11 @@ class MemorizeConfig(BaseModel):
         description="Target max length for auto-generated category summaries.",
     )
     category_update_llm_profile: str = Field(default="default", description="LLM profile for category summary.")
+    # Reference tracking for category summaries
+    enable_item_references: bool = Field(
+        default=False,
+        description="Enable inline [ref:ITEM_ID] citations in category summaries linking to source memory items.",
+    )
 
 
 class PatchConfig(BaseModel):

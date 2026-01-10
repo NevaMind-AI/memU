@@ -577,13 +577,21 @@ class MemorizeMixin:
         store: Database,
         embed_client: Any | None = None,
         user: Mapping[str, Any] | None = None,
-    ) -> tuple[list[MemoryItem], list[CategoryItem], dict[str, list[str]]]:
+    ) -> tuple[list[MemoryItem], list[CategoryItem], dict[str, list[tuple[str, str]]]]:
+        """
+        Persist memory items and track category updates.
+
+        Returns:
+            Tuple of (items, relations, category_updates)
+            where category_updates maps category_id -> list of (item_id, summary) tuples
+        """
         summary_payloads = [content for _, content, _ in structured_entries]
         client = embed_client or self._get_llm_client()
         item_embeddings = await client.embed(summary_payloads) if summary_payloads else []
         items: list[MemoryItem] = []
         rels: list[CategoryItem] = []
-        category_memory_updates: dict[str, list[str]] = {}
+        # Changed: now stores (item_id, summary) tuples for reference support
+        category_memory_updates: dict[str, list[tuple[str, str]]] = {}
 
         for (memory_type, summary_text, cat_names), emb in zip(structured_entries, item_embeddings, strict=True):
             item = store.memory_item_repo.create_item(
@@ -597,7 +605,8 @@ class MemorizeMixin:
             mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
             for cid in mapped_cat_ids:
                 rels.append(store.category_item_repo.link_item_category(item.id, cid, user_data=dict(user or {})))
-                category_memory_updates.setdefault(cid, []).append(summary_text)
+                # Store (item_id, summary) tuple for reference support
+                category_memory_updates.setdefault(cid, []).append((item.id, summary_text))
 
         return items, rels, category_memory_updates
 
@@ -960,8 +969,45 @@ Summary:"""
         safe_categories = self._escape_prompt_value(categories_str)
         return template.format(resource=safe_resource, categories_str=safe_categories)
 
-    def _build_category_summary_prompt(self, *, category: MemoryCategory, new_memories: list[str]) -> str:
-        new_items_text = "\n".join(f"- {m}" for m in new_memories if m.strip())
+    def _build_category_summary_prompt(
+        self,
+        *,
+        category: MemoryCategory,
+        new_memories: list[str] | list[tuple[str, str]],
+    ) -> str:
+        """
+        Build the prompt for updating a category summary.
+
+        Args:
+            category: The category to update
+            new_memories: Either list of summary strings (legacy) or list of (item_id, summary) tuples (with refs)
+        """
+        # Check if references are enabled and we have (id, summary) tuples
+        enable_refs = getattr(self.memorize_config, 'enable_item_references', False)
+
+        if enable_refs and new_memories and isinstance(new_memories[0], tuple):
+            # Use reference-aware prompt
+            from memu.prompts.category_summary_with_refs import PROMPT as REF_PROMPT
+            items_text = "\n".join(f"- [{item_id}] {summary}" for item_id, summary in new_memories if summary.strip())
+            original = category.summary or ""
+            category_config = self.category_config_map.get(category.name)
+            target_length = (
+                category_config and category_config.target_length
+            ) or self.memorize_config.default_category_summary_target_length
+            return REF_PROMPT.format(
+                category=self._escape_prompt_value(category.name),
+                original_content=self._escape_prompt_value(original or ""),
+                new_memory_items_with_ids=self._escape_prompt_value(items_text or "No new memory items."),
+                target_length=target_length,
+            )
+
+        # Legacy behavior: just summary strings
+        if new_memories and isinstance(new_memories[0], tuple):
+            # Extract just summaries if we got tuples but refs disabled
+            new_items_text = "\n".join(f"- {summary}" for _, summary in new_memories if summary.strip())
+        else:
+            new_items_text = "\n".join(f"- {m}" for m in new_memories if isinstance(m, str) and m.strip())
+
         original = category.summary or ""
         category_config = self.category_config_map.get(category.name)
         configured_prompt = (
@@ -985,7 +1031,7 @@ Summary:"""
 
     async def _update_category_summaries(
         self,
-        updates: dict[str, list[str]],
+        updates: dict[str, list[tuple[str, str]]] | dict[str, list[str]],
         ctx: Context,
         store: Database,
         llm_client: Any | None = None,
