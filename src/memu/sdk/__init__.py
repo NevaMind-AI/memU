@@ -13,15 +13,16 @@ Example:
 
     # Memorize a conversation
     result = await client.memorize(
-        resource_url="path/to/conversation.json",
-        modality="conversation",
-        user_id="user_123"
+        conversation_text="User: I love sci-fi novels.\nAssistant: Noted, you prefer sci-fi.",
+        user_id="user_123",
+        agent_id="agent_123",
     )
 
     # Retrieve memories
     memories = await client.retrieve(
         query="What are the user's preferences?",
-        user_id="user_123"
+        user_id="user_123",
+        agent_id="agent_123",
     )
 """
 

@@ -3,6 +3,10 @@
 MemU SDK Complete Integration Test
 
 This script tests all SDK functionality against the live Cloud API.
+It is NOT designed to be run by pytest - run it manually with:
+
+    MEMU_API_KEY=your_key python tests/test_sdk_integration.py
+
 """
 
 from __future__ import annotations
@@ -12,18 +16,24 @@ import os
 import sys
 import time
 
+# Skip this module when running under pytest
+# This is a manual integration test script, not a pytest test suite
+import pytest
+
+pytestmark = pytest.mark.skip(reason="Manual integration test - run with: python tests/test_sdk_integration.py")
+
 # Add src to path for local development
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from memu.sdk import MemorizeResult, MemoryCategory, MemoryItem, MemUClient, RetrieveResult, TaskStatus
-from memu.sdk.client import (
+from memu.sdk import MemorizeResult, MemoryCategory, MemoryItem, MemUClient, RetrieveResult, TaskStatus  # noqa: E402
+from memu.sdk.client import (  # noqa: E402
     MemUAuthenticationError,
     MemUClientError,
 )
-from memu.sdk.models import TaskStatusEnum
+from memu.sdk.models import TaskStatusEnum  # noqa: E402
 
 
-class TestResult:
+class IntegrationTestResult:
     """Track test results."""
 
     def __init__(self) -> None:
@@ -57,7 +67,7 @@ class TestResult:
             print("⚠️ Some tests failed")
 
 
-async def test_client_initialization(results: TestResult) -> None:
+async def test_client_initialization(results: IntegrationTestResult) -> None:
     """Test 1: Client initialization."""
     print("\n📋 Test 1: Client Initialization")
 
@@ -98,7 +108,7 @@ async def test_client_initialization(results: TestResult) -> None:
 
 
 async def test_memorize_with_conversation(
-    client: MemUClient, results: TestResult, user_id: str, agent_id: str
+    client: MemUClient, results: IntegrationTestResult, user_id: str, agent_id: str
 ) -> str | None:
     """Test 2: Memorize with conversation list."""
     print("\n📋 Test 2: Memorize (conversation list)")
@@ -136,7 +146,9 @@ async def test_memorize_with_conversation(
         return result.task_id
 
 
-async def test_memorize_with_text(client: MemUClient, results: TestResult, user_id: str, agent_id: str) -> str | None:
+async def test_memorize_with_text(
+    client: MemUClient, results: IntegrationTestResult, user_id: str, agent_id: str
+) -> str | None:
     """Test 3: Memorize with conversation_text."""
     print("\n📋 Test 3: Memorize (conversation_text)")
 
@@ -164,7 +176,7 @@ User: I'm working on "Stairway to Heaven" but it's quite challenging."""
         return result.task_id
 
 
-async def test_get_task_status(client: MemUClient, results: TestResult, task_id: str) -> None:
+async def test_get_task_status(client: MemUClient, results: IntegrationTestResult, task_id: str) -> None:
     """Test 4: Get task status."""
     print("\n📋 Test 4: Get Task Status")
 
@@ -193,7 +205,7 @@ async def test_get_task_status(client: MemUClient, results: TestResult, task_id:
         results.fail("Get task status", str(e))
 
 
-async def test_wait_for_completion(client: MemUClient, results: TestResult, task_id: str) -> None:
+async def test_wait_for_completion(client: MemUClient, results: IntegrationTestResult, task_id: str) -> None:
     """Test 5: Wait for task completion (poll status)."""
     print("\n📋 Test 5: Wait for Task Completion")
 
@@ -226,7 +238,7 @@ async def test_wait_for_completion(client: MemUClient, results: TestResult, task
         results.fail("Wait for task completion", str(e))
 
 
-async def test_list_categories(client: MemUClient, results: TestResult, user_id: str) -> None:
+async def test_list_categories(client: MemUClient, results: IntegrationTestResult, user_id: str) -> None:
     """Test 6: List categories."""
     print("\n📋 Test 6: List Categories")
 
@@ -254,7 +266,9 @@ async def test_list_categories(client: MemUClient, results: TestResult, user_id:
         results.fail("List categories", str(e))
 
 
-async def test_retrieve_simple_query(client: MemUClient, results: TestResult, user_id: str, agent_id: str) -> None:
+async def test_retrieve_simple_query(
+    client: MemUClient, results: IntegrationTestResult, user_id: str, agent_id: str
+) -> None:
     """Test 7: Retrieve with simple text query."""
     print("\n📋 Test 7: Retrieve (simple query)")
 
@@ -289,7 +303,7 @@ async def test_retrieve_simple_query(client: MemUClient, results: TestResult, us
 
 
 async def test_retrieve_conversation_query(
-    client: MemUClient, results: TestResult, user_id: str, agent_id: str
+    client: MemUClient, results: IntegrationTestResult, user_id: str, agent_id: str
 ) -> None:
     """Test 8: Retrieve with conversation context."""
     print("\n📋 Test 8: Retrieve (conversation context)")
@@ -319,7 +333,7 @@ async def test_retrieve_conversation_query(
         results.fail("Retrieve conversation query", str(e))
 
 
-async def test_sync_wrappers(api_key: str, results: TestResult, user_id: str, agent_id: str) -> None:
+async def test_sync_wrappers(api_key: str, results: IntegrationTestResult, user_id: str, agent_id: str) -> None:
     """Test 9: Synchronous wrapper methods."""
     print("\n📋 Test 9: Synchronous Wrappers")
 
@@ -350,7 +364,7 @@ async def test_sync_wrappers(api_key: str, results: TestResult, user_id: str, ag
         results.fail("Sync wrappers", str(e))
 
 
-async def test_error_handling(results: TestResult) -> None:
+async def test_error_handling(results: IntegrationTestResult) -> None:
     """Test 10: Error handling."""
     print("\n📋 Test 10: Error Handling")
 
@@ -379,7 +393,7 @@ async def test_error_handling(results: TestResult) -> None:
         results.fail("Missing conversation error", str(e))
 
 
-async def test_context_manager(api_key: str, results: TestResult, user_id: str) -> None:
+async def test_context_manager(api_key: str, results: IntegrationTestResult, user_id: str) -> None:
     """Test 11: Async context manager."""
     print("\n📋 Test 11: Context Manager")
 
@@ -398,7 +412,7 @@ async def run_all_tests(api_key: str) -> None:
     print("🧪 MemU SDK Complete Integration Test")
     print("=" * 60)
 
-    results = TestResult()
+    results = IntegrationTestResult()
 
     # Unique identifiers for this test run
     test_id = f"sdk_test_{int(time.time())}"

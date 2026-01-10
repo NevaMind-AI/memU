@@ -48,7 +48,15 @@ class MemUClientError(Exception):
 class MemUAuthenticationError(MemUClientError):
     """Raised when API authentication fails."""
 
-    pass
+    DEFAULT_MESSAGE = "Authentication failed. Please check your API key."
+
+    def __init__(
+        self,
+        message: str | None = None,
+        status_code: int | None = None,
+        response: dict[str, Any] | None = None,
+    ):
+        super().__init__(message or self.DEFAULT_MESSAGE, status_code, response)
 
 
 class MemURateLimitError(MemUClientError):
@@ -74,7 +82,15 @@ class MemUNotFoundError(MemUClientError):
 class MemUValidationError(MemUClientError):
     """Raised when request validation fails."""
 
-    pass
+    DEFAULT_MESSAGE = "Request validation failed. Please check your request parameters."
+
+    def __init__(
+        self,
+        message: str | None = None,
+        status_code: int | None = None,
+        response: dict[str, Any] | None = None,
+    ):
+        super().__init__(message or self.DEFAULT_MESSAGE, status_code, response)
 
 
 class MemUClient:
@@ -95,15 +111,17 @@ class MemUClient:
         # Async usage
         async with MemUClient(api_key="your_key") as client:
             result = await client.memorize(
-                resource_url="path/to/file.json",
-                modality="conversation"
+                conversation_text="Hello, how are you?",
+                user_id="user_123",
+                agent_id="agent_123",
             )
 
         # Sync usage (uses internal event loop)
         client = MemUClient(api_key="your_key")
         result = client.memorize_sync(
-            resource_url="path/to/file.json",
-            modality="conversation"
+            conversation_text="Hello, how are you?",
+            user_id="user_123",
+            agent_id="agent_123",
         )
     """
 
@@ -168,13 +186,14 @@ class MemUClient:
         parsed = self._safe_parse_json(response)
 
         if status == 401:
-            raise MemUAuthenticationError("auth_failed", status_code=401, response=parsed)
+            raise MemUAuthenticationError(status_code=401, response=parsed)
         if status == 404:
             raise MemUNotFoundError(path, status_code=404, response=parsed)
         if status == 422:
-            raise MemUValidationError("validation_failed", status_code=422, response=parsed)
+            raise MemUValidationError(status_code=422, response=parsed)
         if status >= 400:
-            raise MemUClientError(str(status), status_code=status, response=parsed)
+            msg = f"{status}: {path}"
+            raise MemUClientError(msg, status_code=status, response=parsed)
 
     async def _request(  # noqa: C901
         self,
@@ -235,7 +254,7 @@ class MemUClient:
                 if status >= 400:
                     self._raise_for_status(response, path)
 
-                return cast(dict[str, Any], response.json())
+                return cast(dict[str, Any], self._safe_parse_json(response)) or {}
 
             except httpx.TimeoutException as e:
                 last_error = e
