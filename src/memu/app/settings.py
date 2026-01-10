@@ -248,9 +248,9 @@ class LLMProfilesConfig(RootModel[dict[Key, LLMConfig]]):
 
 
 class MetadataStoreConfig(BaseModel):
-    provider: Annotated[Literal["inmemory", "postgres"], Normalize] = "inmemory"
+    provider: Annotated[Literal["inmemory", "postgres", "mysql"], Normalize] = "inmemory"
     ddl_mode: Annotated[Literal["create", "validate"], Normalize] = "create"
-    dsn: str | None = Field(default=None, description="Postgres connection string when provider=postgres.")
+    dsn: str | None = Field(default=None, description="Database connection string when provider=postgres or mysql.")
 
 
 class VectorIndexConfig(BaseModel):

@@ -28,6 +28,11 @@ def build_database(
         from memu.database.postgres import build_postgres_database
 
         return build_postgres_database(config=config, user_model=user_model)
+    elif provider == "mysql":
+        # Lazy import to avoid requiring mysql dependencies when not using mysql
+        from memu.database.mysql import build_mysql_database
+
+        return build_mysql_database(config=config, user_model=user_model)
     else:
         msg = f"Unsupported metadata_store provider: {provider}"
         raise ValueError(msg)
