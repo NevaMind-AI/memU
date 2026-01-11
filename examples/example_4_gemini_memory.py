@@ -6,7 +6,7 @@ and generate memory categories using Google Gemini as the LLM backend.
 
 Usage:
     export GEMINI_API_KEY=your_api_key
-    python examples/example_5_gemini_memory.py
+    python examples/example_4_gemini_memory.py
 """
 
 import asyncio
@@ -53,7 +53,7 @@ async def main():
     3. Extracts memory categories from conversations
     4. Outputs the categories to files
     """
-    print("Example 5: Conversation Memory Processing (Google Gemini)")
+    print("Example 4: Conversation Memory Processing (Google Gemini)")
     print("-" * 55)
 
     api_key = os.getenv("GEMINI_API_KEY")
@@ -69,7 +69,7 @@ async def main():
                 "client_backend": "httpx",
                 "base_url": "https://generativelanguage.googleapis.com/v1beta",
                 "api_key": api_key,
-                "chat_model": "gemini-2.5-flash",  # Fast and capable model
+                "chat_model": "gemini-2.5-pro",  # Fast and capable model
                 "embed_model": "text-embedding-004",  # Gemini's embedding model
             },
         },

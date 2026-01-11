@@ -7,7 +7,7 @@ from memu.llm.backends.base import LLMBackend
 
 class GeminiLLMBackend(LLMBackend):
     """Backend for Google Gemini LLM API.
-    
+
     Gemini uses a different API format than OpenAI-compatible APIs:
     - Endpoint: /models/{model}:generateContent
     - Auth: x-goog-api-key header
@@ -22,28 +22,25 @@ class GeminiLLMBackend(LLMBackend):
     ) -> dict[str, Any]:
         """Build payload for Gemini generateContent API."""
         contents: list[dict[str, Any]] = []
-        
+
         # Add user message
         contents.append({
             "role": "user",
             "parts": [{"text": text}]
         })
-        
+
         payload: dict[str, Any] = {
             "contents": contents,
         }
-        
+
         # Add system instruction if provided
+        # Note: When system_prompt is None, we don't set a default to allow the user prompt
+        # to fully control the output format (e.g., for JSON responses)
         if system_prompt:
             payload["system_instruction"] = {
                 "parts": [{"text": system_prompt}]
             }
-        else:
-            # Default system prompt for summarization
-            payload["system_instruction"] = {
-                "parts": [{"text": "Summarize the text in one short paragraph."}]
-            }
-        
+
         # Add generation config
         generation_config: dict[str, Any] = {
             "temperature": 1.0,  # Gemini recommends keeping at 1.0
@@ -51,7 +48,7 @@ class GeminiLLMBackend(LLMBackend):
         if max_tokens is not None:
             generation_config["maxOutputTokens"] = max_tokens
         payload["generationConfig"] = generation_config
-        
+
         return payload
 
     def parse_summary_response(self, data: dict[str, Any]) -> str:
@@ -83,24 +80,24 @@ class GeminiLLMBackend(LLMBackend):
                 }
             },
         ]
-        
+
         contents: list[dict[str, Any]] = [
             {
                 "role": "user",
                 "parts": user_parts,
             }
         ]
-        
+
         payload: dict[str, Any] = {
             "contents": contents,
         }
-        
+
         # Add system instruction if provided
         if system_prompt:
             payload["system_instruction"] = {
                 "parts": [{"text": system_prompt}]
             }
-        
+
         # Add generation config
         generation_config: dict[str, Any] = {
             "temperature": 1.0,
@@ -108,5 +105,5 @@ class GeminiLLMBackend(LLMBackend):
         if max_tokens is not None:
             generation_config["maxOutputTokens"] = max_tokens
         payload["generationConfig"] = generation_config
-        
+
         return payload

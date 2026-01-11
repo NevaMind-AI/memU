@@ -49,7 +49,7 @@ class _DoubaoEmbeddingBackend(_EmbeddingBackend):
 
 class _GeminiEmbeddingBackend(_EmbeddingBackend):
     """Gemini embedding API backend.
-    
+
     Gemini uses a different format:
     - Endpoint: /models/{model}:embedContent
     - Single text per request (batch supported via batchEmbedContents)
