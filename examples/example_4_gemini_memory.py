@@ -1,12 +1,12 @@
 """
-Example 4: Multiple Conversations -> Memory Category File (Using OpenRouter)
+Example 5: Multiple Conversations -> Memory Category File (Using Google Gemini)
 
 This example demonstrates how to process multiple conversation files
-and generate memory categories using OpenRouter as the LLM backend.
+and generate memory categories using Google Gemini as the LLM backend.
 
 Usage:
-    export OPENROUTER_API_KEY=your_api_key
-    python examples/example_4_openrouter_memory.py
+    export GEMINI_API_KEY=your_api_key
+    python examples/example_5_gemini_memory.py
 """
 
 import asyncio
@@ -45,32 +45,32 @@ async def generate_memory_md(categories, output_dir):
 
 async def main():
     """
-    Process multiple conversation files and generate memory categories using OpenRouter.
+    Process multiple conversation files and generate memory categories using Gemini.
 
     This example:
-    1. Initializes MemoryService with OpenRouter API
+    1. Initializes MemoryService with Google Gemini API
     2. Processes conversation JSON files
     3. Extracts memory categories from conversations
     4. Outputs the categories to files
     """
-    print("Example 4: Conversation Memory Processing (OpenRouter)")
-    print("-" * 50)
+    print("Example 5: Conversation Memory Processing (Google Gemini)")
+    print("-" * 55)
 
-    api_key = os.getenv("OPENROUTER_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        msg = "Please set OPENROUTER_API_KEY environment variable"
+        msg = "Please set GEMINI_API_KEY environment variable"
         raise ValueError(msg)
 
-    # Initialize service with OpenRouter
+    # Initialize service with Google Gemini
     service = MemoryService(
         llm_profiles={
             "default": {
-                "provider": "openrouter",
+                "provider": "gemini",
                 "client_backend": "httpx",
-                "base_url": "https://openrouter.ai",
+                "base_url": "https://generativelanguage.googleapis.com/v1beta",
                 "api_key": api_key,
-                "chat_model": "anthropic/claude-3.5-sonnet", # you can use any model from openrouter.ai
-                "embed_model": "openai/text-embedding-3-small", # you can use any model from openrouter.ai
+                "chat_model": "gemini-2.5-flash",  # Fast and capable model
+                "embed_model": "text-embedding-004",  # Gemini's embedding model
             },
         },
     )
@@ -98,7 +98,7 @@ async def main():
         except Exception as e:
             print(f"Error processing {conv_file}: {e}")
 
-    output_dir = "examples/output/openrouter_example"
+    output_dir = "examples/output/gemini_example"
     os.makedirs(output_dir, exist_ok=True)
 
     await generate_memory_md(categories, output_dir)
