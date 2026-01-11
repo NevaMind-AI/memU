@@ -4,10 +4,11 @@ import json
 import logging
 import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
+from memu.app.workflow import WorkflowMixin
 from memu.database.inmemory.vector import cosine_topk
 from memu.prompts.retrieve.llm_category_ranker import PROMPT as LLM_CATEGORY_RANKER_PROMPT
 from memu.prompts.retrieve.llm_item_ranker import PROMPT as LLM_ITEM_RANKER_PROMPT
@@ -24,20 +25,24 @@ if TYPE_CHECKING:
     from memu.database.interfaces import Database
 
 
-class RetrieveMixin:
+class RetrieveMixin(WorkflowMixin):
     if TYPE_CHECKING:
         retrieve_config: RetrieveConfig
-        _run_workflow: Callable[..., Awaitable[WorkflowState]]
-        _get_context: Callable[[], Context]
-        _get_database: Callable[[], Database]
-        _ensure_categories_ready: Callable[[Context, Database], Awaitable[None]]
-        _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
-        _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
-        _get_llm_client: Callable[..., Any]
-        _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
-        _extract_json_blob: Callable[[str], str]
-        _escape_prompt_value: Callable[[str], str]
         user_model: type[BaseModel]
+        # Methods from MemorizeMixin/service.py (not in WorkflowMixin):
+        _ensure_categories_ready: Callable[[Context, Database], Awaitable[None]]
+        _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
+        # Inherited from WorkflowMixin:
+        # - _run_workflow
+        # - _get_context
+        # - _get_database
+        # - _get_step_llm_client
+        # - _get_llm_client
+        # - _model_dump_without_embeddings
+        # - _extract_json_blob
+        # - _escape_prompt_value
+        # - _normalize_where
+        # - _workflow_response
 
     async def retrieve(
         self,
@@ -78,30 +83,7 @@ class RetrieveMixin:
         }
 
         result = await self._run_workflow(workflow_name, state)
-        response = cast(dict[str, Any] | None, result.get("response"))
-        if response is None:
-            msg = "Retrieve workflow failed to produce a response"
-            raise RuntimeError(msg)
-        return response
-
-    def _normalize_where(self, where: Mapping[str, Any] | None) -> dict[str, Any]:
-        """Validate and clean the `where` scope filters against the configured user model."""
-        if not where:
-            return {}
-
-        valid_fields = set(getattr(self.user_model, "model_fields", {}).keys())
-        cleaned: dict[str, Any] = {}
-
-        for raw_key, value in where.items():
-            if value is None:
-                continue
-            field = raw_key.split("__", 1)[0]
-            if field not in valid_fields:
-                msg = f"Unknown filter field '{field}' for current user scope"
-                raise ValueError(msg)
-            cleaned[raw_key] = value
-
-        return cleaned
+        return self._workflow_response(result, "Retrieve")
 
     def _build_rag_retrieve_workflow(self) -> list[WorkflowStep]:
         steps = [
@@ -769,7 +751,7 @@ class RetrieveMixin:
         return "\n".join(lines)
 
     @staticmethod
-    def _extract_query_text(query: dict[str, Any]) -> str:
+    def _extract_query_text(query: dict[str, Any] | str) -> str:
         """
         Extract text content from query message structure.
 
