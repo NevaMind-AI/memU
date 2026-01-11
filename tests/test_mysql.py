@@ -17,6 +17,7 @@ class MySQLTestUserModel(BaseModel):
 # MySQL Repository Base Tests
 # ============================================================================
 
+
 class TestMySQLRepoBase:
     """Test MySQL repository base functionality."""
 
@@ -54,9 +55,9 @@ class TestMySQLRepoBase:
         class MockItem:
             user_id = "user1"
             agent_id = "agent1"
-        
+
         item = MockItem()
-        
+
         def matches_where(obj, where):
             if not where:
                 return True
@@ -79,13 +80,13 @@ class TestMySQLRepoBase:
                     if actual != expected:
                         return False
             return True
-        
+
         # Match
         assert matches_where(item, {"user_id": "user1"}) is True
-        
+
         # No match
         assert matches_where(item, {"user_id": "user2"}) is False
-        
+
         # Empty where
         assert matches_where(item, None) is True
         assert matches_where(item, {}) is True
@@ -94,9 +95,9 @@ class TestMySQLRepoBase:
         """Test where clause with 'in' operator."""
         class MockItem:
             user_id = "user1"
-        
+
         item = MockItem()
-        
+
         def matches_where(obj, where):
             if not where:
                 return True
@@ -119,10 +120,10 @@ class TestMySQLRepoBase:
                     if actual != expected:
                         return False
             return True
-        
+
         # Match with in operator
         assert matches_where(item, {"user_id__in": ["user1", "user2"]}) is True
-        
+
         # No match with in operator
         assert matches_where(item, {"user_id__in": ["user2", "user3"]}) is False
 
@@ -130,6 +131,7 @@ class TestMySQLRepoBase:
 # ============================================================================
 # MySQL Memory Item Repository Tests
 # ============================================================================
+
 
 class TestMySQLMemoryItemRepo:
     """Test MySQL memory item repository."""
@@ -139,16 +141,16 @@ class TestMySQLMemoryItemRepo:
         def cosine(a, b):
             denom = (sum(x * x for x in a) ** 0.5) * (sum(y * y for y in b) ** 0.5) + 1e-9
             return float(sum(x * y for x, y in zip(a, b, strict=True)) / denom)
-        
+
         # Identical vectors
         vec = [1.0, 0.0, 0.0]
         assert abs(cosine(vec, vec) - 1.0) < 0.001
-        
+
         # Orthogonal vectors
         vec1 = [1.0, 0.0, 0.0]
         vec2 = [0.0, 1.0, 0.0]
         assert abs(cosine(vec1, vec2)) < 0.001
-        
+
         # Similar vectors
         vec1 = [1.0, 1.0, 0.0]
         vec2 = [1.0, 0.0, 0.0]
@@ -160,6 +162,7 @@ class TestMySQLMemoryItemRepo:
 # MySQL Store Integration Tests
 # ============================================================================
 
+
 class TestMySQLStoreInit:
     """Test MySQL store initialization."""
 
@@ -167,11 +170,11 @@ class TestMySQLStoreInit:
         """Test that build_mysql_database requires DSN."""
         from memu.app.settings import DatabaseConfig, MetadataStoreConfig
         from memu.database.mysql import build_mysql_database
-        
+
         config = DatabaseConfig(
             metadata_store=MetadataStoreConfig(provider="mysql", dsn=None)
         )
-        
+
         with pytest.raises(ValueError, match="MySQL metadata_store requires a DSN"):
             build_mysql_database(config=config, user_model=MySQLTestUserModel)
 
@@ -180,6 +183,7 @@ class TestMySQLStoreInit:
 # Database Factory Tests
 # ============================================================================
 
+
 class TestDatabaseFactory:
     """Test database factory with MySQL support."""
 
@@ -187,11 +191,11 @@ class TestDatabaseFactory:
         """Test that factory recognizes mysql provider."""
         from memu.database.factory import build_database
         from memu.app.settings import DatabaseConfig, MetadataStoreConfig
-        
+
         config = DatabaseConfig(
             metadata_store=MetadataStoreConfig(provider="mysql", dsn=None)
         )
-        
+
         # Should raise ValueError about DSN, not about unsupported provider
         with pytest.raises(ValueError, match="MySQL metadata_store requires a DSN"):
             build_database(config=config, user_model=MySQLTestUserModel)
@@ -200,14 +204,14 @@ class TestDatabaseFactory:
         """Test that factory rejects unknown providers."""
         from memu.database.factory import build_database
         from memu.app.settings import DatabaseConfig, MetadataStoreConfig
-        
+
         # Create config with invalid provider by bypassing validation
         config = DatabaseConfig(
             metadata_store=MetadataStoreConfig(provider="inmemory")
         )
         # Manually set invalid provider
         config.metadata_store.provider = "unknown"
-        
+
         with pytest.raises(ValueError, match="Unsupported metadata_store provider"):
             build_database(config=config, user_model=MySQLTestUserModel)
 
@@ -216,25 +220,26 @@ class TestDatabaseFactory:
 # Settings Tests
 # ============================================================================
 
+
 class TestSettingsMySQL:
     """Test settings support for MySQL."""
 
     def test_metadata_store_accepts_mysql(self):
         """Test that MetadataStoreConfig accepts mysql provider."""
         from memu.app.settings import MetadataStoreConfig
-        
+
         config = MetadataStoreConfig(
             provider="mysql",
             dsn="mysql+pymysql://user:pass@localhost/testdb"
         )
-        
+
         assert config.provider == "mysql"
         assert "mysql" in config.dsn
 
     def test_metadata_store_normalizes_mysql(self):
         """Test that provider is normalized to lowercase."""
         from memu.app.settings import MetadataStoreConfig
-        
+
         config = MetadataStoreConfig(provider="MySQL")
         assert config.provider == "mysql"
 
@@ -242,6 +247,7 @@ class TestSettingsMySQL:
 # ============================================================================
 # MySQL Module Structure Tests
 # ============================================================================
+
 
 class TestMySQLModuleStructure:
     """Test that MySQL module has correct structure."""
