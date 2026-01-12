@@ -277,7 +277,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         patch_delete_initial_keys = CRUDMixin._list_delete_memory_item_initial_keys()
         self._pipelines.register("patch_delete", patch_delete_workflow, initial_state_keys=patch_delete_initial_keys)
         crud_list_items_workflow = self._build_list_memory_items_workflow()
-        crud_list_memories_initial_keys = CRUDMixin._list_list_memory_items_initial_keys()
+        crud_list_memories_initial_keys = CRUDMixin._list_list_memories_initial_keys()
         self._pipelines.register(
             "crud_list_memory_items", crud_list_items_workflow, initial_state_keys=crud_list_memories_initial_keys
         )
@@ -286,6 +286,11 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             "crud_list_memory_categories",
             crud_list_categories_workflow,
             initial_state_keys=crud_list_memories_initial_keys,
+        )
+        crud_clear_memory_workflow = self._build_clear_memory_workflow()
+        crud_clear_memory_initial_keys = CRUDMixin._list_clear_memories_initial_keys()
+        self._pipelines.register(
+            "crud_clear_memory", crud_clear_memory_workflow, initial_state_keys=crud_clear_memory_initial_keys
         )
 
     async def _run_workflow(self, workflow_name: str, initial_state: WorkflowState) -> WorkflowState:
