@@ -250,6 +250,7 @@ class LLMClientWrapper:
         *,
         max_tokens: int | None = None,
         system_prompt: str | None = None,
+        response_format: str | None = None,
     ) -> Any:
         request_view = _build_text_request_view(
             "summarize",
@@ -257,11 +258,17 @@ class LLMClientWrapper:
             metadata={
                 "system_prompt_chars": len(system_prompt or ""),
                 "max_tokens": max_tokens,
+                "response_format": response_format,
             },
         )
 
         async def _call() -> Any:
-            return await self._client.summarize(text, max_tokens=max_tokens, system_prompt=system_prompt)
+            return await self._client.summarize(
+                text,
+                max_tokens=max_tokens,
+                system_prompt=system_prompt,
+                response_format=response_format,
+            )
 
         return await self._invoke(
             kind="summarize",

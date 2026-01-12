@@ -28,12 +28,14 @@ class OpenAISDKClient:
         chat_model: str,
         embed_model: str,
         embed_batch_size: int = 1,
+        reasoning_effort: Literal["low", "medium", "high"] | None = "high",
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or ""
         self.chat_model = chat_model
         self.embed_model = embed_model
         self.embed_batch_size = embed_batch_size
+        self.reasoning_effort = reasoning_effort
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
 
     async def summarize(
@@ -42,6 +44,7 @@ class OpenAISDKClient:
         *,
         max_tokens: int | None = None,
         system_prompt: str | None = None,
+        response_format: Literal["text", "json_object"] | None = None,
     ) -> tuple[str, ChatCompletion]:
         prompt = system_prompt or "Summarize the text in one short paragraph."
 
@@ -49,12 +52,20 @@ class OpenAISDKClient:
         user_message: ChatCompletionUserMessageParam = {"role": "user", "content": text}
         messages: list[ChatCompletionMessageParam] = [system_message, user_message]
 
-        response = await self.client.chat.completions.create(
-            model=self.chat_model,
-            messages=messages,
-            temperature=1,
-            max_tokens=max_tokens,
-        )
+        # Build request kwargs with optional reasoning_effort and response_format
+        request_kwargs: dict[str, Any] = {
+            "model": self.chat_model,
+            "messages": messages,
+            "temperature": 1,
+        }
+        if max_tokens is not None:
+            request_kwargs["max_tokens"] = max_tokens
+        if self.reasoning_effort is not None:
+            request_kwargs["reasoning_effort"] = self.reasoning_effort
+        if response_format == "json_object":
+            request_kwargs["response_format"] = {"type": "json_object"}
+
+        response = await self.client.chat.completions.create(**request_kwargs)
         content = response.choices[0].message.content
         logger.debug("OpenAI summarize response: %s", response)
         return content or "", response
@@ -115,12 +126,18 @@ class OpenAISDKClient:
         }
         messages.append(user_message)
 
-        response = await self.client.chat.completions.create(
-            model=self.chat_model,
-            messages=messages,
-            temperature=1,
-            max_tokens=max_tokens,
-        )
+        # Build request kwargs with optional reasoning_effort
+        request_kwargs: dict[str, Any] = {
+            "model": self.chat_model,
+            "messages": messages,
+            "temperature": 1,
+        }
+        if max_tokens is not None:
+            request_kwargs["max_tokens"] = max_tokens
+        if self.reasoning_effort is not None:
+            request_kwargs["reasoning_effort"] = self.reasoning_effort
+
+        response = await self.client.chat.completions.create(**request_kwargs)
         content = response.choices[0].message.content
         logger.debug("OpenAI vision response: %s", response)
         return content or "", response

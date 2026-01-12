@@ -87,11 +87,18 @@ class HTTPLLMClient:
         self.embed_model = embed_model or chat_model
 
     async def summarize(
-        self, text: str, max_tokens: int | None = None, system_prompt: str | None = None
+        self,
+        text: str,
+        max_tokens: int | None = None,
+        system_prompt: str | None = None,
+        response_format: str | None = None,
     ) -> tuple[str, dict[str, Any]]:
         payload = self.backend.build_summary_payload(
             text=text, system_prompt=system_prompt, chat_model=self.chat_model, max_tokens=max_tokens
         )
+        # Add response_format if specified
+        if response_format == "json_object":
+            payload["response_format"] = {"type": "json_object"}
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
             resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()

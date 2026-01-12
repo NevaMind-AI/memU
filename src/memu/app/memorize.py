@@ -779,7 +779,9 @@ class MemorizeMixin:
         preprocessed_text = format_conversation_for_preprocess(text)
         prompt = template.format(conversation=self._escape_prompt_value(preprocessed_text))
         client = llm_client or self._get_llm_client()
-        processed = await client.summarize(prompt, system_prompt=None)
+        processed = await client.summarize(
+            prompt, system_prompt=None, response_format="json_object"
+        )
         _conv, segments = self._parse_conversation_preprocess_with_segments(processed, preprocessed_text)
 
         # Important: always use the original JSON-derived, indexed conversation text for downstream
