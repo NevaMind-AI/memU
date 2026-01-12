@@ -11,6 +11,8 @@ import httpx
 from memu.llm.backends.base import LLMBackend
 from memu.llm.backends.doubao import DoubaoLLMBackend
 from memu.llm.backends.openai import OpenAILLMBackend
+from memu.llm.backends.groq import GroqLLMBackend  
+
 
 
 # Minimal embedding backend support (moved from embedding module)
@@ -52,6 +54,7 @@ logger = logging.getLogger(__name__)
 LLM_BACKENDS: dict[str, Callable[[], LLMBackend]] = {
     OpenAILLMBackend.name: OpenAILLMBackend,
     DoubaoLLMBackend.name: DoubaoLLMBackend,
+    GroqLLMBackend.name: GroqLLMBackend,
 }
 
 
@@ -229,6 +232,7 @@ class HTTPLLMClient:
         backends: dict[str, type[_EmbeddingBackend]] = {
             _OpenAIEmbeddingBackend.name: _OpenAIEmbeddingBackend,
             _DoubaoEmbeddingBackend.name: _DoubaoEmbeddingBackend,
+	    "groq": _OpenAIEmbeddingBackend,
         }
         factory = backends.get(provider)
         if not factory:
