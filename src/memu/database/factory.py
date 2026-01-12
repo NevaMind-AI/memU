@@ -38,6 +38,11 @@ def build_database(
         from memu.database.sqlite import build_sqlite_database
 
         return build_sqlite_database(config=config, user_model=user_model)
+    elif provider == "oracle":
+        # Lazy import to avoid loading Oracle dependencies when not needed
+        from memu.database.oracle.oracle import build_oracle_database
+
+        return build_oracle_database(config=config, user_model=user_model)
     else:
         msg = f"Unsupported metadata_store provider: {provider}"
         raise ValueError(msg)
