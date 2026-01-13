@@ -125,7 +125,7 @@ class EventManager:
             >>> manager.register_dispatcher(celery_dispatcher)
         """
         # Auto-register dispatcher methods as event callbacks
-        for event in self._listeners.keys():
+        for event in self._listeners:
             if hasattr(dispatcher, event):
                 handler = getattr(dispatcher, event)
                 self.on(event, handler)
@@ -143,7 +143,7 @@ class EventManager:
         """
         if dispatcher in self._dispatchers:
             # Unregister all methods
-            for event in self._listeners.keys():
+            for event in self._listeners:
                 if hasattr(dispatcher, event):
                     handler = getattr(dispatcher, event)
                     self.off(event, handler)

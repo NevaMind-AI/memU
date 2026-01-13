@@ -63,7 +63,7 @@ def calculate_retry_countdown(retry_count: int, base: int = 60, max_delay: int =
     import random
 
     delay = base * (2 ** retry_count)
-    jitter = random.uniform(0, delay * 0.1)  # 10% jitter to prevent thundering herd
+    jitter = random.uniform(0, delay * 0.1)  # noqa: S311  # 10% jitter to prevent thundering herd
     return min(int(delay + jitter), max_delay)
 
 

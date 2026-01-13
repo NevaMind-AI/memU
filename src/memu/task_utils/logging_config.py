@@ -9,7 +9,7 @@ import json
 import logging
 import logging.config
 import sys
-from typing import Any
+from typing import Any, ClassVar
 
 
 class JSONFormatter(logging.Formatter):
@@ -73,7 +73,7 @@ class ColoredFormatter(logging.Formatter):
     Adds ANSI color codes for better readability in terminal.
     """
 
-    COLORS = {
+    COLORS: ClassVar[dict] = {
         "DEBUG": "\033[36m",      # Cyan
         "INFO": "\033[32m",       # Green
         "WARNING": "\033[33m",    # Yellow

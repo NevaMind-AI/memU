@@ -56,11 +56,11 @@ class MemorizeTaskInput(BaseModel):
         try:
             parsed = urlparse(v)
         except Exception as e:
-            raise ValueError(f"Invalid URL format: {e}")
+            raise ValueError(f"Invalid URL format: {e}") from e
 
         # Scheme validation (prevent file://, ftp://, etc.)
         if parsed.scheme not in ["http", "https"]:
-            raise ValueError(
+            raise ValueError(  # noqa: TRY003
                 f"Invalid URL scheme: {parsed.scheme}. Only http/https allowed"
             )
 
@@ -91,7 +91,7 @@ class MemorizeTaskInput(BaseModel):
         localhost_patterns = [
             "localhost",
             "127.0.0.1",
-            "0.0.0.0",
+            "0.0.0.0",  # noqa: S104
             "[::1]",
             "::1",
         ]
