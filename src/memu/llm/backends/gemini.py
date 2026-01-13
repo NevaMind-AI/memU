@@ -24,10 +24,7 @@ class GeminiLLMBackend(LLMBackend):
         contents: list[dict[str, Any]] = []
 
         # Add user message
-        contents.append({
-            "role": "user",
-            "parts": [{"text": text}]
-        })
+        contents.append({"role": "user", "parts": [{"text": text}]})
 
         payload: dict[str, Any] = {
             "contents": contents,
@@ -37,9 +34,7 @@ class GeminiLLMBackend(LLMBackend):
         # Note: When system_prompt is None, we don't set a default to allow the user prompt
         # to fully control the output format (e.g., for JSON responses)
         if system_prompt:
-            payload["system_instruction"] = {
-                "parts": [{"text": system_prompt}]
-            }
+            payload["system_instruction"] = {"parts": [{"text": system_prompt}]}
 
         # Add generation config
         generation_config: dict[str, Any] = {
@@ -94,9 +89,7 @@ class GeminiLLMBackend(LLMBackend):
 
         # Add system instruction if provided
         if system_prompt:
-            payload["system_instruction"] = {
-                "parts": [{"text": system_prompt}]
-            }
+            payload["system_instruction"] = {"parts": [{"text": system_prompt}]}
 
         # Add generation config
         generation_config: dict[str, Any] = {

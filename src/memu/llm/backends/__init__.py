@@ -4,4 +4,3 @@ from memu.llm.backends.gemini import GeminiLLMBackend
 from memu.llm.backends.openai import OpenAILLMBackend
 
 __all__ = ["DoubaoLLMBackend", "GeminiLLMBackend", "LLMBackend", "OpenAILLMBackend"]
-

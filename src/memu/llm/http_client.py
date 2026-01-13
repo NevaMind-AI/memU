@@ -13,6 +13,7 @@ from memu.llm.backends.doubao import DoubaoLLMBackend
 from memu.llm.backends.gemini import GeminiLLMBackend
 from memu.llm.backends.openai import OpenAILLMBackend
 
+
 # Minimal embedding backend support (moved from embedding module)
 class _EmbeddingBackend:
     name: str
@@ -65,18 +66,14 @@ class _GeminiEmbeddingBackend(_EmbeddingBackend):
         if len(inputs) == 1:
             return {
                 "model": f"models/{embed_model}",
-                "content": {
-                    "parts": [{"text": inputs[0]}]
-                },
+                "content": {"parts": [{"text": inputs[0]}]},
             }
         # Batch embedding format
         return {
             "requests": [
                 {
                     "model": f"models/{embed_model}",
-                    "content": {
-                        "parts": [{"text": text}]
-                    },
+                    "content": {"parts": [{"text": text}]},
                 }
                 for text in inputs
             ]
@@ -300,4 +297,3 @@ class HTTPLLMClient:
             msg = f"Unsupported embedding provider '{provider}'. Available: {', '.join(backends.keys())}"
             raise ValueError(msg)
         return factory()
-
