@@ -69,8 +69,8 @@ async def main():
                 "client_backend": "httpx",
                 "base_url": "https://openrouter.ai",
                 "api_key": api_key,
-                "chat_model": "anthropic/claude-3.5-sonnet", # you can use any model from openrouter.ai
-                "embed_model": "openai/text-embedding-3-small", # you can use any model from openrouter.ai
+                "chat_model": "anthropic/claude-3.5-sonnet",  # you can use any model from openrouter.ai
+                "embed_model": "openai/text-embedding-3-small",  # you can use any model from openrouter.ai
             },
         },
     )
