@@ -24,6 +24,7 @@ def build_database(
         - "inmemory": In-memory storage (default, no persistence)
         - "postgres": PostgreSQL with optional pgvector support
         - "sqlite": SQLite file-based storage (lightweight, portable)
+        - "mssql": Microsoft SQL Server (requires mssql+pyodbc)
     """
     provider = config.metadata_store.provider
     if provider == "inmemory":
@@ -38,6 +39,11 @@ def build_database(
         from memu.database.sqlite import build_sqlite_database
 
         return build_sqlite_database(config=config, user_model=user_model)
+    elif provider == "mssql":
+        # Lazy import to avoid circular dependencies and required dependencies check
+        from memu.database.mssql import build_mssql_database
+
+        return build_mssql_database(config=config, user_model=user_model)
     else:
         msg = f"Unsupported metadata_store provider: {provider}"
         raise ValueError(msg)
