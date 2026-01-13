@@ -232,7 +232,7 @@ class HTTPLLMClient:
         backends: dict[str, type[_EmbeddingBackend]] = {
             _OpenAIEmbeddingBackend.name: _OpenAIEmbeddingBackend,
             _DoubaoEmbeddingBackend.name: _DoubaoEmbeddingBackend,
-	    "groq": _OpenAIEmbeddingBackend,
+	    	"groq": _OpenAIEmbeddingBackend,
         }
         factory = backends.get(provider)
         if not factory:
