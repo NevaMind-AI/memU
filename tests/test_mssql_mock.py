@@ -133,7 +133,7 @@ class TestMssqlStore(unittest.TestCase):
         store = MssqlStore(dsn="mssql+pyodbc://sa:pass@localhost/db")
 
         # Act: Try to create a resource with ALL required arguments
-        store.resource_repo.create_resource(
+        store.resources.create_resource(
             url="http://test.com",
             modality="text",
             embedding=[0.1, 0.2],

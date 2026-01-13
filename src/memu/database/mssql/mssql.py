@@ -320,13 +320,26 @@ class MssqlCategoryItemRepo(CategoryItemRepo):
 class MssqlStore(Database):
     """MSSQL Database implementation."""
 
-    def __init__(self, dsn: str):
+    def __init__(self, dsn: str, **kwargs: Any):
         self.session_manager = SessionManager(dsn=dsn)
 
-        self.resource_repo = MssqlResourceRepo(self.session_manager)
-        self.memory_category_repo = MssqlMemoryCategoryRepo(self.session_manager)
-        self.memory_item_repo = MssqlMemoryItemRepo(self.session_manager)
-        self.category_item_repo = MssqlCategoryItemRepo(self.session_manager)
+        # 1. Create Instances
+        _res_repo = MssqlResourceRepo(self.session_manager)
+        _cat_repo = MssqlMemoryCategoryRepo(self.session_manager)
+        _item_repo = MssqlMemoryItemRepo(self.session_manager)
+        _rel_repo = MssqlCategoryItemRepo(self.session_manager)
+
+        # 2. Bind Modern Interface (Short names) - Fixes "AttributeError"
+        self.resources = _res_repo  # type: ignore
+        self.categories = _cat_repo  # type: ignore
+        self.items = _item_repo  # type: ignore
+        self.relations = _rel_repo  # type: ignore
+
+        # 3. Bind Legacy Interface (Long names) - Fixes "Abstract Class" error
+        self.resource_repo = _res_repo
+        self.memory_category_repo = _cat_repo
+        self.memory_item_repo = _item_repo
+        self.category_item_repo = _rel_repo
 
         self._init_db()
 
