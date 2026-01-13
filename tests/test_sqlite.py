@@ -6,6 +6,30 @@ import tempfile
 from memu.app import MemoryService
 
 
+def _resolve_llm_profiles() -> dict[str, dict[str, str]]:
+    gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_KEY")
+    if gemini_key:
+        base_url = os.environ.get("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta")
+        chat_model = os.environ.get("GEMINI_CHAT_MODEL", "gemini-flash-latest")
+        embed_model = os.environ.get("GEMINI_EMBED_MODEL", "text-embedding-004")
+        return {
+            "default": {
+                "api_key": gemini_key,
+                "base_url": base_url,
+                "chat_model": chat_model,
+                "embed_model": embed_model,
+                "client_backend": "httpx",
+                "provider": "gemini",
+            }
+        }
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        msg = "Please set OPENAI_API_KEY or GEMINI_API_KEY"
+        raise ValueError(msg)
+    return {"default": {"api_key": api_key}}
+
+
 def _print_results(title: str, result: dict) -> None:
     print(f"\n[SQLITE] RETRIEVED - {title}")
     print("  Categories:")
@@ -22,8 +46,7 @@ def _print_results(title: str, result: dict) -> None:
 
 async def main():
     """Test with SQLite storage."""
-    api_key = os.environ.get("OPENAI_API_KEY")
-    file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "example", "example_conversation.json"))
+    file_path = os.path.abspath("example/example_conversation.json")
 
     # Create a temporary SQLite database file
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
@@ -38,7 +61,7 @@ async def main():
 
     try:
         service = MemoryService(
-            llm_profiles={"default": {"api_key": api_key}},
+            llm_profiles=_resolve_llm_profiles(),
             database_config={
                 "metadata_store": {
                     "provider": "sqlite",

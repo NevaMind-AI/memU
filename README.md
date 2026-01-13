@@ -114,12 +114,14 @@ pip install -e .
 
 #### Basic Example
 
-> **Requirements**: Python 3.13+ and an OpenAI API key
+> **Requirements**: Python 3.13+ and an OpenAI or Gemini API key
 
 **Test with In-Memory Storage** (no database required):
 
 ```bash
 export OPENAI_API_KEY=your_api_key
+# or:
+# export GEMINI_API_KEY=your_api_key
 cd tests
 python test_inmemory.py
 ```
@@ -138,6 +140,8 @@ docker run -d \
 
 # Run the test
 export OPENAI_API_KEY=your_api_key
+# or:
+# export GEMINI_API_KEY=your_api_key
 cd tests
 python test_postgres.py
 ```
@@ -165,7 +169,7 @@ service = MemUService(
             "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
             "api_key": "your_api_key",
             "chat_model": "qwen3-max",
-            "client_backend": "sdk"  # "sdk" or "http"
+            "client_backend": "sdk"  # "sdk" or "httpx"
         },
         # Separate profile for embeddings
         "embedding": {
@@ -175,6 +179,25 @@ service = MemUService(
         }
     },
     # ... other configuration
+)
+```
+
+Gemini example (HTTP backend):
+
+```python
+from memu import MemUService
+
+service = MemUService(
+    llm_profiles={
+        "default": {
+            "provider": "gemini",
+            "client_backend": "httpx",
+            "base_url": "https://generativelanguage.googleapis.com/v1beta",
+            "api_key": "your_gemini_api_key",
+            "chat_model": "gemini-flash-latest",
+            "embed_model": "text-embedding-004",
+        }
+    },
 )
 ```
 
