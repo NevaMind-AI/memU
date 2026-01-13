@@ -1,0 +1,11 @@
+from fastapi import FastAPI
+
+app = FastAPI(title="Simple FastAPI App")
+
+@app.get("/")
+def root():
+    return {"message": "API running successfully"}
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
