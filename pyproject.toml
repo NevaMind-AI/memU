@@ -26,6 +26,7 @@ dependencies = [
     "sqlmodel>=0.0.27",
     "alembic>=1.14.0",
     "pendulum>=3.1.0",
+    "oracledb>=3.4.1",
 ]
 
 [build-system]

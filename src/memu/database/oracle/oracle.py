@@ -73,6 +73,7 @@ class OracleResourceRepo(ResourceRepo):
     ) -> Resource:
         # Minimal implementation
         import uuid
+
         import pendulum
 
         return Resource(
@@ -284,7 +285,7 @@ class OracleMemoryItemRepo(MemoryItemRepo):
         self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None
     ) -> list[tuple[str, float]]:
         # As per instructions: raise NotImplementedError but ensure signature
-        raise NotImplementedError("Vector search is not yet implemented for Oracle provider.")  # noqa: TRY003
+        raise NotImplementedError("Vector search is not yet implemented for Oracle provider.")
 
     def load_existing(self) -> None:
         # No-op for DB backed repo, or verifying connection
@@ -557,9 +558,7 @@ class OracleCategoryItemRepo(CategoryItemRepo):
                 results.append(self._row_to_relation(row))
         return results
 
-    def link_item_category(
-        self, item_id: str, cat_id: str, user_data: dict[str, Any]
-    ) -> CategoryItem:
+    def link_item_category(self, item_id: str, cat_id: str, user_data: dict[str, Any]) -> CategoryItem:
         import uuid
 
         import pendulum
@@ -619,26 +618,32 @@ class OracleCategoryItemRepo(CategoryItemRepo):
 class OracleDatabase(Database):
     """Oracle implementation of the Database interface."""
 
-    def __init__(self, resource_repo: ResourceRepo, item_repo: MemoryItemRepo, category_repo: MemoryCategoryRepo, relation_repo: CategoryItemRepo) -> None:
+    def __init__(
+        self,
+        resource_repo: ResourceRepo,
+        item_repo: MemoryItemRepo,
+        category_repo: MemoryCategoryRepo,
+        relation_repo: CategoryItemRepo,
+    ) -> None:
         self.resource_repo = resource_repo
         self.memory_item_repo = item_repo
         self.memory_category_repo = category_repo
         self.category_item_repo = relation_repo
 
     @property
-    def resources(self) -> dict[str, Resource]: # type: ignore[override]
+    def resources(self) -> dict[str, Resource]:  # type: ignore[override]
         return self.resource_repo.resources
 
     @property
-    def items(self) -> dict[str, MemoryItem]: # type: ignore[override]
+    def items(self) -> dict[str, MemoryItem]:  # type: ignore[override]
         return self.memory_item_repo.items
 
     @property
-    def categories(self) -> dict[str, MemoryCategory]: # type: ignore[override]
+    def categories(self) -> dict[str, MemoryCategory]:  # type: ignore[override]
         return self.memory_category_repo.categories
 
     @property
-    def relations(self) -> list[CategoryItem]: # type: ignore[override]
+    def relations(self) -> list[CategoryItem]:  # type: ignore[override]
         return self.category_item_repo.relations
 
     def close(self) -> None:
@@ -656,35 +661,30 @@ def build_oracle_database(config: DatabaseConfig, user_model: type[BaseModel]) -
     # NOTE: The User Request didn't specify config structure, just to accept it.
     # I will assume the config object has access to these via some dict or attributes.
     # For now, I'll assume they are passed specifically or extracted.
-    
-    # Placeholder: We really need to know where credentials come from. 
+
+    # Placeholder: We really need to know where credentials come from.
     # Usually config.connection_args or similar.
     # I will instantiate with placeholders or what I can extract.
-    
+
     # Warning: Hardcoding or blindly accessing might fail if config doesn't match.
     # But for this task, I must implement the function.
-    
+
     # Let's assume config has a 'connection_string' or we need to parse it.
     # Or maybe config is just passed through.
-    
+
     # Using dummy creds if not found, or raising error?
     # Better to allow the Factory to just call this.
-    
+
     user = getattr(config, "user", "user")
     password = getattr(config, "password", "password")
     dsn = getattr(config, "dsn", "dsn")
-    
+
     # In a real app, we'd probably get these from config.connection_args
     # but let's stick to the requested signature.
-    
+
     res_repo = OracleResourceRepo(user, password, dsn)
     item_repo = OracleMemoryItemRepo(user, password, dsn)
     cat_repo = OracleMemoryCategoryRepo(user, password, dsn)
     rel_repo = OracleCategoryItemRepo(user, password, dsn)
-    
-    return OracleDatabase(
-        resource_repo=res_repo,
-        item_repo=item_repo,
-        category_repo=cat_repo,
-        relation_repo=rel_repo
-    )
+
+    return OracleDatabase(resource_repo=res_repo, item_repo=item_repo, category_repo=cat_repo, relation_repo=rel_repo)
