@@ -38,9 +38,12 @@ async def main():
     openai_api_key = os.getenv("OPENAI_API_KEY")
     
     if not groq_api_key:
-        raise ValueError("Please set GROQ_API_KEY environment variable")
+        msg = "Please set GROQ_API_KEY environment variable"
+        raise ValueError(msg)
     if not openai_api_key:
-        raise ValueError("Please set OPENAI_API_KEY environment variable (needed for embeddings)")
+        msg = "Please set OPENAI_API_KEY environment variable (needed for embeddings)"
+        raise ValueError(msg)
+
 
     # Initialize MemoryService with Groq + OpenAI dual configuration
     print("Initializing MemU with Groq...")
@@ -130,7 +133,7 @@ async def main():
         print(f"Description: {description}")
         
         # Reconfigure service with new model
-        service_test = MemoryService(
+        _service_test = MemoryService(
             llm_profiles={
                 "default": {
                     "provider": "groq",
