@@ -10,6 +10,7 @@ import httpx
 
 from memu.llm.backends.base import LLMBackend
 from memu.llm.backends.doubao import DoubaoLLMBackend
+from memu.llm.backends.grok import GrokBackend
 from memu.llm.backends.openai import OpenAILLMBackend
 
 
@@ -52,6 +53,7 @@ logger = logging.getLogger(__name__)
 LLM_BACKENDS: dict[str, Callable[[], LLMBackend]] = {
     OpenAILLMBackend.name: OpenAILLMBackend,
     DoubaoLLMBackend.name: DoubaoLLMBackend,
+    GrokBackend.name: GrokBackend,
 }
 
 
@@ -229,6 +231,7 @@ class HTTPLLMClient:
         backends: dict[str, type[_EmbeddingBackend]] = {
             _OpenAIEmbeddingBackend.name: _OpenAIEmbeddingBackend,
             _DoubaoEmbeddingBackend.name: _DoubaoEmbeddingBackend,
+            "grok": _OpenAIEmbeddingBackend,
         }
         factory = backends.get(provider)
         if not factory:
