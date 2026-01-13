@@ -12,7 +12,8 @@ Supported Events:
 """
 
 import logging
-from typing import Any, Callable, Dict, List
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -32,15 +33,15 @@ class EventManager:
 
     def __init__(self):
         """Initialize the event manager with empty listener registry."""
-        self._listeners: Dict[str, List[Callable]] = {
-            'on_memory_saved': [],
-            'on_memory_updated': [],
-            'on_memory_deleted': [],
-            'on_memory_queried': [],
+        self._listeners: dict[str, list[Callable]] = {
+            "on_memory_saved": [],
+            "on_memory_updated": [],
+            "on_memory_deleted": [],
+            "on_memory_queried": [],
         }
-        self._dispatchers: List[Any] = []
+        self._dispatchers: list[Any] = []
 
-    def on(self, event: str, callback: Callable[[Dict[str, Any]], None]) -> None:
+    def on(self, event: str, callback: Callable[[dict[str, Any]], None]) -> None:
         """
         Register a callback for a specific event.
 
@@ -59,7 +60,7 @@ class EventManager:
         self._listeners[event].append(callback)
         logger.debug(f"Registered callback for event: {event}")
 
-    def off(self, event: str, callback: Callable[[Dict[str, Any]], None]) -> None:
+    def off(self, event: str, callback: Callable[[dict[str, Any]], None]) -> None:
         """
         Unregister a callback for a specific event.
 
@@ -71,7 +72,7 @@ class EventManager:
             self._listeners[event].remove(callback)
             logger.debug(f"Unregistered callback for event: {event}")
 
-    def emit(self, event: str, data: Dict[str, Any]) -> None:
+    def emit(self, event: str, data: dict[str, Any]) -> None:
         """
         Emit an event to all registered listeners.
 
@@ -101,9 +102,7 @@ class EventManager:
                 callback(data)
             except Exception as e:
                 logger.error(
-                    f"Error in event callback for {event}",
-                    exc_info=True,
-                    extra={"event": event, "error": str(e)}
+                    f"Error in event callback for {event}", exc_info=True, extra={"event": event, "error": str(e)}
                 )
 
     def register_dispatcher(self, dispatcher: Any) -> None:
@@ -151,7 +150,7 @@ class EventManager:
             self._dispatchers.remove(dispatcher)
             logger.info(f"Unregistered dispatcher: {dispatcher.__class__.__name__}")
 
-    def list_events(self) -> List[str]:
+    def list_events(self) -> list[str]:
         """
         Get list of supported event names.
 
@@ -171,5 +170,6 @@ class EventManager:
             Number of registered listeners
         """
         return len(self._listeners.get(event, []))
+
 
 event_manager = EventManager()

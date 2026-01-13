@@ -1,22 +1,23 @@
 import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import ValidationError
 
+from memu.app.service import MemoryService
+
 from .celery_app import celery_app
 from .task_utils.validators import MemorizeTaskInput
-from memu.app.service import MemoryService
 
 logger = logging.getLogger(__name__)
 
 # modality-specific timeout configurations (soft_limit, hard_limit) in seconds
 MODALITY_TIMEOUTS = {
-    "conversation": (180, 210),   # 3 min soft, 3.5 min hard
-    "document": (300, 360),       # 5 min soft, 6 min hard
-    "image": (120, 150),          # 2 min soft, 2.5 min hard
-    "video": (600, 660),          # 10 min soft, 11 min hard (video processing intensive)
-    "audio": (300, 360),          # 5 min soft, 6 min hard (transcription)
+    "conversation": (180, 210),  # 3 min soft, 3.5 min hard
+    "document": (300, 360),  # 5 min soft, 6 min hard
+    "image": (120, 150),  # 2 min soft, 2.5 min hard
+    "video": (600, 660),  # 10 min soft, 11 min hard (video processing intensive)
+    "audio": (300, 360),  # 5 min soft, 6 min hard (transcription)
 }
 
 
@@ -62,7 +63,7 @@ def calculate_retry_countdown(retry_count: int, base: int = 60, max_delay: int =
     """
     import random
 
-    delay = base * (2 ** retry_count)
+    delay = base * (2**retry_count)
     jitter = random.uniform(0, delay * 0.1)  # noqa: S311  # 10% jitter to prevent thundering herd
     return min(int(delay + jitter), max_delay)
 
@@ -70,18 +71,13 @@ def calculate_retry_countdown(retry_count: int, base: int = 60, max_delay: int =
 @celery_app.task(
     bind=True,
     name="memu.tasks.process_memory",
-    autoretry_for=(Exception,),      # Auto-retry on exceptions
-    retry_backoff=True,               # Enable exponential backoff
-    retry_backoff_max=3600,           # Max 1 hour between retries
-    retry_jitter=True,                # Add jitter
-    max_retries=5,                    # Max total retries
+    autoretry_for=(Exception,),  # Auto-retry on exceptions
+    retry_backoff=True,  # Enable exponential backoff
+    retry_backoff_max=3600,  # Max 1 hour between retries
+    retry_jitter=True,  # Add jitter
+    max_retries=5,  # Max total retries
 )
-def process_memory_task(
-    self,
-    resource_url: str,
-    modality: str,
-    user: Optional[Dict[str, Any]] = None
-):
+def process_memory_task(self, resource_url: str, modality: str, user: dict[str, Any] | None = None):
     """
     Background task that initializes MemU and runs the memorization logic.
 
@@ -118,23 +114,19 @@ def process_memory_task(
                 "modality": modality,
                 "soft_time_limit": soft_limit,
                 "hard_time_limit": hard_limit,
-            }
+            },
         )
 
     # Step 1: Input validation
     try:
-        validated_input = MemorizeTaskInput(
-            resource_url=resource_url,
-            modality=modality,
-            user=user
-        )
+        validated_input = MemorizeTaskInput(resource_url=resource_url, modality=modality, user=user)
         logger.debug(
             f"Task {task_id}: Input validation passed",
             extra={
                 "task_id": task_id,
                 "resource_url": resource_url,
                 "modality": modality,
-            }
+            },
         )
     except ValidationError as e:
         logger.error(
@@ -145,10 +137,10 @@ def process_memory_task(
                 "validation_errors": str(e),
                 "resource_url": resource_url,
                 "modality": modality,
-            }
+            },
         )
         # Don't retry validation errors - they will always fail
-        raise ValueError(f"Invalid input: {e}") from e
+        raise ValueError(f"Invalid input: {e}") from e  # noqa: TRY003
 
     # Step 2: Log task start
     logger.info(
@@ -159,18 +151,20 @@ def process_memory_task(
             "modality": validated_input.modality,
             "user_id": validated_input.user.get("user_id") if validated_input.user else None,
             "retry_count": self.request.retries,
-        }
+        },
     )
 
     # Step 3: Initialize service and execute
     service = MemoryService()
 
     try:
-        result = run_async(service.memorize(
-            resource_url=validated_input.resource_url,
-            modality=validated_input.modality,
-            user=validated_input.user,
-        ))
+        result = run_async(
+            service.memorize(
+                resource_url=validated_input.resource_url,
+                modality=validated_input.modality,
+                user=validated_input.user,
+            )
+        )
 
         logger.info(
             "Memory processing completed successfully",
@@ -179,10 +173,8 @@ def process_memory_task(
                 "resource_url": validated_input.resource_url,
                 "modality": validated_input.modality,
                 "result_items": len(result.get("items", [])) if isinstance(result, dict) else 0,
-            }
+            },
         )
-
-        return result
 
     except Exception as e:
         error_type = type(e).__name__
@@ -197,7 +189,7 @@ def process_memory_task(
                 "modality": validated_input.modality,
                 "retry_count": self.request.retries,
                 "max_retries": self.max_retries,
-            }
+            },
         )
 
         # Check if we should retry
@@ -208,7 +200,7 @@ def process_memory_task(
                     "task_id": task_id,
                     "final_error": str(e),
                     "retry_count": self.request.retries,
-                }
+                },
             )
             raise  # Don't retry, task goes to failed state
 
@@ -222,12 +214,10 @@ def process_memory_task(
                 "retry_count": self.request.retries + 1,
                 "countdown": countdown,
                 "error_type": error_type,
-            }
+            },
         )
 
         # Retry with exponential backoff
-        raise self.retry(
-            exc=e,
-            countdown=countdown,
-            max_retries=self.max_retries
-        )
+        raise self.retry(exc=e, countdown=countdown, max_retries=self.max_retries) from e
+    else:
+        return result

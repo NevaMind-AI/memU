@@ -5,7 +5,7 @@ This module provides Pydantic models to validate task inputs before processing,
 preventing security vulnerabilities like SSRF, path traversal, and injection attacks.
 """
 
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -25,7 +25,7 @@ class MemorizeTaskInput(BaseModel):
 
     resource_url: str
     modality: Literal["conversation", "document", "image", "video", "audio"]
-    user: Dict[str, Any] | None = None
+    user: dict[str, Any] | None = None
 
     @field_validator("resource_url")
     @classmethod
@@ -50,13 +50,13 @@ class MemorizeTaskInput(BaseModel):
         """
         # Length check
         if len(v) > 2048:
-            raise ValueError("URL exceeds maximum length of 2048 characters")
+            raise ValueError("URL exceeds maximum length of 2048 characters")  # noqa: TRY003
 
         # Parse and validate
         try:
             parsed = urlparse(v)
         except Exception as e:
-            raise ValueError(f"Invalid URL format: {e}") from e
+            raise ValueError(f"Invalid URL format: {e}") from e  # noqa: TRY003
 
         # Scheme validation (prevent file://, ftp://, etc.)
         if parsed.scheme not in ["http", "https"]:
@@ -66,23 +66,20 @@ class MemorizeTaskInput(BaseModel):
 
         # Netloc must be present
         if not parsed.netloc:
-            raise ValueError("URL must include a hostname")
+            raise ValueError("URL must include a hostname")  # noqa: TRY003
 
         # Path traversal protection
         if ".." in parsed.path or ".." in parsed.netloc:
-            raise ValueError("Path traversal detected in URL")
+            raise ValueError("Path traversal detected in URL")  # noqa: TRY003
 
         # SSRF protection - Block localhost/private IPs
         # For IPv6 addresses in brackets like [::1], keep the brackets
         # For regular hostnames, remove port if present
         netloc_lower = parsed.netloc.lower()
-        if netloc_lower.startswith('['):
+        if netloc_lower.startswith("["):
             # IPv6 address - extract the part in brackets
-            bracket_end = netloc_lower.find(']')
-            if bracket_end != -1:
-                hostname_lower = netloc_lower[:bracket_end + 1]
-            else:
-                hostname_lower = netloc_lower
+            bracket_end = netloc_lower.find("]")
+            hostname_lower = netloc_lower[: bracket_end + 1] if bracket_end != -1 else netloc_lower
         else:
             # Regular hostname - remove port
             hostname_lower = netloc_lower.split(":")[0]
@@ -97,12 +94,12 @@ class MemorizeTaskInput(BaseModel):
         ]
 
         if hostname_lower in localhost_patterns:
-            raise ValueError("Access to localhost is not allowed")
+            raise ValueError("Access to localhost is not allowed")  # noqa: TRY003
 
         # Private IP ranges (check if hostname looks like an IP)
         private_ip_patterns = [
-            "10.",           # 10.0.0.0/8
-            "172.16.",       # 172.16.0.0/12
+            "10.",  # 10.0.0.0/8
+            "172.16.",  # 172.16.0.0/12
             "172.17.",
             "172.18.",
             "172.19.",
@@ -118,18 +115,18 @@ class MemorizeTaskInput(BaseModel):
             "172.29.",
             "172.30.",
             "172.31.",
-            "192.168.",      # 192.168.0.0/16
-            "169.254.",      # Link-local (169.254.0.0/16)
+            "192.168.",  # 192.168.0.0/16
+            "169.254.",  # Link-local (169.254.0.0/16)
         ]
 
         if any(hostname_lower.startswith(pattern) for pattern in private_ip_patterns):
-            raise ValueError("Access to private IP ranges is not allowed")
+            raise ValueError("Access to private IP ranges is not allowed")  # noqa: TRY003
 
         return v
 
     @field_validator("user")
     @classmethod
-    def validate_user(cls, v: Dict[str, Any] | None) -> Dict[str, Any] | None:
+    def validate_user(cls, v: dict[str, Any] | None) -> dict[str, Any] | None:
         """
         Validate user dictionary structure.
 
@@ -147,11 +144,11 @@ class MemorizeTaskInput(BaseModel):
 
         # Ensure user_id exists if user dict provided
         if "user_id" not in v:
-            raise ValueError("user_id is required in user dict")
+            raise ValueError("user_id is required in user dict")  # noqa: TRY003
 
         # Type safety for user_id
         if not isinstance(v["user_id"], str) or not v["user_id"].strip():
-            raise ValueError("user_id must be a non-empty string")
+            raise ValueError("user_id must be a non-empty string")  # noqa: TRY003
 
         return v
 
@@ -187,23 +184,10 @@ class TaskValidationConfig(BaseModel):
     """Configuration for task input validation."""
 
     max_url_length: int = Field(default=2048, description="Maximum URL length")
-    allowed_url_schemes: list[str] = Field(
-        default=["http", "https"],
-        description="Allowed URL schemes"
-    )
-    blocked_domains: list[str] = Field(
-        default_factory=list,
-        description="Domains to block (optional custom blocklist)"
-    )
-    max_file_size_mb: int = Field(
-        default=100,
-        description="Maximum file size in MB (not enforced at validation)"
-    )
+    allowed_url_schemes: list[str] = Field(default=["http", "https"], description="Allowed URL schemes")
+    blocked_domains: list[str] = Field(default_factory=list, description="Domains to block (optional custom blocklist)")
+    max_file_size_mb: int = Field(default=100, description="Maximum file size in MB (not enforced at validation)")
     allowed_modalities: list[str] = Field(
-        default=["conversation", "document", "image", "video", "audio"],
-        description="Allowed modality values"
+        default=["conversation", "document", "image", "video", "audio"], description="Allowed modality values"
     )
-    user_id_required: bool = Field(
-        default=True,
-        description="Whether user_id is required in user dict"
-    )
+    user_id_required: bool = Field(default=True, description="Whether user_id is required in user dict")

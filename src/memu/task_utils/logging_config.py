@@ -74,11 +74,11 @@ class ColoredFormatter(logging.Formatter):
     """
 
     COLORS: ClassVar[dict] = {
-        "DEBUG": "\033[36m",      # Cyan
-        "INFO": "\033[32m",       # Green
-        "WARNING": "\033[33m",    # Yellow
-        "ERROR": "\033[31m",      # Red
-        "CRITICAL": "\033[35m",   # Magenta
+        "DEBUG": "\033[36m",  # Cyan
+        "INFO": "\033[32m",  # Green
+        "WARNING": "\033[33m",  # Yellow
+        "ERROR": "\033[31m",  # Red
+        "CRITICAL": "\033[35m",  # Magenta
     }
     RESET = "\033[0m"
 
@@ -117,7 +117,7 @@ def configure_celery_logging(
         file_handler = {
             "class": "logging.handlers.RotatingFileHandler",
             "filename": log_file,
-            "maxBytes": 10485760,  
+            "maxBytes": 10485760,
             "backupCount": 5,
             "formatter": "json" if use_json else "standard",
         }

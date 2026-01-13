@@ -17,15 +17,14 @@ Usage:
 
 import logging
 import os
-from typing import Optional
 
-from .manager import event_manager
 from .dispatcher import CeleryDispatcher
+from .manager import event_manager
 
 logger = logging.getLogger(__name__)
 
 
-def init_event_system(celery: bool = True, celery_options: Optional[dict] = None) -> None:
+def init_event_system(celery: bool = True, celery_options: dict | None = None) -> None:
     """
     Initialize the event system with dispatchers.
 
@@ -49,7 +48,7 @@ def init_event_system(celery: bool = True, celery_options: Optional[dict] = None
 
         logger.info(
             "Event system initialized with CeleryDispatcher",
-            extra={"dispatcher_count": len(event_manager._dispatchers)}
+            extra={"dispatcher_count": len(event_manager._dispatchers)},
         )
     else:
         logger.info("Event system initialized without dispatchers")
@@ -59,8 +58,6 @@ def init_event_system(celery: bool = True, celery_options: Optional[dict] = None
 if os.getenv("MEMU_AUTO_INIT_EVENTS", "true").lower() == "true":
     try:
         init_event_system(celery=True)
-        logger.debug(
-            f"Event system auto-initialized: {len(event_manager._dispatchers)} dispatcher(s) registered"
-        )
+        logger.debug(f"Event system auto-initialized: {len(event_manager._dispatchers)} dispatcher(s) registered")
     except Exception as e:
         logger.error(f"Failed to auto-initialize event system: {e}", exc_info=True)

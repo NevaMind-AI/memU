@@ -41,8 +41,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from memu.celery_app import celery_app
 from memu import tasks  # noqa: F401
+from memu.celery_app import celery_app
 from memu.events.setup import init_event_system
 
 init_event_system(celery=True)
@@ -61,6 +61,6 @@ if __name__ == "__main__":
     print("Use Ctrl+C to stop\n")
 
     celery_app.worker_main([
-        'worker',
-        '--loglevel=info',
+        "worker",
+        "--loglevel=info",
     ])

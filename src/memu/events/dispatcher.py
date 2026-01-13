@@ -24,7 +24,7 @@ Example:
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -53,12 +53,7 @@ class CeleryDispatcher:
         # Task queued with ID: abc-123-def
     """
 
-    def __init__(
-        self,
-        event_manager=None,
-        enabled: bool = True,
-        task_options: Optional[Dict[str, Any]] = None
-    ):
+    def __init__(self, event_manager=None, enabled: bool = True, task_options: dict[str, Any] | None = None):
         """
         Initialize the Celery dispatcher and auto-register with EventManager.
 
@@ -73,6 +68,7 @@ class CeleryDispatcher:
         # Auto-register with EventManager
         if event_manager is None:
             from .manager import event_manager as default_manager
+
             event_manager = default_manager
 
         event_manager.register_dispatcher(self)
@@ -82,16 +78,13 @@ class CeleryDispatcher:
             extra={
                 "enabled": enabled,
                 "task_options": task_options,
-                "registered_dispatchers": len(event_manager._dispatchers)
-            }
+                "registered_dispatchers": len(event_manager._dispatchers),
+            },
         )
 
     def _dispatch_to_celery(
-        self,
-        event_name: str,
-        data: Dict[str, Any],
-        task_name: str = "memu.tasks.process_memory"
-    ) -> Optional[str]:
+        self, event_name: str, data: dict[str, Any], task_name: str = "memu.tasks.process_memory"
+    ) -> str | None:
         """
         Internal method to dispatch event data to a Celery task.
 
@@ -112,22 +105,19 @@ class CeleryDispatcher:
             from memu.tasks import process_memory_task
 
             # Extract task parameters from event data
-            resource_url = data.get('resource_url')
-            modality = data.get('modality')
-            user = data.get('user')
+            resource_url = data.get("resource_url")
+            modality = data.get("modality")
+            user = data.get("user")
 
             if not resource_url or not modality:
                 logger.error(
                     f"Invalid event data for {event_name}: missing required fields",
-                    extra={"event": event_name, "data": data}
+                    extra={"event": event_name, "data": data},
                 )
                 return None
 
             # Dispatch to Celery using existing task
-            task = process_memory_task.apply_async(
-                args=[resource_url, modality, user],
-                **self.task_options
-            )
+            task = process_memory_task.apply_async(args=[resource_url, modality, user], **self.task_options)
 
             logger.info(
                 f"Event '{event_name}' dispatched to Celery",
@@ -136,21 +126,21 @@ class CeleryDispatcher:
                     "task_id": task.id,
                     "resource_url": resource_url,
                     "modality": modality,
-                    "user_id": user.get('user_id') if user else None
-                }
+                    "user_id": user.get("user_id") if user else None,
+                },
             )
-
-            return task.id
 
         except Exception as e:
             logger.error(
                 f"Failed to dispatch event '{event_name}' to Celery",
                 exc_info=True,
-                extra={"event": event_name, "error": str(e)}
+                extra={"event": event_name, "error": str(e)},
             )
             return None
+        else:
+            return task.id
 
-    def on_memory_saved(self, data: Dict[str, Any]) -> Optional[str]:
+    def on_memory_saved(self, data: dict[str, Any]) -> str | None:
         """
         Handle 'on_memory_saved' event.
 
@@ -177,18 +167,11 @@ class CeleryDispatcher:
             ... })
             'abc-123-def-456'
         """
-        logger.debug(
-            "on_memory_saved event received",
-            extra={"resource_url": data.get('resource_url')}
-        )
+        logger.debug("on_memory_saved event received", extra={"resource_url": data.get("resource_url")})
 
-        return self._dispatch_to_celery(
-            event_name='on_memory_saved',
-            data=data,
-            task_name='memu.tasks.process_memory'
-        )
+        return self._dispatch_to_celery(event_name="on_memory_saved", data=data, task_name="memu.tasks.process_memory")
 
-    def on_memory_updated(self, data: Dict[str, Any]) -> Optional[str]:
+    def on_memory_updated(self, data: dict[str, Any]) -> str | None:
         """
         Handle 'on_memory_updated' event.
 
@@ -202,18 +185,13 @@ class CeleryDispatcher:
         Returns:
             Task ID if dispatched successfully
         """
-        logger.debug(
-            "on_memory_updated event received",
-            extra={"resource_url": data.get('resource_url')}
-        )
+        logger.debug("on_memory_updated event received", extra={"resource_url": data.get("resource_url")})
 
         return self._dispatch_to_celery(
-            event_name='on_memory_updated',
-            data=data,
-            task_name='memu.tasks.process_memory'
+            event_name="on_memory_updated", data=data, task_name="memu.tasks.process_memory"
         )
 
-    def on_memory_deleted(self, data: Dict[str, Any]) -> Optional[str]:
+    def on_memory_deleted(self, data: dict[str, Any]) -> str | None:
         """
         Handle 'on_memory_deleted' event.
 
@@ -226,21 +204,15 @@ class CeleryDispatcher:
         Returns:
             Task ID if dispatched successfully
         """
-        logger.debug(
-            "on_memory_deleted event received",
-            extra={"memory_id": data.get('memory_id')}
-        )
+        logger.debug("on_memory_deleted event received", extra={"memory_id": data.get("memory_id")})
 
         # For delete operations, we might want a different task
         # For now, log the event (can extend later)
-        logger.info(
-            "Memory deletion event (no background processing configured)",
-            extra={"data": data}
-        )
+        logger.info("Memory deletion event (no background processing configured)", extra={"data": data})
 
         return None
 
-    def on_memory_queried(self, data: Dict[str, Any]) -> Optional[str]:
+    def on_memory_queried(self, data: dict[str, Any]) -> str | None:
         """
         Handle 'on_memory_queried' event.
 
@@ -253,17 +225,11 @@ class CeleryDispatcher:
         Returns:
             Task ID if dispatched successfully
         """
-        logger.debug(
-            "on_memory_queried event received",
-            extra={"query": data.get('query')}
-        )
+        logger.debug("on_memory_queried event received", extra={"query": data.get("query")})
 
         # For query operations, typically no background processing needed
         # Can be used for analytics, logging, etc.
-        logger.info(
-            "Memory query event (no background processing configured)",
-            extra={"data": data}
-        )
+        logger.info("Memory query event (no background processing configured)", extra={"data": data})
 
         return None
 
@@ -288,7 +254,4 @@ class CeleryDispatcher:
             >>> dispatcher.set_task_options(priority=5, queue='high-priority')
         """
         self.task_options.update(options)
-        logger.info(
-            "Updated task options",
-            extra={"task_options": self.task_options}
-        )
+        logger.info("Updated task options", extra={"task_options": self.task_options})

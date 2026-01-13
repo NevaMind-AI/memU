@@ -47,7 +47,7 @@ async def demo_event_driven_flow():
 
     print("Step 1: Initializing event system...")
     init_event_system(celery=True)
-    print(f"Event system initialized")
+    print("Event system initialized")
     print(f"   - Registered dispatchers: {len(event_manager._dispatchers)}")
     print(f"   - Supported events: {', '.join(event_manager.list_events())}")
 
@@ -62,10 +62,10 @@ async def demo_event_driven_flow():
         resource_url="https://example.com/event-driven-demo.pdf",
         modality="document",
         user={"user_id": "demo_user_123"},
-        background=True  # triggers event emission
+        background=True,  # triggers event emission
     )
 
-    print(f"Event emitted and dispatched")
+    print("Event emitted and dispatched")
     print(f"   - Status: {result.get('status')}")
     print(f"   - Message: {result.get('message')}")
     print(f"   - Event: {result.get('event')}")
@@ -91,12 +91,12 @@ async def demo_event_driven_flow():
     def custom_listener(data):
         """Custom event listener for demonstration."""
         custom_events.append(data)
-        print(f"Custom listener received event!")
+        print("Custom listener received event!")
         print(f"   - Resource: {data.get('resource_url')}")
         print(f"   - Modality: {data.get('modality')}")
 
     # Register custom listener
-    event_manager.on('on_memory_saved', custom_listener)
+    event_manager.on("on_memory_saved", custom_listener)
     print("Registered custom listener")
 
     # Emit another event
@@ -105,7 +105,7 @@ async def demo_event_driven_flow():
         resource_url="https://example.com/custom-listener-test.pdf",
         modality="document",
         user={"user_id": "demo_user_456"},
-        background=True
+        background=True,
     )
 
     print(f"\nCustom listener captured {len(custom_events)} event(s)")
@@ -113,7 +113,7 @@ async def demo_event_driven_flow():
     print_section("Dispatcher Status")
     for dispatcher in event_manager._dispatchers:
         if isinstance(dispatcher, CeleryDispatcher):
-            print(f"CeleryDispatcher:")
+            print("CeleryDispatcher:")
             print(f"   - Enabled: {dispatcher.enabled}")
             print(f"   - Task Options: {dispatcher.task_options}")
 

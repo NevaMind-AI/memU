@@ -19,10 +19,9 @@ Usage:
     })
 """
 
-from .manager import EventManager, event_manager
-
 # Import setup to trigger auto-initialization
 # This creates and registers the CeleryDispatcher automatically
 from . import setup  # noqa: F401
+from .manager import EventManager, event_manager
 
-__all__ = ["event_manager", "EventManager"]
+__all__ = ["EventManager", "event_manager"]

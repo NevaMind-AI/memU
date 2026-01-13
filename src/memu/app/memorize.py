@@ -108,12 +108,12 @@ class MemorizeMixin:
                 extra={
                     "resource_url": resource_url,
                     "modality": modality,
-                    "user_id": user.get("user_id") if user else None
-                }
+                    "user_id": user.get("user_id") if user else None,
+                },
             )
 
             # Emit the event - any registered dispatchers will handle it
-            event_manager.emit('on_memory_saved', event_data)
+            event_manager.emit("on_memory_saved", event_data)
 
             # Get task_id from CeleryDispatcher if available
             # (For now, return generic response - can enhance to track task_id)
@@ -121,7 +121,7 @@ class MemorizeMixin:
                 "status": "queued",
                 "message": "Memory processing event dispatched to background workers",
                 "event": "on_memory_saved",
-                "resource_url": resource_url
+                "resource_url": resource_url,
             }
 
         # Synchronous processing
