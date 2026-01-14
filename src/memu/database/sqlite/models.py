@@ -1,30 +1,33 @@
+"""SQLite-specific models for MemU database storage."""
+
 from __future__ import annotations
 
+import json
+import logging
 import uuid
 from datetime import datetime
 from typing import Any
 
 import pendulum
-
-try:
-    from pgvector.sqlalchemy import VECTOR as Vector
-except ImportError as exc:
-    msg = "pgvector is required for Postgres vector support"
-    raise ImportError(msg) from exc
-
 from pydantic import BaseModel
-from sqlalchemy import ForeignKey, MetaData, String, Text
+from sqlalchemy import MetaData, String, Text
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
 
+logger = logging.getLogger(__name__)
+
 
 class TZDateTime(DateTime):
+    """DateTime type with timezone support."""
+
     def __init__(self, timezone: bool = True, **kw: Any) -> None:
         super().__init__(timezone=timezone, **kw)
 
 
-class BaseModelMixin(SQLModel):
+class SQLiteBaseModelMixin(SQLModel):
+    """Base mixin for SQLite models with common fields."""
+
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
         primary_key=True,
@@ -42,36 +45,105 @@ class BaseModelMixin(SQLModel):
     )
 
 
-class ResourceModel(BaseModelMixin, Resource):
+class SQLiteResourceModel(SQLiteBaseModelMixin, Resource):
+    """SQLite resource model."""
+
     url: str = Field(sa_column=Column(String, nullable=False))
     modality: str = Field(sa_column=Column(String, nullable=False))
     local_path: str = Field(sa_column=Column(String, nullable=False))
     caption: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
+    # Store embedding as JSON string since SQLite doesn't have native vector type
+    embedding_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+
+    @property
+    def embedding(self) -> list[float] | None:
+        """Parse embedding from JSON string."""
+        if self.embedding_json is None:
+            return None
+        try:
+            return list(json.loads(self.embedding_json))
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse resource embedding JSON: %s", e)
+            return None
+
+    @embedding.setter
+    def embedding(self, value: list[float] | None) -> None:
+        """Serialize embedding to JSON string."""
+        if value is None:
+            self.embedding_json = None
+        else:
+            self.embedding_json = json.dumps(value)
 
 
-class MemoryItemModel(BaseModelMixin, MemoryItem):
-    resource_id: str | None = Field(sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), nullable=True))
+class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):
+    """SQLite memory item model."""
+
+    resource_id: str | None = Field(sa_column=Column(String, nullable=True))
     memory_type: MemoryType = Field(sa_column=Column(String, nullable=False))
     summary: str = Field(sa_column=Column(Text, nullable=False))
-    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
+    # Store embedding as JSON string since SQLite doesn't have native vector type
+    embedding_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+
+    @property
+    def embedding(self) -> list[float] | None:
+        """Parse embedding from JSON string."""
+        if self.embedding_json is None:
+            return None
+        try:
+            return list(json.loads(self.embedding_json))
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse memory item embedding JSON: %s", e)
+            return None
+
+    @embedding.setter
+    def embedding(self, value: list[float] | None) -> None:
+        """Serialize embedding to JSON string."""
+        if value is None:
+            self.embedding_json = None
+        else:
+            self.embedding_json = json.dumps(value)
 
 
-class MemoryCategoryModel(BaseModelMixin, MemoryCategory):
+class SQLiteMemoryCategoryModel(SQLiteBaseModelMixin, MemoryCategory):
+    """SQLite memory category model."""
+
     name: str = Field(sa_column=Column(String, nullable=False, index=True))
     description: str = Field(sa_column=Column(Text, nullable=False))
-    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
+    # Store embedding as JSON string since SQLite doesn't have native vector type
+    embedding_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     summary: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
 
+    @property
+    def embedding(self) -> list[float] | None:
+        """Parse embedding from JSON string."""
+        if self.embedding_json is None:
+            return None
+        try:
+            return list(json.loads(self.embedding_json))
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning("Failed to parse category embedding JSON: %s", e)
+            return None
 
-class CategoryItemModel(BaseModelMixin, CategoryItem):
-    item_id: str = Field(sa_column=Column(ForeignKey("memory_items.id", ondelete="CASCADE"), nullable=False))
-    category_id: str = Field(sa_column=Column(ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False))
+    @embedding.setter
+    def embedding(self, value: list[float] | None) -> None:
+        """Serialize embedding to JSON string."""
+        if value is None:
+            self.embedding_json = None
+        else:
+            self.embedding_json = json.dumps(value)
 
-    __table_args__ = (Index("idx_category_items_unique", "item_id", "category_id", unique=True),)
+
+class SQLiteCategoryItemModel(SQLiteBaseModelMixin, CategoryItem):
+    """SQLite category-item relation model."""
+
+    item_id: str = Field(sa_column=Column(String, nullable=False))
+    category_id: str = Field(sa_column=Column(String, nullable=False))
+
+    __table_args__ = (Index("idx_sqlite_category_items_unique", "item_id", "category_id", unique=True),)
 
 
 def _normalize_table_args(table_args: Any) -> tuple[list[Any], dict[str, Any]]:
+    """Normalize SQLAlchemy table args to a consistent format."""
     if table_args is None:
         return [], {}
     if isinstance(table_args, dict):
@@ -93,6 +165,7 @@ def _merge_models(
     name_suffix: str,
     base_attrs: dict[str, Any],
 ) -> type[SQLModel]:
+    """Merge user scope model with core SQLModel."""
     overlap = set(user_model.model_fields) & set(core_model.model_fields)
     if overlap:
         msg = f"Scope fields conflict with core model fields: {sorted(overlap)}"
@@ -105,7 +178,7 @@ def _merge_models(
     )
 
 
-def build_table_model(
+def build_sqlite_table_model(
     user_model: type[BaseModel],
     core_model: type[SQLModel],
     *,
@@ -114,6 +187,7 @@ def build_table_model(
     extra_table_args: tuple[Any, ...] | None = None,
     unique_with_scope: list[str] | None = None,
 ) -> type[SQLModel]:
+    """Build a scoped SQLite table model."""
     overlap = set(user_model.model_fields) & set(core_model.model_fields)
     if overlap:
         msg = f"Scope fields conflict with core model fields: {sorted(overlap)}"
@@ -139,39 +213,23 @@ def build_table_model(
         else:
             base_attrs["__table_args__"] = tuple(table_args)
 
-    base = _merge_models(user_model, core_model, name_suffix="Base", base_attrs=base_attrs)
+    base = _merge_models(user_model, core_model, name_suffix="SQLiteBase", base_attrs=base_attrs)
 
     # Use type() instead of create_model to properly preserve SQLModel table behavior
     table_attrs: dict[str, Any] = {"__module__": core_model.__module__}
     return type(
-        f"{user_model.__name__}{core_model.__name__}Table",
+        f"{user_model.__name__}{core_model.__name__}SQLiteTable",
         (base,),
         table_attrs,
         table=True,
     )
 
 
-def build_scoped_models(
-    user_model: type[BaseModel],
-) -> tuple[type[SQLModel], type[SQLModel], type[SQLModel], type[SQLModel]]:
-    """
-    Build scoped SQLModel tables for each entity (resource, category, item, relation).
-    """
-    resource_model = build_table_model(user_model, ResourceModel, tablename="resources")
-    memory_category_model = build_table_model(
-        user_model, MemoryCategoryModel, tablename="memory_categories", unique_with_scope=["name"]
-    )
-    memory_item_model = build_table_model(user_model, MemoryItemModel, tablename="memory_items")
-    category_item_model = build_table_model(user_model, CategoryItemModel, tablename="category_items")
-    return resource_model, memory_category_model, memory_item_model, category_item_model
-
-
 __all__ = [
-    "BaseModelMixin",
-    "CategoryItemModel",
-    "MemoryCategoryModel",
-    "MemoryItemModel",
-    "ResourceModel",
-    "build_scoped_models",
-    "build_table_model",
+    "SQLiteBaseModelMixin",
+    "SQLiteCategoryItemModel",
+    "SQLiteMemoryCategoryModel",
+    "SQLiteMemoryItemModel",
+    "SQLiteResourceModel",
+    "build_sqlite_table_model",
 ]
