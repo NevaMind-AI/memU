@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from sqlmodel import select
+from sqlmodel import delete, select
 
 from memu.database.models import Resource
 from memu.database.repositories.resource import ResourceRepo
@@ -85,6 +85,54 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
             self.resources[row.id] = res
 
         return result
+
+    def clear_resources(self, where: Mapping[str, Any] | None = None) -> dict[str, Resource]:
+        """Clear resources matching the where clause.
+
+        Args:
+            where: Optional filter conditions.
+
+        Returns:
+            Dictionary of deleted resource ID to Resource mapping.
+        """
+        filters = self._build_filters(self._resource_model, where)
+        with self._sessions.session() as session:
+            # First get the objects to delete
+            stmt = select(self._resource_model)
+            if filters:
+                stmt = stmt.where(*filters)
+            rows = session.exec(stmt).all()
+
+            deleted: dict[str, Resource] = {}
+            for row in rows:
+                res = Resource(
+                    id=row.id,
+                    url=row.url,
+                    modality=row.modality,
+                    local_path=row.local_path,
+                    caption=row.caption,
+                    embedding=self._normalize_embedding(row.embedding_json),
+                    created_at=row.created_at,
+                    updated_at=row.updated_at,
+                    **self._scope_kwargs_from(row),
+                )
+                deleted[row.id] = res
+
+            if not deleted:
+                return {}
+
+            # Delete from database
+            del_stmt = delete(self._resource_model)
+            if filters:
+                del_stmt = del_stmt.where(*filters)
+            session.exec(del_stmt)
+            session.commit()
+
+            # Clean up cache
+            for res_id in deleted:
+                self.resources.pop(res_id, None)
+
+        return deleted
 
     def create_resource(
         self,

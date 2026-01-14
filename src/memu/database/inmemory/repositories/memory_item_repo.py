@@ -22,6 +22,15 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             return dict(self.items)
         return {mid: item for mid, item in self.items.items() if matches_where(item, where)}
 
+    def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+        if not where:
+            matches = self.items.copy()
+            self.items.clear()
+            return matches
+        matches = {mid: item for mid, item in self.items.items() if matches_where(item, where)}
+        self.items = {mid: item for mid, item in self.items.items() if mid not in matches}
+        return matches
+
     def create_item(
         self,
         *,

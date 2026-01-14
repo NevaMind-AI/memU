@@ -3,7 +3,10 @@ from __future__ import annotations
 import inspect
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from memu.workflow.interceptor import WorkflowInterceptorRegistry
 
 WorkflowState = dict[str, Any]
 WorkflowContext = Mapping[str, Any] | None
@@ -49,7 +52,18 @@ async def run_steps(
     steps: list[WorkflowStep],
     initial_state: WorkflowState,
     context: WorkflowContext = None,
+    interceptor_registry: WorkflowInterceptorRegistry | None = None,
 ) -> WorkflowState:
+    from memu.workflow.interceptor import (
+        WorkflowStepContext,
+        run_after_interceptors,
+        run_before_interceptors,
+        run_on_error_interceptors,
+    )
+
+    snapshot = interceptor_registry.snapshot() if interceptor_registry else None
+    strict = interceptor_registry.strict if interceptor_registry else False
+
     state = dict(initial_state)
     for step in steps:
         missing = step.requires - state.keys()
@@ -60,5 +74,28 @@ async def run_steps(
         step_context["step_id"] = step.step_id
         if step.config:
             step_context["step_config"] = step.config
-        state = await step.run(state, step_context)
+
+        # Build interceptor context
+        interceptor_ctx = WorkflowStepContext(
+            workflow_name=name,
+            step_id=step.step_id,
+            step_role=step.role,
+            step_context=step_context,
+        )
+
+        # Run before interceptors
+        if snapshot and snapshot.before:
+            await run_before_interceptors(snapshot.before, interceptor_ctx, state, strict=strict)
+
+        try:
+            state = await step.run(state, step_context)
+        except Exception as e:
+            if snapshot and snapshot.on_error:
+                await run_on_error_interceptors(snapshot.on_error, interceptor_ctx, state, e, strict=strict)
+            raise
+
+        # Run after interceptors
+        if snapshot and snapshot.after:
+            await run_after_interceptors(snapshot.after, interceptor_ctx, state, strict=strict)
+
     return state
