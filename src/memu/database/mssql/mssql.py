@@ -330,10 +330,10 @@ class MssqlStore(Database):
         _rel_repo = MssqlCategoryItemRepo(self.session_manager)
 
         # 2. Bind Modern Interface (Short names) - Fixes "AttributeError"
-        self.resources = _res_repo  # type: ignore
-        self.categories = _cat_repo  # type: ignore
-        self.items = _item_repo  # type: ignore
-        self.relations = _rel_repo  # type: ignore
+        self.resources = _res_repo  # type: ignore[assignment]
+        self.categories = _cat_repo  # type: ignore[assignment]
+        self.items = _item_repo  # type: ignore[assignment]
+        self.relations = _rel_repo  # type: ignore[assignment]
 
         # 3. Bind Legacy Interface (Long names) - Fixes "Abstract Class" error
         self.resource_repo = _res_repo
