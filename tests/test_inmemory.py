@@ -30,7 +30,6 @@ def _resolve_llm_profiles() -> dict[str, dict[str, str]]:
 
 async def main():
     """Test with in-memory storage (default)."""
-    api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("GEMINI_API_KEY")
     # dashscope_api_key = os.environ.get("DASHSCOPE_API_KEY")
     # voyage_api_key = os.environ.get("VOYAGE_API_KEY")
     file_path = str(Path(__file__).resolve().parent / "example" / "example_conversation.json")

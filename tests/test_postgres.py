@@ -30,7 +30,6 @@ def _resolve_llm_profiles() -> dict[str, dict[str, str]]:
 
 async def main():
     """Test with PostgreSQL storage."""
-    api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("GEMINI_API_KEY")
     # Default port 5432; use 5433 if 5432 is occupied
     postgres_dsn = os.environ.get("POSTGRES_DSN", "postgresql+psycopg://postgres:postgres@localhost:5432/memu")
     file_path = str(Path(__file__).resolve().parent / "example" / "example_conversation.json")

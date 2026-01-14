@@ -82,14 +82,13 @@ class GeminiLLMBackend(LLMBackend):
                             "inline_data": {
                                 "mime_type": mime_type,
                                 "data": base64_image,
-                            }
+                            },
                         },
-                    ]
-                }
-            ]
+                    ],
+                },
+            ],
         }
         generation_config = _build_generation_config(temperature=0.2, max_tokens=max_tokens)
         if generation_config:
             payload["generationConfig"] = generation_config
         return payload
-

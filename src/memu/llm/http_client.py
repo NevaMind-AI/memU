@@ -125,6 +125,7 @@ class HTTPLLMClient:
         )
         self.timeout = timeout
         self.embed_model = embed_model or chat_model
+
     async def summarize(
         self, text: str, max_tokens: int | None = None, system_prompt: str | None = None
     ) -> tuple[str, dict[str, Any]]:
