@@ -36,7 +36,7 @@ def _default_memory_type_prompts() -> "dict[str, str | CustomPrompt]":
 
 
 class PromptBlock(BaseModel):
-    lable: str | None = None
+    label: str | None = None
     ordinal: int = Field(default=0)
     prompt: str | None = None
 
