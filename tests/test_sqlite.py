@@ -23,7 +23,7 @@ def _print_results(title: str, result: dict) -> None:
 async def main():
     """Test with SQLite storage."""
     api_key = os.environ.get("OPENAI_API_KEY")
-    file_path = os.path.abspath("example/example_conversation.json")
+    file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "example", "example_conversation.json"))
 
     # Create a temporary SQLite database file
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
