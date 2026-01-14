@@ -151,7 +151,7 @@ skip_empty = true
 
 [tool.coverage.run]
 branch = true
-source = ["tests"]
+source = ["memu"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
