@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from memu.app.settings import LLMConfig
 from memu.llm.backends.grok import GrokBackend
@@ -11,7 +11,7 @@ class TestGrokProvider(unittest.IsolatedAsyncioTestCase):
         """Test that setting provider='grok' sets the correct defaults."""
         config = LLMConfig(provider="grok")
         self.assertEqual(config.base_url, "https://api.x.ai/v1")
-        self.assertEqual(config.api_key, "GROK_API_KEY")
+        self.assertEqual(config.api_key, "XAI_API_KEY")
         self.assertEqual(config.chat_model, "grok-2-latest")
 
     @patch("memu.llm.openai_sdk.AsyncOpenAI")
