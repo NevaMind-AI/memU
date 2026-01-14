@@ -15,6 +15,7 @@ import asyncio
 import json
 import os
 import sys
+from typing import Any
 
 import pytest
 
@@ -92,7 +93,7 @@ async def test_openrouter_full_workflow():
     if not os.path.exists(file_path):
         pytest.skip(f"Test file not found: {file_path}")
 
-    output_data = {}
+    output_data: dict[str, Any] = {}
 
     print("\n" + "=" * 60)
     print("[OPENROUTER] Starting full workflow test...")
