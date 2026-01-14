@@ -184,6 +184,7 @@ class CRUDMixin:
         ]
         return steps
 
+    @staticmethod
     def _list_clear_memories_initial_keys() -> set[str]:
         return {
             "ctx",

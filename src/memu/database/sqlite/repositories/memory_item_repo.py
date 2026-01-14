@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from sqlmodel import select
+from sqlmodel import delete, select
 
 from memu.database.inmemory.vector import cosine_topk
 from memu.database.models import MemoryItem, MemoryType
@@ -114,6 +114,53 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             self.items[row.id] = item
 
         return result
+
+    def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+        """Clear items matching the where clause.
+
+        Args:
+            where: Optional filter conditions.
+
+        Returns:
+            Dictionary of deleted item ID to MemoryItem mapping.
+        """
+        filters = self._build_filters(self._memory_item_model, where)
+        with self._sessions.session() as session:
+            # First get the objects to delete
+            stmt = select(self._memory_item_model)
+            if filters:
+                stmt = stmt.where(*filters)
+            rows = session.exec(stmt).all()
+
+            deleted: dict[str, MemoryItem] = {}
+            for row in rows:
+                item = MemoryItem(
+                    id=row.id,
+                    resource_id=row.resource_id,
+                    memory_type=row.memory_type,
+                    summary=row.summary,
+                    embedding=self._normalize_embedding(row.embedding_json),
+                    created_at=row.created_at,
+                    updated_at=row.updated_at,
+                    **self._scope_kwargs_from(row),
+                )
+                deleted[row.id] = item
+
+            if not deleted:
+                return {}
+
+            # Delete from database
+            del_stmt = delete(self._memory_item_model)
+            if filters:
+                del_stmt = del_stmt.where(*filters)
+            session.exec(del_stmt)
+            session.commit()
+
+            # Clean up cache
+            for item_id in deleted:
+                self.items.pop(item_id, None)
+
+        return deleted
 
     def create_item(
         self,
