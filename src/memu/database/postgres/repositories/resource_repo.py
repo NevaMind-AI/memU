@@ -37,6 +37,31 @@ class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
                 result[res.id] = res
         return result
 
+    def clear_resources(self, where: Mapping[str, Any] | None = None) -> dict[str, Resource]:
+        from sqlmodel import delete, select
+
+        filters = self._build_filters(self._sqla_models.Resource, where)
+        with self._sessions.session() as session:
+            # First get the objects to delete
+            rows = session.scalars(select(self._sqla_models.Resource).where(*filters)).all()
+            deleted: dict[str, Resource] = {}
+            for row in rows:
+                row.embedding = self._normalize_embedding(row.embedding)
+                deleted[row.id] = row
+
+            if not deleted:
+                return {}
+
+            # Delete from database
+            session.exec(delete(self._sqla_models.Resource).where(*filters))
+            session.commit()
+
+            # Clean up cache
+            for res_id in deleted:
+                self.resources.pop(res_id, None)
+
+        return deleted
+
     def create_resource(
         self,
         *,

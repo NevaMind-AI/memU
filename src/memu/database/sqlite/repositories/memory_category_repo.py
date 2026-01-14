@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from sqlmodel import select
+from sqlmodel import delete, select
 
 from memu.database.models import MemoryCategory
 from memu.database.repositories.memory_category import MemoryCategoryRepo
@@ -80,6 +80,53 @@ class SQLiteMemoryCategoryRepo(SQLiteRepoBase, MemoryCategoryRepo):
             self.categories[row.id] = cat
 
         return result
+
+    def clear_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryCategory]:
+        """Clear categories matching the where clause.
+
+        Args:
+            where: Optional filter conditions.
+
+        Returns:
+            Dictionary of deleted category ID to MemoryCategory mapping.
+        """
+        filters = self._build_filters(self._memory_category_model, where)
+        with self._sessions.session() as session:
+            # First get the objects to delete
+            stmt = select(self._memory_category_model)
+            if filters:
+                stmt = stmt.where(*filters)
+            rows = session.exec(stmt).all()
+
+            deleted: dict[str, MemoryCategory] = {}
+            for row in rows:
+                cat = MemoryCategory(
+                    id=row.id,
+                    name=row.name,
+                    description=row.description,
+                    embedding=self._normalize_embedding(row.embedding_json),
+                    summary=row.summary,
+                    created_at=row.created_at,
+                    updated_at=row.updated_at,
+                    **self._scope_kwargs_from(row),
+                )
+                deleted[row.id] = cat
+
+            if not deleted:
+                return {}
+
+            # Delete from database
+            del_stmt = delete(self._memory_category_model)
+            if filters:
+                del_stmt = del_stmt.where(*filters)
+            session.exec(del_stmt)
+            session.commit()
+
+            # Clean up cache
+            for cat_id in deleted:
+                self.categories.pop(cat_id, None)
+
+        return deleted
 
     def get_or_create_category(
         self, *, name: str, description: str, embedding: list[float], user_data: dict[str, Any]
