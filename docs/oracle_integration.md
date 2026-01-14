@@ -5,7 +5,10 @@
 To use the Oracle Database integration, you must have the `oracledb` python driver installed.
 
 ```bash
-uv add oracledb
+```bash
+uv add memu-py[oracle]
+# or
+uv add memu-py --optional oracle
 ```
 
 ## Configuration

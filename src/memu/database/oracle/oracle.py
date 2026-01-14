@@ -4,7 +4,6 @@ import json
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-import oracledb
 from pydantic import BaseModel
 
 from memu.app.settings import DatabaseConfig
@@ -29,10 +28,14 @@ class OracleResourceRepo(ResourceRepo):
     """Oracle implementation of ResourceRepo."""
 
     def __init__(self, user: str, password: str, dsn: str) -> None:
+        import oracledb
+
         self._conn: Connection = oracledb.connect(user=user, password=password, dsn=dsn)
         self._ensure_table()
 
     def _ensure_table(self) -> None:
+        import oracledb
+
         with self._conn.cursor() as cursor:
             try:
                 cursor.execute("SELECT 1 FROM resources FETCH FIRST 1 ROWS ONLY")
@@ -110,10 +113,14 @@ class OracleMemoryItemRepo(MemoryItemRepo):
     """Oracle implementation of MemoryItemRepo."""
 
     def __init__(self, user: str, password: str, dsn: str) -> None:
+        import oracledb
+
         self._conn: Connection = oracledb.connect(user=user, password=password, dsn=dsn)
         self._ensure_table()
 
     def _ensure_table(self) -> None:
+        import oracledb
+
         with self._conn.cursor() as cursor:
             # Simple check if table exists, if not create it.
             # In a real scenario, use migrations (Alembic).
@@ -323,10 +330,14 @@ class OracleMemoryCategoryRepo(MemoryCategoryRepo):
     """Oracle implementation of MemoryCategoryRepo."""
 
     def __init__(self, user: str, password: str, dsn: str) -> None:
+        import oracledb
+
         self._conn: Connection = oracledb.connect(user=user, password=password, dsn=dsn)
         self._ensure_table()
 
     def _ensure_table(self) -> None:
+        import oracledb
+
         with self._conn.cursor() as cursor:
             try:
                 cursor.execute("SELECT 1 FROM memory_categories FETCH FIRST 1 ROWS ONLY")
@@ -517,10 +528,14 @@ class OracleCategoryItemRepo(CategoryItemRepo):
     """Oracle implementation of CategoryItemRepo."""
 
     def __init__(self, user: str, password: str, dsn: str) -> None:
+        import oracledb
+
         self._conn: Connection = oracledb.connect(user=user, password=password, dsn=dsn)
         self._ensure_table()
 
     def _ensure_table(self) -> None:
+        import oracledb
+
         with self._conn.cursor() as cursor:
             try:
                 cursor.execute("SELECT 1 FROM category_items FETCH FIRST 1 ROWS ONLY")
