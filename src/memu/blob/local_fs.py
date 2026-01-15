@@ -67,6 +67,10 @@ class LocalFS:
             return str(dst), text
 
         # HTTP - get clean filename
+        if not url.startswith(("http://", "https://")):
+            msg = f"Resource not found locally and not a valid URL: {url}"
+            raise ValueError(msg)
+
         filename = self._get_filename_from_url(url, modality)
         dst = self.base / filename
 

@@ -92,7 +92,7 @@ def _default_memory_categories() -> list[CategoryConfig]:
 class LLMConfig(BaseModel):
     provider: str = Field(
         default="openai",
-        description="Identifier for the LLM provider implementation (used by HTTP client backend).",
+        description="Identifier for the LLM provider implementation (used by HTTP client backend). Options: 'openai', 'gemini'.",
     )
     base_url: str = Field(default="https://api.openai.com/v1")
     api_key: str = Field(default="OPENAI_API_KEY")
