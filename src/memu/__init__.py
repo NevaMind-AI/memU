@@ -1,8 +1,4 @@
-try:
-    from memu._core import hello_from_bin
-except ModuleNotFoundError:
-    # Rust extension not built, provide dummy
-    hello_from_bin = None
+from memu._core import hello_from_bin
 
 
 def _rust_entry() -> str:
