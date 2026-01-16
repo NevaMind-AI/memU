@@ -45,7 +45,9 @@ class ResourceModel(BaseModelMixin, Resource):
 
 
 class MemoryItemModel(BaseModelMixin, MemoryItem):
-    resource_id: str = Field(sa_column=Column(String(36), ForeignKey("resources.id", ondelete="CASCADE"), nullable=True))
+    resource_id: str = Field(
+        sa_column=Column(String(36), ForeignKey("resources.id", ondelete="CASCADE"), nullable=True)
+    )
     memory_type: MemoryType = Field(sa_column=Column(String(32), nullable=False))
     summary: str = Field(sa_column=Column(Text, nullable=False))
     # MySQL stores embeddings as JSON text (no native vector type)
@@ -61,8 +63,12 @@ class MemoryCategoryModel(BaseModelMixin, MemoryCategory):
 
 
 class CategoryItemModel(BaseModelMixin, CategoryItem):
-    item_id: str = Field(sa_column=Column(String(36), ForeignKey("memory_items.id", ondelete="CASCADE"), nullable=False))
-    category_id: str = Field(sa_column=Column(String(36), ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False))
+    item_id: str = Field(
+        sa_column=Column(String(36), ForeignKey("memory_items.id", ondelete="CASCADE"), nullable=False)
+    )
+    category_id: str = Field(
+        sa_column=Column(String(36), ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False)
+    )
 
     __table_args__ = (Index("idx_category_items_unique", "item_id", "category_id", unique=True),)
 

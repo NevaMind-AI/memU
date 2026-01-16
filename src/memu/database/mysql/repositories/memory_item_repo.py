@@ -19,9 +19,7 @@ class MySQLMemoryItemRepo(MySQLRepoBase):
         sessions: SessionManager,
         scope_fields: list[str],
     ) -> None:
-        super().__init__(
-            state=state, sqla_models=sqla_models, sessions=sessions, scope_fields=scope_fields
-        )
+        super().__init__(state=state, sqla_models=sqla_models, sessions=sessions, scope_fields=scope_fields)
         self._memory_item_model = memory_item_model
         self.items: dict[str, MemoryItem] = self._state.items
 

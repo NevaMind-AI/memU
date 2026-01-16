@@ -41,7 +41,9 @@ class MySQLRepoBase:
                 parsed = json.loads(embedding)
                 return [float(x) for x in parsed]
             except (json.JSONDecodeError, TypeError):
-                logger.debug("Could not parse embedding JSON: %s", embedding[:100] if len(embedding) > 100 else embedding)
+                logger.debug(
+                    "Could not parse embedding JSON: %s", embedding[:100] if len(embedding) > 100 else embedding
+                )
                 return None
         try:
             return [float(x) for x in embedding]
