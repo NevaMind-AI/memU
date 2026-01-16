@@ -36,7 +36,7 @@ def _default_memory_type_prompts() -> "dict[str, str | CustomPrompt]":
 
 
 class PromptBlock(BaseModel):
-    lable: str | None = None
+    label: str | None = None
     ordinal: int = Field(default=0)
     prompt: str | None = None
 
@@ -110,9 +110,21 @@ class LLMConfig(BaseModel):
         description="Default embedding model used for vectorization.",
     )
     embed_batch_size: int = Field(
-        default=25,
+        default=1,
         description="Maximum batch size for embedding API calls (used by SDK client backends).",
     )
+
+    @model_validator(mode="after")
+    def set_provider_defaults(self) -> "LLMConfig":
+        if self.provider == "grok":
+            # If values match the OpenAI defaults, switch them to Grok defaults
+            if self.base_url == "https://api.openai.com/v1":
+                self.base_url = "https://api.x.ai/v1"
+            if self.api_key == "OPENAI_API_KEY":
+                self.api_key = "XAI_API_KEY"
+            if self.chat_model == "gpt-4o-mini":
+                self.chat_model = "grok-2-latest"
+        return self
 
 
 class BlobConfig(BaseModel):
@@ -260,9 +272,9 @@ class LLMProfilesConfig(RootModel[dict[Key, LLMConfig]]):
 
 
 class MetadataStoreConfig(BaseModel):
-    provider: Annotated[Literal["inmemory", "postgres"], Normalize] = "inmemory"
+    provider: Annotated[Literal["inmemory", "postgres", "sqlite"], Normalize] = "inmemory"
     ddl_mode: Annotated[Literal["create", "validate"], Normalize] = "create"
-    dsn: str | None = Field(default=None, description="Postgres connection string when provider=postgres.")
+    dsn: str | None = Field(default=None, description="Database connection string (required for postgres/sqlite).")
 
 
 class VectorIndexConfig(BaseModel):

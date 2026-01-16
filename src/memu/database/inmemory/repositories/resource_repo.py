@@ -21,6 +21,15 @@ class InMemoryResourceRepository(ResourceRepoProtocol):
             return dict(self.resources)
         return {rid: res for rid, res in self.resources.items() if matches_where(res, where)}
 
+    def clear_resources(self, where: Mapping[str, Any] | None = None) -> dict[str, Resource]:
+        if not where:
+            matches = self.resources.copy()
+            self.resources.clear()
+            return matches
+        matches = {rid: res for rid, res in self.resources.items() if matches_where(res, where)}
+        self.resources = {rid: res for rid, res in self.resources.items() if rid not in matches}
+        return matches
+
     def create_resource(
         self,
         *,
