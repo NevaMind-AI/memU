@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0](https://github.com/NevaMind-AI/memU/compare/v1.2.0...v1.3.0) (2026-01-16)
+
+
+### Features
+
+* **llm:** add Grok (xAI) integration ([#179](https://github.com/NevaMind-AI/memU/issues/179)) ([#236](https://github.com/NevaMind-AI/memU/issues/236)) ([1e16309](https://github.com/NevaMind-AI/memU/commit/1e1630948af535f8ed9d608e6c4f9d2748d4ce8e))
+* Openrouter integration as backend provider ([#182](https://github.com/NevaMind-AI/memU/issues/182)) ([cba667a](https://github.com/NevaMind-AI/memU/commit/cba667a56daca5093c9b79a598c7d2ffda813756))
+
 ## [1.2.0](https://github.com/NevaMind-AI/memU/compare/v1.1.2...v1.2.0) (2026-01-14)
 
 
