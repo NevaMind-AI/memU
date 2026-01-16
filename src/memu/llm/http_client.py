@@ -10,6 +10,7 @@ import httpx
 
 from memu.llm.backends.base import LLMBackend
 from memu.llm.backends.doubao import DoubaoLLMBackend
+from memu.llm.backends.gemini import GeminiLLMBackend
 from memu.llm.backends.openai import OpenAILLMBackend
 
 
@@ -47,11 +48,50 @@ class _DoubaoEmbeddingBackend(_EmbeddingBackend):
         return [cast(list[float], d["embedding"]) for d in data["data"]]
 
 
+class _GeminiEmbeddingBackend(_EmbeddingBackend):
+    name = "gemini"
+    embedding_endpoint = "/models/{model}:batchEmbedContents"
+
+    @staticmethod
+    def _normalize_model_name(model: str) -> str:
+        normalized = model.strip()
+        if normalized.startswith("models/"):
+            return normalized
+        return f"models/{normalized}"
+
+    def build_embedding_payload(self, *, inputs: list[str], embed_model: str) -> dict[str, Any]:
+        model_name = self._normalize_model_name(embed_model)
+        requests: list[dict[str, Any]] = []
+        for text in inputs:
+            requests.append({"model": model_name, "content": {"parts": [{"text": text}]}})
+        return {"requests": requests}
+
+    def parse_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
+        embeddings: list[list[float]] = []
+        items = data.get("embeddings")
+        if isinstance(items, list):
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                values = item.get("values")
+                if isinstance(values, list):
+                    embeddings.append([float(v) for v in values])
+        if embeddings:
+            return embeddings
+        single = data.get("embedding")
+        if isinstance(single, dict):
+            values = single.get("values")
+            if isinstance(values, list):
+                return [[float(v) for v in values]]
+        return []
+
+
 logger = logging.getLogger(__name__)
 
 LLM_BACKENDS: dict[str, Callable[[], LLMBackend]] = {
     OpenAILLMBackend.name: OpenAILLMBackend,
     DoubaoLLMBackend.name: DoubaoLLMBackend,
+    GeminiLLMBackend.name: GeminiLLMBackend,
 }
 
 
@@ -92,8 +132,9 @@ class HTTPLLMClient:
         payload = self.backend.build_summary_payload(
             text=text, system_prompt=system_prompt, chat_model=self.chat_model, max_tokens=max_tokens
         )
+        endpoint = self._format_endpoint(self.summary_endpoint, self.chat_model)
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
-            resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers())
+            resp = await client.post(endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
             data = resp.json()
         logger.debug("HTTP LLM summarize response: %s", data)
@@ -142,8 +183,9 @@ class HTTPLLMClient:
             max_tokens=max_tokens,
         )
 
+        endpoint = self._format_endpoint(self.summary_endpoint, self.chat_model)
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
-            resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers())
+            resp = await client.post(endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
             data = resp.json()
         logger.debug("HTTP LLM vision response: %s", data)
@@ -152,8 +194,9 @@ class HTTPLLMClient:
     async def embed(self, inputs: list[str]) -> tuple[list[list[float]], dict[str, Any]]:
         """Create text embeddings using the provider-specific embedding API."""
         payload = self.embedding_backend.build_embedding_payload(inputs=inputs, embed_model=self.embed_model)
+        endpoint = self._format_endpoint(self.embedding_endpoint, self.embed_model)
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
-            resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers())
+            resp = await client.post(endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
             data = resp.json()
         logger.debug("HTTP embedding response: %s", data)
@@ -216,7 +259,18 @@ class HTTPLLMClient:
             return result or "", raw_response
 
     def _headers(self) -> dict[str, str]:
+        if self.provider == "gemini":
+            return {"x-goog-api-key": self.api_key}
         return {"Authorization": f"Bearer {self.api_key}"}
+
+    @staticmethod
+    def _format_endpoint(endpoint: str, model: str) -> str:
+        if "{model}" not in endpoint:
+            return endpoint
+        normalized = model
+        if "models/{model}" in endpoint and normalized.startswith("models/"):
+            normalized = normalized[len("models/") :]
+        return endpoint.replace("{model}", normalized)
 
     def _load_backend(self, provider: str) -> LLMBackend:
         factory = LLM_BACKENDS.get(provider)
@@ -229,6 +283,7 @@ class HTTPLLMClient:
         backends: dict[str, type[_EmbeddingBackend]] = {
             _OpenAIEmbeddingBackend.name: _OpenAIEmbeddingBackend,
             _DoubaoEmbeddingBackend.name: _DoubaoEmbeddingBackend,
+            _GeminiEmbeddingBackend.name: _GeminiEmbeddingBackend,
         }
         factory = backends.get(provider)
         if not factory:
