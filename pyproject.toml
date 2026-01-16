@@ -20,6 +20,7 @@ keywords = ["ai", "memory", "conversation", "llm", "chatbot", "agent"]
 dependencies = [
     "defusedxml>=0.7.1",
     "httpx>=0.28.1",
+    "networkx>=3.0",
     "numpy>=2.3.4",
     "openai>=2.8.0",
     "pydantic>=2.12.4",
