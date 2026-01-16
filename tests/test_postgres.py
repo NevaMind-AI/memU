@@ -7,8 +7,8 @@ async def main():
     """Test with PostgreSQL storage."""
     api_key = os.environ.get("OPENAI_API_KEY")
     # Default port 5432; use 5433 if 5432 is occupied
-    postgres_dsn = os.environ.get("POSTGRES_DSN", "postgresql+psycopg://postgres:postgres@localhost:5432/memu")
-    file_path = os.path.abspath("example/example_conversation.json")
+    postgres_dsn = os.environ.get("POSTGRES_DSN", "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/memu")
+    file_path = os.path.abspath("tests/example/example_conversation.json")
 
     print("\n" + "=" * 60)
     print("[POSTGRES] Starting test...")
