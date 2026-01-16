@@ -22,7 +22,7 @@ def salience_score(
     """
     Compute salience-aware score combining similarity, reinforcement, and recency.
 
-    Formula: similarity × reinforcement_factor × recency_factor
+    Formula: similarity * reinforcement_factor * recency_factor
 
     - reinforcement_factor: log(count + 1) to dampen extreme counts
       (Logarithmic scaling prevents runaway dominance by frequently repeated facts)
@@ -79,7 +79,7 @@ def cosine_topk_salience(
     """
     Top-k retrieval using salience-aware scoring.
 
-    Ranks memories by: similarity × log(reinforcement+1) × recency_decay
+    Ranks memories by: similarity * log(reinforcement+1) * recency_decay
 
     Args:
         query_vec: Query embedding vector

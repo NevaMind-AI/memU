@@ -87,7 +87,7 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         pool = self.list_items(where)
 
         if ranking == "salience":
-            # Salience-aware ranking: similarity × reinforcement × recency
+            # Salience-aware ranking: similarity x reinforcement x recency
             corpus = [
                 (
                     i.id,

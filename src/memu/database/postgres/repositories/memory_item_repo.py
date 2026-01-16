@@ -157,7 +157,9 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
     ) -> list[tuple[str, float]]:
         if not self._use_vector or ranking == "salience":
             # For salience ranking or when pgvector is not available, use local search
-            return self._vector_search_local(query_vec, top_k, where=where, ranking=ranking, recency_decay_days=recency_decay_days)
+            return self._vector_search_local(
+                query_vec, top_k, where=where, ranking=ranking, recency_decay_days=recency_decay_days
+            )
 
         from sqlmodel import select
 
@@ -224,7 +226,7 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         last_reinforced_at: datetime | None,
         recency_decay_days: float,
     ) -> float:
-        """Compute salience score: similarity × reinforcement × recency."""
+        """Compute salience score: similarity * reinforcement * recency."""
         reinforcement_factor = math.log(reinforcement_count + 1)
 
         if last_reinforced_at is None:

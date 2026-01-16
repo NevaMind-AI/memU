@@ -20,7 +20,7 @@ class MemuChatCompletions:
     def __init__(
         self,
         original_completions,
-        service: "MemoryService",
+        service: MemoryService,
         user_data: dict[str, Any],
         ranking: str = "salience",
         top_k: int = 5,
@@ -95,10 +95,9 @@ class MemuChatCompletions:
                 if loop.is_running():
                     # Already in async context, create task
                     import concurrent.futures
+
                     with concurrent.futures.ThreadPoolExecutor() as pool:
-                        memories = pool.submit(
-                            asyncio.run, self._retrieve_memories(query)
-                        ).result()
+                        memories = pool.submit(asyncio.run, self._retrieve_memories(query)).result()
                 else:
                     memories = loop.run_until_complete(self._retrieve_memories(query))
             except RuntimeError:
@@ -135,7 +134,7 @@ class MemuChat:
     def __init__(
         self,
         original_chat,
-        service: "MemoryService",
+        service: MemoryService,
         user_data: dict[str, Any],
         ranking: str = "salience",
         top_k: int = 5,
@@ -181,7 +180,7 @@ class MemuOpenAIWrapper:
     def __init__(
         self,
         client,
-        service: "MemoryService",
+        service: MemoryService,
         user_data: dict[str, Any],
         ranking: str = "salience",
         top_k: int = 5,
@@ -218,7 +217,7 @@ class MemuOpenAIWrapper:
 
 def wrap_openai(
     client,
-    service: "MemoryService",
+    service: MemoryService,
     user_data: dict[str, Any] | None = None,
     user_id: str | None = None,
     agent_id: str | None = None,
