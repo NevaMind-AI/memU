@@ -331,12 +331,13 @@ class RetrieveMixin:
         items_pool = store.memory_item_repo.list_items(where_filters)
 
         # Check if reference-aware retrieval is enabled
-        use_refs = getattr(self.retrieve_config.item, 'use_category_references', False)
+        use_refs = getattr(self.retrieve_config.item, "use_category_references", False)
         referenced_item_ids: set[str] = set()
 
         if use_refs:
             # Extract item IDs from category summary references
             from memu.utils.references import extract_references
+
             category_hits = state.get("category_hits") or []
             summary_lookup = state.get("category_summary_lookup", {})
             category_pool = state.get("category_pool") or {}

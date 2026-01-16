@@ -983,11 +983,12 @@ Summary:"""
             new_memories: Either list of summary strings (legacy) or list of (item_id, summary) tuples (with refs)
         """
         # Check if references are enabled and we have (id, summary) tuples
-        enable_refs = getattr(self.memorize_config, 'enable_item_references', False)
+        enable_refs = getattr(self.memorize_config, "enable_item_references", False)
 
         if enable_refs and new_memories and isinstance(new_memories[0], tuple):
             # Use reference-aware prompt
             from memu.prompts.category_summary_with_refs import PROMPT as REF_PROMPT
+
             items_text = "\n".join(f"- [{item_id}] {summary}" for item_id, summary in new_memories if summary.strip())
             original = category.summary or ""
             category_config = self.category_config_map.get(category.name)

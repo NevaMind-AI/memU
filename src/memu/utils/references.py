@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from memu.database.interfaces import Database
 
 # Pattern to match references like [ref:abc123] or [ref:abc123,def456]
-REFERENCE_PATTERN = re.compile(r'\[ref:([a-zA-Z0-9_,\-]+)\]')
+REFERENCE_PATTERN = re.compile(r"\[ref:([a-zA-Z0-9_,\-]+)\]")
 
 
 def extract_references(text: str) -> list[str]:
@@ -40,7 +40,7 @@ def extract_references(text: str) -> list[str]:
     for match in REFERENCE_PATTERN.finditer(text):
         # Handle comma-separated IDs like [ref:abc,def]
         ids_str = match.group(1)
-        for item_id in ids_str.split(','):
+        for item_id in ids_str.split(","):
             item_id = item_id.strip()
             if item_id and item_id not in seen:
                 item_ids.append(item_id)
@@ -66,11 +66,11 @@ def strip_references(text: str) -> str:
     if not text:
         return text
     # Remove references
-    result = REFERENCE_PATTERN.sub('', text)
+    result = REFERENCE_PATTERN.sub("", text)
     # Clean up space before punctuation (e.g., " ." -> ".")
-    result = re.sub(r'\s+([.,;:!?])', r'\1', result)
+    result = re.sub(r"\s+([.,;:!?])", r"\1", result)
     # Collapse multiple spaces into one and strip
-    result = ' '.join(result.split())
+    result = " ".join(result.split())
     return result
 
 
@@ -102,7 +102,7 @@ def format_references_as_citations(text: str) -> str:
     def replace_ref(match: re.Match) -> str:
         ids_str = match.group(1)
         nums = []
-        for item_id in ids_str.split(','):
+        for item_id in ids_str.split(","):
             item_id = item_id.strip()
             if item_id in id_to_num:
                 nums.append(str(id_to_num[item_id]))
@@ -117,7 +117,7 @@ def format_references_as_citations(text: str) -> str:
 
 def fetch_referenced_items(
     text: str,
-    store: "Database",
+    store: Database,
 ) -> list[dict]:
     """
     Fetch memory items referenced in text.

@@ -11,13 +11,11 @@ Tests cover:
 
 from __future__ import annotations
 
-import pytest
-
 from memu.utils.references import (
-    extract_references,
-    strip_references,
-    format_references_as_citations,
     build_item_reference_map,
+    extract_references,
+    format_references_as_citations,
+    strip_references,
 )
 
 
