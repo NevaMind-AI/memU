@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ClaudeUsage:
     """Token usage information from Claude API."""
+
     input_tokens: int
     output_tokens: int
 
@@ -29,6 +30,7 @@ class ClaudeUsage:
 @dataclass
 class ClaudeMessage:
     """Claude message response."""
+
     id: str
     type: str
     role: str
@@ -110,9 +112,7 @@ class ClaudeSDKClient:
             model=self.chat_model,
             max_tokens=max_tokens or 4096,
             system=prompt,
-            messages=[
-                {"role": "user", "content": text}
-            ],
+            messages=[{"role": "user", "content": text}],
         )
 
         # Convert to our dataclass for consistent interface
@@ -264,4 +264,4 @@ class ClaudeSDKClient:
         )
 
 
-__all__ = ["ClaudeSDKClient", "ClaudeMessage", "ClaudeUsage"]
+__all__ = ["ClaudeMessage", "ClaudeSDKClient", "ClaudeUsage"]
