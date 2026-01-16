@@ -5,7 +5,7 @@ from typing import Any
 
 from memu.database.models import MemoryCategory
 from memu.database.postgres.repositories.base import PostgresRepoBase
-from memu.database.postgres.session import SessionManager
+from memu.database.postgres.session import AsyncSessionManager, SessionManager
 from memu.database.repositories.memory_category import MemoryCategoryRepo
 from memu.database.state import DatabaseState
 
@@ -18,9 +18,16 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
         memory_category_model: type[MemoryCategory],
         sqla_models: Any,
         sessions: SessionManager,
+        async_sessions: AsyncSessionManager | None = None,
         scope_fields: list[str],
     ) -> None:
-        super().__init__(state=state, sqla_models=sqla_models, sessions=sessions, scope_fields=scope_fields)
+        super().__init__(
+            state=state,
+            sqla_models=sqla_models,
+            sessions=sessions,
+            async_sessions=async_sessions,
+            scope_fields=scope_fields,
+        )
         self._memory_category_model = memory_category_model
         self.categories: dict[str, MemoryCategory] = self._state.categories
 
@@ -157,6 +164,148 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
     def _cache_category(self, cat: MemoryCategory) -> MemoryCategory:
         self.categories[cat.id] = cat
         return cat
+
+    async def list_categories_async(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryCategory]:
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        from sqlalchemy import select
+
+        filters = self._build_filters(self._sqla_models.MemoryCategory, where)
+        async with self._async_sessions.session() as session:
+            result = await session.execute(select(self._sqla_models.MemoryCategory).where(*filters))
+            rows = result.scalars().all()
+            result_dict: dict[str, MemoryCategory] = {}
+            for row in rows:
+                row.embedding = self._normalize_embedding(row.embedding)
+                cat = self._cache_category(row)
+                result_dict[cat.id] = cat
+        return result_dict
+
+    async def clear_categories_async(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryCategory]:
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        from sqlalchemy import delete, select
+
+        filters = self._build_filters(self._sqla_models.MemoryCategory, where)
+        async with self._async_sessions.session() as session:
+            result = await session.execute(select(self._sqla_models.MemoryCategory).where(*filters))
+            rows = result.scalars().all()
+            deleted: dict[str, MemoryCategory] = {}
+            for row in rows:
+                row.embedding = self._normalize_embedding(row.embedding)
+                deleted[row.id] = row
+
+            if not deleted:
+                return {}
+
+            await session.execute(delete(self._sqla_models.MemoryCategory).where(*filters))
+            await session.commit()
+
+            for cat_id in deleted:
+                self.categories.pop(cat_id, None)
+
+        return deleted
+
+    async def get_or_create_category_async(
+        self,
+        *,
+        name: str,
+        description: str,
+        embedding: list[float],
+        user_data: dict[str, Any],
+    ) -> MemoryCategory:
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        from sqlalchemy import select
+
+        now = self._now()
+        async with self._async_sessions.session() as session:
+            filters = [self._sqla_models.MemoryCategory.name == name]
+            for key, value in user_data.items():
+                filters.append(getattr(self._sqla_models.MemoryCategory, key) == value)
+            result = await session.execute(select(self._sqla_models.MemoryCategory).where(*filters))
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                updated = False
+                if getattr(existing, "embedding", None) is None:
+                    existing.embedding = self._prepare_embedding(embedding)
+                    updated = True
+                if getattr(existing, "description", None) is None:
+                    existing.description = description
+                    updated = True
+                if updated:
+                    existing.updated_at = now
+                    session.add(existing)
+                    await session.commit()
+                    await session.refresh(existing)
+                return self._cache_category(existing)
+
+            cat = self._memory_category_model(
+                name=name,
+                description=description,
+                embedding=self._prepare_embedding(embedding),
+                created_at=now,
+                updated_at=now,
+                **user_data,
+            )
+            session.add(cat)
+            await session.commit()
+            await session.refresh(cat)
+
+        return self._cache_category(cat)
+
+    async def update_category_async(
+        self,
+        *,
+        category_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        embedding: list[float] | None = None,
+        summary: str | None = None,
+    ) -> MemoryCategory:
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        from sqlalchemy import select
+
+        now = self._now()
+        async with self._async_sessions.session() as session:
+            result = await session.execute(
+                select(self._sqla_models.MemoryCategory).where(self._sqla_models.MemoryCategory.id == category_id)
+            )
+            cat = result.scalar_one_or_none()
+            if cat is None:
+                msg = f"Category with id {category_id} not found"
+                raise KeyError(msg)
+
+            if name is not None:
+                cat.name = name
+            if description is not None:
+                cat.description = description
+            if embedding is not None:
+                cat.embedding = self._prepare_embedding(embedding)
+            if summary is not None:
+                cat.summary = summary
+
+            cat.updated_at = now
+            session.add(cat)
+            await session.commit()
+            await session.refresh(cat)
+            cat.embedding = self._normalize_embedding(cat.embedding)
+
+        return self._cache_category(cat)
+
+    async def load_existing_async(self) -> None:
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        from sqlalchemy import select
+
+        async with self._async_sessions.session() as session:
+            result = await session.execute(select(self._sqla_models.MemoryCategory))
+            rows = result.scalars().all()
+            for row in rows:
+                row.embedding = self._normalize_embedding(row.embedding)
+                self._cache_category(row)
 
 
 __all__ = ["PostgresMemoryCategoryRepo"]

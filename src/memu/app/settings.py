@@ -273,6 +273,7 @@ class VectorIndexConfig(BaseModel):
 class DatabaseConfig(BaseModel):
     metadata_store: MetadataStoreConfig = Field(default_factory=MetadataStoreConfig)
     vector_index: VectorIndexConfig | None = Field(default=None)
+    use_async: bool = Field(default=False, description="Use async database operations (requires async-compatible backend).")
 
     def model_post_init(self, __context: Any) -> None:
         if self.vector_index is None:

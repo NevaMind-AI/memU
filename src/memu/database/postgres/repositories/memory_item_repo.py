@@ -5,7 +5,7 @@ from typing import Any
 
 from memu.database.models import MemoryItem, MemoryType
 from memu.database.postgres.repositories.base import PostgresRepoBase
-from memu.database.postgres.session import SessionManager
+from memu.database.postgres.session import AsyncSessionManager, SessionManager
 from memu.database.state import DatabaseState
 
 
@@ -17,11 +17,17 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         memory_item_model: type[MemoryItem],
         sqla_models: Any,
         sessions: SessionManager,
+        async_sessions: AsyncSessionManager | None = None,
         scope_fields: list[str],
         use_vector: bool,
     ) -> None:
         super().__init__(
-            state=state, sqla_models=sqla_models, sessions=sessions, scope_fields=scope_fields, use_vector=use_vector
+            state=state,
+            sqla_models=sqla_models,
+            sessions=sessions,
+            async_sessions=async_sessions,
+            scope_fields=scope_fields,
+            use_vector=use_vector,
         )
         self._memory_item_model = memory_item_model
         self.items: dict[str, MemoryItem] = self._state.items
@@ -169,6 +175,172 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
 
         with self._sessions.session() as session:
             rows = session.scalars(select(self._sqla_models.MemoryItem)).all()
+            for row in rows:
+                row.embedding = self._normalize_embedding(row.embedding)
+                self._cache_item(row)
+
+    async def get_item_async(self, memory_id: str) -> MemoryItem | None:
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        from sqlalchemy import select
+
+        async with self._async_sessions.session() as session:
+            result = await session.execute(
+                select(self._sqla_models.MemoryItem).where(self._sqla_models.MemoryItem.id == memory_id)
+            )
+            row = result.scalar_one_or_none()
+            if row:
+                row.embedding = self._normalize_embedding(row.embedding)
+                return self._cache_item(row)
+        return None
+
+    async def list_items_async(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        from sqlalchemy import select
+
+        filters = self._build_filters(self._sqla_models.MemoryItem, where)
+        async with self._async_sessions.session() as session:
+            result = await session.execute(select(self._sqla_models.MemoryItem).where(*filters))
+            rows = result.scalars().all()
+            result_dict: dict[str, MemoryItem] = {}
+            for row in rows:
+                row.embedding = self._normalize_embedding(row.embedding)
+                item = self._cache_item(row)
+                result_dict[item.id] = item
+        return result_dict
+
+    async def clear_items_async(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        from sqlalchemy import delete, select
+
+        filters = self._build_filters(self._sqla_models.MemoryItem, where)
+        async with self._async_sessions.session() as session:
+            result = await session.execute(select(self._sqla_models.MemoryItem).where(*filters))
+            rows = result.scalars().all()
+            deleted: dict[str, MemoryItem] = {}
+            for row in rows:
+                row.embedding = self._normalize_embedding(row.embedding)
+                deleted[row.id] = row
+
+            if not deleted:
+                return {}
+
+            await session.execute(delete(self._sqla_models.MemoryItem).where(*filters))
+            await session.commit()
+
+            for item_id in deleted:
+                self.items.pop(item_id, None)
+
+        return deleted
+
+    async def create_item_async(
+        self,
+        *,
+        resource_id: str | None = None,
+        memory_type: MemoryType,
+        summary: str,
+        embedding: list[float],
+        user_data: dict[str, Any],
+    ) -> MemoryItem:
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        item = self._memory_item_model(
+            resource_id=resource_id,
+            memory_type=memory_type,
+            summary=summary,
+            embedding=self._prepare_embedding(embedding),
+            **user_data,
+            created_at=self._now(),
+            updated_at=self._now(),
+        )
+
+        async with self._async_sessions.session() as session:
+            session.add(item)
+            await session.commit()
+            await session.refresh(item)
+
+        self.items[item.id] = item
+        return item
+
+    async def update_item_async(
+        self,
+        *,
+        item_id: str,
+        memory_type: MemoryType | None = None,
+        summary: str | None = None,
+        embedding: list[float] | None = None,
+    ) -> MemoryItem:
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        from sqlalchemy import select
+
+        now = self._now()
+        async with self._async_sessions.session() as session:
+            result = await session.execute(
+                select(self._sqla_models.MemoryItem).where(self._sqla_models.MemoryItem.id == item_id)
+            )
+            item = result.scalar_one_or_none()
+            if item is None:
+                msg = f"Item with id {item_id} not found"
+                raise KeyError(msg)
+
+            if memory_type is not None:
+                item.memory_type = memory_type
+            if summary is not None:
+                item.summary = summary
+            if embedding is not None:
+                item.embedding = self._prepare_embedding(embedding)
+
+            item.updated_at = now
+            session.add(item)
+            await session.commit()
+            await session.refresh(item)
+            item.embedding = self._normalize_embedding(item.embedding)
+
+        return self._cache_item(item)
+
+    async def delete_item_async(self, item_id: str) -> None:
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        from sqlalchemy import delete
+
+        async with self._async_sessions.session() as session:
+            await session.execute(delete(self._sqla_models.MemoryItem).where(self._sqla_models.MemoryItem.id == item_id))
+            await session.commit()
+
+    async def vector_search_items_async(
+        self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None
+    ) -> list[tuple[str, float]]:
+        if not self._use_vector:
+            return self._vector_search_local(query_vec, top_k, where=where)
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        from sqlalchemy import select
+
+        distance = self._sqla_models.MemoryItem.embedding.cosine_distance(query_vec)
+        filters = [self._sqla_models.MemoryItem.embedding.isnot(None)]
+        filters.extend(self._build_filters(self._sqla_models.MemoryItem, where))
+        stmt = (
+            select(self._sqla_models.MemoryItem.id, (1 - distance).label("score"))
+            .where(*filters)
+            .order_by(distance)
+            .limit(top_k)
+        )
+        async with self._async_sessions.session() as session:
+            result = await session.execute(stmt)
+            rows = result.all()
+        return [(rid, float(score)) for rid, score in rows]
+
+    async def load_existing_async(self) -> None:
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        from sqlalchemy import select
+
+        async with self._async_sessions.session() as session:
+            result = await session.execute(select(self._sqla_models.MemoryItem))
+            rows = result.scalars().all()
             for row in rows:
                 row.embedding = self._normalize_embedding(row.embedding)
                 self._cache_item(row)
