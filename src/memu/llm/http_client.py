@@ -9,6 +9,7 @@ from typing import Any, cast
 import httpx
 
 from memu.llm.backends.base import LLMBackend
+from memu.llm.backends.claude import ClaudeLLMBackend
 from memu.llm.backends.doubao import DoubaoLLMBackend
 from memu.llm.backends.grok import GrokBackend
 from memu.llm.backends.openai import OpenAILLMBackend
@@ -67,6 +68,7 @@ logger = logging.getLogger(__name__)
 LLM_BACKENDS: dict[str, Callable[[], LLMBackend]] = {
     OpenAILLMBackend.name: OpenAILLMBackend,
     DoubaoLLMBackend.name: DoubaoLLMBackend,
+    ClaudeLLMBackend.name: ClaudeLLMBackend,
     GrokBackend.name: GrokBackend,
     OpenRouterLLMBackend.name: OpenRouterLLMBackend,
 }
@@ -233,6 +235,13 @@ class HTTPLLMClient:
             return result or "", raw_response
 
     def _headers(self) -> dict[str, str]:
+        if self.provider == "claude":
+            # Claude uses x-api-key header and requires anthropic-version
+            return {
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            }
         return {"Authorization": f"Bearer {self.api_key}"}
 
     def _load_backend(self, provider: str) -> LLMBackend:
@@ -249,6 +258,9 @@ class HTTPLLMClient:
             "grok": _OpenAIEmbeddingBackend,
             _OpenRouterEmbeddingBackend.name: _OpenRouterEmbeddingBackend,
         }
+        # Claude doesn't have native embeddings, fall back to OpenAI-compatible
+        if provider == "claude":
+            return _OpenAIEmbeddingBackend()
         factory = backends.get(provider)
         if not factory:
             msg = f"Unsupported embedding provider '{provider}'. Available: {', '.join(backends.keys())}"
