@@ -14,6 +14,8 @@ class ResourceRepo(Protocol):
 
     def list_resources(self, where: Mapping[str, Any] | None = None) -> dict[str, Resource]: ...
 
+    def clear_resources(self, where: Mapping[str, Any] | None = None) -> dict[str, Resource]: ...
+
     def create_resource(
         self,
         *,
