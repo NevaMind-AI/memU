@@ -13,7 +13,7 @@ except ImportError as exc:
     raise ImportError(msg) from exc
 
 from pydantic import BaseModel
-from sqlalchemy import ForeignKey, MetaData, String, Text
+from sqlalchemy import JSON, ForeignKey, MetaData, String, Text
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
@@ -55,6 +55,9 @@ class MemoryItemModel(BaseModelMixin, MemoryItem):
     memory_type: MemoryType = Field(sa_column=Column(String, nullable=False))
     summary: str = Field(sa_column=Column(Text, nullable=False))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
+    when_to_use: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    tool_calls: list[Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 
 class MemoryCategoryModel(BaseModelMixin, MemoryCategory):

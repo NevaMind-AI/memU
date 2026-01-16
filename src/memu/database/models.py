@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 import pendulum
 from pydantic import BaseModel, ConfigDict, Field
 
-MemoryType = Literal["profile", "event", "knowledge", "behavior", "skill"]
+MemoryType = Literal["profile", "event", "knowledge", "behavior", "skill", "tool"]
 
 
 class BaseRecord(BaseModel):
@@ -16,6 +18,31 @@ class BaseRecord(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=lambda: pendulum.now("UTC"))
     updated_at: datetime = Field(default_factory=lambda: pendulum.now("UTC"))
+
+
+class ToolCallResult(BaseModel):
+    """Represents the result of a tool invocation for Tool Memory."""
+
+    tool_name: str = Field(..., description="Name of the tool that was called")
+    input: dict[str, Any] | str = Field(default="", description="Tool input parameters")
+    output: str = Field(default="", description="Tool output result")
+    success: bool = Field(default=True, description="Whether the tool invocation succeeded")
+    time_cost: float = Field(default=0.0, description="Time consumed by the tool invocation in seconds")
+    token_cost: int = Field(default=-1, description="Token consumption of the tool (-1 if unknown)")
+    score: float = Field(default=0.0, description="Quality score from 0.0 to 1.0")
+    call_hash: str = Field(default="", description="Hash of input+output for deduplication")
+    created_at: datetime = Field(default_factory=lambda: pendulum.now("UTC"))
+
+    def generate_hash(self) -> str:
+        """Generate MD5 hash from tool input and output for deduplication."""
+        input_str = json.dumps(self.input, sort_keys=True) if isinstance(self.input, dict) else str(self.input)
+        combined = f"{self.tool_name}|{input_str}|{self.output}"
+        return hashlib.md5(combined.encode("utf-8"), usedforsecurity=False).hexdigest()
+
+    def ensure_hash(self) -> None:
+        """Ensure call_hash is set, generate if empty."""
+        if not self.call_hash:
+            self.call_hash = self.generate_hash()
 
 
 class Resource(BaseRecord):
@@ -31,6 +58,62 @@ class MemoryItem(BaseRecord):
     memory_type: MemoryType
     summary: str
     embedding: list[float] | None = None
+    when_to_use: str | None = Field(default=None, description="Hint for when this memory should be retrieved")
+    metadata: dict[str, Any] | None = Field(default=None, description="Type-specific metadata")
+    tool_calls: list[ToolCallResult] | None = Field(default=None, description="Tool call history for tool memories")
+
+    def add_tool_call(self, tool_call: ToolCallResult) -> None:
+        """Add a tool call result to this memory (for tool type memories)."""
+        if self.memory_type != "tool":
+            msg = "add_tool_call can only be used with tool type memories"
+            raise ValueError(msg)
+        tool_call.ensure_hash()
+        if self.tool_calls is None:
+            self.tool_calls = []
+        self.tool_calls.append(tool_call)
+
+    def get_tool_statistics(self, recent_n: int = 20) -> dict[str, float]:
+        """Calculate statistics for the most recent N tool calls.
+
+        Returns:
+            Dictionary with avg_time_cost, success_rate, avg_score, avg_token_cost
+        """
+        if not self.tool_calls:
+            return {
+                "total_calls": 0,
+                "recent_calls_analyzed": 0,
+                "avg_time_cost": 0.0,
+                "success_rate": 0.0,
+                "avg_score": 0.0,
+                "avg_token_cost": 0.0,
+            }
+
+        recent_calls = self.tool_calls[-recent_n:]
+        recent_count = len(recent_calls)
+
+        # Calculate statistics
+        total_time = sum(c.time_cost for c in recent_calls)
+        avg_time_cost = total_time / recent_count if recent_count > 0 else 0.0
+
+        successful = sum(1 for c in recent_calls if c.success)
+        success_rate = successful / recent_count if recent_count > 0 else 0.0
+
+        total_score = sum(c.score for c in recent_calls)
+        avg_score = total_score / recent_count if recent_count > 0 else 0.0
+
+        valid_token_calls = [c for c in recent_calls if c.token_cost >= 0]
+        avg_token_cost = (
+            sum(c.token_cost for c in valid_token_calls) / len(valid_token_calls) if valid_token_calls else 0.0
+        )
+
+        return {
+            "total_calls": len(self.tool_calls),
+            "recent_calls_analyzed": recent_count,
+            "avg_time_cost": round(avg_time_cost, 3),
+            "success_rate": round(success_rate, 4),
+            "avg_score": round(avg_score, 3),
+            "avg_token_cost": round(avg_token_cost, 2),
+        }
 
 
 class MemoryCategory(BaseRecord):
@@ -81,6 +164,7 @@ __all__ = [
     "MemoryItem",
     "MemoryType",
     "Resource",
+    "ToolCallResult",
     "build_scoped_models",
     "merge_scope_model",
 ]
