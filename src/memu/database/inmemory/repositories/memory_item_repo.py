@@ -7,7 +7,7 @@ from typing import Any, override
 from memu.database.inmemory.repositories.filter import matches_where
 from memu.database.inmemory.state import InMemoryState
 from memu.database.inmemory.vector import cosine_topk
-from memu.database.models import MemoryItem, MemoryType
+from memu.database.models import MemoryItem, MemoryType, ToolCallResult
 from memu.database.repositories.memory_item import MemoryItemRepo
 
 
@@ -22,6 +22,15 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             return dict(self.items)
         return {mid: item for mid, item in self.items.items() if matches_where(item, where)}
 
+    def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+        if not where:
+            matches = self.items.copy()
+            self.items.clear()
+            return matches
+        matches = {mid: item for mid, item in self.items.items() if matches_where(item, where)}
+        self.items = {mid: item for mid, item in self.items.items() if mid not in matches}
+        return matches
+
     def create_item(
         self,
         *,
@@ -30,6 +39,9 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
+        when_to_use: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tool_calls: list[ToolCallResult] | None = None,
     ) -> MemoryItem:
         mid = str(uuid.uuid4())
         it = self.memory_item_model(
@@ -38,6 +50,9 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             memory_type=memory_type,
             summary=summary,
             embedding=embedding,
+            when_to_use=when_to_use,
+            metadata=metadata,
+            tool_calls=tool_calls,
             **user_data,
         )
         self.items[mid] = it
@@ -69,6 +84,9 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         memory_type: MemoryType | None = None,
         summary: str | None = None,
         embedding: list[float] | None = None,
+        when_to_use: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tool_calls: list[ToolCallResult] | None = None,
     ) -> MemoryItem:
         item = self.items.get(item_id)
         if item is None:
@@ -81,6 +99,12 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             item.summary = summary
         if embedding is not None:
             item.embedding = embedding
+        if when_to_use is not None:
+            item.when_to_use = when_to_use
+        if metadata is not None:
+            item.metadata = metadata
+        if tool_calls is not None:
+            item.tool_calls = tool_calls
 
         self.items[item_id] = item
         return item

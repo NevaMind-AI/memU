@@ -17,6 +17,28 @@ body:
     validations:
       required: true
 
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why do we need this feature? What problem does it solve?
+      placeholder: "Explain the use case and why this feature would be valuable."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which platform(s) does this feature apply to?
+      options:
+        - Platform Independent
+        - Linux
+        - macOS
+        - Windows
+    validations:
+      required: true
+
   - type: dropdown
     id: priority
     attributes:
