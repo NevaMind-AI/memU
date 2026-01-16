@@ -95,20 +95,20 @@ def memorize(
         with contextlib.suppress(OSError):
             os.remove(temp_path)
 
-        items = result.get("items", [])
-        item_count = len(items)
-
-        if item_count == 0:
-            return "⚠️ No memories extracted from content."
-
-        summaries = [item.get("summary", "")[:100] for item in items[:3]]
-        preview = "\n".join(f"  • {s}..." if len(s) == 100 else f"  • {s}" for s in summaries)
-
-        return f"✅ Stored {item_count} memory item(s):\n{preview}"
-
     except Exception as e:
         logger.exception("memorize failed")
         return f"❌ Failed to memorize: {e!s}"
+
+    items = result.get("items", [])
+    item_count = len(items)
+
+    if item_count == 0:
+        return "⚠️ No memories extracted from content."
+
+    summaries = [item.get("summary", "")[:100] for item in items[:3]]
+    preview = "\n".join(f"  • {s}..." if len(s) == 100 else f"  • {s}" for s in summaries)
+
+    return f"✅ Stored {item_count} memory item(s):\n{preview}"
 
 
 def retrieve(

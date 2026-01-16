@@ -168,10 +168,11 @@ class MemUOpenAgentsAdapter:
                 result = await loop.run_in_executor(None, lambda: func(**kwargs))
             else:
                 result = func(**kwargs)
-            return result
         except Exception as e:
             logger.exception(f"Tool {tool_name} failed")
             return f"❌ Tool error: {e!s}"
+        else:
+            return result
 
     async def memorize_conversation(
         self,

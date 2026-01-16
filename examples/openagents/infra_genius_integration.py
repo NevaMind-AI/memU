@@ -202,11 +202,11 @@ INSTRUCTION_ADDITION = '''
 def demo():
     """Demo the MemU tools that would be added to InfraGenius."""
     import os
-    
+
     print("=" * 60)
     print("InfraGenius + MemU Integration Demo")
     print("=" * 60)
-    
+
     if not os.environ.get("OPENAI_API_KEY"):
         print("\n⚠️  OPENAI_API_KEY not set. Showing code only.\n")
         print("STEP 1: Create tools/memory.py with:")
@@ -219,12 +219,12 @@ def demo():
         print("-" * 40)
         print(INSTRUCTION_ADDITION)
         return
-    
+
     # Actually test the tools
-    from memu.app.service import MemoryService
     from memu.adapters.openagents import MemUOpenAgentsAdapter
     from memu.adapters.openagents.tools import memorize, retrieve, set_memu_service
-    
+    from memu.app.service import MemoryService
+
     print("\n🔧 Initializing MemU service...")
     service = MemoryService(
         llm_profiles={
@@ -241,47 +241,47 @@ def demo():
         },
         database_config={"metadata_store": {"provider": "inmemory"}},
     )
-    
+
     adapter = MemUOpenAgentsAdapter(service=service)
     adapter.initialize(agent_id="infra-genius")
     set_memu_service(service)
-    
+
     print("✅ MemU initialized!\n")
-    
+
     # Simulate InfraGenius remembering deployments
     print("📝 Storing deployment memories...")
-    
+
     result = memorize(
         content="[DEPLOYMENT] Deployed react-app to sandbox-1. "
         "Used npm install && npm run build. Server on port 8000. "
         "URL: https://8000-sandbox-1.e2b.app"
     )
     print(f"  {result}")
-    
+
     result = memorize(
         content="[CONFIG] PostgreSQL connection: host=db.example.com, "
         "port=5432, user=admin. Used for backend API."
     )
     print(f"  {result}")
-    
+
     result = memorize(
         content="[ERROR] Deployment failed due to missing NODE_ENV. "
         "Fix: Set NODE_ENV=production before npm run build."
     )
     print(f"  {result}")
-    
+
     # Simulate recalling
     print("\n🔍 Recalling memories...")
-    
+
     result = retrieve(query="How do I deploy a React app?")
     print(f"\nQuery: 'How do I deploy a React app?'\n{result}")
-    
+
     result = retrieve(query="PostgreSQL database config")
     print(f"\nQuery: 'PostgreSQL database config'\n{result}")
-    
+
     result = retrieve(query="deployment errors and fixes")
     print(f"\nQuery: 'deployment errors and fixes'\n{result}")
-    
+
     print("\n" + "=" * 60)
     print("✅ Integration demo complete!")
     print("=" * 60)

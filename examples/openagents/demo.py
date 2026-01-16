@@ -14,9 +14,10 @@ Usage:
 import asyncio
 import os
 
+from memu.adapters.openagents import MemUOpenAgentsAdapter
+
 # MemU imports
 from memu.app.service import MemoryService
-from memu.adapters.openagents import MemUOpenAgentsAdapter, get_memu_tools
 
 
 async def demo_standalone_tools():
@@ -104,7 +105,7 @@ async def demo_with_openagents():
     print("=" * 60)
 
     try:
-        from openagents import Agent
+        import openagents  # noqa: F401
     except ImportError:
         print("⚠️  OpenAgents not installed. Skipping network demo.")
         print("   Install with: pip install openagents")

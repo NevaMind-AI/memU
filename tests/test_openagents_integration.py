@@ -6,9 +6,9 @@ These tests verify the adapter works correctly with OpenAgents patterns.
 Run with: pytest tests/test_openagents_integration.py -v
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-import asyncio
+
+import pytest
 
 
 class TestOpenAgentsToolPattern:
@@ -16,13 +16,14 @@ class TestOpenAgentsToolPattern:
 
     def test_tool_functions_have_correct_signature(self):
         """Verify tool functions match OpenAgents expected signatures."""
+        import inspect
+
         from memu.adapters.openagents.tools import (
+            get_memory,
+            list_memories,
             memorize,
             retrieve,
-            list_memories,
-            get_memory,
         )
-        import inspect
 
         # memorize should accept content, modality, user_id
         sig = inspect.signature(memorize)
@@ -53,10 +54,10 @@ class TestOpenAgentsToolPattern:
     def test_tool_functions_return_strings(self):
         """Verify all tools return string results (OpenAgents requirement)."""
         from memu.adapters.openagents.tools import (
+            get_memory,
+            list_memories,
             memorize,
             retrieve,
-            list_memories,
-            get_memory,
             set_memu_service,
         )
 
@@ -136,10 +137,11 @@ class TestOpenAgentsYAMLConfig:
 
     def test_tool_implementation_paths_importable(self):
         """Verify tool implementation paths can be imported."""
-        from memu.adapters.openagents.tools import TOOL_SCHEMAS
         import importlib
 
-        for name, schema in TOOL_SCHEMAS.items():
+        from memu.adapters.openagents.tools import TOOL_SCHEMAS
+
+        for _name, schema in TOOL_SCHEMAS.items():
             impl_path = schema["implementation"]
             module_path, func_name = impl_path.rsplit(".", 1)
 
@@ -181,9 +183,7 @@ class TestAdapterWithMockOpenAgents:
         from memu.adapters.openagents import MemUOpenAgentsAdapter
 
         mock_service = MagicMock()
-        mock_service.memorize = AsyncMock(
-            return_value={"items": [{"summary": "Test memory"}]}
-        )
+        mock_service.memorize = AsyncMock(return_value={"items": [{"summary": "Test memory"}]})
         adapter = MemUOpenAgentsAdapter(service=mock_service)
         adapter.initialize(agent_id="test-agent")
 
@@ -293,7 +293,6 @@ class TestErrorHandling:
         from memu.adapters.openagents.tools import (
             get_memu_service,
             set_memu_service,
-            memorize,
         )
 
         # Reset service
@@ -343,8 +342,7 @@ class TestAgentIdScoping:
         await adapter.call_tool("memorize", content="test")
 
         # agent_id should be passed as user_id for scoping
-        assert captured_kwargs.get("user") == {"user_id": "agent-123"} or \
-               "user_id" in str(captured_kwargs)
+        assert captured_kwargs.get("user") == {"user_id": "agent-123"} or "user_id" in str(captured_kwargs)
 
     @pytest.mark.asyncio
     async def test_explicit_user_id_overrides_agent_id(self):
@@ -364,7 +362,7 @@ class TestAgentIdScoping:
             await adapter.call_tool(
                 "memorize",
                 content="test",
-                user_id="explicit-user"  # Explicit user_id
+                user_id="explicit-user",  # Explicit user_id
             )
 
             # Explicit user_id should be used
