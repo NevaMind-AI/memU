@@ -10,7 +10,9 @@ import httpx
 
 from memu.llm.backends.base import LLMBackend
 from memu.llm.backends.doubao import DoubaoLLMBackend
+from memu.llm.backends.grok import GrokBackend
 from memu.llm.backends.openai import OpenAILLMBackend
+from memu.llm.backends.openrouter import OpenRouterLLMBackend
 
 
 # Minimal embedding backend support (moved from embedding module)
@@ -47,11 +49,26 @@ class _DoubaoEmbeddingBackend(_EmbeddingBackend):
         return [cast(list[float], d["embedding"]) for d in data["data"]]
 
 
+class _OpenRouterEmbeddingBackend(_EmbeddingBackend):
+    """OpenRouter uses OpenAI-compatible embedding API."""
+
+    name = "openrouter"
+    embedding_endpoint = "/api/v1/embeddings"
+
+    def build_embedding_payload(self, *, inputs: list[str], embed_model: str) -> dict[str, Any]:
+        return {"model": embed_model, "input": inputs}
+
+    def parse_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
+        return [cast(list[float], d["embedding"]) for d in data["data"]]
+
+
 logger = logging.getLogger(__name__)
 
 LLM_BACKENDS: dict[str, Callable[[], LLMBackend]] = {
     OpenAILLMBackend.name: OpenAILLMBackend,
     DoubaoLLMBackend.name: DoubaoLLMBackend,
+    GrokBackend.name: GrokBackend,
+    OpenRouterLLMBackend.name: OpenRouterLLMBackend,
 }
 
 
@@ -229,6 +246,8 @@ class HTTPLLMClient:
         backends: dict[str, type[_EmbeddingBackend]] = {
             _OpenAIEmbeddingBackend.name: _OpenAIEmbeddingBackend,
             _DoubaoEmbeddingBackend.name: _DoubaoEmbeddingBackend,
+            "grok": _OpenAIEmbeddingBackend,
+            _OpenRouterEmbeddingBackend.name: _OpenRouterEmbeddingBackend,
         }
         factory = backends.get(provider)
         if not factory:
