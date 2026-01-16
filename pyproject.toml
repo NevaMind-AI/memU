@@ -1,6 +1,6 @@
 [project]
 name = "memu-py"
-version = "1.1.2"
+version = "1.2.0"
 authors = [
     {name = "MemU Team", email = "contact@nevamind.ai"},
 ]
@@ -58,6 +58,7 @@ lint = [
 ]
 test = [
     "pytest>=8.4.2",
+    "pytest-asyncio>=0.24.0",
     "pytest-cov>=7.0.0",
 ]
 
@@ -150,9 +151,10 @@ skip_empty = true
 
 [tool.coverage.run]
 branch = true
-source = ["tests"]
+source = ["memu"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 log_cli = true
 log_cli_level = "INFO"
+asyncio_mode = "auto"

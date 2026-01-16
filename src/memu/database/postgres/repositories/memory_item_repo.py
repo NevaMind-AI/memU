@@ -51,6 +51,31 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
                 result[item.id] = item
         return result
 
+    def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+        from sqlmodel import delete, select
+
+        filters = self._build_filters(self._sqla_models.MemoryItem, where)
+        with self._sessions.session() as session:
+            # First get the objects to delete
+            rows = session.scalars(select(self._sqla_models.MemoryItem).where(*filters)).all()
+            deleted: dict[str, MemoryItem] = {}
+            for row in rows:
+                row.embedding = self._normalize_embedding(row.embedding)
+                deleted[row.id] = row
+
+            if not deleted:
+                return {}
+
+            # Delete from database
+            session.exec(delete(self._sqla_models.MemoryItem).where(*filters))
+            session.commit()
+
+            # Clean up cache
+            for item_id in deleted:
+                self.items.pop(item_id, None)
+
+        return deleted
+
     def create_item(
         self,
         *,

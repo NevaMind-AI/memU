@@ -16,6 +16,8 @@ class MemoryItemRepo(Protocol):
 
     def list_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]: ...
 
+    def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]: ...
+
     def create_item(
         self,
         *,

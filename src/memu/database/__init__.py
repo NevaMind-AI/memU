@@ -24,4 +24,5 @@ __all__ = [
     "inmemory",
     "postgres",
     "schema",
+    "sqlite",
 ]
