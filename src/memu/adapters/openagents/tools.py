@@ -130,7 +130,8 @@ def retrieve(
     try:
         service = get_memu_service()
 
-        queries = [{"text": query, "role": "user"}]
+        # Format query as expected by MemU: {"role": "user", "content": "text"}
+        queries = [{"role": "user", "content": query}]
         where = {"user_id": user_id} if user_id else None
 
         result = _run_async(service.retrieve(queries=queries, where=where))
