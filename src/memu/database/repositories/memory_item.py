@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Protocol, runtime_checkable
 
-from memu.database.models import MemoryItem, MemoryType
+from memu.database.models import MemoryItem, MemoryType, ToolCallResult
 
 
 @runtime_checkable
@@ -24,6 +24,9 @@ class MemoryItemRepo(Protocol):
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
+        when_to_use: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tool_calls: list[ToolCallResult] | None = None,
     ) -> MemoryItem: ...
 
     def update_item(
@@ -33,6 +36,9 @@ class MemoryItemRepo(Protocol):
         memory_type: MemoryType | None = None,
         summary: str | None = None,
         embedding: list[float] | None = None,
+        when_to_use: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tool_calls: list[ToolCallResult] | None = None,
     ) -> MemoryItem: ...
 
     def delete_item(self, item_id: str) -> None: ...

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from memu.database.models import MemoryItem, MemoryType
+from memu.database.models import MemoryItem, MemoryType, ToolCallResult
 from memu.database.postgres.repositories.base import PostgresRepoBase
 from memu.database.postgres.session import SessionManager
 from memu.database.state import DatabaseState
@@ -59,12 +59,18 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
+        when_to_use: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tool_calls: list[ToolCallResult] | None = None,
     ) -> MemoryItem:
         item = self._memory_item_model(
             resource_id=resource_id,
             memory_type=memory_type,
             summary=summary,
             embedding=self._prepare_embedding(embedding),
+            when_to_use=when_to_use,
+            metadata=metadata,
+            tool_calls=tool_calls,
             **user_data,
             created_at=self._now(),
             updated_at=self._now(),
@@ -85,6 +91,9 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         memory_type: MemoryType | None = None,
         summary: str | None = None,
         embedding: list[float] | None = None,
+        when_to_use: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tool_calls: list[ToolCallResult] | None = None,
     ) -> MemoryItem:
         from sqlmodel import select
 
@@ -103,6 +112,12 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
                 item.summary = summary
             if embedding is not None:
                 item.embedding = self._prepare_embedding(embedding)
+            if when_to_use is not None:
+                item.when_to_use = when_to_use
+            if metadata is not None:
+                item.metadata = metadata
+            if tool_calls is not None:
+                item.tool_calls = tool_calls
 
             item.updated_at = now
             session.add(item)
