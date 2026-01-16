@@ -98,11 +98,12 @@ class CRUDMixin:
         return response
 
     def _build_list_memory_items_workflow(self) -> list[WorkflowStep]:
+        handler = self._crud_list_memory_items_async if self._use_async else self._crud_list_memory_items
         steps = [
             WorkflowStep(
                 step_id="list_memory_items",
                 role="read_memories",
-                handler=self._crud_list_memory_items,
+                handler=handler,
                 requires={"ctx", "store", "where"},
                 produces={"items"},
                 capabilities={"db"},
@@ -127,11 +128,12 @@ class CRUDMixin:
         }
 
     def _build_list_memory_categories_workflow(self) -> list[WorkflowStep]:
+        handler = self._crud_list_memory_categories_async if self._use_async else self._crud_list_memory_categories
         steps = [
             WorkflowStep(
                 step_id="list_memory_categories",
                 role="read_categories",
-                handler=self._crud_list_memory_categories,
+                handler=handler,
                 requires={"ctx", "store", "where"},
                 produces={"categories"},
                 capabilities={"db"},
@@ -148,11 +150,14 @@ class CRUDMixin:
         return steps
 
     def _build_clear_memory_workflow(self) -> list[WorkflowStep]:
+        categories_handler = self._crud_clear_memory_categories_async if self._use_async else self._crud_clear_memory_categories
+        items_handler = self._crud_clear_memory_items_async if self._use_async else self._crud_clear_memory_items
+        resources_handler = self._crud_clear_memory_resources_async if self._use_async else self._crud_clear_memory_resources
         steps = [
             WorkflowStep(
                 step_id="clear_memory_categories",
                 role="delete_memories",
-                handler=self._crud_clear_memory_categories,
+                handler=categories_handler,
                 requires={"ctx", "store", "where"},
                 produces={"deleted_categories"},
                 capabilities={"db"},
@@ -160,7 +165,7 @@ class CRUDMixin:
             WorkflowStep(
                 step_id="clear_memory_items",
                 role="delete_memories",
-                handler=self._crud_clear_memory_items,
+                handler=items_handler,
                 requires={"ctx", "store", "where"},
                 produces={"deleted_items"},
                 capabilities={"db"},
@@ -168,7 +173,7 @@ class CRUDMixin:
             WorkflowStep(
                 step_id="clear_memory_resources",
                 role="delete_memories",
-                handler=self._crud_clear_memory_resources,
+                handler=resources_handler,
                 requires={"ctx", "store", "where"},
                 produces={"deleted_resources"},
                 capabilities={"db"},
@@ -218,10 +223,26 @@ class CRUDMixin:
         state["items"] = items
         return state
 
+    async def _crud_list_memory_items_async(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Async version of _crud_list_memory_items."""
+        where_filters = state.get("where") or {}
+        store = state["store"]
+        items = await store.memory_item_repo.list_items_async(where_filters)
+        state["items"] = items
+        return state
+
     def _crud_list_memory_categories(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
         categories = store.memory_category_repo.list_categories(where_filters)
+        state["categories"] = categories
+        return state
+
+    async def _crud_list_memory_categories_async(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Async version of _crud_list_memory_categories."""
+        where_filters = state.get("where") or {}
+        store = state["store"]
+        categories = await store.memory_category_repo.list_categories_async(where_filters)
         state["categories"] = categories
         return state
 
@@ -250,6 +271,14 @@ class CRUDMixin:
         state["deleted_categories"] = deleted
         return state
 
+    async def _crud_clear_memory_categories_async(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Async version of _crud_clear_memory_categories."""
+        where_filters = state.get("where") or {}
+        store = state["store"]
+        deleted = await store.memory_category_repo.clear_categories_async(where_filters)
+        state["deleted_categories"] = deleted
+        return state
+
     def _crud_clear_memory_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
@@ -257,10 +286,26 @@ class CRUDMixin:
         state["deleted_items"] = deleted
         return state
 
+    async def _crud_clear_memory_items_async(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Async version of _crud_clear_memory_items."""
+        where_filters = state.get("where") or {}
+        store = state["store"]
+        deleted = await store.memory_item_repo.clear_items_async(where_filters)
+        state["deleted_items"] = deleted
+        return state
+
     def _crud_clear_memory_resources(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
         deleted = store.resource_repo.clear_resources(where_filters)
+        state["deleted_resources"] = deleted
+        return state
+
+    async def _crud_clear_memory_resources_async(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Async version of _crud_clear_memory_resources."""
+        where_filters = state.get("where") or {}
+        store = state["store"]
+        deleted = await store.resource_repo.clear_resources_async(where_filters)
         state["deleted_resources"] = deleted
         return state
 
@@ -380,11 +425,12 @@ class CRUDMixin:
         return response
 
     def _build_create_memory_item_workflow(self) -> list[WorkflowStep]:
+        create_handler = self._patch_create_memory_item_async if self._use_async else self._patch_create_memory_item
         steps = [
             WorkflowStep(
                 step_id="create_memory_item",
                 role="patch",
-                handler=self._patch_create_memory_item,
+                handler=create_handler,
                 requires={"memory_payload", "ctx", "store", "user"},
                 produces={"memory_item", "category_updates"},
                 capabilities={"db", "llm"},
@@ -420,11 +466,12 @@ class CRUDMixin:
         }
 
     def _build_update_memory_item_workflow(self) -> list[WorkflowStep]:
+        update_handler = self._patch_update_memory_item_async if self._use_async else self._patch_update_memory_item
         steps = [
             WorkflowStep(
                 step_id="update_memory_item",
                 role="patch",
-                handler=self._patch_update_memory_item,
+                handler=update_handler,
                 requires={"memory_id", "memory_payload", "ctx", "store", "user"},
                 produces={"memory_item", "category_updates"},
                 capabilities={"db", "llm"},
@@ -461,11 +508,12 @@ class CRUDMixin:
         }
 
     def _build_delete_memory_item_workflow(self) -> list[WorkflowStep]:
+        delete_handler = self._patch_delete_memory_item_async if self._use_async else self._patch_delete_memory_item
         steps = [
             WorkflowStep(
                 step_id="delete_memory_item",
                 role="patch",
-                handler=self._patch_delete_memory_item,
+                handler=delete_handler,
                 requires={"memory_id", "ctx", "store", "user"},
                 produces={"memory_item", "category_updates"},
                 capabilities={"db"},
@@ -527,6 +575,35 @@ class CRUDMixin:
         })
         return state
 
+    async def _patch_create_memory_item_async(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Async version of _patch_create_memory_item."""
+        memory_payload = state["memory_payload"]
+        ctx = state["ctx"]
+        store = state["store"]
+        user = state["user"]
+        category_memory_updates: dict[str, tuple[Any, Any]] = {}
+
+        embed_payload = [memory_payload["content"]]
+        content_embedding = (await self._get_step_embedding_client(step_context).embed(embed_payload))[0]
+
+        item = await store.memory_item_repo.create_item_async(
+            memory_type=memory_payload["type"],
+            summary=memory_payload["content"],
+            embedding=content_embedding,
+            user_data=dict(user or {}),
+        )
+        cat_names = memory_payload["categories"]
+        mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
+        for cid in mapped_cat_ids:
+            await store.category_item_repo.link_item_category_async(item.id, cid, user_data=dict(user or {}))
+            category_memory_updates[cid] = (None, memory_payload["content"])
+
+        state.update({
+            "memory_item": item,
+            "category_updates": category_memory_updates,
+        })
+        return state
+
     async def _patch_update_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         memory_id = state["memory_id"]
         memory_payload = state["memory_payload"]
@@ -578,6 +655,58 @@ class CRUDMixin:
         })
         return state
 
+    async def _patch_update_memory_item_async(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Async version of _patch_update_memory_item."""
+        memory_id = state["memory_id"]
+        memory_payload = state["memory_payload"]
+        ctx = state["ctx"]
+        store = state["store"]
+        user = state["user"]
+        category_memory_updates: dict[str, tuple[Any, Any]] = {}
+
+        item = await store.memory_item_repo.get_item_async(memory_id)
+        if not item:
+            msg = f"Memory item with id {memory_id} not found"
+            raise ValueError(msg)
+        old_content = item.summary
+        old_item_categories = await store.category_item_repo.get_item_categories_async(memory_id)
+        mapped_old_cat_ids = [cat.category_id for cat in old_item_categories]
+
+        if memory_payload["content"]:
+            embed_payload = [memory_payload["content"]]
+            content_embedding = (await self._get_step_embedding_client(step_context).embed(embed_payload))[0]
+        else:
+            content_embedding = None
+
+        if memory_payload["type"] or memory_payload["content"]:
+            item = await store.memory_item_repo.update_item_async(
+                item_id=memory_id,
+                memory_type=memory_payload["type"],
+                summary=memory_payload["content"],
+                embedding=content_embedding,
+            )
+        new_cat_names = memory_payload["categories"]
+        mapped_new_cat_ids = self._map_category_names_to_ids(new_cat_names, ctx)
+
+        cats_to_remove = set(mapped_old_cat_ids) - set(mapped_new_cat_ids)
+        cats_to_add = set(mapped_new_cat_ids) - set(mapped_old_cat_ids)
+        for cid in cats_to_remove:
+            await store.category_item_repo.unlink_item_category_async(memory_id, cid)
+            category_memory_updates[cid] = (old_content, None)
+        for cid in cats_to_add:
+            await store.category_item_repo.link_item_category_async(memory_id, cid, user_data=dict(user or {}))
+            category_memory_updates[cid] = (None, item.summary)
+
+        if memory_payload["content"]:
+            for cid in set(mapped_old_cat_ids) & set(mapped_new_cat_ids):
+                category_memory_updates[cid] = (old_content, item.summary)
+
+        state.update({
+            "memory_item": item,
+            "category_updates": category_memory_updates,
+        })
+        return state
+
     async def _patch_delete_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         memory_id = state["memory_id"]
         store = state["store"]
@@ -591,6 +720,27 @@ class CRUDMixin:
         for cat in item_categories:
             category_memory_updates[cat.category_id] = (item.summary, None)
         store.memory_item_repo.delete_item(memory_id)
+
+        state.update({
+            "memory_item": item,
+            "category_updates": category_memory_updates,
+        })
+        return state
+
+    async def _patch_delete_memory_item_async(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Async version of _patch_delete_memory_item."""
+        memory_id = state["memory_id"]
+        store = state["store"]
+        category_memory_updates: dict[str, tuple[Any, Any]] = {}
+
+        item = await store.memory_item_repo.get_item_async(memory_id)
+        if not item:
+            msg = f"Memory item with id {memory_id} not found"
+            raise ValueError(msg)
+        item_categories = await store.category_item_repo.get_item_categories_async(memory_id)
+        for cat in item_categories:
+            category_memory_updates[cat.category_id] = (item.summary, None)
+        await store.memory_item_repo.delete_item_async(memory_id)
 
         state.update({
             "memory_item": item,

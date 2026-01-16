@@ -1,8 +1,10 @@
 import base64
 import logging
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Literal, cast
 
+import aiofiles
 from openai import AsyncOpenAI
 from openai.types import CreateEmbeddingResponse
 from openai.types.chat import (
@@ -169,9 +171,13 @@ class OpenAISDKClient:
                 kwargs["prompt"] = prompt
             if language is not None:
                 kwargs["language"] = language
-            with open(audio_path, "rb") as audio_stream:
+
+            async with aiofiles.open(audio_path, "rb") as audio_stream:
+                audio_data = await audio_stream.read()
+                audio_buffer = BytesIO(audio_data)
+
                 transcription = await self.client.audio.transcriptions.create(
-                    file=audio_stream,
+                    file=audio_buffer,
                     model="gpt-4o-mini-transcribe",
                     response_format=response_format,
                     **kwargs,

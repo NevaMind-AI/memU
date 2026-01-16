@@ -6,7 +6,7 @@ from typing import Any
 
 import pendulum
 
-from memu.database.postgres.session import SessionManager
+from memu.database.postgres.session import AsyncSessionManager, SessionManager
 from memu.database.state import DatabaseState
 
 logger = logging.getLogger(__name__)
@@ -19,12 +19,14 @@ class PostgresRepoBase:
         state: DatabaseState,
         sqla_models: Any,
         sessions: SessionManager,
+        async_sessions: AsyncSessionManager | None = None,
         scope_fields: list[str],
         use_vector: bool = True,
     ) -> None:
         self._state = state
         self._sqla_models = sqla_models
         self._sessions = sessions
+        self._async_sessions = async_sessions
         self._scope_fields = scope_fields
         self._use_vector = use_vector
 
@@ -60,6 +62,13 @@ class PostgresRepoBase:
         with self._sessions.session() as session:
             session.merge(obj)
             session.commit()
+
+    async def _merge_and_commit_async(self, obj: Any) -> None:
+        if self._async_sessions is None:
+            raise RuntimeError("Async sessions not initialized")
+        async with self._async_sessions.session() as session:
+            await session.merge(obj)
+            await session.commit()
 
     def _now(self) -> pendulum.DateTime:
         return pendulum.now("UTC")

@@ -13,7 +13,7 @@ from memu.database.postgres.repositories.memory_category_repo import PostgresMem
 from memu.database.postgres.repositories.memory_item_repo import PostgresMemoryItemRepo
 from memu.database.postgres.repositories.resource_repo import PostgresResourceRepo
 from memu.database.postgres.schema import SQLAModels, get_sqlalchemy_models, require_sqlalchemy
-from memu.database.postgres.session import SessionManager
+from memu.database.postgres.session import AsyncSessionManager, SessionManager
 from memu.database.repositories import CategoryItemRepo, MemoryCategoryRepo, MemoryItemRepo, ResourceRepo
 from memu.database.state import DatabaseState
 
@@ -53,6 +53,7 @@ class PostgresStore(Database):
         self._scope_fields = list(getattr(self._scope_model, "model_fields", {}).keys())
         self._state = DatabaseState()
         self._sessions = SessionManager(dsn=self.dsn)
+        self._async_sessions = AsyncSessionManager(dsn=self.dsn)
         self._sqla_models: SQLAModels = sqla_models or get_sqlalchemy_models(scope_model=self._scope_model)
         run_migrations(dsn=self.dsn, scope_model=self._scope_model, ddl_mode=self.ddl_mode)
 
@@ -66,6 +67,7 @@ class PostgresStore(Database):
             resource_model=resource_model,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
+            async_sessions=self._async_sessions,
             scope_fields=self._scope_fields,
         )
         self.memory_category_repo = PostgresMemoryCategoryRepo(
@@ -73,6 +75,7 @@ class PostgresStore(Database):
             memory_category_model=memory_category_model,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
+            async_sessions=self._async_sessions,
             scope_fields=self._scope_fields,
         )
         self.memory_item_repo = PostgresMemoryItemRepo(
@@ -80,6 +83,7 @@ class PostgresStore(Database):
             memory_item_model=memory_item_model,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
+            async_sessions=self._async_sessions,
             scope_fields=self._scope_fields,
             use_vector=self._use_vector_type,
         )
@@ -88,6 +92,7 @@ class PostgresStore(Database):
             category_item_model=category_item_model,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
+            async_sessions=self._async_sessions,
             scope_fields=self._scope_fields,
         )
 
@@ -99,10 +104,22 @@ class PostgresStore(Database):
         # self._load_existing()
 
     def close(self) -> None:
+        """Close sync database connections."""
         self._sessions.close()
+
+    async def close_async(self) -> None:
+        """Close async database connections."""
+        await self._async_sessions.close()
 
     def _load_existing(self) -> None:
         self.resource_repo.load_existing()
         self.memory_category_repo.load_existing()
         self.memory_item_repo.load_existing()
         self.category_item_repo.load_existing()
+
+    async def _load_existing_async(self) -> None:
+        """Load existing data using async methods."""
+        await self.resource_repo.load_existing_async()
+        await self.memory_category_repo.load_existing_async()
+        await self.memory_item_repo.load_existing_async()
+        await self.category_item_repo.load_existing_async()

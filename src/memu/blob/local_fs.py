@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import pathlib
 import shutil
 from urllib.parse import parse_qs, urlparse
 
+import aiofiles
 import httpx
 
 
@@ -60,10 +62,11 @@ class LocalFS:
         if p.exists():
             dst = self.base / p.name
             if str(p.resolve()) != str(dst.resolve()):
-                shutil.copyfile(p, dst)
+                await asyncio.to_thread(shutil.copyfile, p, dst)
             text = None
             if modality in ("conversation", "text", "document"):
-                text = dst.read_text(encoding="utf-8")
+                async with aiofiles.open(dst, encoding="utf-8") as f:
+                    text = await f.read()
             return str(dst), text
 
         # HTTP - get clean filename
