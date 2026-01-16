@@ -61,9 +61,7 @@ class KnowledgeGraph:
             except Exception as e:
                 print(f"Warning: Could not save knowledge graph: {e}")
 
-    def _find_canonical_entity(
-        self, name: str, node_type: str = "Concept", similarity_threshold: float = 0.85
-    ) -> str:
+    def _find_canonical_entity(self, name: str, node_type: str = "Concept", similarity_threshold: float = 0.85) -> str:
         """
         Find canonical entity name using fuzzy matching to prevent duplicates.
 
@@ -81,9 +79,7 @@ class KnowledgeGraph:
             return name
 
         name_lower = name.lower().strip()
-        same_type_nodes = [
-            n for n, data in self.graph.nodes(data=True) if data.get("type") == node_type
-        ]
+        same_type_nodes = [n for n, data in self.graph.nodes(data=True) if data.get("type") == node_type]
 
         if not same_type_nodes:
             return name
@@ -126,9 +122,7 @@ class KnowledgeGraph:
                 return existing_node
         return None
 
-    def _find_similarity_match(
-        self, name: str, name_lower: str, same_type_nodes: list[str], threshold: float
-    ) -> str:
+    def _find_similarity_match(self, name: str, name_lower: str, same_type_nodes: list[str], threshold: float) -> str:
         """Find match based on Jaccard similarity."""
         name_words_set = set(name_lower.split())
         best_match = None
@@ -245,10 +239,7 @@ class KnowledgeGraph:
             self.graph.add_edge(canonical_subject, canonical_object, **edge_attrs)
             self._save_graph()
 
-
-    def get_related_entities(
-        self, entity_name: str, limit: int = 10
-    ) -> list[dict[str, Any]]:
+    def get_related_entities(self, entity_name: str, limit: int = 10) -> list[dict[str, Any]]:
         """
         Get entities directly connected to the given entity.
 
@@ -297,9 +288,7 @@ class KnowledgeGraph:
 
         return related[:limit]
 
-    def get_subgraph_context(
-        self, entity_name: str, depth: int = 2
-    ) -> list[str]:
+    def get_subgraph_context(self, entity_name: str, depth: int = 2) -> list[str]:
         """
         Get textual representation of relationships around an entity.
 
@@ -333,9 +322,7 @@ class KnowledgeGraph:
 
         return relationships
 
-    def find_matching_nodes(
-        self, query_name: str, threshold: float = 0.6
-    ) -> list[str]:
+    def find_matching_nodes(self, query_name: str, threshold: float = 0.6) -> list[str]:
         """
         Find nodes matching the query using fuzzy matching.
 
@@ -386,9 +373,7 @@ class KnowledgeGraph:
         with self._lock:
             for name in entity_names:
                 if self.graph.has_node(name):
-                    self.graph.nodes[name]["access_count"] = (
-                        self.graph.nodes[name].get("access_count", 0) + 1
-                    )
+                    self.graph.nodes[name]["access_count"] = self.graph.nodes[name].get("access_count", 0) + 1
                     self.graph.nodes[name]["last_accessed"] = time.time()
                     updated = True
         if updated:

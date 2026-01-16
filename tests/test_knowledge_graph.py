@@ -6,8 +6,7 @@ from pathlib import Path
 
 # Direct file import to avoid circular import issues from memu.database.__init__
 spec = importlib.util.spec_from_file_location(
-    "knowledge_graph",
-    Path(__file__).parent.parent / "src" / "memu" / "database" / "knowledge_graph.py"
+    "knowledge_graph", Path(__file__).parent.parent / "src" / "memu" / "database" / "knowledge_graph.py"
 )
 knowledge_graph_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(knowledge_graph_module)

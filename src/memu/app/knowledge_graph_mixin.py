@@ -63,18 +63,13 @@ class KnowledgeGraphMixin:
             relationships = result.get("relationships", [])
 
             # Filter valid entities
-            valid_entities = [
-                e for e in entities
-                if isinstance(e, dict) and e.get("name") and e.get("type")
-            ]
+            valid_entities = [e for e in entities if isinstance(e, dict) and e.get("name") and e.get("type")]
 
             # Filter valid relationships
             valid_relationships = [
-                r for r in relationships
-                if isinstance(r, dict)
-                and r.get("subject")
-                and r.get("predicate")
-                and r.get("object")
+                r
+                for r in relationships
+                if isinstance(r, dict) and r.get("subject") and r.get("predicate") and r.get("object")
             ]
 
         except (json.JSONDecodeError, KeyError, TypeError) as e:
@@ -183,9 +178,7 @@ class KnowledgeGraphMixin:
 
         return context_lines
 
-    def get_graph_stats(
-        self, knowledge_graph: KnowledgeGraph | None = None
-    ) -> dict[str, int]:
+    def get_graph_stats(self, knowledge_graph: KnowledgeGraph | None = None) -> dict[str, int]:
         """Get knowledge graph statistics."""
         graph = knowledge_graph or self._get_knowledge_graph()
         return {
