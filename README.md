@@ -140,6 +140,8 @@ docker run -d \
 export OPENAI_API_KEY=your_api_key
 cd tests
 python test_postgres.py
+
+**Test with MSSQL Storage**: [Docs](docs/mssql.md)
 ```
 
 Both examples demonstrate the complete workflow:
