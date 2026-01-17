@@ -182,6 +182,65 @@ service = MemUService(
 
 ---
 
+### OpenRouter Integration
+
+MemU supports [OpenRouter](https://openrouter.ai) as a model provider, giving you access to multiple LLM providers through a single API.
+
+#### Configuration
+
+```python
+from memu import MemoryService
+
+service = MemoryService(
+    llm_profiles={
+        "default": {
+            "provider": "openrouter",
+            "client_backend": "httpx",
+            "base_url": "https://openrouter.ai",
+            "api_key": "your_openrouter_api_key",
+            "chat_model": "anthropic/claude-3.5-sonnet",  # Any OpenRouter model
+            "embed_model": "openai/text-embedding-3-small",  # Embedding model
+        },
+    },
+    database_config={
+        "metadata_store": {"provider": "inmemory"},
+    },
+)
+```
+
+#### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `OPENROUTER_API_KEY` | Your OpenRouter API key from [openrouter.ai/keys](https://openrouter.ai/keys) |
+
+#### Supported Features
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Chat Completions | Supported | Works with any OpenRouter chat model |
+| Embeddings | Supported | Use OpenAI embedding models via OpenRouter |
+| Vision | Supported | Use vision-capable models (e.g., `openai/gpt-4o`) |
+
+#### Running OpenRouter Tests
+
+```bash
+export OPENROUTER_API_KEY=your_api_key
+
+# Full workflow test (memorize + retrieve)
+python tests/test_openrouter.py
+
+# Embedding-specific tests
+python tests/test_openrouter_embedding.py
+
+# Vision-specific tests
+python tests/test_openrouter_vision.py
+```
+
+See [`examples/example_4_openrouter_memory.py`](examples/example_4_openrouter_memory.py) for a complete working example.
+
+---
+
 ## 📖 Core APIs
 
 ### `memorize()` - Extract and Store Memory
