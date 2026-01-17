@@ -64,6 +64,9 @@ test = [
 
 [project.optional-dependencies]
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
+oracle = [
+    "oracledb>=3.4.1",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
@@ -93,6 +96,10 @@ disable_error_code = ["attr-defined", "call-arg"]
 
 [[tool.mypy.overrides]]
 module = ["pgvector.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["oracledb"]
 ignore_missing_imports = true
 
 [tool.ruff]

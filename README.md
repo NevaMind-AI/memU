@@ -112,6 +112,7 @@ For enterprise deployment and custom solutions, contact **info@nevamind.ai**
 pip install -e .
 ```
 
+
 #### Basic Example
 
 > **Requirements**: Python 3.13+ and an OpenAI API key

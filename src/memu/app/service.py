@@ -21,7 +21,6 @@ from memu.app.settings import (
     UserConfig,
 )
 from memu.blob.local_fs import LocalFS
-from memu.database.factory import build_database
 from memu.database.interfaces import Database
 from memu.llm.http_client import HTTPLLMClient
 from memu.llm.wrapper import (
@@ -74,10 +73,13 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
 
         self._context = Context(categories_ready=not bool(self.category_configs))
 
+        from memu.database.factory import build_database
+
         self.database: Database = build_database(
             config=self.database_config,
             user_model=self.user_model,
         )
+
         # We need the concrete user scope (user_id: xxx) to initialize the categories
         # self._start_category_initialization(self._context, self.database)
 
