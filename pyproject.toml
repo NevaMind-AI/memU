@@ -42,6 +42,8 @@ dev = [
     {include-group = "docs"},
     {include-group = "lint"},
     {include-group = "test"},
+    "fastapi>=0.128.0",
+    "httpx>=0.28.1",
 ]
 docs = [
     "mkdocs>=1.6.1",
