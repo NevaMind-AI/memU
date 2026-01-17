@@ -30,7 +30,7 @@ class OracleResourceRepo(ResourceRepo):
     def __init__(self, user: str, password: str, dsn: str) -> None:
         import oracledb
 
-        self._conn: Connection = oracledb.connect(user=user, password=password, dsn=dsn)
+        self._conn: Connection = oracledb.connect(user=user, password=password, dsn=dsn)  # type: ignore[no-any-unimported]
         self._ensure_table()
 
     def _ensure_table(self) -> None:
@@ -108,6 +108,14 @@ class OracleResourceRepo(ResourceRepo):
     def load_existing(self) -> None:
         pass
 
+    def clear_resources(self, where: Mapping[str, Any] | None = None) -> dict[str, Resource]:
+        if where:
+            raise NotImplementedError("Clear with filter not implemented for Oracle")
+        with self._conn.cursor() as cursor:
+            cursor.execute("DELETE FROM resources")
+            self._conn.commit()
+        return {}
+
 
 class OracleMemoryItemRepo(MemoryItemRepo):
     """Oracle implementation of MemoryItemRepo."""
@@ -115,7 +123,7 @@ class OracleMemoryItemRepo(MemoryItemRepo):
     def __init__(self, user: str, password: str, dsn: str) -> None:
         import oracledb
 
-        self._conn: Connection = oracledb.connect(user=user, password=password, dsn=dsn)
+        self._conn: Connection = oracledb.connect(user=user, password=password, dsn=dsn)  # type: ignore[no-any-unimported]
         self._ensure_table()
 
     def _ensure_table(self) -> None:
@@ -298,6 +306,14 @@ class OracleMemoryItemRepo(MemoryItemRepo):
         # No-op for DB backed repo, or verifying connection
         pass
 
+    def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+        if where:
+            raise NotImplementedError("Clear with filter not implemented for Oracle")
+        with self._conn.cursor() as cursor:
+            cursor.execute("DELETE FROM memory_items")
+            self._conn.commit()
+        return {}
+
     def _row_to_memory_item(self, row: tuple) -> MemoryItem:
         # Columns: id, resource_id, memory_type, summary, embedding, user_data, created_at, updated_at
         # Index:   0   1            2            3        4          5          6           7
@@ -332,7 +348,7 @@ class OracleMemoryCategoryRepo(MemoryCategoryRepo):
     def __init__(self, user: str, password: str, dsn: str) -> None:
         import oracledb
 
-        self._conn: Connection = oracledb.connect(user=user, password=password, dsn=dsn)
+        self._conn: Connection = oracledb.connect(user=user, password=password, dsn=dsn)  # type: ignore[no-any-unimported]
         self._ensure_table()
 
     def _ensure_table(self) -> None:
@@ -495,6 +511,14 @@ class OracleMemoryCategoryRepo(MemoryCategoryRepo):
     def load_existing(self) -> None:
         pass
 
+    def clear_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryCategory]:
+        if where:
+            raise NotImplementedError("Clear with filter not implemented for Oracle")
+        with self._conn.cursor() as cursor:
+            cursor.execute("DELETE FROM memory_categories")
+            self._conn.commit()
+        return {}
+
     def _row_to_category(self, row: tuple) -> MemoryCategory:
         # id, name, description, embedding, summary, user_data, created_at, updated_at
         embedding_val = row[3]
@@ -530,7 +554,7 @@ class OracleCategoryItemRepo(CategoryItemRepo):
     def __init__(self, user: str, password: str, dsn: str) -> None:
         import oracledb
 
-        self._conn: Connection = oracledb.connect(user=user, password=password, dsn=dsn)
+        self._conn: Connection = oracledb.connect(user=user, password=password, dsn=dsn)  # type: ignore[no-any-unimported]
         self._ensure_table()
 
     def _ensure_table(self) -> None:

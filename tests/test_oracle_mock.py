@@ -1,15 +1,17 @@
 import importlib.util
 import json
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
+
+# Mock oracledb if not installed BEFORE importing the repo
+if importlib.util.find_spec("oracledb") is None:
+    sys.modules["oracledb"] = MagicMock()
 
 from memu.database.models import MemoryItem
 from memu.database.oracle.oracle import OracleMemoryItemRepo
 
-HAS_ORACLE = importlib.util.find_spec("oracledb") is not None
 
-
-@unittest.skipIf(not HAS_ORACLE, "oracledb not installed")
 class TestOracleMemoryItemRepo(unittest.TestCase):
     def setUp(self) -> None:
         self.mock_connect_patcher = patch("oracledb.connect")
