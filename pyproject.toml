@@ -97,6 +97,10 @@ disable_error_code = ["attr-defined", "call-arg"]
 module = ["pgvector.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["oracledb"]
+ignore_missing_imports = true
+
 [tool.ruff]
 target-version = "py313"
 line-length = 120
