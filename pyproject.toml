@@ -58,6 +58,7 @@ lint = [
 ]
 test = [
     "pytest>=8.4.2",
+    "pytest-asyncio>=0.24.0",
     "pytest-cov>=7.0.0",
 ]
 
@@ -163,3 +164,4 @@ source = ["memu"]
 testpaths = ["tests"]
 log_cli = true
 log_cli_level = "INFO"
+asyncio_mode = "auto"

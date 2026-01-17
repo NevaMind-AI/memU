@@ -114,6 +114,18 @@ class LLMConfig(BaseModel):
         description="Maximum batch size for embedding API calls (used by SDK client backends).",
     )
 
+    @model_validator(mode="after")
+    def set_provider_defaults(self) -> "LLMConfig":
+        if self.provider == "grok":
+            # If values match the OpenAI defaults, switch them to Grok defaults
+            if self.base_url == "https://api.openai.com/v1":
+                self.base_url = "https://api.x.ai/v1"
+            if self.api_key == "OPENAI_API_KEY":
+                self.api_key = "XAI_API_KEY"
+            if self.chat_model == "gpt-4o-mini":
+                self.chat_model = "grok-2-latest"
+        return self
+
 
 class BlobConfig(BaseModel):
     provider: str = Field(default="local")
