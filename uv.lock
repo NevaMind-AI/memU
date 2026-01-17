@@ -583,6 +583,7 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "defusedxml" },
+    { name = "fastapi" },
     { name = "httpx" },
     { name = "numpy" },
     { name = "openai" },
@@ -637,6 +638,7 @@ test = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14.0" },
     { name = "defusedxml", specifier = ">=0.7.1" },
+    { name = "fastapi", specifier = ">=0.128.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "numpy", specifier = ">=2.3.4" },
     { name = "openai", specifier = ">=2.8.0" },
