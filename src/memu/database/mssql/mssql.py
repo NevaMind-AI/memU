@@ -117,6 +117,9 @@ class MssqlResourceRepo(ResourceRepo):
             results = session.exec(statement).all()
             return {res.id: res for res in results}
 
+    def clear_resources(self, where: Mapping[str, Any] | None = None) -> dict[str, Resource]:
+        raise NotImplementedError("Method not yet implemented")
+
 
 class MssqlMemoryCategoryRepo(MemoryCategoryRepo):
     """MSSQL implementation of the MemoryCategoryRepo."""
@@ -188,6 +191,9 @@ class MssqlMemoryCategoryRepo(MemoryCategoryRepo):
             statement = select(MssqlMemoryCategoryModel)
             results = session.exec(statement).all()
             return {cat.id: cat for cat in results}
+
+    def clear_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryCategory]:
+        raise NotImplementedError("Method not yet implemented")
 
 
 class MssqlMemoryItemRepo(MemoryItemRepo):
@@ -263,6 +269,9 @@ class MssqlMemoryItemRepo(MemoryItemRepo):
             statement = select(MssqlMemoryItemModel)
             results = session.exec(statement).all()
             return {item.id: item for item in results}
+
+    def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+        raise NotImplementedError("Method not yet implemented")
 
     def vector_search_items(
         self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None
