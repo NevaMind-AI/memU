@@ -12,7 +12,9 @@ Usage:
 import asyncio
 import os
 import sys
+from typing import Any
 
+# ... imports ...
 from memu.app import MemoryService
 
 # Add src to sys.path
@@ -20,7 +22,7 @@ src_path = os.path.abspath("src")
 sys.path.insert(0, src_path)
 
 
-async def generate_memory_md(categories, output_dir):
+async def generate_memory_md(categories: list[dict[str, Any]], output_dir: str) -> list[str]:
     """Generate concise markdown files for each memory category."""
 
     os.makedirs(output_dir, exist_ok=True)
@@ -48,7 +50,7 @@ async def generate_memory_md(categories, output_dir):
     return generated_files
 
 
-async def main():
+async def main() -> None:
     """
     Process multiple conversation files and generate memory categories.
 

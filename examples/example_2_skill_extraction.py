@@ -12,6 +12,7 @@ Usage:
 import asyncio
 import os
 import sys
+from typing import Any
 
 from openai import AsyncOpenAI
 
@@ -23,8 +24,14 @@ sys.path.insert(0, src_path)
 
 
 async def generate_skill_md(
-    all_skills, service, output_file, attempt_number, total_attempts, categories=None, is_final=False
-):
+    all_skills: list[dict[str, Any]],
+    service: MemoryService,
+    output_file: str,
+    attempt_number: int,
+    total_attempts: int,
+    categories: list[dict[str, Any]] | None = None,
+    is_final: bool = False,
+) -> bool:
     """
     Use LLM to generate a concise task execution guide (skill.md).
 
@@ -39,7 +46,9 @@ async def generate_skill_md(
     # Get category summaries if available
     categories_text = ""
     if categories:
-        categories_with_content = [cat for cat in categories if cat.get("summary") and cat.get("summary").strip()]
+        categories_with_content = [
+            cat for cat in categories if isinstance(cat.get("summary"), str) and cat.get("summary", "").strip()
+        ]
         if categories_with_content:
             categories_text = "\n\n".join([
                 f"**{cat.get('name', 'unknown')}**:\n{cat.get('summary', '')}" for cat in categories_with_content
@@ -122,7 +131,7 @@ Generate the complete markdown document now:"""
         max_tokens=3000,
     )
 
-    generated_content = response.choices[0].message.content
+    generated_content = response.choices[0].message.content or ""
 
     # Write to file
     with open(output_file, "w", encoding="utf-8") as f:
@@ -131,7 +140,7 @@ Generate the complete markdown document now:"""
     return True
 
 
-async def main():
+async def main() -> None:
     """
     Extract skills from agent logs using incremental memory updates.
 

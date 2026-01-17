@@ -1,0 +1,97 @@
+openapi: 3.0.0
+info:
+  title: MemU Dify Integration
+  description: API Adapter for connecting MemU Memory System to Dify
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000
+    description: Local MemU Adapter Server
+
+paths:
+  /dify/memory/add:
+    post:
+      summary: Add to Memory
+      operationId: add_memory
+      description: Stores user interaction or facts into MemU's long-term memory.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                  description: The text content to be memorized (e.g., "User prefers dark mode").
+                user_id:
+                  type: string
+                  description: Unique identifier for the user to scope the memory.
+              required:
+                - query
+      responses:
+        '200':
+          description: Memory successfully stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    description: Confirmation message for the LLM.
+                  metadata:
+                    type: object
+                    properties:
+                      items_created:
+                        type: integer
+                      resource_id:
+                        type: string
+
+  /dify/memory/search:
+    post:
+      summary: Search Memory
+      operationId: search_memory
+      description: Retrieves relevant context from MemU based on semantic similarity.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                  description: The search query to find relevant memories.
+                user_id:
+                  type: string
+                  description: Unique identifier for the user scope.
+              required:
+                - query
+      responses:
+        '200':
+          description: Relevant memories found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    description: Formatted text containing relevant memory items and category context.
+                  metadata:
+                    type: object
+                    properties:
+                      item_count:
+                        type: integer
+                      category_count:
+                        type: integer
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
