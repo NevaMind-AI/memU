@@ -1,5 +1,6 @@
 import os
 import sys
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -163,7 +164,7 @@ async def test_memu_node_execution(mock_memory_service):
     assert len(tools) == 2
 
     # Test node call
-    state = {"messages": []}
+    state: dict[str, list[Any]] = {"messages": []}
     result = await node(state)
 
     assert result == {"memu_status": "active"}

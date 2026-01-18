@@ -11,19 +11,16 @@ from pydantic import BaseModel, Field
 
 from memu.app.service import MemoryService
 
-# Try to import from langchain_core, but allow failure if not installed yet
 try:
     from langchain_core.tools import BaseTool, StructuredTool
-except ImportError:
-    # Define dummy BaseTool/StructuredTool for development/inspection purposes
-    # if dependencies aren't present.
-    class BaseTool:
-        pass
-
-    class StructuredTool:
-        @classmethod
-        def from_function(cls, *args, **kwargs):
-            pass
+except ImportError as e:
+    # If langchain_core is not installed, we can't really function.
+    # We let the ImportError propagate or handle it gracefully if strict optionality is needed.
+    # However, per instructions, we are standardizing imports.
+    # If explicit type checking logic is needed for some reason we can use TYPE_CHECKING,
+    # but for base classes used at runtime, we need them at runtime.
+    msg = "Please install 'langchain-core' to use the LangGraph integration."
+    raise ImportError(msg) from e
 
 
 # Setup logger
@@ -103,7 +100,7 @@ class MemULangGraphTools:
             self.search_memory_tool(),
         ]
 
-    def save_memory_tool(self) -> BaseTool:
+    def save_memory_tool(self) -> StructuredTool:
         """Creates a tool to save information into MemU.
 
         Returns:
@@ -160,7 +157,7 @@ class MemULangGraphTools:
             args_schema=SaveRecallInput,
         )
 
-    def search_memory_tool(self) -> BaseTool:
+    def search_memory_tool(self) -> StructuredTool:
         """Creates a tool to search for information in MemU.
 
         Returns:
