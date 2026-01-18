@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 import importlib.util
 
-from memu.integrations.langgraph import MemULangGraphTools
+from memu.integrations.langgraph import MemUIntegrationError, MemULangGraphTools, MemUNode
 
 # Check availability without triggering F401 (Unused import)
 has_langchain = importlib.util.find_spec("langchain_core") is not None
@@ -32,6 +32,16 @@ def langgraph_tools(mock_memory_service):
     return MemULangGraphTools(mock_memory_service)
 
 
+def test_memu_langgraph_tools_initialization(mock_memory_service):
+    """Verify MemULangGraphTools initializes correctly."""
+    tools_bucket = MemULangGraphTools(mock_memory_service)
+    assert tools_bucket.memory_service == mock_memory_service
+    tools = tools_bucket.tools()
+    assert len(tools) == 2
+    assert tools[0].name == "save_memory"
+    assert tools[1].name == "search_memory"
+
+
 @pytest.mark.asyncio
 async def test_save_memory_tool_execution(langgraph_tools, mock_memory_service):
     """Verify save_memory_tool calls memorize with correct parameters."""
@@ -42,9 +52,7 @@ async def test_save_memory_tool_execution(langgraph_tools, mock_memory_service):
     user_id = "user_123"
     metadata = {"category": "test"}
 
-    # Execute the tool's coroutine directly since we are testing the logic,
-    # not the LangChain Tool wrapper overhead (though we could invoke it if we wanted).
-    # The tool returns an awaitable.
+    # Execute the tool's coroutine directly
     result = await save_tool.coroutine(content=content, user_id=user_id, metadata=metadata)
 
     assert result == "Memory saved successfully."
@@ -65,10 +73,23 @@ async def test_save_memory_tool_execution(langgraph_tools, mock_memory_service):
     assert "memu_input_" in resource_url
     assert resource_url.endswith(".txt")
 
-    # Verify file handling logic (mocked verify it existed/was read? No, integration checks logic)
-    # Since the function writes and deletes the file conformantly, we rely on the implementation.
-    # We can check if file is gone (cleanup works)
+    # Verify cleanup works
     assert not os.path.exists(resource_url), "Temporary file should have been cleaned up."
+
+
+@pytest.mark.asyncio
+async def test_save_memory_error_handling(langgraph_tools, mock_memory_service):
+    """Verify save_memory_tool handles service errors by raising custom exceptions."""
+    save_tool = langgraph_tools.save_memory_tool()
+
+    # Mock service to raise an exception
+    mock_memory_service.memorize.side_effect = Exception("Service unavailable")
+
+    with pytest.raises(MemUIntegrationError) as exc_info:
+        await save_tool.coroutine(content="Fail", user_id="user_123")
+
+    assert "Failed to save memory" in str(exc_info.value)
+    assert "Service unavailable" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
@@ -88,8 +109,8 @@ async def test_search_memory_tool_execution(langgraph_tools, mock_memory_service
 
     # Check expected format
     assert "Retrieved Memories:" in result
-    assert "1. User name is David" in result
-    assert "2. User likes Python" in result
+    assert "[Score: 0.9] User name is David" in result
+    assert "[Score: 0.8] User likes Python" in result
 
     # Verify key args
     mock_memory_service.retrieve.assert_called_once()
@@ -100,12 +121,49 @@ async def test_search_memory_tool_execution(langgraph_tools, mock_memory_service
 
 
 @pytest.mark.asyncio
-async def test_search_memory_tool_no_results(langgraph_tools, mock_memory_service):
-    """Verify search_memory_tool handles empty results gracefully."""
+async def test_search_memory_with_metadata_filter(langgraph_tools, mock_memory_service):
+    """Verify search_memory_tool passes metadata filters correctly."""
     search_tool = langgraph_tools.search_memory_tool()
+
+    query = "Search with filter"
+    user_id = "user_123"
+    metadata_filter = {"category": "work"}
 
     mock_memory_service.retrieve.return_value = {"items": []}
 
-    result = await search_tool.coroutine(query="Unknown", user_id="user_123")
+    await search_tool.coroutine(query=query, user_id=user_id, metadata_filter=metadata_filter)
 
-    assert result == "No relevant memories found."
+    # Verify where filter includes metadata
+    _, kwargs = mock_memory_service.retrieve.call_args
+    assert kwargs["where"]["user_id"] == user_id
+    assert kwargs["where"]["category"] == "work"
+
+
+@pytest.mark.asyncio
+async def test_search_memory_error_handling(langgraph_tools, mock_memory_service):
+    """Verify search_memory_tool handles service errors by raising custom exceptions."""
+    search_tool = langgraph_tools.search_memory_tool()
+
+    mock_memory_service.retrieve.side_effect = Exception("Network timeout")
+
+    with pytest.raises(MemUIntegrationError) as exc_info:
+        await search_tool.coroutine(query="Test", user_id="user_123")
+
+    assert "Failed to search memory" in str(exc_info.value)
+    assert "Network timeout" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_memu_node_execution(mock_memory_service):
+    """Verify MemUNode initializes and executes correctly."""
+    node = MemUNode(mock_memory_service)
+
+    # Test tool retrieval
+    tools = node.get_tools()
+    assert len(tools) == 2
+
+    # Test node call
+    state = {"messages": []}
+    result = await node(state)
+
+    assert result == {"memu_status": "active"}
