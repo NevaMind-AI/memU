@@ -26,6 +26,7 @@ dependencies = [
     "sqlmodel>=0.0.27",
     "alembic>=1.14.0",
     "pendulum>=3.1.0",
+    "langchain-core>=1.2.7",
 ]
 
 [build-system]
@@ -42,6 +43,8 @@ dev = [
     {include-group = "docs"},
     {include-group = "lint"},
     {include-group = "test"},
+    "langchain-openai>=1.1.7",
+    "langgraph>=1.0.6",
 ]
 docs = [
     "mkdocs>=1.6.1",
@@ -64,6 +67,7 @@ test = [
 
 [project.optional-dependencies]
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
+langgraph = ["langgraph>=0.0.10", "langchain-core>=0.1.0"]
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
