@@ -1,18 +1,16 @@
 import asyncio
 import os
 import sys
+from typing import Annotated, Any, Literal, TypedDict
 
 # Ensure we can import from src
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../src")))
 
-from typing import Annotated, Literal
-
 try:
-    from typing import TypedDict
-
-    from langchain_core.messages import HumanMessage
+    from langchain_core.messages import BaseMessage, HumanMessage
+    from langchain_core.tools import BaseTool
     from langchain_openai import ChatOpenAI
-    from langgraph.graph import END, START, StateGraph
+    from langgraph.graph import START, StateGraph
     from langgraph.graph.message import add_messages
     from langgraph.prebuilt import ToolNode
 except ImportError:
@@ -25,14 +23,14 @@ from memu.integrations.langgraph import MemULangGraphTools
 
 # Define state
 class State(TypedDict):
-    messages: Annotated[list, add_messages]
+    messages: Annotated[list[BaseMessage], add_messages]
 
 
-def build_demo_graph(tools, llm_model):
+def build_demo_graph(tools: list[BaseTool], llm_model: ChatOpenAI) -> Any:
     """Build the LangGraph state graph for the demo."""
     llm_with_tools = llm_model.bind_tools(tools)
 
-    def chatbot(state: State):
+    def chatbot(state: State) -> dict[str, list[BaseMessage]]:
         return {"messages": [llm_with_tools.invoke(state["messages"])]}
 
     graph_builder = StateGraph(State)
@@ -43,12 +41,13 @@ def build_demo_graph(tools, llm_model):
 
     graph_builder.add_edge(START, "chatbot")
 
-    def should_continue(state: State) -> Literal["tools", END]:
+    # Note: END is actually "__end__", we use the literal string for the Type Hint to avoid MyPy error
+    def should_continue(state: State) -> Literal["tools", "__end__"]:
         messages = state["messages"]
         last_message = messages[-1]
-        if last_message.tool_calls:
+        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
             return "tools"
-        return END
+        return "__end__"
 
     graph_builder.add_conditional_edges("chatbot", should_continue)
     graph_builder.add_edge("tools", "chatbot")
@@ -56,7 +55,7 @@ def build_demo_graph(tools, llm_model):
     return graph_builder.compile()
 
 
-async def initialize_infrastructure():
+async def initialize_infrastructure() -> tuple[MemoryService | None, list[BaseTool] | None]:
     """Initialize MemoryService and MemULangGraphTools."""
     print("=== MemU LangGraph Demo ===")
     try:
@@ -73,7 +72,7 @@ async def initialize_infrastructure():
     return service, tools
 
 
-async def process_conversation(graph, user_input: str):
+async def process_conversation(graph: Any, user_input: str) -> None:
     """Handle the main conversation flow."""
     print(f"\nUser: {user_input}")
     events = graph.stream({"messages": [HumanMessage(content=user_input)]}, stream_mode="values")
@@ -83,13 +82,14 @@ async def process_conversation(graph, user_input: str):
             last_msg = event["messages"][-1]
             if last_msg.type == "ai":
                 print(f"Agent: {last_msg.content}")
-                if last_msg.tool_calls:
+                # Check for tool_calls safely
+                if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
                     print(f"   (Tool Call: {last_msg.tool_calls})")
             elif last_msg.type == "tool":
                 print(f"Tool Output: {last_msg.content}")
 
 
-async def process_retrieval(graph, search_input: str):
+async def process_retrieval(graph: Any, search_input: str) -> None:
     """Handle the retrieval flow."""
     print(f"\nUser: {search_input}")
     events = graph.stream({"messages": [HumanMessage(content=search_input)]}, stream_mode="values")
@@ -101,13 +101,15 @@ async def process_retrieval(graph, search_input: str):
                 print(f"Agent: {last_msg.content}")
 
 
-async def run_demo():
+async def run_demo() -> None:
     """Main orchestration function."""
-    service, tools = await initialize_infrastructure()
-    if not service:
+    service_and_tools = await initialize_infrastructure()
+    service, tools = service_and_tools
+
+    if not service or not tools:
         return
 
-    if not os.getenv("OPENAI_API_KEY"):
+    if not os.environ.get("OPENAI_API_KEY"):
         print("⚠️  OPENAI_API_KEY not found. Please set it to run the agent.")
         return
 

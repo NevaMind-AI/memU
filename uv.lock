@@ -650,8 +650,6 @@ dependencies = [
     { name = "defusedxml" },
     { name = "httpx" },
     { name = "langchain-core" },
-    { name = "langchain-openai" },
-    { name = "langgraph" },
     { name = "numpy" },
     { name = "openai" },
     { name = "pendulum" },
@@ -672,6 +670,8 @@ postgres = [
 [package.dev-dependencies]
 dev = [
     { name = "deptry" },
+    { name = "langchain-openai" },
+    { name = "langgraph" },
     { name = "mkdocs" },
     { name = "mkdocs-material" },
     { name = "mkdocstrings" },
@@ -710,8 +710,6 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "langchain-core", specifier = ">=1.2.7" },
     { name = "langchain-core", marker = "extra == 'langgraph'", specifier = ">=0.1.0" },
-    { name = "langchain-openai", specifier = ">=1.1.7" },
-    { name = "langgraph", specifier = ">=1.0.6" },
     { name = "langgraph", marker = "extra == 'langgraph'", specifier = ">=0.0.10" },
     { name = "numpy", specifier = ">=2.3.4" },
     { name = "openai", specifier = ">=2.8.0" },
@@ -726,6 +724,8 @@ provides-extras = ["postgres", "langgraph"]
 [package.metadata.requires-dev]
 dev = [
     { name = "deptry", specifier = ">=0.23.1" },
+    { name = "langchain-openai", specifier = ">=1.1.7" },
+    { name = "langgraph", specifier = ">=1.0.6" },
     { name = "mkdocs", specifier = ">=1.6.1" },
     { name = "mkdocs-material", specifier = ">=9.6.23" },
     { name = "mkdocstrings", specifier = ">=0.30.1" },

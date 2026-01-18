@@ -26,8 +26,6 @@ dependencies = [
     "sqlmodel>=0.0.27",
     "alembic>=1.14.0",
     "pendulum>=3.1.0",
-    "langgraph>=1.0.6",
-    "langchain-openai>=1.1.7",
     "langchain-core>=1.2.7",
 ]
 
@@ -45,6 +43,8 @@ dev = [
     {include-group = "docs"},
     {include-group = "lint"},
     {include-group = "test"},
+    "langchain-openai>=1.1.7",
+    "langgraph>=1.0.6",
 ]
 docs = [
     "mkdocs>=1.6.1",

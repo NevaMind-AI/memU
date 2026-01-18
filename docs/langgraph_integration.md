@@ -1,79 +1,97 @@
-# LangGraph Integration
+# MemU LangGraph Integration
 
-This integration provides a seamless way to use MemU's long-term memory capabilities within LangGraph and LangChain agents.
+The MemU LangGraph Integration provides a seamless adapter to expose MemU's powerful memory capabilities (`memorize` and `retrieve`) as standard [LangChain](https://python.langchain.com/) / [LangGraph](https://langchain-ai.github.io/langgraph/) tools. This allows your agents to persist information and recall it across sessions using MemU as the long-term memory backend.
+
+## Overview
+
+This integration wraps the `MemoryService` and exposes two key tools:
+- **`save_memory`**: Persists text, conversation snippets, or facts associated with a user.
+- **`search_memory`**: Retrieves relevant memories based on semantic search queries.
+
+These tools are fully typed and compatible with LangGraph's `prebuilt.ToolNode` and LangChain's agents.
 
 ## Installation
 
-Ensure you have MemU installed with the LangGraph optional dependencies:
+To use this integration, you need to install the optional dependencies:
 
 ```bash
-uv sync --extra langgraph
-# OR
-pip install memu[langgraph]
+uv add langgraph langchain-core
 ```
 
-## Usage
+## Quick Start
 
-The integration exposes a helper class `MemULangGraphTools` that wraps MemU's `MemoryService` into LangChain-compatible tools.
-
-### 1. Initialize MemoryService
-
-First, initialize the core memory service.
+Here is a complete example of how to initialize the MemU memory service and bind it to a LangGraph agent.
 
 ```python
+import asyncio
+import os
 from memu.app.service import MemoryService
-
-service = MemoryService()
-```
-
-### 2. Create Tools
-
-Pass the service to the adapter to generate the tools.
-
-```python
 from memu.integrations.langgraph import MemULangGraphTools
 
-adapter = MemULangGraphTools(service)
-tools = adapter.tools()
-# tools now contains [save_memory, search_memory]
+# Ensure you have your configuration set (e.g., env vars for DB connection)
+# os.environ["MEMU_DATABASE_URL"] = "..."
+
+async def main():
+    # 1. Initialize MemoryService
+    memory_service = MemoryService()
+    # If your service requires async init (check your specific implementation):
+    # await memory_service.initialize()
+
+    # 2. Instantiate MemULangGraphTools
+    memu_tools = MemULangGraphTools(memory_service)
+
+    # Get the list of tools (BaseTool compatible)
+    tools = memu_tools.tools()
+
+    # 3. Example Usage: Manually invoking a tool
+    # In a real app, you would pass 'tools' to your LangGraph agent or StateGraph.
+
+    # Save a memory
+    save_tool = memu_tools.save_memory_tool()
+    print("Saving memory...")
+    result = await save_tool.ainvoke({
+        "content": "The user prefers dark mode.",
+        "user_id": "user_123",
+        "metadata": {"category": "preferences"}
+    })
+    print(f"Save Result: {result}")
+
+    # Search for a memory
+    search_tool = memu_tools.search_memory_tool()
+    print("\nSearching memory...")
+    search_result = await search_tool.ainvoke({
+        "query": "What are the user's preferences?",
+        "user_id": "user_123"
+    })
+    print(f"Search Result:\n{search_result}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-### 3. Integrate with LangGraph
+## API Reference
 
-Add the tools to your LangGraph `ToolNode` or bind them to your LLM.
+### `MemULangGraphTools`
+
+The main adapter class.
 
 ```python
-from langgraph.prebuilt import ToolNode
-from langchain_openai import ChatOpenAI
-
-# Bind tools to LLM
-llm = ChatOpenAI(model="gpt-4")
-llm_with_tools = llm.bind_tools(tools)
-
-# Create ToolNode
-tool_node = ToolNode(tools=tools)
-
-# ... Build your StateGraph using tool_node ...
+class MemULangGraphTools(memory_service: MemoryService)
 ```
 
-## Available Tools
+#### `save_memory_tool() -> StructuredTool`
+Returns a tool named `save_memory`.
+- **Inputs**: `content` (str), `user_id` (str), `metadata` (dict, optional).
+- **Description**: Save a piece of information, conversation snippet, or memory for a user.
 
-### `save_memory`
-Allows the agent to save important information, user preferences, or conversation snippets to long-term memory.
+#### `search_memory_tool() -> StructuredTool`
+Returns a tool named `search_memory`.
+- **Inputs**: `query` (str), `user_id` (str), `limit` (int, default=5), `metadata_filter` (dict, optional), `min_relevance_score` (float, default=0.0).
+- **Description**: Search for relevant memories or information for a user based on a query.
 
-- **Arguments:**
-  - `content` (str): The information to save.
-  - `user_id` (str): The user associated with this memory.
-  - `metadata` (dict, optional): Additional context (e.g., category, importance).
+## Troubleshooting
 
-### `search_memory`
-Allows the agent to retrieve relevant information from memory based on a query.
-
-- **Arguments:**
-  - `query` (str): The question or topic to search for.
-  - `user_id` (str): The user associated with this memory.
-  - `limit` (int, default=5): Number of results to return.
-
-## Example
-
-See `examples/langgraph_demo.py` for a complete running example of a chatbot that uses MemU to remember user details across sessions.
+### Import Errors
+If you see an `ImportError` regarding `langchain_core` or `langgraph`:
+1. Ensure you have installed the extras: `uv add langgraph langchain-core` (or `pip install langgraph langchain-core`).
+2. Verify your virtual environment is active.
