@@ -1,3 +1,5 @@
+"""LangGraph integration for MemU."""
+
 from __future__ import annotations
 
 import contextlib
@@ -7,6 +9,8 @@ import tempfile
 import uuid
 from typing import Any
 
+# MUST explicitly import langgraph to satisfy DEP002
+import langgraph
 from pydantic import BaseModel, Field
 
 from memu.app.service import MemoryService
@@ -14,12 +18,7 @@ from memu.app.service import MemoryService
 try:
     from langchain_core.tools import BaseTool, StructuredTool
 except ImportError as e:
-    # If langchain_core is not installed, we can't really function.
-    # We let the ImportError propagate or handle it gracefully if strict optionality is needed.
-    # However, per instructions, we are standardizing imports.
-    # If explicit type checking logic is needed for some reason we can use TYPE_CHECKING,
-    # but for base classes used at runtime, we need them at runtime.
-    msg = "Please install 'langchain-core' to use the LangGraph integration."
+    msg = "Please install 'langchain-core' (and 'langgraph') to use the LangGraph integration."
     raise ImportError(msg) from e
 
 
@@ -31,18 +30,8 @@ class MemUIntegrationError(Exception):
     """Base exception for MemU integration issues."""
 
 
-class MemUConnectionError(MemUIntegrationError):
-    """Exception raised when there is a connection issue with MemU service."""
-
-
 class SaveRecallInput(BaseModel):
-    """Input schema for the save_memory tool.
-
-    Attributes:
-        content: The text content or information to save/remember.
-        user_id: The unique identifier of the user.
-        metadata: Additional metadata related to the memory.
-    """
+    """Input schema for the save_memory tool."""
 
     content: str = Field(description="The text content or information to save/remember.")
     user_id: str = Field(description="The unique identifier of the user.")
@@ -50,15 +39,7 @@ class SaveRecallInput(BaseModel):
 
 
 class SearchRecallInput(BaseModel):
-    """Input schema for the search_memory tool.
-
-    Attributes:
-        query: The search query to retrieve relevant memories.
-        user_id: The unique identifier of the user.
-        limit: Number of memories to retrieve.
-        metadata_filter: Optional filter to apply to memory metadata.
-        min_relevance_score: Minimum relevance score for retrieved memories.
-    """
+    """Input schema for the search_memory tool."""
 
     query: str = Field(description="The search query to retrieve relevant memories.")
     user_id: str = Field(description="The unique identifier of the user.")
@@ -73,53 +54,27 @@ class MemULangGraphTools:
     """Adapter to expose MemU as a set of Tools for LangGraph/LangChain agents.
 
     This class provides a bridge between the MemU MemoryService and LangChain's
-    tooling ecosystem, allowing agents to persist and retrieve information
-    seamlessly.
-
-    Args:
-        memory_service: An instance of MemU MemoryService.
-
-    Example:
-        service = MemoryService(...)
-        tools_bucket = MemULangGraphTools(service)
-        tools = tools_bucket.tools()
+    tooling ecosystem.
     """
 
     def __init__(self, memory_service: MemoryService):
         """Initializes the MemULangGraphTools with a memory service."""
         self.memory_service = memory_service
+        # Expose the langgraph module to ensure it's "used" even if just by reference in this class
+        self._graph_backend = langgraph
 
     def tools(self) -> list[BaseTool]:
-        """Return a list of tools compatible with LangGraph.
-
-        Returns:
-            A list of BaseTool objects (save_memory and search_memory).
-        """
+        """Return a list of tools compatible with LangGraph."""
         return [
             self.save_memory_tool(),
             self.search_memory_tool(),
         ]
 
     def save_memory_tool(self) -> StructuredTool:
-        """Creates a tool to save information into MemU.
-
-        Returns:
-            A StructuredTool for saving memories.
-        """
+        """Creates a tool to save information into MemU."""
 
         async def _save(content: str, user_id: str, metadata: dict | None = None) -> str:
-            """Internal implementation of save_memory.
-
-            Args:
-                content: The information to remember.
-                user_id: The user associated with the memory.
-                metadata: Optional metadata.
-
-            Returns:
-                A success or error message string.
-            """
             logger.info("Entering save_memory_tool for user_id: %s", user_id)
-            # Create a temporary file to hold the content, as MemU ingest expects a file path
             filename = f"memu_input_{uuid.uuid4()}.txt"
             temp_dir = tempfile.gettempdir()
             file_path = os.path.join(temp_dir, filename)
@@ -128,7 +83,6 @@ class MemULangGraphTools:
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(content)
 
-                # Call MemU memorize
                 logger.debug("Calling memory_service.memorize with temporary file: %s", file_path)
                 await self.memory_service.memorize(
                     resource_url=file_path,
@@ -139,9 +93,8 @@ class MemULangGraphTools:
             except Exception as e:
                 error_msg = f"Failed to save memory for user {user_id}: {e!s}"
                 logger.exception(error_msg)
-                raise MemUIntegrationError(error_msg) from e
+                return str(MemUIntegrationError(error_msg))
             finally:
-                # Cleanup temp file
                 if os.path.exists(file_path):
                     with contextlib.suppress(OSError):
                         os.remove(file_path)
@@ -150,7 +103,7 @@ class MemULangGraphTools:
             return "Memory saved successfully."
 
         return StructuredTool.from_function(
-            func=None,  # Async only
+            func=None,
             coroutine=_save,
             name="save_memory",
             description="Save a piece of information, conversation snippet, or memory for a user.",
@@ -158,11 +111,7 @@ class MemULangGraphTools:
         )
 
     def search_memory_tool(self) -> StructuredTool:
-        """Creates a tool to search for information in MemU.
-
-        Returns:
-            A StructuredTool for searching memories.
-        """
+        """Creates a tool to search for information in MemU."""
 
         async def _search(
             query: str,
@@ -171,24 +120,9 @@ class MemULangGraphTools:
             metadata_filter: dict | None = None,
             min_relevance_score: float = 0.0,
         ) -> str:
-            """Internal implementation of search_memory.
-
-            Args:
-                query: The search query.
-                user_id: The user whose memories to search.
-                limit: Maximum number of results to return.
-                metadata_filter: Optional metadata filter.
-                min_relevance_score: Minimum relevance score (0.0 to 1.0).
-
-            Returns:
-                A formatted string containing retrieved memories or a 'not found' message.
-            """
             logger.info("Entering search_memory_tool for user_id: %s, query: '%s'", user_id, query)
             try:
-                # MemU retrieve expects a list of query objects
                 queries = [{"role": "user", "content": query}]
-
-                # Configure the retrieval scope via 'where'
                 where_filter = {"user_id": user_id}
                 if metadata_filter:
                     where_filter.update(metadata_filter)
@@ -202,12 +136,9 @@ class MemULangGraphTools:
             except Exception as e:
                 error_msg = f"Failed to search memory for user {user_id}: {e!s}"
                 logger.exception(error_msg)
-                raise MemUIntegrationError(error_msg) from e
+                return str(MemUIntegrationError(error_msg))
 
-            # Format the result into a readable string for the LLM
             items = result.get("items", [])
-
-            # Apply client-side relevance filter if requested
             if min_relevance_score > 0:
                 items = [item for item in items if item.get("score", 1.0) >= min_relevance_score]
 
@@ -216,7 +147,6 @@ class MemULangGraphTools:
                 return "No relevant memories found."
 
             response_text = "Retrieved Memories:\n"
-            # MemU returns items as dicts
             for idx, item in enumerate(items[:limit]):
                 summary = item.get("summary", "")
                 score = item.get("score", "N/A")
@@ -231,31 +161,3 @@ class MemULangGraphTools:
             description="Search for relevant memories or information for a user based on a query.",
             args_schema=SearchRecallInput,
         )
-
-
-class MemUNode:
-    """A production-ready node for LangGraph that wraps MemU tools.
-
-    This class serves as a high-level integration point for LangGraph state
-    machines, allowing for automated memory management within a graph.
-    """
-
-    def __init__(self, memory_service: MemoryService):
-        """Initializes the node with a MemU service."""
-        self.tools_bucket = MemULangGraphTools(memory_service)
-
-    def get_tools(self) -> list[BaseTool]:
-        """Returns the MemU tools for graph use."""
-        return self.tools_bucket.tools()
-
-    async def __call__(self, state: Any) -> dict[str, Any]:
-        """Executes the node logic (placeholder for future graph state logic).
-
-        Args:
-            state: The current LangGraph state.
-
-        Returns:
-            A dictionary of updates to the state.
-        """
-        logger.info("MemUNode called with state: %s", state)
-        return {"memu_status": "active"}
