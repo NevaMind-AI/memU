@@ -14,11 +14,11 @@ import asyncio
 import os
 import sys
 
+from memu.app import MemoryService
+
 # Add src to sys.path
 src_path = os.path.abspath("src")
 sys.path.insert(0, src_path)
-
-from memu.app import MemoryService
 
 
 async def test_claude_memorize():
@@ -94,13 +94,13 @@ async def test_claude_memorize():
         for cat in result.get("categories", [])[:3]:
             print(f"    - {cat.get('name')}: {(cat.get('summary') or '')[:60]}...")
 
-        return True
-
     except Exception as e:
         print(f"\n✗ Error during memorization: {e}")
         import traceback
         traceback.print_exc()
         return False
+    else:
+        return True
 
 
 async def test_claude_retrieve():
@@ -163,13 +163,13 @@ async def test_claude_retrieve():
         for item in result.get("items", [])[:3]:
             print(f"    - [{item.get('memory_type')}] {item.get('summary', '')[:80]}...")
 
-        return True
-
     except Exception as e:
         print(f"\n✗ Error during retrieval: {e}")
         import traceback
         traceback.print_exc()
         return False
+    else:
+        return True
 
 
 async def test_claude_sdk_direct():
@@ -209,8 +209,6 @@ async def test_claude_sdk_direct():
         print(f"✓ Summary: {summary[:100]}...")
         print(f"  Tokens used: {response.usage.total_tokens}")
 
-        return True
-
     except ImportError:
         print("✗ anthropic package not installed. Run: pip install anthropic")
         return False
@@ -218,6 +216,9 @@ async def test_claude_sdk_direct():
         print(f"✗ Error: {e}")
         import traceback
         traceback.print_exc()
+        return False
+    else:
+        return True
         return False
 
 
@@ -246,7 +247,7 @@ async def test_claude_http_client():
         print("\nTesting HTTP client summarization...")
         text = "The quick brown fox jumps over the lazy dog. This is a test sentence."
 
-        summary, raw_response = await client.summarize(
+        summary, _raw_response = await client.summarize(
             text,
             system_prompt="Repeat the text exactly.",
             max_tokens=100,
@@ -254,13 +255,13 @@ async def test_claude_http_client():
 
         print(f"✓ Response: {summary[:100]}...")
 
-        return True
-
     except Exception as e:
         print(f"✗ Error: {e}")
         import traceback
         traceback.print_exc()
         return False
+    else:
+        return True
 
 
 async def main():

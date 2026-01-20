@@ -64,6 +64,7 @@ test = [
 
 [project.optional-dependencies]
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
+claude = ["anthropic>=0.40.0"]
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
@@ -94,6 +95,14 @@ disable_error_code = ["attr-defined", "call-arg"]
 [[tool.mypy.overrides]]
 module = ["pgvector.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["anthropic.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["memu.llm.claude_sdk"]
+disallow_any_unimported = false
 
 [tool.ruff]
 target-version = "py313"

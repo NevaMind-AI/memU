@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-
 
 # ============================================================================
 # Claude Backend Tests
@@ -85,7 +83,7 @@ class TestClaudeLLMBackend:
 
         backend = ClaudeLLMBackend()
 
-        response = {"content": []}
+        response: dict[str, list[dict[str, str]]] = {"content": []}
         result = backend.parse_summary_response(response)
         assert result == ""
 
