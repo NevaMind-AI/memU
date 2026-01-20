@@ -95,6 +95,14 @@ disable_error_code = ["attr-defined", "call-arg"]
 module = ["pgvector.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["networkx.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["memu.database.knowledge_graph"]
+disallow_any_unimported = false
+
 [tool.ruff]
 target-version = "py313"
 line-length = 120

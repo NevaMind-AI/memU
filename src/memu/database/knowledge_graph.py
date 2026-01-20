@@ -258,7 +258,7 @@ class KnowledgeGraph:
             else:
                 return []
 
-        related = []
+        related: list[dict[str, Any]] = []
 
         # Outgoing relationships
         for successor in self.graph.successors(entity_name):
@@ -426,12 +426,12 @@ class KnowledgeGraph:
     @property
     def node_count(self) -> int:
         """Number of entities in the graph."""
-        return self.graph.number_of_nodes()
+        return int(self.graph.number_of_nodes())
 
     @property
     def edge_count(self) -> int:
         """Number of relationships in the graph."""
-        return self.graph.number_of_edges()
+        return int(self.graph.number_of_edges())
 
     def close(self) -> None:
         """Save and cleanup."""

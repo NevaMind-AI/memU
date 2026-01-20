@@ -8,6 +8,8 @@ from pathlib import Path
 spec = importlib.util.spec_from_file_location(
     "knowledge_graph", Path(__file__).parent.parent / "src" / "memu" / "database" / "knowledge_graph.py"
 )
+assert spec is not None
+assert spec.loader is not None
 knowledge_graph_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(knowledge_graph_module)
 KnowledgeGraph = knowledge_graph_module.KnowledgeGraph
