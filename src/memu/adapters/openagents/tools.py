@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 _memu_service: MemoryService | None = None
 
 
-def set_memu_service(service: MemoryService) -> None:
+def set_memu_service(service: MemoryService | None) -> None:
     """Set the global MemU service instance for tools to use."""
     global _memu_service
     _memu_service = service
@@ -232,12 +232,13 @@ def get_memory(memory_id: str) -> str:
     try:
         service = get_memu_service()
 
-        result = _run_async(service.get_memory_item(item_id=memory_id))
+        # Use list_memory_items with id filter
+        result = _run_async(service.list_memory_items(where={"id": memory_id}))
 
-        if not result or not result.get("item"):
+        if not result or not result.get("items") or len(result["items"]) == 0:
             return f"📭 Memory '{memory_id}' not found."
 
-        item = result["item"]
+        item = result["items"][0]
         output_parts = [
             f"📝 **Memory: {item.get('id', memory_id)}**\n",
             f"**Type:** {item.get('memory_type', 'unknown')}",

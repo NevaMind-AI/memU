@@ -140,9 +140,10 @@ class TestToolSchemas:
         schema = TOOL_SCHEMAS["memorize"]
 
         assert schema["name"] == "memorize"
-        assert "content" in schema["input_schema"]["properties"]
-        assert "modality" in schema["input_schema"]["properties"]
-        assert "content" in schema["input_schema"]["required"]
+        assert "content" in schema["input_schema"]["properties"]  # type: ignore[index]
+        assert "modality" in schema["input_schema"]["properties"]  # type: ignore[index]
+        required_fields = list(schema["input_schema"].get("required", []))
+        assert "content" in required_fields
 
     def test_retrieve_schema(self):
         """Test retrieve tool schema."""
@@ -151,9 +152,10 @@ class TestToolSchemas:
         schema = TOOL_SCHEMAS["retrieve"]
 
         assert schema["name"] == "retrieve"
-        assert "query" in schema["input_schema"]["properties"]
-        assert "top_k" in schema["input_schema"]["properties"]
-        assert "query" in schema["input_schema"]["required"]
+        assert "query" in schema["input_schema"]["properties"]  # type: ignore[index]
+        assert "top_k" in schema["input_schema"]["properties"]  # type: ignore[index]
+        required_fields = list(schema["input_schema"].get("required", []))
+        assert "query" in required_fields
 
     def test_list_memories_schema(self):
         """Test list_memories tool schema."""
@@ -162,8 +164,8 @@ class TestToolSchemas:
         schema = TOOL_SCHEMAS["list_memories"]
 
         assert schema["name"] == "list_memories"
-        assert "limit" in schema["input_schema"]["properties"]
-        assert "memory_type" in schema["input_schema"]["properties"]
+        assert "limit" in schema["input_schema"]["properties"]  # type: ignore[index]
+        assert "memory_type" in schema["input_schema"]["properties"]  # type: ignore[index]
 
     def test_get_memory_schema(self):
         """Test get_memory tool schema."""
@@ -172,8 +174,9 @@ class TestToolSchemas:
         schema = TOOL_SCHEMAS["get_memory"]
 
         assert schema["name"] == "get_memory"
-        assert "memory_id" in schema["input_schema"]["properties"]
-        assert "memory_id" in schema["input_schema"]["required"]
+        assert "memory_id" in schema["input_schema"]["properties"]  # type: ignore[index]
+        required_fields = list(schema["input_schema"].get("required", []))
+        assert "memory_id" in required_fields
 
 
 class TestToolFunctions:
