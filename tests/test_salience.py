@@ -9,9 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import math
-from datetime import datetime, timedelta, UTC
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 
 # Inline implementations to avoid circular import issues during testing
@@ -161,12 +159,12 @@ class TestSalienceScore:
 class TestCosineTopkSalience:
     """Tests for salience-aware top-k retrieval."""
 
-    def test_basic_retrieval(self):
+    def test_basic_retrieval(self) -> None:
         """Should return top-k results sorted by salience."""
         query = [1.0, 0.0, 0.0]
         now = datetime.now(UTC)
 
-        corpus = [
+        corpus: list[tuple[str, list[float] | None, int, datetime | None]] = [
             ("id1", [1.0, 0.0, 0.0], 1, now),  # Perfect match, low reinforcement
             ("id2", [0.9, 0.1, 0.0], 10, now),  # Good match, high reinforcement
             ("id3", [0.5, 0.5, 0.0], 1, now),  # Weak match
@@ -178,12 +176,12 @@ class TestCosineTopkSalience:
         # id2 should rank first due to high reinforcement despite slightly lower similarity
         assert results[0][0] == "id2"
 
-    def test_skips_none_embeddings(self):
+    def test_skips_none_embeddings(self) -> None:
         """Should skip items with None embeddings."""
         query = [1.0, 0.0, 0.0]
         now = datetime.now(UTC)
 
-        corpus = [
+        corpus: list[tuple[str, list[float] | None, int, datetime | None]] = [
             ("id1", [1.0, 0.0, 0.0], 1, now),
             ("id2", None, 10, now),  # None embedding
         ]
@@ -193,12 +191,12 @@ class TestCosineTopkSalience:
         assert len(results) == 1
         assert results[0][0] == "id1"
 
-    def test_respects_k_limit(self):
+    def test_respects_k_limit(self) -> None:
         """Should return at most k results."""
         query = [1.0, 0.0, 0.0]
         now = datetime.now(UTC)
 
-        corpus = [
+        corpus: list[tuple[str, list[float] | None, int, datetime | None]] = [
             ("id1", [1.0, 0.0, 0.0], 1, now),
             ("id2", [0.9, 0.1, 0.0], 1, now),
             ("id3", [0.8, 0.2, 0.0], 1, now),

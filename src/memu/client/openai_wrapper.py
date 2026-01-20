@@ -74,9 +74,8 @@ class MemuChatCompletions:
         """Retrieve relevant memories for the query."""
         try:
             result = await self._service.retrieve(
-                query=query,
-                user=self._user_data,
-                top_k=self._top_k,
+                queries=[{"role": "user", "content": query}],
+                where=self._user_data,
             )
             return result.get("items", [])
         except Exception:

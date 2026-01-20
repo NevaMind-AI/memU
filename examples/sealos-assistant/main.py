@@ -17,7 +17,6 @@ Usage:
 import os
 import sys
 from contextlib import asynccontextmanager
-from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -34,7 +33,7 @@ if os.path.exists(src_path):
 from memu.app import MemoryService
 
 # Global memory service instance
-memory_service: Optional[MemoryService] = None
+memory_service: MemoryService | None = None
 
 
 def get_llm_profiles() -> dict:
@@ -215,7 +214,7 @@ async def chat(request: ChatRequest):
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Chat failed: {e!s}")
 
 
 @app.post("/memorize", response_model=MemorizeResponse)
@@ -244,7 +243,7 @@ async def memorize(request: MemorizeRequest):
             os.unlink(temp_file)
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Memorize failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Memorize failed: {e!s}")
 
 
 @app.get("/recall", response_model=RecallResponse)
@@ -276,7 +275,7 @@ async def recall(query: str, limit: int = 5):
         )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Recall failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Recall failed: {e!s}")
 
 
 if __name__ == "__main__":
