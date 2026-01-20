@@ -52,7 +52,7 @@ class MySQLResourceRepo(MySQLRepoBase, ResourceRepo):
             modality=modality,
             local_path=local_path,
             caption=caption,
-            embedding=self._prepare_embedding(embedding),
+            embedding=self._prepare_embedding(embedding),  # type: ignore[arg-type]
             **user_data,
             created_at=self._now(),
             updated_at=self._now(),

@@ -22,7 +22,7 @@ class BaseModelMixin(SQLModel):
         default_factory=lambda: str(uuid.uuid4()),
         primary_key=True,
         index=True,
-        sa_type=String(36),
+        sa_column=Column(String(36), primary_key=True, index=True),  # type: ignore[call-overload]
     )
     created_at: datetime = Field(
         default_factory=lambda: pendulum.now("UTC"),

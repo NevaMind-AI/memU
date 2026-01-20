@@ -72,7 +72,7 @@ class MySQLMemoryCategoryRepo(MySQLRepoBase, MemoryCategoryRepo):
             cat = self._memory_category_model(
                 name=name,
                 description=description,
-                embedding=self._prepare_embedding(embedding),
+                embedding=self._prepare_embedding(embedding),  # type: ignore[arg-type]
                 created_at=now,
                 updated_at=now,
                 **user_data,

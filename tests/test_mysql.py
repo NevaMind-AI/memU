@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+
 import pytest
 from pydantic import BaseModel
 
@@ -189,8 +190,8 @@ class TestDatabaseFactory:
 
     def test_factory_supports_mysql_provider(self):
         """Test that factory recognizes mysql provider."""
-        from memu.database.factory import build_database
         from memu.app.settings import DatabaseConfig, MetadataStoreConfig
+        from memu.database.factory import build_database
 
         config = DatabaseConfig(
             metadata_store=MetadataStoreConfig(provider="mysql", dsn=None)
@@ -202,15 +203,15 @@ class TestDatabaseFactory:
 
     def test_factory_rejects_unknown_provider(self):
         """Test that factory rejects unknown providers."""
-        from memu.database.factory import build_database
         from memu.app.settings import DatabaseConfig, MetadataStoreConfig
+        from memu.database.factory import build_database
 
         # Create config with invalid provider by bypassing validation
         config = DatabaseConfig(
             metadata_store=MetadataStoreConfig(provider="inmemory")
         )
         # Manually set invalid provider
-        config.metadata_store.provider = "unknown"
+        config.metadata_store.provider = "unknown"  # type: ignore[assignment]
 
         with pytest.raises(ValueError, match="Unsupported metadata_store provider"):
             build_database(config=config, user_model=MySQLTestUserModel)
@@ -234,13 +235,13 @@ class TestSettingsMySQL:
         )
 
         assert config.provider == "mysql"
-        assert "mysql" in config.dsn
+        assert "mysql" in config.dsn  # type: ignore[operator]
 
     def test_metadata_store_normalizes_mysql(self):
         """Test that provider is normalized to lowercase."""
         from memu.app.settings import MetadataStoreConfig
 
-        config = MetadataStoreConfig(provider="MySQL")
+        config = MetadataStoreConfig(provider="MySQL")  # type: ignore[arg-type]
         assert config.provider == "mysql"
 
 
@@ -270,10 +271,10 @@ class TestMySQLModuleStructure:
     def test_mysql_repositories_exist(self):
         """Test that all repository classes exist."""
         from memu.database.mysql.repositories import (
-            MySQLResourceRepo,
+            MySQLCategoryItemRepo,
             MySQLMemoryCategoryRepo,
             MySQLMemoryItemRepo,
-            MySQLCategoryItemRepo,
+            MySQLResourceRepo,
         )
         assert MySQLResourceRepo is not None
         assert MySQLMemoryCategoryRepo is not None

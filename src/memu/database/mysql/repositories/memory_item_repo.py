@@ -62,7 +62,7 @@ class MySQLMemoryItemRepo(MySQLRepoBase):
             resource_id=resource_id,
             memory_type=memory_type,
             summary=summary,
-            embedding=self._prepare_embedding(embedding),
+            embedding=self._prepare_embedding(embedding),  # type: ignore[arg-type]
             **user_data,
             created_at=self._now(),
             updated_at=self._now(),
