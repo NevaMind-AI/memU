@@ -119,7 +119,8 @@ class MemoryReasoner:
         memories = []
 
         # Get all memory items
-        all_items = self.database.memory_item_repo.list_items({})
+        all_items_dict = self.database.memory_item_repo.list_items({})
+        all_items = list(all_items_dict.values())
 
         for item in all_items:
             memory_dict = {
@@ -186,6 +187,53 @@ class MemoryReasoner:
 
         return graph_context[:50]  # Limit context size
 
+    def _filter_by_memory_type(
+        self, memories: list[dict[str, Any]], memory_types: list[str] | None
+    ) -> list[dict[str, Any]]:
+        """Filter memories by type."""
+        if not memory_types:
+            return memories
+        return [m for m in memories if m.get("memory_type") in memory_types]
+
+    def _filter_by_time_range(
+        self, memories: list[dict[str, Any]], time_range_days: int | None
+    ) -> list[dict[str, Any]]:
+        """Filter memories by time range."""
+        if not time_range_days:
+            return memories
+
+        cutoff = pendulum.now("UTC") - timedelta(days=time_range_days)
+        filtered = []
+        for m in memories:
+            created_at = m.get("created_at")
+            if created_at:
+                try:
+                    created_dt = pendulum.parse(created_at) if isinstance(created_at, str) else created_at
+                    if created_dt >= cutoff:  # type: ignore[operator]
+                        filtered.append(m)
+                except Exception:
+                    filtered.append(m)  # Keep if can't parse
+            else:
+                filtered.append(m)
+        return filtered
+
+    def _filter_by_tool_success(
+        self, memories: list[dict[str, Any]], require_success: bool
+    ) -> list[dict[str, Any]]:
+        """Filter tool memories by success status."""
+        if not require_success:
+            return memories
+
+        filtered = []
+        for m in memories:
+            if m.get("memory_type") != "tool":
+                filtered.append(m)
+            else:
+                tool_calls = m.get("tool_calls") or []
+                if any(tc.get("success", True) for tc in tool_calls):
+                    filtered.append(m)
+        return filtered
+
     def _filter_memories(
         self,
         query: ReasoningQuery,
@@ -196,38 +244,10 @@ class MemoryReasoner:
         filtered = memories.copy()
         constraints = query.constraints
 
-        # Filter by memory type
-        if constraints.memory_types:
-            filtered = [m for m in filtered if m.get("memory_type") in constraints.memory_types]
-
-        # Filter by time range
-        if constraints.time_range_days:
-            cutoff = pendulum.now("UTC") - timedelta(days=constraints.time_range_days)
-            new_filtered = []
-            for m in filtered:
-                created_at = m.get("created_at")
-                if created_at:
-                    try:
-                        created_dt = pendulum.parse(created_at) if isinstance(created_at, str) else created_at
-                        if created_dt >= cutoff:
-                            new_filtered.append(m)
-                    except Exception:
-                        new_filtered.append(m)  # Keep if can't parse
-                else:
-                    new_filtered.append(m)
-            filtered = new_filtered
-
-        # Filter tool memories by success
-        if constraints.require_tool_success:
-            new_filtered = []
-            for m in filtered:
-                if m.get("memory_type") != "tool":
-                    new_filtered.append(m)
-                else:
-                    tool_calls = m.get("tool_calls") or []
-                    if any(tc.get("success", True) for tc in tool_calls):
-                        new_filtered.append(m)
-            filtered = new_filtered
+        # Apply filters
+        filtered = self._filter_by_memory_type(filtered, constraints.memory_types)
+        filtered = self._filter_by_time_range(filtered, constraints.time_range_days)
+        filtered = self._filter_by_tool_success(filtered, constraints.require_tool_success)
 
         trace.add_step(
             action="filter",
@@ -352,7 +372,7 @@ class MemoryReasoner:
             )
 
             # Parse JSON response
-            conclusions = self._parse_inference_response(response)
+            conclusions: list[dict[str, Any]] = self._parse_inference_response(response)
 
             trace.add_step(
                 action="infer",
@@ -360,9 +380,6 @@ class MemoryReasoner:
                 output_data={"conclusions_count": len(conclusions)},
                 confidence=0.8,
             )
-
-            return conclusions
-
         except Exception as e:
             logger.warning("LLM inference failed: %s, falling back to simple inference", e)
             trace.add_step(
@@ -370,7 +387,9 @@ class MemoryReasoner:
                 description=f"LLM inference failed ({e}), using simple aggregation",
                 confidence=0.4,
             )
-            return self._simple_inference(query, memories, graph_context)
+            conclusions = self._simple_inference(query, memories, graph_context)
+
+        return conclusions
 
     def _simple_inference(
         self,
@@ -379,7 +398,7 @@ class MemoryReasoner:
         graph_context: list[str],
     ) -> list[dict[str, Any]]:
         """Simple inference without LLM - aggregation and summarization."""
-        conclusions = []
+        conclusions: list[dict[str, Any]] = []
 
         if not memories:
             return conclusions
@@ -424,11 +443,13 @@ class MemoryReasoner:
             if json_start >= 0 and json_end > json_start:
                 json_str = response[json_start:json_end]
                 data = json.loads(json_str)
-                return data.get("conclusions", [])
+                conclusions_list: list[dict[str, Any]] = data.get("conclusions", [])
+                return conclusions_list
         except json.JSONDecodeError:
             pass
 
         # Fallback: return empty if can't parse
+        return []
         logger.warning("Could not parse inference response as JSON")
         return []
 
@@ -454,13 +475,17 @@ class MemoryReasoner:
                 continue
 
             # Create new derived memory
-            inference_type = conclusion.get("inference_type", "summarization")
-            if inference_type not in ("deduction", "induction", "summarization", "analogy", "aggregation"):
-                inference_type = "summarization"
+            inference_type_str = conclusion.get("inference_type", "summarization")
+            if inference_type_str not in ("deduction", "induction", "summarization", "analogy", "aggregation"):
+                inference_type_str = "summarization"
+
+            from typing import cast
+
+            from memu.reasoning.derived_memory import InferenceType
 
             derived = DerivedMemory(
                 content=content,
-                inference_type=inference_type,  # type: ignore[arg-type]
+                inference_type=cast(InferenceType, inference_type_str),
                 source_memory_ids=conclusion.get("source_ids", []),
                 confidence_score=conclusion.get("confidence", 0.5),
                 reasoning_trace=conclusion.get("reasoning", ""),

@@ -170,6 +170,9 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
+        when_to_use: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tool_calls: list[Any] | None = None,
     ) -> MemoryItem:
         """Create a new memory item.
 
@@ -218,6 +221,9 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         memory_type: MemoryType | None = None,
         summary: str | None = None,
         embedding: list[float] | None = None,
+        when_to_use: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        tool_calls: list[Any] | None = None,
     ) -> MemoryItem:
         """Update an existing memory item.
 

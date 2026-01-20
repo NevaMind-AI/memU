@@ -56,7 +56,7 @@ class MemoryItemModel(BaseModelMixin, MemoryItem):
     summary: str = Field(sa_column=Column(Text, nullable=False))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
     when_to_use: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-    metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))  # type: ignore[assignment,misc]
     tool_calls: list[Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 

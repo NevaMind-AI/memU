@@ -75,7 +75,7 @@ class SQLiteResourceModel(SQLiteBaseModelMixin, Resource):
             self.embedding_json = json.dumps(value)
 
 
-class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):
+class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):  # type: ignore[misc]
     """SQLite memory item model."""
 
     resource_id: str | None = Field(sa_column=Column(String, nullable=True))

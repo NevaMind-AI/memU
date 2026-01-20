@@ -18,6 +18,8 @@ import pytest  # noqa: E402
 # Import directly from the models file path to avoid circular import through database/__init__.py
 # We use importlib to import the module directly without triggering the package __init__
 spec = importlib.util.spec_from_file_location("models", src_path / "memu" / "database" / "models.py")
+assert spec is not None
+assert spec.loader is not None
 models = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(models)
 
