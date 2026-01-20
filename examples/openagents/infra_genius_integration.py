@@ -50,7 +50,7 @@ def _get_adapter():
                     "chat_model": "gpt-4o-mini",
                 },
                 "embedding": {
-                    "provider": "openai", 
+                    "provider": "openai",
                     "api_key": os.environ.get("OPENAI_API_KEY"),
                     "embed_model": "text-embedding-3-small",
                 },
@@ -68,19 +68,19 @@ def _get_adapter():
 def remember(content: str, category: str = "deployment") -> str:
     """
     Store information in memory.
-    
+
     Args:
         content: What to remember (deployment details, config, error, etc.)
         category: Category - deployment, config, error, learning
-    
+
     Returns:
         Confirmation message
     """
     from memu.adapters.openagents.tools import memorize, set_memu_service
-    
+
     adapter = _get_adapter()
     set_memu_service(adapter.service)
-    
+
     # Add category prefix for better retrieval
     tagged_content = f"[{category.upper()}] {content}"
     return memorize(content=tagged_content, modality="text")
@@ -90,18 +90,18 @@ def remember(content: str, category: str = "deployment") -> str:
 def recall(query: str) -> str:
     """
     Search memory for relevant information.
-    
+
     Args:
         query: What to search for (e.g., "postgres deployment", "error handling")
-    
+
     Returns:
         Relevant memories
     """
     from memu.adapters.openagents.tools import retrieve, set_memu_service
-    
+
     adapter = _get_adapter()
     set_memu_service(adapter.service)
-    
+
     return retrieve(query=query, top_k=5)
 
 
@@ -109,18 +109,18 @@ def recall(query: str) -> str:
 def list_memories(limit: int = 10) -> str:
     """
     List recent memories.
-    
+
     Args:
         limit: Max items to show
-    
+
     Returns:
         List of memories
     """
     from memu.adapters.openagents.tools import list_memories as _list, set_memu_service
-    
+
     adapter = _get_adapter()
     set_memu_service(adapter.service)
-    
+
     return _list(limit=limit)
 '''
 
@@ -128,9 +128,9 @@ def list_memories(limit: int = 10) -> str:
 # STEP 2: YAML Config Addition (add to agents/deployer.yaml)
 # ============================================================================
 
-YAML_TOOLS_CONFIG = '''
+YAML_TOOLS_CONFIG = """
     # Add these tools to the existing tools section in deployer.yaml
-    
+
     - name: "remember"
       description: "Store deployment info, configs, or learnings in long-term memory"
       implementation: "tools.memory.remember"
@@ -145,7 +145,7 @@ YAML_TOOLS_CONFIG = '''
             description: "Category: deployment, config, error, learning"
             default: "deployment"
         required: ["content"]
-      
+
     - name: "recall"
       description: "Search memory for relevant past deployments, configs, or learnings"
       implementation: "tools.memory.recall"
@@ -156,7 +156,7 @@ YAML_TOOLS_CONFIG = '''
             type: string
             description: "What to search for"
         required: ["query"]
-      
+
     - name: "list_memories"
       description: "List recent memories"
       implementation: "tools.memory.list_memories"
@@ -168,36 +168,37 @@ YAML_TOOLS_CONFIG = '''
             description: "Max items to show"
             default: 10
         required: []
-'''
+"""
 
 # ============================================================================
 # STEP 3: Updated Agent Instruction (add to deployer.yaml instruction)
 # ============================================================================
 
-INSTRUCTION_ADDITION = '''
+INSTRUCTION_ADDITION = """
     # Add to the instruction section:
-    
+
     MEMORY CAPABILITIES:
     You have long-term memory! Use it to:
     - Remember successful deployments with `remember`
     - Recall past configs and solutions with `recall`
     - Learn from errors and remember fixes
-    
+
     WORKFLOW WITH MEMORY:
     1. Before deploying, use `recall` to check for similar past deployments
     2. After successful deployment, use `remember` to store the config
     3. If errors occur, remember the error and solution for next time
-    
+
     Example:
     - User: "Deploy my-app to sandbox"
     - You: First recall("my-app deployment") to check history
     - Then proceed with deployment
     - After success: remember("Deployed my-app to sandbox-1, used npm build", "deployment")
-'''
+"""
 
 # ============================================================================
 # Demo: Test the integration locally
 # ============================================================================
+
 
 def demo():
     """Demo the MemU tools that would be added to InfraGenius."""
@@ -259,14 +260,12 @@ def demo():
     print(f"  {result}")
 
     result = memorize(
-        content="[CONFIG] PostgreSQL connection: host=db.example.com, "
-        "port=5432, user=admin. Used for backend API."
+        content="[CONFIG] PostgreSQL connection: host=db.example.com, port=5432, user=admin. Used for backend API."
     )
     print(f"  {result}")
 
     result = memorize(
-        content="[ERROR] Deployment failed due to missing NODE_ENV. "
-        "Fix: Set NODE_ENV=production before npm run build."
+        content="[ERROR] Deployment failed due to missing NODE_ENV. Fix: Set NODE_ENV=production before npm run build."
     )
     print(f"  {result}")
 
