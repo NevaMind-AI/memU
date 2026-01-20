@@ -146,3 +146,39 @@ def _format_search_response(result: dict[str, Any]) -> DifyResponse:
     final_text = "\n".join(context_parts) if context_parts else "No relevant memories found."
 
     return DifyResponse(result=final_text, metadata={"item_count": len(items), "category_count": len(categories)})
+
+
+# Standalone app for direct execution (e.g., uvicorn memu.integrations.dify_adapter:app)
+def create_app():
+    """Create a standalone FastAPI app with the Dify adapter router."""
+    from contextlib import asynccontextmanager
+
+    from fastapi import FastAPI
+
+    from memu.app.service import MemoryService
+
+    memu_service: MemoryService | None = None
+
+    @asynccontextmanager
+    async def lifespan(fastapi_app: FastAPI):  # noqa: ARG001
+        nonlocal memu_service
+        memu_service = MemoryService()
+        yield
+
+    def get_service_override() -> MemoryService:
+        if memu_service is None:
+            raise RuntimeError("MemU service not initialized")
+        return memu_service
+
+    fastapi_app = FastAPI(
+        title="MemU Dify Adapter",
+        description="API server for integrating MemU with Dify",
+        lifespan=lifespan,
+    )
+    fastapi_app.include_router(router)
+    fastapi_app.dependency_overrides[get_memu_service] = get_service_override
+
+    return fastapi_app
+
+
+app = create_app()
