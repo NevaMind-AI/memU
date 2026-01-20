@@ -240,7 +240,7 @@ class MemorizeMixin:
         resources: list[Resource] = []
         items: list[MemoryItem] = []
         relations: list[CategoryItem] = []
-        category_updates: dict[str, list[str]] = {}
+        category_updates: dict[str, list[tuple[str, str]]] = {}
         user_scope = state.get("user", {})
 
         for plan in state.get("resource_plans", []):
@@ -989,7 +989,11 @@ Summary:"""
             # Use reference-aware prompt
             from memu.prompts.category_summary_with_refs import PROMPT as REF_PROMPT
 
-            items_text = "\n".join(f"- [{item_id}] {summary}" for item_id, summary in new_memories if summary.strip())
+            # Type narrowing: we know new_memories is list[tuple[str, str]] here
+            tuple_memories = cast(list[tuple[str, str]], new_memories)
+            items_text = "\n".join(
+                f"- [{item_id}] {summary}" for item_id, summary in tuple_memories if summary.strip()
+            )
             original = category.summary or ""
             category_config = self.category_config_map.get(category.name)
             target_length = (
@@ -1005,9 +1009,11 @@ Summary:"""
         # Legacy behavior: just summary strings
         if new_memories and isinstance(new_memories[0], tuple):
             # Extract just summaries if we got tuples but refs disabled
-            new_items_text = "\n".join(f"- {summary}" for _, summary in new_memories if summary.strip())
+            tuple_memories = cast(list[tuple[str, str]], new_memories)
+            new_items_text = "\n".join(f"- {summary}" for _, summary in tuple_memories if summary.strip())
         else:
-            new_items_text = "\n".join(f"- {m}" for m in new_memories if isinstance(m, str) and m.strip())
+            str_memories = cast(list[str], new_memories)
+            new_items_text = "\n".join(f"- {m}" for m in str_memories if m.strip())
 
         original = category.summary or ""
         category_config = self.category_config_map.get(category.name)

@@ -321,6 +321,28 @@ class RetrieveMixin:
             state["query_vector"] = (await embed_client.embed([state["active_query"]]))[0]
         return state
 
+    def _extract_referenced_item_ids(self, state: WorkflowState) -> set[str]:
+        """Extract item IDs from category summary references."""
+        from memu.utils.references import extract_references
+
+        category_hits = state.get("category_hits") or []
+        summary_lookup = state.get("category_summary_lookup", {})
+        category_pool = state.get("category_pool") or {}
+        referenced_item_ids: set[str] = set()
+
+        for cid, _score in category_hits:
+            # Get summary from lookup or category
+            summary = summary_lookup.get(cid)
+            if not summary:
+                cat = category_pool.get(cid)
+                if cat:
+                    summary = cat.summary
+            if summary:
+                refs = extract_references(summary)
+                referenced_item_ids.update(refs)
+
+        return referenced_item_ids
+
     async def _rag_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("retrieve_item") or not state.get("needs_retrieval") or not state.get("proceed_to_items"):
             state["item_hits"] = []
@@ -335,23 +357,7 @@ class RetrieveMixin:
         referenced_item_ids: set[str] = set()
 
         if use_refs:
-            # Extract item IDs from category summary references
-            from memu.utils.references import extract_references
-
-            category_hits = state.get("category_hits") or []
-            summary_lookup = state.get("category_summary_lookup", {})
-            category_pool = state.get("category_pool") or {}
-
-            for cid, _score in category_hits:
-                # Get summary from lookup or category
-                summary = summary_lookup.get(cid)
-                if not summary:
-                    cat = category_pool.get(cid)
-                    if cat:
-                        summary = cat.summary
-                if summary:
-                    refs = extract_references(summary)
-                    referenced_item_ids.update(refs)
+            referenced_item_ids = self._extract_referenced_item_ids(state)
 
         qvec = state.get("query_vector")
         if qvec is None:

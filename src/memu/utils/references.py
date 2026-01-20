@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 REFERENCE_PATTERN = re.compile(r"\[ref:([a-zA-Z0-9_,\-]+)\]")
 
 
-def extract_references(text: str) -> list[str]:
+def extract_references(text: str | None) -> list[str]:
     """
     Extract all item IDs referenced in a text.
 
@@ -49,7 +49,7 @@ def extract_references(text: str) -> list[str]:
     return item_ids
 
 
-def strip_references(text: str) -> str:
+def strip_references(text: str | None) -> str | None:
     """
     Remove all [ref:...] citations from text for clean display.
 
@@ -74,7 +74,7 @@ def strip_references(text: str) -> str:
     return result
 
 
-def format_references_as_citations(text: str) -> str:
+def format_references_as_citations(text: str | None) -> str | None:
     """
     Convert [ref:ID] format to numbered citations [1], [2], etc.
 

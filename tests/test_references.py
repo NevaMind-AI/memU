@@ -104,6 +104,7 @@ class TestFormatReferencesAsCitations:
         """Should convert single reference to numbered citation."""
         text = "User loves coffee [ref:abc]."
         result = format_references_as_citations(text)
+        assert result is not None
         assert "[1]" in result
         assert "[ref:abc]" not in result
         assert "References:" in result
@@ -113,6 +114,7 @@ class TestFormatReferencesAsCitations:
         """Should number citations in order of appearance."""
         text = "Coffee [ref:abc]. Tea [ref:def]."
         result = format_references_as_citations(text)
+        assert result is not None
         assert "[1]" in result
         assert "[2]" in result
         assert "[1] abc" in result
@@ -174,6 +176,7 @@ class TestReferenceIntegration:
         clean = strip_references(original)
 
         assert refs == ["abc", "def"]
+        assert clean is not None
         assert "[ref:" not in clean
         assert "coffee" in clean
         assert "Tea" in clean
@@ -183,5 +186,6 @@ class TestReferenceIntegration:
         original = "User loves coffee [ref:abc]."
         result = format_references_as_citations(original)
 
+        assert result is not None
         assert "User loves coffee" in result
         assert "abc" in result  # ID should be in references section
