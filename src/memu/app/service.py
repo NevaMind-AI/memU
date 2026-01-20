@@ -24,6 +24,7 @@ from memu.blob.local_fs import LocalFS
 from memu.database.factory import build_database
 from memu.database.interfaces import Database
 from memu.llm.http_client import HTTPLLMClient
+from memu.llm.lazyllm_client import LazyLLMClient
 from memu.llm.wrapper import (
     LLMCallMetadata,
     LLMClientWrapper,
@@ -114,6 +115,15 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
                 provider=cfg.provider,
                 endpoint_overrides=cfg.endpoint_overrides,
                 embed_model=cfg.embed_model,
+            )
+        elif backend == "lazyllm_backend":
+            return LazyLLMClient(
+                source=cfg.source,
+                chat_model=cfg.chat_model,
+                vlm_model=cfg.vlm_model,
+                embed_model=cfg.embed_model,
+                stt_model=cfg.stt_model,
+                api_key=cfg.api_key,
             )
         else:
             msg = f"Unknown llm_client_backend '{cfg.client_backend}'"

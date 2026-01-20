@@ -99,8 +99,12 @@ class LLMConfig(BaseModel):
     chat_model: str = Field(default="gpt-4o-mini")
     client_backend: str = Field(
         default="sdk",
-        description="Which LLM client backend to use: 'httpx' (httpx) or 'sdk' (official OpenAI).",
+        description="Which LLM client backend to use: 'httpx' (httpx) , 'sdk' (official OpenAI) or 'lazyllm_backend'",
     )
+    # setup LazyLLM 
+    source: str = Field(default="qwen", description="LLM source for lazyllm backend")
+    vlm_model: str = Field(default="qwen-vl-plus", description="Vision language model for lazyllm")
+    stt_model: str = Field(default="qwen-audio-turbo", description="Speech-to-text model for lazyllm")
     endpoint_overrides: dict[str, str] = Field(
         default_factory=dict,
         description="Optional overrides for HTTP endpoints (keys: 'chat'/'summary').",
