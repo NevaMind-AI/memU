@@ -10,6 +10,7 @@ Usage:
 import asyncio
 import os
 import sys
+import lazyllm
 
 # Add src to sys.path
 src_path = os.path.abspath("src")
@@ -25,19 +26,18 @@ async def test_lazyllm_client():
     print("=" * 60)
     
     # Get API key from environment
-    api_key = os.getenv("LAZYLLM_API_KEY")
+    lazyllm.config.add("qwen_api_key", str, env="QWEN_API_KEY", description="Qwen API Key")
+    with lazyllm.config.namespace("MEMU"):
+        api_key = lazyllm.config['qwen_api_key']
     if not api_key:
-        print("❌ Error: Please set LAZYLLM_API_KEY environment variable")
-        print("   export LAZYLLM_API_KEY=your_api_key")
-        return False
+        msg = "Please set MEMU_QWEN_API_KEY environment variable"
+        raise ValueError(msg)
     
     print(f"✓ API key found: {api_key[:20]}...")
-    
-    # Initialize client
     try:
         client = LazyLLMClient(
             source="qwen",
-            chat_model="qwen-plus",
+            chat_model="qwen3-max",
             vlm_model="qwen-vl-plus",
             embed_model="text-embedding-v3",
             stt_model="qwen-audio-turbo",
