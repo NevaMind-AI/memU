@@ -1,0 +1,95 @@
+openapi: 3.1.0
+info:
+  title: MemU Dify Integration
+  description: API Integration for MemU Memory System
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000
+    description: Local MemU Adapter Server
+
+paths:
+  /add-memory:
+    post:
+      summary: Add to Memory
+      operationId: add_memory
+      description: Memorize content into MemU.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                  description: The text content to memorize.
+                user_id:
+                  type: string
+                  description: Optional user identifier to scope the memory.
+              required:
+                - query
+      responses:
+        '200':
+          description: Memory added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  message:
+                    type: string
+                  resource_id:
+                    type: string
+                  items_created:
+                    type: integer
+
+  /search-memory:
+    post:
+      summary: Search Memory
+      operationId: search_memory
+      description: Retrieve relevant memories from MemU.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                  description: The search query.
+                user_id:
+                  type: string
+                  description: Optional user identifier to scope the search.
+              required:
+                - query
+      responses:
+        '200':
+          description: Retrieval results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    description: Formatted memory context.
+                  metadata:
+                    type: object
+                    properties:
+                      item_count:
+                        type: integer
+                      category_count:
+                        type: integer
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
