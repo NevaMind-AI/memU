@@ -10,7 +10,7 @@ from typing import Any
 
 import pendulum
 from pydantic import BaseModel
-from sqlalchemy import MetaData, String, Text
+from sqlalchemy import JSON, MetaData, String, Text
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
@@ -83,6 +83,8 @@ class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):
     summary: str = Field(sa_column=Column(Text, nullable=False))
     # Store embedding as JSON string since SQLite doesn't have native vector type
     embedding_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    happened_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
+    extra: dict[str, Any] = Field(default={}, sa_column=Column(JSON, nullable=True))
 
     @property
     def embedding(self) -> list[float] | None:
