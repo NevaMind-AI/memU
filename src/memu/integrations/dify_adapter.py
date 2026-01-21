@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import tempfile
 import uuid
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
@@ -155,7 +156,7 @@ def create_app() -> FastAPI:
     memu_service: MemoryService | None = None
 
     @asynccontextmanager
-    async def lifespan(fastapi_app: FastAPI):
+    async def lifespan(fastapi_app: FastAPI) -> AsyncGenerator[None]:
         nonlocal memu_service
         # Initialize MemoryService here.
         # Ensure that MemoryService is properly configured (e.g. via environment variables)
