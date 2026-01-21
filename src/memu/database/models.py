@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
 import pendulum
 from pydantic import BaseModel, ConfigDict, Field
@@ -31,8 +31,6 @@ class MemoryItem(BaseRecord):
     memory_type: MemoryType
     summary: str
     embedding: list[float] | None = None
-    happened_at: datetime | None = None
-    extra: dict[str, Any] = {}
 
 
 class MemoryCategory(BaseRecord):
