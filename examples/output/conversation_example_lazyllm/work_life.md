@@ -1,11 +1,6 @@
-# work_life
-## Professional Role
-- The user is a software engineer at TechCorp
-- The user has been programming for about 5 years
-- The user leads a big product launch at work
-## Technical Stack
-- The user works on backend systems using Python and Go
-- The user uses Kubernetes for orchestration and Redis for caching
-- The user is using Apache Kafka for event streaming
-## Monitoring & Observability
-- The user is responsible for monitoring and observability with Prometheus and Grafana
+# work_life  
+## Professional Background  
+- The user works in software development at TechCorp on backend systems using Python and Go  
+- The user uses Django and FastAPI for Python services and is migrating critical services to Go  
+- The user works with Kubernetes, Redis, Apache Kafka, Prometheus, and Grafana  
+- The user often answers work emails late at night

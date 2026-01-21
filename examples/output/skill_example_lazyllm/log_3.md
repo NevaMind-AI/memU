@@ -1,7 +1,7 @@
 ```yaml
 ---
 name: production-microservice-deployment
-description: Production-ready guide for deploying a microservice using a blue-green deployment strategy, based on real-world execution and lessons learned.
+description: Production-ready guide for deploying microservices using blue-green strategy with validated infrastructure, monitoring, and rollback safeguards.
 version: 0.3.0
 status: Evolving
 ---
@@ -9,148 +9,149 @@ status: Evolving
 
 # Production Microservice Deployment with Blue-Green Strategy
 
-## Introduction
+This guide provides a battle-tested procedure for safely deploying microservices in production using the blue-green deployment strategy. It is intended for use when zero-downtime rollouts, risk mitigation under real traffic, and rapid recovery are required. The steps are derived from real deployment outcomes across three iterations, including two failures and one successful cutover.
 
-This guide provides a field-validated procedure for safely deploying a microservice in production using the blue-green deployment strategy. It is intended for use when minimizing downtime and enabling rapid rollback are critical. The steps and checks herein are derived from three iterative deployment attempts, incorporating observed failures and optimizations.
-
-Use this guide during scheduled production releases where service continuity and observability are required.
+Use this guide when:
+- Deploying versioned services with stateless workloads
+- Database schema and query performance have been pre-validated
+- Monitoring, alerting, and rollback tooling are active
+- Traffic shifting is managed via service mesh or load balancer
 
 ---
 
 ## Deployment Context
 
-- **Strategy**: Blue-green deployment via Kubernetes `Service` selector switch  
-- **Environment**: Kubernetes (v1.25+), Helm-managed workloads, Istio ingress  
-- **Goals**:
-  - Zero-downtime deployment
-  - Sub-5-minute rollback if failure detected
-  - Full observability during transition
-  - Minimal impact on downstream consumers
+**Strategy**: Blue-green deployment with incremental traffic shift (10% → 100%) over 36 minutes  
+**Environment**: Kubernetes-based platform with service mesh routing control  
+**Target Service**: `recommendation-service` v2.5.0  
+**Goals**:
+- Achieve zero-downtime cutover
+- Validate performance under real production load
+- Stay within SLOs (P99 latency < 500ms, error rate < 0.5%)
+- Maintain database stability under dual-environment load
 
 ---
 
 ## Pre-Deployment Checklist
 
-### Database
-- [ ] **Verify schema compatibility** with new version — *Critical*  
-  Run: `helm test db-checks --namespace=db`
-- [ ] Confirm migration scripts are idempotent and version-tagged
+### ✅ Database
+- [CRITICAL] Confirm database `max_connections` supports combined blue/green load (minimum 250 for this service)  
+- [CRITICAL] Verify all new queries have appropriate indexes; validate existence of `idx_user_segment`  
+- [ ] Ensure per-pod connection pool size is adjusted to prevent exhaustion (e.g., HikariCP `maximumPoolSize`)  
+- [ ] Confirm staging dataset mirrors production scale (≥50M rows for key tables)
 
-### Monitoring & Observability
-- [ ] **Ensure metrics endpoints are enabled** in new image — *Critical*  
-  Check: `/metrics` returns 200 in staging
-- [ ] Validate Prometheus scrape config includes new pod labels
-- [ ] Set up dashboard panels for latency, error rate, and request volume per color
+### ✅ Monitoring & Alerting
+- [CRITICAL] Active alerts on database connection usage (>80% threshold)  
+- [CRITICAL] Query latency monitoring enabled for high-impact endpoints  
+- [ ] P99 latency, error rate, and request volume dashboards accessible in real time  
+- [ ] Rollback trigger thresholds defined (see Rollback Procedure)
 
-### Networking
-- [ ] Confirm Istio virtual service routes do not override color selectors
-- [ ] Verify readiness/liveness probes are tuned for startup time (new version may be slower)
+### ✅ Infrastructure
+- [ ] New environment (green) deployed and health-checked  
+- [ ] Blue environment remains fully operational and stable  
+- [ ] Routing controller ready for incremental traffic shifts  
 
-### Rollback Readiness
-- [ ] **Pre-stage rollback script** with known-good revision — *Critical*  
-  Store: `rollback-v2.1.0.yaml` in secure location
-- [ ] Confirm `kubectl` context points to production cluster
+### ✅ Testing & Validation
+- [CRITICAL] Full-capacity integration test completed under dual-blue-green load  
+- [ ] Performance testing executed with production-scale data volume  
+- [ ] Indexing and query plan review performed for all new database access patterns  
 
 ---
 
 ## Deployment Procedure
 
-1. **Deploy Green Instance (inactive)**
+1. **Deploy Green Environment**
    ```bash
-   helm upgrade --install mysvc-green ./charts/microservice \
-     --namespace services \
-     --set replicaCount=3 \
-     --set image.tag=v2.2.0 \
-     --set service.name=mysvc-green
+   kubectl apply -f recommendation-service-v2.5.0.yaml
+   ```
+   Wait for all pods to reach `Running` and pass readiness checks.
+
+2. **Validate Health**
+   - Confirm logs show clean startup
+   - Verify `/health` endpoint returns 200
+   - Check metrics: no errors, CPU/MEM within expected range
+
+3. **Begin Incremental Traffic Shift**
+   Apply traffic weights via service mesh (example using Istio):
+   ```bash
+   # 10% to green
+   istioctl traffic-shift set --to green --weight 10
+   sleep 300  # Monitor for 5 minutes
    ```
 
-2. **Wait for Pod Readiness**
+4. **Monitor at Each Stage**
+   After each shift, wait 5–10 minutes and verify:
+   - P99 latency < 500ms
+   - Error rate < 0.5%
+   - Database active connections < 80% of max
+   - No alerts firing
+
+   Continue shifting:
    ```bash
-   kubectl wait --for=condition=ready pod -l app=mysvc,version=v2.2.0 -n services --timeout=180s
+   istioctl traffic-shift set --to green --weight 25
+   sleep 300
+
+   istioctl traffic-shift set --to green --weight 50
+   sleep 600
+
+   istioctl traffic-shift set --to green --weight 75
+   sleep 600
+
+   istioctl traffic-shift set --to green --weight 100
    ```
 
-3. **Run Smoke Tests Against Green**
-   ```bash
-   curl -H "x-bypass-router: green" http://mysvc.prod.svc.cluster.local/health
-   # Expected: 200 OK + "green", no errors in logs
-   ```
-
-4. **Switch Traffic: Blue → Green**
-   Update service selector to point to green version:
-   ```bash
-   kubectl patch svc mysvc -n services -p '{"spec": {"selector": {"version": "v2.2.0"}}}'
-   ```
-
-5. **Monitor Transition (First 5 Minutes)**
-   - Watch for:
-     - Error rate > 1% (via Grafana or `kubectl logs`)
-     - Latency increase > 2x baseline
-     - Drop in request volume (consumer breakage)
-   - Use:
-     ```bash
-     kubectl top pods -n services -l app=mysvc
-     ```
-
-6. **Confirm Stability**
-   - Sustained health for 10 minutes
-   - No alerts triggered
-   - Tracing shows full request flow
+5. **Cutover Complete**
+   - Confirm full traffic on green (1500 req/s observed in success case)
+   - Average latency: 136ms, P99: 216ms, error rate: 0.2%
 
 ---
 
 ## Rollback Procedure
 
-### When to Roll Back
-- HTTP 5xx error rate > 2% sustained over 2 minutes
-- Latency P95 > 1.5x baseline for 3+ minutes
-- Database connection pool exhaustion observed
-- Downstream services report failures
+**Trigger Rollback If**:
+- P99 latency > 500ms for >2 minutes
+- Error rate > 0.5% sustained
+- Database connection usage hits 90%
+- Any critical alert fires during shift
 
-### Rollback Steps
-1. **Immediately reroute traffic to blue (known stable):**
-   ```bash
-   kubectl patch svc mysvc -n services -p '{"spec": {"selector": {"version": "v2.1.0"}}}'
-   ```
+**Execute Immediate Rollback**:
+```bash
+istioctl traffic-shift set --to blue --weight 100
+```
 
-2. **Verify blue instance health:**
-   ```bash
-   kubectl get pods -n services -l app=mysvc,version=v2.1.0
-   ```
-
-3. **Expected Recovery Time**: < 4 minutes from rollback initiation to full restoration.
+**Expected Recovery Time**: ≤1.5 minutes  
+**Post-Rollback Actions**:
+- Preserve logs and metrics for root cause analysis
+- Disable green environment if not needed for debugging
+- Update incident log with timestamp, metrics, and rollback reason
 
 ---
 
 ## Common Pitfalls & Solutions
 
-| Issue | Root Cause | Symptom | Solution |
-|------|-----------|--------|----------|
-| Green pods crash after deploy | Missing config map mount | CrashLoopBackOff in logs | Explicitly declare all configMaps in Helm values |
-| Service selector fails to switch | Misaligned pod labels | No traffic to green | Double-check label selectors in deployment vs service |
-| High latency post-switch | Cold cache in new service | P95 spikes at switchover | Warm caches via pre-load job before cutover |
-| Rollback fails due to blue scale-down | Auto-scaler terminated old pods | No healthy blue pods | Keep blue instance alive for 15 min post-switch |
+| Issue | Symptom | Root Cause | Solution |
+|------|--------|-----------|----------|
+| Database connection exhaustion | 5xx errors during 50% shift, "too many connections" logs | `max_connections=100` insufficient for dual environments | Increase limit to 250; reduce per-pod pool size |
+| Latency spike at 75% traffic | P99 jumps to 780ms, SLO violation | Missing `idx_user_segment`, full table scan on 50M-row table | Create index; test with production-scale data |
+| No alert on connection usage | Failure undetected until user impact | Missing monitoring on DB connection pool | Add Prometheus/Grafana alert at 80% threshold |
+| Staging test passed but prod failed | No issues in staging, failure in production | Staging dataset too small (5M vs 50M rows) | Mirror production data scale in staging |
 
 ---
 
 ## Best Practices
 
-- **Keep both blue and green active during monitoring window** (min 15 minutes)  
-- **Automate smoke tests** — run post-deploy, pre-cutover  
-- **Tag images immutably** — never reuse `latest`  
-- **Time deployments outside peak hours** — target 02:00–04:00 UTC  
-- **Expected timeline**:
-  - Deploy green: 2 min
-  - Wait & test: 3 min
-  - Cutover: 1 min
-  - Monitor: 10 min
-  - Total: ~16 minutes
+- **Traffic Shifting**: Use conservative increments (10% → 100%) over ≥30 minutes to allow observation
+- **Monitoring**: Focus on P99 latency, error rate, and database connection count—these were leading indicators
+- **Testing**: Always run performance tests with production-scale datasets and query patterns
+- **Validation**: Enforce mandatory pre-deployment checklist including indexing and capacity review
+- **Timeline**: Allow 36+ minutes for full rollout with monitoring pauses; rollback completes in <2 minutes
 
 ---
 
 ## Key Takeaways
 
-1. **Label consistency is critical** — mismatched selectors cause silent failures.
-2. **Never assume backward compatibility** — always verify DB/schema interoperability.
-3. **Rollback must be faster than detection** — automate the switch.
-4. **Observability starts before cutover** — monitor green *before* routing traffic.
-5. **Human error is the largest risk** — use pre-checked scripts, not CLI guesswork.
+1. **Database capacity must account for peak deployment states**—blue-green requires double the normal load capacity.
+2. **Production-scale testing is non-negotiable**—small datasets hide scalability bugs like missing indexes.
+3. **Connection pools and infrastructure limits must be proactively monitored and alerted**—silent exhaustion causes outages.
+4. **Incremental traffic shifting with staged validation enables safe rollout**—real-load testing catches what synthetic tests miss.
+5. **Lessons must become checklists**—operationalize fixes (index reviews, pool sizing) to prevent recurrence.

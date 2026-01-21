@@ -13,6 +13,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+import lazyllm
 
 # Add src to sys.path FIRST before importing memu
 project_root = Path(__file__).parent.parent
@@ -114,18 +115,8 @@ Generate the complete markdown document now:"""
     # Use LazyLLM through MemoryService
     system_prompt = "You are an expert technical writer creating concise, production-grade deployment guides from real experiences."
     
-    # Create a temporary client from the service to use for generation
-    from memu.llm.lazyllm_client import LazyLLMClient
-    
-    api_key = os.getenv("LAZYLLM_QWEN_API_KEY")
-    llm_client = LazyLLMClient(
-        source="qwen",
-        chat_model=service.llm_config.chat_model,
-        api_key=api_key,
-    )
-    
     full_prompt = f"{system_prompt}\n\n{prompt}"
-    generated_content = await llm_client.summarize(
+    generated_content = await service.llm_client.summarize(
         text=full_prompt,
         system_prompt=system_prompt,
     )
@@ -151,9 +142,11 @@ async def main():
     print("-" * 60)
 
     # Get LazyLLM API key from environment
-    api_key = os.getenv("LAZYLLM_QWEN_API_KEY")
+    lazyllm.config.add("qwen_api_key", str, env="QWEN_API_KEY", description="Qwen API Key")
+    with lazyllm.config.namespace("MEMU"):
+        api_key = lazyllm.config['qwen_api_key']
     if not api_key:
-        msg = "Please set LAZYLLM_QWEN_API_KEY environment variable"
+        msg = "Please set MEMU_QWEN_API_KEY environment variable"
         raise ValueError(msg)
 
     # Custom config for skill extraction
@@ -161,7 +154,6 @@ async def main():
     You are analyzing an agent execution log. Extract the key actions taken, their outcomes, and lessons learned.
 
     For each significant action or phase:
-
     1. **Action/Phase**: What was being attempted?
     2. **Status**: SUCCESS ✅ or FAILURE ❌
     3. **What Happened**: What was executed
@@ -170,11 +162,29 @@ async def main():
     6. **Lesson**: What did we learn?
     7. **Action Items**: Concrete steps for next time
 
+    Assign each extracted skill to one or more relevant categories from the following list:
+    {categories_str}
+
     **IMPORTANT**:
     - Focus on ACTIONS and outcomes
     - Be specific: include actual metrics, errors, timing
     - ONLY extract information explicitly stated
     - DO NOT infer or assume information
+    - Output MUST be valid XML wrapped in <skills> tags.
+
+    Output format:
+    <skills>
+        <memory>
+            <content>
+                [Action] Description of the action and outcome.
+                [Lesson] Key lesson learned.
+            </content>
+            <categories>
+                <category>Category Name</category>
+            </categories>
+        </memory>
+        ...
+    </skills>
 
     Extract ALL significant actions from the text:
 
@@ -214,20 +224,14 @@ async def main():
         llm_profiles={
             "default": {
                 "client_backend": "lazyllm_backend",
-                "source": "qwen",
-                "chat_model": "qwen-plus",
-                "vlm_model": "qwen-vl-plus",
+                "llm_source": "qwen",
+                "vlm_source": "qwen",
+                "embed_source": "qwen",
+                "stt_source": "qwen",
+                "chat_model": "qwen3-max",
+                "vlm_model":"qwen-vl-plus",
+                "stt_model":"qwen-audio-turbo",
                 "embed_model": "text-embedding-v3",
-                "stt_model": "qwen-audio-turbo",
-                "api_key": api_key,
-            },
-            "embedding": {
-                "client_backend": "lazyllm_backend",
-                "source": "qwen",
-                "chat_model": "qwen-plus",
-                "vlm_model": "qwen-vl-plus",
-                "embed_model": "text-embedding-v3",
-                "stt_model": "qwen-audio-turbo",
                 "api_key": api_key,
             },
         },

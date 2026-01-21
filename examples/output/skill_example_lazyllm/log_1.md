@@ -1,7 +1,7 @@
 ```yaml
 ---
 name: production-microservice-deployment
-description: Production-ready guide for deploying a microservice using blue-green deployment strategy with monitoring, rollback safeguards, and lessons from real deployment attempts.
+description: Production-ready guide for deploying microservices using a blue-green strategy, based on real incident learnings to prevent connection exhaustion and ensure safe rollouts.
 version: 0.1.0
 status: Evolving
 ---
@@ -11,199 +11,142 @@ status: Evolving
 
 ## Introduction
 
-This guide provides a battle-tested procedure for safely deploying a microservice to production using the blue-green deployment strategy. It is intended for use when minimizing downtime and enabling rapid rollback are critical. The steps reflect lessons learned from active deployment attempts and focus on practical execution in cloud-native environments using Kubernetes and CI/CD pipelines.
+This guide provides a practical, experience-driven procedure for safely deploying microservices in production using the blue-green deployment strategy. It is intended for use during versioned service updates where minimizing user impact and enabling rapid rollback are critical. The steps and checks herein are derived from a real-world failure involving database connection exhaustion during traffic shift.
 
-Use this guide during scheduled maintenance windows for major version updates or breaking changes where user impact must be contained.
+Use this guide when:
+- Deploying stateful services that maintain database connections
+- Employing blue-green deployments in Kubernetes or similar orchestration platforms
+- Ensuring infrastructure capacity aligns with peak deployment load
 
 ---
 
 ## Deployment Context
 
 - **Strategy**: Blue-green deployment  
-- **Environment**: Kubernetes (EKS), AWS-hosted, Helm-managed services  
-- **Traffic Management**: Istio service mesh with weighted routing  
-- **Primary Goals**:
-  - Zero-downtime deployment
-  - Immediate rollback capability
-  - Controlled traffic shift with observability
-  - Validation of health before full cutover
+- **Environment**: Production, containerized (e.g., Kubernetes), PostgreSQL backend  
+- **Traffic Shift**: Gradual (e.g., 0% → 50% → 100%) via service mesh or ingress controller  
+- **Goal**: Zero-downtime deployment with full rollback capability within 2 minutes if anomalies occur  
+- **Critical Risk**: Resource contention during dual-environment operation (blue + green)
 
 ---
 
 ## Pre-Deployment Checklist
 
-### 🔧 Infrastructure & Configuration
-- [x] New (green) environment provisioned and stable (`kubectl get nodes --selector=env=green`)  
-- [x] Helm chart version tagged and immutable (e.g., `my-service-1.4.0`)  
-- [x] ConfigMaps and Secrets verified for green environment (no dev defaults)  
+Ensure all items are verified **before** initiating deployment.
 
-### 🛢️ Database
-- [x] Schema migrations are backward-compatible **(Critical)**  
-- [x] Migration scripts tested in staging with production-like data  
-- [ ] Downtime-free migration path confirmed (if applicable)  
+### Database
+- [ ] **Validate `max_connections` limit supports combined blue and green load** *(Critical)*  
+  > Ensure total expected connections from both environments ≤ database limit  
+- [ ] **Adjust per-pod connection pool size** *(Critical)*  
+  > Scale down individual pod pools to prevent oversubscription during overlap  
 
-### 📊 Monitoring & Observability
-- [x] Prometheus metrics endpoints exposed on new pods  
-- [x] Grafana dashboards updated to include green service instance  
-- [x] Alertmanager rules cover deployment-phase anomalies (latency, error rate spikes)  
-- [x] Distributed tracing (Jaeger) enabled and sampled at 100% during cutover  
+### Monitoring & Alerts
+- [ ] **Enable monitoring of active database connections** *(Critical)*  
+  > Track metric: `pg_stat_database.numbackends` or equivalent  
+- [ ] **Set up alert thresholds for connection pool usage (>80%)** *(Critical)*  
+  > Trigger alerts during deployment phase  
+- [ ] Confirm end-to-end metrics pipeline is active (Prometheus/Grafana or equivalent)
 
-### 🧪 Validation Readiness
-- [x] Smoke test suite available and passing against staging  
-- [x] Canaries configured to hit green service pre-cutover  
-- [x] Rollback image tagged and accessible in registry (`v1.3.9-rollback`)  
+### Testing & Validation
+- [ ] **Perform full-capacity load test under dual-environment conditions** *(Critical)*  
+  > Simulate blue + green traffic concurrently  
+- [ ] Verify no performance degradation or connection errors at peak load  
+- [ ] Confirm rollback mechanism works in staging
 
 ---
 
 ## Deployment Procedure
 
-> ⏱️ Estimated execution time: 18 minutes
+> ⚠️ Monitor all systems continuously during execution.
 
-1. **Deploy Green Service**
+1. **Deploy Green Environment**
    ```bash
-   helm upgrade my-service-green ./charts/my-service \
-     --namespace production \
-     --set environment=green \
-     --set image.tag=v1.4.0 \
-     --install
+   kubectl apply -f recommendation-service-v2.5.0-green.yaml
    ```
+   - Wait for all pods to reach `Running` and pass readiness probes
+   - Confirm logs show clean startup with no connection errors
 
-2. **Wait for Pod Readiness**
+2. **Verify Green Service Health**
+   - Access `/health` endpoint directly (bypassing router)
+   - Confirm database connectivity and query responsiveness
+   - Check metrics dashboard: baseline connection count established
+
+3. **Begin Traffic Shift (0% → 50%)**
    ```bash
-   kubectl wait --for=condition=ready pod -l app=my-service,environment=green -n production --timeout=5m
+   kubectl apply -f traffic-shift-50pct.yaml
    ```
-   - ✅ Monitoring Point: All pods report `Ready` status within 5 minutes  
-   - ❌ If pending > 3 minutes: check resource quotas and node autoscaling
+   - Update canary weight or virtual service routing rules accordingly
+   - Allow 2–3 minutes for traffic stabilization
 
-3. **Run Smoke Tests Against Green**
+4. **Monitor During 50% Shift**
+   - Observe:
+     - Error rates (must remain <0.5%)
+     - Latency (P95 < 300ms)
+     - **Active database connections** (must not exceed 80% of max)
+   - If any threshold breached → **Initiate Rollback Immediately**
+
+5. **Proceed to 100% Traffic (if stable)**
    ```bash
-   ./scripts/smoke-test.sh --target https://api-green.example.com
+   kubectl apply -f traffic-shift-100pct.yaml
    ```
-   - ✅ Expected: All 7 tests pass, response time < 800ms  
-   - ❌ Fail: Halt deployment, investigate logs and traces
-
-4. **Shift 5% Traffic to Green (Canary)**
-   Apply Istio traffic split:
-   ```yaml
-   apiVersion: networking.istio.io/v1alpha3
-   kind: VirtualService
-   metadata:
-     name: my-service-route
-   spec:
-     hosts:
-       - api.example.com
-     http:
-     - route:
-       - destination:
-           host: my-service-blue.production.svc.cluster.local
-         weight: 95
-       - destination:
-           host: my-service-green.production.svc.cluster.local
-         weight: 5
-   ```
-   ```bash
-   kubectl apply -f virtualservice-split.yaml
-   ```
-
-5. **Monitor Key Metrics (5 minutes)**
-   - Error rate (goal: < 0.5%)  
-   - P95 latency (< 1.2s)  
-   - Request volume consistency  
-   - Check Jaeger traces for failed spans
-
-6. **Shift 100% Traffic to Green**
-   Update weights:
-   ```yaml
-   - weight: 0    # blue
-   - weight: 100  # green
-   ```
-   ```bash
-   kubectl apply -f virtualservice-split.yaml
-   ```
-
-7. **Verify Full Cutover**
-   ```bash
-   curl -H "Host: api.example.com" http://ingress/status | grep "version=1.4.0"
-   ```
-
-8. **Decommission Blue (After 1 hour)**
-   ```bash
-   helm uninstall my-service-blue --namespace production
-   ```
+   - Redirect all traffic to green
+   - Decommission blue environment after confirmation:
+     ```bash
+     kubectl delete -f recommendation-service-v2.4.0-blue.yaml
+     ```
 
 ---
 
 ## Rollback Procedure
 
-### When to Roll Back
+### When to Rollback
+Immediate rollback required if:
+- Error rate exceeds **1% for 60 seconds**
+- Latency P95 > **1s for 2+ minutes**
+- Database connections ≥ **90% of max_connections**
+- Emergency signal from SRE team
 
-Roll back immediately if any of the following occur:
-- Error rate > 5% sustained over 2 minutes  
-- Latency P95 > 3s for 3+ minutes  
-- Database connection pool exhaustion observed  
-- Smoke test failure at any stage
-
-### Steps
-
-1. **Revert Traffic to Blue**
+### Execute Rollback
+1. Revert traffic to blue:
    ```bash
-   kubectl patch virtualservice my-service-route --patch '
-   spec:
-     http:
-     - route:
-       - destination:
-           host: my-service-blue.production.svc.cluster.local
-         weight: 100
-       - destination:
-           host: my-service-green.production.svc.cluster.local
-         weight: 0'
+   kubectl apply -f traffic-shift-100pct-blue.yaml
    ```
-
-2. **Confirm Health of Blue Service**
+2. Confirm traffic rerouted within **60 seconds**
+3. Terminate green pods:
    ```bash
-   kubectl get pods -l app=my-service,environment=blue -n production
+   kubectl delete -f recommendation-service-v2.5.0-green.yaml
    ```
-   - Ensure all replicas are running and ready
+4. Validate blue service stability via health checks and dashboards
 
-3. **Trigger Alert Acknowledgment**
-   - Manually acknowledge firing alerts in Alertmanager  
-   - Notify #prod-alerts: `@team Rollback initiated – green service degraded`
-
-4. **Expected Recovery Time**: < 90 seconds from rollback initiation
+✅ **Expected Recovery Time**: ≤ 1.5 minutes  
+✅ **Impact Window**: ~1.5 minutes at <5% error rate (historically observed)
 
 ---
 
 ## Common Pitfalls & Solutions
 
-| Issue | Root Cause | Symptom | Solution |
-|------|-----------|--------|---------|
-| Green pods stuck in `Pending` | Node autoscaler not triggered | No new pods scheduled | Manually scale node group or reduce CPU requests temporarily |
-| Sudden 503s after cutover | Misconfigured readiness probe | Pods accept traffic before DB connection | Add `initialDelaySeconds: 30` to probe config |
-| Rollback fails due to blue already uninstalled | Premature cleanup | 503s across the board | Reinstall blue via Helm restore from last release revision |
-| Traces missing in Jaeger | Sampling rate too low | Incomplete trace visibility | Set `tracing.sample-rate: 100` during deployment window |
+| Issue | Symptom | Root Cause | Solution |
+|------|--------|-----------|----------|
+| Database connection exhaustion | Errors during 50% shift, timeouts | `max_connections=100` too low; per-pod pools oversized | Increase DB limit; reduce per-pod pool size |
+| No early warning | Failure detected too late | Missing alerts on connection usage | Implement proactive monitoring at 80% threshold |
+| Undetected bottleneck | Load test passed but failed live | Test did not simulate dual blue-green load | Add full-capacity integration testing pre-deploy |
 
 ---
 
 ## Best Practices
 
-- Always keep the previous version deployable and tracked (tagged in Helm repository)  
-- Run smoke tests against green **before** any traffic shift  
-- Use immutable image tags — never `latest`  
-- Schedule deployments during low-traffic periods (e.g., 02:00–04:00 local ops time)  
-- Coordinate with SRE team for alert suspension/sensitivity adjustment during window
-
-> ✅ Expected timeline:  
-> - Preparation: 30 min  
-> - Execution: 18 min  
-> - Observation: 60 min  
-> - Total: ~110 minutes
+- **Always size infrastructure for peak deployment states**, not just steady-state
+- **Test under realistic overlap conditions** — blue and green running simultaneously
+- **Integrate checklist items into CI/CD gates** — block deployment if validations missing
+- **Expect rollout duration**: ~8–12 minutes (including verification windows)
+- **Rollback drills**: Conduct quarterly in staging
 
 ---
 
 ## Key Takeaways
 
-1. **Backward-compatible schema changes are non-negotiable** — even minor migrations can break old instances during rollback.  
-2. **Readiness probes must reflect actual service dependencies**, especially database and cache connectivity.  
-3. **Never decommission the blue stack until post-cutover stability is confirmed** — rollback without it is impossible.  
-4. **Observability must be pre-wired** — ad-hoc dashboard creation delays incident response.  
-5. **Automated smoke tests are essential** — manual validation is unreliable under pressure.
+1. **Connection pools must be sized for combined blue and green load** — never assume steady-state capacity suffices.
+2. **Infrastructure limits (e.g., `max_connections`) must be validated pre-deployment** — silent failures occur when shared resources are exhausted.
+3. **Proactive monitoring of key database metrics is non-negotiable** — lack of alerts delays detection and increases blast radius.
+4. **Full-capacity and dual-environment testing is mandatory** — unit and single-instance tests do not reveal integration bottlenecks.
+5. **Remediation actions must become standard checks** — update checklists and automate where possible to prevent recurrence.

@@ -5,7 +5,7 @@ This example demonstrates how to process multiple conversation files
 and generate a memory category JSON file using the LazyLLM backend.
 
 Usage:
-    export LAZYLLM_QWEN_API_KEY=your_api_key
+    export MEMU_QWEN_API_KEY=your_api_key
     python examples/example_4_conversation_memory_with_lazyllm.py
 """
 
@@ -13,6 +13,7 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+import lazyllm
 
 # Add src to sys.path FIRST before importing memu
 project_root = Path(__file__).parent.parent
@@ -67,11 +68,11 @@ async def main():
     print("Example 4: Conversation Memory Processing with LazyLLM Backend")
     print("-" * 60)
 
-    # Get LazyLLM API key from environment
-    # api_key = os.getenv("LAZYLLM_QWEN_API_KEY")
-    api_key = os.getenv("LAZYLLM_QWEN_API_KEY")
+    lazyllm.config.add("qwen_api_key", str, env="QWEN_API_KEY", description="Qwen API Key")
+    with lazyllm.config.namespace("MEMU"):
+        api_key = lazyllm.config['qwen_api_key']
     if not api_key:
-        msg = "Please set LAZYLLM_QWEN_API_KEY environment variable"
+        msg = "Please set MEMU_QWEN_API_KEY environment variable"
         raise ValueError(msg)
     
     # Initialize service with LazyLLM backend using llm_profiles
@@ -80,20 +81,14 @@ async def main():
         llm_profiles={
             "default": {
                 "client_backend": "lazyllm_backend",
-                "source": "qwen",
-                "chat_model": "qwen-plus",
-                "vlm_model": "qwen-vl-plus",
+                "llm_source": "qwen",
+                "vlm_source": "qwen",
+                "embed_source": "qwen",
+                "stt_source": "qwen",
+                "chat_model": "qwen3-max",
+                "vlm_model":"qwen-vl-plus",
                 "embed_model": "text-embedding-v3",
-                "stt_model": "qwen-audio-turbo",
-                "api_key": api_key,
-            },
-            "embedding": {
-                "client_backend": "lazyllm_backend",
-                "source": "qwen",
-                "chat_model": "qwen-plus",
-                "vlm_model": "qwen-vl-plus",
-                "embed_model": "text-embedding-v3",
-                "stt_model": "qwen-audio-turbo",
+                "stt_model":"qwen-audio-turbo",
                 "api_key": api_key,
             },
         },
