@@ -14,6 +14,7 @@ except ImportError as exc:
 
 from pydantic import BaseModel
 from sqlalchemy import ForeignKey, MetaData, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
@@ -55,6 +56,8 @@ class MemoryItemModel(BaseModelMixin, MemoryItem):
     memory_type: MemoryType = Field(sa_column=Column(String, nullable=False))
     summary: str = Field(sa_column=Column(Text, nullable=False))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
+    happened_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
+    extra: dict[str, Any] = Field(default={}, sa_column=Column(JSONB, nullable=True))
 
 
 class MemoryCategoryModel(BaseModelMixin, MemoryCategory):
