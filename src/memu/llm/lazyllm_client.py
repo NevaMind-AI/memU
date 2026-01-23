@@ -3,16 +3,11 @@ import logging
 from pathlib import Path
 import asyncio
 import lazyllm
+import functools
 from lazyllm import LOG
 
 class LazyLLMClient:
     DEFAULT_SOURCE = 'qwen'
-    DEFAULT_MODELS = {
-            'llm': 'qwen3-max',
-            'vlm': 'qwen-vl-plus',
-            'embed': 'text-embedding-v3',
-            'stt': 'qwen-audio-turbo',
-    }
 
     def __init__(self,
                   *,
@@ -29,17 +24,17 @@ class LazyLLMClient:
         self.vlm_source = vlm_source or self.DEFAULT_SOURCE
         self.embed_source = embed_source or self.DEFAULT_SOURCE
         self.stt_source = stt_source or self.DEFAULT_SOURCE
-        self.chat_model = chat_model or self.DEFAULT_MODELS['llm']
-        self.vlm_model = vlm_model or self.DEFAULT_MODELS['vlm']
-        self.embed_model = embed_model or self.DEFAULT_MODELS['embed']
-        self.stt_model = stt_model or self.DEFAULT_MODELS['stt']
+        self.chat_model = chat_model
+        self.vlm_model = vlm_model
+        self.embed_model = embed_model
+        self.stt_model = stt_model
 
     async def _call_async(self, client: Any, *args: Any, **kwargs: Any) -> Any:
         '''异步调用 lazyllm client'''
         if kwargs:
-            return await asyncio.to_thread(lambda: client(*args, **kwargs))
+            return await asyncio.to_thread(functools.partial(client, *args, **kwargs))
         else:
-            return await asyncio.to_thread(lambda: client(*args))
+            return await asyncio.to_thread(client, *args)
 
 
     async def summarize(
@@ -67,7 +62,7 @@ class LazyLLMClient:
         client = lazyllm.namespace('MEMU').OnlineModule(source=self.vlm_source, model=self.vlm_model, type='vlm')
         LOG.debug(f'Processing image with {self.vlm_source}/{self.vlm_model}: {image_path}')
         # LazyLLM VLM accepts prompt as first positional argument and image_path as keyword argument
-        response = await self._call_async(client, prompt, image_path=image_path)
+        response = await self._call_async(client, prompt, lazyllm_files=image_path)
         return response, None
 
     async def embed(

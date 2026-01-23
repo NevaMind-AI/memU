@@ -22,7 +22,6 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-import lazyllm
 
 # Add src to sys.path FIRST before importing memu
 project_root = Path(__file__).parent.parent
@@ -65,7 +64,7 @@ async def run_conversation_memory_demo(service):
             print(f"  ✗ Error processing {conv_file}: {e}")
 
     # Output generation
-    output_dir = "examples/output/unified_example/conversation"
+    output_dir = "examples/output/lazyllm_example/conversation"
     os.makedirs(output_dir, exist_ok=True)
     await generate_markdown_output(categories, output_dir)
     print(f"✓ Conversation processing complete. Output: {output_dir}")
@@ -128,7 +127,7 @@ async def run_skill_extraction_demo(service):
 
     # Generate summary guide
     if all_skills:
-        output_file = "examples/output/unified_example/skills/skill_guide.md"
+        output_file = "examples/output/lazyllm_example/skills/skill_guide.md"
         await generate_skill_guide(all_skills, service, output_file)
         print(f"✓ Skill guide generated: {output_file}")
 
@@ -178,7 +177,7 @@ async def run_multimodal_demo(service):
         except Exception as e:
             print(f"  ✗ Error: {e}")
 
-    output_dir = "examples/output/unified_example/multimodal"
+    output_dir = "examples/output/lazyllm_example/multimodal"
     os.makedirs(output_dir, exist_ok=True)
     await generate_markdown_output(categories, output_dir)
     print(f"✓ Multimodal processing complete. Output: {output_dir}")
@@ -237,8 +236,8 @@ async def main():
 
     # 2. Run Demos
     await run_conversation_memory_demo(service)
-    await run_skill_extraction_demo(service)
-    await run_multimodal_demo(service)
+    # await run_skill_extraction_demo(service)
+    # await run_multimodal_demo(service)
 
 if __name__ == "__main__":
     asyncio.run(main())

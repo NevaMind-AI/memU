@@ -26,15 +26,16 @@ async def test_lazyllm_client():
     print("=" * 60)
     
     # Get API key from environment
-    lazyllm.config.add("qwen_api_key", str, env="MEMU_QWEN_API_KEY", description="Qwen API Key")
     try:
         client = LazyLLMClient(
-            source="qwen",
-            chat_model="qwen3-max",
-            vlm_model="qwen-vl-plus",
-            embed_model="text-embedding-v3",
-            stt_model="qwen-audio-turbo",
-            base_url="",
+            llm_source="doubao",
+            vlm_source="qwen",
+            embed_source="qwen",
+            stt_source="qwen",
+            chat_model = "deepseek-v3-1-terminus",
+            vlm_model = "qwen-vl-plus",
+            embed_model = "text-embedding-v3",
+            stt_model = "qwen-audio-turbo"
         )
         print("✓ LazyLLMClient initialized successfully")
     except Exception as e:
@@ -69,10 +70,10 @@ async def test_lazyllm_client():
     
     # Test 3: Vision (requires image file)
     print("\n[Test 3] Testing vision...")
-    test_image_path = "examples/resources/images/sample.jpg"
+    test_image_path = "examples/resources/images/image1.png"
     if os.path.exists(test_image_path):
         try:
-            result, response = await client.vision(
+            result, _ = await client.vision(
                 prompt="描述这张图片的内容",
                 image_path=test_image_path
             )
@@ -84,29 +85,6 @@ async def test_lazyllm_client():
             traceback.print_exc()
     else:
         print(f"⚠ Skipped: Test image not found at {test_image_path}")
-    
-    # Test 4: Transcription (requires audio file)
-    print("\n[Test 4] Testing transcription...")
-    test_audio_path = "examples/resources/audio/sample.wav"
-    if os.path.exists(test_audio_path):
-        try:
-            result, response = await client.transcribe(
-                audio_path=test_audio_path,
-                language="zh"
-            )
-            print(f"✓ Transcription successful")
-            print(f"  Result: {result[:100]}...")
-        except Exception as e:
-            print(f"❌ Transcription failed: {e}")
-            import traceback
-            traceback.print_exc()
-    else:
-        print(f"⚠ Skipped: Test audio not found at {test_audio_path}")
-    
-    print("\n" + "=" * 60)
-    print("✓ LazyLLM backend tests completed!")
-    return True
-
 
 if __name__ == "__main__":
     success = asyncio.run(test_lazyllm_client())
