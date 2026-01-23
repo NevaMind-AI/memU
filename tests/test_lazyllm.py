@@ -28,11 +28,11 @@ async def test_lazyllm_client():
     # Get API key from environment
     try:
         client = LazyLLMClient(
-            llm_source="doubao",
+            llm_source="qwen",
             vlm_source="qwen",
             embed_source="qwen",
             stt_source="qwen",
-            chat_model = "deepseek-v3-1-terminus",
+            chat_model = "qwen-plus",
             vlm_model = "qwen-vl-plus",
             embed_model = "text-embedding-v3",
             stt_model = "qwen-audio-turbo"
@@ -73,7 +73,7 @@ async def test_lazyllm_client():
     test_image_path = "examples/resources/images/image1.png"
     if os.path.exists(test_image_path):
         try:
-            result, _ = await client.vision(
+            result, response = await client.vision(
                 prompt="描述这张图片的内容",
                 image_path=test_image_path
             )
