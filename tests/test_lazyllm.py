@@ -26,14 +26,7 @@ async def test_lazyllm_client():
     print("=" * 60)
     
     # Get API key from environment
-    lazyllm.config.add("qwen_api_key", str, env="QWEN_API_KEY", description="Qwen API Key")
-    with lazyllm.config.namespace("MEMU"):
-        api_key = lazyllm.config['qwen_api_key']
-    if not api_key:
-        msg = "Please set MEMU_QWEN_API_KEY environment variable"
-        raise ValueError(msg)
-    
-    print(f"✓ API key found: {api_key[:20]}...")
+    lazyllm.config.add("qwen_api_key", str, env="MEMU_QWEN_API_KEY", description="Qwen API Key")
     try:
         client = LazyLLMClient(
             source="qwen",
@@ -42,7 +35,6 @@ async def test_lazyllm_client():
             embed_model="text-embedding-v3",
             stt_model="qwen-audio-turbo",
             base_url="",
-            api_key=api_key
         )
         print("✓ LazyLLMClient initialized successfully")
     except Exception as e:

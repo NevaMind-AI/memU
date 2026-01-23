@@ -102,6 +102,7 @@ class LLMConfig(BaseModel):
         description="Which LLM client backend to use: 'httpx' (httpx) , 'sdk' (official OpenAI) or 'lazyllm_backend'(for more LLM source like Qwen, Doubao, SIliconflow, etc.)",
     )
     # setup LazyLLM 
+    source: str | None = Field(default=None, description="default source for lazyllm backend")
     llm_source: str | None = Field(default=None, description="LLM source for lazyllm backend")
     vlm_source: str | None = Field(default=None, description="VLM source for lazyllm backend")
     embed_source: str | None = Field(default=None, description="Embedding source for lazyllm backend")
