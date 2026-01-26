@@ -3,14 +3,13 @@
 Quick test script to verify LazyLLM backend configuration and basic functionality.
 
 Usage:
-    export LAZYLLM_API_KEY=your_api_key
+    export MEMU_QWEN_API_KEY=your_api_key
     python examples/test_lazyllm.py
 """
 
 import asyncio
 import os
 import sys
-import lazyllm
 
 # Add src to sys.path
 src_path = os.path.abspath("src")
