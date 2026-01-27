@@ -1,4 +1,4 @@
-![MemU Banner](assets/banner.png)
+![MemU Banner](../assets/banner.png)
 
 <div align="center">
 
@@ -14,7 +14,7 @@
 
 <a href="https://trendshift.io/repositories/17374" target="_blank"><img src="https://trendshift.io/api/badge/repositories/17374" alt="NevaMind-AI%2FmemU | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
-**[English](readme/README_en.md) | [中文](readme/README_zh.md) | [日本語](readme/README_ja.md) | [한국어](readme/README_ko.md) | [Español](readme/README_es.md) | [Français](readme/README_fr.md)**
+**[English](README_en.md) | [中文](README_zh.md) | [日本語](README_ja.md) | [한국어](README_ko.md) | [Español](README_es.md) | [Français](README_fr.md)**
 
 </div>
 
@@ -137,7 +137,7 @@ Agent: "Good morning! Here's what's relevant today..."
 
 MemU's three-layer system enables both **reactive queries** and **proactive context loading**:
 
-<img width="100%" alt="structure" src="assets/structure.png" />
+<img width="100%" alt="structure" src="../assets/structure.png" />
 
 | Layer | Reactive Use | Proactive Use |
 |-------|--------------|---------------|
@@ -219,7 +219,7 @@ Both examples demonstrate **proactive memory workflows**:
 2. **Auto-Extraction**: Immediate memory creation
 3. **Proactive Retrieval**: Context-aware memory surfacing
 
-See [`tests/test_inmemory.py`](tests/test_inmemory.py) and [`tests/test_postgres.py`](tests/test_postgres.py) for implementation details.
+See [`tests/test_inmemory.py`](../tests/test_inmemory.py) and [`tests/test_postgres.py`](../tests/test_postgres.py) for implementation details.
 
 ---
 
@@ -304,7 +304,7 @@ python tests/test_openrouter_embedding.py
 python tests/test_openrouter_vision.py
 ```
 
-See [`examples/example_4_openrouter_memory.py`](examples/example_4_openrouter_memory.py) for a complete working example.
+See [`examples/example_4_openrouter_memory.py`](../examples/example_4_openrouter_memory.py) for a complete working example.
 
 ---
 
@@ -314,7 +314,7 @@ See [`examples/example_4_openrouter_memory.py`](examples/example_4_openrouter_me
 
 Processes inputs in real-time and immediately updates memory:
 
-<img width="100%" alt="memorize" src="assets/memorize.png" />
+<img width="100%" alt="memorize" src="../assets/memorize.png" />
 ```python
 result = await service.memorize(
     resource_url="path/to/file.json",  # File path or URL
@@ -339,7 +339,7 @@ result = await service.memorize(
 
 MemU supports both **proactive context loading** and **reactive querying**:
 
-<img width="100%" alt="retrieve" src="assets/retrieve.png" />
+<img width="100%" alt="retrieve" src="../assets/retrieve.png" />
 
 #### RAG-based Retrieval (`method="rag"`)
 
@@ -392,7 +392,7 @@ result = await service.retrieve(
 - `where={"agent_id__in": ["1", "2"]}` - Multi-agent coordination
 - Omit `where` for global context awareness
 
-> 📚 **For complete API documentation**, see [SERVICE_API.md](docs/SERVICE_API.md) - includes proactive workflow patterns, pipeline configuration, and real-time update handling.
+> 📚 **For complete API documentation**, see [SERVICE_API.md](../docs/SERVICE_API.md) - includes proactive workflow patterns, pipeline configuration, and real-time update handling.
 
 ---
 
@@ -482,13 +482,13 @@ View detailed experimental data: [memU-experiment](https://github.com/NevaMind-A
 <div align="center">
 
 <a href="https://github.com/TEN-framework/ten-framework"><img src="https://avatars.githubusercontent.com/u/113095513?s=200&v=4" alt="Ten" height="40" style="margin: 10px;"></a>
-<a href="https://openagents.org"><img src="assets/partners/openagents.png" alt="OpenAgents" height="40" style="margin: 10px;"></a>
+<a href="https://openagents.org"><img src="../assets/partners/openagents.png" alt="OpenAgents" height="40" style="margin: 10px;"></a>
 <a href="https://github.com/milvus-io/milvus"><img src="https://miro.medium.com/v2/resize:fit:2400/1*-VEGyAgcIBD62XtZWavy8w.png" alt="Milvus" height="40" style="margin: 10px;"></a>
-<a href="https://xroute.ai/"><img src="assets/partners/xroute.png" alt="xRoute" height="40" style="margin: 10px;"></a>
-<a href="https://jaaz.app/"><img src="assets/partners/jazz.png" alt="Jazz" height="40" style="margin: 10px;"></a>
-<a href="https://github.com/Buddie-AI/Buddie"><img src="assets/partners/buddie.png" alt="Buddie" height="40" style="margin: 10px;"></a>
-<a href="https://github.com/bytebase/bytebase"><img src="assets/partners/bytebase.png" alt="Bytebase" height="40" style="margin: 10px;"></a>
-<a href="https://github.com/LazyAGI/LazyLLM"><img src="assets/partners/LazyLLM.png" alt="LazyLLM" height="40" style="margin: 10px;"></a>
+<a href="https://xroute.ai/"><img src="../assets/partners/xroute.png" alt="xRoute" height="40" style="margin: 10px;"></a>
+<a href="https://jaaz.app/"><img src="../assets/partners/jazz.png" alt="Jazz" height="40" style="margin: 10px;"></a>
+<a href="https://github.com/Buddie-AI/Buddie"><img src="../assets/partners/buddie.png" alt="Buddie" height="40" style="margin: 10px;"></a>
+<a href="https://github.com/bytebase/bytebase"><img src="../assets/partners/bytebase.png" alt="Bytebase" height="40" style="margin: 10px;"></a>
+<a href="https://github.com/LazyAGI/LazyLLM"><img src="../assets/partners/LazyLLM.png" alt="LazyLLM" height="40" style="margin: 10px;"></a>
 
 </div>
 
@@ -537,7 +537,7 @@ The `make check` command runs:
 
 ### Contributing Guidelines
 
-For detailed contribution guidelines, code standards, and development practices, please see [CONTRIBUTING.md](CONTRIBUTING.md).
+For detailed contribution guidelines, code standards, and development practices, please see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 **Quick tips:**
 - Create a new branch for each feature or bug fix
@@ -550,7 +550,7 @@ For detailed contribution guidelines, code standards, and development practices,
 
 ## 📄 License
 
-[Apache License 2.0](LICENSE.txt)
+[Apache License 2.0](../LICENSE.txt)
 
 ---
 
