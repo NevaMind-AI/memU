@@ -88,7 +88,7 @@ Unlike traditional retrieval systems that wait for queries, MemU operates in **c
 
 ## 🎯 Proactive Use Cases
 
-### 1. **Contextual Assistance** 
+### 1. **Contextual Assistance**
 *Agent monitors conversation context and proactively surfaces relevant memories*
 ```python
 # User starts discussing a topic
@@ -100,7 +100,7 @@ User: "I'm thinking about that project..."
 - Past decisions and their outcomes
 - Relevant documents and resources
 
-Agent: "Based on your previous work on the dashboard redesign, 
+Agent: "Based on your previous work on the dashboard redesign,
         I noticed you preferred Material UI components..."
 ```
 
