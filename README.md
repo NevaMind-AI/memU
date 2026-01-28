@@ -98,8 +98,8 @@ python proactive.py
 MemU tracks: reading history, saved articles, search queries
 
 # When new content arrives:
-Agent: "I found 3 new papers on RAG optimization that align with 
-        your recent research on retrieval systems. One author 
+Agent: "I found 3 new papers on RAG optimization that align with
+        your recent research on retrieval systems. One author
         (Dr. Chen) you've cited before published yesterday."
 
 # Proactive behaviors:
@@ -119,9 +119,9 @@ Agent: "I found 3 new papers on RAG optimization that align with
 - Writing style and tone variations
 
 # Proactive email assistance:
-Agent: "You have 12 new emails. I've drafted responses for 3 routine 
+Agent: "You have 12 new emails. I've drafted responses for 3 routine
         requests and flagged 2 urgent items from your priority contacts.
-        Should I also reschedule tomorrow's meeting based on the 
+        Should I also reschedule tomorrow's meeting based on the
         conflict John mentioned?"
 
 # Autonomous actions:
@@ -141,9 +141,9 @@ Agent: "You have 12 new emails. I've drafted responses for 3 routine
 - Portfolio rebalancing triggers
 
 # Proactive alerts:
-Agent: "NVDA dropped 5% in after-hours trading. Based on your past 
-        behavior, you typically buy tech dips above 3%. Your current 
-        allocation allows for $2,000 additional exposure while 
+Agent: "NVDA dropped 5% in after-hours trading. Based on your past
+        behavior, you typically buy tech dips above 3%. Your current
+        allocation allows for $2,000 additional exposure while
         maintaining your 70/30 equity-bond target."
 
 # Continuous monitoring:
