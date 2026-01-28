@@ -1,8 +1,8 @@
 import asyncio
 import functools
-from typing import Any
+from typing import Any, cast
 
-import lazyllm
+import lazyllm  # type: ignore[import-untyped]
 from lazyllm import LOG
 
 
@@ -63,7 +63,7 @@ class LazyLLMClient:
         full_prompt = f"{prompt}\n\ntext:\n{text}"
         LOG.debug(f"Summarizing text with {self.llm_source}/{self.chat_model}")
         response = await self._call_async(client, full_prompt)
-        return response
+        return cast(str, response)
 
     async def vision(
         self,
@@ -110,7 +110,7 @@ class LazyLLMClient:
         )
         LOG.debug(f"embed {len(texts)} texts with {self.embed_source}/{self.embed_model}")
         response = await self._call_async(client, texts)
-        return response
+        return cast(list[list[float]], response)
 
     async def transcribe(
         self,
@@ -131,4 +131,4 @@ class LazyLLMClient:
         client = lazyllm.namespace("MEMU").OnlineModule(source=self.stt_source, model=self.stt_model, type="stt")
         LOG.debug(f"Transcribing audio with {self.stt_source}/{self.stt_model}: {audio_path}")
         response = await self._call_async(client, audio_path)
-        return response
+        return cast(str, response)
