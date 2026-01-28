@@ -2,7 +2,7 @@
 
 <div align="center">
 
-# MemU
+# memU
 
 ### Mémoire Proactive Toujours Active pour les Agents IA
 
@@ -20,117 +20,145 @@
 
 ---
 
-MemU est un **framework de mémoire proactive 7×24** qui apprend, anticipe et s'adapte continuellement. Il transforme les backends LLM passifs en agents intelligents avec une **mémoire toujours active** qui affiche proactivement des insights, prédit les besoins et fait évoluer le contexte sans requêtes explicites.
+memU est un framework de mémoire conçu pour les **agents proactifs 24/7**.
+Il est conçu pour une utilisation prolongée et **réduit considérablement le coût en tokens LLM** pour maintenir les agents toujours en ligne, rendant les agents toujours actifs et évolutifs pratiques dans les systèmes de production.
+memU **capture et comprend continuellement l'intention de l'utilisateur**. Même sans commande, l'agent peut détecter ce que vous êtes sur le point de faire et agir de lui-même.
 
 ---
 
 ## ⭐️ Mettez une étoile au dépôt
 
 <img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/star.gif" />
-Si vous trouvez MemU utile ou intéressant, une étoile GitHub ⭐️ serait grandement appréciée.
+Si vous trouvez memU utile ou intéressant, une étoile GitHub ⭐️ serait grandement appréciée.
 
 ---
 
-## ✨ Capacités Principales
+
+## ✨ Fonctionnalités Principales
 
 | Capacité | Description |
 |----------|-------------|
-| 🔄 **Apprentissage Continu** | Extraction de mémoire 7×24 de chaque interaction—conversations, documents, actions |
-| 🎯 **Récupération Proactive** | Anticipe les besoins d'information avant d'être demandé, affiche automatiquement le contexte pertinent |
-| 🧠 **Évolution du Contexte** | La structure de mémoire s'adapte en temps réel selon les patterns d'utilisation et les sujets émergents |
-| 🔍 **Intelligence Duale** | Rappel rapide basé sur embeddings + raisonnement LLM profond pour une compréhension complète |
-| 🎨 **Conscience Multimodale** | Mémoire unifiée à travers texte, images, audio, vidéo—se souvient de ce qu'il voit et entend |
-
+| 🤖 **Agent Proactif 24/7** | Agent de mémoire toujours actif qui travaille continuellement en arrière-plan—ne dort jamais, n'oublie jamais |
+| 🎯 **Capture d'Intention Utilisateur** | Comprend et mémorise automatiquement les objectifs, préférences et contexte de l'utilisateur à travers les sessions |
+| 💰 **Économique** | Réduit les coûts de tokens à long terme en cachant les insights et en évitant les appels LLM redondants |
 ---
 
 ## 🔄 Comment Fonctionne la Mémoire Proactive
 
-Contrairement aux systèmes de récupération traditionnels qui attendent les requêtes, MemU opère en **mode continu** :
+```bash
 
-### Mémoire Passive vs. Proactive
+cd examples/proactive
+python proactive.py
 
-| RAG Traditionnel | Mémoire Proactive MemU |
-|------------------|------------------------|
-| ❌ Attend les requêtes explicites | ✅ Surveille le contexte continuellement |
-| ❌ Récupération d'information réactive | ✅ Anticipe les besoins d'information |
-| ❌ Base de connaissances statique | ✅ Structure de mémoire auto-évolutive |
-| ❌ Traitement unique | ✅ Pipeline d'apprentissage toujours actif |
+```
+
+---
 
 ### Cycle de Vie de la Mémoire Proactive
 ```
 ┌─────────────────────────────────────────────────┐
-│  1. INGESTION CONTINUE                          │
-│  └─ Chaque conversation, document, action       │
-│     traitée automatiquement 7×24                │
+│  1. REQUÊTE INITIALE UTILISATEUR                │
+│  └─ Entrée utilisateur, contexte ou tout        │
+│     événement déclencheur                       │
+│     La conversation commence ici                │
 └─────────────────────────────────────────────────┘
                       ↓
-┌─────────────────────────────────────────────────┐
-│  2. EXTRACTION EN TEMPS RÉEL                    │
-│  └─ Création immédiate d'éléments de mémoire    │
-│     Pas de délais de batch, disponibilité       │
-│     instantanée                                 │
-└─────────────────────────────────────────────────┘
-                      ↓
-┌─────────────────────────────────────────────────┐
-│  3. STRUCTURATION PROACTIVE                     │
-│  └─ Auto-catégorisation en sujets évolutifs     │
-│     Organisation hiérarchique s'adapte à        │
-│     l'usage                                     │
-└─────────────────────────────────────────────────┘
-                      ↓
-┌─────────────────────────────────────────────────┐
-│  4. RÉCUPÉRATION ANTICIPATOIRE                  │
-│  └─ Affiche la mémoire pertinente sans prompt   │
-│     Suggestions et insights contextuels         │
-└─────────────────────────────────────────────────┘
+    ┌─────────────────────────────────────────────────┐
+    │  2. PLANIFICATION / ACTIONS DE L'AGENT          │
+    │  └─ Analyser la demande, exécuter les tâches    │
+    │     Récupérer les mémoires pertinentes pour     │
+    │     le contexte                                 │
+    └─────────────────────────────────────────────────┘
+                          ↓
+    ┌─────────────────────────────────────────────────┐
+    │  3. MÉMORISER & METTRE À JOUR LISTE DE TÂCHES   │
+    │  └─ Stocker nouveaux insights, faits,           │
+    │     préférences                                 │
+    │     Modifier la liste selon la progression      │
+    └─────────────────────────────────────────────────┘
+                          ↓
+    ┌─────────────────────────────────────────────────┐
+    │  4. PRÉDIRE L'INTENTION UTILISATEUR             │
+    │  └─ Anticiper les prochaines étapes et besoins  │
+    │     Préparer proactivement le contexte          │
+    │     pertinent                                   │
+    └─────────────────────────────────────────────────┘
+                          ↓
+    ┌─────────────────────────────────────────────────┐
+    │  5. BOUCLE (2 → 4)                              │
+    │  └─ Itération continue jusqu'à fin de tâche     │
+    │     Workflow proactif piloté par l'agent        │
+    └─────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 🎯 Cas d'Usage Proactifs
 
-### 1. **Assistance Contextuelle**
-*L'agent surveille le contexte de conversation et affiche proactivement les mémoires pertinentes*
+### 1. **Recommandation d'Information**
+*L'agent surveille les intérêts et affiche proactivement du contenu pertinent*
 ```python
-# L'utilisateur commence à discuter d'un sujet
-Utilisateur: "Je pense à ce projet..."
+# L'utilisateur recherche des sujets sur l'IA
+MemU suit: historique de lecture, articles sauvegardés, requêtes de recherche
 
-# MemU récupère automatiquement sans requête explicite:
-- Discussions précédentes sur le projet
-- Préférences et contraintes associées
-- Décisions passées et leurs résultats
-- Documents et ressources pertinents
+# Quand du nouveau contenu arrive:
+Agent: "J'ai trouvé 3 nouveaux articles sur l'optimisation RAG qui
+        correspondent à vos recherches récentes sur les systèmes de
+        récupération. Un auteur (Dr. Chen) que vous avez cité a publié hier."
 
-Agent: "Basé sur votre travail précédent sur le redesign du dashboard,
-        j'ai remarqué que vous préfériez les composants Material UI..."
+# Comportements proactifs:
+- Apprend les préférences de sujets des patterns de navigation
+- Suit les préférences de crédibilité auteur/source
+- Filtre le bruit selon l'historique d'engagement
+- Planifie les recommandations pour attention optimale
 ```
 
-### 2. **Préparation Prédictive**
-*L'agent anticipe les besoins futurs basé sur les patterns*
+### 2. **Gestion d'Email**
+*L'agent apprend les patterns de communication et gère la correspondance routinière*
 ```python
-# Détection de routine matinale
-L'utilisateur se connecte à 9h (heure habituelle)
+# MemU observe les patterns email au fil du temps:
+- Templates de réponse pour scénarios courants
+- Contacts prioritaires et mots-clés urgents
+- Préférences de planning et disponibilité
+- Variations de style d'écriture et de ton
 
-# MemU affiche proactivement:
-- Points de discussion pour le standup quotidien
-- Résumé des notifications de nuit
-- Tâches prioritaires basées sur le comportement passé
-- Contexte pertinent du travail d'hier
+# Assistance email proactive:
+Agent: "Vous avez 12 nouveaux emails. J'ai rédigé des réponses pour 3
+        demandes routinières et marqué 2 éléments urgents de vos contacts
+        prioritaires. Dois-je aussi reprogrammer la réunion de demain
+        selon le conflit mentionné par John?"
 
-Agent: "Bonjour! Voici ce qui est pertinent aujourd'hui..."
+# Actions autonomes:
+✓ Rédiger des réponses contextuelles
+✓ Catégoriser et prioriser la boîte de réception
+✓ Détecter les conflits de planning
+✓ Résumer les longs fils avec décisions clés
 ```
 
-### 3. **Gestion Autonome de Mémoire**
-*Le système s'auto-organise sans intervention manuelle*
+### 3. **Trading & Surveillance Financière**
+*L'agent suit le contexte marché et le comportement d'investissement utilisateur*
 ```python
-# À mesure que les interactions s'accumulent:
-✓ Crée automatiquement de nouvelles catégories pour les sujets émergents
-✓ Consolide les mémoires associées à travers les modalités
-✓ Identifie les patterns et extrait des insights de haut niveau
-✓ Supprime les informations obsolètes tout en préservant l'historique
+# MemU apprend les préférences de trading:
+- Tolérance au risque des décisions historiques
+- Secteurs et classes d'actifs préférés
+- Patterns de réponse aux événements marché
+- Déclencheurs de rééquilibrage de portefeuille
 
-# Résultat: Structure de mémoire toujours optimisée
+# Alertes proactives:
+Agent: "NVDA a chuté de 5% en after-hours. Selon votre comportement passé,
+        vous achetez typiquement les baisses tech supérieures à 3%. Votre
+        allocation actuelle permet $2,000 d'exposition supplémentaire tout
+        en maintenant votre cible 70/30 actions-obligations."
+
+# Surveillance continue:
+- Suivre les alertes prix liées aux seuils définis
+- Corréler événements d'actualité et impact portefeuille
+- Apprendre des recommandations exécutées vs. ignorées
+- Anticiper les opportunités de récolte de pertes fiscales
 ```
+
+
+...
 
 ---
 
