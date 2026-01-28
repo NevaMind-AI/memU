@@ -2,7 +2,7 @@
 
 <div align="center">
 
-# MemU
+# memU
 
 ### Always-On Proactive Memory for AI Agents
 
