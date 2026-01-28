@@ -89,6 +89,16 @@ def _default_memory_categories() -> list[CategoryConfig]:
     ]
 
 
+class LazyLLMSource(BaseModel):
+    source: str | None = Field(default=None, description="default source for lazyllm client backend")
+    llm_source: str | None = Field(default=None, description="LLM source for lazyllm client backend")
+    embed_source: str | None = Field(default=None, description="Embedding source for lazyllm client backend")
+    vlm_source: str | None = Field(default=None, description="VLM source for lazyllm client backend")
+    stt_source: str | None = Field(default=None, description="STT source for lazyllm client backend")
+    vlm_model: str = Field(default="qwen-vl-plus", description="Vision language model for lazyllm client backend")
+    stt_model: str = Field(default="qwen-audio-turbo", description="Speech-to-text model for lazyllm client backend")
+
+
 class LLMConfig(BaseModel):
     provider: str = Field(
         default="openai",
@@ -99,8 +109,9 @@ class LLMConfig(BaseModel):
     chat_model: str = Field(default="gpt-4o-mini")
     client_backend: str = Field(
         default="sdk",
-        description="Which LLM client backend to use: 'httpx' (httpx) or 'sdk' (official OpenAI).",
+        description="Which LLM client backend to use: 'httpx' (httpx), 'sdk' (official OpenAI), or 'lazyllm_backend' (for more LLM source like Qwen, Doubao, SIliconflow, etc.)",
     )
+    lazyllm_source: LazyLLMSource = Field(default=LazyLLMSource())
     endpoint_overrides: dict[str, str] = Field(
         default_factory=dict,
         description="Optional overrides for HTTP endpoints (keys: 'chat'/'summary').",
