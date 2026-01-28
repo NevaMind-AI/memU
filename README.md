@@ -20,7 +20,9 @@
 
 ---
 
-MemU is a **7×24 proactive memory framework** that continuously learns, anticipates, and adapts. It transforms passive LLM backends into intelligent agents with **always-on memory** that proactively surfaces insights, predicts needs, and evolves context without explicit queries.
+memU is a memory framework built for **24/7 proactive agents**.
+It is designed for long-running use and greatly **reduces the LLM token cost** of keeping agents always online, making always-on, evolving agents practical in production systems.
+memU **continuously captures and understands user intent**. Even without a command, the agent can tell what you are about to do and act on it by itself.
 
 ---
 
@@ -32,104 +34,127 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 ---
 
 
-## ✨ Core Capabilities
+## ✨ Core Features
 
 | Capability | Description |
 |------------|-------------|
-| 🔄 **Continuous Learning** | 7×24 memory extraction from every interaction—conversations, documents, actions |
-| 🎯 **Proactive Retrieval** | Anticipates information needs before being asked, surfaces relevant context automatically |
-| 🧠 **Context Evolution** | Memory structure adapts in real-time based on usage patterns and emerging topics |
-| 🔍 **Dual Intelligence** | Fast embedding-based recall + deep LLM reasoning for comprehensive understanding |
-| 🎨 **Multimodal Awareness** | Unified memory across text, images, audio, video—remembers what it sees and hears |
-
+| 🤖 **24/7 Proactive Agent** | Always-on memory agent that works continuously in the background—never sleeps, never forgets |
+| 🎯 **User Intention Capture** | Understands and remembers user goals, preferences, and context across sessions automatically |
+| 💰 **Cost Efficient** | Reduces long-running token costs by caching insights and avoiding redundant LLM calls |
 ---
 
 ## 🔄 How Proactive Memory Works
 
-Unlike traditional retrieval systems that wait for queries, MemU operates in **continuous mode**:
+```bash
 
-### Passive vs. Proactive Memory
+cd examples/proactive
+python proactive.py
 
-| Traditional RAG | MemU Proactive Memory |
-|-----------------|----------------------|
-| ❌ Waits for explicit queries | ✅ Monitors context continuously |
-| ❌ Reactive information retrieval | ✅ Anticipates information needs |
-| ❌ Static knowledge base | ✅ Self-evolving memory structure |
-| ❌ One-time processing | ✅ Always-on learning pipeline |
+```
+
+---
 
 ### Proactive Memory Lifecycle
 ```
 ┌─────────────────────────────────────────────────┐
-│  1. CONTINUOUS INGESTION                        │
-│  └─ Every conversation, document, action        │
-│     automatically processed 7×24                │
+│  1. USER INITIAL QUERY                          │
+│  └─ User input, context, or any trigger event   │
+│     Conversation starts here                    │
 └─────────────────────────────────────────────────┘
                       ↓
-┌─────────────────────────────────────────────────┐
-│  2. REAL-TIME EXTRACTION                        │
-│  └─ Immediate memory item creation              │
-│     No batch delays, instant availability       │
-└─────────────────────────────────────────────────┘
-                      ↓
-┌─────────────────────────────────────────────────┐
-│  3. PROACTIVE STRUCTURING                       │
-│  └─ Auto-categorization into evolving topics    │
-│     Hierarchical organization adapts to usage   │
-└─────────────────────────────────────────────────┘
-                      ↓
-┌─────────────────────────────────────────────────┐
-│  4. ANTICIPATORY RETRIEVAL                      │
-│  └─ Surfaces relevant memory without prompting  │
-│     Context-aware suggestions and insights      │
-└─────────────────────────────────────────────────┘
+    ┌─────────────────────────────────────────────────┐
+    │  2. AGENT PLANNING / ACTIONS                    │
+    │  └─ Analyze request, execute tasks              │
+    │     Retrieve relevant memories for context      │
+    └─────────────────────────────────────────────────┘
+                          ↓
+    ┌─────────────────────────────────────────────────┐
+    │  3. MEMORIZE & UPDATE TODOLIST                  │
+    │  └─ Store new insights, facts, preferences      │
+    │     Modify task list based on progress          │
+    └─────────────────────────────────────────────────┘
+                          ↓
+    ┌─────────────────────────────────────────────────┐
+    │  4. PREDICT USER INTENT                         │
+    │  └─ Anticipate next steps and needs             │
+    │     Proactively prepare relevant context        │
+    └─────────────────────────────────────────────────┘
+                          ↓
+    ┌─────────────────────────────────────────────────┐
+    │  5. LOOP (2 → 4)                                │
+    │  └─ Continuous iteration until task complete    │
+    │     Agent-driven proactive workflow             │
+    └─────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 🎯 Proactive Use Cases
 
-### 1. **Contextual Assistance**
-*Agent monitors conversation context and proactively surfaces relevant memories*
+### 1. **Information Recommendation**
+*Agent monitors interests and proactively surfaces relevant content*
 ```python
-# User starts discussing a topic
-User: "I'm thinking about that project..."
+# User has been researching AI topics
+MemU tracks: reading history, saved articles, search queries
 
-# MemU automatically retrieves without explicit query:
-- Previous project discussions
-- Related preferences and constraints
-- Past decisions and their outcomes
-- Relevant documents and resources
+# When new content arrives:
+Agent: "I found 3 new papers on RAG optimization that align with 
+        your recent research on retrieval systems. One author 
+        (Dr. Chen) you've cited before published yesterday."
 
-Agent: "Based on your previous work on the dashboard redesign,
-        I noticed you preferred Material UI components..."
+# Proactive behaviors:
+- Learns topic preferences from browsing patterns
+- Tracks author/source credibility preferences
+- Filters noise based on engagement history
+- Times recommendations for optimal attention
 ```
 
-### 2. **Predictive Preparation**
-*Agent anticipates upcoming needs based on patterns*
+### 2. **Email Management**
+*Agent learns communication patterns and handles routine correspondence*
 ```python
-# Morning routine detection
-User logs in at 9 AM (usual time)
+# MemU observes email patterns over time:
+- Response templates for common scenarios
+- Priority contacts and urgent keywords
+- Scheduling preferences and availability
+- Writing style and tone variations
 
-# MemU proactively surfaces:
-- Daily standup talking points
-- Overnight notifications summary
-- Priority tasks based on past behavior
-- Relevant context from yesterday's work
+# Proactive email assistance:
+Agent: "You have 12 new emails. I've drafted responses for 3 routine 
+        requests and flagged 2 urgent items from your priority contacts.
+        Should I also reschedule tomorrow's meeting based on the 
+        conflict John mentioned?"
 
-Agent: "Good morning! Here's what's relevant today..."
+# Autonomous actions:
+✓ Draft context-aware replies
+✓ Categorize and prioritize inbox
+✓ Detect scheduling conflicts
+✓ Summarize long threads with key decisions
 ```
 
-### 3. **Autonomous Memory Management**
-*System self-organizes without manual intervention*
+### 3. **Trading & Financial Monitoring**
+*Agent tracks market context and user investment behavior*
 ```python
-# As interactions accumulate:
-✓ Automatically creates new categories for emerging topics
-✓ Consolidates related memories across modalities
-✓ Identifies patterns and extracts higher-level insights
-✓ Prunes outdated information while preserving history
+# MemU learns trading preferences:
+- Risk tolerance from historical decisions
+- Preferred sectors and asset classes
+- Response patterns to market events
+- Portfolio rebalancing triggers
 
-# Result: Always-optimized memory structure
+# Proactive alerts:
+Agent: "NVDA dropped 5% in after-hours trading. Based on your past 
+        behavior, you typically buy tech dips above 3%. Your current 
+        allocation allows for $2,000 additional exposure while 
+        maintaining your 70/30 equity-bond target."
+
+# Continuous monitoring:
+- Track price alerts tied to user-defined thresholds
+- Correlate news events with portfolio impact
+- Learn from executed vs. ignored recommendations
+- Anticipate tax-loss harvesting opportunities
 ```
+
+
+...
 
 ---
 
