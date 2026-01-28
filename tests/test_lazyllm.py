@@ -15,7 +15,7 @@ import sys
 src_path = os.path.abspath("src")
 sys.path.insert(0, src_path)
 
-from memu.llm.lazyllm_client import LazyLLMClient
+from memu.llm.lazyllm_client import LazyLLMClient   # noqa: E402
 
 
 async def test_lazyllm_client():

@@ -29,7 +29,7 @@ src_path = str(project_root / "src")
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
-from memu.app import MemoryService
+from memu.app import MemoryService  # noqa: E402
 
 # ==========================================
 # PART 1: Conversation Memory Processing

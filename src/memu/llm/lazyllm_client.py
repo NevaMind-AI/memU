@@ -14,14 +14,14 @@ class LazyLLMClient:
     def __init__(
         self,
         *,
-        llm_source: str = None,
-        vlm_source: str = None,
-        embed_source: str = None,
-        stt_source: str = None,
-        chat_model: str = None,
-        vlm_model: str = None,
-        embed_model: str = None,
-        stt_model: str = None,
+        llm_source: str | None = None,
+        vlm_source: str | None = None,
+        embed_source: str | None = None,
+        stt_source: str | None = None,
+        chat_model: str | None = None,
+        vlm_model: str | None = None,
+        embed_model: str | None = None,
+        stt_model: str | None = None,
     ):
         self.llm_source = llm_source or self.DEFAULT_SOURCE
         self.vlm_source = vlm_source or self.DEFAULT_SOURCE
