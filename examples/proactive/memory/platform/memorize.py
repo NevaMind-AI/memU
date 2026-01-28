@@ -2,12 +2,12 @@ from typing import Any
 
 import aiohttp
 
+from ..config import memorize_config
+
 BASE_URL = "https://api.memu.so"
 API_KEY = "your memu api key"
 USER_ID = "claude_user"
 AGENT_ID = "claude_agent"
-
-from ..config import memorize_config
 
 
 async def memorize(conversation_messages: list[dict[str, Any]]) -> str | None:

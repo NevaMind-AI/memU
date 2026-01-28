@@ -20,11 +20,107 @@ async def trigger_memorize(messages: list[dict[str, any]]) -> bool:
     """Background task to memorize conversation messages."""
     try:
         await memorize(messages)
-        print("\n[Background] Memorization submitted.")
-        return True
     except Exception as e:
         print(f"\n[Background] Memorization failed: {e!r}")
         return False
+    else:
+        print("\n[Background] Memorization submitted.")
+        return True
+
+
+async def get_next_input(iteration: int) -> tuple[str | None, bool]:
+    """
+    Get the next input for the conversation.
+
+    Returns:
+        tuple of (input_text, should_break)
+        - input_text: The user input or todo-based input, None if should continue
+        - should_break: True if the loop should break
+    """
+    if iteration == 0:
+        return await get_user_input()
+
+    todos = await _get_todos()
+    if todos:
+        return f"Please continue with the following todos:\n{todos}", False
+
+    return await get_user_input()
+
+
+async def get_user_input() -> tuple[str | None, bool]:
+    """
+    Get input from the user.
+
+    Returns:
+        tuple of (input_text, should_break)
+    """
+    try:
+        user_input = input("\nYou: ").strip()
+    except EOFError:
+        return None, True
+
+    if not user_input:
+        return None, False
+
+    if user_input.lower() in ("quit", "exit"):
+        return None, True
+
+    return user_input, False
+
+
+async def process_response(client: ClaudeSDKClient) -> list[str]:
+    """Process the assistant response and return collected text parts."""
+    assistant_text_parts: list[str] = []
+
+    async for message in client.receive_response():
+        if isinstance(message, AssistantMessage):
+            for block in message.content:
+                if isinstance(block, TextBlock):
+                    print(f"Claude: {block.text}")
+                    assistant_text_parts.append(block.text)
+        elif isinstance(message, ResultMessage):
+            print(f"Result: {message.result}")
+
+    return assistant_text_parts
+
+
+async def check_and_memorize(conversation_messages: list[dict[str, any]]) -> None:
+    """Check if memorization threshold is reached and trigger if needed."""
+    if len(conversation_messages) >= N_MESSAGES_MEMORIZE:
+        print(f"\n[Info] Reached {N_MESSAGES_MEMORIZE} messages, triggering memorization...")
+        success = await trigger_memorize(conversation_messages.copy())
+        if success:
+            conversation_messages.clear()
+
+
+async def run_conversation_loop(client: ClaudeSDKClient) -> list[dict[str, any]]:
+    """Run the main conversation loop."""
+    conversation_messages: list[dict[str, any]] = []
+    iteration = 0
+
+    while True:
+        user_input, should_break = await get_next_input(iteration)
+
+        if should_break:
+            break
+        if user_input is None:
+            continue
+
+        conversation_messages.append({"role": "user", "content": user_input})
+        await client.query(user_input)
+
+        assistant_text_parts = await process_response(client)
+
+        if assistant_text_parts:
+            conversation_messages.append({
+                "role": "assistant",
+                "content": "\n".join(assistant_text_parts),
+            })
+
+        await check_and_memorize(conversation_messages)
+        iteration += 1
+
+    return conversation_messages
 
 
 async def main():
@@ -36,79 +132,16 @@ async def main():
         ],
     )
 
-    conversation_messages: list[dict[str, any]] = []
-    pending_tasks: list[asyncio.Task] = []
-
     print("Claude Autorun")
     print("Type 'quit' or 'exit' to end the session.")
     print("-" * 40)
 
-    round = 0
     async with ClaudeSDKClient(options=options) as client:
-        while True:
-            want_user_input = False
+        remaining_messages = await run_conversation_loop(client)
 
-            if round == 0:
-                want_user_input = True
-            else:
-                todos = await _get_todos()
-                if todos:
-                    user_input = f"Please continue with the following todos:\n{todos}"
-                else:
-                    want_user_input = True
-
-            if want_user_input:
-                try:
-                    user_input = input("\nYou: ").strip()
-                except EOFError:
-                    break
-
-                if not user_input:
-                    continue
-
-                if user_input.lower() in ("quit", "exit"):
-                    break
-
-            # Record user message
-            conversation_messages.append({"role": "user", "content": user_input})
-
-            # Send query to Claude
-            await client.query(user_input)
-
-            # Collect assistant response
-            assistant_text_parts: list[str] = []
-
-            async for message in client.receive_response():
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            print(f"Claude: {block.text}")
-                            assistant_text_parts.append(block.text)
-                elif isinstance(message, ResultMessage):
-                    print(f"Result: {message.result}")
-
-            # Record assistant message
-            if assistant_text_parts:
-                conversation_messages.append({"role": "assistant", "content": "\n".join(assistant_text_parts)})
-
-            # Check if we should trigger memorization
-            if len(conversation_messages) >= N_MESSAGES_MEMORIZE:
-                print(f"\n[Info] Reached {N_MESSAGES_MEMORIZE} messages, triggering memorization...")
-                success = await trigger_memorize(conversation_messages.copy())
-                if success:
-                    conversation_messages.clear()
-
-            round += 1
-
-    # User quit - memorize remaining messages if any
-    if conversation_messages:
+    if remaining_messages:
         print("\n[Info] Session ended, memorizing remaining messages...")
-        success = await trigger_memorize(conversation_messages.copy())
-
-    # Wait for all pending memorization tasks to complete
-    if pending_tasks:
-        print("[Info] Waiting for memorization tasks to complete...")
-        await asyncio.gather(*pending_tasks, return_exceptions=True)
+        await trigger_memorize(remaining_messages.copy())
 
     print("\nDone")
 
