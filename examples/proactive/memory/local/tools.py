@@ -1,9 +1,8 @@
-import os
 from typing import Any
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
-from memu.app import MemoryService
+from .common import get_memory_service
 
 USER_ID = "claude_user"
 
@@ -13,34 +12,7 @@ async def get_memory(args: dict[str, Any]) -> dict[str, Any]:
     """Retrieve memory from the memory API based on the provided query."""
     query = {"role": "user", "content": args["query"]}
 
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        msg = "Please set OPENAI_API_KEY environment variable"
-        raise ValueError(msg)
-
-    memory_service = MemoryService(
-        llm_profiles={
-            "default": {
-                "api_key": api_key,
-                "chat_model": "gpt-4o-mini",
-            },
-        },
-        retrieve_config={
-            "method": "rag",
-            "route_intention": False,
-            "sufficiency_check": False,
-            "category": {
-                "enabled": False,
-            },
-            "item": {
-                "enabled": True,
-                "top_k": 10,
-            },
-            "resource": {
-                "enabled": False,
-            },
-        },
-    )
+    memory_service = get_memory_service()
 
     result = await memory_service.retrieve(query, where={"user_id": USER_ID})
 
@@ -48,7 +20,7 @@ async def get_memory(args: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _get_todos() -> str:
-    memory_service = MemoryService()
+    memory_service = get_memory_service()
 
     result = await memory_service.list_memory_categories(where={"user_id": USER_ID})
 
