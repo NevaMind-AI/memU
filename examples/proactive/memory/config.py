@@ -48,3 +48,19 @@ memorize_config = {
         }
     ],
 }
+
+retrieve_config = {
+    "method": "rag",
+    "route_intention": False,
+    "sufficiency_check": False,
+    "category": {
+        "enabled": False,
+    },
+    "item": {
+        "enabled": True,
+        "top_k": 10,
+    },
+    "resource": {
+        "enabled": False,
+    },
+}
