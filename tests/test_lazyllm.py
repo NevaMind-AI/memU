@@ -15,7 +15,7 @@ import sys
 src_path = os.path.abspath("src")
 sys.path.insert(0, src_path)
 
-from memu.llm.lazyllm_client import LazyLLMClient   # noqa: E402
+from memu.llm.lazyllm_client import LazyLLMClient  # noqa: E402
 
 
 async def test_lazyllm_client():
@@ -44,7 +44,7 @@ async def test_lazyllm_client():
     # Test 1: Summarization
     print("\n[Test 1] Testing summarization...")
     try:
-        test_text = "这是一段关于Python编程的文本。Python是一种高级编程语言，具有简单易学的语法。它被广泛用于数据分析、机器学习和Web开发。"
+        test_text = "这是一段关于Python编程的文本。Python是一种高级编程语言，具有简单易学的语法。它被广泛用于数据分析、机器学习和Web开发。"  # noqa: RUF001
         result = await client.summarize(test_text)
         print("✓ Summarization successful")
         print(f"  Result: {result[:100]}...")
@@ -74,7 +74,7 @@ async def test_lazyllm_client():
     test_image_path = "examples/resources/images/image1.png"
     if os.path.exists(test_image_path):
         try:
-            result, response = await client.vision(prompt="描述这张图片的内容", image_path=test_image_path)
+            result, _ = await client.vision(prompt="描述这张图片的内容", image_path=test_image_path)
             print("✓ Vision successful")
             print(f"  Result: {result[:100]}...")
         except Exception as e:
