@@ -38,11 +38,11 @@ memorize_config = {
                 },
                 "rules": {
                     "ordinal": -1,
-                    "prompt": None,
+                    "prompt": "# Rules\nFor each action-like record, explictly mark it as [Done] or [Todo].",
                 },
                 "examples": {
                     "ordinal": 50,
-                    "prompt": "# Example\n## Output\n```markdown\n# Task\n## Task Objective\nThe user ask the agent to generate a code example for fastapi\n## Workflow\nThe agent suggest to use the code example from the document\nThe agent ask the user to specify the response type\n```",
+                    "prompt": "# Example\n## Output\n```markdown\n# Task\n## Task Objective\nThe user ask the agent to generate a code example for fastapi\n## Breakdown\n- [Done] The agent suggest to use the code example from the document\n- [Todo] The agent ask the user to specify the response type\n```",
                 },
             },
         }
