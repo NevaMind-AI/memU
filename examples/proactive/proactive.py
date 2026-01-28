@@ -51,9 +51,8 @@ async def get_next_input(iteration: int) -> tuple[str | None, bool]:
     print(f">>> Todos:\n{todos}\n")
     print("-" * 40)
 
-    if todos:
-        if "[todo]" in todos.lower():
-            return f"Please continue with the following todos:\n{todos}", False
+    if todos and "[todo]" in todos.lower():
+        return f"Please continue with the following todos:\n{todos}", False
 
     return await get_user_input()
 
