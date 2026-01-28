@@ -3,9 +3,9 @@ Unified Example: LazyLLM Integration Demo
 =========================================
 
 This example merges functionalities from:
-1. Example 1: Conversation Memory Processing 
-2. Example 2: Skill Extraction 
-3. Example 3: Multimodal Processing 
+1. Example 1: Conversation Memory Processing
+2. Example 2: Skill Extraction
+3. Example 3: Multimodal Processing
 
 It demonstrates how to use the LazyLLM backend for:
 - Processing conversation history
@@ -35,10 +35,11 @@ from memu.app import MemoryService
 # PART 1: Conversation Memory Processing
 # ==========================================
 
+
 async def run_conversation_memory_demo(service):
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("PART 1: Conversation Memory Processing")
-    print("="*60)
+    print("=" * 60)
 
     conversation_files = [
         "examples/resources/conversations/conv1.json",
@@ -48,7 +49,7 @@ async def run_conversation_memory_demo(service):
 
     total_items = 0
     categories = []
-    
+
     for conv_file in conversation_files:
         if not os.path.exists(conv_file):
             print(f"⚠ File not found: {conv_file}")
@@ -74,15 +75,16 @@ async def run_conversation_memory_demo(service):
 # PART 2: Skill Extraction
 # ==========================================
 
+
 async def run_skill_extraction_demo(service):
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("PART 2: Skill Extraction from Logs")
-    print("="*60)
+    print("=" * 60)
 
     # Configure prompt for skill extraction
     skill_prompt = """
     You are analyzing an agent execution log. Extract the key actions taken, their outcomes, and lessons learned.
-    
+
     Output MUST be valid XML wrapped in <skills> tags.
     Format:
     <skills>
@@ -96,25 +98,21 @@ async def run_skill_extraction_demo(service):
             </categories>
         </memory>
     </skills>
-    
+
     Text: {resource}
     """
-    
+
     # Update service config for skill extraction
     service.memorize_config.memory_types = ["skill"]
     service.memorize_config.memory_type_prompts = {"skill": skill_prompt}
-    
-    logs = [
-        "examples/resources/logs/log1.txt",
-        "examples/resources/logs/log2.txt", 
-        "examples/resources/logs/log3.txt"
-    ]
+
+    logs = ["examples/resources/logs/log1.txt", "examples/resources/logs/log2.txt", "examples/resources/logs/log3.txt"]
 
     all_skills = []
     for log_file in logs:
         if not os.path.exists(log_file):
             continue
-            
+
         print(f"  Processing log: {log_file}")
         try:
             result = await service.memorize(resource_url=log_file, modality="document")
@@ -136,10 +134,11 @@ async def run_skill_extraction_demo(service):
 # PART 3: Multimodal Memory
 # ==========================================
 
+
 async def run_multimodal_demo(service):
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("PART 3: Multimodal Memory Processing")
-    print("="*60)
+    print("=" * 60)
 
     # Configure for knowledge extraction
     xml_prompt = """
@@ -152,10 +151,10 @@ async def run_multimodal_demo(service):
             <categories><category>category_name</category></categories>
         </memory>
     </knowledge>
-    
+
     Content: {resource}
     """
-    
+
     service.memorize_config.memory_types = ["knowledge"]
     service.memorize_config.memory_type_prompts = {"knowledge": xml_prompt}
 
@@ -168,7 +167,7 @@ async def run_multimodal_demo(service):
     for res_file, modality in resources:
         if not os.path.exists(res_file):
             continue
-            
+
         print(f"  Processing {modality}: {res_file}")
         try:
             result = await service.memorize(resource_url=res_file, modality=modality)
@@ -187,25 +186,28 @@ async def run_multimodal_demo(service):
 # Helpers
 # ==========================================
 
+
 async def generate_markdown_output(categories, output_dir):
     for cat in categories:
         name = cat.get("name", "unknown")
         summary = cat.get("summary", "")
-        if not summary: continue
-        
+        if not summary:
+            continue
+
         with open(os.path.join(output_dir, f"{name}.md"), "w", encoding="utf-8") as f:
             f.write(f"# {name.replace('_', ' ').title()}\n\n")
             cleaned = summary.replace("<content>", "").replace("</content>", "").strip()
             f.write(cleaned)
 
+
 async def generate_skill_guide(skills, service, output_file):
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     skills_text = "\n\n".join(skills)
     prompt = f"Summarize these skills into a guide:\n\n{skills_text}"
-    
+
     # Use LazyLLM via service
     summary = await service.llm_client.summarize(text=prompt)
-    
+
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(summary)
 
@@ -214,9 +216,10 @@ async def generate_skill_guide(skills, service, output_file):
 # Main Entry
 # ==========================================
 
+
 async def main():
     print("Unified LazyLLM Example")
-    print("="*60)
+    print("=" * 60)
     # 1. Initialize Shared Service
     service = MemoryService(
         llm_profiles={
@@ -241,6 +244,7 @@ async def main():
     await run_conversation_memory_demo(service)
     # await run_skill_extraction_demo(service)
     # await run_multimodal_demo(service)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
