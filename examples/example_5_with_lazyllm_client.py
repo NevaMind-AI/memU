@@ -222,14 +222,17 @@ async def main():
         llm_profiles={
             "default": {
                 "client_backend": "lazyllm_backend",
-                "llm_source": "qwen",
-                "vlm_source": "qwen",
-                "embed_source": "qwen",
-                "stt_source": "qwen",
                 "chat_model": "qwen3-max",
-                "vlm_model": "qwen-vl-plus",
                 "embed_model": "text-embedding-v3",
-                "stt_model": "qwen-audio-turbo",
+                "lazyllm_source": {
+                    "source": "qwen",
+                    "llm_source": "qwen",
+                    "vlm_source": "qwen",
+                    "embed_source": "qwen",
+                    "stt_source": "qwen",
+                    "vlm_model": "qwen-vl-plus",
+                    "stt_model": "qwen-audio-turbo",
+                },
             },
         }
     )

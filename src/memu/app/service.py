@@ -121,14 +121,14 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             from memu.llm.lazyllm_client import LazyLLMClient
 
             return LazyLLMClient(
-                llm_source=cfg.llm_source or cfg.source,
-                vlm_source=cfg.vlm_source or cfg.source,
-                embed_source=cfg.embed_source or cfg.source,
-                stt_source=cfg.stt_source or cfg.source,
+                llm_source=cfg.lazyllm_source.llm_source or cfg.lazyllm_source.source,
+                vlm_source=cfg.lazyllm_source.vlm_source or cfg.lazyllm_source.source,
+                embed_source=cfg.lazyllm_source.embed_source or cfg.lazyllm_source.source,
+                stt_source=cfg.lazyllm_source.stt_source or cfg.lazyllm_source.source,
                 chat_model=cfg.chat_model,
                 embed_model=cfg.embed_model,
-                vlm_model=cfg.vlm_model,
-                stt_model=cfg.stt_model,
+                vlm_model=cfg.lazyllm_source.vlm_model,
+                stt_model=cfg.lazyllm_source.stt_model,
             )
         else:
             msg = f"Unknown llm_client_backend '{cfg.client_backend}'"
