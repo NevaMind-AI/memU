@@ -28,7 +28,7 @@ class Resource(BaseRecord):
 
 class MemoryItem(BaseRecord):
     resource_id: str | None
-    memory_type: MemoryType
+    memory_type: str
     summary: str
     embedding: list[float] | None = None
     happened_at: datetime | None = None
