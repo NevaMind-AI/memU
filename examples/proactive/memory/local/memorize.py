@@ -1,5 +1,6 @@
 import json
 import os
+from collections.abc import Awaitable
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,7 @@ from ..config import memorize_config
 USER_ID = "claude_user"
 
 
-async def dump_conversation_resource(
+def dump_conversation_resource(
     conversation_messages: list[dict[str, Any]],
 ) -> str:
     resource_data = {
@@ -32,7 +33,7 @@ async def dump_conversation_resource(
     return resource_url.as_posix()
 
 
-async def memorize(conversation_messages: list[dict[str, Any]]) -> str | None:
+def memorize(conversation_messages: list[dict[str, Any]]) -> Awaitable[dict[str, Any]]:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         msg = "Please set OPENAI_API_KEY environment variable"
@@ -48,8 +49,5 @@ async def memorize(conversation_messages: list[dict[str, Any]]) -> str | None:
         memorize_config=memorize_config,
     )
 
-    resource_url = await dump_conversation_resource(conversation_messages)
-    result = await memory_service.memorize(
-        resource_url=resource_url, modality="conversation", user={"user_id": USER_ID}
-    )
-    return result
+    resource_url = dump_conversation_resource(conversation_messages)
+    return memory_service.memorize(resource_url=resource_url, modality="conversation", user={"user_id": USER_ID})

@@ -14,17 +14,23 @@ from memory.local.tools import _get_todos, memu_server
 # os.environ["ANTHROPIC_API_KEY"] = ""
 
 N_MESSAGES_MEMORIZE = 2
+RUNNING_MEMORIZATION: asyncio.Task | None = None
 
 
 async def trigger_memorize(messages: list[dict[str, any]]) -> bool:
-    """Background task to memorize conversation messages."""
+    """Create a background task to memorize conversation messages.
+
+    Returns True if the task was successfully created and registered.
+    """
+    global RUNNING_MEMORIZATION
     try:
-        await memorize(messages)
+        memorize_awaitable = memorize(messages)
+        RUNNING_MEMORIZATION = asyncio.create_task(memorize_awaitable)
     except Exception as e:
-        print(f"\n[Background] Memorization failed: {e!r}")
+        print(f"\n[Memory] Memorization initialization failed: {e!r}")
         return False
     else:
-        print("\n[Background] Memorization submitted.")
+        print("\n[Memory] Memorization task submitted.")
         return True
 
 
@@ -85,12 +91,31 @@ async def process_response(client: ClaudeSDKClient) -> list[str]:
 
 
 async def check_and_memorize(conversation_messages: list[dict[str, any]]) -> None:
-    """Check if memorization threshold is reached and trigger if needed."""
-    if len(conversation_messages) >= N_MESSAGES_MEMORIZE:
-        print(f"\n[Info] Reached {N_MESSAGES_MEMORIZE} messages, triggering memorization...")
-        success = await trigger_memorize(conversation_messages.copy())
-        if success:
-            conversation_messages.clear()
+    """Check if memorization threshold is reached and trigger if needed.
+
+    Skips triggering if a previous memorization task is still running.
+    """
+    global RUNNING_MEMORIZATION
+
+    if len(conversation_messages) < N_MESSAGES_MEMORIZE:
+        return
+
+    # Check if there's a running memorization task
+    if RUNNING_MEMORIZATION is not None:
+        if not RUNNING_MEMORIZATION.done():
+            print("\n[Info] Have running memorization, skipping...")
+            return
+        # Previous task completed, check for exceptions
+        try:
+            RUNNING_MEMORIZATION.result()
+        except Exception as e:
+            print(f"\n[Memory] Memorization failed: {e!r}")
+        RUNNING_MEMORIZATION = None
+
+    print(f"\n[Info] Reached {N_MESSAGES_MEMORIZE} messages, triggering memorization...")
+    success = await trigger_memorize(conversation_messages.copy())
+    if success:
+        conversation_messages.clear()
 
 
 async def run_conversation_loop(client: ClaudeSDKClient) -> list[dict[str, any]]:
@@ -139,9 +164,28 @@ async def main():
     async with ClaudeSDKClient(options=options) as client:
         remaining_messages = await run_conversation_loop(client)
 
+    # Wait for any running memorization task to complete
+    global RUNNING_MEMORIZATION
+    if RUNNING_MEMORIZATION is not None and not RUNNING_MEMORIZATION.done():
+        print("\n[Info] Waiting for running memorization task to complete...")
+        try:
+            await RUNNING_MEMORIZATION
+            print("\n[Memory] Running memorization completed successfully.")
+        except Exception as e:
+            print(f"\n[Memory] Running memorization failed: {e!r}")
+        RUNNING_MEMORIZATION = None
+
+    # Memorize remaining messages and wait for completion
     if remaining_messages:
         print("\n[Info] Session ended, memorizing remaining messages...")
-        await trigger_memorize(remaining_messages.copy())
+        success = await trigger_memorize(remaining_messages.copy())
+        if success and RUNNING_MEMORIZATION is not None:
+            print("\n[Info] Waiting for final memorization to complete...")
+            try:
+                await RUNNING_MEMORIZATION
+                print("\n[Memory] Final memorization completed successfully.")
+            except Exception as e:
+                print(f"\n[Memory] Final memorization failed: {e!r}")
 
     print("\nDone")
 
