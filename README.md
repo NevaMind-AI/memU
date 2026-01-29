@@ -24,7 +24,7 @@ memU is a memory framework built for **24/7 proactive agents**.
 It is designed for long-running use and greatly **reduces the LLM token cost** of keeping agents always online, making always-on, evolving agents practical in production systems.
 memU **continuously captures and understands user intent**. Even without a command, the agent can tell what you are about to do and act on it by itself.
 
-check our [memU bot](memu.bot)
+check our [memU bot](https://memu.bot)
 
 ---
 
