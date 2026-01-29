@@ -102,6 +102,10 @@ warn_unused_ignores = false
 disable_error_code = ["attr-defined", "call-arg"]
 
 [[tool.mypy.overrides]]
+module = ["lazyllm.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = ["pgvector.*"]
 ignore_missing_imports = true
 

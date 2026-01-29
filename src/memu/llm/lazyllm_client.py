@@ -2,7 +2,7 @@ import asyncio
 import functools
 from typing import Any, cast
 
-import lazyllm  # type: ignore[import-untyped]
+import lazyllm
 from lazyllm import LOG
 
 
