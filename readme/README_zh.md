@@ -26,7 +26,7 @@ memU **持续捕获并理解用户意图**。即使没有明确指令，智能�
 
 ---
 
-## 🤖 [Moltbot (Clawdbot) Alternative](https://memu.bot)
+## 🤖 [OpenClaw (Moltbot, Clawdbot) Alternative](https://memu.bot)
 
 <img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/memUbot.png" />
 

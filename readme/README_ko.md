@@ -26,7 +26,7 @@ memU는 **사용자 의도를 지속적으로 캡처하고 이해**합니다. �
 
 ---
 
-## 🤖 [Moltbot (Clawdbot) Alternative](https://memu.bot)
+## 🤖 [OpenClaw (Moltbot, Clawdbot) Alternative](https://memu.bot)
 
 <img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/memUbot.png" />
 
