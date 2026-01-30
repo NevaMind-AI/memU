@@ -26,7 +26,7 @@ memU **captura y comprende continuamente la intención del usuario**. Incluso si
 
 ---
 
-## 🤖 [Moltbot (Clawdbot) Alternative](https://memu.bot)
+## 🤖 [openclaw (moltbot, clawdbot) alternative](https://memu.bot)
 
 <img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/memUbot.png" />
 
