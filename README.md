@@ -4,7 +4,7 @@
 
 # memU
 
-### Always-On Proactive Memory for AI Agents
+### 24/7 Always-On Proactive Memory for AI Agents
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -32,7 +32,7 @@ memU **continuously captures and understands user intent**. Even without a comma
 
 - **Download-and-use and simple** to get started.
 - Builds long-term memory to **understand user intent** and act proactively.
-- **Cuts LLM token cost** with smaller context.  
+- **Cuts LLM token cost** with smaller context.
 
 Try now: [memU bot](https://memu.bot)
 
