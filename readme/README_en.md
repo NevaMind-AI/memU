@@ -370,6 +370,7 @@ See [`examples/example_4_openrouter_memory.py`](../examples/example_4_openrouter
 Processes inputs in real-time and immediately updates memory:
 
 <img width="100%" alt="memorize" src="../assets/memorize.png" />
+
 ```python
 result = await service.memorize(
     resource_url="path/to/file.json",  # File path or URL
