@@ -26,6 +26,18 @@ memUは**ユーザーの意図を継続的にキャプチャして理解**しま
 
 ---
 
+## 🤖 [memU bot](https://memu.bot)
+
+<img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/memUbot.png" />
+
+- **ダウンロードしてすぐにご利用いただけます。導入も簡単です。**
+- ユーザーの意図を理解し、先回りして行動できる**長期記憶をエージェントに実装します。**
+- 必要なコンテキストを最小限に抑えることで、**LLM のトークンコスト削減にも貢献します。**
+
+Try now: [memU bot](https://memu.bot)
+
+---
+
 ## ⭐️ リポジトリにスターを
 
 <img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/star.gif" />
