@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.1](https://github.com/NevaMind-AI/memU/compare/v1.3.0...v1.3.1) (2026-01-30)
+
+
+### Bug Fixes
+
+* remove unused type: ignore comment and add lazyllm mypy override ([#275](https://github.com/NevaMind-AI/memU/issues/275)) ([0e490f7](https://github.com/NevaMind-AI/memU/commit/0e490f7333feecffaef0901cccb1c9a5dbb7bafb))
+
+
+### Documentation
+
+* fix name ([#291](https://github.com/NevaMind-AI/memU/issues/291)) ([fd0d179](https://github.com/NevaMind-AI/memU/commit/fd0d17998f6c0c9ba5c7e91964c39ee909f2b366))
+* fix readme lint ([#290](https://github.com/NevaMind-AI/memU/issues/290)) ([a7a5516](https://github.com/NevaMind-AI/memU/commit/a7a55169ecbc1579ae87dc68c5e09b1d62f07b56))
+* lint error ([#287](https://github.com/NevaMind-AI/memU/issues/287)) ([7f61dc7](https://github.com/NevaMind-AI/memU/commit/7f61dc72ffbadf849f227cf314bba7ce7964761b))
+* readme memubot ([#289](https://github.com/NevaMind-AI/memU/issues/289)) ([2f30798](https://github.com/NevaMind-AI/memU/commit/2f30798367e3591107e1e66a184d0dd4ad6c2f93))
+
 ## [1.3.0](https://github.com/NevaMind-AI/memU/compare/v1.2.0...v1.3.0) (2026-01-29)
 
 
