@@ -103,6 +103,35 @@ class HTTPLLMClient:
         self.timeout = timeout
         self.embed_model = embed_model or chat_model
 
+    async def chat(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int | None = None,
+        system_prompt: str | None = None,
+        temperature: float = 0.2,
+    ) -> tuple[str, dict[str, Any]]:
+        """Generic chat completion."""
+        messages: list[dict[str, Any]] = []
+        if system_prompt is not None:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        payload: dict[str, Any] = {
+            "model": self.chat_model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
+            resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers())
+            resp.raise_for_status()
+            data = resp.json()
+        logger.debug("HTTP LLM chat response: %s", data)
+        return self.backend.parse_summary_response(data), data
+
     async def summarize(
         self, text: str, max_tokens: int | None = None, system_prompt: str | None = None
     ) -> tuple[str, dict[str, Any]]:

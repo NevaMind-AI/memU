@@ -36,6 +36,33 @@ class OpenAISDKClient:
         self.embed_batch_size = embed_batch_size
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
 
+    async def chat(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int | None = None,
+        system_prompt: str | None = None,
+        temperature: float = 0.2,
+    ) -> tuple[str, ChatCompletion]:
+        """Generic chat completion."""
+        messages: list[ChatCompletionMessageParam] = []
+        if system_prompt is not None:
+            system_message: ChatCompletionSystemMessageParam = {"role": "system", "content": system_prompt}
+            messages.append(system_message)
+
+        user_message: ChatCompletionUserMessageParam = {"role": "user", "content": prompt}
+        messages.append(user_message)
+
+        response = await self.client.chat.completions.create(
+            model=self.chat_model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        content = response.choices[0].message.content
+        logger.debug("OpenAI chat response: %s", response)
+        return content or "", response
+
     async def summarize(
         self,
         text: str,
