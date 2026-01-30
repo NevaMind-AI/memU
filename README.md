@@ -26,7 +26,7 @@ memU **continuously captures and understands user intent**. Even without a comma
 
 ---
 
-## 🤖 [memU bot](https://memu.bot)
+## 🤖 [Moltbot (Clawdbot) Alternative](https://memu.bot)
 
 <img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/memUbot.png" />
 
