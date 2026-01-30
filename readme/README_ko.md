@@ -370,6 +370,7 @@ python tests/test_openrouter_vision.py
 입력을 실시간으로 처리하고 메모리를 즉시 업데이트:
 
 <img width="100%" alt="memorize" src="../assets/memorize.png" />
+
 ```python
 result = await service.memorize(
     resource_url="path/to/file.json",  # 파일 경로 또는 URL

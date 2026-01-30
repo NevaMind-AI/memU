@@ -368,6 +368,7 @@ python tests/test_openrouter_vision.py
 实时处理输入并立即更新记忆：
 
 <img width="100%" alt="memorize" src="../assets/memorize.png" />
+
 ```python
 result = await service.memorize(
     resource_url="path/to/file.json",  # 文件路径或 URL

@@ -370,6 +370,7 @@ Voir [`examples/example_4_openrouter_memory.py`](../examples/example_4_openroute
 Traite les entrées en temps réel et met à jour la mémoire immédiatement:
 
 <img width="100%" alt="memorize" src="../assets/memorize.png" />
+
 ```python
 result = await service.memorize(
     resource_url="path/to/file.json",  # Chemin de fichier ou URL
