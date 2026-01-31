@@ -58,7 +58,7 @@ jobs:
             extra-args: ""
             python-version: "3.13"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -85,7 +85,7 @@ jobs:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - name: Upload wheel artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: wheels-${{ matrix.label }}
           path: dist/*.whl
@@ -97,7 +97,7 @@ jobs:
     needs: release-please
     if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -114,7 +114,7 @@ jobs:
         run: uvx maturin sdist --out dist
 
       - name: Upload sdist artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sdist
           path: dist/*.tar.gz
@@ -134,14 +134,14 @@ jobs:
       contents: write
     steps:
       - name: Download wheel artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: wheels-*
           merge-multiple: true
           path: dist
 
       - name: Download sdist artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: sdist
           path: dist
