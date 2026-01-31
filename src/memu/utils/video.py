@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -49,9 +50,11 @@ class VideoFrameExtractor:
         safe_video_path = str(video_path_obj)
 
         # Create output path if not provided
+        created_temp_file = False
         if output_path is None:
             with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
                 output_path = tmp_file.name
+            created_temp_file = True
         output_path_obj = VideoFrameExtractor._resolve_output_path(output_path)
         safe_output_path = str(output_path_obj)
 
@@ -102,10 +105,14 @@ class VideoFrameExtractor:
                 return str(output_path_obj)
 
         except subprocess.CalledProcessError as e:
+            if created_temp_file and output_path_obj.exists():
+                output_path_obj.unlink()
             msg = f"ffmpeg/ffprobe failed: {e.stderr}"
             logger.exception(msg)
             raise RuntimeError(msg) from e
         except subprocess.TimeoutExpired as e:
+            if created_temp_file and output_path_obj.exists():
+                output_path_obj.unlink()
             msg = "Video processing timed out"
             logger.exception(msg)
             raise RuntimeError(msg) from e
@@ -138,8 +145,10 @@ class VideoFrameExtractor:
         safe_video_path = str(video_path_obj)
 
         # Create output directory if not provided
+        created_temp_dir = False
         if output_dir is None:
             output_dir = tempfile.mkdtemp()
+            created_temp_dir = True
 
         output_dir_obj = VideoFrameExtractor._ensure_safe_cli_path(Path(output_dir))
         output_dir_obj.mkdir(parents=True, exist_ok=True)
@@ -197,10 +206,14 @@ class VideoFrameExtractor:
 
             logger.info(f"Successfully extracted {len(frame_paths)} frames to: {output_dir_obj}")
         except subprocess.CalledProcessError as e:
+            if created_temp_dir and output_dir_obj.exists():
+                shutil.rmtree(output_dir_obj)
             msg = f"ffmpeg/ffprobe failed: {e.stderr}"
             logger.exception(msg)
             raise RuntimeError(msg) from e
         except subprocess.TimeoutExpired as e:
+            if created_temp_dir and output_dir_obj.exists():
+                shutil.rmtree(output_dir_obj)
             msg = "Video processing timed out"
             logger.exception(msg)
             raise RuntimeError(msg) from e
