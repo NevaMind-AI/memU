@@ -448,8 +448,6 @@ result = await service.retrieve(
 - `where={"agent_id__in": ["1", "2"]}` - Multi-agent coordination
 - Omit `where` for global context awareness
 
-> 📚 **For complete API documentation**, see [SERVICE_API.md](docs/SERVICE_API.md) - includes proactive workflow patterns, pipeline configuration, and real-time update handling.
-
 ---
 
 ## 💡 Proactive Scenarios
