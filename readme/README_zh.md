@@ -38,6 +38,43 @@ Try now: [memU bot](https://memu.bot)
 
 ---
 
+## 🗃️ 记忆即文件系统，文件系统即记忆
+
+memU 将**记忆视为文件系统**——结构化、层次化、即时可访问。
+
+| 文件系统 | memU 记忆 |
+|---------|----------|
+| 📁 文件夹 | 🏷️ 类别（自动组织的主题） |
+| 📄 文件 | 🧠 记忆条目（提取的事实、偏好、技能） |
+| 🔗 符号链接 | 🔄 交叉引用（关联的记忆相互链接） |
+| 📂 挂载点 | 📥 资源（对话、文档、图像） |
+
+**为何重要：**
+- **像浏览目录一样导航记忆**——从宽泛的类别深入到具体的事实
+- **即时挂载新知识**——对话和文档成为可查询的记忆
+- **万物互联**——记忆相互引用，构建连接的知识图谱
+- **持久化且可迁移**——像文件一样导出、备份和迁移记忆
+
+```
+memory/
+├── preferences/
+│   ├── communication_style.md
+│   └── topic_interests.md
+├── relationships/
+│   ├── contacts/
+│   └── interaction_history/
+├── knowledge/
+│   ├── domain_expertise/
+│   └── learned_skills/
+└── context/
+    ├── recent_conversations/
+    └── pending_tasks/
+```
+
+正如文件系统将原始字节转化为有组织的数据，memU 将原始交互转化为**结构化、可搜索、主动式的智能**。
+
+---
+
 ## ⭐️ 给项目点个星
 
 <img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/star.gif" />

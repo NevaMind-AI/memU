@@ -38,6 +38,43 @@ Try now: [memU bot](https://memu.bot)
 
 ---
 
+## 🗃️ La Mémoire comme Système de Fichiers, le Système de Fichiers comme Mémoire
+
+memU traite la **mémoire comme un système de fichiers**—structurée, hiérarchique et instantanément accessible.
+
+| Système de Fichiers | Mémoire memU |
+|--------------------|--------------|
+| 📁 Dossiers | 🏷️ Catégories (sujets auto-organisés) |
+| 📄 Fichiers | 🧠 Éléments de Mémoire (faits, préférences, compétences extraites) |
+| 🔗 Liens symboliques | 🔄 Références croisées (mémoires liées connectées) |
+| 📂 Points de montage | 📥 Ressources (conversations, documents, images) |
+
+**Pourquoi c'est important :**
+- **Naviguez dans les mémoires** comme dans des répertoires—explorez des catégories larges jusqu'aux faits spécifiques
+- **Montez de nouvelles connaissances** instantanément—les conversations et documents deviennent de la mémoire interrogeable
+- **Liez tout de manière croisée**—les mémoires se référencent mutuellement, construisant un graphe de connaissances connecté
+- **Persistant et portable**—exportez, sauvegardez et transférez la mémoire comme des fichiers
+
+```
+memory/
+├── preferences/
+│   ├── communication_style.md
+│   └── topic_interests.md
+├── relationships/
+│   ├── contacts/
+│   └── interaction_history/
+├── knowledge/
+│   ├── domain_expertise/
+│   └── learned_skills/
+└── context/
+    ├── recent_conversations/
+    └── pending_tasks/
+```
+
+Tout comme un système de fichiers transforme des octets bruts en données organisées, memU transforme les interactions brutes en **intelligence structurée, recherchable et proactive**.
+
+---
+
 ## ⭐️ Mettez une étoile au dépôt
 
 <img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/star.gif" />

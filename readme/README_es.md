@@ -38,6 +38,43 @@ Try now: [memU bot](https://memu.bot)
 
 ---
 
+## 🗃️ Memoria como Sistema de Archivos, Sistema de Archivos como Memoria
+
+memU trata la **memoria como un sistema de archivos**—estructurada, jerárquica e instantáneamente accesible.
+
+| Sistema de Archivos | Memoria memU |
+|--------------------|--------------|
+| 📁 Carpetas | 🏷️ Categorías (temas auto-organizados) |
+| 📄 Archivos | 🧠 Elementos de Memoria (hechos, preferencias, habilidades extraídas) |
+| 🔗 Enlaces simbólicos | 🔄 Referencias cruzadas (memorias relacionadas enlazadas) |
+| 📂 Puntos de montaje | 📥 Recursos (conversaciones, documentos, imágenes) |
+
+**Por qué esto importa:**
+- **Navega memorias** como si exploraras directorios—profundiza desde categorías amplias a hechos específicos
+- **Monta nuevo conocimiento** instantáneamente—conversaciones y documentos se convierten en memoria consultable
+- **Enlaza todo cruzadamente**—las memorias se referencian entre sí, construyendo un grafo de conocimiento conectado
+- **Persistente y portable**—exporta, respalda y transfiere memoria como archivos
+
+```
+memory/
+├── preferences/
+│   ├── communication_style.md
+│   └── topic_interests.md
+├── relationships/
+│   ├── contacts/
+│   └── interaction_history/
+├── knowledge/
+│   ├── domain_expertise/
+│   └── learned_skills/
+└── context/
+    ├── recent_conversations/
+    └── pending_tasks/
+```
+
+Así como un sistema de archivos convierte bytes crudos en datos organizados, memU transforma interacciones crudas en **inteligencia estructurada, buscable y proactiva**.
+
+---
+
 ## ⭐️ Dale una estrella al repositorio
 
 <img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/star.gif" />
