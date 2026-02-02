@@ -38,6 +38,43 @@ Try now: [memU bot](https://memu.bot)
 
 ---
 
+## 🗃️ Memory as File System, File System as Memory
+
+memU treats **memory like a file system**—structured, hierarchical, and instantly accessible.
+
+| File System | memU Memory |
+|-------------|-------------|
+| 📁 Folders | 🏷️ Categories (auto-organized topics) |
+| 📄 Files | 🧠 Memory Items (extracted facts, preferences, skills) |
+| 🔗 Symlinks | 🔄 Cross-references (related memories linked) |
+| 📂 Mount points | 📥 Resources (conversations, documents, images) |
+
+**Why this matters:**
+- **Navigate memories** like browsing directories—drill down from broad categories to specific facts
+- **Mount new knowledge** instantly—conversations and documents become queryable memory
+- **Cross-link everything**—memories reference each other, building a connected knowledge graph
+- **Persistent & portable**—export, backup, and transfer memory like files
+
+```
+memory/
+├── preferences/
+│   ├── communication_style.md
+│   └── topic_interests.md
+├── relationships/
+│   ├── contacts/
+│   └── interaction_history/
+├── knowledge/
+│   ├── domain_expertise/
+│   └── learned_skills/
+└── context/
+    ├── recent_conversations/
+    └── pending_tasks/
+```
+
+Just as a file system turns raw bytes into organized data, memU transforms raw interactions into **structured, searchable, proactive intelligence**.
+
+---
+
 ## ⭐️ Star the repository
 
 <img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/star.gif" />
