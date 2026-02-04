@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import logging
+import os
+from typing import Optional
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
@@ -61,6 +63,16 @@ class _OpenRouterEmbeddingBackend(_EmbeddingBackend):
     def parse_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
         return [cast(list[float], d["embedding"]) for d in data["data"]]
 
+    def _load_proxies() -> Optional[dict[str, str]]:
+    proxy = os.getenv("MEMU_HTTP_PROXY") or os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
+    if not proxy:
+        return None
+    return {
+        "http://": proxy,
+        "https://": proxy,
+    }
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +114,7 @@ class HTTPLLMClient:
         )
         self.timeout = timeout
         self.embed_model = embed_model or chat_model
+        self.proxies = _load_proxies()
 
     async def summarize(
         self, text: str, max_tokens: int | None = None, system_prompt: str | None = None
@@ -109,7 +122,7 @@ class HTTPLLMClient:
         payload = self.backend.build_summary_payload(
             text=text, system_prompt=system_prompt, chat_model=self.chat_model, max_tokens=max_tokens
         )
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, proxies = self.proxies) as client:
             resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
             data = resp.json()
@@ -159,7 +172,7 @@ class HTTPLLMClient:
             max_tokens=max_tokens,
         )
 
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, proxies = self.proxies) as client:
             resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
             data = resp.json()
@@ -210,7 +223,7 @@ class HTTPLLMClient:
                 if language:
                     data["language"] = language
 
-                async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout * 3) as client:
+                async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout * 3, proxies = self.proxies) as client:
                     resp = await client.post(
                         "/v1/audio/transcriptions",
                         files=files,
