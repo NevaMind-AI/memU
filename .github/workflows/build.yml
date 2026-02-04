@@ -11,7 +11,7 @@ jobs:
         python-version: ["3.13"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv & set Python
         uses: astral-sh/setup-uv@v7
