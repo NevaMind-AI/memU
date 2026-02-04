@@ -155,7 +155,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101"]
+"tests/*" = ["S101", "C901"]
 
 [tool.ruff.format]
 preview = true
