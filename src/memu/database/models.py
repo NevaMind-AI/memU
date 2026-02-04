@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 import pendulum
 from pydantic import BaseModel, ConfigDict, Field
@@ -49,9 +49,11 @@ class Resource(BaseRecord):
 
 class MemoryItem(BaseRecord):
     resource_id: str | None
-    memory_type: MemoryType
+    memory_type: str
     summary: str
     embedding: list[float] | None = None
+    happened_at: datetime | None = None
+    extra: dict[str, Any] = {}
     # Reinforcement tracking for salience-aware memory
     content_hash: str | None = None
     reinforcement_count: int = 1

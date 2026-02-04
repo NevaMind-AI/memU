@@ -115,6 +115,51 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
 
         return result
 
+    def list_items_by_ref_ids(
+        self, ref_ids: list[str], where: Mapping[str, Any] | None = None
+    ) -> dict[str, MemoryItem]:
+        """List items by their ref_id in the extra column.
+
+        Args:
+            ref_ids: List of ref_ids to query.
+            where: Additional filter conditions.
+
+        Returns:
+            Dict mapping item_id -> MemoryItem for items whose extra.ref_id is in ref_ids.
+        """
+        if not ref_ids:
+            return {}
+
+        from sqlalchemy import func
+
+        with self._sessions.session() as session:
+            stmt = select(self._memory_item_model)
+            filters = self._build_filters(self._memory_item_model, where)
+            # Add filter for json_extract(extra, '$.ref_id') IN ref_ids (only rows with ref_id key)
+            ref_id_col = func.json_extract(self._memory_item_model.extra, "$.ref_id")
+            filters.append(ref_id_col.isnot(None))
+            filters.append(ref_id_col.in_(ref_ids))
+            if filters:
+                stmt = stmt.where(*filters)
+            rows = session.exec(stmt).all()
+
+        result: dict[str, MemoryItem] = {}
+        for row in rows:
+            item = MemoryItem(
+                id=row.id,
+                resource_id=row.resource_id,
+                memory_type=row.memory_type,
+                summary=row.summary,
+                embedding=self._normalize_embedding(row.embedding_json),
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+                **self._scope_kwargs_from(row),
+            )
+            result[row.id] = item
+            self.items[row.id] = item
+
+        return result
+
     def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
         """Clear items matching the where clause.
 
@@ -218,6 +263,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         memory_type: MemoryType | None = None,
         summary: str | None = None,
         embedding: list[float] | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> MemoryItem:
         """Update an existing memory item.
 
@@ -226,6 +272,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             memory_type: New memory type (optional).
             summary: New summary text (optional).
             embedding: New embedding vector (optional).
+            extra: Extra data to merge into existing extra dict (optional).
 
         Returns:
             Updated MemoryItem object.
@@ -247,6 +294,11 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
                 row.summary = summary
             if embedding is not None:
                 row.embedding_json = self._prepare_embedding(embedding)
+            if extra is not None:
+                # Incremental update: merge new keys into existing extra dict
+                current_extra = row.extra or {}
+                merged_extra = {**current_extra, **extra}
+                row.extra = merged_extra
             row.updated_at = self._now()
 
             session.add(row)
