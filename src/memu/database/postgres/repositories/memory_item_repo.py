@@ -51,6 +51,38 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
                 result[item.id] = item
         return result
 
+    def list_items_by_ref_ids(
+        self, ref_ids: list[str], where: Mapping[str, Any] | None = None
+    ) -> dict[str, MemoryItem]:
+        """List items by their ref_id in the extra column.
+
+        Args:
+            ref_ids: List of ref_ids to query.
+            where: Additional filter conditions.
+
+        Returns:
+            Dict mapping item_id -> MemoryItem for items whose extra->>'ref_id' is in ref_ids.
+        """
+        if not ref_ids:
+            return {}
+
+        from sqlmodel import select
+
+        filters = self._build_filters(self._sqla_models.MemoryItem, where)
+        # Add filter for extra->>'ref_id' IN ref_ids (only rows with ref_id key)
+        ref_id_col = self._sqla_models.MemoryItem.extra["ref_id"].astext
+        filters.append(ref_id_col.isnot(None))
+        filters.append(ref_id_col.in_(ref_ids))
+
+        with self._sessions.session() as session:
+            rows = session.scalars(select(self._sqla_models.MemoryItem).where(*filters)).all()
+            result: dict[str, MemoryItem] = {}
+            for row in rows:
+                row.embedding = self._normalize_embedding(row.embedding)
+                item = self._cache_item(row)
+                result[item.id] = item
+        return result
+
     def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
         from sqlmodel import delete, select
 
@@ -110,6 +142,7 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         memory_type: MemoryType | None = None,
         summary: str | None = None,
         embedding: list[float] | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> MemoryItem:
         from sqlmodel import select
 
@@ -128,6 +161,11 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
                 item.summary = summary
             if embedding is not None:
                 item.embedding = self._prepare_embedding(embedding)
+            if extra is not None:
+                # Incremental update: merge new keys into existing extra dict
+                current_extra = item.extra or {}
+                merged_extra = {**current_extra, **extra}
+                item.extra = merged_extra
 
             item.updated_at = now
             session.add(item)

@@ -351,43 +351,16 @@ class RetrieveMixin:
         store = state["store"]
         where_filters = state.get("where") or {}
         items_pool = store.memory_item_repo.list_items(where_filters)
-
-        # Check if reference-aware retrieval is enabled
-        use_refs = getattr(self.retrieve_config.item, "use_category_references", False)
-        referenced_item_ids: set[str] = set()
-
-        if use_refs:
-            referenced_item_ids = self._extract_referenced_item_ids(state)
-
         qvec = state.get("query_vector")
         if qvec is None:
             embed_client = self._get_step_embedding_client(step_context)
             qvec = (await embed_client.embed([state["active_query"]]))[0]
             state["query_vector"] = qvec
-
-        # Get vector search results
-        vector_hits = store.memory_item_repo.vector_search_items(
+        state["item_hits"] = store.memory_item_repo.vector_search_items(
             qvec,
             self.retrieve_config.item.top_k,
             where=where_filters,
         )
-
-        # If we have referenced items, prioritize them
-        if referenced_item_ids:
-            # Add referenced items that aren't already in hits
-            existing_ids = {item_id for item_id, _ in vector_hits}
-            ref_hits = []
-            for ref_id in referenced_item_ids:
-                if ref_id not in existing_ids:
-                    # Give referenced items a high score (1.0) since they're explicitly cited
-                    ref_hits.append((ref_id, 1.0))
-
-            # Combine: referenced items first, then vector search results
-            state["item_hits"] = ref_hits + vector_hits
-            state["referenced_item_ids"] = list(referenced_item_ids)
-        else:
-            state["item_hits"] = vector_hits
-
         state["item_pool"] = items_pool
         return state
 
@@ -643,10 +616,26 @@ class RetrieveMixin:
             return state
 
         where_filters = state.get("where") or {}
-        category_ids = [cat["id"] for cat in state.get("category_hits", [])]
+        category_hits = state.get("category_hits", [])
+        category_ids = [cat["id"] for cat in category_hits]
         llm_client = self._get_step_llm_client(step_context)
         store = state["store"]
-        items_pool = store.memory_item_repo.list_items(where_filters)
+
+        use_refs = getattr(self.retrieve_config.item, "use_category_references", False)
+        ref_ids: list[str] = []
+        if use_refs and category_hits:
+            # Extract all ref_ids from category summaries
+            from memu.utils.references import extract_references
+
+            for cat in category_hits:
+                summary = cat.get("summary") or ""
+                ref_ids.extend(extract_references(summary))
+        if ref_ids:
+            # Query items by ref_ids
+            items_pool = store.memory_item_repo.list_items_by_ref_ids(ref_ids, where_filters)
+        else:
+            items_pool = store.memory_item_repo.list_items(where_filters)
+
         relations = store.category_item_repo.list_relations(where_filters)
         category_pool = state.get("category_pool") or store.memory_category_repo.list_categories(where_filters)
         state["item_hits"] = await self._llm_rank_items(

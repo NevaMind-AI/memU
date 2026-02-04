@@ -22,6 +22,32 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             return dict(self.items)
         return {mid: item for mid, item in self.items.items() if matches_where(item, where)}
 
+    def list_items_by_ref_ids(
+        self, ref_ids: list[str], where: Mapping[str, Any] | None = None
+    ) -> dict[str, MemoryItem]:
+        """List items by their ref_id in the extra column.
+
+        Args:
+            ref_ids: List of ref_ids to query.
+            where: Additional filter conditions.
+
+        Returns:
+            Dict mapping item_id -> MemoryItem for items whose extra.ref_id is in ref_ids.
+        """
+        if not ref_ids:
+            return {}
+        ref_id_set = set(ref_ids)
+        result: dict[str, MemoryItem] = {}
+        for mid, item in self.items.items():
+            # Check where filter first
+            if where and not matches_where(item, where):
+                continue
+            # Check if ref_id is in the requested set
+            item_ref_id = (item.extra or {}).get("ref_id")
+            if item_ref_id and item_ref_id in ref_id_set:
+                result[mid] = item
+        return result
+
     def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
         if not where:
             matches = self.items.copy()
@@ -78,6 +104,7 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         memory_type: MemoryType | None = None,
         summary: str | None = None,
         embedding: list[float] | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> MemoryItem:
         item = self.items.get(item_id)
         if item is None:
@@ -90,6 +117,11 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             item.summary = summary
         if embedding is not None:
             item.embedding = embedding
+        if extra is not None:
+            # Incremental update: merge new keys into existing extra dict
+            current_extra = item.extra or {}
+            merged_extra = {**current_extra, **extra}
+            item.extra = merged_extra
 
         self.items[item_id] = item
         return item
