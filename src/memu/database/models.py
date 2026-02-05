@@ -80,70 +80,17 @@ class MemoryItem(BaseRecord):
     embedding: list[float] | None = None
     happened_at: datetime | None = None
     extra: dict[str, Any] = {}
-    # extra may contains:
+    # extra may contain:
     # # reinforcement tracking fields
     # - content_hash: str
     # - reinforcement_count: int
     # - last_reinforced_at: str (isoformat)
     # # Reference tracking field
     # - ref_id: str
-
-    when_to_use: str | None = Field(default=None, description="Hint for when this memory should be retrieved")
-    metadata: dict[str, Any] | None = Field(default=None, description="Type-specific metadata")
-    tool_calls: list[ToolCallResult] | None = Field(default=None, description="Tool call history for tool memories")
-
-    def add_tool_call(self, tool_call: ToolCallResult) -> None:
-        """Add a tool call result to this memory (for tool type memories)."""
-        if self.memory_type != "tool":
-            msg = "add_tool_call can only be used with tool type memories"
-            raise ValueError(msg)
-        tool_call.ensure_hash()
-        if self.tool_calls is None:
-            self.tool_calls = []
-        self.tool_calls.append(tool_call)
-
-    def get_tool_statistics(self, recent_n: int = 20) -> dict[str, float]:
-        """Calculate statistics for the most recent N tool calls.
-
-        Returns:
-            Dictionary with avg_time_cost, success_rate, avg_score, avg_token_cost
-        """
-        if not self.tool_calls:
-            return {
-                "total_calls": 0,
-                "recent_calls_analyzed": 0,
-                "avg_time_cost": 0.0,
-                "success_rate": 0.0,
-                "avg_score": 0.0,
-                "avg_token_cost": 0.0,
-            }
-
-        recent_calls = self.tool_calls[-recent_n:]
-        recent_count = len(recent_calls)
-
-        # Calculate statistics
-        total_time = sum(c.time_cost for c in recent_calls)
-        avg_time_cost = total_time / recent_count if recent_count > 0 else 0.0
-
-        successful = sum(1 for c in recent_calls if c.success)
-        success_rate = successful / recent_count if recent_count > 0 else 0.0
-
-        total_score = sum(c.score for c in recent_calls)
-        avg_score = total_score / recent_count if recent_count > 0 else 0.0
-
-        valid_token_calls = [c for c in recent_calls if c.token_cost >= 0]
-        avg_token_cost = (
-            sum(c.token_cost for c in valid_token_calls) / len(valid_token_calls) if valid_token_calls else 0.0
-        )
-
-        return {
-            "total_calls": len(self.tool_calls),
-            "recent_calls_analyzed": recent_count,
-            "avg_time_cost": round(avg_time_cost, 3),
-            "success_rate": round(success_rate, 4),
-            "avg_score": round(avg_score, 3),
-            "avg_token_cost": round(avg_token_cost, 2),
-        }
+    # # Tool memory fields
+    # - when_to_use: str - Hint for when this memory should be retrieved
+    # - metadata: dict - Type-specific metadata (e.g., tool_name, avg_success_rate)
+    # - tool_calls: list[dict] - Tool call history for tool memories (serialized ToolCallResult)
 
 
 class MemoryCategory(BaseRecord):

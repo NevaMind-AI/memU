@@ -9,7 +9,7 @@ import pendulum
 from memu.database.inmemory.repositories.filter import matches_where
 from memu.database.inmemory.state import InMemoryState
 from memu.database.inmemory.vector import cosine_topk, cosine_topk_salience
-from memu.database.models import MemoryItem, MemoryType, ToolCallResult, compute_content_hash
+from memu.database.models import MemoryItem, MemoryType, compute_content_hash
 from memu.database.repositories.memory_item import MemoryItemRepo
 
 
@@ -85,11 +85,9 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         embedding: list[float],
         user_data: dict[str, Any],
         reinforce: bool = False,
-        when_to_use: str | None = None,
-        metadata: dict[str, Any] | None = None,
-        tool_calls: list[ToolCallResult] | None = None,
+        tool_record: dict[str, Any] | None = None,
     ) -> MemoryItem:
-        if reinforce:
+        if reinforce and memory_type != "tool":
             return self.create_item_reinforce(
                 resource_id=resource_id,
                 memory_type=memory_type,
@@ -98,6 +96,16 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
                 user_data=user_data,
             )
 
+        # Build extra dict with tool_record fields at top level
+        extra: dict[str, Any] = {}
+        if tool_record:
+            if tool_record.get("when_to_use") is not None:
+                extra["when_to_use"] = tool_record["when_to_use"]
+            if tool_record.get("metadata") is not None:
+                extra["metadata"] = tool_record["metadata"]
+            if tool_record.get("tool_calls") is not None:
+                extra["tool_calls"] = tool_record["tool_calls"]
+
         mid = str(uuid.uuid4())
         it = self.memory_item_model(
             id=mid,
@@ -105,9 +113,7 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             memory_type=memory_type,
             summary=summary,
             embedding=embedding,
-            when_to_use=when_to_use,
-            metadata=metadata,
-            tool_calls=tool_calls,
+            extra=extra if extra else {},
             **user_data,
         )
         self.items[mid] = it
@@ -223,9 +229,7 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         summary: str | None = None,
         embedding: list[float] | None = None,
         extra: dict[str, Any] | None = None,
-        when_to_use: str | None = None,
-        metadata: dict[str, Any] | None = None,
-        tool_calls: list[ToolCallResult] | None = None,
+        tool_record: dict[str, Any] | None = None,
     ) -> MemoryItem:
         item = self.items.get(item_id)
         if item is None:
@@ -238,17 +242,21 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             item.summary = summary
         if embedding is not None:
             item.embedding = embedding
+
+        # Merge extra and tool_record into existing extra dict
+        current_extra = item.extra or {}
         if extra is not None:
-            # Incremental update: merge new keys into existing extra dict
-            current_extra = item.extra or {}
-            merged_extra = {**current_extra, **extra}
-            item.extra = merged_extra
-        if when_to_use is not None:
-            item.when_to_use = when_to_use
-        if metadata is not None:
-            item.metadata = metadata
-        if tool_calls is not None:
-            item.tool_calls = tool_calls
+            current_extra = {**current_extra, **extra}
+        if tool_record is not None:
+            # Merge tool_record fields at top level
+            if tool_record.get("when_to_use") is not None:
+                current_extra["when_to_use"] = tool_record["when_to_use"]
+            if tool_record.get("metadata") is not None:
+                current_extra["metadata"] = tool_record["metadata"]
+            if tool_record.get("tool_calls") is not None:
+                current_extra["tool_calls"] = tool_record["tool_calls"]
+        if extra is not None or tool_record is not None:
+            item.extra = current_extra
 
         self.items[item_id] = item
         return item

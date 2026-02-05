@@ -37,6 +37,16 @@ MemoryItem = models.MemoryItem
 MemoryType = models.MemoryType
 ToolCallResult = models.ToolCallResult
 
+# Import tool memory utility functions
+util_tool_spec = importlib.util.spec_from_file_location("util_tool", src_path / "memu" / "utils" / "tool.py")
+assert util_tool_spec is not None
+assert util_tool_spec.loader is not None
+util_tool = importlib.util.module_from_spec(util_tool_spec)
+util_tool_spec.loader.exec_module(util_tool)
+
+add_tool_call = util_tool.add_tool_call
+get_tool_statistics = util_tool.get_tool_statistics
+
 
 class TestToolCallResult:
     """Tests for ToolCallResult model."""
@@ -125,19 +135,20 @@ class TestMemoryItemToolType:
         assert "tool" in valid_types
 
     def test_create_tool_memory(self):
-        """Test creating a tool type memory item."""
+        """Test creating a tool type memory item with tool fields in extra."""
         item = MemoryItem(
             resource_id=None,
             memory_type="tool",
             summary="file_reader tool usage for config files",
-            when_to_use="When needing to read configuration files",
-            metadata={"tool_name": "file_reader", "avg_success_rate": 0.95},
+            extra={
+                "when_to_use": "When needing to read configuration files",
+                "metadata": {"tool_name": "file_reader", "avg_success_rate": 0.95},
+            },
         )
 
         assert item.memory_type == "tool"
-        assert item.when_to_use == "When needing to read configuration files"
-        assert item.metadata is not None
-        assert item.metadata["tool_name"] == "file_reader"
+        assert item.extra["when_to_use"] == "When needing to read configuration files"
+        assert item.extra["metadata"]["tool_name"] == "file_reader"
 
     def test_add_tool_call(self):
         """Test adding tool call results to a tool memory."""
@@ -156,12 +167,12 @@ class TestMemoryItemToolType:
             score=1.0,
         )
 
-        item.add_tool_call(tool_call)
+        add_tool_call(item, tool_call)
 
-        assert item.tool_calls is not None
-        assert len(item.tool_calls) == 1
-        assert item.tool_calls[0].tool_name == "calculator"
-        assert item.tool_calls[0].call_hash != ""  # ensure_hash was called
+        tool_calls = item.extra.get("tool_calls", [])
+        assert len(tool_calls) == 1
+        assert tool_calls[0]["tool_name"] == "calculator"
+        assert tool_calls[0]["call_hash"] != ""  # ensure_hash was called
 
     def test_add_tool_call_wrong_type(self):
         """Test that add_tool_call fails for non-tool memories."""
@@ -178,7 +189,7 @@ class TestMemoryItemToolType:
         )
 
         with pytest.raises(ValueError, match="can only be used with tool type memories"):
-            item.add_tool_call(tool_call)
+            add_tool_call(item, tool_call)
 
     def test_get_tool_statistics_empty(self):
         """Test statistics for memory with no tool calls."""
@@ -188,7 +199,7 @@ class TestMemoryItemToolType:
             summary="empty tool memory",
         )
 
-        stats = item.get_tool_statistics()
+        stats = get_tool_statistics(item)
 
         assert stats["total_calls"] == 0
         assert stats["recent_calls_analyzed"] == 0
@@ -199,24 +210,21 @@ class TestMemoryItemToolType:
 
     def test_get_tool_statistics(self):
         """Test statistics calculation for tool calls."""
+        # Tool calls are stored as dicts in extra
         item = MemoryItem(
             resource_id=None,
             memory_type="tool",
             summary="calculator tool",
-            tool_calls=[
-                ToolCallResult(
-                    tool_name="calc", input="1+1", output="2", success=True, time_cost=0.1, score=1.0, token_cost=10
-                ),
-                ToolCallResult(
-                    tool_name="calc", input="2+2", output="4", success=True, time_cost=0.2, score=0.9, token_cost=15
-                ),
-                ToolCallResult(
-                    tool_name="calc", input="bad", output="error", success=False, time_cost=0.5, score=0.0, token_cost=5
-                ),
-            ],
+            extra={
+                "tool_calls": [
+                    {"tool_name": "calc", "input": "1+1", "output": "2", "success": True, "time_cost": 0.1, "score": 1.0, "token_cost": 10},
+                    {"tool_name": "calc", "input": "2+2", "output": "4", "success": True, "time_cost": 0.2, "score": 0.9, "token_cost": 15},
+                    {"tool_name": "calc", "input": "bad", "output": "error", "success": False, "time_cost": 0.5, "score": 0.0, "token_cost": 5},
+                ]
+            },
         )
 
-        stats = item.get_tool_statistics()
+        stats = get_tool_statistics(item)
 
         assert stats["total_calls"] == 3
         assert stats["recent_calls_analyzed"] == 3
@@ -231,15 +239,17 @@ class TestMemoryItemToolType:
             resource_id=None,
             memory_type="tool",
             summary="tool with many calls",
-            tool_calls=[
-                ToolCallResult(tool_name="t", input="1", output="1", success=False, time_cost=1.0, score=0.0),
-                ToolCallResult(tool_name="t", input="2", output="2", success=True, time_cost=0.1, score=1.0),
-                ToolCallResult(tool_name="t", input="3", output="3", success=True, time_cost=0.1, score=1.0),
-            ],
+            extra={
+                "tool_calls": [
+                    {"tool_name": "t", "input": "1", "output": "1", "success": False, "time_cost": 1.0, "score": 0.0},
+                    {"tool_name": "t", "input": "2", "output": "2", "success": True, "time_cost": 0.1, "score": 1.0},
+                    {"tool_name": "t", "input": "3", "output": "3", "success": True, "time_cost": 0.1, "score": 1.0},
+                ]
+            },
         )
 
         # Only analyze last 2 calls
-        stats = item.get_tool_statistics(recent_n=2)
+        stats = get_tool_statistics(item, recent_n=2)
 
         assert stats["total_calls"] == 3
         assert stats["recent_calls_analyzed"] == 2
@@ -247,45 +257,47 @@ class TestMemoryItemToolType:
 
 
 class TestMemoryItemNewFields:
-    """Tests for new MemoryItem fields."""
+    """Tests for tool-related fields stored in extra."""
 
     def test_when_to_use_field(self):
-        """Test when_to_use field for retrieval hints."""
+        """Test when_to_use field stored in extra for retrieval hints."""
         item = MemoryItem(
             resource_id=None,
             memory_type="profile",
             summary="User prefers dark mode",
-            when_to_use="When configuring UI settings or themes",
+            extra={"when_to_use": "When configuring UI settings or themes"},
         )
 
-        assert item.when_to_use == "When configuring UI settings or themes"
+        assert item.extra["when_to_use"] == "When configuring UI settings or themes"
 
     def test_metadata_field(self):
-        """Test metadata field for type-specific data."""
+        """Test metadata field stored in extra for type-specific data."""
         item = MemoryItem(
             resource_id=None,
             memory_type="event",
             summary="User attended conference",
-            metadata={
-                "event_date": "2026-01-15",
-                "location": "San Francisco",
-                "attendees": ["Alice", "Bob"],
+            extra={
+                "metadata": {
+                    "event_date": "2026-01-15",
+                    "location": "San Francisco",
+                    "attendees": ["Alice", "Bob"],
+                }
             },
         )
 
-        assert item.metadata is not None
-        assert item.metadata["event_date"] == "2026-01-15"
-        assert item.metadata["location"] == "San Francisco"
-        assert len(item.metadata["attendees"]) == 2
+        assert item.extra.get("metadata") is not None
+        assert item.extra["metadata"]["event_date"] == "2026-01-15"
+        assert item.extra["metadata"]["location"] == "San Francisco"
+        assert len(item.extra["metadata"]["attendees"]) == 2
 
     def test_default_values(self):
-        """Test that new fields have proper defaults."""
+        """Test that extra defaults to empty dict."""
         item = MemoryItem(
             resource_id=None,
             memory_type="knowledge",
             summary="Python is a programming language",
         )
 
-        assert item.when_to_use is None
-        assert item.metadata is None
-        assert item.tool_calls is None
+        assert item.extra.get("when_to_use") is None
+        assert item.extra.get("metadata") is None
+        assert item.extra.get("tool_calls") is None
