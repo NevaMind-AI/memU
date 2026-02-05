@@ -109,6 +109,15 @@ ignore_missing_imports = true
 module = ["pgvector.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["langgraph.*", "langchain_core.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["memu.integrations.langgraph", "tests.integrations.test_langgraph"]
+ignore_missing_imports = true
+disallow_any_unimported = false
+
 [tool.ruff]
 target-version = "py313"
 line-length = 120
