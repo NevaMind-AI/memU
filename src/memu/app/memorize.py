@@ -836,7 +836,7 @@ class MemorizeMixin:
         )
         try:
             client = llm_client or self._get_llm_client()
-            response = await client.summarize(segment_text, system_prompt=system_prompt)
+            response = await client.chat(segment_text, system_prompt=system_prompt)
             return response.strip() if response else None
         except Exception:
             logger.exception("Failed to summarize segment")
