@@ -1,18 +1,24 @@
+"""Base repository class for PostgreSQL backend."""
+
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
 from typing import Any
 
-import pendulum
-
+from memu.database.base import RepoBaseMixin
 from memu.database.postgres.session import SessionManager
 from memu.database.state import DatabaseState
 
 logger = logging.getLogger(__name__)
 
 
-class PostgresRepoBase:
+class PostgresRepoBase(RepoBaseMixin):
+    """Base class for PostgreSQL repository implementations.
+
+    Inherits common functionality from RepoBaseMixin and provides
+    PostgreSQL-specific embedding normalization for pgvector type.
+    """
+
     def __init__(
         self,
         *,
@@ -22,29 +28,53 @@ class PostgresRepoBase:
         scope_fields: list[str],
         use_vector: bool = True,
     ) -> None:
+        """Initialize base repository.
+
+        Args:
+            state: Shared database state for caching.
+            sqla_models: SQLAlchemy model definitions.
+            sessions: Session manager for database connections.
+            scope_fields: List of user scope field names.
+            use_vector: Whether to use vector operations (default: True).
+        """
         self._state = state
         self._sqla_models = sqla_models
         self._sessions = sessions
         self._scope_fields = scope_fields
         self._use_vector = use_vector
 
-    def _scope_kwargs_from(self, obj: Any) -> dict[str, Any]:
-        return {field: getattr(obj, field, None) for field in self._scope_fields}
-
     def _normalize_embedding(self, embedding: Any) -> list[float] | None:
+        """Normalize embedding from various formats to list[float].
+
+        PostgreSQL with pgvector stores embeddings as vector objects that
+        may have a to_list() method, or as string representations.
+
+        Args:
+            embedding: Embedding in various formats (pgvector, str, list, or None).
+
+        Returns:
+            Normalized embedding as list of floats, or None if invalid.
+
+        Note:
+            This is PostgreSQL-specific due to pgvector type handling.
+            SQLite uses JSON storage with a different normalization approach.
+        """
         if embedding is None:
             return None
+        # Handle pgvector objects with to_list method
         if hasattr(embedding, "to_list"):
             try:
                 return [float(x) for x in embedding.to_list()]
             except Exception:
                 logger.debug("Could not convert pgvector value %s", embedding)
                 return None
+        # Handle string representation (e.g., "[0.1, 0.2, 0.3]")
         if isinstance(embedding, str):
             stripped = embedding.strip("[]")
             if not stripped:
                 return []
             return [float(x) for x in stripped.split(",")]
+        # Handle list format
         try:
             return [float(x) for x in embedding]
         except Exception:
@@ -52,62 +82,21 @@ class PostgresRepoBase:
             return None
 
     def _prepare_embedding(self, embedding: list[float] | None) -> Any:
+        """Prepare embedding for PostgreSQL storage.
+
+        Args:
+            embedding: Embedding as list of floats or None.
+
+        Returns:
+            Embedding ready for pgvector storage, or None.
+
+        Note:
+            This is PostgreSQL-specific. pgvector accepts lists directly.
+            SQLite requires JSON serialization.
+        """
         if embedding is None:
             return None
         return embedding
-
-    def _merge_and_commit(self, obj: Any) -> None:
-        with self._sessions.session() as session:
-            session.merge(obj)
-            session.commit()
-
-    def _now(self) -> pendulum.DateTime:
-        return pendulum.now("UTC")
-
-    def _build_filters(self, model: Any, where: Mapping[str, Any] | None) -> list[Any]:
-        if not where:
-            return []
-        filters: list[Any] = []
-        for raw_key, expected in where.items():
-            if expected is None:
-                continue
-            field, op = [*raw_key.split("__", 1), None][:2]
-            column = getattr(model, str(field), None)
-            if column is None:
-                msg = f"Unknown filter field '{field}' for model '{model.__name__}'"
-                raise ValueError(msg)
-            if op == "in":
-                if isinstance(expected, str):
-                    filters.append(column == expected)
-                else:
-                    filters.append(column.in_(expected))
-            else:
-                filters.append(column == expected)
-        return filters
-
-    @staticmethod
-    def _matches_where(obj: Any, where: Mapping[str, Any] | None) -> bool:
-        if not where:
-            return True
-        for raw_key, expected in where.items():
-            if expected is None:
-                continue
-            field, op = [*raw_key.split("__", 1), None][:2]
-            actual = getattr(obj, str(field), None)
-            if op == "in":
-                if isinstance(expected, str):
-                    if actual != expected:
-                        return False
-                else:
-                    try:
-                        if actual not in expected:
-                            return False
-                    except TypeError:
-                        return False
-            else:
-                if actual != expected:
-                    return False
-        return True
 
 
 __all__ = ["PostgresRepoBase"]
