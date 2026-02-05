@@ -6,10 +6,11 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
+import pendulum
 from sqlmodel import delete, select
 
-from memu.database.inmemory.vector import cosine_topk
-from memu.database.models import MemoryItem, MemoryType
+from memu.database.inmemory.vector import cosine_topk, cosine_topk_salience
+from memu.database.models import MemoryItem, MemoryType, compute_content_hash
 from memu.database.repositories.memory_item import MemoryItemRepo
 from memu.database.sqlite.repositories.base import SQLiteRepoBase
 from memu.database.sqlite.schema import SQLiteSQLAModels
@@ -215,6 +216,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
+        reinforce: bool = False,
     ) -> MemoryItem:
         """Create a new memory item.
 
@@ -224,10 +226,20 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             summary: Memory summary text.
             embedding: Embedding vector.
             user_data: User scope data.
+            reinforce: If True, reinforce existing item instead of creating duplicate.
 
         Returns:
             Created MemoryItem object.
         """
+        if reinforce:
+            return self.create_item_reinforce(
+                resource_id=resource_id,
+                memory_type=memory_type,
+                summary=summary,
+                embedding=embedding,
+                user_data=user_data,
+            )
+
         now = self._now()
         row = self._memory_item_model(
             resource_id=resource_id,
@@ -252,6 +264,109 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             created_at=row.created_at,
             updated_at=row.updated_at,
             **user_data,
+        )
+        self.items[row.id] = item
+        return item
+
+    def create_item_reinforce(
+        self,
+        *,
+        resource_id: str,
+        memory_type: MemoryType,
+        summary: str,
+        embedding: list[float],
+        user_data: dict[str, Any],
+    ) -> MemoryItem:
+        """Create or reinforce a memory item with deduplication.
+
+        If an item with the same content hash exists in the same scope,
+        reinforce it instead of creating a duplicate.
+
+        Args:
+            resource_id: Associated resource ID.
+            memory_type: Type of memory.
+            summary: Memory summary text.
+            embedding: Embedding vector.
+            user_data: User scope data.
+
+        Returns:
+            Created or reinforced MemoryItem object.
+        """
+        from sqlalchemy import func
+
+        content_hash = compute_content_hash(summary, memory_type)
+
+        with self._sessions.session() as session:
+            # Check for existing item with same hash in same scope (deduplication)
+            # Use json_extract(extra, '$.content_hash') for query
+            content_hash_col = func.json_extract(self._memory_item_model.extra, "$.content_hash")
+            filters = [content_hash_col == content_hash]
+            filters.extend(self._build_filters(self._memory_item_model, user_data))
+
+            existing = session.exec(select(self._memory_item_model).where(*filters)).first()
+
+            if existing:
+                # Reinforce existing memory instead of creating duplicate
+                current_extra = existing.extra or {}
+                current_count = current_extra.get("reinforcement_count", 1)
+                existing.extra = {
+                    **current_extra,
+                    "reinforcement_count": current_count + 1,
+                    "last_reinforced_at": self._now().isoformat(),
+                }
+                existing.updated_at = self._now()
+                session.add(existing)
+                session.commit()
+                session.refresh(existing)
+
+                item = MemoryItem(
+                    id=existing.id,
+                    resource_id=existing.resource_id,
+                    memory_type=existing.memory_type,
+                    summary=existing.summary,
+                    embedding=self._normalize_embedding(existing.embedding_json),
+                    created_at=existing.created_at,
+                    updated_at=existing.updated_at,
+                    extra=existing.extra,
+                    **self._scope_kwargs_from(existing),
+                )
+                self.items[existing.id] = item
+                return item
+
+            # Create new item with salience tracking in extra
+            now = self._now()
+            item_extra = user_data.pop("extra", {}) if "extra" in user_data else {}
+            item_extra.update({
+                "content_hash": content_hash,
+                "reinforcement_count": 1,
+                "last_reinforced_at": now.isoformat(),
+            })
+
+            row = self._memory_item_model(
+                resource_id=resource_id,
+                memory_type=memory_type,
+                summary=summary,
+                embedding_json=self._prepare_embedding(embedding),
+                extra=item_extra,
+                created_at=now,
+                updated_at=now,
+                **user_data,
+            )
+
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+
+        item = MemoryItem(
+            id=row.id,
+            resource_id=row.resource_id,
+            memory_type=row.memory_type,
+            summary=row.summary,
+            embedding=embedding,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            extra=row.extra,
+            **self._scope_kwargs_from(row),
         )
         self.items[row.id] = item
         return item
@@ -335,7 +450,13 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             del self.items[item_id]
 
     def vector_search_items(
-        self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+        *,
+        ranking: str = "similarity",
+        recency_decay_days: float = 30.0,
     ) -> list[tuple[str, float]]:
         """Perform vector similarity search on memory items.
 
@@ -345,15 +466,46 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             query_vec: Query embedding vector.
             top_k: Maximum number of results to return.
             where: Optional filter conditions.
+            ranking: Ranking strategy - "similarity" (default) or "salience".
+            recency_decay_days: Half-life for recency decay in salience ranking.
 
         Returns:
             List of (item_id, similarity_score) tuples.
         """
         # Load items from database with filters
         pool = self.list_items(where)
-        # Use brute-force cosine similarity
+
+        if ranking == "salience":
+            # Salience-aware ranking: similarity x reinforcement x recency
+            # Read values from extra dict
+            corpus = [
+                (
+                    i.id,
+                    i.embedding,
+                    (i.extra or {}).get("reinforcement_count", 1),
+                    self._parse_datetime((i.extra or {}).get("last_reinforced_at")),
+                )
+                for i in pool.values()
+            ]
+            return cosine_topk_salience(query_vec, corpus, k=top_k, recency_decay_days=recency_decay_days)
+
+        # Default: pure cosine similarity (backward compatible)
         hits = cosine_topk(query_vec, [(i.id, i.embedding) for i in pool.values()], k=top_k)
         return hits
+
+    @staticmethod
+    def _parse_datetime(dt_str: str | None) -> pendulum.DateTime | None:
+        """Parse ISO datetime string from extra dict."""
+        if dt_str is None:
+            return None
+        try:
+            parsed = pendulum.parse(dt_str)
+        except (ValueError, TypeError):
+            return None
+        else:
+            if isinstance(parsed, pendulum.DateTime):
+                return parsed
+            return None
 
     def load_existing(self) -> None:
         """Load all existing items from database into cache."""

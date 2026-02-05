@@ -599,6 +599,7 @@ class MemorizeMixin:
         # Changed: now stores (item_id, summary) tuples for reference support
         category_memory_updates: dict[str, list[tuple[str, str]]] = {}
 
+        reinforce = self.memorize_config.enable_item_reinforcement
         for (memory_type, summary_text, cat_names), emb in zip(structured_entries, item_embeddings, strict=True):
             item = store.memory_item_repo.create_item(
                 resource_id=resource_id,
@@ -606,8 +607,12 @@ class MemorizeMixin:
                 summary=summary_text,
                 embedding=emb,
                 user_data=dict(user or {}),
+                reinforce=reinforce,
             )
             items.append(item)
+            if reinforce and item.extra.get("reinforcement_count", 1) > 1:
+                # existing item
+                continue
             mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
             for cid in mapped_cat_ids:
                 rels.append(store.category_item_repo.link_item_category(item.id, cid, user_data=dict(user or {})))
@@ -1025,10 +1030,10 @@ Summary:"""
 
         # Update extra column for referenced items
         for short_id in referenced_short_ids:
-            item_id = short_id_to_item_id.get(short_id)
-            if item_id:
+            matched_item_id = short_id_to_item_id.get(short_id)
+            if matched_item_id:
                 store.memory_item_repo.update_item(
-                    item_id=item_id,
+                    item_id=matched_item_id,
                     extra={"ref_id": short_id},
                 )
 

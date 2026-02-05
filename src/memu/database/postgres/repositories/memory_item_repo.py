@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any
 
-from memu.database.models import MemoryItem, MemoryType
+from memu.database.models import MemoryItem, MemoryType, compute_content_hash
 from memu.database.postgres.repositories.base import PostgresRepoBase
 from memu.database.postgres.session import SessionManager
 from memu.database.state import DatabaseState
@@ -116,7 +118,17 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
+        reinforce: bool = False,
     ) -> MemoryItem:
+        if reinforce:
+            return self.create_item_reinforce(
+                resource_id=resource_id,
+                memory_type=memory_type,
+                summary=summary,
+                embedding=embedding,
+                user_data=user_data,
+            )
+
         item = self._memory_item_model(
             resource_id=resource_id,
             memory_type=memory_type,
@@ -128,6 +140,69 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         )
 
         with self._sessions.session() as session:
+            session.add(item)
+            session.commit()
+            session.refresh(item)
+
+        self.items[item.id] = item
+        return item
+
+    def create_item_reinforce(
+        self,
+        *,
+        resource_id: str | None = None,
+        memory_type: MemoryType,
+        summary: str,
+        embedding: list[float],
+        user_data: dict[str, Any],
+    ) -> MemoryItem:
+        from sqlmodel import select
+
+        content_hash = compute_content_hash(summary, memory_type)
+
+        with self._sessions.session() as session:
+            # Check for existing item with same hash in same scope (deduplication)
+            # Use extra->>'content_hash' for query performance
+            content_hash_col = self._sqla_models.MemoryItem.extra["content_hash"].astext
+            filters = [content_hash_col == content_hash]
+            filters.extend(self._build_filters(self._sqla_models.MemoryItem, user_data))
+
+            existing = session.scalar(select(self._sqla_models.MemoryItem).where(*filters))
+
+            if existing:
+                # Reinforce existing memory instead of creating duplicate
+                current_extra = existing.extra or {}
+                current_count = current_extra.get("reinforcement_count", 1)
+                existing.extra = {
+                    **current_extra,
+                    "reinforcement_count": current_count + 1,
+                    "last_reinforced_at": self._now().isoformat(),
+                }
+                existing.updated_at = self._now()
+                session.add(existing)
+                session.commit()
+                session.refresh(existing)
+                existing.embedding = self._normalize_embedding(existing.embedding)
+                return self._cache_item(existing)
+
+            # Create new item with salience tracking in extra
+            now = self._now()
+
+            item = self._memory_item_model(
+                resource_id=resource_id,
+                memory_type=memory_type,
+                summary=summary,
+                embedding=self._prepare_embedding(embedding),
+                **user_data,
+                created_at=now,
+                updated_at=now,
+                extra={
+                    "content_hash": content_hash,
+                    "reinforcement_count": 1,
+                    "last_reinforced_at": now.isoformat(),
+                },
+            )
+
             session.add(item)
             session.commit()
             session.refresh(item)
@@ -183,10 +258,20 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
             session.commit()
 
     def vector_search_items(
-        self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+        *,
+        ranking: str = "similarity",
+        recency_decay_days: float = 30.0,
     ) -> list[tuple[str, float]]:
-        if not self._use_vector:
-            return self._vector_search_local(query_vec, top_k, where=where)
+        if not self._use_vector or ranking == "salience":
+            # For salience ranking or when pgvector is not available, use local search
+            return self._vector_search_local(
+                query_vec, top_k, where=where, ranking=ranking, recency_decay_days=recency_decay_days
+            )
+
         from sqlmodel import select
 
         distance = self._sqla_models.MemoryItem.embedding.cosine_distance(query_vec)
@@ -212,7 +297,13 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
                 self._cache_item(row)
 
     def _vector_search_local(
-        self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+        *,
+        ranking: str = "similarity",
+        recency_decay_days: float = 30.0,
     ) -> list[tuple[str, float]]:
         scored: list[tuple[str, float]] = []
         for item in self.items.values():
@@ -220,14 +311,66 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
                 continue
             if not self._matches_where(item, where):
                 continue
-            score = self._cosine(query_vec, item.embedding)
+
+            similarity = self._cosine(query_vec, item.embedding)
+
+            if ranking == "salience":
+                # Salience-aware scoring - read from extra dict
+                extra = item.extra or {}
+                reinforcement_count = extra.get("reinforcement_count", 1)
+                last_reinforced_at = self._parse_datetime(extra.get("last_reinforced_at"))
+                score = self._salience_score(
+                    similarity,
+                    reinforcement_count,
+                    last_reinforced_at,
+                    recency_decay_days,
+                )
+            else:
+                score = similarity
+
             scored.append((item.id, score))
+
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored[:top_k]
+
+    @staticmethod
+    def _salience_score(
+        similarity: float,
+        reinforcement_count: int,
+        last_reinforced_at: datetime | None,
+        recency_decay_days: float,
+    ) -> float:
+        """Compute salience score: similarity * reinforcement * recency."""
+        reinforcement_factor = math.log(reinforcement_count + 1)
+
+        if last_reinforced_at is None:
+            recency_factor = 0.5
+        else:
+            now = datetime.now(last_reinforced_at.tzinfo) if last_reinforced_at.tzinfo else datetime.utcnow()
+            days_ago = (now - last_reinforced_at).total_seconds() / 86400
+            recency_factor = math.exp(-0.693 * days_ago / recency_decay_days)
+
+        return similarity * reinforcement_factor * recency_factor
 
     def _cache_item(self, item: MemoryItem) -> MemoryItem:
         self.items[item.id] = item
         return item
+
+    @staticmethod
+    def _parse_datetime(dt_str: str | None) -> datetime | None:
+        """Parse ISO datetime string from extra dict."""
+        if dt_str is None:
+            return None
+        try:
+            import pendulum
+
+            parsed = pendulum.parse(dt_str)
+        except (ValueError, TypeError):
+            return None
+        else:
+            if isinstance(parsed, datetime):
+                return parsed
+            return None
 
     @staticmethod
     def _cosine(a: list[float], b: list[float]) -> float:

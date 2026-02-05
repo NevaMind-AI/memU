@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import datetime
 from typing import Any, Literal
@@ -8,6 +9,26 @@ import pendulum
 from pydantic import BaseModel, ConfigDict, Field
 
 MemoryType = Literal["profile", "event", "knowledge", "behavior", "skill"]
+
+
+def compute_content_hash(summary: str, memory_type: str) -> str:
+    """
+    Generate unique hash for memory deduplication.
+
+    Operates on post-summary content. Normalizes whitespace to handle
+    minor formatting differences like "I love coffee" vs "I  love  coffee".
+
+    Args:
+        summary: The memory summary text
+        memory_type: The type of memory (profile, event, etc.)
+
+    Returns:
+        A 16-character hex hash string
+    """
+    # Normalize: lowercase, strip, collapse whitespace
+    normalized = " ".join(summary.lower().split())
+    content = f"{memory_type}:{normalized}"
+    return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
 class BaseRecord(BaseModel):
@@ -33,6 +54,13 @@ class MemoryItem(BaseRecord):
     embedding: list[float] | None = None
     happened_at: datetime | None = None
     extra: dict[str, Any] = {}
+    # extra may contains:
+    # # reinforcement tracking fields
+    # - content_hash: str
+    # - reinforcement_count: int
+    # - last_reinforced_at: str (isoformat)
+    # # Reference tracking field
+    # - ref_id: str
 
 
 class MemoryCategory(BaseRecord):
@@ -84,5 +112,6 @@ __all__ = [
     "MemoryType",
     "Resource",
     "build_scoped_models",
+    "compute_content_hash",
     "merge_scope_model",
 ]

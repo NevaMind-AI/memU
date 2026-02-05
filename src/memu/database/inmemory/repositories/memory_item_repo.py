@@ -4,10 +4,12 @@ import uuid
 from collections.abc import Mapping
 from typing import Any, override
 
+import pendulum
+
 from memu.database.inmemory.repositories.filter import matches_where
 from memu.database.inmemory.state import InMemoryState
-from memu.database.inmemory.vector import cosine_topk
-from memu.database.models import MemoryItem, MemoryType
+from memu.database.inmemory.vector import cosine_topk, cosine_topk_salience
+from memu.database.models import MemoryItem, MemoryType, compute_content_hash
 from memu.database.repositories.memory_item import MemoryItemRepo
 
 
@@ -57,6 +59,23 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         self.items = {mid: item for mid, item in self.items.items() if mid not in matches}
         return matches
 
+    def _find_by_hash(self, content_hash: str, user_data: dict[str, Any]) -> MemoryItem | None:
+        """
+        Find existing item by content hash within the same user scope.
+
+        This enables deduplication: if the same content exists for the same user,
+        we reinforce it instead of creating a duplicate.
+        """
+        for item in self.items.values():
+            # Read content_hash from extra dict
+            item_hash = (item.extra or {}).get("content_hash")
+            if item_hash != content_hash:
+                continue
+            # Check scope match (user_id, agent_id, etc.)
+            if matches_where(item, user_data):
+                return item
+        return None
+
     def create_item(
         self,
         *,
@@ -65,7 +84,17 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
+        reinforce: bool = False,
     ) -> MemoryItem:
+        if reinforce:
+            return self.create_item_reinforce(
+                resource_id=resource_id,
+                memory_type=memory_type,
+                summary=summary,
+                embedding=embedding,
+                user_data=user_data,
+            )
+
         mid = str(uuid.uuid4())
         it = self.memory_item_model(
             id=mid,
@@ -78,10 +107,79 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         self.items[mid] = it
         return it
 
+    def create_item_reinforce(
+        self,
+        *,
+        resource_id: str,
+        memory_type: MemoryType,
+        summary: str,
+        embedding: list[float],
+        user_data: dict[str, Any],
+        reinforce: bool = False,
+    ) -> MemoryItem:
+        content_hash = compute_content_hash(summary, memory_type)
+
+        # Check for existing item with same hash in same scope (deduplication)
+        existing = self._find_by_hash(content_hash, user_data)
+        if existing:
+            # Reinforce existing memory instead of creating duplicate
+            current_extra = existing.extra or {}
+            current_count = current_extra.get("reinforcement_count", 1)
+            existing.extra = {
+                **current_extra,
+                "reinforcement_count": current_count + 1,
+                "last_reinforced_at": pendulum.now("UTC").isoformat(),
+            }
+            existing.updated_at = pendulum.now("UTC")
+            return existing
+
+        # Create new item with salience tracking in extra
+        mid = str(uuid.uuid4())
+        now = pendulum.now("UTC")
+        item_extra = user_data.pop("extra", {}) if "extra" in user_data else {}
+        item_extra.update({
+            "content_hash": content_hash,
+            "reinforcement_count": 1,
+            "last_reinforced_at": now.isoformat(),
+        })
+        it = self.memory_item_model(
+            id=mid,
+            resource_id=resource_id,
+            memory_type=memory_type,
+            summary=summary,
+            embedding=embedding,
+            extra=item_extra,
+            **user_data,
+        )
+        self.items[mid] = it
+        return it
+
     def vector_search_items(
-        self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+        *,
+        ranking: str = "similarity",
+        recency_decay_days: float = 30.0,
     ) -> list[tuple[str, float]]:
         pool = self.list_items(where)
+
+        if ranking == "salience":
+            # Salience-aware ranking: similarity x reinforcement x recency
+            # Read values from extra dict
+            corpus = [
+                (
+                    i.id,
+                    i.embedding,
+                    (i.extra or {}).get("reinforcement_count", 1),
+                    self._parse_datetime((i.extra or {}).get("last_reinforced_at")),
+                )
+                for i in pool.values()
+            ]
+            return cosine_topk_salience(query_vec, corpus, k=top_k, recency_decay_days=recency_decay_days)
+
+        # Default: pure cosine similarity (backward compatible)
         hits = cosine_topk(query_vec, [(i.id, i.embedding) for i in pool.values()], k=top_k)
         return hits
 
@@ -90,6 +188,20 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
 
     def get_item(self, item_id: str) -> MemoryItem | None:
         return self.items.get(item_id)
+
+    @staticmethod
+    def _parse_datetime(dt_str: str | None) -> pendulum.DateTime | None:
+        """Parse ISO datetime string from extra dict."""
+        if dt_str is None:
+            return None
+        try:
+            parsed = pendulum.parse(dt_str)
+        except (ValueError, TypeError):
+            return None
+        else:
+            if isinstance(parsed, pendulum.DateTime):
+                return parsed
+            return None
 
     @override
     def delete_item(self, item_id: str) -> None:

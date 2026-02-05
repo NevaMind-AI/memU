@@ -1,0 +1,4 @@
+memu>=0.1.0
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+python-dotenv>=1.0.0
