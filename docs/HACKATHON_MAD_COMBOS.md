@@ -10,7 +10,7 @@
 
 #### FROM MEMORIPY:
 - ❌ `access_counts[]` - Track how often each memory is accessed
-- ❌ `timestamps[]` - Track when memory was created/last accessed  
+- ❌ `timestamps[]` - Track when memory was created/last accessed
 - ❌ `decay_factor` - Exponential time-based decay: `np.exp(-decay_rate * time_diff)`
 - ❌ `reinforcement_factor` - Log-scaled access boost: `np.log1p(access_count)`
 - ❌ `adjusted_similarity` - `similarity * decay_factor * reinforcement_factor`
@@ -176,7 +176,7 @@ Result: Clean, high-quality memory that doesn't bloat!
 class SalienceGate:
     SALIENT_PROTOTYPES = ["My name is...", "I work at...", "The deadline is..."]
     NON_SALIENT_PROTOTYPES = ["Hello", "Thanks", "Okay", "Got it"]
-    
+
     def is_worth_saving(self, text: str) -> bool:
         # Compare similarity to salient vs non-salient prototypes
         salient_score = max_similarity(text, SALIENT_PROTOTYPES)
@@ -225,13 +225,13 @@ import networkx as nx
 class KnowledgeGraph:
     def __init__(self):
         self.graph = nx.Graph()
-    
+
     def add_entity(self, name: str, node_type: str):
         self.graph.add_node(name, type=node_type)
-    
+
     def add_relationship(self, subject: str, predicate: str, obj: str):
         self.graph.add_edge(subject, obj, relation=predicate)
-    
+
     def get_subgraph_context(self, entity: str, depth: int = 2):
         # Traverse graph for related entities
         return nx.ego_graph(self.graph, entity, radius=depth)
@@ -368,7 +368,7 @@ memU/src/memu/app/service.py              # Auto-pruning service
 - Key class: `SalienceGate`
 
 ### From ReMe (Frequency & Utility):
-- Files: 
+- Files:
   - `prospects/ReMe/reme_ai/vector_store/update_memory_freq_op.py`
   - `prospects/ReMe/reme_ai/vector_store/update_memory_utility_op.py`
   - `prospects/ReMe/reme_ai/vector_store/delete_memory_op.py`

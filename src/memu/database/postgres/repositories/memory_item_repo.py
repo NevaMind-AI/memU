@@ -364,8 +364,12 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         try:
             import pendulum
 
-            return pendulum.parse(dt_str)
+            parsed = pendulum.parse(dt_str)
         except (ValueError, TypeError):
+            return None
+        else:
+            if isinstance(parsed, datetime):
+                return parsed
             return None
 
     @staticmethod

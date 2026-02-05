@@ -169,9 +169,7 @@ async def chat(request: ChatRequest):
 
     try:
         # Retrieve relevant memories
-        retrieve_result = await memory_service.retrieve(
-            queries=[{"role": "user", "content": request.message}]
-        )
+        retrieve_result = await memory_service.retrieve(queries=[{"role": "user", "content": request.message}])
 
         memories = retrieve_result.get("items", [])
 
@@ -194,7 +192,8 @@ async def chat(request: ChatRequest):
 
         # Store the conversation
         import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
             f.write(f"User ({request.user_id}) said: {request.message}")
             temp_file = f.name
 
@@ -225,7 +224,8 @@ async def memorize(request: MemorizeRequest):
 
     try:
         import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
             f.write(f"[User: {request.user_id}] {request.content}")
             temp_file = f.name
 
@@ -253,9 +253,7 @@ async def recall(query: str, limit: int = 5):
         raise HTTPException(status_code=503, detail="Memory service not initialized")
 
     try:
-        result = await memory_service.retrieve(
-            queries=[{"role": "user", "content": query}]
-        )
+        result = await memory_service.retrieve(queries=[{"role": "user", "content": query}])
 
         items = result.get("items", [])[:limit]
         memories = []

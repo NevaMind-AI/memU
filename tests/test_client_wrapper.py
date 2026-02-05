@@ -14,9 +14,7 @@ class TestMemuOpenAIWrapper:
         """Should extract user query from messages."""
         from memu.client.openai_wrapper import MemuChatCompletions
 
-        completions = MemuChatCompletions(
-            MagicMock(), MagicMock(), {}, "salience", 5
-        )
+        completions = MemuChatCompletions(MagicMock(), MagicMock(), {}, "salience", 5)
 
         messages = [
             {"role": "system", "content": "You are helpful."},
@@ -30,9 +28,7 @@ class TestMemuOpenAIWrapper:
         """Should extract most recent user query."""
         from memu.client.openai_wrapper import MemuChatCompletions
 
-        completions = MemuChatCompletions(
-            MagicMock(), MagicMock(), {}, "salience", 5
-        )
+        completions = MemuChatCompletions(MagicMock(), MagicMock(), {}, "salience", 5)
 
         messages = [
             {"role": "user", "content": "Hello"},
@@ -47,9 +43,7 @@ class TestMemuOpenAIWrapper:
         """Should append memories to existing system message."""
         from memu.client.openai_wrapper import MemuChatCompletions
 
-        completions = MemuChatCompletions(
-            MagicMock(), MagicMock(), {}, "salience", 5
-        )
+        completions = MemuChatCompletions(MagicMock(), MagicMock(), {}, "salience", 5)
 
         messages = [
             {"role": "system", "content": "You are helpful."},
@@ -73,9 +67,7 @@ class TestMemuOpenAIWrapper:
         """Should create system message if none exists."""
         from memu.client.openai_wrapper import MemuChatCompletions
 
-        completions = MemuChatCompletions(
-            MagicMock(), MagicMock(), {}, "salience", 5
-        )
+        completions = MemuChatCompletions(MagicMock(), MagicMock(), {}, "salience", 5)
 
         messages = [
             {"role": "user", "content": "Hi"},
@@ -94,9 +86,7 @@ class TestMemuOpenAIWrapper:
         """Should return original messages if no memories."""
         from memu.client.openai_wrapper import MemuChatCompletions
 
-        completions = MemuChatCompletions(
-            MagicMock(), MagicMock(), {}, "salience", 5
-        )
+        completions = MemuChatCompletions(MagicMock(), MagicMock(), {}, "salience", 5)
 
         messages = [{"role": "user", "content": "Hi"}]
         result = completions._inject_memories(messages, [])

@@ -1030,10 +1030,10 @@ Summary:"""
 
         # Update extra column for referenced items
         for short_id in referenced_short_ids:
-            item_id = short_id_to_item_id.get(short_id)
-            if item_id:
+            matched_item_id = short_id_to_item_id.get(short_id)
+            if matched_item_id:
                 store.memory_item_repo.update_item(
-                    item_id=item_id,
+                    item_id=matched_item_id,
                     extra={"ref_id": short_id},
                 )
 

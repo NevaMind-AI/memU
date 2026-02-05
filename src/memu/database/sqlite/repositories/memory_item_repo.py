@@ -499,8 +499,12 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         if dt_str is None:
             return None
         try:
-            return pendulum.parse(dt_str)
+            parsed = pendulum.parse(dt_str)
         except (ValueError, TypeError):
+            return None
+        else:
+            if isinstance(parsed, pendulum.DateTime):
+                return parsed
             return None
 
     def load_existing(self) -> None:

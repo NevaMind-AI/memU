@@ -141,7 +141,8 @@ async def test_memu_with_nebius():
         # Test memorize with a file (create temp file)
         print("\n  Testing memorize...")
         import tempfile
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8') as f:
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
             f.write("User likes Python programming and AI development. They prefer dark mode in their IDE.")
             temp_file = f.name
 
@@ -186,6 +187,7 @@ async def test_memu_with_nebius():
     except Exception as e:
         print(f"  ✗ MemU with Nebius failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

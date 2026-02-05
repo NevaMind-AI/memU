@@ -41,6 +41,7 @@ def salience_score(
 
 def _cosine(a: list[float], b: list[float]) -> float:
     import numpy as np
+
     a_arr = np.array(a, dtype=np.float32)
     b_arr = np.array(b, dtype=np.float32)
     denom = (np.linalg.norm(a_arr) * np.linalg.norm(b_arr)) + 1e-9
