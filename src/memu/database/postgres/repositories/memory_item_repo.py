@@ -256,12 +256,9 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
                 current_extra = {**current_extra, **extra}
             if tool_record is not None:
                 # Merge tool_record fields at top level
-                if tool_record.get("when_to_use") is not None:
-                    current_extra["when_to_use"] = tool_record["when_to_use"]
-                if tool_record.get("metadata") is not None:
-                    current_extra["metadata"] = tool_record["metadata"]
-                if tool_record.get("tool_calls") is not None:
-                    current_extra["tool_calls"] = tool_record["tool_calls"]
+                for key in ("when_to_use", "metadata", "tool_calls"):
+                    if tool_record.get(key) is not None:
+                        current_extra[key] = tool_record[key]
             if extra is not None or tool_record is not None:
                 item.extra = current_extra
 

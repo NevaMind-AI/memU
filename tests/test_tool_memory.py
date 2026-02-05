@@ -217,9 +217,33 @@ class TestMemoryItemToolType:
             summary="calculator tool",
             extra={
                 "tool_calls": [
-                    {"tool_name": "calc", "input": "1+1", "output": "2", "success": True, "time_cost": 0.1, "score": 1.0, "token_cost": 10},
-                    {"tool_name": "calc", "input": "2+2", "output": "4", "success": True, "time_cost": 0.2, "score": 0.9, "token_cost": 15},
-                    {"tool_name": "calc", "input": "bad", "output": "error", "success": False, "time_cost": 0.5, "score": 0.0, "token_cost": 5},
+                    {
+                        "tool_name": "calc",
+                        "input": "1+1",
+                        "output": "2",
+                        "success": True,
+                        "time_cost": 0.1,
+                        "score": 1.0,
+                        "token_cost": 10,
+                    },
+                    {
+                        "tool_name": "calc",
+                        "input": "2+2",
+                        "output": "4",
+                        "success": True,
+                        "time_cost": 0.2,
+                        "score": 0.9,
+                        "token_cost": 15,
+                    },
+                    {
+                        "tool_name": "calc",
+                        "input": "bad",
+                        "output": "error",
+                        "success": False,
+                        "time_cost": 0.5,
+                        "score": 0.0,
+                        "token_cost": 5,
+                    },
                 ]
             },
         )

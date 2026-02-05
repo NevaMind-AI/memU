@@ -17,7 +17,8 @@ def get_tool_calls(item: MemoryItem) -> list[dict[str, Any]]:
     Returns:
         List of tool call dicts, or empty list if none exist
     """
-    return (item.extra or {}).get("tool_calls", [])
+    result: list[dict[str, Any]] = (item.extra or {}).get("tool_calls", [])
+    return result
 
 
 def set_tool_calls(item: MemoryItem, tool_calls: list[dict[str, Any]]) -> None:
