@@ -118,6 +118,43 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
+        reinforce: bool = False,
+    ) -> MemoryItem:
+        if reinforce:
+            return self.create_item_reinforce(
+                resource_id=resource_id,
+                memory_type=memory_type,
+                summary=summary,
+                embedding=embedding,
+                user_data=user_data,
+            )
+
+        item = self._memory_item_model(
+            resource_id=resource_id,
+            memory_type=memory_type,
+            summary=summary,
+            embedding=self._prepare_embedding(embedding),
+            **user_data,
+            created_at=self._now(),
+            updated_at=self._now(),
+        )
+
+        with self._sessions.session() as session:
+            session.add(item)
+            session.commit()
+            session.refresh(item)
+
+        self.items[item.id] = item
+        return item
+
+    def create_item_reinforce(
+        self,
+        *,
+        resource_id: str | None = None,
+        memory_type: MemoryType,
+        summary: str,
+        embedding: list[float],
+        user_data: dict[str, Any],
     ) -> MemoryItem:
         from sqlmodel import select
 
@@ -125,15 +162,22 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
 
         with self._sessions.session() as session:
             # Check for existing item with same hash in same scope (deduplication)
-            filters = [self._sqla_models.MemoryItem.content_hash == content_hash]
+            # Use extra->>'content_hash' for query performance
+            content_hash_col = self._sqla_models.MemoryItem.extra["content_hash"].astext
+            filters = [content_hash_col == content_hash]
             filters.extend(self._build_filters(self._sqla_models.MemoryItem, user_data))
 
             existing = session.scalar(select(self._sqla_models.MemoryItem).where(*filters))
 
             if existing:
                 # Reinforce existing memory instead of creating duplicate
-                existing.reinforcement_count = getattr(existing, "reinforcement_count", 1) + 1
-                existing.last_reinforced_at = self._now()
+                current_extra = existing.extra or {}
+                current_count = current_extra.get("reinforcement_count", 1)
+                existing.extra = {
+                    **current_extra,
+                    "reinforcement_count": current_count + 1,
+                    "last_reinforced_at": self._now().isoformat(),
+                }
                 existing.updated_at = self._now()
                 session.add(existing)
                 session.commit()
@@ -141,18 +185,22 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
                 existing.embedding = self._normalize_embedding(existing.embedding)
                 return self._cache_item(existing)
 
-            # Create new item
+            # Create new item with salience tracking in extra
+            now = self._now()
+
             item = self._memory_item_model(
                 resource_id=resource_id,
                 memory_type=memory_type,
                 summary=summary,
                 embedding=self._prepare_embedding(embedding),
-                content_hash=content_hash,
-                reinforcement_count=1,
-                last_reinforced_at=self._now(),
                 **user_data,
-                created_at=self._now(),
-                updated_at=self._now(),
+                created_at=now,
+                updated_at=now,
+                extra={
+                    "content_hash": content_hash,
+                    "reinforcement_count": 1,
+                    "last_reinforced_at": now.isoformat(),
+                },
             )
 
             session.add(item)
@@ -267,11 +315,14 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
             similarity = self._cosine(query_vec, item.embedding)
 
             if ranking == "salience":
-                # Salience-aware scoring
+                # Salience-aware scoring - read from extra dict
+                extra = item.extra or {}
+                reinforcement_count = extra.get("reinforcement_count", 1)
+                last_reinforced_at = self._parse_datetime(extra.get("last_reinforced_at"))
                 score = self._salience_score(
                     similarity,
-                    getattr(item, "reinforcement_count", 1),
-                    getattr(item, "last_reinforced_at", None),
+                    reinforcement_count,
+                    last_reinforced_at,
                     recency_decay_days,
                 )
             else:
@@ -304,6 +355,18 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
     def _cache_item(self, item: MemoryItem) -> MemoryItem:
         self.items[item.id] = item
         return item
+
+    @staticmethod
+    def _parse_datetime(dt_str: str | None) -> datetime | None:
+        """Parse ISO datetime string from extra dict."""
+        if dt_str is None:
+            return None
+        try:
+            import pendulum
+
+            return pendulum.parse(dt_str)
+        except (ValueError, TypeError):
+            return None
 
     @staticmethod
     def _cosine(a: list[float], b: list[float]) -> float:

@@ -236,6 +236,10 @@ class MemorizeConfig(BaseModel):
         default=False,
         description="Enable inline [ref:ITEM_ID] citations in category summaries linking to source memory items.",
     )
+    enable_item_reinforcement: bool = Field(
+        default=False,
+        description="Enable reinforcement tracking for memory items.",
+    )
 
 
 class PatchConfig(BaseModel):
@@ -245,8 +249,8 @@ class PatchConfig(BaseModel):
 class DefaultUserModel(BaseModel):
     user_id: str | None = None
     # Agent/session scoping for multi-agent and multi-session memory filtering
-    agent_id: str | None = None
-    session_id: str | None = None
+    # agent_id: str | None = None
+    # session_id: str | None = None
 
 
 class UserConfig(BaseModel):

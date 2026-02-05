@@ -360,6 +360,8 @@ class RetrieveMixin:
             qvec,
             self.retrieve_config.item.top_k,
             where=where_filters,
+            ranking=self.retrieve_config.item.ranking,
+            recency_decay_days=self.retrieve_config.item.recency_decay_days,
         )
         state["item_pool"] = items_pool
         return state

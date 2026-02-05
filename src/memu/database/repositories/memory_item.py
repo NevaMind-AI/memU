@@ -26,6 +26,7 @@ class MemoryItemRepo(Protocol):
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
+        reinforce: bool = False,
     ) -> MemoryItem: ...
 
     def update_item(

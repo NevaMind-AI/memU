@@ -67,7 +67,9 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         we reinforce it instead of creating a duplicate.
         """
         for item in self.items.values():
-            if getattr(item, "content_hash", None) != content_hash:
+            # Read content_hash from extra dict
+            item_hash = (item.extra or {}).get("content_hash")
+            if item_hash != content_hash:
                 continue
             # Check scope match (user_id, agent_id, etc.)
             if matches_where(item, user_data):
@@ -82,19 +84,17 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
+        reinforce: bool = False,
     ) -> MemoryItem:
-        content_hash = compute_content_hash(summary, memory_type)
+        if reinforce:
+            return self.create_item_reinforce(
+                resource_id=resource_id,
+                memory_type=memory_type,
+                summary=summary,
+                embedding=embedding,
+                user_data=user_data,
+            )
 
-        # Check for existing item with same hash in same scope (deduplication)
-        existing = self._find_by_hash(content_hash, user_data)
-        if existing:
-            # Reinforce existing memory instead of creating duplicate
-            existing.reinforcement_count = getattr(existing, "reinforcement_count", 1) + 1
-            existing.last_reinforced_at = pendulum.now("UTC")
-            existing.updated_at = pendulum.now("UTC")
-            return existing
-
-        # Create new item
         mid = str(uuid.uuid4())
         it = self.memory_item_model(
             id=mid,
@@ -102,9 +102,53 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             memory_type=memory_type,
             summary=summary,
             embedding=embedding,
-            content_hash=content_hash,
-            reinforcement_count=1,
-            last_reinforced_at=pendulum.now("UTC"),
+            **user_data,
+        )
+        self.items[mid] = it
+        return it
+
+    def create_item_reinforce(
+        self,
+        *,
+        resource_id: str,
+        memory_type: MemoryType,
+        summary: str,
+        embedding: list[float],
+        user_data: dict[str, Any],
+        reinforce: bool = False,
+    ) -> MemoryItem:
+        content_hash = compute_content_hash(summary, memory_type)
+
+        # Check for existing item with same hash in same scope (deduplication)
+        existing = self._find_by_hash(content_hash, user_data)
+        if existing:
+            # Reinforce existing memory instead of creating duplicate
+            current_extra = existing.extra or {}
+            current_count = current_extra.get("reinforcement_count", 1)
+            existing.extra = {
+                **current_extra,
+                "reinforcement_count": current_count + 1,
+                "last_reinforced_at": pendulum.now("UTC").isoformat(),
+            }
+            existing.updated_at = pendulum.now("UTC")
+            return existing
+
+        # Create new item with salience tracking in extra
+        mid = str(uuid.uuid4())
+        now = pendulum.now("UTC")
+        item_extra = user_data.pop("extra", {}) if "extra" in user_data else {}
+        item_extra.update({
+            "content_hash": content_hash,
+            "reinforcement_count": 1,
+            "last_reinforced_at": now.isoformat(),
+        })
+        it = self.memory_item_model(
+            id=mid,
+            resource_id=resource_id,
+            memory_type=memory_type,
+            summary=summary,
+            embedding=embedding,
+            extra=item_extra,
             **user_data,
         )
         self.items[mid] = it
@@ -123,12 +167,13 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
 
         if ranking == "salience":
             # Salience-aware ranking: similarity x reinforcement x recency
+            # Read values from extra dict
             corpus = [
                 (
                     i.id,
                     i.embedding,
-                    getattr(i, "reinforcement_count", 1),
-                    getattr(i, "last_reinforced_at", None),
+                    (i.extra or {}).get("reinforcement_count", 1),
+                    self._parse_datetime((i.extra or {}).get("last_reinforced_at")),
                 )
                 for i in pool.values()
             ]
@@ -143,6 +188,16 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
 
     def get_item(self, item_id: str) -> MemoryItem | None:
         return self.items.get(item_id)
+
+    @staticmethod
+    def _parse_datetime(dt_str: str | None) -> pendulum.DateTime | None:
+        """Parse ISO datetime string from extra dict."""
+        if dt_str is None:
+            return None
+        try:
+            return pendulum.parse(dt_str)
+        except (ValueError, TypeError):
+            return None
 
     @override
     def delete_item(self, item_id: str) -> None:

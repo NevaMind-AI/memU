@@ -54,10 +54,13 @@ class MemoryItem(BaseRecord):
     embedding: list[float] | None = None
     happened_at: datetime | None = None
     extra: dict[str, Any] = {}
-    # Reinforcement tracking for salience-aware memory
-    content_hash: str | None = None
-    reinforcement_count: int = 1
-    last_reinforced_at: datetime | None = None
+    # extra may contains:
+    # # reinforcement tracking fields
+    # - content_hash: str
+    # - reinforcement_count: int
+    # - last_reinforced_at: str (isoformat)
+    # # Reference tracking field
+    # - ref_id: str
 
 
 class MemoryCategory(BaseRecord):
