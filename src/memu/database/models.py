@@ -12,6 +12,26 @@ from pydantic import BaseModel, ConfigDict, Field
 MemoryType = Literal["profile", "event", "knowledge", "behavior", "skill", "tool"]
 
 
+def compute_content_hash(summary: str, memory_type: str) -> str:
+    """
+    Generate unique hash for memory deduplication.
+
+    Operates on post-summary content. Normalizes whitespace to handle
+    minor formatting differences like "I love coffee" vs "I  love  coffee".
+
+    Args:
+        summary: The memory summary text
+        memory_type: The type of memory (profile, event, etc.)
+
+    Returns:
+        A 16-character hex hash string
+    """
+    # Normalize: lowercase, strip, collapse whitespace
+    normalized = " ".join(summary.lower().split())
+    content = f"{memory_type}:{normalized}"
+    return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+
 class BaseRecord(BaseModel):
     """Backend-agnostic record interface."""
 
@@ -55,9 +75,19 @@ class Resource(BaseRecord):
 
 class MemoryItem(BaseRecord):
     resource_id: str | None
-    memory_type: MemoryType
+    memory_type: str
     summary: str
     embedding: list[float] | None = None
+    happened_at: datetime | None = None
+    extra: dict[str, Any] = {}
+    # extra may contains:
+    # # reinforcement tracking fields
+    # - content_hash: str
+    # - reinforcement_count: int
+    # - last_reinforced_at: str (isoformat)
+    # # Reference tracking field
+    # - ref_id: str
+
     when_to_use: str | None = Field(default=None, description="Hint for when this memory should be retrieved")
     metadata: dict[str, Any] | None = Field(default=None, description="Type-specific metadata")
     tool_calls: list[ToolCallResult] | None = Field(default=None, description="Tool call history for tool memories")
@@ -166,5 +196,6 @@ __all__ = [
     "Resource",
     "ToolCallResult",
     "build_scoped_models",
+    "compute_content_hash",
     "merge_scope_model",
 ]

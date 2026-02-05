@@ -26,6 +26,7 @@ class MemoryItemRepo(Protocol):
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
+        reinforce: bool = False,
         when_to_use: str | None = None,
         metadata: dict[str, Any] | None = None,
         tool_calls: list[ToolCallResult] | None = None,
@@ -38,12 +39,17 @@ class MemoryItemRepo(Protocol):
         memory_type: MemoryType | None = None,
         summary: str | None = None,
         embedding: list[float] | None = None,
+        extra: dict[str, Any] | None = None,
         when_to_use: str | None = None,
         metadata: dict[str, Any] | None = None,
         tool_calls: list[ToolCallResult] | None = None,
     ) -> MemoryItem: ...
 
     def delete_item(self, item_id: str) -> None: ...
+
+    def list_items_by_ref_ids(
+        self, ref_ids: list[str], where: Mapping[str, Any] | None = None
+    ) -> dict[str, MemoryItem]: ...
 
     def vector_search_items(
         self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None

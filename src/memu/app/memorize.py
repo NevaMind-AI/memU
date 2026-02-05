@@ -240,7 +240,7 @@ class MemorizeMixin:
         resources: list[Resource] = []
         items: list[MemoryItem] = []
         relations: list[CategoryItem] = []
-        category_updates: dict[str, list[str]] = {}
+        category_updates: dict[str, list[tuple[str, str]]] = {}
         user_scope = state.get("user", {})
 
         for plan in state.get("resource_plans", []):
@@ -282,12 +282,18 @@ class MemorizeMixin:
 
     async def _memorize_persist_and_index(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         llm_client = self._get_step_llm_client(step_context)
-        await self._update_category_summaries(
+        updated_summaries = await self._update_category_summaries(
             state.get("category_updates", {}),
             ctx=state["ctx"],
             store=state["store"],
             llm_client=llm_client,
         )
+        if self.memorize_config.enable_item_references:
+            await self._persist_item_references(
+                updated_summaries=updated_summaries,
+                category_updates=state.get("category_updates", {}),
+                store=state["store"],
+            )
         return state
 
     def _memorize_build_response(self, state: WorkflowState, step_context: Any) -> WorkflowState:
@@ -577,14 +583,23 @@ class MemorizeMixin:
         store: Database,
         embed_client: Any | None = None,
         user: Mapping[str, Any] | None = None,
-    ) -> tuple[list[MemoryItem], list[CategoryItem], dict[str, list[str]]]:
+    ) -> tuple[list[MemoryItem], list[CategoryItem], dict[str, list[tuple[str, str]]]]:
+        """
+        Persist memory items and track category updates.
+
+        Returns:
+            Tuple of (items, relations, category_updates)
+            where category_updates maps category_id -> list of (item_id, summary) tuples
+        """
         summary_payloads = [content for _, content, _ in structured_entries]
         client = embed_client or self._get_llm_client()
         item_embeddings = await client.embed(summary_payloads) if summary_payloads else []
         items: list[MemoryItem] = []
         rels: list[CategoryItem] = []
-        category_memory_updates: dict[str, list[str]] = {}
+        # Changed: now stores (item_id, summary) tuples for reference support
+        category_memory_updates: dict[str, list[tuple[str, str]]] = {}
 
+        reinforce = self.memorize_config.enable_item_reinforcement
         for (memory_type, summary_text, cat_names), emb in zip(structured_entries, item_embeddings, strict=True):
             item = store.memory_item_repo.create_item(
                 resource_id=resource_id,
@@ -592,12 +607,17 @@ class MemorizeMixin:
                 summary=summary_text,
                 embedding=emb,
                 user_data=dict(user or {}),
+                reinforce=reinforce,
             )
             items.append(item)
+            if reinforce and item.extra.get("reinforcement_count", 1) > 1:
+                # existing item
+                continue
             mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
             for cid in mapped_cat_ids:
                 rels.append(store.category_item_repo.link_item_category(item.id, cid, user_data=dict(user or {})))
-                category_memory_updates.setdefault(cid, []).append(summary_text)
+                # Store (item_id, summary) tuple for reference support
+                category_memory_updates.setdefault(cid, []).append((item.id, summary_text))
 
         return items, rels, category_memory_updates
 
@@ -960,19 +980,115 @@ Summary:"""
         safe_categories = self._escape_prompt_value(categories_str)
         return template.format(resource=safe_resource, categories_str=safe_categories)
 
-    def _build_category_summary_prompt(self, *, category: MemoryCategory, new_memories: list[str]) -> str:
-        new_items_text = "\n".join(f"- {m}" for m in new_memories if m.strip())
+    def _build_item_ref_id(self, item_id: str) -> str:
+        return item_id.replace("-", "")[:6]
+
+    def _extract_refs_from_summaries(self, summaries: dict[str, str]) -> set[str]:
+        """
+        Extract all [ref:xxx] references from summary texts.
+
+        Args:
+            summaries: dict mapping category_id -> summary text
+
+        Returns:
+            Set of all referenced short IDs (the xxx part from [ref:xxx])
+        """
+        from memu.utils.references import extract_references
+
+        refs: set[str] = set()
+        for summary in summaries.values():
+            refs.update(extract_references(summary))
+        return refs
+
+    async def _persist_item_references(
+        self,
+        *,
+        updated_summaries: dict[str, str],
+        category_updates: dict[str, list[tuple[str, str]]],
+        store: Database,
+    ) -> None:
+        """
+        Persist ref_id to items that are referenced in category summaries.
+
+        This function:
+        1. Extracts all [ref:xxx] patterns from updated summaries
+        2. Builds a mapping of short_id -> full item_id for all items in category_updates
+        3. For items whose short_id appears in the references, updates their extra column
+           with {"ref_id": short_id}
+        """
+        # Extract all referenced short IDs from summaries
+        referenced_short_ids = self._extract_refs_from_summaries(updated_summaries)
+        if not referenced_short_ids:
+            return
+
+        # Build mapping of short_id -> full item_id for all items in category_updates
+        short_id_to_item_id: dict[str, str] = {}
+        for item_tuples in category_updates.values():
+            for item_id, _ in item_tuples:
+                short_id = self._build_item_ref_id(item_id)
+                short_id_to_item_id[short_id] = item_id
+
+        # Update extra column for referenced items
+        for short_id in referenced_short_ids:
+            matched_item_id = short_id_to_item_id.get(short_id)
+            if matched_item_id:
+                store.memory_item_repo.update_item(
+                    item_id=matched_item_id,
+                    extra={"ref_id": short_id},
+                )
+
+    def _build_category_summary_prompt(
+        self,
+        *,
+        category: MemoryCategory,
+        new_memories: list[str] | list[tuple[str, str]],
+    ) -> str:
+        """
+        Build the prompt for updating a category summary.
+
+        Args:
+            category: The category to update
+            new_memories: Either list of summary strings (legacy) or list of (item_id, summary) tuples (with refs)
+        """
+        # Check if references are enabled and we have (id, summary) tuples
+        enable_refs = getattr(self.memorize_config, "enable_item_references", False)
+
+        if enable_refs:
+            from memu.prompts.category_summary import (
+                CUSTOM_PROMPT_WITH_REFS as category_summary_custom_prompt,
+            )
+            from memu.prompts.category_summary import (
+                PROMPT_WITH_REFS as category_summary_prompt,
+            )
+
+            tuple_memories = cast(list[tuple[str, str]], new_memories)
+            new_items_text = "\n".join(
+                f"- [{self._build_item_ref_id(item_id)}] {summary}"
+                for item_id, summary in tuple_memories
+                if summary.strip()
+            )
+        else:
+            category_summary_prompt = CATEGORY_SUMMARY_PROMPT
+            category_summary_custom_prompt = CATEGORY_SUMMARY_CUSTOM_PROMPT
+
+            if new_memories and isinstance(new_memories[0], tuple):
+                tuple_memories = cast(list[tuple[str, str]], new_memories)
+                new_items_text = "\n".join(f"- {summary}" for item_id, summary in tuple_memories if summary.strip())
+            else:
+                str_memories = cast(list[str], new_memories)
+                new_items_text = "\n".join(f"- {m}" for m in str_memories if m.strip())
+
         original = category.summary or ""
         category_config = self.category_config_map.get(category.name)
         configured_prompt = (
             category_config and category_config.summary_prompt
         ) or self.memorize_config.default_category_summary_prompt
         if configured_prompt is None:
-            prompt = CATEGORY_SUMMARY_PROMPT
+            prompt = category_summary_prompt
         elif isinstance(configured_prompt, str):
             prompt = configured_prompt
         else:
-            prompt = self._resolve_custom_prompt(configured_prompt, CATEGORY_SUMMARY_CUSTOM_PROMPT)
+            prompt = self._resolve_custom_prompt(configured_prompt, category_summary_custom_prompt)
         target_length = (
             category_config and category_config.target_length
         ) or self.memorize_config.default_category_summary_target_length
@@ -985,13 +1101,20 @@ Summary:"""
 
     async def _update_category_summaries(
         self,
-        updates: dict[str, list[str]],
+        updates: dict[str, list[tuple[str, str]]] | dict[str, list[str]],
         ctx: Context,
         store: Database,
         llm_client: Any | None = None,
-    ) -> None:
+    ) -> dict[str, str]:
+        """
+        Update category summaries based on new memory items.
+
+        Returns:
+            dict mapping category_id -> updated summary text
+        """
+        updated_summaries: dict[str, str] = {}
         if not updates:
-            return
+            return updated_summaries
         tasks = []
         target_ids: list[str] = []
         client = llm_client or self._get_llm_client()
@@ -1003,16 +1126,19 @@ Summary:"""
             tasks.append(client.summarize(prompt, system_prompt=None))
             target_ids.append(cid)
         if not tasks:
-            return
+            return updated_summaries
         summaries = await asyncio.gather(*tasks)
         for cid, summary in zip(target_ids, summaries, strict=True):
             cat = store.memory_category_repo.categories.get(cid)
             if not cat:
                 continue
+            cleaned_summary = summary.replace("```markdown", "").replace("```", "").strip()
             store.memory_category_repo.update_category(
                 category_id=cid,
-                summary=summary.replace("```markdown", "").replace("```", "").strip(),
+                summary=cleaned_summary,
             )
+            updated_summaries[cid] = cleaned_summary
+        return updated_summaries
 
     def _parse_conversation_preprocess(self, raw: str) -> tuple[str | None, str | None]:
         conversation = self._extract_tag_content(raw, "conversation")
