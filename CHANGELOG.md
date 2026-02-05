@@ -1,5 +1,60 @@
 # Changelog
 
+## [1.3.0](https://github.com/NevaMind-AI/memU/compare/v1.2.0...v1.3.0) (2026-01-29)
+
+
+### Features
+
+* add happened at and extra fields to memory item ([#262](https://github.com/NevaMind-AI/memU/issues/262)) ([77938e9](https://github.com/NevaMind-AI/memU/commit/77938e9c282e1c0eda11088675c35975d85c4ff0))
+* add proactive example ([#268](https://github.com/NevaMind-AI/memU/issues/268)) ([d3d1de1](https://github.com/NevaMind-AI/memU/commit/d3d1de1d9b0f45d9b14479cbaa4462458b172005))
+* add Sealos support agent use case (Track G) ([#255](https://github.com/NevaMind-AI/memU/issues/255)) ([8fbdf3c](https://github.com/NevaMind-AI/memU/commit/8fbdf3c301f74f2aa85604837e00bb305b8801ec))
+* integrate LazyLLM to provide more llm services ([#265](https://github.com/NevaMind-AI/memU/issues/265)) ([c03f639](https://github.com/NevaMind-AI/memU/commit/c03f639677d6c897b75dfe28d0cd92d5b5270957))
+* **integrations:** Add LangGraph Adapter for MemU (Track A) ([#258](https://github.com/NevaMind-AI/memU/issues/258)) ([50b5502](https://github.com/NevaMind-AI/memU/commit/50b5502ebcacd86401f98b1bb7e5a6577fab7126))
+* **llm:** add Grok (xAI) integration ([#179](https://github.com/NevaMind-AI/memU/issues/179)) ([#236](https://github.com/NevaMind-AI/memU/issues/236)) ([1e16309](https://github.com/NevaMind-AI/memU/commit/1e1630948af535f8ed9d608e6c4f9d2748d4ce8e))
+* Openrouter integration as backend provider ([#182](https://github.com/NevaMind-AI/memU/issues/182)) ([cba667a](https://github.com/NevaMind-AI/memU/commit/cba667a56daca5093c9b79a598c7d2ffda813756))
+
+
+### Bug Fixes
+
+* memory type & proactive example ([#272](https://github.com/NevaMind-AI/memU/issues/272)) ([710f14d](https://github.com/NevaMind-AI/memU/commit/710f14d4b171c5cde609a9dc2caf454681ab94b3))
+* proactive examples ([#273](https://github.com/NevaMind-AI/memU/issues/273)) ([603ae12](https://github.com/NevaMind-AI/memU/commit/603ae122b94741bb350656086960c4e2bb868c2a))
+
+
+### Documentation
+
+* Add link to memU bot ([#276](https://github.com/NevaMind-AI/memU/issues/276)) ([2f84231](https://github.com/NevaMind-AI/memU/commit/2f842311ed592c1a45cdb9e24f7a128da97a0a39))
+* multilingual readme ([#271](https://github.com/NevaMind-AI/memU/issues/271)) ([200f47a](https://github.com/NevaMind-AI/memU/commit/200f47a15ff7d05fc435abe1d2cefbb3774548fe))
+* Update memU bot link to include full URL ([#277](https://github.com/NevaMind-AI/memU/issues/277)) ([6874eaf](https://github.com/NevaMind-AI/memU/commit/6874eaf278e910d07a4427dd4c06f9c4c21283ce))
+* update readme ([#266](https://github.com/NevaMind-AI/memU/issues/266)) ([16ae534](https://github.com/NevaMind-AI/memU/commit/16ae534675a5e0711256a5e2147b9190fd8b2524))
+* update README ([#270](https://github.com/NevaMind-AI/memU/issues/270)) ([b531d39](https://github.com/NevaMind-AI/memU/commit/b531d39e5538449b31cb212aea1deea24e12180f))
+
+## [1.2.0](https://github.com/NevaMind-AI/memU/compare/v1.1.2...v1.2.0) (2026-01-14)
+
+
+### Features
+
+* clear memory ([#239](https://github.com/NevaMind-AI/memU/issues/239)) ([7da36da](https://github.com/NevaMind-AI/memU/commit/7da36da57d7013df213e537b1f238f5a526e69d9))
+* **database:** add SQLite storage backend ([#201](https://github.com/NevaMind-AI/memU/issues/201)) ([4b899d7](https://github.com/NevaMind-AI/memU/commit/4b899d7b768fcd48b6456234800033e3b2e3173c))
+* improve issue template ([#199](https://github.com/NevaMind-AI/memU/issues/199)) ([abe0f1b](https://github.com/NevaMind-AI/memU/commit/abe0f1b77d5f8294ff45c9f57f5aeb6de33977d6))
+* optimize topk pick function ([#196](https://github.com/NevaMind-AI/memU/issues/196)) ([b474c54](https://github.com/NevaMind-AI/memU/commit/b474c54a7eea06ba56844d6482d5e78b3cb3f020))
+* workflow step interceptor ([#240](https://github.com/NevaMind-AI/memU/issues/240)) ([bf2ac96](https://github.com/NevaMind-AI/memU/commit/bf2ac96f1cb26b196f27b543d4c3e157f408f343))
+
+
+### Bug Fixes
+
+* allow nullable resource_id in Postgres items ([#232](https://github.com/NevaMind-AI/memU/issues/232)) ([ae2ffbb](https://github.com/NevaMind-AI/memU/commit/ae2ffbb0bcd69170875a47cebf322b71a15f4bd3))
+* correct coverage source to track memu package instead of tests ([#220](https://github.com/NevaMind-AI/memU/issues/220)) ([2460bbd](https://github.com/NevaMind-AI/memU/commit/2460bbd2a2c4df5b3664db81d89886b926b51031))
+* correct typo in PromptBlock class label attribute ([#231](https://github.com/NevaMind-AI/memU/issues/231)) ([d69053c](https://github.com/NevaMind-AI/memU/commit/d69053cece3467dd7c8cbf0634e72447649095f7))
+* default embed size ([#192](https://github.com/NevaMind-AI/memU/issues/192)) ([144fd32](https://github.com/NevaMind-AI/memU/commit/144fd32cfd6917b08f29cf56f251f239c360d2ae))
+* readme partners link & github issue link ([#198](https://github.com/NevaMind-AI/memU/issues/198)) ([849f881](https://github.com/NevaMind-AI/memU/commit/849f881f004b0772f372069e40f937731c114c89))
+
+
+### Documentation
+
+* add Chinese translation of README ([#212](https://github.com/NevaMind-AI/memU/issues/212)) ([d15ecf9](https://github.com/NevaMind-AI/memU/commit/d15ecf97647d8fd9f1d2ae95008a08bbba93a44a))
+* add How to Contribute section to README ([#215](https://github.com/NevaMind-AI/memU/issues/215)) ([bf44de7](https://github.com/NevaMind-AI/memU/commit/bf44de722965fd611c0dc585712eac587caa9e6c))
+* **readme:** update Chinese README with fixes and improvements ([#221](https://github.com/NevaMind-AI/memU/issues/221)) ([75a8f65](https://github.com/NevaMind-AI/memU/commit/75a8f651bb4b491ab5b0363de789c0dcd0291287))
+
 ## [1.1.2](https://github.com/NevaMind-AI/memU/compare/v1.1.1...v1.1.2) (2026-01-08)
 
 

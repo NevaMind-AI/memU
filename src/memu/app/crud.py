@@ -76,6 +76,27 @@ class CRUDMixin:
             raise RuntimeError(msg)
         return response
 
+    async def clear_memory(
+        self,
+        where: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        ctx = self._get_context()
+        store = self._get_database()
+        where_filters = self._normalize_where(where)
+
+        state: WorkflowState = {
+            "ctx": ctx,
+            "store": store,
+            "where": where_filters,
+        }
+
+        result = await self._run_workflow("crud_clear_memory", state)
+        response = cast(dict[str, Any] | None, result.get("response"))
+        if response is None:
+            msg = "Clear memory workflow failed to produce a response"
+            raise RuntimeError(msg)
+        return response
+
     def _build_list_memory_items_workflow(self) -> list[WorkflowStep]:
         steps = [
             WorkflowStep(
@@ -98,7 +119,7 @@ class CRUDMixin:
         return steps
 
     @staticmethod
-    def _list_list_memory_items_initial_keys() -> set[str]:
+    def _list_list_memories_initial_keys() -> set[str]:
         return {
             "ctx",
             "store",
@@ -125,6 +146,51 @@ class CRUDMixin:
             ),
         ]
         return steps
+
+    def _build_clear_memory_workflow(self) -> list[WorkflowStep]:
+        steps = [
+            WorkflowStep(
+                step_id="clear_memory_categories",
+                role="delete_memories",
+                handler=self._crud_clear_memory_categories,
+                requires={"ctx", "store", "where"},
+                produces={"deleted_categories"},
+                capabilities={"db"},
+            ),
+            WorkflowStep(
+                step_id="clear_memory_items",
+                role="delete_memories",
+                handler=self._crud_clear_memory_items,
+                requires={"ctx", "store", "where"},
+                produces={"deleted_items"},
+                capabilities={"db"},
+            ),
+            WorkflowStep(
+                step_id="clear_memory_resources",
+                role="delete_memories",
+                handler=self._crud_clear_memory_resources,
+                requires={"ctx", "store", "where"},
+                produces={"deleted_resources"},
+                capabilities={"db"},
+            ),
+            WorkflowStep(
+                step_id="build_response",
+                role="emit",
+                handler=self._crud_build_clear_memory_response,
+                requires={"ctx", "store", "deleted_categories", "deleted_items", "deleted_resources"},
+                produces={"response"},
+                capabilities=set(),
+            ),
+        ]
+        return steps
+
+    @staticmethod
+    def _list_clear_memories_initial_keys() -> set[str]:
+        return {
+            "ctx",
+            "store",
+            "where",
+        }
 
     def _normalize_where(self, where: Mapping[str, Any] | None) -> dict[str, Any]:
         """Validate and clean the `where` scope filters against the configured user model."""
@@ -173,6 +239,39 @@ class CRUDMixin:
         categories_list = [self._model_dump_without_embeddings(category) for category in categories.values()]
         response = {
             "categories": categories_list,
+        }
+        state["response"] = response
+        return state
+
+    def _crud_clear_memory_categories(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        where_filters = state.get("where") or {}
+        store = state["store"]
+        deleted = store.memory_category_repo.clear_categories(where_filters)
+        state["deleted_categories"] = deleted
+        return state
+
+    def _crud_clear_memory_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        where_filters = state.get("where") or {}
+        store = state["store"]
+        deleted = store.memory_item_repo.clear_items(where_filters)
+        state["deleted_items"] = deleted
+        return state
+
+    def _crud_clear_memory_resources(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        where_filters = state.get("where") or {}
+        store = state["store"]
+        deleted = store.resource_repo.clear_resources(where_filters)
+        state["deleted_resources"] = deleted
+        return state
+
+    def _crud_build_clear_memory_response(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        deleted_categories = state.get("deleted_categories", {})
+        deleted_items = state.get("deleted_items", {})
+        deleted_resources = state.get("deleted_resources", {})
+        response = {
+            "deleted_categories": [self._model_dump_without_embeddings(cat) for cat in deleted_categories.values()],
+            "deleted_items": [self._model_dump_without_embeddings(item) for item in deleted_items.values()],
+            "deleted_resources": [self._model_dump_without_embeddings(res) for res in deleted_resources.values()],
         }
         state["response"] = response
         return state

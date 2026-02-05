@@ -30,6 +30,7 @@ from memu.llm.wrapper import (
     LLMInterceptorHandle,
     LLMInterceptorRegistry,
 )
+from memu.workflow.interceptor import WorkflowInterceptorHandle, WorkflowInterceptorRegistry
 from memu.workflow.pipeline import PipelineManager
 from memu.workflow.runner import WorkflowRunner, resolve_workflow_runner
 from memu.workflow.step import WorkflowState, WorkflowStep
@@ -83,6 +84,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         # Initialize client caches (lazy creation on first use)
         self._llm_clients: dict[str, Any] = {}
         self._llm_interceptors = LLMInterceptorRegistry()
+        self._workflow_interceptors = WorkflowInterceptorRegistry()
 
         self._workflow_runner = resolve_workflow_runner(workflow_runner)
 
@@ -114,6 +116,19 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
                 provider=cfg.provider,
                 endpoint_overrides=cfg.endpoint_overrides,
                 embed_model=cfg.embed_model,
+            )
+        elif backend == "lazyllm_backend":
+            from memu.llm.lazyllm_client import LazyLLMClient
+
+            return LazyLLMClient(
+                llm_source=cfg.lazyllm_source.llm_source or cfg.lazyllm_source.source,
+                vlm_source=cfg.lazyllm_source.vlm_source or cfg.lazyllm_source.source,
+                embed_source=cfg.lazyllm_source.embed_source or cfg.lazyllm_source.source,
+                stt_source=cfg.lazyllm_source.stt_source or cfg.lazyllm_source.source,
+                chat_model=cfg.chat_model,
+                embed_model=cfg.embed_model,
+                vlm_model=cfg.lazyllm_source.vlm_model,
+                stt_model=cfg.lazyllm_source.stt_model,
             )
         else:
             msg = f"Unknown llm_client_backend '{cfg.client_backend}'"
@@ -240,6 +255,45 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
     ) -> LLMInterceptorHandle:
         return self._llm_interceptors.register_on_error(fn, name=name, priority=priority, where=where)
 
+    def intercept_before_workflow_step(
+        self,
+        fn: Callable[..., Any],
+        *,
+        name: str | None = None,
+    ) -> WorkflowInterceptorHandle:
+        """
+        Register an interceptor to be called before each workflow step.
+
+        The interceptor receives (step_context: WorkflowStepContext, state: WorkflowState).
+        """
+        return self._workflow_interceptors.register_before(fn, name=name)
+
+    def intercept_after_workflow_step(
+        self,
+        fn: Callable[..., Any],
+        *,
+        name: str | None = None,
+    ) -> WorkflowInterceptorHandle:
+        """
+        Register an interceptor to be called after each workflow step.
+
+        The interceptor receives (step_context: WorkflowStepContext, state: WorkflowState).
+        """
+        return self._workflow_interceptors.register_after(fn, name=name)
+
+    def intercept_on_error_workflow_step(
+        self,
+        fn: Callable[..., Any],
+        *,
+        name: str | None = None,
+    ) -> WorkflowInterceptorHandle:
+        """
+        Register an interceptor to be called when a workflow step raises an exception.
+
+        The interceptor receives (step_context: WorkflowStepContext, state: WorkflowState, error: Exception).
+        """
+        return self._workflow_interceptors.register_on_error(fn, name=name)
+
     def _get_context(self) -> Context:
         return self._context
 
@@ -277,7 +331,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         patch_delete_initial_keys = CRUDMixin._list_delete_memory_item_initial_keys()
         self._pipelines.register("patch_delete", patch_delete_workflow, initial_state_keys=patch_delete_initial_keys)
         crud_list_items_workflow = self._build_list_memory_items_workflow()
-        crud_list_memories_initial_keys = CRUDMixin._list_list_memory_items_initial_keys()
+        crud_list_memories_initial_keys = CRUDMixin._list_list_memories_initial_keys()
         self._pipelines.register(
             "crud_list_memory_items", crud_list_items_workflow, initial_state_keys=crud_list_memories_initial_keys
         )
@@ -287,12 +341,23 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             crud_list_categories_workflow,
             initial_state_keys=crud_list_memories_initial_keys,
         )
+        crud_clear_memory_workflow = self._build_clear_memory_workflow()
+        crud_clear_memory_initial_keys = CRUDMixin._list_clear_memories_initial_keys()
+        self._pipelines.register(
+            "crud_clear_memory", crud_clear_memory_workflow, initial_state_keys=crud_clear_memory_initial_keys
+        )
 
     async def _run_workflow(self, workflow_name: str, initial_state: WorkflowState) -> WorkflowState:
         """Execute a workflow through the configured runner backend."""
         steps = self._pipelines.build(workflow_name)
         runner_context = {"workflow_name": workflow_name}
-        return await self._workflow_runner.run(workflow_name, steps, initial_state, runner_context)
+        return await self._workflow_runner.run(
+            workflow_name,
+            steps,
+            initial_state,
+            runner_context,
+            interceptor_registry=self._workflow_interceptors,
+        )
 
     @staticmethod
     def _extract_json_blob(raw: str) -> str:

@@ -36,7 +36,7 @@ def _default_memory_type_prompts() -> "dict[str, str | CustomPrompt]":
 
 
 class PromptBlock(BaseModel):
-    lable: str | None = None
+    label: str | None = None
     ordinal: int = Field(default=0)
     prompt: str | None = None
 
@@ -89,6 +89,16 @@ def _default_memory_categories() -> list[CategoryConfig]:
     ]
 
 
+class LazyLLMSource(BaseModel):
+    source: str | None = Field(default=None, description="default source for lazyllm client backend")
+    llm_source: str | None = Field(default=None, description="LLM source for lazyllm client backend")
+    embed_source: str | None = Field(default=None, description="Embedding source for lazyllm client backend")
+    vlm_source: str | None = Field(default=None, description="VLM source for lazyllm client backend")
+    stt_source: str | None = Field(default=None, description="STT source for lazyllm client backend")
+    vlm_model: str = Field(default="qwen-vl-plus", description="Vision language model for lazyllm client backend")
+    stt_model: str = Field(default="qwen-audio-turbo", description="Speech-to-text model for lazyllm client backend")
+
+
 class LLMConfig(BaseModel):
     provider: str = Field(
         default="openai",
@@ -99,8 +109,9 @@ class LLMConfig(BaseModel):
     chat_model: str = Field(default="gpt-4o-mini")
     client_backend: str = Field(
         default="sdk",
-        description="Which LLM client backend to use: 'httpx' (httpx) or 'sdk' (official OpenAI).",
+        description="Which LLM client backend to use: 'httpx' (httpx), 'sdk' (official OpenAI), or 'lazyllm_backend' (for more LLM source like Qwen, Doubao, SIliconflow, etc.)",
     )
+    lazyllm_source: LazyLLMSource = Field(default=LazyLLMSource())
     endpoint_overrides: dict[str, str] = Field(
         default_factory=dict,
         description="Optional overrides for HTTP endpoints (keys: 'chat'/'summary').",
@@ -113,6 +124,18 @@ class LLMConfig(BaseModel):
         default=1,
         description="Maximum batch size for embedding API calls (used by SDK client backends).",
     )
+
+    @model_validator(mode="after")
+    def set_provider_defaults(self) -> "LLMConfig":
+        if self.provider == "grok":
+            # If values match the OpenAI defaults, switch them to Grok defaults
+            if self.base_url == "https://api.openai.com/v1":
+                self.base_url = "https://api.x.ai/v1"
+            if self.api_key == "OPENAI_API_KEY":
+                self.api_key = "XAI_API_KEY"
+            if self.chat_model == "gpt-4o-mini":
+                self.chat_model = "grok-2-latest"
+        return self
 
 
 class BlobConfig(BaseModel):
@@ -128,6 +151,20 @@ class RetrieveCategoryConfig(BaseModel):
 class RetrieveItemConfig(BaseModel):
     enabled: bool = Field(default=True, description="Whether to enable item retrieval.")
     top_k: int = Field(default=5, description="Total number of items to retrieve.")
+    # Reference-aware retrieval
+    use_category_references: bool = Field(
+        default=False,
+        description="When category retrieval is insufficient, follow [ref:ITEM_ID] citations to fetch referenced items.",
+    )
+    # Salience-aware retrieval settings
+    ranking: Literal["similarity", "salience"] = Field(
+        default="similarity",
+        description="Ranking strategy: 'similarity' (cosine only) or 'salience' (weighted by reinforcement + recency).",
+    )
+    recency_decay_days: float = Field(
+        default=30.0,
+        description="Half-life in days for recency decay in salience scoring. After this many days, recency factor is ~0.5.",
+    )
 
 
 class RetrieveResourceConfig(BaseModel):
@@ -194,6 +231,15 @@ class MemorizeConfig(BaseModel):
         description="Target max length for auto-generated category summaries.",
     )
     category_update_llm_profile: str = Field(default="default", description="LLM profile for category summary.")
+    # Reference tracking for category summaries
+    enable_item_references: bool = Field(
+        default=False,
+        description="Enable inline [ref:ITEM_ID] citations in category summaries linking to source memory items.",
+    )
+    enable_item_reinforcement: bool = Field(
+        default=False,
+        description="Enable reinforcement tracking for memory items.",
+    )
 
 
 class PatchConfig(BaseModel):
@@ -202,6 +248,9 @@ class PatchConfig(BaseModel):
 
 class DefaultUserModel(BaseModel):
     user_id: str | None = None
+    # Agent/session scoping for multi-agent and multi-session memory filtering
+    # agent_id: str | None = None
+    # session_id: str | None = None
 
 
 class UserConfig(BaseModel):
