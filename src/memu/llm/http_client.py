@@ -8,6 +8,7 @@ from typing import Any, cast
 
 import httpx
 
+from memu.llm.backends.anthropic import AnthropicLLMBackend
 from memu.llm.backends.base import LLMBackend
 from memu.llm.backends.doubao import DoubaoLLMBackend
 from memu.llm.backends.grok import GrokBackend
@@ -62,6 +63,24 @@ class _OpenRouterEmbeddingBackend(_EmbeddingBackend):
         return [cast(list[float], d["embedding"]) for d in data["data"]]
 
 
+class _GeminiEmbeddingBackend(_EmbeddingBackend):
+    """Gemini embedding API backend."""
+
+    name = "gemini"
+    embedding_endpoint = "/v1beta/models/{model}:batchEmbedContents"
+
+    def build_embedding_payload(self, *, inputs: list[str], embed_model: str) -> dict[str, Any]:
+        requests = [
+            {"model": f"models/{embed_model}", "content": {"parts": [{"text": text}]}}
+            for text in inputs
+        ]
+        return {"requests": requests}
+
+    def parse_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
+        embeddings = data.get("embeddings", [])
+        return [emb["values"] for emb in embeddings]
+
+
 logger = logging.getLogger(__name__)
 
 LLM_BACKENDS: dict[str, Callable[[], LLMBackend]] = {
@@ -69,6 +88,8 @@ LLM_BACKENDS: dict[str, Callable[[], LLMBackend]] = {
     DoubaoLLMBackend.name: DoubaoLLMBackend,
     GrokBackend.name: GrokBackend,
     OpenRouterLLMBackend.name: OpenRouterLLMBackend,
+    AnthropicLLMBackend.name: AnthropicLLMBackend,
+    "gemini": OpenAILLMBackend,  # Gemini uses embedding only; chat falls back to OpenAI format
 }
 
 
@@ -85,13 +106,23 @@ class HTTPLLMClient:
         endpoint_overrides: dict[str, str] | None = None,
         timeout: int = 60,
         embed_model: str | None = None,
+        # Separate embedding provider settings
+        embed_provider: str | None = None,
+        embed_base_url: str | None = None,
+        embed_api_key: str | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or ""
         self.chat_model = chat_model
         self.provider = provider.lower()
         self.backend = self._load_backend(self.provider)
-        self.embedding_backend = self._load_embedding_backend(self.provider)
+        
+        # Use separate embedding provider if specified
+        self._embed_provider = (embed_provider or provider).lower()
+        self._embed_base_url = (embed_base_url or base_url).rstrip("/")
+        self._embed_api_key = embed_api_key or api_key or ""
+        self.embedding_backend = self._load_embedding_backend(self._embed_provider)
+        
         overrides = endpoint_overrides or {}
         self.summary_endpoint = overrides.get("chat") or overrides.get("summary") or self.backend.summary_endpoint
         self.embedding_endpoint = (
@@ -112,18 +143,29 @@ class HTTPLLMClient:
         temperature: float = 0.2,
     ) -> tuple[str, dict[str, Any]]:
         """Generic chat completion."""
-        messages: list[dict[str, Any]] = []
-        if system_prompt is not None:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+        # Anthropic uses different payload format
+        if self.provider == "anthropic":
+            payload: dict[str, Any] = {
+                "model": self.chat_model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": temperature,
+                "max_tokens": max_tokens or 1024,
+            }
+            if system_prompt is not None:
+                payload["system"] = system_prompt
+        else:
+            messages: list[dict[str, Any]] = []
+            if system_prompt is not None:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
 
-        payload: dict[str, Any] = {
-            "model": self.chat_model,
-            "messages": messages,
-            "temperature": temperature,
-        }
-        if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
+            payload = {
+                "model": self.chat_model,
+                "messages": messages,
+                "temperature": temperature,
+            }
+            if max_tokens is not None:
+                payload["max_tokens"] = max_tokens
 
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
             resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers())
@@ -198,8 +240,15 @@ class HTTPLLMClient:
     async def embed(self, inputs: list[str]) -> tuple[list[list[float]], dict[str, Any]]:
         """Create text embeddings using the provider-specific embedding API."""
         payload = self.embedding_backend.build_embedding_payload(inputs=inputs, embed_model=self.embed_model)
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
-            resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers())
+        
+        # Gemini uses model name in endpoint path
+        endpoint = self.embedding_endpoint
+        if self._embed_provider == "gemini" and "{model}" in endpoint:
+            endpoint = endpoint.format(model=self.embed_model)
+        
+        # Use separate embedding provider settings
+        async with httpx.AsyncClient(base_url=self._embed_base_url, timeout=self.timeout) as client:
+            resp = await client.post(endpoint, json=payload, headers=self._embed_headers())
             resp.raise_for_status()
             data = resp.json()
         logger.debug("HTTP embedding response: %s", data)
@@ -262,7 +311,45 @@ class HTTPLLMClient:
             return result or "", raw_response
 
     def _headers(self) -> dict[str, str]:
+        if self.provider == "gemini":
+            return {"x-goog-api-key": self.api_key, "Content-Type": "application/json"}
+        if self.provider == "anthropic":
+            # Support both API key (x-api-key) and OAuth token (Bearer)
+            # OAuth tokens start with "sk-ant-oat" 
+            if self.api_key.startswith("sk-ant-oat"):
+                return {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "anthropic-version": "2023-06-01",
+                    "anthropic-beta": "oauth-2025-04-20",
+                    "Content-Type": "application/json",
+                }
+            else:
+                return {
+                    "x-api-key": self.api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                }
         return {"Authorization": f"Bearer {self.api_key}"}
+
+    def _embed_headers(self) -> dict[str, str]:
+        """Headers for embedding API (may use different provider)."""
+        if self._embed_provider == "gemini":
+            return {"x-goog-api-key": self._embed_api_key, "Content-Type": "application/json"}
+        if self._embed_provider == "anthropic":
+            if self._embed_api_key.startswith("sk-ant-oat"):
+                return {
+                    "Authorization": f"Bearer {self._embed_api_key}",
+                    "anthropic-version": "2023-06-01",
+                    "anthropic-beta": "oauth-2025-04-20",
+                    "Content-Type": "application/json",
+                }
+            else:
+                return {
+                    "x-api-key": self._embed_api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                }
+        return {"Authorization": f"Bearer {self._embed_api_key}"}
 
     def _load_backend(self, provider: str) -> LLMBackend:
         factory = LLM_BACKENDS.get(provider)
@@ -277,6 +364,9 @@ class HTTPLLMClient:
             _DoubaoEmbeddingBackend.name: _DoubaoEmbeddingBackend,
             "grok": _OpenAIEmbeddingBackend,
             _OpenRouterEmbeddingBackend.name: _OpenRouterEmbeddingBackend,
+            _GeminiEmbeddingBackend.name: _GeminiEmbeddingBackend,
+            # Anthropic doesn't have embedding API, use OpenAI-compatible as fallback
+            "anthropic": _OpenAIEmbeddingBackend,
         }
         factory = backends.get(provider)
         if not factory:

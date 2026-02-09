@@ -124,6 +124,19 @@ class LLMConfig(BaseModel):
         default=1,
         description="Maximum batch size for embedding API calls (used by SDK client backends).",
     )
+    # Separate embedding provider settings (if different from LLM)
+    embed_provider: str | None = Field(
+        default=None,
+        description="Embedding provider (if different from main provider). e.g., 'gemini'",
+    )
+    embed_base_url: str | None = Field(
+        default=None,
+        description="Embedding API base URL (if different from main base_url).",
+    )
+    embed_api_key: str | None = Field(
+        default=None,
+        description="Embedding API key (if different from main api_key).",
+    )
 
     @model_validator(mode="after")
     def set_provider_defaults(self) -> "LLMConfig":

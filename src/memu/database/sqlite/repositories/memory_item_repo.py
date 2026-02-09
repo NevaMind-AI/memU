@@ -106,11 +106,12 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
                 resource_id=row.resource_id,
                 memory_type=row.memory_type,
                 summary=row.summary,
-                embedding=self._normalize_embedding(row.embedding_json),
                 created_at=row.created_at,
                 updated_at=row.updated_at,
                 **self._scope_kwargs_from(row),
             )
+            # Store raw embedding for vector search (MemoryItem doesn't have embedding field)
+            setattr(item, "embedding", self._normalize_embedding(row.embedding_json))
             result[row.id] = item
             self.items[row.id] = item
 
@@ -151,11 +152,12 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
                 resource_id=row.resource_id,
                 memory_type=row.memory_type,
                 summary=row.summary,
-                embedding=self._normalize_embedding(row.embedding_json),
                 created_at=row.created_at,
                 updated_at=row.updated_at,
                 **self._scope_kwargs_from(row),
             )
+            # Store raw embedding for vector search
+            setattr(item, "embedding", self._normalize_embedding(row.embedding_json))
             result[row.id] = item
             self.items[row.id] = item
 
@@ -211,7 +213,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
     def create_item(
         self,
         *,
-        resource_id: str,
+        resource_id: str | None = None,
         memory_type: MemoryType,
         summary: str,
         embedding: list[float],
@@ -285,7 +287,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
     def create_item_reinforce(
         self,
         *,
-        resource_id: str,
+        resource_id: str | None = None,
         memory_type: MemoryType,
         summary: str,
         embedding: list[float],

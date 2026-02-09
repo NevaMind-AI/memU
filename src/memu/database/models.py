@@ -35,6 +35,8 @@ def compute_content_hash(summary: str, memory_type: str) -> str:
 class BaseRecord(BaseModel):
     """Backend-agnostic record interface."""
 
+    model_config = ConfigDict(extra="allow")  # Allow dynamic attributes like embedding
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=lambda: pendulum.now("UTC"))
     updated_at: datetime = Field(default_factory=lambda: pendulum.now("UTC"))
@@ -70,14 +72,16 @@ class Resource(BaseRecord):
     modality: str
     local_path: str
     caption: str | None = None
-    embedding: list[float] | None = None
+    # Note: embedding field is defined in concrete implementations (InMemory models)
+    # SQLite uses embedding_json column + property
 
 
 class MemoryItem(BaseRecord):
     resource_id: str | None
     memory_type: str
     summary: str
-    embedding: list[float] | None = None
+    # Note: embedding field is defined in concrete implementations (InMemory models)
+    # SQLite uses embedding_json column + property
     happened_at: datetime | None = None
     extra: dict[str, Any] = {}
     # extra may contain:
@@ -96,7 +100,8 @@ class MemoryItem(BaseRecord):
 class MemoryCategory(BaseRecord):
     name: str
     description: str
-    embedding: list[float] | None = None
+    # Note: embedding field is defined in concrete implementations (InMemory models)
+    # SQLite uses embedding_json column + property
     summary: str | None = None
 
 

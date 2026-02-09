@@ -116,6 +116,10 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
                 provider=cfg.provider,
                 endpoint_overrides=cfg.endpoint_overrides,
                 embed_model=cfg.embed_model,
+                # Separate embedding provider settings
+                embed_provider=cfg.embed_provider,
+                embed_base_url=cfg.embed_base_url,
+                embed_api_key=cfg.embed_api_key,
             )
         elif backend == "lazyllm_backend":
             from memu.llm.lazyllm_client import LazyLLMClient

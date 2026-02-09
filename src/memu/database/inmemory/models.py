@@ -13,14 +13,17 @@ from memu.database.models import (
 
 class InMemoryResource(Resource):
     """Concrete in-memory resource model."""
+    embedding: list[float] | None = None
 
 
 class InMemoryMemoryItem(MemoryItem):
     """Concrete in-memory memory item model."""
+    embedding: list[float] | None = None
 
 
 class InMemoryMemoryCategory(MemoryCategory):
     """Concrete in-memory memory category model."""
+    embedding: list[float] | None = None
 
 
 class InMemoryCategoryItem(CategoryItem):
