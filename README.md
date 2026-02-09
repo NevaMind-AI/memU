@@ -16,6 +16,8 @@
 
 **[English](readme/README_en.md) | [中文](readme/README_zh.md) | [日本語](readme/README_ja.md) | [한국어](readme/README_ko.md) | [Español](readme/README_es.md) | [Français](readme/README_fr.md)**
 
+> 🔧 **This fork adds Anthropic/Gemini providers and SQLite fixes.** See [Multi-Provider Setup Guide](docs/multi-provider-guide.md) for details.
+
 </div>
 
 ---
