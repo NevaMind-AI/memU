@@ -5,15 +5,11 @@ from pydantic import AfterValidator, BaseModel, BeforeValidator, Field, RootMode
 
 from memu.prompts.category_summary import (
     DEFAULT_CATEGORY_SUMMARY_PROMPT_ORDINAL,
-)
-from memu.prompts.category_summary import (
     PROMPT as CATEGORY_SUMMARY_PROMPT,
 )
 from memu.prompts.memory_type import (
     DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL,
     DEFAULT_MEMORY_TYPES,
-)
-from memu.prompts.memory_type import (
     PROMPTS as DEFAULT_MEMORY_TYPE_PROMPTS,
 )
 
