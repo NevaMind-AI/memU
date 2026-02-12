@@ -119,8 +119,9 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         embedding: list[float],
         user_data: dict[str, Any],
         reinforce: bool = False,
+        tool_record: dict[str, Any] | None = None,
     ) -> MemoryItem:
-        if reinforce:
+        if reinforce and memory_type != "tool":
             return self.create_item_reinforce(
                 resource_id=resource_id,
                 memory_type=memory_type,
@@ -129,11 +130,22 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
                 user_data=user_data,
             )
 
+        # Build extra dict with tool_record fields at top level
+        extra: dict[str, Any] = {}
+        if tool_record:
+            if tool_record.get("when_to_use") is not None:
+                extra["when_to_use"] = tool_record["when_to_use"]
+            if tool_record.get("metadata") is not None:
+                extra["metadata"] = tool_record["metadata"]
+            if tool_record.get("tool_calls") is not None:
+                extra["tool_calls"] = tool_record["tool_calls"]
+
         item = self._memory_item_model(
             resource_id=resource_id,
             memory_type=memory_type,
             summary=summary,
             embedding=self._prepare_embedding(embedding),
+            extra=extra if extra else {},
             **user_data,
             created_at=self._now(),
             updated_at=self._now(),
@@ -218,6 +230,7 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         summary: str | None = None,
         embedding: list[float] | None = None,
         extra: dict[str, Any] | None = None,
+        tool_record: dict[str, Any] | None = None,
     ) -> MemoryItem:
         from sqlmodel import select
 
@@ -236,11 +249,18 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
                 item.summary = summary
             if embedding is not None:
                 item.embedding = self._prepare_embedding(embedding)
+
+            # Merge extra and tool_record into existing extra dict
+            current_extra = item.extra or {}
             if extra is not None:
-                # Incremental update: merge new keys into existing extra dict
-                current_extra = item.extra or {}
-                merged_extra = {**current_extra, **extra}
-                item.extra = merged_extra
+                current_extra = {**current_extra, **extra}
+            if tool_record is not None:
+                # Merge tool_record fields at top level
+                for key in ("when_to_use", "metadata", "tool_calls"):
+                    if tool_record.get(key) is not None:
+                        current_extra[key] = tool_record[key]
+            if extra is not None or tool_record is not None:
+                item.extra = current_extra
 
             item.updated_at = now
             session.add(item)

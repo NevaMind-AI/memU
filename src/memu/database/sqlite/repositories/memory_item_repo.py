@@ -217,6 +217,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         embedding: list[float],
         user_data: dict[str, Any],
         reinforce: bool = False,
+        tool_record: dict[str, Any] | None = None,
     ) -> MemoryItem:
         """Create a new memory item.
 
@@ -227,11 +228,12 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             embedding: Embedding vector.
             user_data: User scope data.
             reinforce: If True, reinforce existing item instead of creating duplicate.
+            tool_record: Tool-related fields (when_to_use, metadata, tool_calls) to store in extra.
 
         Returns:
             Created MemoryItem object.
         """
-        if reinforce:
+        if reinforce and memory_type != "tool":
             return self.create_item_reinforce(
                 resource_id=resource_id,
                 memory_type=memory_type,
@@ -240,12 +242,23 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
                 user_data=user_data,
             )
 
+        # Build extra dict with tool_record fields at top level
+        extra: dict[str, Any] = {}
+        if tool_record:
+            if tool_record.get("when_to_use") is not None:
+                extra["when_to_use"] = tool_record["when_to_use"]
+            if tool_record.get("metadata") is not None:
+                extra["metadata"] = tool_record["metadata"]
+            if tool_record.get("tool_calls") is not None:
+                extra["tool_calls"] = tool_record["tool_calls"]
+
         now = self._now()
         row = self._memory_item_model(
             resource_id=resource_id,
             memory_type=memory_type,
             summary=summary,
             embedding_json=self._prepare_embedding(embedding),
+            extra=extra if extra else {},
             created_at=now,
             updated_at=now,
             **user_data,
@@ -261,6 +274,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             memory_type=row.memory_type,
             summary=row.summary,
             embedding=embedding,
+            extra=row.extra,
             created_at=row.created_at,
             updated_at=row.updated_at,
             **user_data,
@@ -379,6 +393,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         summary: str | None = None,
         embedding: list[float] | None = None,
         extra: dict[str, Any] | None = None,
+        tool_record: dict[str, Any] | None = None,
     ) -> MemoryItem:
         """Update an existing memory item.
 
@@ -388,6 +403,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             summary: New summary text (optional).
             embedding: New embedding vector (optional).
             extra: Extra data to merge into existing extra dict (optional).
+            tool_record: Tool-related fields (when_to_use, metadata, tool_calls) to merge into extra.
 
         Returns:
             Updated MemoryItem object.
@@ -409,11 +425,19 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
                 row.summary = summary
             if embedding is not None:
                 row.embedding_json = self._prepare_embedding(embedding)
+
+            # Merge extra and tool_record into existing extra dict
+            current_extra = row.extra or {}
             if extra is not None:
-                # Incremental update: merge new keys into existing extra dict
-                current_extra = row.extra or {}
-                merged_extra = {**current_extra, **extra}
-                row.extra = merged_extra
+                current_extra = {**current_extra, **extra}
+            if tool_record is not None:
+                # Merge tool_record fields at top level
+                for key in ("when_to_use", "metadata", "tool_calls"):
+                    if tool_record.get(key) is not None:
+                        current_extra[key] = tool_record[key]
+            if extra is not None or tool_record is not None:
+                row.extra = current_extra
+
             row.updated_at = self._now()
 
             session.add(row)
@@ -426,6 +450,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             memory_type=row.memory_type,
             summary=row.summary,
             embedding=self._normalize_embedding(row.embedding_json),
+            extra=row.extra,
             created_at=row.created_at,
             updated_at=row.updated_at,
             **self._scope_kwargs_from(row),

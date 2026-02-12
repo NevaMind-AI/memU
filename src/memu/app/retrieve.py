@@ -777,7 +777,7 @@ class RetrieveMixin:
 
         sys_prompt = system_prompt or PRE_RETRIEVAL_SYSTEM_PROMPT
         client = llm_client or self._get_llm_client()
-        response = await client.summarize(user_prompt, system_prompt=sys_prompt)
+        response = await client.chat(user_prompt, system_prompt=sys_prompt)
         decision = self._extract_decision(response)
         rewritten = self._extract_rewritten_query(response) or query
 
@@ -1235,7 +1235,7 @@ class RetrieveMixin:
         )
 
         client = llm_client or self._get_llm_client()
-        llm_response = await client.summarize(prompt, system_prompt=None)
+        llm_response = await client.chat(prompt)
         return self._parse_llm_category_response(llm_response, store, categories=category_pool)
 
     async def _llm_rank_items(
@@ -1274,7 +1274,7 @@ class RetrieveMixin:
         )
 
         client = llm_client or self._get_llm_client()
-        llm_response = await client.summarize(prompt, system_prompt=None)
+        llm_response = await client.chat(prompt)
         return self._parse_llm_item_response(llm_response, store, items=item_pool)
 
     async def _llm_rank_resources(
@@ -1319,7 +1319,7 @@ class RetrieveMixin:
         )
 
         client = llm_client or self._get_llm_client()
-        llm_response = await client.summarize(prompt, system_prompt=None)
+        llm_response = await client.chat(prompt)
         return self._parse_llm_resource_response(llm_response, store, resources=resource_pool)
 
     def _parse_llm_category_response(

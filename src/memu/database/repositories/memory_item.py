@@ -27,6 +27,7 @@ class MemoryItemRepo(Protocol):
         embedding: list[float],
         user_data: dict[str, Any],
         reinforce: bool = False,
+        tool_record: dict[str, Any] | None = None,
     ) -> MemoryItem: ...
 
     def update_item(
@@ -37,6 +38,7 @@ class MemoryItemRepo(Protocol):
         summary: str | None = None,
         embedding: list[float] | None = None,
         extra: dict[str, Any] | None = None,
+        tool_record: dict[str, Any] | None = None,
     ) -> MemoryItem: ...
 
     def delete_item(self, item_id: str) -> None: ...

@@ -528,7 +528,8 @@ class MemorizeMixin:
             for mtype in memory_types
         ]
         valid_prompts = [prompt for prompt in prompts if prompt.strip()]
-        tasks = [client.summarize(prompt_text) for prompt_text in valid_prompts]
+        # These prompts are instructions that request structured output, not text summaries.
+        tasks = [client.chat(prompt_text) for prompt_text in valid_prompts]
         responses = await asyncio.gather(*tasks)
         return self._parse_structured_entries(memory_types, responses)
 
@@ -799,7 +800,7 @@ class MemorizeMixin:
         preprocessed_text = format_conversation_for_preprocess(text)
         prompt = template.format(conversation=self._escape_prompt_value(preprocessed_text))
         client = llm_client or self._get_llm_client()
-        processed = await client.summarize(prompt, system_prompt=None)
+        processed = await client.chat(prompt)
         _conv, segments = self._parse_conversation_preprocess_with_segments(processed, preprocessed_text)
 
         # Important: always use the original JSON-derived, indexed conversation text for downstream
@@ -829,16 +830,13 @@ class MemorizeMixin:
 
     async def _summarize_segment(self, segment_text: str, llm_client: Any | None = None) -> str | None:
         """Summarize a single conversation segment."""
-        prompt = f"""Summarize the following conversation segment in 1-2 concise sentences.
-Focus on the main topic or theme discussed.
-
-Conversation:
-{segment_text}
-
-Summary:"""
+        system_prompt = (
+            "Summarize the given conversation segment in 1-2 concise sentences. "
+            "Focus on the main topic or theme discussed."
+        )
         try:
             client = llm_client or self._get_llm_client()
-            response = await client.summarize(prompt, system_prompt=None)
+            response = await client.chat(segment_text, system_prompt=system_prompt)
             return response.strip() if response else None
         except Exception:
             logger.exception("Failed to summarize segment")
@@ -915,7 +913,7 @@ Summary:"""
         """Preprocess document data - condense and extract caption"""
         prompt = template.format(document_text=self._escape_prompt_value(text))
         client = llm_client or self._get_llm_client()
-        processed = await client.summarize(prompt, system_prompt=None)
+        processed = await client.chat(prompt)
         processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
         return [{"text": processed_content or text, "caption": caption}]
 
@@ -925,7 +923,7 @@ Summary:"""
         """Preprocess audio data - format transcription and extract caption"""
         prompt = template.format(transcription=self._escape_prompt_value(text))
         client = llm_client or self._get_llm_client()
-        processed = await client.summarize(prompt, system_prompt=None)
+        processed = await client.chat(prompt)
         processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
         return [{"text": processed_content or text, "caption": caption}]
 
@@ -1123,7 +1121,7 @@ Summary:"""
             if not cat or not memories:
                 continue
             prompt = self._build_category_summary_prompt(category=cat, new_memories=memories)
-            tasks.append(client.summarize(prompt, system_prompt=None))
+            tasks.append(client.chat(prompt))
             target_ids.append(cid)
         if not tasks:
             return updated_summaries

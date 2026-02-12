@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.4.0](https://github.com/NevaMind-AI/memU/compare/v1.3.0...v1.4.0) (2026-02-06)
+
+
+### Features
+
+* Add inline memory item references in category summaries ([#202](https://github.com/NevaMind-AI/memU/issues/202)) ([#205](https://github.com/NevaMind-AI/memU/issues/205)) ([5213571](https://github.com/NevaMind-AI/memU/commit/5213571b218d85784e0771f7a721eafd7da1c1ff))
+* Add salience-aware memory with reinforcement tracking ([#186](https://github.com/NevaMind-AI/memU/issues/186)) ([#206](https://github.com/NevaMind-AI/memU/issues/206)) ([2bdbcce](https://github.com/NevaMind-AI/memU/commit/2bdbcce1a87ae1017d5930901fb0ae8d2924dcee))
+* Add Tool Memory type with specialized metadata and statistics ([#247](https://github.com/NevaMind-AI/memU/issues/247)) ([4e8a035](https://github.com/NevaMind-AI/memU/commit/4e8a03578641afd0e07f9700629dff8d91d2b3fb))
+
+
+### Bug Fixes
+
+* add chat() API and stop misusing summarize() ([#208](https://github.com/NevaMind-AI/memU/issues/208)) ([be0a5c7](https://github.com/NevaMind-AI/memU/commit/be0a5c73250f0a21ad5e0d39b0e66e3018809e0f))
+* remove unused type: ignore comment and add lazyllm mypy override ([#275](https://github.com/NevaMind-AI/memU/issues/275)) ([0e490f7](https://github.com/NevaMind-AI/memU/commit/0e490f7333feecffaef0901cccb1c9a5dbb7bafb))
+* **video:** cleanup temp files on extraction failure ([#295](https://github.com/NevaMind-AI/memU/issues/295)) ([16b65e5](https://github.com/NevaMind-AI/memU/commit/16b65e54aef69dfe617835ca534c12752e06eda8))
+
+
+### Documentation
+
+* file system in readme ([#301](https://github.com/NevaMind-AI/memU/issues/301)) ([ee27d8a](https://github.com/NevaMind-AI/memU/commit/ee27d8aa5e42d249963b08d5775338080b0255f8))
+* fix name ([#291](https://github.com/NevaMind-AI/memU/issues/291)) ([fd0d179](https://github.com/NevaMind-AI/memU/commit/fd0d17998f6c0c9ba5c7e91964c39ee909f2b366))
+* fix readme lint ([#290](https://github.com/NevaMind-AI/memU/issues/290)) ([a7a5516](https://github.com/NevaMind-AI/memU/commit/a7a55169ecbc1579ae87dc68c5e09b1d62f07b56))
+* lint error ([#287](https://github.com/NevaMind-AI/memU/issues/287)) ([7f61dc7](https://github.com/NevaMind-AI/memU/commit/7f61dc72ffbadf849f227cf314bba7ce7964761b))
+* readme memubot ([#289](https://github.com/NevaMind-AI/memU/issues/289)) ([2f30798](https://github.com/NevaMind-AI/memU/commit/2f30798367e3591107e1e66a184d0dd4ad6c2f93))
+* Update README.md ([#300](https://github.com/NevaMind-AI/memU/issues/300)) ([1075d7c](https://github.com/NevaMind-AI/memU/commit/1075d7c9ec3a272846c9fdb8c22ec58ff73cf6e7))
+
 ## [1.3.0](https://github.com/NevaMind-AI/memU/compare/v1.2.0...v1.3.0) (2026-01-29)
 
 

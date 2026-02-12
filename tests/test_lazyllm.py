@@ -45,7 +45,7 @@ async def test_lazyllm_client():
     print("\n[Test 1] Testing summarization...")
     try:
         test_text = "这是一段关于Python编程的文本。Python是一种高级编程语言，具有简单易学的语法。它被广泛用于数据分析、机器学习和Web开发。"  # noqa: RUF001
-        result = await client.summarize(test_text)
+        result = await client.chat(test_text)
         print("✓ Summarization successful")
         print(f"  Result: {result[:100]}...")
     except Exception as e:
