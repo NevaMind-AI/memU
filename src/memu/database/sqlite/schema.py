@@ -52,25 +52,25 @@ def get_sqlite_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) 
     resource_model = build_sqlite_table_model(
         scope,
         SQLiteResourceModel,
-        tablename="sqlite_resources",
+        tablename="memu_resources",
         metadata=metadata_obj,
     )
     memory_category_model = build_sqlite_table_model(
         scope,
         SQLiteMemoryCategoryModel,
-        tablename="sqlite_memory_categories",
+        tablename="memu_memory_categories",
         metadata=metadata_obj,
     )
     memory_item_model = build_sqlite_table_model(
         scope,
         SQLiteMemoryItemModel,
-        tablename="sqlite_memory_items",
+        tablename="memu_memory_items",
         metadata=metadata_obj,
     )
     category_item_model = build_sqlite_table_model(
         scope,
         SQLiteCategoryItemModel,
-        tablename="sqlite_category_items",
+        tablename="memu_category_items",
         metadata=metadata_obj,
     )
 
