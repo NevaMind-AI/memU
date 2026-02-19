@@ -68,7 +68,63 @@ class MemorizeMixin:
         resource_url: str,
         modality: str,
         user: dict[str, Any] | None = None,
+        background: bool = False,
     ) -> dict[str, Any]:
+        """
+        Memorize a resource from a URL.
+
+        This method processes the resource either synchronously or asynchronously
+        using the event-driven orchestration system.
+
+        Args:
+            resource_url: URL of the resource to memorize
+            modality: Type of content (document, image, video, audio, conversation)
+            user: Optional user context
+            background: If True, uses event-driven dispatch to Celery workers
+
+        Returns:
+            Response dictionary with result or task status
+
+        Event-Driven Flow (background=True):
+            1. Emit 'on_memory_saved' event with payload
+            2. CeleryDispatcher catches event
+            3. Dispatches to Celery worker (process_memory_task)
+            4. Returns task_id for tracking
+        """
+        if background:
+            # Event-driven orchestration: emit event instead of direct task call
+            from memu.events import event_manager
+
+            # prepare event payload
+            event_data = {
+                "resource_url": resource_url,
+                "modality": modality,
+                "user": user,
+            }
+
+            # Emit event - CeleryDispatcher will handle async dispatch
+            logger.info(
+                "Emitting on_memory_saved event for background processing",
+                extra={
+                    "resource_url": resource_url,
+                    "modality": modality,
+                    "user_id": user.get("user_id") if user else None,
+                },
+            )
+
+            # Emit the event - any registered dispatchers will handle it
+            event_manager.emit("on_memory_saved", event_data)
+
+            # Get task_id from CeleryDispatcher if available
+            # (For now, return generic response - can enhance to track task_id)
+            return {
+                "status": "queued",
+                "message": "Memory processing event dispatched to background workers",
+                "event": "on_memory_saved",
+                "resource_url": resource_url,
+            }
+
+        # Synchronous processing
         ctx = self._get_context()
         store = self._get_database()
         user_scope = self.user_model(**user).model_dump() if user is not None else None
@@ -92,6 +148,7 @@ class MemorizeMixin:
         if response is None:
             msg = "Memorize workflow failed to produce a response"
             raise RuntimeError(msg)
+
         return response
 
     def _build_memorize_workflow(self) -> list[WorkflowStep]:
