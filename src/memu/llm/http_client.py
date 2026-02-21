@@ -86,20 +86,27 @@ class HTTPLLMClient:
         timeout: int = 60,
         embed_model: str | None = None,
     ):
-        self.base_url = base_url.rstrip("/")
+        # Ensure base_url ends with "/" so httpx doesn't discard the path
+        # component when joining with endpoint paths.
+        # See: https://github.com/NevaMind-AI/memU/issues/328
+        self.base_url = base_url.rstrip("/") + "/"
         self.api_key = api_key or ""
         self.chat_model = chat_model
         self.provider = provider.lower()
         self.backend = self._load_backend(self.provider)
         self.embedding_backend = self._load_embedding_backend(self.provider)
         overrides = endpoint_overrides or {}
-        self.summary_endpoint = overrides.get("chat") or overrides.get("summary") or self.backend.summary_endpoint
-        self.embedding_endpoint = (
+        raw_summary_ep = overrides.get("chat") or overrides.get("summary") or self.backend.summary_endpoint
+        raw_embedding_ep = (
             overrides.get("embeddings")
             or overrides.get("embedding")
             or overrides.get("embed")
             or self.embedding_backend.embedding_endpoint
         )
+        # Strip leading "/" from endpoints so httpx resolves them relative to
+        # base_url instead of treating them as absolute paths.
+        self.summary_endpoint = raw_summary_ep.lstrip("/")
+        self.embedding_endpoint = raw_embedding_ep.lstrip("/")
         self.timeout = timeout
         self.embed_model = embed_model or chat_model
 
