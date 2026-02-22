@@ -343,6 +343,37 @@ class RetrieveMixin:
 
         return referenced_item_ids
 
+    @staticmethod
+    def _tokenize(text: str) -> set[str]:
+        """Split text into lowercase non-empty tokens (standard library only)."""
+        if not text:
+            return set()
+        parts = re.split(r"\W+", text.lower())
+        return {p for p in parts if p}
+
+    @staticmethod
+    def _keyword_match_items(
+        query: str,
+        pool: Mapping[str, Any],
+        top_k: int,
+    ) -> list[tuple[str, float]]:
+        """Match items by token intersection. Returns list of (id, score) sorted by (-score, id), capped at top_k."""
+        query_tokens = RetrieveMixin._tokenize(query)
+        if not query_tokens:
+            return []
+        scores: list[tuple[str, float]] = []
+        for item_id, item in pool.items():
+            summary = item.get("summary", "") if isinstance(item, dict) else getattr(item, "summary", "")
+            extra = item.get("extra", {}) if isinstance(item, dict) else (getattr(item, "extra", None) or {})
+            extra_str = " ".join(str(v) for v in extra.values() if v is not None)
+            doc_text = f"{summary} {extra_str}".strip()
+            doc_tokens = RetrieveMixin._tokenize(doc_text)
+            score = float(len(query_tokens & doc_tokens))
+            if score > 0:
+                scores.append((item_id, score))
+        scores.sort(key=lambda x: (-x[1], x[0]))
+        return scores[:top_k]
+
     async def _rag_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("retrieve_item") or not state.get("needs_retrieval") or not state.get("proceed_to_items"):
             state["item_hits"] = []
@@ -351,6 +382,17 @@ class RetrieveMixin:
         store = state["store"]
         where_filters = state.get("where") or {}
         items_pool = store.memory_item_repo.list_items(where_filters)
+        retriever = getattr(self.retrieve_config, "retriever", "vector")
+
+        if retriever == "keyword":
+            state["item_hits"] = self._keyword_match_items(
+                state["active_query"],
+                items_pool,
+                self.retrieve_config.item.top_k,
+            )
+            state["item_pool"] = items_pool
+            return state
+
         qvec = state.get("query_vector")
         if qvec is None:
             embed_client = self._get_step_embedding_client(step_context)
