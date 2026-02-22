@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from pydantic import BaseModel
 
@@ -22,6 +22,11 @@ if TYPE_CHECKING:
     from memu.app.service import Context
     from memu.app.settings import RetrieveConfig
     from memu.database.interfaces import Database
+
+
+class InvalidRetrieverError(ValueError):
+    def __init__(self) -> None:
+        super().__init__("retriever must be one of: vector, keyword")
 
 
 class RetrieveMixin:
@@ -43,6 +48,8 @@ class RetrieveMixin:
         self,
         queries: list[dict[str, Any]],
         where: dict[str, Any] | None = None,
+        method: Literal["rag", "llm"] | None = None,
+        retriever: str | None = None,
     ) -> dict[str, Any]:
         if not queries:
             raise ValueError("empty_queries")
@@ -60,10 +67,20 @@ class RetrieveMixin:
         retrieve_resource = self.retrieve_config.resource.enabled
         sufficiency_check = self.retrieve_config.sufficiency_check
 
-        workflow_name = "retrieve_llm" if self.retrieve_config.method == "llm" else "retrieve_rag"
+        effective_method = method if method is not None else self.retrieve_config.method
+        workflow_name = "retrieve_llm" if effective_method == "llm" else "retrieve_rag"
+
+        if effective_method == "rag":
+            effective_retriever = (
+                retriever.lower() if retriever is not None else getattr(self.retrieve_config, "retriever", "vector")
+            )
+            if retriever is not None and effective_retriever not in {"vector", "keyword"}:
+                raise InvalidRetrieverError()
+        else:
+            effective_retriever = None
 
         state: WorkflowState = {
-            "method": self.retrieve_config.method,
+            "method": effective_method,
             "original_query": original_query,
             "context_queries": context_queries_objs,
             "route_intention": route_intention,
@@ -76,6 +93,8 @@ class RetrieveMixin:
             "store": store,
             "where": where_filters,
         }
+        if effective_method == "rag":
+            state["retriever"] = effective_retriever
 
         result = await self._run_workflow(workflow_name, state)
         response = cast(dict[str, Any] | None, result.get("response"))
@@ -382,7 +401,7 @@ class RetrieveMixin:
         store = state["store"]
         where_filters = state.get("where") or {}
         items_pool = store.memory_item_repo.list_items(where_filters)
-        retriever = getattr(self.retrieve_config, "retriever", "vector")
+        retriever = state.get("retriever") or getattr(self.retrieve_config, "retriever", "vector")
 
         if retriever == "keyword":
             state["item_hits"] = self._keyword_match_items(

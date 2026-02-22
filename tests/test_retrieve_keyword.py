@@ -135,6 +135,82 @@ class TestRagResponseStructure:
         assert "original_query" in r
 
 
+# --- STEP 4: per-call method/retriever override (state + workflow_name) ---
+class TestRetrievePerCallOverride:
+    """Per-call method/retriever override: state and workflow_name; no real DB/embedding."""
+
+    @pytest.mark.asyncio
+    async def test_retrieve_rag_keyword_state_and_workflow(self):
+        service = MemoryService(
+            database_config={"metadata_store": {"provider": "inmemory"}},
+            retrieve_config={"method": "rag", "retriever": "vector"},
+        )
+        captured: list[tuple[str, dict]] = []
+
+        async def fake_run(workflow_name: str, state: dict):
+            captured.append((workflow_name, dict(state)))
+            return {
+                "response": {
+                    "categories": [],
+                    "items": [],
+                    "resources": [],
+                    "needs_retrieval": True,
+                    "original_query": "q",
+                    "rewritten_query": "q",
+                    "next_step_query": None,
+                }
+            }
+
+        service._run_workflow = fake_run
+        queries = [{"role": "user", "content": {"text": "q"}}]
+        await service.retrieve(queries, method="rag", retriever="keyword")
+        assert len(captured) == 1
+        wname, state = captured[0]
+        assert wname == "retrieve_rag"
+        assert state.get("retriever") == "keyword"
+
+    @pytest.mark.asyncio
+    async def test_retrieve_rag_default_retriever_in_state(self):
+        service = MemoryService(
+            database_config={"metadata_store": {"provider": "inmemory"}},
+            retrieve_config={"method": "rag", "retriever": "vector"},
+        )
+        captured: list[tuple[str, dict]] = []
+
+        async def fake_run(workflow_name: str, state: dict):
+            captured.append((workflow_name, dict(state)))
+            return {
+                "response": {
+                    "categories": [],
+                    "items": [],
+                    "resources": [],
+                    "needs_retrieval": True,
+                    "original_query": "q",
+                    "rewritten_query": "q",
+                    "next_step_query": None,
+                }
+            }
+
+        service._run_workflow = fake_run
+        queries = [{"role": "user", "content": {"text": "q"}}]
+        await service.retrieve(queries, method="rag")
+        assert len(captured) == 1
+        _, state = captured[0]
+        assert state.get("retriever") == "vector"
+
+    @pytest.mark.asyncio
+    async def test_retrieve_rag_invalid_retriever_raises(self):
+        service = MemoryService(
+            database_config={"metadata_store": {"provider": "inmemory"}},
+            retrieve_config={"method": "rag"},
+        )
+        queries = [{"role": "user", "content": {"text": "q"}}]
+        with pytest.raises(ValueError) as exc_info:
+            await service.retrieve(queries, method="rag", retriever="INVALID")
+        msg = str(exc_info.value).lower()
+        assert "vector" in msg and "keyword" in msg
+
+
 # --- 需求 3 可选: OPENAI_API_KEY 集成测试 ---
 @pytest.mark.skipif(
     not os.environ.get("OPENAI_API_KEY"),
