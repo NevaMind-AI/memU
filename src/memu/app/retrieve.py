@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -18,6 +19,8 @@ from memu.workflow.step import WorkflowState, WorkflowStep
 
 logger = logging.getLogger(__name__)
 
+VALID_RETRIEVERS = {"vector", "keyword", "bm25", "hybrid"}
+
 if TYPE_CHECKING:
     from memu.app.service import Context
     from memu.app.settings import RetrieveConfig
@@ -26,7 +29,7 @@ if TYPE_CHECKING:
 
 class InvalidRetrieverError(ValueError):
     def __init__(self) -> None:
-        super().__init__("retriever must be one of: vector, keyword")
+        super().__init__(f"retriever must be one of: {', '.join(sorted(VALID_RETRIEVERS))}")
 
 
 class RetrieveMixin:
@@ -74,7 +77,7 @@ class RetrieveMixin:
             effective_retriever = (
                 retriever.lower() if retriever is not None else getattr(self.retrieve_config, "retriever", "vector")
             )
-            if retriever is not None and effective_retriever not in {"vector", "keyword"}:
+            if retriever is not None and effective_retriever not in VALID_RETRIEVERS:
                 raise InvalidRetrieverError()
         else:
             effective_retriever = None
@@ -371,6 +374,14 @@ class RetrieveMixin:
         return {p for p in parts if p}
 
     @staticmethod
+    def _extract_item_text(item: Any) -> str:
+        """Extract searchable text from an item (summary + extra values)."""
+        summary = item.get("summary", "") if isinstance(item, dict) else getattr(item, "summary", "")
+        extra = item.get("extra", {}) if isinstance(item, dict) else (getattr(item, "extra", None) or {})
+        extra_str = " ".join(str(v) for v in extra.values() if v is not None)
+        return f"{summary} {extra_str}".strip()
+
+    @staticmethod
     def _keyword_match_items(
         query: str,
         pool: Mapping[str, Any],
@@ -382,16 +393,97 @@ class RetrieveMixin:
             return []
         scores: list[tuple[str, float]] = []
         for item_id, item in pool.items():
-            summary = item.get("summary", "") if isinstance(item, dict) else getattr(item, "summary", "")
-            extra = item.get("extra", {}) if isinstance(item, dict) else (getattr(item, "extra", None) or {})
-            extra_str = " ".join(str(v) for v in extra.values() if v is not None)
-            doc_text = f"{summary} {extra_str}".strip()
+            doc_text = RetrieveMixin._extract_item_text(item)
             doc_tokens = RetrieveMixin._tokenize(doc_text)
             score = float(len(query_tokens & doc_tokens))
             if score > 0:
                 scores.append((item_id, score))
         scores.sort(key=lambda x: (-x[1], x[0]))
         return scores[:top_k]
+
+    @staticmethod
+    def _bm25_doc_score(
+        query_tokens: set[str],
+        doc_tokens: list[str],
+        df: dict[str, int],
+        n_docs: int,
+        avgdl: float,
+        k1: float,
+        b: float,
+    ) -> float:
+        """Compute BM25 score for a single document."""
+        doc_len = len(doc_tokens)
+        tf_map: dict[str, int] = {}
+        for t in doc_tokens:
+            if t in query_tokens:
+                tf_map[t] = tf_map.get(t, 0) + 1
+
+        score = 0.0
+        for term in query_tokens:
+            if term not in tf_map:
+                continue
+            tf = tf_map[term]
+            n_t = df.get(term, 0)
+            idf = math.log((n_docs - n_t + 0.5) / (n_t + 0.5) + 1.0)
+            numerator = tf * (k1 + 1)
+            denominator = tf + k1 * (1 - b + b * doc_len / avgdl)
+            score += idf * numerator / denominator
+        return score
+
+    @staticmethod
+    def _bm25_score_items(
+        query: str,
+        pool: Mapping[str, Any],
+        top_k: int,
+        k1: float = 1.2,
+        b: float = 0.75,
+    ) -> list[tuple[str, float]]:
+        """Score items using Okapi BM25. Returns (id, score) sorted desc, capped at top_k."""
+        query_tokens = RetrieveMixin._tokenize(query)
+        if not query_tokens:
+            return []
+
+        # Build per-document token lists (need frequencies, not just sets)
+        docs: dict[str, list[str]] = {}
+        for item_id, item in pool.items():
+            doc_text = RetrieveMixin._extract_item_text(item)
+            tokens = [t for t in re.split(r"\W+", doc_text.lower()) if t]
+            docs[item_id] = tokens
+
+        if not docs:
+            return []
+
+        n_docs = len(docs)
+        avgdl = sum(len(toks) for toks in docs.values()) / n_docs
+
+        # Document frequency for query terms
+        df: dict[str, int] = {}
+        for term in query_tokens:
+            df[term] = sum(1 for toks in docs.values() if term in set(toks))
+
+        scores: list[tuple[str, float]] = []
+        for item_id, doc_tokens in docs.items():
+            score = RetrieveMixin._bm25_doc_score(query_tokens, doc_tokens, df, n_docs, avgdl, k1, b)
+            if score > 0:
+                scores.append((item_id, score))
+
+        scores.sort(key=lambda x: (-x[1], x[0]))
+        return scores[:top_k]
+
+    @staticmethod
+    def _rrf_fuse(
+        *ranked_lists: list[tuple[str, float]],
+        k: int = 60,
+        top_k: int = 5,
+    ) -> list[tuple[str, float]]:
+        """Reciprocal Rank Fusion across multiple ranked result lists."""
+        rrf_scores: dict[str, float] = {}
+        for ranked_list in ranked_lists:
+            for rank, (item_id, _score) in enumerate(ranked_list):
+                rrf_scores[item_id] = rrf_scores.get(item_id, 0.0) + 1.0 / (k + rank + 1)
+        results = list(rrf_scores.items())
+        results.sort(key=lambda x: (-x[1], x[0]))
+        return results[:top_k]
 
     async def _rag_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("retrieve_item") or not state.get("needs_retrieval") or not state.get("proceed_to_items"):
@@ -403,27 +495,46 @@ class RetrieveMixin:
         items_pool = store.memory_item_repo.list_items(where_filters)
         retriever = state.get("retriever") or getattr(self.retrieve_config, "retriever", "vector")
 
+        top_k = self.retrieve_config.item.top_k
+
         if retriever == "keyword":
             state["item_hits"] = self._keyword_match_items(
                 state["active_query"],
                 items_pool,
-                self.retrieve_config.item.top_k,
+                top_k,
             )
             state["item_pool"] = items_pool
             return state
 
+        if retriever == "bm25":
+            state["item_hits"] = self._bm25_score_items(
+                state["active_query"],
+                items_pool,
+                top_k,
+            )
+            state["item_pool"] = items_pool
+            return state
+
+        # Vector search (shared by "vector" and "hybrid")
         qvec = state.get("query_vector")
         if qvec is None:
             embed_client = self._get_step_embedding_client(step_context)
             qvec = (await embed_client.embed([state["active_query"]]))[0]
             state["query_vector"] = qvec
-        state["item_hits"] = store.memory_item_repo.vector_search_items(
+        vector_hits = store.memory_item_repo.vector_search_items(
             qvec,
-            self.retrieve_config.item.top_k,
+            top_k,
             where=where_filters,
             ranking=self.retrieve_config.item.ranking,
             recency_decay_days=self.retrieve_config.item.recency_decay_days,
         )
+
+        if retriever == "hybrid":
+            bm25_hits = self._bm25_score_items(state["active_query"], items_pool, top_k)
+            state["item_hits"] = self._rrf_fuse(bm25_hits, vector_hits, top_k=top_k)
+        else:
+            state["item_hits"] = vector_hits
+
         state["item_pool"] = items_pool
         return state
 

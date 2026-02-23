@@ -15,7 +15,7 @@ from memu.app.service import MemoryService
 from memu.app.settings import RetrieveConfig
 
 
-# --- 需求 3: TestRetrieveConfigNormalize ---
+# --- Config normalization ---
 class TestRetrieveConfigNormalize:
     """retriever field: vector/keyword case normalization via Normalize."""
 
@@ -36,7 +36,7 @@ class TestRetrieveConfigNormalize:
         assert c.retriever == "vector"
 
 
-# --- 需求 3: TestKeywordMatchItems ---
+# --- Keyword matching ---
 class TestKeywordMatchItems:
     """_tokenize and _keyword_match_items: hit, stable sort, top_k, extra, empty query/pool."""
 
@@ -101,7 +101,7 @@ class TestKeywordMatchItems:
         assert out == []
 
 
-# --- 需求 3: TestRagResponseStructure ---
+# --- RAG response structure ---
 class TestRagResponseStructure:
     """Assert RAG response dict contains at least categories/items/resources (no new deps)."""
 
@@ -209,10 +209,10 @@ class TestRetrievePerCallOverride:
         with pytest.raises(ValueError) as exc_info:
             await service.retrieve(queries, method="rag", retriever="INVALID")
         msg = str(exc_info.value).lower()
-        assert "vector" in msg and "keyword" in msg
+        assert "vector" in msg and "keyword" in msg and "bm25" in msg and "hybrid" in msg
 
 
-# --- 需求 3 可选: OPENAI_API_KEY 集成测试 ---
+# --- Optional: integration test (requires OPENAI_API_KEY) ---
 @pytest.mark.skipif(
     not os.environ.get("OPENAI_API_KEY"),
     reason="OPENAI_API_KEY not set",
