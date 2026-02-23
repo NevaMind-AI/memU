@@ -6,6 +6,7 @@ No new dependencies; optional integration test guarded by OPENAI_API_KEY skipif.
 from __future__ import annotations
 
 import os
+from typing import Literal, cast
 
 import pytest
 
@@ -19,15 +20,15 @@ class TestRetrieveConfigNormalize:
     """retriever field: vector/keyword case normalization via Normalize."""
 
     def test_vector_uppercase(self):
-        c = RetrieveConfig(retriever="VECTOR")
+        c = RetrieveConfig(retriever=cast(Literal["vector", "keyword"], "VECTOR"))
         assert c.retriever == "vector"
 
     def test_keyword_uppercase(self):
-        c = RetrieveConfig(retriever="KEYWORD")
+        c = RetrieveConfig(retriever=cast(Literal["vector", "keyword"], "KEYWORD"))
         assert c.retriever == "keyword"
 
     def test_keyword_mixed_case(self):
-        c = RetrieveConfig(retriever="KeyWord")
+        c = RetrieveConfig(retriever=cast(Literal["vector", "keyword"], "KeyWord"))
         assert c.retriever == "keyword"
 
     def test_default_is_vector(self):
@@ -140,7 +141,7 @@ class TestRetrievePerCallOverride:
     """Per-call method/retriever override: state and workflow_name; no real DB/embedding."""
 
     @pytest.mark.asyncio
-    async def test_retrieve_rag_keyword_state_and_workflow(self):
+    async def test_retrieve_rag_keyword_state_and_workflow(self, monkeypatch: pytest.MonkeyPatch):
         service = MemoryService(
             database_config={"metadata_store": {"provider": "inmemory"}},
             retrieve_config={"method": "rag", "retriever": "vector"},
@@ -161,7 +162,7 @@ class TestRetrievePerCallOverride:
                 }
             }
 
-        service._run_workflow = fake_run
+        monkeypatch.setattr(service, "_run_workflow", fake_run, raising=True)
         queries = [{"role": "user", "content": {"text": "q"}}]
         await service.retrieve(queries, method="rag", retriever="keyword")
         assert len(captured) == 1
@@ -170,7 +171,7 @@ class TestRetrievePerCallOverride:
         assert state.get("retriever") == "keyword"
 
     @pytest.mark.asyncio
-    async def test_retrieve_rag_default_retriever_in_state(self):
+    async def test_retrieve_rag_default_retriever_in_state(self, monkeypatch: pytest.MonkeyPatch):
         service = MemoryService(
             database_config={"metadata_store": {"provider": "inmemory"}},
             retrieve_config={"method": "rag", "retriever": "vector"},
@@ -191,7 +192,7 @@ class TestRetrievePerCallOverride:
                 }
             }
 
-        service._run_workflow = fake_run
+        monkeypatch.setattr(service, "_run_workflow", fake_run, raising=True)
         queries = [{"role": "user", "content": {"text": "q"}}]
         await service.retrieve(queries, method="rag")
         assert len(captured) == 1
