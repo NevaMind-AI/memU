@@ -91,23 +91,59 @@ class HTTPLLMClient:
         timeout: int = 60,
         embed_model: str | None = None,
     ):
-        self.base_url = base_url.rstrip("/")
+        # Ensure base_url ends with "/" so httpx doesn't discard the path
+        # component when joining with endpoint paths.
+        # See: https://github.com/NevaMind-AI/memU/issues/328
+        self.base_url = base_url.rstrip("/") + "/"
         self.api_key = api_key or ""
         self.chat_model = chat_model
         self.provider = provider.lower()
         self.backend = self._load_backend(self.provider)
         self.embedding_backend = self._load_embedding_backend(self.provider)
         overrides = endpoint_overrides or {}
-        self.summary_endpoint = overrides.get("chat") or overrides.get("summary") or self.backend.summary_endpoint
-        self.embedding_endpoint = (
+        raw_summary_ep = overrides.get("chat") or overrides.get("summary") or self.backend.summary_endpoint
+        raw_embedding_ep = (
             overrides.get("embeddings")
             or overrides.get("embedding")
             or overrides.get("embed")
             or self.embedding_backend.embedding_endpoint
         )
+        # Strip leading "/" from endpoints so httpx resolves them relative to
+        # base_url instead of treating them as absolute paths.
+        self.summary_endpoint = raw_summary_ep.lstrip("/")
+        self.embedding_endpoint = raw_embedding_ep.lstrip("/")
         self.timeout = timeout
         self.embed_model = embed_model or chat_model
         self.proxy = _load_proxy()
+
+    async def chat(
+        self,
+        prompt: str,
+        *,
+        max_tokens: int | None = None,
+        system_prompt: str | None = None,
+        temperature: float = 0.2,
+    ) -> tuple[str, dict[str, Any]]:
+        """Generic chat completion."""
+        messages: list[dict[str, Any]] = []
+        if system_prompt is not None:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        payload: dict[str, Any] = {
+            "model": self.chat_model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
+            resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers())
+            resp.raise_for_status()
+            data = resp.json()
+        logger.debug("HTTP LLM chat response: %s", data)
+        return self.backend.parse_summary_response(data), data
 
     async def summarize(
         self, text: str, max_tokens: int | None = None, system_prompt: str | None = None

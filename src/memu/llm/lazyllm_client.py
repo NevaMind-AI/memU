@@ -41,6 +41,31 @@ class LazyLLMClient:
         else:
             return await asyncio.to_thread(client, *args)
 
+    async def chat(
+        self,
+        text: str,
+        *,
+        max_tokens: int | None = None,
+        system_prompt: str | None = None,
+        temperature: float = 0.2,
+    ) -> str:
+        """
+        Generate a summary or response for the input text using the configured LLM backend.
+
+        Args:
+            text: The input text to summarize or process.
+            max_tokens: (Optional) Maximum number of tokens to generate.
+            system_prompt: (Optional) System instruction to guide the LLM behavior.
+        Return:
+            The generated summary text as a string.
+        """
+        client = lazyllm.namespace("MEMU").OnlineModule(source=self.llm_source, model=self.chat_model, type="llm")
+        prompt = f"{system_prompt}\n\n" if system_prompt else ""
+        full_prompt = f"{prompt}text:\n{text}"
+        LOG.debug(f"Summarizing text with {self.llm_source}/{self.chat_model}")
+        response = await self._call_async(client, full_prompt)
+        return cast(str, response)
+
     async def summarize(
         self,
         text: str,

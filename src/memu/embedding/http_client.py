@@ -37,18 +37,23 @@ class HTTPEmbeddingClient:
         endpoint_overrides: dict[str, str] | None = None,
         timeout: int = 60,
     ):
-        self.base_url = base_url.rstrip("/")
+        # Ensure base_url ends with "/" so httpx doesn't discard the path
+        # component when joining with endpoint paths.
+        # See: https://github.com/NevaMind-AI/memU/issues/328
+        self.base_url = base_url.rstrip("/") + "/"
         self.api_key = api_key or ""
         self.embed_model = embed_model
         self.provider = provider.lower()
         self.backend = self._load_backend(self.provider)
         overrides = endpoint_overrides or {}
-        self.embedding_endpoint = (
+        raw_embedding_ep = (
             overrides.get("embeddings")
             or overrides.get("embedding")
             or overrides.get("embed")
             or self.backend.embedding_endpoint
         )
+        # Strip leading "/" so httpx resolves relative to base_url
+        self.embedding_endpoint = raw_embedding_ep.lstrip("/")
         self.timeout = timeout
         self.proxy = _load_proxy()
 
@@ -124,7 +129,7 @@ class HTTPEmbeddingClient:
             encoding_format=encoding_format,
         )
 
-        endpoint = self.backend.multimodal_embedding_endpoint
+        endpoint = self.backend.multimodal_embedding_endpoint.lstrip("/")
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, proxy=self.proxy) as client:
             resp = await client.post(endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()

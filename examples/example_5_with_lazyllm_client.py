@@ -29,7 +29,7 @@ src_path = str(project_root / "src")
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
-from memu.app import MemoryService  # noqa: E402
+from memu.app import MemoryService
 
 # ==========================================
 # PART 1: Conversation Memory Processing
@@ -206,7 +206,7 @@ async def generate_skill_guide(skills, service, output_file):
     prompt = f"Summarize these skills into a guide:\n\n{skills_text}"
 
     # Use LazyLLM via service
-    summary = await service.llm_client.summarize(text=prompt)
+    summary = await service.llm_client.chat(text=prompt)
 
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(summary)

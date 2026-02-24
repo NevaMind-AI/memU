@@ -321,6 +321,28 @@ class RetrieveMixin:
             state["query_vector"] = (await embed_client.embed([state["active_query"]]))[0]
         return state
 
+    def _extract_referenced_item_ids(self, state: WorkflowState) -> set[str]:
+        """Extract item IDs from category summary references."""
+        from memu.utils.references import extract_references
+
+        category_hits = state.get("category_hits") or []
+        summary_lookup = state.get("category_summary_lookup", {})
+        category_pool = state.get("category_pool") or {}
+        referenced_item_ids: set[str] = set()
+
+        for cid, _score in category_hits:
+            # Get summary from lookup or category
+            summary = summary_lookup.get(cid)
+            if not summary:
+                cat = category_pool.get(cid)
+                if cat:
+                    summary = cat.summary
+            if summary:
+                refs = extract_references(summary)
+                referenced_item_ids.update(refs)
+
+        return referenced_item_ids
+
     async def _rag_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("retrieve_item") or not state.get("needs_retrieval") or not state.get("proceed_to_items"):
             state["item_hits"] = []
@@ -338,6 +360,8 @@ class RetrieveMixin:
             qvec,
             self.retrieve_config.item.top_k,
             where=where_filters,
+            ranking=self.retrieve_config.item.ranking,
+            recency_decay_days=self.retrieve_config.item.recency_decay_days,
         )
         state["item_pool"] = items_pool
         return state
@@ -594,10 +618,26 @@ class RetrieveMixin:
             return state
 
         where_filters = state.get("where") or {}
-        category_ids = [cat["id"] for cat in state.get("category_hits", [])]
+        category_hits = state.get("category_hits", [])
+        category_ids = [cat["id"] for cat in category_hits]
         llm_client = self._get_step_llm_client(step_context)
         store = state["store"]
-        items_pool = store.memory_item_repo.list_items(where_filters)
+
+        use_refs = getattr(self.retrieve_config.item, "use_category_references", False)
+        ref_ids: list[str] = []
+        if use_refs and category_hits:
+            # Extract all ref_ids from category summaries
+            from memu.utils.references import extract_references
+
+            for cat in category_hits:
+                summary = cat.get("summary") or ""
+                ref_ids.extend(extract_references(summary))
+        if ref_ids:
+            # Query items by ref_ids
+            items_pool = store.memory_item_repo.list_items_by_ref_ids(ref_ids, where_filters)
+        else:
+            items_pool = store.memory_item_repo.list_items(where_filters)
+
         relations = store.category_item_repo.list_relations(where_filters)
         category_pool = state.get("category_pool") or store.memory_category_repo.list_categories(where_filters)
         state["item_hits"] = await self._llm_rank_items(
@@ -737,7 +777,7 @@ class RetrieveMixin:
 
         sys_prompt = system_prompt or PRE_RETRIEVAL_SYSTEM_PROMPT
         client = llm_client or self._get_llm_client()
-        response = await client.summarize(user_prompt, system_prompt=sys_prompt)
+        response = await client.chat(user_prompt, system_prompt=sys_prompt)
         decision = self._extract_decision(response)
         rewritten = self._extract_rewritten_query(response) or query
 
@@ -1195,7 +1235,7 @@ class RetrieveMixin:
         )
 
         client = llm_client or self._get_llm_client()
-        llm_response = await client.summarize(prompt, system_prompt=None)
+        llm_response = await client.chat(prompt)
         return self._parse_llm_category_response(llm_response, store, categories=category_pool)
 
     async def _llm_rank_items(
@@ -1234,7 +1274,7 @@ class RetrieveMixin:
         )
 
         client = llm_client or self._get_llm_client()
-        llm_response = await client.summarize(prompt, system_prompt=None)
+        llm_response = await client.chat(prompt)
         return self._parse_llm_item_response(llm_response, store, items=item_pool)
 
     async def _llm_rank_resources(
@@ -1279,7 +1319,7 @@ class RetrieveMixin:
         )
 
         client = llm_client or self._get_llm_client()
-        llm_response = await client.summarize(prompt, system_prompt=None)
+        llm_response = await client.chat(prompt)
         return self._parse_llm_resource_response(llm_response, store, resources=resource_pool)
 
     def _parse_llm_category_response(
