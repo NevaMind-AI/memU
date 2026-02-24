@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Callable
 from typing import Literal
-import os
-from typing import Optional
+
 import httpx
 
 from memu.embedding.backends.base import EmbeddingBackend
@@ -12,11 +12,8 @@ from memu.embedding.backends.doubao import DoubaoEmbeddingBackend, DoubaoMultimo
 from memu.embedding.backends.openai import OpenAIEmbeddingBackend
 
 
-def _load_proxies() -> Optional[dict[str, str]]:
-    proxy = os.getenv("MEMU_HTTP_PROXY") or os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
-    if not proxy:
-        return None
-    return {"http://": proxy, "https://": proxy}
+def _load_proxy() -> str | None:
+    return os.getenv("MEMU_HTTP_PROXY") or os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY") or None
 
 
 logger = logging.getLogger(__name__)
@@ -53,7 +50,7 @@ class HTTPEmbeddingClient:
             or self.backend.embedding_endpoint
         )
         self.timeout = timeout
-        self.proxy = _load_proxies()
+        self.proxy = _load_proxy()
 
     async def embed(self, inputs: list[str]) -> list[list[float]]:
         """
@@ -66,7 +63,7 @@ class HTTPEmbeddingClient:
             List of embedding vectors
         """
         payload = self.backend.build_embedding_payload(inputs=inputs, embed_model=self.embed_model)
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, proxies=self.proxies) as client:
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, proxy=self.proxy) as client:
             resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
             data = resp.json()
@@ -128,7 +125,7 @@ class HTTPEmbeddingClient:
         )
 
         endpoint = self.backend.multimodal_embedding_endpoint
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, proxy=self.proxy) as client:
             resp = await client.post(endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
             data = resp.json()
