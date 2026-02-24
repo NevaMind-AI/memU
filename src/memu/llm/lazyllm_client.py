@@ -22,6 +22,7 @@ class LazyLLMClient:
         vlm_model: str | None = None,
         embed_model: str | None = None,
         stt_model: str | None = None,
+        proxy: str | None = None,
     ):
         self.llm_source = llm_source or self.DEFAULT_SOURCE
         self.vlm_source = vlm_source or self.DEFAULT_SOURCE
@@ -31,6 +32,13 @@ class LazyLLMClient:
         self.vlm_model = vlm_model
         self.embed_model = embed_model
         self.stt_model = stt_model
+        self.proxy = proxy
+        
+        # Set proxy for LazyLLM if provided
+        if proxy:
+            import os
+            os.environ["HTTP_PROXY"] = proxy
+            os.environ["HTTPS_PROXY"] = proxy
 
     async def _call_async(self, client: Any, *args: Any, **kwargs: Any) -> Any:
         """
