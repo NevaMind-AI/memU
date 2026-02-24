@@ -408,6 +408,30 @@ class RetrieveMixin:
         return RetrieveMixin._extract_item_text(item)
 
     @staticmethod
+    def _add_parsed_token(spec: dict[str, Any], field: str | None, body: str, sign: str) -> None:
+        """Route a single parsed query token into the appropriate spec bucket."""
+        is_phrase = len(body) >= 2 and body[0] == '"' and body[-1] == '"'
+        value = body[1:-1].strip().lower() if is_phrase else body.lower()
+        if not value:
+            return
+        if is_phrase:
+            if field:
+                spec["field_phrases"].append((field, value, sign))
+            else:
+                spec["phrases"].append((value, sign))
+        else:
+            tokens = [t for t in re.split(r"[^\w]+", value) if t]
+            for tok in tokens:
+                if field:
+                    spec["field_terms"].append((field, tok, sign))
+                elif sign == "must":
+                    spec["must_terms"].add(tok)
+                elif sign == "exclude":
+                    spec["exclude_terms"].add(tok)
+                else:
+                    spec["should_terms"].add(tok)
+
+    @staticmethod
     def _parse_lexical_query(query: str) -> dict[str, Any]:
         """Parse lexical query syntax.
 
@@ -430,84 +454,95 @@ class RetrieveMixin:
 
         pattern = re.compile(r'(?P<prefix>[+-]?)(?:(?P<field>[A-Za-z_][\w\.]*)\:)?(?P<body>"[^"]+"|\S+)')
         for m in pattern.finditer(query):
-            prefix = m.group('prefix') or ''
-            field = m.group('field')
-            body = (m.group('body') or '').strip()
+            prefix = m.group("prefix") or ""
+            field = m.group("field")
+            body = (m.group("body") or "").strip()
             if not body:
                 continue
-            is_phrase = len(body) >= 2 and body[0] == '"' and body[-1] == '"'
-            value = body[1:-1].strip().lower() if is_phrase else body.lower()
-            if not value:
-                continue
-            sign = 'must' if prefix == '+' else ('exclude' if prefix == '-' else 'should')
-            if is_phrase:
-                if field:
-                    spec['field_phrases'].append((field, value, sign))
-                else:
-                    spec['phrases'].append((value, sign))
-            else:
-                tokens = [t for t in re.split(r"[^\w]+", value) if t]
-                for tok in tokens:
-                    if field:
-                        spec['field_terms'].append((field, tok, sign))
-                    elif sign == 'must':
-                        spec['must_terms'].add(tok)
-                    elif sign == 'exclude':
-                        spec['exclude_terms'].add(tok)
-                    else:
-                        spec['should_terms'].add(tok)
+            sign = "must" if prefix == "+" else ("exclude" if prefix == "-" else "should")
+            RetrieveMixin._add_parsed_token(spec, field, body, sign)
 
         # If the query had no explicit should/must terms, backfill from plain tokenization.
-        if not spec['should_terms'] and not spec['must_terms'] and not spec['phrases'] and not spec['field_terms'] and not spec['field_phrases']:
-            spec['should_terms'] = RetrieveMixin._tokenize(query)
+        if (
+            not spec["should_terms"]
+            and not spec["must_terms"]
+            and not spec["phrases"]
+            and not spec["field_terms"]
+            and not spec["field_phrases"]
+        ):
+            spec["should_terms"] = RetrieveMixin._tokenize(query)
         return spec
+
+    @staticmethod
+    def _passes_exclusions(item: Any, all_text: str, all_tokens: set[str], spec: Mapping[str, Any]) -> bool:
+        """Return False if the item matches any exclusion constraint in spec."""
+        if spec.get("exclude_terms", set()) & all_tokens:
+            return False
+        if any(phrase in all_text for phrase, sign in spec.get("phrases", []) if sign == "exclude"):
+            return False
+        for field, term, sign in spec.get("field_terms", []):
+            if sign == "exclude":
+                ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+                if term in RetrieveMixin._tokenize(ftxt):
+                    return False
+        for field, phrase, sign in spec.get("field_phrases", []):
+            if sign == "exclude":
+                ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+                if phrase in ftxt:
+                    return False
+        return True
+
+    @staticmethod
+    def _satisfies_mandatory(item: Any, all_text: str, all_tokens: set[str], spec: Mapping[str, Any]) -> bool:
+        """Return False if the item fails any mandatory constraint in spec."""
+        if not (spec.get("must_terms", set()) <= all_tokens):
+            return False
+        if any(phrase not in all_text for phrase, sign in spec.get("phrases", []) if sign == "must"):
+            return False
+        for field, term, sign in spec.get("field_terms", []):
+            if sign == "must":
+                ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+                if term not in RetrieveMixin._tokenize(ftxt):
+                    return False
+        for field, phrase, sign in spec.get("field_phrases", []):
+            if sign == "must":
+                ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+                if phrase not in ftxt:
+                    return False
+        return True
 
     @staticmethod
     def _item_matches_lexical_spec(item: Any, spec: Mapping[str, Any]) -> bool:
         all_text = RetrieveMixin._extract_item_text(item).lower()
         all_tokens = RetrieveMixin._tokenize(all_text)
+        return RetrieveMixin._passes_exclusions(
+            item, all_text, all_tokens, spec
+        ) and RetrieveMixin._satisfies_mandatory(item, all_text, all_tokens, spec)
 
-        # Exclusions first
-        for t in spec.get('exclude_terms', set()):
-            if t in all_tokens:
-                return False
-        for phrase, sign in spec.get('phrases', []):
-            if sign == 'exclude' and phrase in all_text:
-                return False
-        for field, term, sign in spec.get('field_terms', []):
-            if sign != 'exclude':
+    @staticmethod
+    def _score_keyword_item(item: Any, spec: Mapping[str, Any]) -> float:
+        """Compute keyword relevance score for a single item against spec."""
+        all_text = RetrieveMixin._extract_item_text(item).lower()
+        all_tokens = RetrieveMixin._tokenize(all_text)
+        score = 0.0
+        score += float(len(spec.get("should_terms", set()) & all_tokens))
+        score += 1.5 * float(len(spec.get("must_terms", set()) & all_tokens))
+        for phrase, sign in spec.get("phrases", []):
+            if sign in {"should", "must"} and phrase in all_text:
+                score += 2.0 if sign == "should" else 3.0
+        for field, term, sign in spec.get("field_terms", []):
+            if sign == "exclude":
                 continue
             ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
             if term in RetrieveMixin._tokenize(ftxt):
-                return False
-        for field, phrase, sign in spec.get('field_phrases', []):
-            if sign != 'exclude':
+                score += 1.5 if sign == "should" else 2.5
+        for field, phrase, sign in spec.get("field_phrases", []):
+            if sign == "exclude":
                 continue
             ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
             if phrase in ftxt:
-                return False
-
-        # Mandatory constraints
-        for t in spec.get('must_terms', set()):
-            if t not in all_tokens:
-                return False
-        for phrase, sign in spec.get('phrases', []):
-            if sign == 'must' and phrase not in all_text:
-                return False
-        for field, term, sign in spec.get('field_terms', []):
-            if sign != 'must':
-                continue
-            ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
-            if term not in RetrieveMixin._tokenize(ftxt):
-                return False
-        for field, phrase, sign in spec.get('field_phrases', []):
-            if sign != 'must':
-                continue
-            ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
-            if phrase not in ftxt:
-                return False
-
-        return True
+                score += 2.5 if sign == "should" else 3.5
+        return score
 
     @staticmethod
     def _keyword_match_items(
@@ -518,7 +553,11 @@ class RetrieveMixin:
         """Keyword retrieval with inclusion/exclusion, phrase matching, and field-aware matching."""
         spec = RetrieveMixin._parse_lexical_query(query)
         if not any([
-            spec.get('should_terms'), spec.get('must_terms'), spec.get('phrases'), spec.get('field_terms'), spec.get('field_phrases')
+            spec.get("should_terms"),
+            spec.get("must_terms"),
+            spec.get("phrases"),
+            spec.get("field_terms"),
+            spec.get("field_phrases"),
         ]):
             return []
 
@@ -526,28 +565,7 @@ class RetrieveMixin:
         for item_id, item in pool.items():
             if not RetrieveMixin._item_matches_lexical_spec(item, spec):
                 continue
-
-            all_text = RetrieveMixin._extract_item_text(item).lower()
-            all_tokens = RetrieveMixin._tokenize(all_text)
-            score = 0.0
-            score += float(len(spec.get('should_terms', set()) & all_tokens))
-            score += 1.5 * float(len(spec.get('must_terms', set()) & all_tokens))
-            for phrase, sign in spec.get('phrases', []):
-                if sign in {'should', 'must'} and phrase in all_text:
-                    score += 2.0 if sign == 'should' else 3.0
-            for field, term, sign in spec.get('field_terms', []):
-                if sign == 'exclude':
-                    continue
-                ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
-                if term in RetrieveMixin._tokenize(ftxt):
-                    score += 1.5 if sign == 'should' else 2.5
-            for field, phrase, sign in spec.get('field_phrases', []):
-                if sign == 'exclude':
-                    continue
-                ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
-                if phrase in ftxt:
-                    score += 2.5 if sign == 'should' else 3.5
-
+            score = RetrieveMixin._score_keyword_item(item, spec)
             # If query only has negatives and item passes, avoid returning everything.
             if score > 0:
                 scores.append((item_id, score))
@@ -583,6 +601,50 @@ class RetrieveMixin:
         return score
 
     @staticmethod
+    def _build_bm25_query_terms(spec: Mapping[str, Any]) -> list[str]:
+        """Build ordered, de-duplicated list of positive query terms for BM25 scoring."""
+        positive_terms: list[str] = []
+        positive_terms.extend(sorted(spec.get("should_terms", set())))
+        positive_terms.extend(sorted(spec.get("must_terms", set())))
+        for _field, term, sign in spec.get("field_terms", []):
+            if sign != "exclude":
+                positive_terms.append(term)
+        return list(dict.fromkeys(positive_terms))
+
+    @staticmethod
+    def _compute_term_df(query_terms: list[str], docs: Mapping[str, list[str]]) -> dict[str, int]:
+        """Compute document frequency for each query term across the doc corpus."""
+        df: dict[str, int] = dict.fromkeys(query_terms, 0)
+        for toks in docs.values():
+            uniq = set(toks)
+            for term in query_terms:
+                if term in uniq:
+                    df[term] += 1
+        return df
+
+    @staticmethod
+    def _apply_bm25_boost(item: Any, spec: Mapping[str, Any]) -> float:
+        """Compute phrase and field-aware score boost for BM25 (conservative weights)."""
+        all_text = RetrieveMixin._extract_item_text(item).lower()
+        boost = 0.0
+        for phrase, sign in spec.get("phrases", []):
+            if sign != "exclude" and phrase in all_text:
+                boost += 0.8 if sign == "should" else 1.2
+        for field, phrase, sign in spec.get("field_phrases", []):
+            if sign == "exclude":
+                continue
+            ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+            if phrase in ftxt:
+                boost += 0.8 if sign == "should" else 1.2
+        for field, term, sign in spec.get("field_terms", []):
+            if sign == "exclude":
+                continue
+            ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+            if term in RetrieveMixin._tokenize(ftxt):
+                boost += 0.4 if sign == "should" else 0.7
+        return boost
+
+    @staticmethod
     def _bm25_score_items(
         query: str,
         pool: Mapping[str, Any],
@@ -592,17 +654,8 @@ class RetrieveMixin:
     ) -> list[tuple[str, float]]:
         """BM25 with lexical constraints and phrase/field boosts."""
         spec = RetrieveMixin._parse_lexical_query(query)
-
-        # Candidate terms are positive lexical signals (should + must + field terms)
-        positive_terms: list[str] = []
-        positive_terms.extend(sorted(spec.get('should_terms', set())))
-        positive_terms.extend(sorted(spec.get('must_terms', set())))
-        for _field, term, sign in spec.get('field_terms', []):
-            if sign != 'exclude':
-                positive_terms.append(term)
-        # De-duplicate preserving order
-        query_terms = list(dict.fromkeys(positive_terms))
-        if not query_terms and not spec.get('phrases') and not spec.get('field_phrases'):
+        query_terms = RetrieveMixin._build_bm25_query_terms(spec)
+        if not query_terms and not spec.get("phrases") and not spec.get("field_phrases"):
             return []
 
         docs: dict[str, list[str]] = {}
@@ -619,35 +672,12 @@ class RetrieveMixin:
 
         n_docs = len(docs)
         avgdl = sum(len(toks) for toks in docs.values()) / max(n_docs, 1)
-
-        df: dict[str, int] = {term: 0 for term in query_terms}
-        for toks in docs.values():
-            uniq = set(toks)
-            for term in query_terms:
-                if term in uniq:
-                    df[term] += 1
+        df = RetrieveMixin._compute_term_df(query_terms, docs)
 
         scores: list[tuple[str, float]] = []
         for item_id, doc_tokens in docs.items():
             score = RetrieveMixin._bm25_doc_score(query_terms, doc_tokens, df, n_docs, avgdl, k1, b)
-            item = items_filtered[item_id]
-            all_text = RetrieveMixin._extract_item_text(item).lower()
-            # Phrase and field-aware boosts (conservative)
-            for phrase, sign in spec.get('phrases', []):
-                if sign != 'exclude' and phrase in all_text:
-                    score += 0.8 if sign == 'should' else 1.2
-            for field, phrase, sign in spec.get('field_phrases', []):
-                if sign == 'exclude':
-                    continue
-                ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
-                if phrase in ftxt:
-                    score += 0.8 if sign == 'should' else 1.2
-            for field, term, sign in spec.get('field_terms', []):
-                if sign == 'exclude':
-                    continue
-                ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
-                if term in RetrieveMixin._tokenize(ftxt):
-                    score += 0.4 if sign == 'should' else 0.7
+            score += RetrieveMixin._apply_bm25_boost(items_filtered[item_id], spec)
             if score > 0:
                 scores.append((item_id, score))
 
