@@ -183,9 +183,9 @@ class RetrieveConfig(BaseModel):
     """
 
     method: Annotated[Literal["rag", "llm"], Normalize] = "rag"
-    retriever: Annotated[Literal["vector", "keyword"], Normalize] = Field(
+    retriever: Annotated[Literal["vector", "keyword", "bm25", "hybrid"], Normalize] = Field(
         default="vector",
-        description="Item retriever: 'vector' (embedding) or 'keyword'. Only applies when method is 'rag'.",
+        description="Item retriever: 'vector' (embedding), 'keyword' (token intersection), 'bm25' (BM25 ranking), or 'hybrid' (BM25 + vector via RRF). Only applies when method is 'rag'.",
     )
     # top_k: int = Field(
     #     default=5,

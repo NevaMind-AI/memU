@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Literal, cast
@@ -18,6 +19,8 @@ from memu.workflow.step import WorkflowState, WorkflowStep
 
 logger = logging.getLogger(__name__)
 
+VALID_RETRIEVERS = {"vector", "keyword", "bm25", "hybrid"}
+
 if TYPE_CHECKING:
     from memu.app.service import Context
     from memu.app.settings import RetrieveConfig
@@ -26,7 +29,7 @@ if TYPE_CHECKING:
 
 class InvalidRetrieverError(ValueError):
     def __init__(self) -> None:
-        super().__init__("retriever must be one of: vector, keyword")
+        super().__init__(f"retriever must be one of: {', '.join(sorted(VALID_RETRIEVERS))}")
 
 
 class RetrieveMixin:
@@ -74,7 +77,7 @@ class RetrieveMixin:
             effective_retriever = (
                 retriever.lower() if retriever is not None else getattr(self.retrieve_config, "retriever", "vector")
             )
-            if retriever is not None and effective_retriever not in {"vector", "keyword"}:
+            if retriever is not None and effective_retriever not in VALID_RETRIEVERS:
                 raise InvalidRetrieverError()
         else:
             effective_retriever = None
@@ -367,8 +370,179 @@ class RetrieveMixin:
         """Split text into lowercase non-empty tokens (standard library only)."""
         if not text:
             return set()
-        parts = re.split(r"\W+", text.lower())
+        parts = re.split(r"[^\w]+", text.lower())
         return {p for p in parts if p}
+
+    @staticmethod
+    def _tokenize_list(text: str) -> list[str]:
+        if not text:
+            return []
+        return [p for p in re.split(r"[^\w]+", text.lower()) if p]
+
+    @staticmethod
+    def _extract_item_text(item: Any) -> str:
+        """Extract searchable text from an item (summary + extra values)."""
+        summary = item.get("summary", "") if isinstance(item, dict) else getattr(item, "summary", "")
+        extra = item.get("extra", {}) if isinstance(item, dict) else (getattr(item, "extra", None) or {})
+        extra_str = " ".join(str(v) for v in extra.values() if v is not None)
+        return f"{summary} {extra_str}".strip()
+
+    @staticmethod
+    def _extract_item_field_text(item: Any, field: str | None) -> str:
+        """Field-aware text extraction. Supports summary/content and extra.<key> lookups."""
+        if not field:
+            return RetrieveMixin._extract_item_text(item)
+        f = field.lower()
+        summary = item.get("summary", "") if isinstance(item, dict) else getattr(item, "summary", "")
+        extra = item.get("extra", {}) if isinstance(item, dict) else (getattr(item, "extra", None) or {})
+        if f in {"summary", "content", "text"}:
+            return str(summary or "")
+        if f.startswith("extra."):
+            key = f.split(".", 1)[1]
+            return str((extra or {}).get(key, "") or "")
+        if f == "extra":
+            return " ".join(str(v) for v in (extra or {}).values() if v is not None)
+        # Fallback: if the key exists in extra, use it.
+        if isinstance(extra, dict) and field in extra:
+            return str(extra.get(field, "") or "")
+        return RetrieveMixin._extract_item_text(item)
+
+    @staticmethod
+    def _add_parsed_token(spec: dict[str, Any], field: str | None, body: str, sign: str) -> None:
+        """Route a single parsed query token into the appropriate spec bucket."""
+        is_phrase = len(body) >= 2 and body[0] == '"' and body[-1] == '"'
+        value = body[1:-1].strip().lower() if is_phrase else body.lower()
+        if not value:
+            return
+        if is_phrase:
+            if field:
+                spec["field_phrases"].append((field, value, sign))
+            else:
+                spec["phrases"].append((value, sign))
+        else:
+            tokens = [t for t in re.split(r"[^\w]+", value) if t]
+            for tok in tokens:
+                if field:
+                    spec["field_terms"].append((field, tok, sign))
+                elif sign == "must":
+                    spec["must_terms"].add(tok)
+                elif sign == "exclude":
+                    spec["exclude_terms"].add(tok)
+                else:
+                    spec["should_terms"].add(tok)
+
+    @staticmethod
+    def _parse_lexical_query(query: str) -> dict[str, Any]:
+        """Parse lexical query syntax.
+
+        Supported forms:
+        - exact phrase in quotes: "error code"
+        - mandatory token: +token
+        - exclusion token: -token
+        - field-aware token/phrase: summary:token, extra.source:"slack"
+        """
+        spec: dict[str, Any] = {
+            "should_terms": set(),
+            "must_terms": set(),
+            "exclude_terms": set(),
+            "phrases": [],
+            "field_terms": [],  # (field, term, sign)
+            "field_phrases": [],  # (field, phrase, sign)
+        }
+        if not query:
+            return spec
+
+        pattern = re.compile(r'(?P<prefix>[+-]?)(?:(?P<field>[A-Za-z_][\w\.]*)\:)?(?P<body>"[^"]+"|\S+)')
+        for m in pattern.finditer(query):
+            prefix = m.group("prefix") or ""
+            field = m.group("field")
+            body = (m.group("body") or "").strip()
+            if not body:
+                continue
+            sign = "must" if prefix == "+" else ("exclude" if prefix == "-" else "should")
+            RetrieveMixin._add_parsed_token(spec, field, body, sign)
+
+        # If the query had no explicit should/must terms, backfill from plain tokenization.
+        if (
+            not spec["should_terms"]
+            and not spec["must_terms"]
+            and not spec["phrases"]
+            and not spec["field_terms"]
+            and not spec["field_phrases"]
+        ):
+            spec["should_terms"] = RetrieveMixin._tokenize(query)
+        return spec
+
+    @staticmethod
+    def _passes_exclusions(item: Any, all_text: str, all_tokens: set[str], spec: Mapping[str, Any]) -> bool:
+        """Return False if the item matches any exclusion constraint in spec."""
+        if spec.get("exclude_terms", set()) & all_tokens:
+            return False
+        if any(phrase in all_text for phrase, sign in spec.get("phrases", []) if sign == "exclude"):
+            return False
+        for field, term, sign in spec.get("field_terms", []):
+            if sign == "exclude":
+                ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+                if term in RetrieveMixin._tokenize(ftxt):
+                    return False
+        for field, phrase, sign in spec.get("field_phrases", []):
+            if sign == "exclude":
+                ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+                if phrase in ftxt:
+                    return False
+        return True
+
+    @staticmethod
+    def _satisfies_mandatory(item: Any, all_text: str, all_tokens: set[str], spec: Mapping[str, Any]) -> bool:
+        """Return False if the item fails any mandatory constraint in spec."""
+        if not (spec.get("must_terms", set()) <= all_tokens):
+            return False
+        if any(phrase not in all_text for phrase, sign in spec.get("phrases", []) if sign == "must"):
+            return False
+        for field, term, sign in spec.get("field_terms", []):
+            if sign == "must":
+                ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+                if term not in RetrieveMixin._tokenize(ftxt):
+                    return False
+        for field, phrase, sign in spec.get("field_phrases", []):
+            if sign == "must":
+                ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+                if phrase not in ftxt:
+                    return False
+        return True
+
+    @staticmethod
+    def _item_matches_lexical_spec(item: Any, spec: Mapping[str, Any]) -> bool:
+        all_text = RetrieveMixin._extract_item_text(item).lower()
+        all_tokens = RetrieveMixin._tokenize(all_text)
+        return RetrieveMixin._passes_exclusions(
+            item, all_text, all_tokens, spec
+        ) and RetrieveMixin._satisfies_mandatory(item, all_text, all_tokens, spec)
+
+    @staticmethod
+    def _score_keyword_item(item: Any, spec: Mapping[str, Any]) -> float:
+        """Compute keyword relevance score for a single item against spec."""
+        all_text = RetrieveMixin._extract_item_text(item).lower()
+        all_tokens = RetrieveMixin._tokenize(all_text)
+        score = 0.0
+        score += float(len(spec.get("should_terms", set()) & all_tokens))
+        score += 1.5 * float(len(spec.get("must_terms", set()) & all_tokens))
+        for phrase, sign in spec.get("phrases", []):
+            if sign in {"should", "must"} and phrase in all_text:
+                score += 2.0 if sign == "should" else 3.0
+        for field, term, sign in spec.get("field_terms", []):
+            if sign == "exclude":
+                continue
+            ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+            if term in RetrieveMixin._tokenize(ftxt):
+                score += 1.5 if sign == "should" else 2.5
+        for field, phrase, sign in spec.get("field_phrases", []):
+            if sign == "exclude":
+                continue
+            ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+            if phrase in ftxt:
+                score += 2.5 if sign == "should" else 3.5
+        return score
 
     @staticmethod
     def _keyword_match_items(
@@ -376,22 +550,154 @@ class RetrieveMixin:
         pool: Mapping[str, Any],
         top_k: int,
     ) -> list[tuple[str, float]]:
-        """Match items by token intersection. Returns list of (id, score) sorted by (-score, id), capped at top_k."""
-        query_tokens = RetrieveMixin._tokenize(query)
-        if not query_tokens:
+        """Keyword retrieval with inclusion/exclusion, phrase matching, and field-aware matching."""
+        spec = RetrieveMixin._parse_lexical_query(query)
+        if not any([
+            spec.get("should_terms"),
+            spec.get("must_terms"),
+            spec.get("phrases"),
+            spec.get("field_terms"),
+            spec.get("field_phrases"),
+        ]):
             return []
+
         scores: list[tuple[str, float]] = []
         for item_id, item in pool.items():
-            summary = item.get("summary", "") if isinstance(item, dict) else getattr(item, "summary", "")
-            extra = item.get("extra", {}) if isinstance(item, dict) else (getattr(item, "extra", None) or {})
-            extra_str = " ".join(str(v) for v in extra.values() if v is not None)
-            doc_text = f"{summary} {extra_str}".strip()
-            doc_tokens = RetrieveMixin._tokenize(doc_text)
-            score = float(len(query_tokens & doc_tokens))
+            if not RetrieveMixin._item_matches_lexical_spec(item, spec):
+                continue
+            score = RetrieveMixin._score_keyword_item(item, spec)
+            # If query only has negatives and item passes, avoid returning everything.
             if score > 0:
                 scores.append((item_id, score))
         scores.sort(key=lambda x: (-x[1], x[0]))
         return scores[:top_k]
+
+    @staticmethod
+    def _bm25_doc_score(
+        query_tokens: Sequence[str],
+        doc_tokens: list[str],
+        df: Mapping[str, int],
+        n_docs: int,
+        avgdl: float,
+        k1: float,
+        b: float,
+    ) -> float:
+        """Compute BM25 score for a single document."""
+        doc_len = max(len(doc_tokens), 1)
+        tf_map: dict[str, int] = {}
+        for t in doc_tokens:
+            tf_map[t] = tf_map.get(t, 0) + 1
+
+        score = 0.0
+        for term in query_tokens:
+            tf = tf_map.get(term, 0)
+            if tf <= 0:
+                continue
+            n_t = df.get(term, 0)
+            idf = math.log((n_docs - n_t + 0.5) / (n_t + 0.5) + 1.0)
+            numerator = tf * (k1 + 1)
+            denominator = tf + k1 * (1 - b + b * doc_len / max(avgdl, 1e-9))
+            score += idf * numerator / denominator
+        return score
+
+    @staticmethod
+    def _build_bm25_query_terms(spec: Mapping[str, Any]) -> list[str]:
+        """Build ordered, de-duplicated list of positive query terms for BM25 scoring."""
+        positive_terms: list[str] = []
+        positive_terms.extend(sorted(spec.get("should_terms", set())))
+        positive_terms.extend(sorted(spec.get("must_terms", set())))
+        for _field, term, sign in spec.get("field_terms", []):
+            if sign != "exclude":
+                positive_terms.append(term)
+        return list(dict.fromkeys(positive_terms))
+
+    @staticmethod
+    def _compute_term_df(query_terms: list[str], docs: Mapping[str, list[str]]) -> dict[str, int]:
+        """Compute document frequency for each query term across the doc corpus."""
+        df: dict[str, int] = dict.fromkeys(query_terms, 0)
+        for toks in docs.values():
+            uniq = set(toks)
+            for term in query_terms:
+                if term in uniq:
+                    df[term] += 1
+        return df
+
+    @staticmethod
+    def _apply_bm25_boost(item: Any, spec: Mapping[str, Any]) -> float:
+        """Compute phrase and field-aware score boost for BM25 (conservative weights)."""
+        all_text = RetrieveMixin._extract_item_text(item).lower()
+        boost = 0.0
+        for phrase, sign in spec.get("phrases", []):
+            if sign != "exclude" and phrase in all_text:
+                boost += 0.8 if sign == "should" else 1.2
+        for field, phrase, sign in spec.get("field_phrases", []):
+            if sign == "exclude":
+                continue
+            ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+            if phrase in ftxt:
+                boost += 0.8 if sign == "should" else 1.2
+        for field, term, sign in spec.get("field_terms", []):
+            if sign == "exclude":
+                continue
+            ftxt = RetrieveMixin._extract_item_field_text(item, field).lower()
+            if term in RetrieveMixin._tokenize(ftxt):
+                boost += 0.4 if sign == "should" else 0.7
+        return boost
+
+    @staticmethod
+    def _bm25_score_items(
+        query: str,
+        pool: Mapping[str, Any],
+        top_k: int,
+        k1: float = 1.2,
+        b: float = 0.75,
+    ) -> list[tuple[str, float]]:
+        """BM25 with lexical constraints and phrase/field boosts."""
+        spec = RetrieveMixin._parse_lexical_query(query)
+        query_terms = RetrieveMixin._build_bm25_query_terms(spec)
+        if not query_terms and not spec.get("phrases") and not spec.get("field_phrases"):
+            return []
+
+        docs: dict[str, list[str]] = {}
+        items_filtered: dict[str, Any] = {}
+        for item_id, item in pool.items():
+            if not RetrieveMixin._item_matches_lexical_spec(item, spec):
+                continue
+            doc_text = RetrieveMixin._extract_item_text(item)
+            docs[item_id] = RetrieveMixin._tokenize_list(doc_text)
+            items_filtered[item_id] = item
+
+        if not docs:
+            return []
+
+        n_docs = len(docs)
+        avgdl = sum(len(toks) for toks in docs.values()) / max(n_docs, 1)
+        df = RetrieveMixin._compute_term_df(query_terms, docs)
+
+        scores: list[tuple[str, float]] = []
+        for item_id, doc_tokens in docs.items():
+            score = RetrieveMixin._bm25_doc_score(query_terms, doc_tokens, df, n_docs, avgdl, k1, b)
+            score += RetrieveMixin._apply_bm25_boost(items_filtered[item_id], spec)
+            if score > 0:
+                scores.append((item_id, score))
+
+        scores.sort(key=lambda x: (-x[1], x[0]))
+        return scores[:top_k]
+
+    @staticmethod
+    def _rrf_fuse(
+        *ranked_lists: list[tuple[str, float]],
+        k: int = 60,
+        top_k: int = 5,
+    ) -> list[tuple[str, float]]:
+        """Reciprocal Rank Fusion across multiple ranked result lists."""
+        rrf_scores: dict[str, float] = {}
+        for ranked_list in ranked_lists:
+            for rank, (item_id, _score) in enumerate(ranked_list):
+                rrf_scores[item_id] = rrf_scores.get(item_id, 0.0) + 1.0 / (k + rank + 1)
+        results = list(rrf_scores.items())
+        results.sort(key=lambda x: (-x[1], x[0]))
+        return results[:top_k]
 
     async def _rag_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("retrieve_item") or not state.get("needs_retrieval") or not state.get("proceed_to_items"):
@@ -403,27 +709,46 @@ class RetrieveMixin:
         items_pool = store.memory_item_repo.list_items(where_filters)
         retriever = state.get("retriever") or getattr(self.retrieve_config, "retriever", "vector")
 
+        top_k = self.retrieve_config.item.top_k
+
         if retriever == "keyword":
             state["item_hits"] = self._keyword_match_items(
                 state["active_query"],
                 items_pool,
-                self.retrieve_config.item.top_k,
+                top_k,
             )
             state["item_pool"] = items_pool
             return state
 
+        if retriever == "bm25":
+            state["item_hits"] = self._bm25_score_items(
+                state["active_query"],
+                items_pool,
+                top_k,
+            )
+            state["item_pool"] = items_pool
+            return state
+
+        # Vector search (shared by "vector" and "hybrid")
         qvec = state.get("query_vector")
         if qvec is None:
             embed_client = self._get_step_embedding_client(step_context)
             qvec = (await embed_client.embed([state["active_query"]]))[0]
             state["query_vector"] = qvec
-        state["item_hits"] = store.memory_item_repo.vector_search_items(
+        vector_hits = store.memory_item_repo.vector_search_items(
             qvec,
-            self.retrieve_config.item.top_k,
+            top_k,
             where=where_filters,
             ranking=self.retrieve_config.item.ranking,
             recency_decay_days=self.retrieve_config.item.recency_decay_days,
         )
+
+        if retriever == "hybrid":
+            bm25_hits = self._bm25_score_items(state["active_query"], items_pool, top_k)
+            state["item_hits"] = self._rrf_fuse(bm25_hits, vector_hits, top_k=top_k)
+        else:
+            state["item_hits"] = vector_hits
+
         state["item_pool"] = items_pool
         return state
 
