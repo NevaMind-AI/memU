@@ -111,15 +111,28 @@ class LLMConfig(BaseModel):
     api_key: str = Field(default="OPENAI_API_KEY")
     chat_model: str = Field(default="gpt-4o-mini")
 
-    def __init__(self, **data):
-        # Novita AI support: auto-detect if NOVITA_API_KEY is set
+    @model_validator(mode="before")
+    @classmethod
+    def apply_novita_env(cls, data: Any) -> Any:
+        """Apply Novita AI environment configuration."""
         import os
-        if os.getenv("NOVITA_API_KEY") and "novita" not in (data.get("provider", "") or "").lower():
-            # Only override if user hasn't explicitly set a different provider
-            if "NOVITA_API_KEY" in (data.get("api_key") or ""):
-                data["base_url"] = "https://api.novita.ai/openai"
-                data["api_key"] = os.getenv("NOVITA_API_KEY")
-        super().__init__(**data)
+        novita_key = os.getenv("NOVITA_API_KEY")
+        if not novita_key:
+            return data
+        
+        # Only auto-switch to Novita for default openai provider
+        provider = data.get("provider", "openai") if isinstance(data, dict) else "openai"
+        if provider != "openai":
+            return data
+        
+        # Only override if using default API key or explicitly set NOVITA_API_KEY
+        api_key = data.get("api_key", "OPENAI_API_KEY") if isinstance(data, dict) else "OPENAI_API_KEY"
+        if api_key in ("OPENAI_API_KEY", "NOVITA_API_KEY", None):
+            data = dict(data) if isinstance(data, dict) else {}
+            data["base_url"] = "https://api.novita.ai/openai"
+            data["api_key"] = novita_key
+        return data
+
     client_backend: str = Field(
         default="sdk",
         description="Which LLM client backend to use: 'httpx' (httpx), 'sdk' (official OpenAI), or 'lazyllm_backend' (for more LLM source like Qwen, Doubao, SIliconflow, etc.)",
