@@ -104,9 +104,22 @@ class LLMConfig(BaseModel):
         default="openai",
         description="Identifier for the LLM provider implementation (used by HTTP client backend).",
     )
-    base_url: str = Field(default="https://api.openai.com/v1")
+    base_url: str = Field(
+        default="https://api.openai.com/v1",
+        description="API base URL. Set to https://api.novita.ai/openai for Novita AI"
+    )
     api_key: str = Field(default="OPENAI_API_KEY")
     chat_model: str = Field(default="gpt-4o-mini")
+
+    def __init__(self, **data):
+        # Novita AI support: auto-detect if NOVITA_API_KEY is set
+        import os
+        if os.getenv("NOVITA_API_KEY") and "novita" not in (data.get("provider", "") or "").lower():
+            # Only override if user hasn't explicitly set a different provider
+            if "NOVITA_API_KEY" in (data.get("api_key") or ""):
+                data["base_url"] = "https://api.novita.ai/openai"
+                data["api_key"] = os.getenv("NOVITA_API_KEY")
+        super().__init__(**data)
     client_backend: str = Field(
         default="sdk",
         description="Which LLM client backend to use: 'httpx' (httpx), 'sdk' (official OpenAI), or 'lazyllm_backend' (for more LLM source like Qwen, Doubao, SIliconflow, etc.)",
