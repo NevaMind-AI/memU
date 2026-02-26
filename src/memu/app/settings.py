@@ -1,5 +1,5 @@
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator, Field, RootModel, StringConstraints, model_validator
 
@@ -106,32 +106,10 @@ class LLMConfig(BaseModel):
     )
     base_url: str = Field(
         default="https://api.openai.com/v1",
-        description="API base URL. Set to https://api.novita.ai/openai for Novita AI"
+        description="API base URL for the configured provider."
     )
     api_key: str = Field(default="OPENAI_API_KEY")
     chat_model: str = Field(default="gpt-4o-mini")
-
-    @model_validator(mode="before")
-    @classmethod
-    def apply_novita_env(cls, data: Any) -> Any:
-        """Apply Novita AI environment configuration."""
-        import os
-        novita_key = os.getenv("NOVITA_API_KEY")
-        if not novita_key:
-            return data
-        
-        # Only auto-switch to Novita for default openai provider
-        provider = data.get("provider", "openai") if isinstance(data, dict) else "openai"
-        if provider != "openai":
-            return data
-        
-        # Only override if using default API key or explicitly set NOVITA_API_KEY
-        api_key = data.get("api_key", "OPENAI_API_KEY") if isinstance(data, dict) else "OPENAI_API_KEY"
-        if api_key in ("OPENAI_API_KEY", "NOVITA_API_KEY", None):
-            data = dict(data) if isinstance(data, dict) else {}
-            data["base_url"] = "https://api.novita.ai/openai"
-            data["api_key"] = novita_key
-        return data
 
     client_backend: str = Field(
         default="sdk",
@@ -161,6 +139,12 @@ class LLMConfig(BaseModel):
                 self.api_key = "XAI_API_KEY"
             if self.chat_model == "gpt-4o-mini":
                 self.chat_model = "grok-2-latest"
+        if self.provider == "novita":
+            # If values match the OpenAI defaults, switch them to Novita defaults
+            if self.base_url == "https://api.openai.com/v1":
+                self.base_url = "https://api.novita.ai/openai"
+            if self.api_key == "OPENAI_API_KEY":
+                self.api_key = "NOVITA_API_KEY"
         return self
 
 
