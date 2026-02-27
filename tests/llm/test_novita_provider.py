@@ -12,7 +12,7 @@ class TestNovitaProvider(unittest.IsolatedAsyncioTestCase):
         config = LLMConfig(provider="novita")
         self.assertEqual(config.base_url, "https://api.novita.ai/openai")
         self.assertEqual(config.api_key, "NOVITA_API_KEY")
-        self.assertEqual(config.chat_model, "gpt-4o-mini")
+        self.assertEqual(config.chat_model, "deepseek/deepseek-r1")
 
     def test_settings_do_not_override_non_openai_defaults(self):
         """Test that provider defaults only apply when values are OpenAI defaults."""
@@ -46,7 +46,7 @@ class TestNovitaProvider(unittest.IsolatedAsyncioTestCase):
         )
 
         mock_async_openai.assert_called_with(api_key="fake-key", base_url="https://api.novita.ai/openai")
-        self.assertEqual(client.chat_model, "gpt-4o-mini")
+        self.assertEqual(client.chat_model, "deepseek/deepseek-r1")
 
     def test_novita_backend_payload_parsing(self):
         """Test that NovitaBackend parses responses correctly (inherited from OpenAI)."""

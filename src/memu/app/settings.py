@@ -145,6 +145,8 @@ class LLMConfig(BaseModel):
                 self.base_url = "https://api.novita.ai/openai"
             if self.api_key == "OPENAI_API_KEY":
                 self.api_key = "NOVITA_API_KEY"
+            if self.chat_model == "gpt-4o-mini":
+                self.chat_model = "deepseek/deepseek-r1"
         return self
 
 
