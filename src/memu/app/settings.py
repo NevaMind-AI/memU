@@ -124,6 +124,10 @@ class LLMConfig(BaseModel):
         default=1,
         description="Maximum batch size for embedding API calls (used by SDK client backends).",
     )
+    proxy: str | None = Field(
+        default=None,
+        description="HTTP proxy URL for LLM requests (e.g., 'http://proxy.example.com:8080').",
+    )
 
     @model_validator(mode="after")
     def set_provider_defaults(self) -> "LLMConfig":
