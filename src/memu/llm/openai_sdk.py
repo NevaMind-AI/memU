@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal, cast
 
+import httpx
 from openai import AsyncOpenAI
 from openai.types import CreateEmbeddingResponse
 from openai.types.chat import (
@@ -28,13 +29,24 @@ class OpenAISDKClient:
         chat_model: str,
         embed_model: str,
         embed_batch_size: int = 1,
+        proxy: str | None = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or ""
         self.chat_model = chat_model
         self.embed_model = embed_model
         self.embed_batch_size = embed_batch_size
-        self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
+        
+        # Create httpx client with proxy if provided
+        http_client = None
+        if proxy:
+            http_client = httpx.AsyncClient(proxy=proxy)
+        
+        self.client = AsyncOpenAI(
+            api_key=self.api_key, 
+            base_url=self.base_url,
+            http_client=http_client
+        )
 
     async def chat(
         self,
