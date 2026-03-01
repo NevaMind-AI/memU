@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.5.0](https://github.com/NevaMind-AI/memU/compare/v1.4.0...v1.5.0) (2026-03-01)
+
+
+### Features
+
+* **http:** add HTTP proxy support for LLM & embedding clients ([#310](https://github.com/NevaMind-AI/memU/issues/310)) ([a3d45e2](https://github.com/NevaMind-AI/memU/commit/a3d45e2f4174702fd8fd83cd13862285cd47cad9))
+
+
+### Bug Fixes
+
+* httpx base_url path discarded when endpoint starts with / ([#328](https://github.com/NevaMind-AI/memU/issues/328), [#336](https://github.com/NevaMind-AI/memU/issues/336), [#341](https://github.com/NevaMind-AI/memU/issues/341), [#329](https://github.com/NevaMind-AI/memU/issues/329)) ([#344](https://github.com/NevaMind-AI/memU/issues/344)) ([9e31ef2](https://github.com/NevaMind-AI/memU/commit/9e31ef235d46317f383613825090c52943cb55a2))
+
+
+### Documentation
+
+* add architecture explanation and adrs ([#353](https://github.com/NevaMind-AI/memU/issues/353)) ([8676a27](https://github.com/NevaMind-AI/memU/commit/8676a2721917f4e0baee6d01a9d6b95bd642be97))
+* add pull request template to improve contribution quality ([#261](https://github.com/NevaMind-AI/memU/issues/261)) ([2256119](https://github.com/NevaMind-AI/memU/commit/2256119fb2d177890c7f738c926f437a355e7359))
+* update memU Bot section with GitHub reference and "Now open source" ([#366](https://github.com/NevaMind-AI/memU/issues/366)) ([dc6880a](https://github.com/NevaMind-AI/memU/commit/dc6880a793d40b04cd599298a110af5f0f0b9cb5))
+
 ## [1.4.0](https://github.com/NevaMind-AI/memU/compare/v1.3.0...v1.4.0) (2026-02-06)
 
 
