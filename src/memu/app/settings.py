@@ -135,6 +135,15 @@ class LLMConfig(BaseModel):
                 self.api_key = "XAI_API_KEY"
             if self.chat_model == "gpt-4o-mini":
                 self.chat_model = "grok-2-latest"
+        elif self.provider == "gemini":
+            if self.base_url == "https://api.openai.com/v1":
+                self.base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+            if self.api_key == "OPENAI_API_KEY":
+                self.api_key = "GEMINI_API_KEY"
+            if self.chat_model == "gpt-4o-mini":
+                self.chat_model = "gemini-2.0-flash"
+            if self.embed_model == "text-embedding-3-small":
+                self.embed_model = "gemini-embedding-001"
         return self
 
 
