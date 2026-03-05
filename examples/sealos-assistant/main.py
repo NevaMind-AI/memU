@@ -37,27 +37,25 @@ memory_service: MemoryService | None = None
 
 
 def get_llm_profiles() -> dict:
-    """Build LLM profiles from environment variables."""
-    base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-    api_key = os.getenv("OPENAI_API_KEY")
-
+    api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
-        raise ValueError("OPENAI_API_KEY environment variable is required")
+        raise ValueError("OPENROUTER_API_KEY is required")
 
     return {
         "default": {
-            "provider": "openai",
-            "base_url": base_url,
+            "provider": "openrouter",
+            "client_backend": "httpx",
+            "base_url": "https://openrouter.ai",
             "api_key": api_key,
-            "chat_model": os.getenv("CHAT_MODEL", "gpt-4o-mini"),
-            "client_backend": "sdk",
+            "chat_model": os.getenv("CHAT_MODEL", "anthropic/claude-3.5-sonnet"),
+            "embed_model": os.getenv("EMBED_MODEL", "openai/text-embedding-3-small"),
         },
         "embedding": {
-            "provider": "openai",
-            "base_url": base_url,
+            "provider": "openrouter",
+            "client_backend": "httpx",
+            "base_url": "https://openrouter.ai",
             "api_key": api_key,
-            "embed_model": os.getenv("EMBED_MODEL", "text-embedding-3-small"),
-            "client_backend": "sdk",
+            "embed_model": os.getenv("EMBED_MODEL", "openai/text-embedding-3-small"),
         },
     }
 
