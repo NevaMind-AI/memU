@@ -36,7 +36,7 @@ class MCPUserModel(BaseModel):
     session_id: str | None = None
 
 
-def init_mcp_server(service: MemoryService) -> FastMCP:
+def init_mcp_server(service: MemoryService) -> Any:
     """Bind a MemoryService instance to the MCP server."""
     global _service
     _service = service
