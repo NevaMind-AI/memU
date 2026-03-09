@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
@@ -14,6 +15,10 @@ from memu.llm.backends.doubao import DoubaoLLMBackend
 from memu.llm.backends.grok import GrokBackend
 from memu.llm.backends.openai import OpenAILLMBackend
 from memu.llm.backends.openrouter import OpenRouterLLMBackend
+
+
+def _load_proxy() -> str | None:
+    return os.getenv("MEMU_HTTP_PROXY") or os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY") or None
 
 
 # Minimal embedding backend support (moved from embedding module)
@@ -111,7 +116,10 @@ class HTTPLLMClient:
         embed_base_url: str | None = None,
         embed_api_key: str | None = None,
     ):
-        self.base_url = base_url.rstrip("/")
+        # Ensure base_url ends with "/" so httpx doesn't discard the path
+        # component when joining with endpoint paths.
+        # See: https://github.com/NevaMind-AI/memU/issues/328
+        self.base_url = base_url.rstrip("/") + "/"
         self.api_key = api_key or ""
         self.chat_model = chat_model
         self.provider = provider.lower()
@@ -124,15 +132,20 @@ class HTTPLLMClient:
         self.embedding_backend = self._load_embedding_backend(self._embed_provider)
         
         overrides = endpoint_overrides or {}
-        self.summary_endpoint = overrides.get("chat") or overrides.get("summary") or self.backend.summary_endpoint
-        self.embedding_endpoint = (
+        raw_summary_ep = overrides.get("chat") or overrides.get("summary") or self.backend.summary_endpoint
+        raw_embedding_ep = (
             overrides.get("embeddings")
             or overrides.get("embedding")
             or overrides.get("embed")
             or self.embedding_backend.embedding_endpoint
         )
+        # Strip leading "/" from endpoints so httpx resolves them relative to
+        # base_url instead of treating them as absolute paths.
+        self.summary_endpoint = raw_summary_ep.lstrip("/")
+        self.embedding_endpoint = raw_embedding_ep.lstrip("/")
         self.timeout = timeout
         self.embed_model = embed_model or chat_model
+        self.proxy = _load_proxy()
 
     async def chat(
         self,
@@ -180,7 +193,7 @@ class HTTPLLMClient:
         payload = self.backend.build_summary_payload(
             text=text, system_prompt=system_prompt, chat_model=self.chat_model, max_tokens=max_tokens
         )
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, proxy=self.proxy) as client:
             resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
             data = resp.json()
@@ -230,7 +243,7 @@ class HTTPLLMClient:
             max_tokens=max_tokens,
         )
 
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, proxy=self.proxy) as client:
             resp = await client.post(self.summary_endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
             data = resp.json()
@@ -247,7 +260,7 @@ class HTTPLLMClient:
             endpoint = endpoint.format(model=self.embed_model)
         
         # Use separate embedding provider settings
-        async with httpx.AsyncClient(base_url=self._embed_base_url, timeout=self.timeout) as client:
+        async with httpx.AsyncClient(base_url=self._embed_base_url, timeout=self.timeout, proxy=self.proxy) as client:
             resp = await client.post(endpoint, json=payload, headers=self._embed_headers())
             resp.raise_for_status()
             data = resp.json()
@@ -288,7 +301,9 @@ class HTTPLLMClient:
                 if language:
                     data["language"] = language
 
-                async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout * 3) as client:
+                async with httpx.AsyncClient(
+                    base_url=self.base_url, timeout=self.timeout * 3, proxy=self.proxy
+                ) as client:
                     resp = await client.post(
                         "/v1/audio/transcriptions",
                         files=files,

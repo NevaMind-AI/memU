@@ -28,15 +28,17 @@ memU **continuously captures and understands user intent**. Even without a comma
 
 ---
 
-## 🤖 [OpenClaw (Moltbot, Clawdbot) Alternative](https://memu.bot)
+## 🤖 [OpenClaw (Moltbot, Clawdbot) Alternative](https://github.com/NevaMind-AI/memUBot)
 
 <img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/memUbot.png" />
 
-- **Download-and-use and simple** to get started.
-- Builds long-term memory to **understand user intent** and act proactively.
-- **Cuts LLM token cost** with smaller context.
+**[memU Bot](https://github.com/NevaMind-AI/memUBot)** — Now open source. The enterprise-ready OpenClaw. Your proactive AI assistant that remembers everything.
 
-Try now: [memU bot](https://memu.bot)
+- **Download-and-use and simple** to get started (one-click install, &lt; 3 min).
+- Builds long-term memory to **understand user intent** and act proactively (24/7).
+- **Cuts LLM token cost** with smaller context (~1/10 of comparable usage).
+
+Try now: [memu.bot](https://memu.bot) · Source: [memUBot on GitHub](https://github.com/NevaMind-AI/memUBot)
 
 ---
 
@@ -582,6 +584,7 @@ View detailed experimental data: [memU-experiment](https://github.com/NevaMind-A
 <a href="https://github.com/Buddie-AI/Buddie"><img src="assets/partners/buddie.png" alt="Buddie" height="40" style="margin: 10px;"></a>
 <a href="https://github.com/bytebase/bytebase"><img src="assets/partners/bytebase.png" alt="Bytebase" height="40" style="margin: 10px;"></a>
 <a href="https://github.com/LazyAGI/LazyLLM"><img src="assets/partners/LazyLLM.png" alt="LazyLLM" height="40" style="margin: 10px;"></a>
+<a href="https://clawdchat.ai/"><img src="assets/partners/Clawdchat.png" alt="Clawdchat" height="40" style="margin: 10px;"></a>
 
 </div>
 
