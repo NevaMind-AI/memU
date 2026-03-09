@@ -333,7 +333,7 @@ class TestRetrieve:
         assert result == expected
 
         service.retrieve.assert_awaited_once_with(
-            queries=[{"role": "user", "content": "What are user preferences?"}],
+            queries=[{"role": "user", "content": {"text": "What are user preferences?"}}],
             where={"user_id": "user-1"},
         )
 
@@ -348,7 +348,7 @@ class TestRetrieve:
         )
 
         service.retrieve.assert_awaited_once_with(
-            queries=[{"role": "user", "content": "Test query"}],
+            queries=[{"role": "user", "content": {"text": "Test query"}}],
             where={"user_id": "user-1", "agent_id": "agent-1", "session_id": "sess-1"},
         )
 

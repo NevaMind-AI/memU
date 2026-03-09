@@ -18,7 +18,7 @@ from memu.database.models import MemoryType
 try:
     from mcp.server.fastmcp import FastMCP
 except ImportError as e:
-    msg = "Please install 'mcp' to use the MCP integration: pip install memu-py[mcp]"
+    msg = "Please install 'mcp' to use the MCP integration: uv sync --extra mcp"
     raise ImportError(msg) from e
 
 logger = logging.getLogger("memu.integrations.mcp")
@@ -127,7 +127,7 @@ async def retrieve(
     service = _get_service()
     scope = _build_scope(user_id, agent_id, session_id)
     result = await service.retrieve(
-        queries=[{"role": "user", "content": query}],
+        queries=[{"role": "user", "content": {"text": query}}],
         where=scope,
     )
     return _json(result)
@@ -327,7 +327,9 @@ def main() -> None:
         "--embed-api-key", default=None, help="Embedding API key, if different from --api-key (env: MEMU_EMBED_API_KEY)"
     )
     parser.add_argument(
-        "--embed-base-url", default=None, help="Embedding base URL, if different from --base-url (env: MEMU_EMBED_BASE_URL)"
+        "--embed-base-url",
+        default=None,
+        help="Embedding base URL, if different from --base-url (env: MEMU_EMBED_BASE_URL)",
     )
     parser.add_argument(
         "--db",
