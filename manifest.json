@@ -1,0 +1,82 @@
+{
+  "manifest_version": "0.3",
+  "name": "memU",
+  "display_name": "memU - AI Memory Service",
+  "version": "1.0.0",
+  "description": "memU is a memory framework built for 24/7 proactive agents. It is designed for long-running use and greatly reduces the LLM token cost of keeping agents always online, making always-on, evolving agents practical in production systems. memU continuously captures and understands user intent. Even without a command, the agent can tell what you are about to do and act on it by itself.",
+  "author": {
+    "name": "NevaMind-AI",
+    "email": "jinshen.yin@nevamind.ai"
+  },
+  "homepage": "https://github.com/NevaMind-AI/memU",
+  "documentation": "https://memu.pro/docs",
+  "server": {
+    "type": "python",
+    "entry_point": "src/memu/integrations/mcp.py",
+    "mcp_config": {
+      "command": "uvx",
+      "args": ["--from", "memu-py[mcp] @ git+https://github.com/De13ruyne/memU@feat/add_mcp", "memu-mcp"],
+      "env": {
+        "OPENAI_API_KEY": "${user_config.api_key}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "memorize",
+      "description": "Save conversations, documents, or knowledge to memory"
+    },
+    {
+      "name": "retrieve",
+      "description": "Search for relevant memories based on a query"
+    },
+    {
+      "name": "list_memories",
+      "description": "List all stored memory items for a user"
+    },
+    {
+      "name": "list_categories",
+      "description": "List all memory categories for a user"
+    },
+    {
+      "name": "create_memory",
+      "description": "Manually create a memory item"
+    },
+    {
+      "name": "update_memory",
+      "description": "Update an existing memory item"
+    },
+    {
+      "name": "delete_memory",
+      "description": "Delete a specific memory item"
+    },
+    {
+      "name": "clear_memory",
+      "description": "Clear all memories for a user"
+    }
+  ],
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "LLM API Key",
+      "description": "OpenAI-compatible API key for chat and embedding",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "keywords": [
+    "memory",
+    "ai",
+    "agent",
+    "llm",
+    "conversation",
+    "knowledge",
+    "proactive",
+    "mcp"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NevaMind-AI/memU"
+  }
+}
