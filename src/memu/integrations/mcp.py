@@ -324,6 +324,12 @@ def main() -> None:
     parser.add_argument("--chat-model", default=None, help="Chat model name (env: MEMU_CHAT_MODEL)")
     parser.add_argument("--embed-model", default=None, help="Embedding model name (env: MEMU_EMBED_MODEL)")
     parser.add_argument(
+        "--embed-api-key", default=None, help="Embedding API key, if different from --api-key (env: MEMU_EMBED_API_KEY)"
+    )
+    parser.add_argument(
+        "--embed-base-url", default=None, help="Embedding base URL, if different from --base-url (env: MEMU_EMBED_BASE_URL)"
+    )
+    parser.add_argument(
         "--db",
         default=None,
         choices=["inmemory", "sqlite", "postgres"],
@@ -347,6 +353,8 @@ def main() -> None:
     base_url = _resolve(args.base_url, "OPENAI_BASE_URL", "https://api.openai.com/v1")
     chat_model = _resolve(args.chat_model, "MEMU_CHAT_MODEL", "gpt-4o-mini")
     embed_model = _resolve(args.embed_model, "MEMU_EMBED_MODEL")
+    embed_api_key = _resolve(args.embed_api_key, "MEMU_EMBED_API_KEY")
+    embed_base_url = _resolve(args.embed_base_url, "MEMU_EMBED_BASE_URL")
     db = _resolve(args.db, "MEMU_DB", "inmemory") or "inmemory"
     db_path = _resolve(args.db_path, "MEMU_DB_PATH")
     db_dsn = _resolve(args.db_dsn, "MEMU_DB_DSN")
@@ -357,8 +365,12 @@ def main() -> None:
         "chat_model": chat_model,
     }
     llm_profiles: dict[str, Any] = {"default": llm_default}
-    if embed_model:
-        llm_profiles["embedding"] = {**llm_default, "embed_model": embed_model}
+    if embed_model or embed_api_key or embed_base_url:
+        llm_profiles["embedding"] = {
+            "api_key": embed_api_key or api_key,
+            "base_url": embed_base_url or base_url,
+            "embed_model": embed_model,
+        }
 
     database_config = _build_database_config(db, db_path, db_dsn)
 

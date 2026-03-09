@@ -357,6 +357,8 @@ All tools support `user_id`, `agent_id`, and `session_id` for multi-user and mul
 | `--base-url` | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | LLM Base URL |
 | `--chat-model` | `MEMU_CHAT_MODEL` | `gpt-4o-mini` | Chat model |
 | `--embed-model` | `MEMU_EMBED_MODEL` | (same as default) | Embedding model |
+| `--embed-api-key` | `MEMU_EMBED_API_KEY` | (same as `--api-key`) | Embedding API key (use when embedding provider differs from chat) |
+| `--embed-base-url` | `MEMU_EMBED_BASE_URL` | (same as `--base-url`) | Embedding base URL (use when embedding provider differs from chat) |
 | `--db` | `MEMU_DB` | `inmemory` | Storage backend |
 | `--db-path` | `MEMU_DB_PATH` | `None` | SQLite database path |
 | `--db-dsn` | `MEMU_DB_DSN` | `None` | PostgreSQL DSN |
