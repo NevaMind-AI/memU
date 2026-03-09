@@ -317,6 +317,89 @@ See [`tests/test_inmemory.py`](tests/test_inmemory.py) and [`tests/test_postgres
 
 ---
 
+### Option 3: MCP Server
+
+Expose memU as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, making it available to any MCP-compatible client such as Claude Desktop, Cursor, OpenClaw, and more.
+
+#### Installation
+
+```bash
+pip install memu-py[mcp]
+```
+
+#### Quick Start
+
+```bash
+export OPENAI_API_KEY=sk-...
+memu-mcp --db sqlite --db-path ./memory.db
+```
+
+#### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `memorize` | Save conversations, documents, or knowledge to memory |
+| `retrieve` | Search for relevant memories based on a query |
+| `list_memories` | List all stored memory items for a user |
+| `list_categories` | List all memory categories for a user |
+| `create_memory` | Manually create a memory item |
+| `update_memory` | Update an existing memory item |
+| `delete_memory` | Delete a specific memory item |
+| `clear_memory` | Clear all memories for a user |
+
+All tools support `user_id`, `agent_id`, and `session_id` for multi-user and multi-agent scoping.
+
+#### CLI Options
+
+| Option | Environment Variable | Default | Description |
+|--------|---------------------|---------|-------------|
+| `--api-key` | `OPENAI_API_KEY` | (required) | LLM API Key |
+| `--base-url` | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | LLM Base URL |
+| `--chat-model` | `MEMU_CHAT_MODEL` | `gpt-4o-mini` | Chat model |
+| `--embed-model` | `MEMU_EMBED_MODEL` | (same as default) | Embedding model |
+| `--db` | `MEMU_DB` | `inmemory` | Storage backend |
+| `--db-path` | `MEMU_DB_PATH` | `None` | SQLite database path |
+| `--db-dsn` | `MEMU_DB_DSN` | `None` | PostgreSQL DSN |
+| `--transport` | - | `stdio` | MCP transport (`stdio` or `sse`) |
+
+#### Claude Desktop Configuration
+
+Add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "memu": {
+      "command": "memu-mcp",
+      "args": ["--db", "sqlite", "--db-path", "/path/to/memory.db"],
+      "env": {
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}
+```
+
+#### Cursor Configuration
+
+Add to `.cursor/mcp.json` in your project:
+
+```json
+{
+  "mcpServers": {
+    "memu": {
+      "command": "memu-mcp",
+      "args": ["--db", "sqlite", "--db-path", "/path/to/memory.db"],
+      "env": {
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}
+```
+
+---
+
 ### Custom LLM and Embedding Providers
 
 MemU supports custom LLM and embedding providers beyond OpenAI. Configure them via `llm_profiles`:

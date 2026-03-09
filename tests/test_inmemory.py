@@ -1,13 +1,16 @@
 import os
 
+from dotenv import load_dotenv
+
 from memu.app import MemoryService
+
+load_dotenv()
 
 
 async def main():
     """Test with in-memory storage (default)."""
-    api_key = os.environ.get("OPENAI_API_KEY")
-    # dashscope_api_key = os.environ.get("DASHSCOPE_API_KEY")
-    # voyage_api_key = os.environ.get("VOYAGE_API_KEY")
+    zenmux_api_key = os.environ.get("ZENMUX_API_KEY")
+    openai_api_key = os.environ.get("OPENAI_API_KEY")
     file_path = os.path.abspath("example/example_conversation.json")
 
     print("\n" + "=" * 60)
@@ -15,20 +18,22 @@ async def main():
     print("=" * 60)
 
     service = MemoryService(
-        llm_profiles={"default": {"api_key": api_key}},
-        # llm_profiles={
-        #     "default": {
-        #         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        #         "api_key": dashscope_api_key,
-        #         "chat_model": "qwen3-max",
-        #         "client_backend": "sdk"
-        #     },
-        #     "embedding": {
-        #         "base_url": "https://api.voyageai.com/v1",
-        #         "api_key": voyage_api_key,
-        #         "embed_model": "voyage-3.5-lite"
-        #     }
-        # },
+        llm_profiles={
+            "default": {
+                "provider": "openai",
+                "base_url": "https://zenmux.ai/api/v1",
+                "api_key": zenmux_api_key,
+                "chat_model": "openai/gpt-4o-mini",
+                "client_backend": "sdk",
+            },
+            "embedding": {
+                "provider": "openai",
+                "base_url": "https://api.openai.com/v1",
+                "api_key": openai_api_key,
+                "embed_model": "text-embedding-3-small",
+                "client_backend": "sdk",
+            },
+        },
         database_config={
             "metadata_store": {"provider": "inmemory"},
         },
