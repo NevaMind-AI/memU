@@ -15,7 +15,11 @@
     "entry_point": "src/memu/integrations/mcp.py",
     "mcp_config": {
       "command": "uvx",
-      "args": ["--from", "memu-py[mcp] @ git+https://github.com/De13ruyne/memU@feat/add_mcp", "memu-mcp"],
+      "args": [
+        "--from",
+        "memu-py[mcp] @ git+https://github.com/De13ruyne/memU@feat/add_mcp",
+        "memu-mcp"
+      ],
       "env": {
         "OPENAI_API_KEY": "${user_config.api_key}"
       }
