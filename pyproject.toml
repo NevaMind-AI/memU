@@ -82,6 +82,7 @@ memu-server = "memu.server.cli:main"
 memu-mcp = "memu.integrations.mcp:main"
 
 [tool.deptry.per_rule_ignores]
+DEP001 = ["dotenv"]
 # Optional dependencies used in examples/
 DEP002 = ["claude-agent-sdk", "mcp", "python-dotenv"]
 
