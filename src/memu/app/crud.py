@@ -517,6 +517,7 @@ class CRUDMixin:
         content_embedding = (await self._get_step_embedding_client(step_context).embed(embed_payload))[0]
 
         item = store.memory_item_repo.create_item(
+            resource_id="",
             memory_type=memory_payload["type"],
             summary=memory_payload["content"],
             embedding=content_embedding,

@@ -70,6 +70,7 @@ test = [
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
 langgraph = ["langgraph>=0.0.10", "langchain-core>=0.1.0"]
 claude = ["claude-agent-sdk>=0.1.24"]
+mcp = ["mcp>=1.0", "python-dotenv>=1.0"]
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
@@ -78,10 +79,12 @@ claude = ["claude-agent-sdk>=0.1.24"]
 
 [project.scripts]
 memu-server = "memu.server.cli:main"
+memu-mcp = "memu.integrations.mcp:main"
 
 [tool.deptry.per_rule_ignores]
+DEP001 = ["dotenv"]
 # Optional dependencies used in examples/
-DEP002 = ["claude-agent-sdk"]
+DEP002 = ["claude-agent-sdk", "mcp", "python-dotenv"]
 
 [tool.mypy]
 files = ["src", "tests"]
@@ -107,6 +110,14 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["pgvector.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["mcp.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["dotenv.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
