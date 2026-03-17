@@ -124,6 +124,10 @@ class LLMConfig(BaseModel):
         default=1,
         description="Maximum batch size for embedding API calls (used by SDK client backends).",
     )
+    proxy: str | None = Field(
+        default=None,
+        description="HTTP proxy URL for LLM requests (e.g., 'http://proxy.example.com:8080').",
+    )
 
     @model_validator(mode="after")
     def set_provider_defaults(self) -> "LLMConfig":
@@ -135,6 +139,14 @@ class LLMConfig(BaseModel):
                 self.api_key = "XAI_API_KEY"
             if self.chat_model == "gpt-4o-mini":
                 self.chat_model = "grok-2-latest"
+        elif self.provider == "openrouter":
+            # If values match the OpenAI defaults, switch them to OpenRouter defaults
+            if self.base_url == "https://api.openai.com/v1":
+                self.base_url = "https://openrouter.ai"
+            if self.api_key == "OPENAI_API_KEY":
+                self.api_key = "OPENROUTER_API_KEY"
+            if self.chat_model == "gpt-4o-mini":
+                self.chat_model = "anthropic/claude-3.5-sonnet"
         return self
 
 
