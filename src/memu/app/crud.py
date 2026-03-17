@@ -579,10 +579,9 @@ class CRUDMixin:
             if propagate:
                 category_memory_updates[cid] = (None, item.summary)
 
-        if propagate:
-            if memory_payload["content"]:
-                for cid in set(mapped_old_cat_ids) & set(mapped_new_cat_ids):
-                    category_memory_updates[cid] = (old_content, item.summary)
+        if propagate and memory_payload["content"]:
+            for cid in set(mapped_old_cat_ids) & set(mapped_new_cat_ids):
+                category_memory_updates[cid] = (old_content, item.summary)
 
         state.update({
             "memory_item": item,
