@@ -104,9 +104,13 @@ class LLMConfig(BaseModel):
         default="openai",
         description="Identifier for the LLM provider implementation (used by HTTP client backend).",
     )
-    base_url: str = Field(default="https://api.openai.com/v1")
+    base_url: str = Field(
+        default="https://api.openai.com/v1",
+        description="API base URL for the configured provider."
+    )
     api_key: str = Field(default="OPENAI_API_KEY")
     chat_model: str = Field(default="gpt-4o-mini")
+
     client_backend: str = Field(
         default="sdk",
         description="Which LLM client backend to use: 'httpx' (httpx), 'sdk' (official OpenAI), or 'lazyllm_backend' (for more LLM source like Qwen, Doubao, SIliconflow, etc.)",
@@ -135,6 +139,14 @@ class LLMConfig(BaseModel):
                 self.api_key = "XAI_API_KEY"
             if self.chat_model == "gpt-4o-mini":
                 self.chat_model = "grok-2-latest"
+        if self.provider == "novita":
+            # If values match the OpenAI defaults, switch them to Novita defaults
+            if self.base_url == "https://api.openai.com/v1":
+                self.base_url = "https://api.novita.ai/openai"
+            if self.api_key == "OPENAI_API_KEY":
+                self.api_key = "NOVITA_API_KEY"
+            if self.chat_model == "gpt-4o-mini":
+                self.chat_model = "deepseek/deepseek-r1"
         return self
 
 
