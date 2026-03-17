@@ -283,6 +283,7 @@ class CRUDMixin:
         memory_content: str,
         memory_categories: list[str],
         user: dict[str, Any] | None = None,
+        propagate: bool = True,
     ) -> dict[str, Any]:
         if memory_type not in get_args(MemoryType):
             msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}"
@@ -303,6 +304,7 @@ class CRUDMixin:
             "store": store,
             "category_ids": list(ctx.category_ids),
             "user": user_scope,
+            "propagate": propagate,
         }
 
         result = await self._run_workflow("patch_create", state)
@@ -320,6 +322,7 @@ class CRUDMixin:
         memory_content: str | None = None,
         memory_categories: list[str] | None = None,
         user: dict[str, Any] | None = None,
+        propagate: bool = True,
     ) -> dict[str, Any]:
         if all((memory_type is None, memory_content is None, memory_categories is None)):
             msg = "At least one of memory type, memory content, or memory categories is required for UPDATE operation"
@@ -344,6 +347,7 @@ class CRUDMixin:
             "store": store,
             "category_ids": list(ctx.category_ids),
             "user": user_scope,
+            "propagate": propagate,
         }
 
         result = await self._run_workflow("patch_update", state)
@@ -358,6 +362,7 @@ class CRUDMixin:
         *,
         memory_id: str,
         user: dict[str, Any] | None = None,
+        propagate: bool = True,
     ) -> dict[str, Any]:
         ctx = self._get_context()
         store = self._get_database()
@@ -370,6 +375,7 @@ class CRUDMixin:
             "store": store,
             "category_ids": list(ctx.category_ids),
             "user": user_scope,
+            "propagate": propagate,
         }
 
         result = await self._run_workflow("patch_delete", state)
@@ -504,6 +510,7 @@ class CRUDMixin:
         ctx = state["ctx"]
         store = state["store"]
         user = state["user"]
+        propagate = state["propagate"]
         category_memory_updates: dict[str, tuple[Any, Any]] = {}
 
         embed_payload = [memory_payload["content"]]
@@ -519,7 +526,8 @@ class CRUDMixin:
         mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
         for cid in mapped_cat_ids:
             store.category_item_repo.link_item_category(item.id, cid, user_data=dict(user or {}))
-            category_memory_updates[cid] = (None, memory_payload["content"])
+            if propagate:
+                category_memory_updates[cid] = (None, memory_payload["content"])
 
         state.update({
             "memory_item": item,
@@ -533,6 +541,7 @@ class CRUDMixin:
         ctx = state["ctx"]
         store = state["store"]
         user = state["user"]
+        propagate = state["propagate"]
         category_memory_updates: dict[str, tuple[Any, Any]] = {}
 
         item = store.memory_item_repo.get_item(memory_id)
@@ -563,14 +572,17 @@ class CRUDMixin:
         cats_to_add = set(mapped_new_cat_ids) - set(mapped_old_cat_ids)
         for cid in cats_to_remove:
             store.category_item_repo.unlink_item_category(memory_id, cid)
-            category_memory_updates[cid] = (old_content, None)
+            if propagate:
+                category_memory_updates[cid] = (old_content, None)
         for cid in cats_to_add:
             store.category_item_repo.link_item_category(memory_id, cid, user_data=dict(user or {}))
-            category_memory_updates[cid] = (None, item.summary)
+            if propagate:
+                category_memory_updates[cid] = (None, item.summary)
 
-        if memory_payload["content"]:
-            for cid in set(mapped_old_cat_ids) & set(mapped_new_cat_ids):
-                category_memory_updates[cid] = (old_content, item.summary)
+        if propagate:
+            if memory_payload["content"]:
+                for cid in set(mapped_old_cat_ids) & set(mapped_new_cat_ids):
+                    category_memory_updates[cid] = (old_content, item.summary)
 
         state.update({
             "memory_item": item,
@@ -581,6 +593,7 @@ class CRUDMixin:
     async def _patch_delete_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         memory_id = state["memory_id"]
         store = state["store"]
+        propagate = state["propagate"]
         category_memory_updates: dict[str, tuple[Any, Any]] = {}
 
         item = store.memory_item_repo.get_item(memory_id)
@@ -588,8 +601,9 @@ class CRUDMixin:
             msg = f"Memory item with id {memory_id} not found"
             raise ValueError(msg)
         item_categories = store.category_item_repo.get_item_categories(memory_id)
-        for cat in item_categories:
-            category_memory_updates[cat.category_id] = (item.summary, None)
+        if propagate:
+            for cat in item_categories:
+                category_memory_updates[cat.category_id] = (item.summary, None)
         store.memory_item_repo.delete_item(memory_id)
 
         state.update({
