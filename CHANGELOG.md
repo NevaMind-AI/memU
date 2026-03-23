@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/NevaMind-AI/memU/compare/v1.5.0...v1.5.1) (2026-03-23)
+
+
+### Bug Fixes
+
+* use correct interpolation in alembic url ([#390](https://github.com/NevaMind-AI/memU/issues/390)) ([fd87ceb](https://github.com/NevaMind-AI/memU/commit/fd87ceb558eaa800aeb694b045847971958f23a3))
+
 ## [1.5.0](https://github.com/NevaMind-AI/memU/compare/v1.4.0...v1.5.0) (2026-03-17)
 
 
