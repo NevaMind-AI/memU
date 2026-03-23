@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Literal
 
 from sqlalchemy import create_engine, inspect, text
-
-from memu.database.postgres.schema import get_metadata
 
 try:  # Optional dependency for Postgres backend
     from alembic import command
@@ -18,12 +17,17 @@ except ImportError as exc:  # pragma: no cover - optional dependency
 logger = logging.getLogger(__name__)
 
 DDLMode = Literal["create", "validate"]
+_UNESCAPED_CONFIGPARSER_PERCENT = re.compile(r"(?<!%)%(?!%)")
+
+
+def _escape_for_config_parser(value: str) -> str:
+    return _UNESCAPED_CONFIGPARSER_PERCENT.sub("%%", value)
 
 
 def make_alembic_config(*, dsn: str, scope_model: type[Any]) -> AlembicConfig:
     cfg = AlembicConfig()
     cfg.set_main_option("script_location", str(Path(__file__).with_name("migrations")))
-    cfg.set_main_option("sqlalchemy.url", dsn)
+    cfg.set_main_option("sqlalchemy.url", _escape_for_config_parser(dsn))
     cfg.attributes["scope_model"] = scope_model
     return cfg
 
@@ -37,6 +41,8 @@ def run_migrations(*, dsn: str, scope_model: type[Any], ddl_mode: DDLMode = "cre
         scope_model: User scope model for scoped tables
         ddl_mode: "create" to create missing tables, "validate" to only check schema
     """
+    from memu.database.postgres.schema import get_metadata
+
     metadata = get_metadata(scope_model)
     engine = create_engine(dsn)
 
