@@ -208,7 +208,7 @@ class RetrieveMixin:
                     "query_vector",
                     "store",
                 },
-                produces={"graph_hits"},
+                produces={"graph_hits", "graph_recall_result"},
                 capabilities={"vector"},
                 config={"embed_llm_profile": "embedding"},
             ),
@@ -458,6 +458,7 @@ class RetrieveMixin:
             state["active_query"],
             query_vec=query_vec,
             max_nodes=self.retrieve_config.graph.max_nodes,
+            where=state.get("where"),
         )
         # Convert to (id, score) tuples for consistency with other hits
         state["graph_hits"] = [
@@ -488,11 +489,17 @@ class RetrieveMixin:
                 categories_pool,
             )
 
-            # Score fusion: apply weights to item scores
-            graph_weight = self.retrieve_config.graph.weight
-            vector_weight = 1.0 - graph_weight
+            # Score fusion: only deflate item scores when graph is enabled AND returned results
+            graph_recall_result = state.get("graph_recall_result")
+            graph_active = (
+                self.retrieve_config.graph.enabled
+                and graph_recall_result
+                and graph_recall_result.nodes
+            )
             item_hits = state.get("item_hits", [])
-            if graph_weight > 0 and item_hits:
+            if graph_active:
+                graph_weight = self.retrieve_config.graph.weight
+                vector_weight = 1.0 - graph_weight
                 response["items"] = [
                     {**d, "score": d["score"] * vector_weight}
                     for d in self._materialize_hits(item_hits, items_pool)
@@ -506,8 +513,8 @@ class RetrieveMixin:
             )
 
             # Graph nodes: materialize from RecallResult
-            graph_recall_result = state.get("graph_recall_result")
-            if graph_recall_result and graph_recall_result.nodes:
+            if graph_active:
+                gw = self.retrieve_config.graph.weight
                 max_ppr = max((n.ppr_score for n in graph_recall_result.nodes), default=0.0) or 1.0
                 graph_entries = []
                 for n in graph_recall_result.nodes:
@@ -519,7 +526,7 @@ class RetrieveMixin:
                         "description": n.description,
                         "content": n.content,
                         "community_id": n.community_id,
-                        "score": ppr_norm * graph_weight,
+                        "score": ppr_norm * gw,
                         "ppr_score": n.ppr_score,
                     })
                 response["graph_nodes"] = graph_entries
@@ -790,6 +797,7 @@ class RetrieveMixin:
             "categories": [],
             "items": [],
             "resources": [],
+            "graph_nodes": [],
         }
         if state.get("needs_retrieval"):
             response["categories"] = list(state.get("category_hits") or [])
