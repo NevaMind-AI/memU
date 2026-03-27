@@ -167,6 +167,15 @@ class RetrieveItemConfig(BaseModel):
     )
 
 
+class RetrieveGraphConfig(BaseModel):
+    enabled: bool = Field(default=False, description="Whether to enable graph-enhanced retrieval.")
+    max_nodes: int = Field(default=6, description="Maximum graph nodes to return per recall.")
+    weight: float = Field(
+        default=0.3,
+        description="Graph score weight (β) in fusion. Vector weight is 1-β.",
+    )
+
+
 class RetrieveResourceConfig(BaseModel):
     enabled: bool = Field(default=True, description="Whether to enable resource retrieval.")
     top_k: int = Field(default=5, description="Total number of resources to retrieve.")
@@ -195,6 +204,7 @@ class RetrieveConfig(BaseModel):
     category: RetrieveCategoryConfig = Field(default=RetrieveCategoryConfig())
     item: RetrieveItemConfig = Field(default=RetrieveItemConfig())
     resource: RetrieveResourceConfig = Field(default=RetrieveResourceConfig())
+    graph: RetrieveGraphConfig = Field(default=RetrieveGraphConfig())
     sufficiency_check: bool = Field(default=True, description="Whether to check sufficiency after each tier.")
     sufficiency_check_prompt: str = Field(default="", description="User prompt for sufficiency check.")
     sufficiency_check_llm_profile: str = Field(default="default", description="LLM profile for sufficiency check.")
