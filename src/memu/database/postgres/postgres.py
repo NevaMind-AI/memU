@@ -9,6 +9,7 @@ from memu.database.interfaces import Database
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, Resource
 from memu.database.postgres.migration import DDLMode, run_migrations
 from memu.database.postgres.repositories.category_item_repo import PostgresCategoryItemRepo
+from memu.database.postgres.repositories.graph_store import PostgresGraphStore
 from memu.database.postgres.repositories.memory_category_repo import PostgresMemoryCategoryRepo
 from memu.database.postgres.repositories.memory_item_repo import PostgresMemoryItemRepo
 from memu.database.postgres.repositories.resource_repo import PostgresResourceRepo
@@ -89,6 +90,13 @@ class PostgresStore(Database):
             sqla_models=self._sqla_models,
             sessions=self._sessions,
             scope_fields=self._scope_fields,
+        )
+        self.graph_store = PostgresGraphStore(
+            state=self._state,
+            sqla_models=self._sqla_models,
+            sessions=self._sessions,
+            scope_fields=self._scope_fields,
+            use_vector=self._use_vector_type,
         )
 
         self.resources = self._state.resources
