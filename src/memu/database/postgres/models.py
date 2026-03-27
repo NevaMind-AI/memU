@@ -13,11 +13,23 @@ except ImportError as exc:
     raise ImportError(msg) from exc
 
 from pydantic import BaseModel
+import sqlalchemy as sa
 from sqlalchemy import ForeignKey, MetaData, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
-from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
+from sqlalchemy.dialects.postgresql import ARRAY as PgArray
+
+from memu.database.models import (
+    CategoryItem,
+    GraphCommunity,
+    GraphEdge,
+    GraphNode,
+    MemoryCategory,
+    MemoryItem,
+    MemoryType,
+    Resource,
+)
 
 
 class TZDateTime(DateTime):
@@ -72,6 +84,37 @@ class CategoryItemModel(BaseModelMixin, CategoryItem):
     category_id: str = Field(sa_column=Column(ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False))
 
     __table_args__ = (Index("idx_category_items_unique", "item_id", "category_id", unique=True),)
+
+
+class GraphNodeModel(BaseModelMixin, GraphNode):
+    type: str = Field(sa_column=Column(String, nullable=False))
+    name: str = Field(sa_column=Column(String, nullable=False))
+    description: str = Field(default="", sa_column=Column(Text, nullable=False, server_default=""))
+    content: str = Field(default="", sa_column=Column(Text, nullable=False))
+    status: str = Field(default="active", sa_column=Column(String, nullable=False, server_default="active"))
+    validated_count: int | None = Field(default=1, sa_column=Column(sa.Integer, nullable=True, server_default="1"))
+    source_sessions: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(PgArray(Text), nullable=True, server_default="{}"),
+    )
+    community_id: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    pagerank: float | None = Field(default=0.0, sa_column=Column(sa.Float, nullable=True, server_default="0"))
+    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
+
+
+class GraphEdgeModel(BaseModelMixin, GraphEdge):
+    from_id: str = Field(sa_column=Column(String, nullable=False))
+    to_id: str = Field(sa_column=Column(String, nullable=False))
+    type: str = Field(sa_column=Column(String, nullable=False))
+    instruction: str = Field(default="", sa_column=Column(Text, nullable=False))
+    condition: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    session_id: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+
+
+class GraphCommunityModel(BaseModelMixin, GraphCommunity):
+    summary: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    node_count: int | None = Field(default=0, sa_column=Column(sa.Integer, nullable=True, server_default="0"))
+    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
 
 
 def _normalize_table_args(table_args: Any) -> tuple[list[Any], dict[str, Any]]:
@@ -172,6 +215,9 @@ def build_scoped_models(
 __all__ = [
     "BaseModelMixin",
     "CategoryItemModel",
+    "GraphCommunityModel",
+    "GraphEdgeModel",
+    "GraphNodeModel",
     "MemoryCategoryModel",
     "MemoryItemModel",
     "ResourceModel",
