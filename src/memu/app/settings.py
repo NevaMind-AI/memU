@@ -172,6 +172,8 @@ class RetrieveGraphConfig(BaseModel):
     max_nodes: int = Field(default=6, description="Maximum graph nodes to return per recall.")
     weight: float = Field(
         default=0.3,
+        ge=0.0,
+        le=1.0,
         description="Graph score weight (β) in fusion. Vector weight is 1-β.",
     )
 

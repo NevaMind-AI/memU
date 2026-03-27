@@ -115,9 +115,16 @@ class PostgresGraphStore(PostgresRepoBase):
     def delete_node(self, node_id: str) -> None:
         from sqlmodel import delete
 
-        model = self._sqla_models.GraphNode
+        node_model = self._sqla_models.GraphNode
+        edge_model = self._sqla_models.GraphEdge
         with self._sessions.session() as session:
-            session.exec(delete(model).where(model.id == node_id))
+            # Cascade: remove all edges touching this node
+            session.exec(
+                delete(edge_model).where(
+                    (edge_model.from_id == node_id) | (edge_model.to_id == node_id)
+                )
+            )
+            session.exec(delete(node_model).where(node_model.id == node_id))
             session.commit()
 
     # ── Edge CRUD ──────────────────────────────────────────────────
@@ -178,18 +185,23 @@ class PostgresGraphStore(PostgresRepoBase):
 
     # ── Graph loading (for PPR) ────────────────────────────────────
 
-    def load_graph(self) -> tuple[set[str], dict[str, set[str]]]:
+    def load_graph(
+        self, where: Mapping[str, Any] | None = None
+    ) -> tuple[set[str], dict[str, set[str]]]:
         """Load active node IDs and undirected adjacency from DB."""
         from sqlmodel import select
 
         node_model = self._sqla_models.GraphNode
         edge_model = self._sqla_models.GraphEdge
+        scope_filters = self._build_filters(node_model, where)
 
         with self._sessions.session() as session:
             node_ids = {
                 row
                 for row in session.scalars(
-                    select(node_model.id).where(node_model.status == "active")
+                    select(node_model.id).where(
+                        node_model.status == "active", *scope_filters
+                    )
                 ).all()
             }
 
@@ -213,6 +225,7 @@ class PostgresGraphStore(PostgresRepoBase):
         query_vec: list[float],
         limit: int = 6,
         min_score: float = 0.35,
+        where: Mapping[str, Any] | None = None,
     ) -> list[tuple[str, float]]:
         """Find seed nodes by pgvector cosine similarity."""
         if not self._use_vector:
@@ -221,6 +234,7 @@ class PostgresGraphStore(PostgresRepoBase):
         node_model = self._sqla_models.GraphNode
         distance = node_model.embedding.cosine_distance(query_vec)
         score_col = (1 - distance).label("score")
+        scope_filters = self._build_filters(node_model, where)
 
         from sqlmodel import select
 
@@ -230,6 +244,7 @@ class PostgresGraphStore(PostgresRepoBase):
                 node_model.status == "active",
                 node_model.embedding.isnot(None),
                 (1 - distance) >= min_score,
+                *scope_filters,
             )
             .order_by(distance)
             .limit(limit)
@@ -239,13 +254,16 @@ class PostgresGraphStore(PostgresRepoBase):
             rows = session.execute(stmt).all()
         return [(rid, float(score)) for rid, score in rows]
 
-    def fts_seed_search(self, query: str, limit: int = 6) -> list[str]:
+    def fts_seed_search(
+        self, query: str, limit: int = 6, where: Mapping[str, Any] | None = None
+    ) -> list[str]:
         """Fallback: full-text search on node name/description/content."""
         from sqlalchemy import func, text
 
         from sqlmodel import select
 
         node_model = self._sqla_models.GraphNode
+        scope_filters = self._build_filters(node_model, where)
         tsvec = func.to_tsvector(
             "simple",
             func.coalesce(node_model.name, "")
@@ -258,7 +276,7 @@ class PostgresGraphStore(PostgresRepoBase):
 
         stmt = (
             select(node_model.id)
-            .where(node_model.status == "active", tsvec.op("@@")(tsq))
+            .where(node_model.status == "active", tsvec.op("@@")(tsq), *scope_filters)
             .order_by(node_model.pagerank.desc())
             .limit(limit)
         )
@@ -266,11 +284,14 @@ class PostgresGraphStore(PostgresRepoBase):
         with self._sessions.session() as session:
             return list(session.scalars(stmt).all())
 
-    def get_community_peers(self, node_id: str, limit: int = 2) -> list[str]:
+    def get_community_peers(
+        self, node_id: str, limit: int = 2, where: Mapping[str, Any] | None = None
+    ) -> list[str]:
         """Get peers in the same community, ordered by validated_count."""
         from sqlmodel import select
 
         node_model = self._sqla_models.GraphNode
+        scope_filters = self._build_filters(node_model, where)
 
         # First get this node's community_id
         with self._sessions.session() as session:
@@ -284,6 +305,7 @@ class PostgresGraphStore(PostgresRepoBase):
                     node_model.community_id == node.community_id,
                     node_model.id != node_id,
                     node_model.status == "active",
+                    *scope_filters,
                 )
                 .order_by(node_model.validated_count.desc(), node_model.updated_at.desc())
                 .limit(limit)
@@ -292,7 +314,9 @@ class PostgresGraphStore(PostgresRepoBase):
 
     # ── Graph walk ─────────────────────────────────────────────────
 
-    def graph_walk(self, start_ids: set[str], depth: int = 2) -> set[str]:
+    def graph_walk(
+        self, start_ids: set[str], depth: int = 2, where: Mapping[str, Any] | None = None
+    ) -> set[str]:
         """BFS graph walk up to `depth` hops, undirected."""
         from sqlalchemy import or_
 
@@ -300,6 +324,7 @@ class PostgresGraphStore(PostgresRepoBase):
 
         edge_model = self._sqla_models.GraphEdge
         node_model = self._sqla_models.GraphNode
+        scope_filters = self._build_filters(node_model, where)
 
         visited = set(start_ids)
         frontier = set(start_ids)
@@ -326,12 +351,13 @@ class PostgresGraphStore(PostgresRepoBase):
                 visited |= new_nodes
                 frontier = new_nodes
 
-            # Filter to active nodes only
+            # Filter to active nodes only, respecting scope
             active = set(
                 session.scalars(
                     select(node_model.id).where(
                         node_model.id.in_(list(visited)),
                         node_model.status == "active",
+                        *scope_filters,
                     )
                 ).all()
             )
@@ -340,7 +366,9 @@ class PostgresGraphStore(PostgresRepoBase):
 
     # ── Node/Edge loading for recall results ───────────────────────
 
-    def load_recall_nodes(self, node_ids: set[str]) -> dict[str, RecallNode]:
+    def load_recall_nodes(
+        self, node_ids: set[str], where: Mapping[str, Any] | None = None
+    ) -> dict[str, RecallNode]:
         """Load full node data as RecallNode dataclasses."""
         if not node_ids:
             return {}
@@ -348,9 +376,10 @@ class PostgresGraphStore(PostgresRepoBase):
         from sqlmodel import select
 
         node_model = self._sqla_models.GraphNode
+        scope_filters = self._build_filters(node_model, where)
         with self._sessions.session() as session:
             rows = session.scalars(
-                select(node_model).where(node_model.id.in_(list(node_ids)))
+                select(node_model).where(node_model.id.in_(list(node_ids)), *scope_filters)
             ).all()
             return {
                 r.id: RecallNode(
@@ -366,10 +395,18 @@ class PostgresGraphStore(PostgresRepoBase):
                 for r in rows
             }
 
-    def load_recall_edges(self, node_ids: set[str]) -> list[RecallEdge]:
-        """Load edges where both endpoints are in node_ids."""
+    def load_recall_edges(
+        self, node_ids: set[str], where: Mapping[str, Any] | None = None  # noqa: ARG002
+    ) -> list[RecallEdge]:
+        """Load edges where both endpoints are in node_ids.
+
+        `where` is accepted for API consistency; scope enforcement is already
+        applied upstream (node_ids have been filtered by scope at the walk stage).
+        """
         if not node_ids:
             return []
+
+        from sqlalchemy import alias
 
         from sqlmodel import select
 
@@ -377,25 +414,11 @@ class PostgresGraphStore(PostgresRepoBase):
         node_model = self._sqla_models.GraphNode
         node_list = list(node_ids)
 
+        # Join node table twice to resolve from/to names
+        to_node = alias(node_model.__table__, name="to_node")
+        from_node = alias(node_model.__table__, name="from_node")
+
         with self._sessions.session() as session:
-            stmt = (
-                select(
-                    node_model.name.label("from_name"),
-                    edge_model.type,
-                    edge_model.instruction,
-                )
-                .join(node_model, edge_model.from_id == node_model.id)
-                .where(
-                    edge_model.from_id.in_(node_list),
-                    edge_model.to_id.in_(node_list),
-                )
-            )
-            # Need to_name too — join twice
-            from sqlalchemy import alias
-
-            to_node = alias(node_model.__table__, name="to_node")
-            from_node = alias(node_model.__table__, name="from_node")
-
             stmt = (
                 select(
                     from_node.c.name.label("from_name"),
@@ -620,15 +643,16 @@ class PostgresGraphStore(PostgresRepoBase):
         node_ids: set[str],
         adj: dict[str, set[str]],
         max_nodes: int = 6,
+        where: Mapping[str, Any] | None = None,
     ) -> RecallResult:
         """Precise path: vector/FTS seed → community expansion → walk → PPR."""
         seeds: list[tuple[str, float]] = []
         if query_vec:
-            seeds = self.vector_seed_search(query_vec, limit=max_nodes // 2)
+            seeds = self.vector_seed_search(query_vec, limit=max_nodes // 2, where=where)
 
         seed_ids = [s[0] for s in seeds]
         if len(seed_ids) < 2:
-            fts_ids = self.fts_seed_search(query, limit=max_nodes)
+            fts_ids = self.fts_seed_search(query, limit=max_nodes, where=where)
             seed_id_set = set(seed_ids)
             for fid in fts_ids:
                 if fid not in seed_id_set:
@@ -640,16 +664,16 @@ class PostgresGraphStore(PostgresRepoBase):
         # Community expansion
         expanded = set(seed_ids)
         for sid in seed_ids:
-            peers = self.get_community_peers(sid, limit=2)
+            peers = self.get_community_peers(sid, limit=2, where=where)
             expanded.update(peers)
 
         # Graph walk
-        walked = self.graph_walk(expanded, depth=2)
+        walked = self.graph_walk(expanded, depth=2, where=where)
 
         # PPR ranking
         ppr = self.personalized_pagerank(node_ids, adj, seed_ids, candidate_ids=walked)
 
-        nodes_data = self.load_recall_nodes(walked)
+        nodes_data = self.load_recall_nodes(walked, where=where)
         for nid, node in nodes_data.items():
             node.ppr_score = ppr.get(nid, 0.0)
 
@@ -659,7 +683,7 @@ class PostgresGraphStore(PostgresRepoBase):
         )[:max_nodes]
 
         result_ids = {n.id for n in sorted_nodes}
-        edges = self.load_recall_edges(result_ids)
+        edges = self.load_recall_edges(result_ids, where=where)
 
         return RecallResult(nodes=sorted_nodes, edges=edges, path="precise")
 
@@ -670,11 +694,13 @@ class PostgresGraphStore(PostgresRepoBase):
         node_ids: set[str],
         adj: dict[str, set[str]],
         max_nodes: int = 6,
+        where: Mapping[str, Any] | None = None,
     ) -> RecallResult:
         """Generalized path: community representatives → shallow walk → PPR."""
         from sqlmodel import select
 
         node_model = self._sqla_models.GraphNode
+        scope_filters = self._build_filters(node_model, where)
 
         with self._sessions.session() as session:
             # Pick top representative per community
@@ -683,6 +709,7 @@ class PostgresGraphStore(PostgresRepoBase):
                 .where(
                     node_model.status == "active",
                     node_model.community_id.isnot(None),
+                    *scope_filters,
                 )
                 .order_by(
                     node_model.community_id,
@@ -704,12 +731,12 @@ class PostgresGraphStore(PostgresRepoBase):
             return RecallResult(nodes=[], edges=[], path="generalized")
 
         # Shallow walk
-        walked = self.graph_walk(set(seed_ids), depth=1)
+        walked = self.graph_walk(set(seed_ids), depth=1, where=where)
 
         # PPR ranking
         ppr = self.personalized_pagerank(node_ids, adj, seed_ids, candidate_ids=walked)
 
-        nodes_data = self.load_recall_nodes(walked)
+        nodes_data = self.load_recall_nodes(walked, where=where)
         for nid, node in nodes_data.items():
             node.ppr_score = ppr.get(nid, 0.0)
 
@@ -719,7 +746,7 @@ class PostgresGraphStore(PostgresRepoBase):
         )[:max_nodes]
 
         result_ids = {n.id for n in sorted_nodes}
-        edges = self.load_recall_edges(result_ids)
+        edges = self.load_recall_edges(result_ids, where=where)
 
         return RecallResult(nodes=sorted_nodes, edges=edges, path="generalized")
 
@@ -754,14 +781,17 @@ class PostgresGraphStore(PostgresRepoBase):
         query: str,
         query_vec: list[float] | None = None,
         max_nodes: int = 6,
+        where: Mapping[str, Any] | None = None,
     ) -> RecallResult:
         """Full dual-path graph recall."""
-        node_ids, adj = self.load_graph()
+        node_ids, adj = self.load_graph(where=where)
         if not node_ids:
             return RecallResult(nodes=[], edges=[], path="empty")
 
-        precise = self.recall_precise(query, query_vec, node_ids, adj, max_nodes)
-        generalized = self.recall_generalized(query, query_vec, node_ids, adj, max_nodes)
+        precise = self.recall_precise(query, query_vec, node_ids, adj, max_nodes, where=where)
+        generalized = self.recall_generalized(
+            query, query_vec, node_ids, adj, max_nodes, where=where
+        )
 
         return self.merge_results(precise, generalized)
 
