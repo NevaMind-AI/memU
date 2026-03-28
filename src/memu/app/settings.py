@@ -135,6 +135,14 @@ class LLMConfig(BaseModel):
                 self.api_key = "XAI_API_KEY"
             if self.chat_model == "gpt-4o-mini":
                 self.chat_model = "grok-2-latest"
+        elif self.provider == "minimax":
+            # If values match the OpenAI defaults, switch them to MiniMax defaults
+            if self.base_url == "https://api.openai.com/v1":
+                self.base_url = "https://api.minimax.io/v1"
+            if self.api_key == "OPENAI_API_KEY":
+                self.api_key = "MINIMAX_API_KEY"
+            if self.chat_model == "gpt-4o-mini":
+                self.chat_model = "MiniMax-M2.5"
         return self
 
 
