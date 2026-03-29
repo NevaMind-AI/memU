@@ -12,6 +12,7 @@ from xml.etree.ElementTree import Element
 import defusedxml.ElementTree as ET
 from pydantic import BaseModel
 
+from memu.app.admission import AdmissionGate, AdmissionRejectedError
 from memu.app.settings import CategoryConfig, CustomPrompt
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
 from memu.prompts.category_summary import (
@@ -87,7 +88,16 @@ class MemorizeMixin:
             "user": user_scope,
         }
 
-        result = await self._run_workflow("memorize", state)
+        try:
+            result = await self._run_workflow("memorize", state)
+        except AdmissionRejectedError as exc:
+            return {
+                "memories": [],
+                "relations": [],
+                "admission_rejected": True,
+                "admission_reason": exc.result.reason,
+                "admission_score": exc.result.score,
+            }
         response = cast(dict[str, Any] | None, result.get("response"))
         if response is None:
             msg = "Memorize workflow failed to produce a response"
@@ -103,6 +113,14 @@ class MemorizeMixin:
                 requires={"resource_url", "modality"},
                 produces={"local_path", "raw_text"},
                 capabilities={"io"},
+            ),
+            WorkflowStep(
+                step_id="admission_check",
+                role="filter",
+                handler=self._memorize_admission_check,
+                requires={"raw_text"},
+                produces=set(),
+                capabilities=set(),
             ),
             WorkflowStep(
                 step_id="preprocess_multimodal",
@@ -181,6 +199,16 @@ class MemorizeMixin:
     async def _memorize_ingest_resource(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         local_path, raw_text = await self.fs.fetch(state["resource_url"], state["modality"])
         state.update({"local_path": local_path, "raw_text": raw_text})
+        return state
+
+    async def _memorize_admission_check(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Early exit when content fails admission gate."""
+        gate = AdmissionGate(self.memorize_config.admission)
+        raw_text = state.get("raw_text") or ""
+        result = gate.check(raw_text)
+        if not result.allowed:
+            logger.info("Admission gate rejected content: %s (score=%.2f)", result.reason, result.score)
+            raise AdmissionRejectedError(result)
         return state
 
     async def _memorize_preprocess_multimodal(self, state: WorkflowState, step_context: Any) -> WorkflowState:

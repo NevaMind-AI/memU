@@ -213,6 +213,17 @@ class RetrieveConfig(BaseModel):
     llm_ranking_llm_profile: str = Field(default="default", description="LLM profile for LLM ranking.")
 
 
+class MemorizeAdmissionConfig(BaseModel):
+    """Configuration for the memory admission gate (write-time quality filter)."""
+
+    enabled: bool = Field(default=False, description="Enable admission gate. When False, all content is accepted.")
+    min_length: int = Field(default=30, description="Reject content shorter than this (after stripping).")
+    threshold: float = Field(default=0.3, description="Minimum quality score (0-1) to admit content.")
+    noise_patterns: list[str] = Field(
+        default_factory=list, description="Additional regex patterns to reject as noise."
+    )
+
+
 class MemorizeConfig(BaseModel):
     category_assign_threshold: float = Field(default=0.25)
     multimodal_preprocess_prompts: dict[str, str | CustomPrompt] = Field(
@@ -251,6 +262,10 @@ class MemorizeConfig(BaseModel):
     enable_item_reinforcement: bool = Field(
         default=False,
         description="Enable reinforcement tracking for memory items.",
+    )
+    admission: MemorizeAdmissionConfig = Field(
+        default_factory=MemorizeAdmissionConfig,
+        description="Write-time admission gate configuration.",
     )
 
 
