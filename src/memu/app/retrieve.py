@@ -199,6 +199,20 @@ class RetrieveMixin:
                 config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
+                step_id="recall_graph",
+                role="recall_graph",
+                handler=self._rag_recall_graph,
+                requires={
+                    "needs_retrieval",
+                    "active_query",
+                    "query_vector",
+                    "store",
+                },
+                produces={"graph_hits", "graph_recall_result"},
+                capabilities={"vector"},
+                config={"embed_llm_profile": "embedding"},
+            ),
+            WorkflowStep(
                 step_id="build_context",
                 role="build_context",
                 handler=self._rag_build_context,
@@ -423,6 +437,36 @@ class RetrieveMixin:
         state["resource_hits"] = cosine_topk(qvec, corpus, k=self.retrieve_config.resource.top_k)
         return state
 
+    async def _rag_recall_graph(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("needs_retrieval") or not self.retrieve_config.graph.enabled:
+            state["graph_hits"] = []
+            return state
+
+        store = state["store"]
+        graph_store = getattr(store, "graph_store", None)
+        if graph_store is None:
+            state["graph_hits"] = []
+            return state
+
+        query_vec = state.get("query_vector")
+        if query_vec is None:
+            embed_client = self._get_step_embedding_client(step_context)
+            query_vec = (await embed_client.embed([state["active_query"]]))[0]
+            state["query_vector"] = query_vec
+
+        result = graph_store.graph_recall(
+            state["active_query"],
+            query_vec=query_vec,
+            max_nodes=self.retrieve_config.graph.max_nodes,
+            where=state.get("where"),
+        )
+        # Convert to (id, score) tuples for consistency with other hits
+        state["graph_hits"] = [
+            (n.id, n.ppr_score) for n in result.nodes
+        ]
+        state["graph_recall_result"] = result
+        return state
+
     def _rag_build_context(self, state: WorkflowState, _: Any) -> WorkflowState:
         response = {
             "needs_retrieval": bool(state.get("needs_retrieval")),
@@ -432,6 +476,7 @@ class RetrieveMixin:
             "categories": [],
             "items": [],
             "resources": [],
+            "graph_nodes": [],
         }
         if state.get("needs_retrieval"):
             store = state["store"]
@@ -443,11 +488,49 @@ class RetrieveMixin:
                 state.get("category_hits", []),
                 categories_pool,
             )
-            response["items"] = self._materialize_hits(state.get("item_hits", []), items_pool)
+
+            # Score fusion: only deflate item scores when graph is enabled AND returned results
+            graph_recall_result = state.get("graph_recall_result")
+            graph_active = (
+                self.retrieve_config.graph.enabled
+                and graph_recall_result
+                and graph_recall_result.nodes
+            )
+            item_hits = state.get("item_hits", [])
+            if graph_active:
+                graph_weight = self.retrieve_config.graph.weight
+                vector_weight = 1.0 - graph_weight
+                response["items"] = [
+                    {**d, "score": d["score"] * vector_weight}
+                    for d in self._materialize_hits(item_hits, items_pool)
+                ]
+            else:
+                response["items"] = self._materialize_hits(item_hits, items_pool)
+
             response["resources"] = self._materialize_hits(
                 state.get("resource_hits", []),
                 resources_pool,
             )
+
+            # Graph nodes: materialize from RecallResult
+            if graph_active:
+                gw = self.retrieve_config.graph.weight
+                max_ppr = max((n.ppr_score for n in graph_recall_result.nodes), default=0.0) or 1.0
+                graph_entries = []
+                for n in graph_recall_result.nodes:
+                    ppr_norm = n.ppr_score / max_ppr
+                    graph_entries.append({
+                        "id": n.id,
+                        "type": n.type,
+                        "name": n.name,
+                        "description": n.description,
+                        "content": n.content,
+                        "community_id": n.community_id,
+                        "score": ppr_norm * gw,
+                        "ppr_score": n.ppr_score,
+                    })
+                response["graph_nodes"] = graph_entries
+
         state["response"] = response
         return state
 
@@ -714,6 +797,7 @@ class RetrieveMixin:
             "categories": [],
             "items": [],
             "resources": [],
+            "graph_nodes": [],
         }
         if state.get("needs_retrieval"):
             response["categories"] = list(state.get("category_hits") or [])
