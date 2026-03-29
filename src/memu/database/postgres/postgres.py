@@ -26,6 +26,7 @@ class PostgresStore(Database):
     memory_category_repo: MemoryCategoryRepo
     memory_item_repo: MemoryItemRepo
     category_item_repo: CategoryItemRepo
+    graph_store: Any | None
     resources: dict[str, Resource]
     items: dict[str, MemoryItem]
     categories: dict[str, MemoryCategory]
