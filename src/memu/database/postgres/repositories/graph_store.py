@@ -196,14 +196,13 @@ class PostgresGraphStore(PostgresRepoBase):
         scope_filters = self._build_filters(node_model, where)
 
         with self._sessions.session() as session:
-            node_ids = {
-                row
-                for row in session.scalars(
+            node_ids = set(
+                session.scalars(
                     select(node_model.id).where(
                         node_model.status == "active", *scope_filters
                     )
                 ).all()
-            }
+            )
 
             adj: dict[str, set[str]] = defaultdict(set)
             edge_scope_filters = self._build_filters(edge_model, where)
@@ -262,7 +261,6 @@ class PostgresGraphStore(PostgresRepoBase):
     ) -> list[str]:
         """Fallback: full-text search on node name/description/content."""
         from sqlalchemy import func, text
-
         from sqlmodel import select
 
         node_model = self._sqla_models.GraphNode
@@ -322,7 +320,6 @@ class PostgresGraphStore(PostgresRepoBase):
     ) -> set[str]:
         """BFS graph walk up to `depth` hops, undirected."""
         from sqlalchemy import or_
-
         from sqlmodel import select
 
         edge_model = self._sqla_models.GraphEdge
@@ -408,7 +405,6 @@ class PostgresGraphStore(PostgresRepoBase):
             return []
 
         from sqlalchemy import alias
-
         from sqlmodel import select
 
         edge_model = self._sqla_models.GraphEdge
@@ -507,10 +503,10 @@ class PostgresGraphStore(PostgresRepoBase):
             return {}
 
         teleport_base = (1 - damping) / n
-        rank = {nid: 1.0 / n for nid in node_ids}
+        rank = dict.fromkeys(node_ids, 1.0 / n)
 
         for _ in range(iterations):
-            new_rank = {nid: teleport_base for nid in node_ids}
+            new_rank = dict.fromkeys(node_ids, teleport_base)
 
             for nid in node_ids:
                 neighbors = adj[nid]
@@ -538,7 +534,7 @@ class PostgresGraphStore(PostgresRepoBase):
         seed: int | None = None,
     ) -> dict[str, str]:
         """Label Propagation Algorithm for community detection."""
-        rng = random.Random(seed)
+        rng = random.Random(seed)  # noqa: S311 — LPA shuffle is not security-sensitive
         nodes = list(node_ids)
         label = {nid: nid for nid in nodes}
 
@@ -556,7 +552,7 @@ class PostgresGraphStore(PostgresRepoBase):
                     freq[label[nb]] += 1
 
                 max_freq = max(freq.values())
-                candidates = [l for l, f in freq.items() if f == max_freq]
+                candidates = [lbl for lbl, f in freq.items() if f == max_freq]
                 best_label = min(candidates)
 
                 if label[nid] != best_label:
@@ -755,7 +751,6 @@ class PostgresGraphStore(PostgresRepoBase):
                 query_vec, limit=max_nodes, where=where
             )
             rep_score_map = dict(rep_scores)
-            rep_set = set(rep_ids)
             # Sort reps by cosine similarity; reps not in results get score 0
             rep_ids = sorted(
                 rep_ids,
@@ -807,7 +802,6 @@ class PostgresGraphStore(PostgresRepoBase):
         if max_nodes > 0:
             merged_nodes = merged_nodes[:max_nodes]
 
-        result_ids = {n.id for n in merged_nodes}
         edge_set: set[tuple[str, str, str]] = set()
         merged_edges: list[RecallEdge] = []
         for e in precise.edges + generalized.edges:
