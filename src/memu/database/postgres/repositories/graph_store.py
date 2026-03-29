@@ -206,7 +206,10 @@ class PostgresGraphStore(PostgresRepoBase):
             }
 
             adj: dict[str, set[str]] = defaultdict(set)
-            edges = session.execute(select(edge_model.from_id, edge_model.to_id)).all()
+            edge_scope_filters = self._build_filters(edge_model, where)
+            edges = session.execute(
+                select(edge_model.from_id, edge_model.to_id).where(*edge_scope_filters)
+            ).all()
             for from_id, to_id in edges:
                 if from_id in node_ids and to_id in node_ids:
                     adj[from_id].add(to_id)
@@ -334,11 +337,13 @@ class PostgresGraphStore(PostgresRepoBase):
                 if not frontier:
                     break
                 frontier_list = list(frontier)
+                edge_scope_filters = self._build_filters(edge_model, where)
                 stmt = select(edge_model.from_id, edge_model.to_id).where(
                     or_(
                         edge_model.from_id.in_(frontier_list),
                         edge_model.to_id.in_(frontier_list),
-                    )
+                    ),
+                    *edge_scope_filters,
                 )
                 rows = session.execute(stmt).all()
                 neighbors: set[str] = set()
@@ -396,13 +401,9 @@ class PostgresGraphStore(PostgresRepoBase):
             }
 
     def load_recall_edges(
-        self, node_ids: set[str], where: Mapping[str, Any] | None = None  # noqa: ARG002
+        self, node_ids: set[str], where: Mapping[str, Any] | None = None
     ) -> list[RecallEdge]:
-        """Load edges where both endpoints are in node_ids.
-
-        `where` is accepted for API consistency; scope enforcement is already
-        applied upstream (node_ids have been filtered by scope at the walk stage).
-        """
+        """Load edges where both endpoints are in node_ids, with scope filtering."""
         if not node_ids:
             return []
 
@@ -431,6 +432,7 @@ class PostgresGraphStore(PostgresRepoBase):
                 .where(
                     edge_model.from_id.in_(node_list),
                     edge_model.to_id.in_(node_list),
+                    *self._build_filters(edge_model, where),
                 )
             )
 
@@ -627,9 +629,26 @@ class PostgresGraphStore(PostgresRepoBase):
             for nid, cid in labels.items():
                 community_members[cid].append(nid)
 
+            # Extract scope fields from an existing node to propagate to communities
+            scope_kwargs: dict[str, Any] = {}
+            if labels:
+                sample_nid = next(iter(labels))
+                sample_node = session.scalar(
+                    select(node_model).where(node_model.id == sample_nid)
+                )
+                if sample_node:
+                    for field in self._scope_fields:
+                        val = getattr(sample_node, field, None)
+                        if val is not None and hasattr(community_model, field):
+                            scope_kwargs[field] = val
+
             now = self._now()
             for cid, members in community_members.items():
-                obj = community_model(id=cid, node_count=len(members), created_at=now, updated_at=now)
+                obj = community_model(
+                    id=cid, node_count=len(members),
+                    created_at=now, updated_at=now,
+                    **scope_kwargs,
+                )
                 session.add(obj)
 
             session.commit()
@@ -721,14 +740,29 @@ class PostgresGraphStore(PostgresRepoBase):
 
         # Deduplicate: first per community wins (since ordered by validated_count desc)
         seen_communities: set[str] = set()
-        seed_ids: list[str] = []
+        rep_ids: list[str] = []
         for nid, cid in rows:
             if cid not in seen_communities:
                 seen_communities.add(cid)
-                seed_ids.append(nid)
+                rep_ids.append(nid)
 
-        if not seed_ids:
+        if not rep_ids:
             return RecallResult(nodes=[], edges=[], path="generalized")
+
+        # Rank community representatives by query relevance (P1 #1 fix)
+        if query_vec and self._use_vector:
+            rep_scores = self.vector_seed_search(
+                query_vec, limit=max_nodes, where=where
+            )
+            rep_score_map = dict(rep_scores)
+            rep_set = set(rep_ids)
+            # Sort reps by cosine similarity; reps not in results get score 0
+            rep_ids = sorted(
+                rep_ids,
+                key=lambda nid: rep_score_map.get(nid, 0.0),
+                reverse=True,
+            )
+        seed_ids = rep_ids[:max_nodes]
 
         # Shallow walk
         walked = self.graph_walk(set(seed_ids), depth=1, where=where)
@@ -751,8 +785,12 @@ class PostgresGraphStore(PostgresRepoBase):
         return RecallResult(nodes=sorted_nodes, edges=edges, path="generalized")
 
     @staticmethod
-    def merge_results(precise: RecallResult, generalized: RecallResult) -> RecallResult:
-        """Merge: precise wins on dedup, generalized fills gaps."""
+    def merge_results(
+        precise: RecallResult,
+        generalized: RecallResult,
+        max_nodes: int = 0,
+    ) -> RecallResult:
+        """Merge: precise wins on dedup, generalized fills gaps, cap to max_nodes."""
         seen_ids: set[str] = set()
         merged_nodes: list[RecallNode] = []
 
@@ -766,6 +804,10 @@ class PostgresGraphStore(PostgresRepoBase):
                 merged_nodes.append(n)
                 seen_ids.add(n.id)
 
+        if max_nodes > 0:
+            merged_nodes = merged_nodes[:max_nodes]
+
+        result_ids = {n.id for n in merged_nodes}
         edge_set: set[tuple[str, str, str]] = set()
         merged_edges: list[RecallEdge] = []
         for e in precise.edges + generalized.edges:
@@ -793,7 +835,7 @@ class PostgresGraphStore(PostgresRepoBase):
             query, query_vec, node_ids, adj, max_nodes, where=where
         )
 
-        return self.merge_results(precise, generalized)
+        return self.merge_results(precise, generalized, max_nodes=max_nodes)
 
 
 __all__ = [
