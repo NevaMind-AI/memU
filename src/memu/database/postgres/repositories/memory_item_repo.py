@@ -41,6 +41,14 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         return None
 
     def list_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+        # Hot path: if items already cached by load_existing(), filter in-memory
+        # instead of redundant PG roundtrip + embedding deserialization (~335ms → <1ms)
+        if self.items:
+            if not where:
+                return dict(self.items)
+            return {k: v for k, v in self.items.items() if self._matches_where(v, where)}
+
+        # Cold start fallback: load from DB
         from sqlmodel import select
 
         filters = self._build_filters(self._sqla_models.MemoryItem, where)
