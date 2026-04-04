@@ -1,0 +1,41 @@
+# Builds the memu-py wheel for linux-x86_64 on every push to main.
+# The uploaded artifact ("memu-wheel") can be consumed cross-repo via
+# actions/download-artifact@v7 with `repository` + `github-token` params,
+# or via the GitHub REST API: GET /repos/{owner}/{repo}/actions/artifacts?name=memu-wheel
+
+name: build-wheel
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-wheel:
+    name: build linux-x86_64 wheel
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install maturin
+        run: uv tool install maturin
+
+      - name: Build wheel
+        run: uvx maturin build --release --out dist --compatibility manylinux_2_39
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: memu-wheel
+          path: dist/*.whl
+          retention-days: 7
+          if-no-files-found: error
