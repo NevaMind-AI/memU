@@ -699,6 +699,55 @@ class RetrieveMixin:
         results.sort(key=lambda x: (-x[1], x[0]))
         return results[:top_k]
 
+    @staticmethod
+    def _normalize_ranked_scores(
+        ranked_list: Sequence[tuple[str, float]],
+        *,
+        normalization: str = "minmax",
+    ) -> dict[str, float]:
+        """Normalize a ranked list into comparable scores for weighted fusion."""
+        if normalization != "minmax":
+            msg = f"unsupported score normalization: {normalization}"
+            raise ValueError(msg)
+        if not ranked_list:
+            return {}
+
+        scores = [score for _item_id, score in ranked_list]
+        min_score = min(scores)
+        max_score = max(scores)
+        if math.isclose(min_score, max_score):
+            return {item_id: 1.0 for item_id, _score in ranked_list}
+
+        score_range = max_score - min_score
+        return {item_id: (score - min_score) / score_range for item_id, score in ranked_list}
+
+    @staticmethod
+    def _weighted_score_fuse(
+        vector_hits: Sequence[tuple[str, float]],
+        bm25_hits: Sequence[tuple[str, float]],
+        *,
+        alpha: float = 0.5,
+        top_k: int = 5,
+        normalization: str = "minmax",
+    ) -> list[tuple[str, float]]:
+        """Weighted score fusion across vector and BM25 ranked results."""
+        vector_scores = RetrieveMixin._normalize_ranked_scores(vector_hits, normalization=normalization)
+        bm25_scores = RetrieveMixin._normalize_ranked_scores(bm25_hits, normalization=normalization)
+
+        item_ids = set(vector_scores) | set(bm25_scores)
+        if not item_ids:
+            return []
+
+        results = [
+            (
+                item_id,
+                alpha * vector_scores.get(item_id, 0.0) + (1.0 - alpha) * bm25_scores.get(item_id, 0.0),
+            )
+            for item_id in item_ids
+        ]
+        results.sort(key=lambda x: (-x[1], x[0]))
+        return results[:top_k]
+
     async def _rag_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("retrieve_item") or not state.get("needs_retrieval") or not state.get("proceed_to_items"):
             state["item_hits"] = []
@@ -745,7 +794,22 @@ class RetrieveMixin:
 
         if retriever == "hybrid":
             bm25_hits = self._bm25_score_items(state["active_query"], items_pool, top_k)
-            state["item_hits"] = self._rrf_fuse(bm25_hits, vector_hits, top_k=top_k)
+            fusion_strategy = getattr(self.retrieve_config, "fusion_strategy", "rrf")
+            if fusion_strategy == "weighted":
+                state["item_hits"] = self._weighted_score_fuse(
+                    vector_hits,
+                    bm25_hits,
+                    alpha=getattr(self.retrieve_config, "weighted_alpha", 0.5),
+                    top_k=top_k,
+                    normalization=getattr(self.retrieve_config, "score_normalization", "minmax"),
+                )
+            else:
+                state["item_hits"] = self._rrf_fuse(
+                    bm25_hits,
+                    vector_hits,
+                    k=getattr(self.retrieve_config, "rrf_k", 60),
+                    top_k=top_k,
+                )
         else:
             state["item_hits"] = vector_hits
 
