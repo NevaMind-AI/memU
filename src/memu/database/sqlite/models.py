@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import logging
 import uuid
 from datetime import datetime
 from typing import Any
@@ -14,8 +12,6 @@ from sqlalchemy import JSON, MetaData, String, Text
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
-
-logger = logging.getLogger(__name__)
 
 
 class TZDateTime(DateTime):
@@ -52,27 +48,10 @@ class SQLiteResourceModel(SQLiteBaseModelMixin, Resource):
     modality: str = Field(sa_column=Column(String, nullable=False))
     local_path: str = Field(sa_column=Column(String, nullable=False))
     caption: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-    # Store embedding as JSON string since SQLite doesn't have native vector type
+    # Override inherited embedding field: SQLite stores vectors as JSON, not a native column type
+    embedding: list[float] | None = Field(default=None, sa_column=False)
+    # Actual column storing the embedding as a JSON string
     embedding_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-
-    @property
-    def embedding(self) -> list[float] | None:
-        """Parse embedding from JSON string."""
-        if self.embedding_json is None:
-            return None
-        try:
-            return list(json.loads(self.embedding_json))
-        except (json.JSONDecodeError, TypeError) as e:
-            logger.warning("Failed to parse resource embedding JSON: %s", e)
-            return None
-
-    @embedding.setter
-    def embedding(self, value: list[float] | None) -> None:
-        """Serialize embedding to JSON string."""
-        if value is None:
-            self.embedding_json = None
-        else:
-            self.embedding_json = json.dumps(value)
 
 
 class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):
@@ -81,29 +60,12 @@ class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):
     resource_id: str | None = Field(sa_column=Column(String, nullable=True))
     memory_type: MemoryType = Field(sa_column=Column(String, nullable=False))
     summary: str = Field(sa_column=Column(Text, nullable=False))
-    # Store embedding as JSON string since SQLite doesn't have native vector type
+    # Override inherited embedding field: SQLite stores vectors as JSON, not a native column type
+    embedding: list[float] | None = Field(default=None, sa_column=False)
+    # Actual column storing the embedding as a JSON string
     embedding_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     happened_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
     extra: dict[str, Any] = Field(default={}, sa_column=Column(JSON, nullable=True))
-
-    @property
-    def embedding(self) -> list[float] | None:
-        """Parse embedding from JSON string."""
-        if self.embedding_json is None:
-            return None
-        try:
-            return list(json.loads(self.embedding_json))
-        except (json.JSONDecodeError, TypeError) as e:
-            logger.warning("Failed to parse memory item embedding JSON: %s", e)
-            return None
-
-    @embedding.setter
-    def embedding(self, value: list[float] | None) -> None:
-        """Serialize embedding to JSON string."""
-        if value is None:
-            self.embedding_json = None
-        else:
-            self.embedding_json = json.dumps(value)
 
 
 class SQLiteMemoryCategoryModel(SQLiteBaseModelMixin, MemoryCategory):
@@ -111,28 +73,11 @@ class SQLiteMemoryCategoryModel(SQLiteBaseModelMixin, MemoryCategory):
 
     name: str = Field(sa_column=Column(String, nullable=False, index=True))
     description: str = Field(sa_column=Column(Text, nullable=False))
-    # Store embedding as JSON string since SQLite doesn't have native vector type
+    # Override inherited embedding field: SQLite stores vectors as JSON, not a native column type
+    embedding: list[float] | None = Field(default=None, sa_column=False)
+    # Actual column storing the embedding as a JSON string
     embedding_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     summary: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-
-    @property
-    def embedding(self) -> list[float] | None:
-        """Parse embedding from JSON string."""
-        if self.embedding_json is None:
-            return None
-        try:
-            return list(json.loads(self.embedding_json))
-        except (json.JSONDecodeError, TypeError) as e:
-            logger.warning("Failed to parse category embedding JSON: %s", e)
-            return None
-
-    @embedding.setter
-    def embedding(self, value: list[float] | None) -> None:
-        """Serialize embedding to JSON string."""
-        if value is None:
-            self.embedding_json = None
-        else:
-            self.embedding_json = json.dumps(value)
 
 
 class SQLiteCategoryItemModel(SQLiteBaseModelMixin, CategoryItem):
