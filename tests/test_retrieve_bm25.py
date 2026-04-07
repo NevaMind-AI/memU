@@ -15,7 +15,7 @@ from memu.app.settings import RetrieveConfig
 
 # --- Config normalization ---
 class TestRetrieveConfigBm25Normalize:
-    """retriever field: bm25/hybrid case normalization."""
+    """retriever and hybrid fusion fields normalize consistently."""
 
     def test_bm25_uppercase(self):
         c = RetrieveConfig(retriever=cast(Literal["vector", "keyword", "bm25", "hybrid"], "BM25"))
@@ -32,6 +32,22 @@ class TestRetrieveConfigBm25Normalize:
     def test_hybrid_mixed_case(self):
         c = RetrieveConfig(retriever=cast(Literal["vector", "keyword", "bm25", "hybrid"], "Hybrid"))
         assert c.retriever == "hybrid"
+
+    def test_fusion_strategy_uppercase(self):
+        c = RetrieveConfig(fusion_strategy=cast(Literal["rrf", "weighted"], "WEIGHTED"))
+        assert c.fusion_strategy == "weighted"
+
+    def test_fusion_strategy_mixed_case(self):
+        c = RetrieveConfig(fusion_strategy=cast(Literal["rrf", "weighted"], "RrF"))
+        assert c.fusion_strategy == "rrf"
+
+    def test_weighted_alpha_bounds(self):
+        with pytest.raises(ValueError):
+            RetrieveConfig(weighted_alpha=1.1)
+
+    def test_default_fusion_strategy_is_rrf(self):
+        c = RetrieveConfig()
+        assert c.fusion_strategy == "rrf"
 
 
 # --- VALID_RETRIEVERS constant ---
@@ -190,6 +206,51 @@ class TestRrfFuse:
         assert all(score > 0 for _, score in out)
 
 
+class TestWeightedScoreFuse:
+    """Weighted score fusion uses normalized vector and BM25 scores."""
+
+    def test_weighted_prefers_vector_when_alpha_high(self):
+        vector_hits = [("semantic", 0.95), ("shared", 0.80)]
+        bm25_hits = [("keyword", 10.0), ("shared", 8.0)]
+        out = RetrieveMixin._weighted_score_fuse(vector_hits, bm25_hits, alpha=0.8, top_k=5)
+        assert out[0][0] == "semantic"
+
+    def test_weighted_prefers_bm25_when_alpha_low(self):
+        vector_hits = [("semantic", 0.95), ("shared", 0.80)]
+        bm25_hits = [("keyword", 10.0), ("shared", 8.0)]
+        out = RetrieveMixin._weighted_score_fuse(vector_hits, bm25_hits, alpha=0.2, top_k=5)
+        assert out[0][0] == "keyword"
+
+    def test_weighted_includes_union_of_lists(self):
+        vector_hits = [("a", 0.9)]
+        bm25_hits = [("b", 2.0)]
+        out = RetrieveMixin._weighted_score_fuse(vector_hits, bm25_hits, alpha=0.5, top_k=5)
+        ids = [item_id for item_id, _score in out]
+        assert ids == ["a", "b"]
+
+    def test_weighted_handles_flat_scores(self):
+        vector_hits = [("a", 0.5), ("b", 0.5)]
+        bm25_hits = [("a", 1.0), ("c", 1.0)]
+        out = RetrieveMixin._weighted_score_fuse(vector_hits, bm25_hits, alpha=0.5, top_k=5)
+        assert out[0] == ("a", 1.0)
+
+    def test_weighted_top_k_respected(self):
+        vector_hits = [("a", 3.0), ("b", 2.0), ("c", 1.0)]
+        bm25_hits = [("d", 3.0), ("e", 2.0), ("f", 1.0)]
+        out = RetrieveMixin._weighted_score_fuse(vector_hits, bm25_hits, alpha=0.5, top_k=2)
+        assert len(out) == 2
+
+    def test_weighted_empty_lists(self):
+        assert RetrieveMixin._weighted_score_fuse([], [], alpha=0.5, top_k=5) == []
+
+    def test_weighted_tie_breaks_by_id(self):
+        vector_hits = [("b", 1.0)]
+        bm25_hits = [("a", 1.0)]
+        out = RetrieveMixin._weighted_score_fuse(vector_hits, bm25_hits, alpha=0.5, top_k=5)
+        assert out[0][0] == "a"
+        assert out[1][0] == "b"
+
+
 # --- Per-call override tests ---
 class TestRetrieveBm25Override:
     """Per-call retriever='bm25' and retriever='hybrid' override."""
@@ -267,3 +328,99 @@ class TestRetrieveBm25Override:
         assert "hybrid" in msg
         assert "vector" in msg
         assert "keyword" in msg
+
+
+class _FakeItemRepo:
+    def __init__(self) -> None:
+        self._items = {
+            "semantic": {"summary": "semantic summary", "extra": {}},
+            "keyword": {"summary": "keyword summary", "extra": {}},
+        }
+
+    def list_items(self, where=None):
+        return self._items
+
+    def vector_search_items(self, query_vec, top_k, where=None, *, ranking="similarity", recency_decay_days=30.0):
+        return [("semantic", 0.9), ("keyword", 0.2)]
+
+
+class _FakeStore:
+    def __init__(self) -> None:
+        self.memory_item_repo = _FakeItemRepo()
+
+
+class TestHybridFusionSelection:
+    @pytest.mark.asyncio
+    async def test_hybrid_defaults_to_rrf(self, monkeypatch: pytest.MonkeyPatch):
+        service = MemoryService(
+            database_config={"metadata_store": {"provider": "inmemory"}},
+            retrieve_config={"method": "rag", "retriever": "hybrid"},
+        )
+        state = {
+            "retrieve_item": True,
+            "needs_retrieval": True,
+            "proceed_to_items": True,
+            "store": _FakeStore(),
+            "where": {},
+            "active_query": "keyword",
+            "query_vector": [1.0, 0.0],
+            "retriever": "hybrid",
+        }
+
+        def fake_bm25(_query: str, _pool, _top_k: int):
+            return [("keyword", 5.0), ("semantic", 2.0)]
+
+        def fake_rrf(*_ranked_lists, k=60, top_k=5):
+            return [("semantic", 1.0)]
+
+        def fail_weighted(*_args, **_kwargs):
+            raise AssertionError("weighted fusion should not run by default")
+
+        monkeypatch.setattr(service, "_bm25_score_items", fake_bm25, raising=True)
+        monkeypatch.setattr(service, "_rrf_fuse", fake_rrf, raising=True)
+        monkeypatch.setattr(service, "_weighted_score_fuse", fail_weighted, raising=True)
+
+        out = await service._rag_recall_items(state, step_context=None)
+        assert out["item_hits"] == [("semantic", 1.0)]
+
+    @pytest.mark.asyncio
+    async def test_hybrid_weighted_uses_weighted_fuse(self, monkeypatch: pytest.MonkeyPatch):
+        service = MemoryService(
+            database_config={"metadata_store": {"provider": "inmemory"}},
+            retrieve_config={
+                "method": "rag",
+                "retriever": "hybrid",
+                "fusion_strategy": "weighted",
+                "weighted_alpha": 0.8,
+            },
+        )
+        state = {
+            "retrieve_item": True,
+            "needs_retrieval": True,
+            "proceed_to_items": True,
+            "store": _FakeStore(),
+            "where": {},
+            "active_query": "keyword",
+            "query_vector": [1.0, 0.0],
+            "retriever": "hybrid",
+        }
+
+        def fake_bm25(_query: str, _pool, _top_k: int):
+            return [("keyword", 5.0), ("semantic", 2.0)]
+
+        def fail_rrf(*_args, **_kwargs):
+            raise AssertionError("rrf fusion should not run for weighted hybrid")
+
+        def fake_weighted(vector_hits, bm25_hits, *, alpha=0.5, top_k=5, normalization="minmax"):
+            assert vector_hits == [("semantic", 0.9), ("keyword", 0.2)]
+            assert bm25_hits == [("keyword", 5.0), ("semantic", 2.0)]
+            assert alpha == 0.8
+            assert normalization == "minmax"
+            return [("semantic", 0.8)]
+
+        monkeypatch.setattr(service, "_bm25_score_items", fake_bm25, raising=True)
+        monkeypatch.setattr(service, "_rrf_fuse", fail_rrf, raising=True)
+        monkeypatch.setattr(service, "_weighted_score_fuse", fake_weighted, raising=True)
+
+        out = await service._rag_recall_items(state, step_context=None)
+        assert out["item_hits"] == [("semantic", 0.8)]

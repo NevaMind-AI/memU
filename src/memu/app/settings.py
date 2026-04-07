@@ -187,6 +187,25 @@ class RetrieveConfig(BaseModel):
         default="vector",
         description="Item retriever: 'vector' (embedding), 'keyword' (token intersection), 'bm25' (BM25 ranking), or 'hybrid' (BM25 + vector via RRF). Only applies when method is 'rag'.",
     )
+    fusion_strategy: Annotated[Literal["rrf", "weighted"], Normalize] = Field(
+        default="rrf",
+        description="Hybrid fusion strategy: 'rrf' (default, rank-based) or 'weighted' (normalized score fusion). Only applies when retriever is 'hybrid' and method is 'rag'.",
+    )
+    weighted_alpha: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Vector weight used by weighted hybrid fusion: final = alpha * vector + (1 - alpha) * bm25.",
+    )
+    score_normalization: Annotated[Literal["minmax"], Normalize] = Field(
+        default="minmax",
+        description="Normalization applied before weighted hybrid fusion. Currently only 'minmax' is supported.",
+    )
+    rrf_k: int = Field(
+        default=60,
+        ge=1,
+        description="Rank constant used by reciprocal rank fusion when retriever='hybrid' and fusion_strategy='rrf'.",
+    )
     # top_k: int = Field(
     #     default=5,
     #     description="Maximum number of results to return per category.",
