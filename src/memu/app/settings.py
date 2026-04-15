@@ -303,8 +303,22 @@ class MetadataStoreConfig(BaseModel):
 
 
 class VectorIndexConfig(BaseModel):
-    provider: Annotated[Literal["bruteforce", "pgvector", "none"], Normalize] = "bruteforce"
+    provider: Annotated[Literal["bruteforce", "pgvector", "milvus", "none"], Normalize] = "bruteforce"
     dsn: str | None = Field(default=None, description="Postgres connection string when provider=pgvector.")
+    uri: str | None = Field(
+        default=None,
+        description=(
+            "Milvus URI. File path (e.g. './milvus.db') runs Milvus Lite, "
+            "'http://host:19530' targets a Milvus server, and a Zilliz Cloud "
+            "endpoint targets the managed service."
+        ),
+    )
+    token: str | None = Field(default=None, description="Milvus/Zilliz auth token, if required.")
+    collection_name: str = Field(default="memu_memory_items", description="Milvus collection name.")
+    dim: int | None = Field(
+        default=None,
+        description="Embedding dimension. If None, inferred from the first upsert.",
+    )
 
 
 class DatabaseConfig(BaseModel):
@@ -319,3 +333,5 @@ class DatabaseConfig(BaseModel):
                 self.vector_index = VectorIndexConfig(provider="bruteforce")
         elif self.vector_index.provider == "pgvector" and self.vector_index.dsn is None:
             self.vector_index = self.vector_index.model_copy(update={"dsn": self.metadata_store.dsn})
+        elif self.vector_index.provider == "milvus" and self.vector_index.uri is None:
+            self.vector_index = self.vector_index.model_copy(update={"uri": "./milvus.db"})

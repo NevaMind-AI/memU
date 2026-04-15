@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+* Add Milvus / Milvus Lite / Zilliz Cloud as an optional external vector index (`vector_index.provider = "milvus"`), wired to the in-memory metadata store. See `docs/milvus.md` and `docs/adr/0003-external-vector-index.md`.
+
 ## [1.5.1](https://github.com/NevaMind-AI/memU/compare/v1.5.0...v1.5.1) (2026-03-23)
 
 

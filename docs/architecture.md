@@ -129,6 +129,13 @@ Storage is abstracted through a `Database` protocol with four repositories:
 
 For Postgres, startup runs migration bootstrap and attempts `CREATE EXTENSION IF NOT EXISTS vector` in `ddl_mode="create"`.
 
+### External vector index (optional)
+
+`database_config.vector_index` can point at an external index that lives outside the metadata store. Providers:
+
+- `bruteforce` / `pgvector`: default, handled inside the metadata backend (see above).
+- `milvus`: delegates similarity search to Milvus / Milvus Lite / Zilliz Cloud via the `VectorIndex` protocol in `memu/database/vector_index/`. Metadata backends mirror embedding writes through this interface on create/update/delete; searches route through it except for `ranking="salience"`, which still runs locally. See `docs/milvus.md` and `docs/adr/0003-external-vector-index.md`.
+
 ### Scope model propagation
 
 `UserConfig.model` is merged into record/table models so scope fields (for example `user_id`) become first-class columns/attributes across resources, items, categories, and relations.
