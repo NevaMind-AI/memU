@@ -1315,10 +1315,18 @@ class MemorizeMixin:
             xml_content = raw[start_idx : end_idx + len(end_tag)]
             xml_content = xml_content.replace("&", "&amp;")
 
-            root = ET.fromstring(xml_content)
+            try:
+                root = ET.fromstring(xml_content)
+            except ET.ParseError:
+                # Some LLMs emit one <item> per memory rather than a single root
+                # element wrapping all memories, resulting in "junk after document
+                # element" when the slice contains multiple top-level tags.  Wrap
+                # the content in a synthetic root element and retry.
+                root = ET.fromstring(f"<_root_>{xml_content}</_root_>")
+
             result: list[dict[str, Any]] = []
 
-            for memory_elem in root.findall("memory"):
+            for memory_elem in root.iter("memory"):
                 parsed = self._parse_memory_element(memory_elem)
                 if parsed:
                     result.append(parsed)
