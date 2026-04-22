@@ -68,6 +68,13 @@ test = [
 
 [project.optional-dependencies]
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
+milvus = [
+    "milvus-lite>=2.4.10",
+    "pymilvus>=2.5.0",
+    # milvus-lite <=2.5.1 still imports pkg_resources, which setuptools >=81
+    # removed. Pin on Python 3.13 until a milvus-lite release drops the import.
+    "setuptools<81; python_version >= '3.13'",
+]
 langgraph = ["langgraph>=0.0.10", "langchain-core>=0.1.0"]
 claude = ["claude-agent-sdk>=0.1.24"]
 
@@ -81,7 +88,9 @@ memu-server = "memu.server.cli:main"
 
 [tool.deptry.per_rule_ignores]
 # Optional dependencies used in examples/
-DEP002 = ["claude-agent-sdk"]
+# milvus-lite is imported indirectly by pymilvus when uri ends in .db;
+# setuptools is a conditional compatibility pin for milvus-lite on Python 3.13.
+DEP002 = ["claude-agent-sdk", "milvus-lite", "setuptools"]
 
 [tool.mypy]
 files = ["src", "tests"]
@@ -107,6 +116,10 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["pgvector.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["pymilvus.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

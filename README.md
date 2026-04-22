@@ -315,6 +315,14 @@ Both examples demonstrate **proactive memory workflows**:
 
 See [`tests/test_inmemory.py`](tests/test_inmemory.py) and [`tests/test_postgres.py`](tests/test_postgres.py) for implementation details.
 
+**Use Milvus / Milvus Lite / Zilliz Cloud as an external vector index:**
+```bash
+uv sync --extra milvus
+export OPENAI_API_KEY=your_api_key
+python examples/milvus_vector_index.py
+```
+The `inmemory` metadata store is wired to Milvus today; the `sqlite` and `postgres` backends follow the same pattern and will be wired in a follow-up. See [`docs/milvus.md`](docs/milvus.md) for configuration details.
+
 ---
 
 ### Custom LLM and Embedding Providers

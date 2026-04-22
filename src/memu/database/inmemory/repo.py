@@ -15,6 +15,7 @@ from memu.database.inmemory.state import InMemoryState
 from memu.database.interfaces import Database
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, Resource
 from memu.database.repositories import MemoryCategoryRepo, ResourceRepo
+from memu.database.vector_index.interfaces import VectorIndex
 
 
 class InMemoryStore(Database):
@@ -27,6 +28,7 @@ class InMemoryStore(Database):
         memory_category_model: type[Any] | None = None,
         category_item_model: type[Any] | None = None,
         state: InMemoryState | None = None,
+        vector_index: VectorIndex | None = None,
     ) -> None:
         self.scope_model = scope_model or BaseModel
         (
@@ -47,14 +49,21 @@ class InMemoryStore(Database):
         memory_category_model = memory_category_model or default_memory_category_model or MemoryCategory
         category_item_model = category_item_model or default_category_item_model or CategoryItem
 
+        self._vector_index = vector_index
+
         self.resource_repo: ResourceRepo = InMemoryResourceRepository(state=self.state, resource_model=resource_model)
         self.memory_category_repo: MemoryCategoryRepo = InMemoryMemoryCategoryRepository(
             state=self.state, memory_category_model=memory_category_model
         )
-        self.memory_item_repo = InMemoryMemoryItemRepository(state=self.state, memory_item_model=memory_item_model)
+        self.memory_item_repo = InMemoryMemoryItemRepository(
+            state=self.state,
+            memory_item_model=memory_item_model,
+            vector_index=vector_index,
+        )
         self.category_item_repo = InMemoryCategoryItemRepository(
             state=self.state, category_item_model=category_item_model
         )
 
     def close(self) -> None:
-        return None
+        if self._vector_index is not None:
+            self._vector_index.close()
