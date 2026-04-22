@@ -26,7 +26,7 @@ memU **continuously captures and understands user intent**. Even without a comma
 
 ---
 
-## 🤖 [OpenClaw (Moltbot, Clawdbot) Alternative](https://github.com/NevaMind-AI/memUBot)
+## 🤖 [OpenClaw Alternative](https://github.com/NevaMind-AI/memUBot)
 
 <img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/memUbot.png" />
 
@@ -89,7 +89,7 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 
 | Capability | Description |
 |------------|-------------|
-| 🤖 **24/7 Proactive Agent** | Always-on memory agent that works continuously in the background—never sleeps, never forgets |
+| 🤖 **24/7 Proactive Agent** | Always-on memory agent that works continuously in the background |
 | 🎯 **User Intention Capture** | Understands and remembers user goals, preferences, and context across sessions automatically |
 | 💰 **Cost Efficient** | Reduces long-running token costs by caching insights and avoiding redundant LLM calls |
 ---
@@ -113,9 +113,9 @@ python proactive.py
                  │                                                           │
                  ▼                                                           ▼
 ┌────────────────────────────────────────┐         ┌────────────────────────────────────────────────┐
-│         🤖 MAIN AGENT                  │         │              🧠 MEMU BOT                       │
+│         🤖 MAIN AGENT                  │         │              🧠 MEMU BOT                        │
 │                                        │         │                                                │
-│  Handle user queries & execute tasks   │  ◄───►  │  Monitor, memorize & proactive intelligence   │
+│  Handle user queries & execute tasks   │  ◄───►  │  Monitor, memorize & proactive intelligence    │
 ├────────────────────────────────────────┤         ├────────────────────────────────────────────────┤
 │                                        │         │                                                │
 │  ┌──────────────────────────────────┐  │         │  ┌──────────────────────────────────────────┐  │
