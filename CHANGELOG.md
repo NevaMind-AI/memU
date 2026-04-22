@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.2](https://github.com/NevaMind-AI/memU/compare/v1.5.1...v1.5.2) (2026-04-22)
+
+
+### Documentation
+
+* Refine OpenClaw reference and feature descriptions ([#410](https://github.com/NevaMind-AI/memU/issues/410)) ([707b80e](https://github.com/NevaMind-AI/memU/commit/707b80e5f4394b8e4aafff1ef23fd331a8b557f8))
+
 ## [1.5.1](https://github.com/NevaMind-AI/memU/compare/v1.5.0...v1.5.1) (2026-03-23)
 
 
