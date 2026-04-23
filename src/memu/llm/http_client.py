@@ -12,6 +12,7 @@ import httpx
 from memu.llm.backends.base import LLMBackend
 from memu.llm.backends.doubao import DoubaoLLMBackend
 from memu.llm.backends.grok import GrokBackend
+from memu.llm.backends.novita import NovitaBackend
 from memu.llm.backends.openai import OpenAILLMBackend
 from memu.llm.backends.openrouter import OpenRouterLLMBackend
 
@@ -73,6 +74,7 @@ LLM_BACKENDS: dict[str, Callable[[], LLMBackend]] = {
     OpenAILLMBackend.name: OpenAILLMBackend,
     DoubaoLLMBackend.name: DoubaoLLMBackend,
     GrokBackend.name: GrokBackend,
+    NovitaBackend.name: NovitaBackend,
     OpenRouterLLMBackend.name: OpenRouterLLMBackend,
 }
 
@@ -291,6 +293,7 @@ class HTTPLLMClient:
             _OpenAIEmbeddingBackend.name: _OpenAIEmbeddingBackend,
             _DoubaoEmbeddingBackend.name: _DoubaoEmbeddingBackend,
             "grok": _OpenAIEmbeddingBackend,
+            "novita": _OpenAIEmbeddingBackend,
             _OpenRouterEmbeddingBackend.name: _OpenRouterEmbeddingBackend,
         }
         factory = backends.get(provider)
