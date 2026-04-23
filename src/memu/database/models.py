@@ -105,6 +105,34 @@ class CategoryItem(BaseRecord):
     category_id: str
 
 
+class GraphNode(BaseRecord):
+    type: str
+    name: str
+    description: str = ""
+    content: str = ""
+    status: str = "active"
+    validated_count: int = 1
+    source_sessions: list[str] = Field(default_factory=list)
+    community_id: str | None = None
+    pagerank: float = 0.0
+    embedding: list[float] | None = None
+
+
+class GraphEdge(BaseRecord):
+    from_id: str
+    to_id: str
+    type: str
+    instruction: str = ""
+    condition: str | None = None
+    session_id: str | None = None
+
+
+class GraphCommunity(BaseRecord):
+    summary: str | None = None
+    node_count: int = 0
+    embedding: list[float] | None = None
+
+
 def merge_scope_model[TBaseRecord: BaseRecord](
     user_model: type[BaseModel], core_model: type[TBaseRecord], *, name_suffix: str
 ) -> type[TBaseRecord]:
@@ -137,6 +165,9 @@ def build_scoped_models(
 __all__ = [
     "BaseRecord",
     "CategoryItem",
+    "GraphCommunity",
+    "GraphEdge",
+    "GraphNode",
     "MemoryCategory",
     "MemoryItem",
     "MemoryType",
