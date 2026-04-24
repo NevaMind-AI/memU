@@ -9,7 +9,7 @@
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/memu)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.com/invite/hQZntfGsbJ)
 [![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
 
 <a href="https://trendshift.io/repositories/17374" target="_blank"><img src="https://trendshift.io/api/badge/repositories/17374" alt="NevaMind-AI%2FmemU | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
@@ -26,15 +26,17 @@ memU **continuously captures and understands user intent**. Even without a comma
 
 ---
 
-## 🤖 [OpenClaw (Moltbot, Clawdbot) Alternative](https://memu.bot)
+## 🤖 [OpenClaw Alternative](https://github.com/NevaMind-AI/memUBot)
 
 <img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/memUbot.png" />
 
-- **Download-and-use and simple** to get started.
-- Builds long-term memory to **understand user intent** and act proactively.
-- **Cuts LLM token cost** with smaller context.
+**[memU Bot](https://github.com/NevaMind-AI/memUBot)** — Now open source. The enterprise-ready OpenClaw. Your proactive AI assistant that remembers everything.
 
-Try now: [memU bot](https://memu.bot)
+- **Download-and-use and simple** to get started (one-click install, &lt; 3 min).
+- Builds long-term memory to **understand user intent** and act proactively (24/7).
+- **Cuts LLM token cost** with smaller context (~1/10 of comparable usage).
+
+Try now: [memu.bot](https://memu.bot) · Source: [memUBot on GitHub](https://github.com/NevaMind-AI/memUBot)
 
 ---
 
@@ -87,7 +89,7 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 
 | Capability | Description |
 |------------|-------------|
-| 🤖 **24/7 Proactive Agent** | Always-on memory agent that works continuously in the background—never sleeps, never forgets |
+| 🤖 **24/7 Proactive Agent** | Always-on memory agent that works continuously in the background |
 | 🎯 **User Intention Capture** | Understands and remembers user goals, preferences, and context across sessions automatically |
 | 💰 **Cost Efficient** | Reduces long-running token costs by caching insights and avoiding redundant LLM calls |
 ---
@@ -111,9 +113,9 @@ python proactive.py
                  │                                                           │
                  ▼                                                           ▼
 ┌────────────────────────────────────────┐         ┌────────────────────────────────────────────────┐
-│         🤖 MAIN AGENT                  │         │              🧠 MEMU BOT                       │
+│         🤖 MAIN AGENT                  │         │              🧠 MEMU BOT                        │
 │                                        │         │                                                │
-│  Handle user queries & execute tasks   │  ◄───►  │  Monitor, memorize & proactive intelligence   │
+│  Handle user queries & execute tasks   │  ◄───►  │  Monitor, memorize & proactive intelligence    │
 ├────────────────────────────────────────┤         ├────────────────────────────────────────────────┤
 │                                        │         │                                                │
 │  ┌──────────────────────────────────┐  │         │  ┌──────────────────────────────────────────┐  │
@@ -564,7 +566,7 @@ View detailed experimental data: [memU-experiment](https://github.com/NevaMind-A
 **Quick Links:**
 - 🚀 [Try MemU Cloud](https://app.memu.so/quick-start)
 - 📚 [API Documentation](https://memu.pro/docs)
-- 💬 [Discord Community](https://discord.gg/memu)
+- 💬 [Discord Community](https://discord.com/invite/hQZntfGsbJ)
 
 ---
 
