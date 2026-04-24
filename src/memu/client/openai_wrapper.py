@@ -24,12 +24,14 @@ class MemuChatCompletions:
         user_data: dict[str, Any],
         ranking: str = "salience",
         top_k: int = 5,
+        retriever: str | None = None,
     ):
         self._original = original_completions
         self._service = service
         self._user_data = user_data
         self._ranking = ranking
         self._top_k = top_k
+        self._retriever = retriever
 
     def _extract_user_query(self, messages: list[dict]) -> str:
         """Extract the most recent user message."""
@@ -70,13 +72,17 @@ class MemuChatCompletions:
 
         return messages
 
-    async def _retrieve_memories(self, query: str) -> list[dict]:
+    async def _retrieve_memories(self, query: str, retriever: str | None = None) -> list[dict]:
         """Retrieve relevant memories for the query."""
         try:
-            result = await self._service.retrieve(
-                queries=[{"role": "user", "content": query}],
-                where=self._user_data,
-            )
+            effective = retriever if retriever is not None else self._retriever
+            kwargs: dict[str, Any] = {
+                "queries": [{"role": "user", "content": query}],
+                "where": self._user_data,
+            }
+            if effective is not None:
+                kwargs["retriever"] = effective
+            result = await self._service.retrieve(**kwargs)
             return result.get("items", [])
         except Exception:
             # Fail silently - don't break the LLM call
@@ -137,6 +143,7 @@ class MemuChat:
         user_data: dict[str, Any],
         ranking: str = "salience",
         top_k: int = 5,
+        retriever: str | None = None,
     ):
         self._original = original_chat
         self.completions = MemuChatCompletions(
@@ -145,6 +152,7 @@ class MemuChat:
             user_data,
             ranking,
             top_k,
+            retriever,
         )
 
     def __getattr__(self, name: str) -> Any:
@@ -183,6 +191,7 @@ class MemuOpenAIWrapper:
         user_data: dict[str, Any],
         ranking: str = "salience",
         top_k: int = 5,
+        retriever: str | None = None,
     ):
         """
         Initialize the wrapper.
@@ -207,6 +216,7 @@ class MemuOpenAIWrapper:
             user_data,
             ranking,
             top_k,
+            retriever,
         )
 
     def __getattr__(self, name: str) -> Any:
@@ -223,6 +233,7 @@ def wrap_openai(
     session_id: str | None = None,
     ranking: str = "salience",
     top_k: int = 5,
+    retriever: str | None = None,
 ) -> MemuOpenAIWrapper:
     """
     Wrap an OpenAI client for auto-recall memory injection.
@@ -265,4 +276,4 @@ def wrap_openai(
     if session_id:
         user_data["session_id"] = session_id
 
-    return MemuOpenAIWrapper(client, service, user_data, ranking, top_k)
+    return MemuOpenAIWrapper(client, service, user_data, ranking, top_k, retriever)

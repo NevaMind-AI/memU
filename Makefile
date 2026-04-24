@@ -19,4 +19,4 @@ check:
 .PHONY: test
 test:
 	@echo "🚀 Testing code: Running pytest"
-	@uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=xml
+	@PYTHONPATH=src uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=xml
