@@ -107,6 +107,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
                 chat_model=cfg.chat_model,
                 embed_model=cfg.embed_model,
                 embed_batch_size=cfg.embed_batch_size,
+                proxy=cfg.proxy,
             )
         elif backend == "httpx":
             return HTTPLLMClient(
@@ -116,6 +117,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
                 provider=cfg.provider,
                 endpoint_overrides=cfg.endpoint_overrides,
                 embed_model=cfg.embed_model,
+                proxy=cfg.proxy,
             )
         elif backend == "lazyllm_backend":
             from memu.llm.lazyllm_client import LazyLLMClient
@@ -129,6 +131,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
                 embed_model=cfg.embed_model,
                 vlm_model=cfg.lazyllm_source.vlm_model,
                 stt_model=cfg.lazyllm_source.stt_model,
+                proxy=cfg.proxy,
             )
         else:
             msg = f"Unknown llm_client_backend '{cfg.client_backend}'"
