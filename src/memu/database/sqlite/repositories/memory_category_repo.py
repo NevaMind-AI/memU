@@ -70,7 +70,7 @@ class SQLiteMemoryCategoryRepo(SQLiteRepoBase, MemoryCategoryRepo):
                 id=row.id,
                 name=row.name,
                 description=row.description,
-                embedding=self._normalize_embedding(row.embedding_json),
+                embedding=row.embedding,
                 summary=row.summary,
                 created_at=row.created_at,
                 updated_at=row.updated_at,
@@ -104,7 +104,7 @@ class SQLiteMemoryCategoryRepo(SQLiteRepoBase, MemoryCategoryRepo):
                     id=row.id,
                     name=row.name,
                     description=row.description,
-                    embedding=self._normalize_embedding(row.embedding_json),
+                    embedding=row.embedding,
                     summary=row.summary,
                     created_at=row.created_at,
                     updated_at=row.updated_at,
@@ -156,7 +156,7 @@ class SQLiteMemoryCategoryRepo(SQLiteRepoBase, MemoryCategoryRepo):
                     id=existing.id,
                     name=existing.name,
                     description=existing.description,
-                    embedding=self._normalize_embedding(existing.embedding_json),
+                    embedding=existing.embedding,
                     summary=existing.summary,
                     created_at=existing.created_at,
                     updated_at=existing.updated_at,
@@ -170,7 +170,7 @@ class SQLiteMemoryCategoryRepo(SQLiteRepoBase, MemoryCategoryRepo):
             row = self._memory_category_model(
                 name=name,
                 description=description,
-                embedding_json=self._prepare_embedding(embedding),
+                embedding=embedding,
                 summary=None,
                 created_at=now,
                 updated_at=now,
@@ -230,7 +230,7 @@ class SQLiteMemoryCategoryRepo(SQLiteRepoBase, MemoryCategoryRepo):
             if description is not None:
                 row.description = description
             if embedding is not None:
-                row.embedding_json = self._prepare_embedding(embedding)
+                row.embedding = embedding
             if summary is not None:
                 row.summary = summary
             row.updated_at = self._now()
@@ -243,7 +243,7 @@ class SQLiteMemoryCategoryRepo(SQLiteRepoBase, MemoryCategoryRepo):
             id=row.id,
             name=row.name,
             description=row.description,
-            embedding=self._normalize_embedding(row.embedding_json),
+            embedding=row.embedding,
             summary=row.summary,
             created_at=row.created_at,
             updated_at=row.updated_at,
