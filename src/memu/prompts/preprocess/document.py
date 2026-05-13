@@ -5,7 +5,7 @@ Analyze the provided document text and produce two outputs:
 2. A one-sentence caption summarizing what the document is about.
 
 # Workflow
-1. Read the **Document** (`{document_text}`) carefully to understand its full content.
+1. Read the **Document** carefully to understand its full content.
 2. Identify the main points, key arguments, and essential details.
 3. Remove repetition, filler, and unnecessary verbosity while preserving meaning and completeness.
 4. Rewrite the content in a concise, structured form.
