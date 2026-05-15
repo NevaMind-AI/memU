@@ -1283,7 +1283,9 @@ class MemorizeMixin:
             categories = [cat_elem.text.strip() for cat_elem in categories_elem.findall("category") if cat_elem.text]
             memory_dict["categories"] = categories
 
-        if memory_dict.get("content") and memory_dict.get("categories"):
+        # `categories` may be empty per the memory type prompts.
+        if memory_dict.get("content"):
+            memory_dict.setdefault("categories", [])
             return memory_dict
         return None
 
