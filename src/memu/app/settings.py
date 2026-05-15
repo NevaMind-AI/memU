@@ -240,6 +240,14 @@ class MemorizeConfig(BaseModel):
         default=False,
         description="Enable reinforcement tracking for memory items.",
     )
+    enable_uncategorized_fallback: bool = Field(
+        default=True,
+        description=(
+            "Auto-create an 'uncategorized' category and link memory items whose "
+            "extracted categories match none of the configured ones, so LLM-mode "
+            "retrieval (which joins items via category relations) can still reach them."
+        ),
+    )
 
 
 class PatchConfig(BaseModel):

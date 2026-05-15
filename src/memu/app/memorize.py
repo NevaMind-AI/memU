@@ -37,6 +37,8 @@ from memu.workflow.step import WorkflowState, WorkflowStep
 
 logger = logging.getLogger(__name__)
 
+UNCATEGORIZED_CATEGORY_NAME = "uncategorized"
+
 if TYPE_CHECKING:
     from memu.app.service import Context
     from memu.app.settings import MemorizeConfig
@@ -615,6 +617,10 @@ class MemorizeMixin:
                 # existing item
                 continue
             mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
+            if not mapped_cat_ids and self.memorize_config.enable_uncategorized_fallback:
+                fallback_id = ctx.category_name_to_id.get(UNCATEGORIZED_CATEGORY_NAME)
+                if fallback_id is not None:
+                    mapped_cat_ids = [fallback_id]
             for cid in mapped_cat_ids:
                 rels.append(store.category_item_repo.link_item_category(item.id, cid, user_data=dict(user or {})))
                 # Store (item_id, summary) tuple for reference support
@@ -650,19 +656,36 @@ class MemorizeMixin:
     ) -> None:
         if ctx.categories_ready:
             return
-        if not self.category_configs:
+        configs = list(self.category_configs)
+        if self.memorize_config.enable_uncategorized_fallback and not any(
+            cfg.name.lower() == UNCATEGORIZED_CATEGORY_NAME for cfg in configs
+        ):
+            configs.append(
+                CategoryConfig(
+                    name=UNCATEGORIZED_CATEGORY_NAME,
+                    description="Memory items that do not match any other configured category.",
+                )
+            )
+        if not configs:
             ctx.categories_ready = True
             return
-        cat_texts = [self._category_embedding_text(cfg) for cfg in self.category_configs]
+        cat_texts = [self._category_embedding_text(cfg) for cfg in configs]
         cat_vecs = await self._get_llm_client("embedding").embed(cat_texts)
         ctx.category_ids = []
         ctx.category_name_to_id = {}
-        for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
+        for cfg, vec in zip(configs, cat_vecs, strict=True):
             name = cfg.name.strip() or "Untitled"
             description = cfg.description.strip()
             cat = store.memory_category_repo.get_or_create_category(
                 name=name, description=description, embedding=vec, user_data=dict(user or {})
             )
+            # Seed a static summary for the fallback: _rank_categories_by_summary
+            # in retrieve.py filters on `cat.summary`, and we deliberately skip
+            # dynamic summary updates for this category (see _update_category_summaries).
+            # Must go through update_category so the value persists on SQL backends
+            # whose get_or_create_category returns a detached/copied instance.
+            if name.lower() == UNCATEGORIZED_CATEGORY_NAME and not cat.summary and description:
+                cat = store.memory_category_repo.update_category(category_id=cat.id, summary=description)
             ctx.category_ids.append(cat.id)
             ctx.category_name_to_id[name.lower()] = cat.id
         ctx.categories_ready = True
@@ -1120,6 +1143,11 @@ class MemorizeMixin:
             cat = store.memory_category_repo.categories.get(cid)
             if not cat or not memories:
                 continue
+            if cat.name.lower() == UNCATEGORIZED_CATEGORY_NAME:
+                # Summaries over heterogeneous uncategorized items are incoherent and
+                # waste tokens; the category's static description embedding is enough
+                # for route_category to consider it when nothing else matches.
+                continue
             prompt = self._build_category_summary_prompt(category=cat, new_memories=memories)
             tasks.append(client.chat(prompt))
             target_ids.append(cid)
@@ -1259,7 +1287,20 @@ class MemorizeMixin:
 
     def _find_xml_boundaries(self, raw: str) -> tuple[int, int, str] | None:
         """Find the start index, end index, and closing tag for XML root element."""
-        root_tags = ["item", "profile", "behaviors", "events", "knowledge", "skills"]
+        root_tags = [
+            "item",
+            "profile",
+            "profiles",
+            "event",
+            "events",
+            "knowledge",
+            "behavior",
+            "behaviors",
+            "skill",
+            "skills",
+            "tool",
+            "tools",
+        ]
         for tag in root_tags:
             opening = f"<{tag}>"
             closing = f"</{tag}>"
@@ -1283,7 +1324,9 @@ class MemorizeMixin:
             categories = [cat_elem.text.strip() for cat_elem in categories_elem.findall("category") if cat_elem.text]
             memory_dict["categories"] = categories
 
-        if memory_dict.get("content") and memory_dict.get("categories"):
+        # `categories` may be empty per the memory type prompts.
+        if memory_dict.get("content"):
+            memory_dict.setdefault("categories", [])
             return memory_dict
         return None
 
@@ -1292,7 +1335,7 @@ class MemorizeMixin:
         Parse XML memory extraction output into a list of memory items.
 
         Expected XML format (root tag varies by memory type):
-        <profile|behaviors|events|knowledge|skills>
+        <item|profile|event[s]|knowledge|behavior[s]|skill[s]|tool[s]>
             <memory>
                 <content>...</content>
                 <categories>
