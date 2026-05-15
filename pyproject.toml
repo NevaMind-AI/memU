@@ -44,8 +44,10 @@ dev = [
     {include-group = "docs"},
     {include-group = "lint"},
     {include-group = "test"},
+    "fastmcp>=3.3.0",
     "langchain-openai>=1.1.7",
     "langgraph>=1.0.6",
+    "mcp>=1.0.0",
 ]
 docs = [
     "mkdocs>=1.6.1",
@@ -70,6 +72,8 @@ test = [
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
 langgraph = ["langgraph>=0.0.10", "langchain-core>=0.1.0"]
 claude = ["claude-agent-sdk>=0.1.24"]
+mcp = ["fastmcp>=2.7.0"]
+mcp-lowlevel = ["mcp>=1.0.0"]
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
