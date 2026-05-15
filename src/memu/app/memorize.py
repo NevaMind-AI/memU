@@ -1259,7 +1259,20 @@ class MemorizeMixin:
 
     def _find_xml_boundaries(self, raw: str) -> tuple[int, int, str] | None:
         """Find the start index, end index, and closing tag for XML root element."""
-        root_tags = ["item", "profile", "behaviors", "events", "knowledge", "skills"]
+        root_tags = [
+            "item",
+            "profile",
+            "profiles",
+            "event",
+            "events",
+            "knowledge",
+            "behavior",
+            "behaviors",
+            "skill",
+            "skills",
+            "tool",
+            "tools",
+        ]
         for tag in root_tags:
             opening = f"<{tag}>"
             closing = f"</{tag}>"
@@ -1294,7 +1307,7 @@ class MemorizeMixin:
         Parse XML memory extraction output into a list of memory items.
 
         Expected XML format (root tag varies by memory type):
-        <profile|behaviors|events|knowledge|skills>
+        <item|profile|event[s]|knowledge|behavior[s]|skill[s]|tool[s]>
             <memory>
                 <content>...</content>
                 <categories>
