@@ -478,6 +478,7 @@ result = await service.retrieve(
     "categories": [...],     # Relevant topic areas (auto-prioritized)
     "items": [...],          # Specific memory facts
     "resources": [...],      # Original sources for traceability
+    "graph_nodes": [...],    # Graph-enhanced context (if enabled)
     "next_step_query": "..." # Predicted follow-up context
 }
 ```
@@ -486,6 +487,35 @@ result = await service.retrieve(
 - `where={"user_id": "123"}` - User-specific context
 - `where={"agent_id__in": ["1", "2"]}` - Multi-agent coordination
 - Omit `where` for global context awareness
+
+#### Graph-Enhanced Retrieval
+
+MemU can optionally build a **knowledge graph** from stored memories, enabling retrieval that follows semantic relationships between concepts — not just vector similarity.
+
+```python
+service = MemoryService(
+    retrieve_config={
+        "method": "rag",
+        "graph": {
+            "enabled": True,   # Enable graph recall alongside vector search
+            "weight": 0.3,     # Score fusion: 70% vector + 30% graph
+            "max_nodes": 6,    # Max graph nodes per query
+        },
+    },
+    # ... other config
+)
+```
+
+When enabled, the retrieve pipeline runs a **dual-path graph recall**:
+1. **Precise path**: Vector/FTS seed nodes → community expansion → BFS walk → Personalized PageRank
+2. **Generalized path**: Community representatives → shallow walk → PPR
+
+Results are fused with vector retrieval using configurable weights (`α * vector_score + β * graph_ppr`), giving you both direct semantic matches and structurally related context.
+
+The graph store supports:
+- **Personalized PageRank** for query-relevant ranking
+- **Label Propagation** for automatic community detection
+- **Global PageRank** for baseline node importance
 
 ---
 

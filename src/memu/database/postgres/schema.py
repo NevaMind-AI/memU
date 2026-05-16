@@ -25,6 +25,9 @@ except ImportError as exc:
 
 from memu.database.postgres.models import (
     CategoryItemModel,
+    GraphCommunityModel,
+    GraphEdgeModel,
+    GraphNodeModel,
     MemoryCategoryModel,
     MemoryItemModel,
     ResourceModel,
@@ -39,6 +42,9 @@ class SQLAModels:
     MemoryCategory: type[Any]
     MemoryItem: type[Any]
     CategoryItem: type[Any]
+    GraphNode: type[Any] | None = None
+    GraphEdge: type[Any] | None = None
+    GraphCommunity: type[Any] | None = None
 
 
 _MODEL_CACHE: dict[type[Any], SQLAModels] = {}
@@ -85,6 +91,24 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
         tablename="category_items",
         metadata=metadata_obj,
     )
+    graph_node_model = build_table_model(
+        scope,
+        GraphNodeModel,
+        tablename="gm_nodes",
+        metadata=metadata_obj,
+    )
+    graph_edge_model = build_table_model(
+        scope,
+        GraphEdgeModel,
+        tablename="gm_edges",
+        metadata=metadata_obj,
+    )
+    graph_community_model = build_table_model(
+        scope,
+        GraphCommunityModel,
+        tablename="gm_communities",
+        metadata=metadata_obj,
+    )
 
     class Base(SQLModel):
         __abstract__ = True
@@ -96,6 +120,9 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
         MemoryCategory=memory_category_model,
         MemoryItem=memory_item_model,
         CategoryItem=category_item_model,
+        GraphNode=graph_node_model,
+        GraphEdge=graph_edge_model,
+        GraphCommunity=graph_community_model,
     )
     _MODEL_CACHE[cache_key] = models
     return models

@@ -18,6 +18,8 @@ from memu.database.repositories import MemoryCategoryRepo, ResourceRepo
 
 
 class InMemoryStore(Database):
+    graph_store: Any | None = None
+
     def __init__(
         self,
         *,

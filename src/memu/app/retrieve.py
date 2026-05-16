@@ -199,6 +199,20 @@ class RetrieveMixin:
                 config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
+                step_id="recall_graph",
+                role="recall_graph",
+                handler=self._rag_recall_graph,
+                requires={
+                    "needs_retrieval",
+                    "active_query",
+                    "query_vector",
+                    "store",
+                },
+                produces={"graph_hits", "graph_recall_result"},
+                capabilities={"vector"},
+                config={"embed_llm_profile": "embedding"},
+            ),
+            WorkflowStep(
                 step_id="build_context",
                 role="build_context",
                 handler=self._rag_build_context,
@@ -350,7 +364,6 @@ class RetrieveMixin:
 
         store = state["store"]
         where_filters = state.get("where") or {}
-        items_pool = store.memory_item_repo.list_items(where_filters)
         qvec = state.get("query_vector")
         if qvec is None:
             embed_client = self._get_step_embedding_client(step_context)
@@ -363,6 +376,13 @@ class RetrieveMixin:
             ranking=self.retrieve_config.item.ranking,
             recency_decay_days=self.retrieve_config.item.recency_decay_days,
         )
+        # Build mini pool from hit IDs only — avoids full table scan of all items
+        hit_ids = [_id for _id, _ in state["item_hits"]]
+        items_pool: dict[str, Any] = {}
+        for _id in hit_ids:
+            item = store.memory_item_repo.get_item(_id)
+            if item is not None:
+                items_pool[_id] = item
         state["item_pool"] = items_pool
         return state
 
@@ -423,6 +443,36 @@ class RetrieveMixin:
         state["resource_hits"] = cosine_topk(qvec, corpus, k=self.retrieve_config.resource.top_k)
         return state
 
+    async def _rag_recall_graph(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("needs_retrieval") or not self.retrieve_config.graph.enabled:
+            state["graph_hits"] = []
+            return state
+
+        store = state["store"]
+        graph_store = getattr(store, "graph_store", None)
+        if graph_store is None:
+            state["graph_hits"] = []
+            return state
+
+        query_vec = state.get("query_vector")
+        if query_vec is None:
+            embed_client = self._get_step_embedding_client(step_context)
+            query_vec = (await embed_client.embed([state["active_query"]]))[0]
+            state["query_vector"] = query_vec
+
+        result = graph_store.graph_recall(
+            state["active_query"],
+            query_vec=query_vec,
+            max_nodes=self.retrieve_config.graph.max_nodes,
+            where=state.get("where"),
+        )
+        # Convert to (id, score) tuples for consistency with other hits
+        state["graph_hits"] = [
+            (n.id, n.ppr_score) for n in result.nodes
+        ]
+        state["graph_recall_result"] = result
+        return state
+
     def _rag_build_context(self, state: WorkflowState, _: Any) -> WorkflowState:
         response = {
             "needs_retrieval": bool(state.get("needs_retrieval")),
@@ -432,22 +482,61 @@ class RetrieveMixin:
             "categories": [],
             "items": [],
             "resources": [],
+            "graph_nodes": [],
         }
         if state.get("needs_retrieval"):
             store = state["store"]
             where_filters = state.get("where") or {}
             categories_pool = state.get("category_pool") or store.memory_category_repo.list_categories(where_filters)
-            items_pool = state.get("item_pool") or store.memory_item_repo.list_items(where_filters)
+            items_pool = state["item_pool"] if "item_pool" in state else store.memory_item_repo.list_items(where_filters)
             resources_pool = state.get("resource_pool") or store.resource_repo.list_resources(where_filters)
             response["categories"] = self._materialize_hits(
                 state.get("category_hits", []),
                 categories_pool,
             )
-            response["items"] = self._materialize_hits(state.get("item_hits", []), items_pool)
+
+            # Score fusion: only deflate item scores when graph is enabled AND returned results
+            graph_recall_result = state.get("graph_recall_result")
+            graph_active = (
+                self.retrieve_config.graph.enabled
+                and graph_recall_result
+                and graph_recall_result.nodes
+            )
+            item_hits = state.get("item_hits", [])
+            if graph_active:
+                graph_weight = self.retrieve_config.graph.weight
+                vector_weight = 1.0 - graph_weight
+                response["items"] = [
+                    {**d, "score": d["score"] * vector_weight}
+                    for d in self._materialize_hits(item_hits, items_pool)
+                ]
+            else:
+                response["items"] = self._materialize_hits(item_hits, items_pool)
+
             response["resources"] = self._materialize_hits(
                 state.get("resource_hits", []),
                 resources_pool,
             )
+
+            # Graph nodes: materialize from RecallResult
+            if graph_active:
+                gw = self.retrieve_config.graph.weight
+                max_ppr = max((n.ppr_score for n in graph_recall_result.nodes), default=0.0) or 1.0
+                graph_entries = []
+                for n in graph_recall_result.nodes:
+                    ppr_norm = n.ppr_score / max_ppr
+                    graph_entries.append({
+                        "id": n.id,
+                        "type": n.type,
+                        "name": n.name,
+                        "description": n.description,
+                        "content": n.content,
+                        "community_id": n.community_id,
+                        "score": ppr_norm * gw,
+                        "ppr_score": n.ppr_score,
+                    })
+                response["graph_nodes"] = graph_entries
+
         state["response"] = response
         return state
 
@@ -714,6 +803,7 @@ class RetrieveMixin:
             "categories": [],
             "items": [],
             "resources": [],
+            "graph_nodes": [],
         }
         if state.get("needs_retrieval"):
             response["categories"] = list(state.get("category_hits") or [])
@@ -737,7 +827,17 @@ class RetrieveMixin:
             return [], {}
         summary_texts = [summary for _, summary in entries]
         client = embed_client or self._get_llm_client()
-        summary_embeddings = await client.embed(summary_texts)
+
+        # Cache category summary embeddings — summaries rarely change
+        if not hasattr(self, "_cat_embed_cache"):
+            self._cat_embed_cache: dict[tuple[tuple[str, str], ...], list[list[float]]] = {}
+        cache_key = tuple(sorted(entries))
+        if cache_key in self._cat_embed_cache:
+            summary_embeddings = self._cat_embed_cache[cache_key]
+        else:
+            summary_embeddings = await client.embed(summary_texts)
+            self._cat_embed_cache[cache_key] = summary_embeddings
+
         corpus = [(cid, emb) for (cid, _), emb in zip(entries, summary_embeddings, strict=True)]
         hits = cosine_topk(query_vec, corpus, k=top_k)
         summary_lookup = dict(entries)
@@ -864,82 +964,6 @@ class RetrieveMixin:
             return match.group(1).strip()
         return None
 
-    async def _embedding_based_retrieve(
-        self,
-        query: str,
-        top_k: int,
-        context_queries: list[dict[str, Any]] | None,
-        ctx: Context,
-        store: Database,
-        llm_client: Any | None = None,
-        where: Mapping[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Embedding-based retrieval with query rewriting and judging at each tier"""
-        where_filters = self._normalize_where(where)
-        category_pool = store.memory_category_repo.list_categories(where_filters)
-        items_pool = store.memory_item_repo.list_items(where_filters)
-        resource_pool = store.resource_repo.list_resources(where_filters)
-        client = llm_client or self._get_llm_client()
-        current_query = query
-        qvec = (await client.embed([current_query]))[0]
-        response: dict[str, Any] = {"resources": [], "items": [], "categories": [], "next_step_query": None}
-        content_sections: list[str] = []
-
-        # Tier 1: Categories
-        cat_hits, summary_lookup = await self._rank_categories_by_summary(
-            qvec,
-            top_k,
-            ctx,
-            store,
-            embed_client=client,
-            categories=category_pool,
-        )
-        if cat_hits:
-            response["categories"] = self._materialize_hits(cat_hits, category_pool)
-            content_sections.append(
-                self._format_category_content(cat_hits, summary_lookup, store, categories=category_pool)
-            )
-
-            needs_more, current_query = await self._decide_if_retrieval_needed(
-                current_query,
-                context_queries,
-                retrieved_content="\n\n".join(content_sections),
-                llm_client=client,
-            )
-            response["next_step_query"] = current_query
-            if not needs_more:
-                return response
-            # Re-embed with rewritten query
-            qvec = (await client.embed([current_query]))[0]
-
-        # Tier 2: Items
-        item_hits = store.memory_item_repo.vector_search_items(qvec, top_k, where=where_filters)
-        if item_hits:
-            response["items"] = self._materialize_hits(item_hits, items_pool)
-            content_sections.append(self._format_item_content(item_hits, store, items=items_pool))
-
-            needs_more, current_query = await self._decide_if_retrieval_needed(
-                current_query,
-                context_queries,
-                retrieved_content="\n\n".join(content_sections),
-                llm_client=client,
-            )
-            response["next_step_query"] = current_query
-            if not needs_more:
-                return response
-            # Re-embed with rewritten query
-            qvec = (await client.embed([current_query]))[0]
-
-        # Tier 3: Resources
-        resource_corpus = self._resource_caption_corpus(store, resources=resource_pool)
-        if resource_corpus:
-            res_hits = cosine_topk(qvec, resource_corpus, k=top_k)
-            if res_hits:
-                response["resources"] = self._materialize_hits(res_hits, resource_pool)
-                content_sections.append(self._format_resource_content(res_hits, store, resources=resource_pool))
-
-        return response
-
     def _materialize_hits(self, hits: Sequence[tuple[str, float]], pool: dict[str, Any]) -> list[dict[str, Any]]:
         out = []
         for _id, score in hits:
@@ -1017,104 +1041,6 @@ class RetrieveMixin:
         if "ENOUGH" in upper:
             return "ENOUGH"
         return "MORE"
-
-    async def _llm_based_retrieve(
-        self,
-        query: str,
-        top_k: int,
-        context_queries: list[dict[str, Any]] | None,
-        ctx: Context,
-        store: Database,
-        llm_client: Any | None = None,
-        where: Mapping[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """
-        LLM-based retrieval that uses language model to search and rank results
-        in a hierarchical manner, with query rewriting and judging at each tier.
-
-        Flow:
-        1. Search categories with LLM, judge + rewrite query
-        2. If needs more, search items from relevant categories, judge + rewrite
-        3. If needs more, search resources related to context
-        """
-        where_filters = self._normalize_where(where)
-        category_pool = store.memory_category_repo.list_categories(where_filters)
-        items_pool = store.memory_item_repo.list_items(where_filters)
-        relations = store.category_item_repo.list_relations(where_filters)
-        resource_pool = store.resource_repo.list_resources(where_filters)
-        current_query = query
-        client = llm_client or self._get_llm_client()
-        response: dict[str, Any] = {"resources": [], "items": [], "categories": [], "next_step_query": None}
-        content_sections: list[str] = []
-
-        # Tier 1: Search and rank categories
-        category_hits = await self._llm_rank_categories(
-            current_query,
-            top_k,
-            ctx,
-            store,
-            llm_client=client,
-            categories=category_pool,
-        )
-        if category_hits:
-            response["categories"] = category_hits
-            content_sections.append(self._format_llm_category_content(category_hits))
-
-            needs_more, current_query = await self._decide_if_retrieval_needed(
-                current_query,
-                context_queries,
-                retrieved_content="\n\n".join(content_sections),
-                llm_client=client,
-            )
-            response["next_step_query"] = current_query
-            if not needs_more:
-                return response
-
-        # Tier 2: Search memory items from relevant categories
-        relevant_category_ids = [cat["id"] for cat in category_hits]
-        item_hits = await self._llm_rank_items(
-            current_query,
-            top_k,
-            relevant_category_ids,
-            category_hits,
-            ctx,
-            store,
-            llm_client=client,
-            categories=category_pool,
-            items=items_pool,
-            relations=relations,
-        )
-        if item_hits:
-            response["items"] = item_hits
-            content_sections.append(self._format_llm_item_content(item_hits))
-
-            needs_more, current_query = await self._decide_if_retrieval_needed(
-                current_query,
-                context_queries,
-                retrieved_content="\n\n".join(content_sections),
-                llm_client=client,
-            )
-            response["next_step_query"] = current_query
-            if not needs_more:
-                return response
-
-        # Tier 3: Search resources related to the context
-        resource_hits = await self._llm_rank_resources(
-            current_query,
-            top_k,
-            category_hits,
-            item_hits,
-            ctx,
-            store,
-            llm_client=client,
-            items=items_pool,
-            resources=resource_pool,
-        )
-        if resource_hits:
-            response["resources"] = resource_hits
-            content_sections.append(self._format_llm_resource_content(resource_hits))
-
-        return response
 
     def _format_categories_for_llm(
         self,
