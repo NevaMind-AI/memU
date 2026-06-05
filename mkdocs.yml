@@ -1,0 +1,50 @@
+site_name: memU
+site_description: AI memory and conversation management framework
+site_url: https://nevamind-ai.github.io/MemU/
+repo_url: https://github.com/NevaMind-AI/MemU
+repo_name: NevaMind-AI/MemU
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - src
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+
+nav:
+  - Home: index.md
+  - Getting Started: tutorials/getting_started.md
+  - Architecture: architecture.md
+  - Folder Memory Compiler: folder_memory_compiler.md
+  - Storage:
+      - SQLite: sqlite.md
+  - Providers:
+      - Grok: providers/grok.md
+  - Integrations:
+      - LangGraph: langgraph_integration.md
+      - Grok: integrations/grok.md
+      - Sealos Devbox: sealos-devbox-guide.md
+      - Sealos Use Case: sealos_use_case.md
+  - ADRs:
+      - Overview: adr/README.md
+      - Workflow Pipelines: adr/0001-workflow-pipeline-architecture.md
+      - Pluggable Storage: adr/0002-pluggable-storage-and-vector-strategy.md
+      - User Scope: adr/0003-user-scope-in-data-model.md
+      - Markdown Context Harness: adr/0004-markdown-context-harness-and-skill-evolution.md
+      - Self-Evolve Review Gate: adr/0005-self-evolve-instruction-review-gate.md
