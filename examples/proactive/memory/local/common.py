@@ -1,6 +1,6 @@
 import os
 
-from memu.app import MemoryService
+from memu import MemoryService
 
 from ..config import memorize_config, retrieve_config
 

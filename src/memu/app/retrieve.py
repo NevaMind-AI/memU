@@ -8,12 +8,14 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel
 
+from memu.app.scope import concrete_scope_from_where, normalize_scope_where
 from memu.database.inmemory.vector import cosine_topk
 from memu.prompts.retrieve.llm_category_ranker import PROMPT as LLM_CATEGORY_RANKER_PROMPT
 from memu.prompts.retrieve.llm_item_ranker import PROMPT as LLM_ITEM_RANKER_PROMPT
 from memu.prompts.retrieve.llm_resource_ranker import PROMPT as LLM_RESOURCE_RANKER_PROMPT
 from memu.prompts.retrieve.pre_retrieval_decision import SYSTEM_PROMPT as PRE_RETRIEVAL_SYSTEM_PROMPT
 from memu.prompts.retrieve.pre_retrieval_decision import USER_PROMPT as PRE_RETRIEVAL_USER_PROMPT
+from memu.utils.retrieve import RetrieveMethod, RetrieveRanking, normalize_retrieve_method, normalize_retrieve_ranking
 from memu.workflow.step import WorkflowState, WorkflowStep
 
 logger = logging.getLogger(__name__)
@@ -30,7 +32,7 @@ class RetrieveMixin:
         _run_workflow: Callable[..., Awaitable[WorkflowState]]
         _get_context: Callable[[], Context]
         _get_database: Callable[[], Database]
-        _ensure_categories_ready: Callable[[Context, Database], Awaitable[None]]
+        _ensure_categories_ready: Callable[[Context, Database, Mapping[str, Any] | None], Awaitable[None]]
         _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
         _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
         _get_llm_client: Callable[..., Any]
@@ -41,36 +43,48 @@ class RetrieveMixin:
 
     async def retrieve(
         self,
-        queries: list[dict[str, Any]],
+        queries: list[str | Mapping[str, Any]],
         where: dict[str, Any] | None = None,
+        method: RetrieveMethod | str | None = None,
+        ranking: RetrieveRanking | str | None = None,
     ) -> dict[str, Any]:
+        if not isinstance(queries, list):
+            msg = "queries must be a non-empty list of strings or query objects"
+            raise TypeError(msg)
         if not queries:
-            raise ValueError("empty_queries")
+            msg = "queries must be a non-empty list of strings or query objects"
+            raise ValueError(msg)
+        normalized_queries = [self._normalize_query_item(query, index=index) for index, query in enumerate(queries)]
         ctx = self._get_context()
         store = self._get_database()
-        original_query = self._extract_query_text(queries[-1])
-        # await self._ensure_categories_ready(ctx, store)
+        original_query = self._extract_query_text(normalized_queries[-1])
         where_filters = self._normalize_where(where)
 
-        context_queries_objs = queries[:-1] if len(queries) > 1 else []
+        context_queries_objs: list[dict[str, Any]] = normalized_queries[:-1] if len(normalized_queries) > 1 else []
 
         route_intention = self.retrieve_config.route_intention
         retrieve_category = self.retrieve_config.category.enabled
         retrieve_item = self.retrieve_config.item.enabled
         retrieve_resource = self.retrieve_config.resource.enabled
         sufficiency_check = self.retrieve_config.sufficiency_check
+        retrieve_method = normalize_retrieve_method(method, default=self.retrieve_config.method)
+        item_ranking = normalize_retrieve_ranking(ranking, default=self.retrieve_config.item.ranking)
+        bootstrap_scope = concrete_scope_from_where(where_filters)
+        if retrieve_category and bootstrap_scope is not None:
+            await self._ensure_categories_ready(ctx, store, bootstrap_scope)
 
-        workflow_name = "retrieve_llm" if self.retrieve_config.method == "llm" else "retrieve_rag"
+        workflow_name = "retrieve_llm" if retrieve_method == "llm" else "retrieve_rag"
 
         state: WorkflowState = {
-            "method": self.retrieve_config.method,
+            "method": retrieve_method,
             "original_query": original_query,
             "context_queries": context_queries_objs,
             "route_intention": route_intention,
-            "skip_rewrite": len(queries) == 1,
+            "skip_rewrite": len(normalized_queries) == 1,
             "retrieve_category": retrieve_category,
             "retrieve_item": retrieve_item,
             "retrieve_resource": retrieve_resource,
+            "item_ranking": item_ranking,
             "sufficiency_check": sufficiency_check,
             "ctx": ctx,
             "store": store,
@@ -86,22 +100,38 @@ class RetrieveMixin:
 
     def _normalize_where(self, where: Mapping[str, Any] | None) -> dict[str, Any]:
         """Validate and clean the `where` scope filters against the configured user model."""
-        if not where:
-            return {}
+        return normalize_scope_where(self.user_model, where)
 
-        valid_fields = set(getattr(self.user_model, "model_fields", {}).keys())
-        cleaned: dict[str, Any] = {}
+    @staticmethod
+    def _normalize_query_item(query: str | Mapping[str, Any], *, index: int) -> dict[str, Any]:
+        if isinstance(query, str):
+            text = query.strip()
+            if not text:
+                raise ValueError(f"queries[{index}] must not be empty")
+            return {"role": "user", "content": text}
 
-        for raw_key, value in where.items():
-            if value is None:
-                continue
-            field = raw_key.split("__", 1)[0]
-            if field not in valid_fields:
-                msg = f"Unknown filter field '{field}' for current user scope"
-                raise ValueError(msg)
-            cleaned[raw_key] = value
+        if not isinstance(query, Mapping):
+            raise TypeError(f"queries[{index}] must be a string or query object")
 
-        return cleaned
+        role = query.get("role", "user")
+        if not isinstance(role, str) or not role.strip():
+            raise ValueError(f"queries[{index}].role must be a non-empty string")
+
+        content = query.get("content")
+        if isinstance(content, str):
+            text = content.strip()
+            if not text:
+                raise ValueError(f"queries[{index}].content must not be empty")
+            normalized_content: str | dict[str, str] = text
+        elif isinstance(content, Mapping):
+            text = content.get("text")
+            if not isinstance(text, str) or not text.strip():
+                raise ValueError(f"queries[{index}].content.text must be a non-empty string")
+            normalized_content = {"text": text.strip()}
+        else:
+            raise TypeError(f"queries[{index}].content must be a string or object with text")
+
+        return {"role": role.strip(), "content": normalized_content}
 
     def _build_rag_retrieve_workflow(self) -> list[WorkflowStep]:
         steps = [
@@ -112,7 +142,7 @@ class RetrieveMixin:
                 requires={"route_intention", "original_query", "context_queries", "skip_rewrite"},
                 produces={"needs_retrieval", "rewritten_query", "active_query", "next_step_query"},
                 capabilities={"llm"},
-                config={"chat_llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
+                config={"chat_llm_profile": self.retrieve_config.route_intention_llm_profile},
             ),
             WorkflowStep(
                 step_id="route_category",
@@ -156,6 +186,7 @@ class RetrieveMixin:
                     "where",
                     "active_query",
                     "query_vector",
+                    "item_ranking",
                 },
                 produces={"item_hits", "query_vector"},
                 capabilities={"vector"},
@@ -219,6 +250,7 @@ class RetrieveMixin:
             "retrieve_category",
             "retrieve_item",
             "retrieve_resource",
+            "item_ranking",
             "sufficiency_check",
             "ctx",
             "store",
@@ -321,14 +353,15 @@ class RetrieveMixin:
             state["query_vector"] = (await embed_client.embed([state["active_query"]]))[0]
         return state
 
-    def _extract_referenced_item_ids(self, state: WorkflowState) -> set[str]:
-        """Extract item IDs from category summary references."""
+    def _extract_referenced_item_ids(self, state: WorkflowState) -> list[str]:
+        """Extract ordered, deduplicated ref IDs from category summary references."""
         from memu.utils.references import extract_references
 
         category_hits = state.get("category_hits") or []
         summary_lookup = state.get("category_summary_lookup", {})
         category_pool = state.get("category_pool") or {}
-        referenced_item_ids: set[str] = set()
+        referenced_item_ids: list[str] = []
+        seen: set[str] = set()
 
         for cid, _score in category_hits:
             # Get summary from lookup or category
@@ -339,7 +372,11 @@ class RetrieveMixin:
                     summary = cat.summary
             if summary:
                 refs = extract_references(summary)
-                referenced_item_ids.update(refs)
+                for ref_id in refs:
+                    if ref_id in seen:
+                        continue
+                    referenced_item_ids.append(ref_id)
+                    seen.add(ref_id)
 
         return referenced_item_ids
 
@@ -360,11 +397,33 @@ class RetrieveMixin:
             qvec,
             self.retrieve_config.item.top_k,
             where=where_filters,
-            ranking=self.retrieve_config.item.ranking,
+            ranking=state.get("item_ranking", self.retrieve_config.item.ranking),
             recency_decay_days=self.retrieve_config.item.recency_decay_days,
         )
+        if getattr(self.retrieve_config.item, "use_category_references", False):
+            ref_ids = self._extract_referenced_item_ids(state)
+            if ref_ids:
+                referenced_items = store.memory_item_repo.list_items_by_ref_ids(ref_ids, where_filters)
+                items_pool.update(referenced_items)
+                state["item_hits"] = self._merge_referenced_item_hits(
+                    state["item_hits"],
+                    referenced_items,
+                )
         state["item_pool"] = items_pool
         return state
+
+    @staticmethod
+    def _merge_referenced_item_hits(
+        item_hits: Sequence[tuple[str, float]],
+        referenced_items: Mapping[str, Any],
+    ) -> list[tuple[str, float]]:
+        merged = list(item_hits)
+        seen = {item_id for item_id, _score in merged}
+        for item_id in referenced_items:
+            if item_id not in seen:
+                merged.append((item_id, 1.0))
+                seen.add(item_id)
+        return merged
 
     async def _rag_item_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("needs_retrieval"):
@@ -457,16 +516,16 @@ class RetrieveMixin:
                 step_id="route_intention",
                 role="route_intention",
                 handler=self._llm_route_intention,
-                requires={"original_query", "context_queries", "skip_rewrite"},
+                requires={"route_intention", "original_query", "context_queries", "skip_rewrite"},
                 produces={"needs_retrieval", "rewritten_query", "active_query", "next_step_query"},
                 capabilities={"llm"},
-                config={"llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
+                config={"llm_profile": self.retrieve_config.route_intention_llm_profile},
             ),
             WorkflowStep(
                 step_id="route_category",
                 role="route_category",
                 handler=self._llm_route_category,
-                requires={"needs_retrieval", "active_query", "ctx", "store", "where"},
+                requires={"retrieve_category", "needs_retrieval", "active_query", "ctx", "store", "where"},
                 produces={"category_hits"},
                 capabilities={"llm"},
                 config={"llm_profile": self.retrieve_config.llm_ranking_llm_profile},
@@ -487,6 +546,7 @@ class RetrieveMixin:
                 requires={
                     "needs_retrieval",
                     "proceed_to_items",
+                    "retrieve_item",
                     "ctx",
                     "store",
                     "where",
@@ -513,6 +573,7 @@ class RetrieveMixin:
                 requires={
                     "needs_retrieval",
                     "proceed_to_resources",
+                    "retrieve_resource",
                     "active_query",
                     "ctx",
                     "store",
@@ -568,7 +629,7 @@ class RetrieveMixin:
         return state
 
     async def _llm_route_category(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("needs_retrieval"):
+        if not state.get("retrieve_category") or not state.get("needs_retrieval"):
             state["category_hits"] = []
             return state
         llm_client = self._get_step_llm_client(step_context)
@@ -613,7 +674,7 @@ class RetrieveMixin:
         return state
 
     async def _llm_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("needs_retrieval") or not state.get("proceed_to_items"):
+        if not state.get("retrieve_item") or not state.get("needs_retrieval") or not state.get("proceed_to_items"):
             state["item_hits"] = []
             return state
 
@@ -682,7 +743,11 @@ class RetrieveMixin:
         return state
 
     async def _llm_recall_resources(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("needs_retrieval") or not state.get("proceed_to_resources"):
+        if (
+            not state.get("needs_retrieval")
+            or not state.get("retrieve_resource")
+            or not state.get("proceed_to_resources")
+        ):
             state["resource_hits"] = []
             return state
 
@@ -746,7 +811,7 @@ class RetrieveMixin:
     async def _decide_if_retrieval_needed(
         self,
         query: str,
-        context_queries: list[dict[str, Any]] | None,
+        context_queries: Sequence[str | Mapping[str, Any]] | None,
         retrieved_content: str | None = None,
         system_prompt: str | None = None,
         llm_client: Any | None = None,
@@ -756,7 +821,7 @@ class RetrieveMixin:
 
         Args:
             query: The current query string
-            context_queries: List of previous query objects with role and content
+            context_queries: Previous query strings or objects with role and content
             retrieved_content: Content retrieved so far (if checking for sufficiency)
             system_prompt: Optional system prompt override
 
@@ -783,7 +848,7 @@ class RetrieveMixin:
 
         return decision == "RETRIEVE", rewritten
 
-    def _format_query_context(self, queries: list[dict[str, Any]] | None) -> str:
+    def _format_query_context(self, queries: Sequence[str | Mapping[str, Any]] | None) -> str:
         """Format query context for prompts, including role information"""
         if not queries:
             return "No query context."
@@ -793,7 +858,7 @@ class RetrieveMixin:
             if isinstance(q, str):
                 # Backward compatibility
                 lines.append(f"- {q}")
-            elif isinstance(q, dict):
+            elif isinstance(q, Mapping):
                 role = q.get("role", "user")
                 content = q.get("content")
                 if isinstance(content, dict):
@@ -809,32 +874,39 @@ class RetrieveMixin:
         return "\n".join(lines)
 
     @staticmethod
-    def _extract_query_text(query: dict[str, Any]) -> str:
+    def _extract_query_text(query: str | Mapping[str, Any]) -> str:
         """
         Extract text content from query message structure.
 
         Args:
-            query: Query in format {"role": "user", "content": {"text": "..."}}
+            query: Query string or message in format {"role": "user", "content": "..."}.
+                The legacy {"content": {"text": "..."}} shape is also accepted.
 
         Returns:
             The extracted text string
         """
         if isinstance(query, str):
             # Backward compatibility: if it's already a string, return it
-            return query
+            text = query.strip()
+            if not text:
+                raise ValueError("EMPTY")
+            return text
 
-        if not isinstance(query, dict):
+        if not isinstance(query, Mapping):
             raise TypeError("INVALID")
 
         content = query.get("content")
         if isinstance(content, dict):
             text = content.get("text", "")
-            if not text:
+            if not isinstance(text, str) or not text.strip():
                 raise ValueError("EMPTY")
-            return str(text)
+            return text.strip()
         elif isinstance(content, str):
             # Also support {"role": "user", "content": "text"} format
-            return content
+            text = content.strip()
+            if not text:
+                raise ValueError("EMPTY")
+            return text
         else:
             raise TypeError("INVALID")
 
@@ -868,7 +940,7 @@ class RetrieveMixin:
         self,
         query: str,
         top_k: int,
-        context_queries: list[dict[str, Any]] | None,
+        context_queries: Sequence[str | Mapping[str, Any]] | None,
         ctx: Context,
         store: Database,
         llm_client: Any | None = None,
@@ -1022,7 +1094,7 @@ class RetrieveMixin:
         self,
         query: str,
         top_k: int,
-        context_queries: list[dict[str, Any]] | None,
+        context_queries: Sequence[str | Mapping[str, Any]] | None,
         ctx: Context,
         store: Database,
         llm_client: Any | None = None,
@@ -1253,7 +1325,7 @@ class RetrieveMixin:
     ) -> list[dict[str, Any]]:
         """Use LLM to rank memory items from relevant categories"""
         if not category_ids:
-            print("[LLM Rank Items] No category_ids provided")
+            logger.debug("Skipping LLM item ranking because no category IDs were provided")
             return []
 
         item_pool = items if items is not None else store.memory_item_repo.items

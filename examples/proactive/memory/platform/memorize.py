@@ -1,31 +1,26 @@
 from typing import Any
 
-import aiohttp
+import httpx
 
 from ..config import memorize_config
-
-BASE_URL = "https://api.memu.so"
-API_KEY = "your memu api key"
-USER_ID = "claude_user"
-AGENT_ID = "claude_agent"
+from .common import get_platform_memory_config
 
 
 async def memorize(conversation_messages: list[dict[str, Any]]) -> str | None:
+    config = get_platform_memory_config()
     payload = {
         "conversation": conversation_messages,
-        "user_id": USER_ID,
-        "agent_id": AGENT_ID,
+        "user_id": config.user_id,
+        "agent_id": config.agent_id,
         "override_config": memorize_config,
     }
 
-    async with (
-        aiohttp.ClientSession() as session,
-        session.post(
-            f"{BASE_URL}/api/v3/memory/memorize",
-            headers={"Authorization": f"Bearer {API_KEY}"},
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.post(
+            f"{config.base_url}/api/v3/memory/memorize",
+            headers={"Authorization": f"Bearer {config.api_key}"},
             json=payload,
-        ) as response,
-    ):
-        result = await response.json()
-        task_id = result["task_id"]
-        return task_id
+        )
+        response.raise_for_status()
+        result = response.json()
+        return result["task_id"]

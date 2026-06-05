@@ -18,7 +18,7 @@ We welcome all types of contributions:
 ## 🚀 Quick Start for Contributors
 
 ### Prerequisites
-- Python 3.13+
+- Python 3.12+
 - Git
 - [uv](https://github.com/astral-sh/uv) (Python package manager)
 - A code editor (VS Code recommended)
@@ -47,6 +47,8 @@ make test
 make install           # Create virtual environment and install dependencies with uv
 make test              # Run tests with pytest and coverage
 make check             # Run all checks (lock file, pre-commit, mypy, deptry)
+make docs              # Preview the documentation site locally
+make docs-build        # Build documentation in strict mode
 ```
 
 ## 🔧 Development Guidelines
@@ -76,7 +78,7 @@ uv run python -m pytest
 uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=html
 
 # Run specific test file
-uv run python -m pytest tests/rust_entry_test.py
+uv run python -m pytest tests/test_inmemory.py
 
 # Run tests with specific marker
 uv run python -m pytest -m "not slow"
@@ -120,9 +122,9 @@ For feature requests, please describe:
 
 3. **Test your changes**
    ```bash
+   make check
    make test
-   make lint
-   make coverage
+   make docs-build
    ```
 
 4. **Submit pull request**
@@ -201,6 +203,7 @@ We're currently focusing on:
 
 **Reporting Security Issues:**
 - **DO NOT** create public issues for security vulnerabilities
+- Follow the [Security Policy](SECURITY.md)
 - Email security issues privately to [contact@nevamind.ai](mailto:contact@nevamind.ai)
 - Include detailed reproduction steps and impact assessment
 - We'll acknowledge receipt within 24 hours
@@ -224,9 +227,10 @@ By contributing to MemU, you agree that:
 
 | Channel | Best For |
 |---------|----------|
-| 💬 [Discord](https://discord.gg/memu) | Real-time chat, quick questions |
+| 💬 [Discord](https://discord.com/invite/hQZntfGsbJ) | Real-time chat, quick questions |
 | 🗣️ [GitHub Discussions](https://github.com/NevaMind-AI/MemU/discussions) | Feature discussions, Q&A |
 | 🐛 [GitHub Issues](https://github.com/NevaMind-AI/MemU/issues) | Bug reports, feature requests |
+| 🔒 [Security Policy](SECURITY.md) | Private vulnerability reporting |
 | 📧 [Email](mailto:contact@nevamind.ai) | Private inquiries |
 
 ## 🎉 Recognition

@@ -12,12 +12,16 @@ Usage:
 import asyncio
 import os
 import sys
+from pathlib import Path
 
-from memu.app import MemoryService
+ROOT = Path(__file__).resolve().parents[1]
 
-# Add src to sys.path
-src_path = os.path.abspath("src")
-sys.path.insert(0, src_path)
+# Add src to sys.path before importing memu from a source checkout.
+src_path = str(ROOT / "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+
+from memu import MemoryService
 
 
 async def generate_memory_md(categories, output_dir):
@@ -100,9 +104,9 @@ async def main():
 
     # Resources to process (file_path, modality)
     resources = [
-        ("examples/resources/docs/doc1.txt", "document"),
-        ("examples/resources/docs/doc2.txt", "document"),
-        ("examples/resources/images/image1.png", "image"),
+        (ROOT / "examples" / "resources" / "docs" / "doc1.txt", "document"),
+        (ROOT / "examples" / "resources" / "docs" / "doc2.txt", "document"),
+        (ROOT / "examples" / "resources" / "images" / "image1.png", "image"),
     ]
 
     # Process each resource
@@ -110,11 +114,11 @@ async def main():
     total_items = 0
     categories = []
     for resource_file, modality in resources:
-        if not os.path.exists(resource_file):
+        if not resource_file.exists():
             continue
 
         try:
-            result = await service.memorize(resource_url=resource_file, modality=modality)
+            result = await service.memorize(resource_url=str(resource_file), modality=modality)
             total_items += len(result.get("items", []))
             # Categories are returned in the result and updated after each memorize call
             categories = result.get("categories", [])
@@ -122,15 +126,15 @@ async def main():
             print(f"Error: {e}")
 
     # Write to output files
-    output_dir = "examples/output/multimodal_example"
+    output_dir = ROOT / "examples" / "output" / "multimodal_example"
     os.makedirs(output_dir, exist_ok=True)
 
     # 1. Generate individual Markdown files for each category
     await generate_memory_md(categories, output_dir)
 
-    print(f"\n✓ Processed {len(resources)} files, extracted {total_items} items")
-    print(f"✓ Generated {len(categories)} categories")
-    print(f"✓ Output: {output_dir}/")
+    print(f"\n[OK] Processed {len(resources)} files, extracted {total_items} items")
+    print(f"[OK] Generated {len(categories)} categories")
+    print(f"[OK] Output: {output_dir}/")
 
 
 if __name__ == "__main__":

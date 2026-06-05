@@ -15,8 +15,17 @@ These tools are fully typed and compatible with LangGraph's `prebuilt.ToolNode` 
 To use this integration, you need to install the optional dependencies:
 
 ```bash
-uv add langgraph langchain-core
+pip install "memu-py[langgraph]"
 ```
+
+If you manage dependencies with uv in an application project:
+
+```bash
+uv add "memu-py[langgraph]"
+```
+
+When working from a source checkout, install the direct integration dependencies
+with `uv sync --extra langgraph`.
 
 ## Quick Start
 
@@ -25,11 +34,11 @@ Here is a complete example of how to initialize the MemU memory service and bind
 ```python
 import asyncio
 import os
-from memu.app.service import MemoryService
+from memu import MemoryService
 from memu.integrations.langgraph import MemULangGraphTools
 
 # Ensure you have your configuration set (e.g., env vars for DB connection)
-# os.environ["MEMU_DATABASE_URL"] = "..."
+# os.environ["MEMU_DATABASE_DSN"] = "..."
 
 async def main():
     # 1. Initialize MemoryService
@@ -83,15 +92,21 @@ class MemULangGraphTools(memory_service: MemoryService)
 Returns a tool named `save_memory`.
 - **Inputs**: `content` (str), `user_id` (str), `metadata` (dict, optional).
 - **Description**: Save a piece of information, conversation snippet, or memory for a user.
+- **Scope rule**: `user_id` is authoritative. A `metadata["user_id"]` value cannot override it.
 
 #### `search_memory_tool() -> StructuredTool`
 Returns a tool named `search_memory`.
-- **Inputs**: `query` (str), `user_id` (str), `limit` (int, default=5), `metadata_filter` (dict, optional), `min_relevance_score` (float, default=0.0).
+- **Inputs**: `query` (str), `user_id` (str), `limit` (int, default=5),
+  `metadata_filter` (dict, optional), `min_relevance_score` (float, default=0.0).
 - **Description**: Search for relevant memories or information for a user based on a query.
+- **Bounds**: `query` and `user_id` must be non-empty, `limit` must be at least 1,
+  and `min_relevance_score` must be between 0.0 and 1.0.
+- **Scope rule**: `user_id` is authoritative. A `metadata_filter["user_id"]` value cannot override it.
 
 ## Troubleshooting
 
 ### Import Errors
 If you see an `ImportError` regarding `langchain_core` or `langgraph`:
-1. Ensure you have installed the extras: `uv add langgraph langchain-core` (or `pip install langgraph langchain-core`).
+1. Ensure you have installed the extra: `pip install "memu-py[langgraph]"` or `uv add "memu-py[langgraph]"`.
+   From a source checkout, run `uv sync --extra langgraph`.
 2. Verify your virtual environment is active.

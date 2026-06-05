@@ -8,6 +8,8 @@ that can be deployed on Sealos DevBox with 1-click deployment.
 Usage:
     # Local development
     pip install -r requirements.txt
+    # For PostgreSQL persistence:
+    # pip install -r requirements-postgres.txt
     python main.py
 
     # Or with uvicorn
@@ -17,11 +19,12 @@ Usage:
 import os
 import sys
 from contextlib import asynccontextmanager
+from typing import Annotated
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
 
 load_dotenv()
 
@@ -30,10 +33,30 @@ src_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "
 if os.path.exists(src_path):
     sys.path.insert(0, src_path)
 
-from memu.app import MemoryService
+from memu import MemoryService
 
 # Global memory service instance
 memory_service: MemoryService | None = None
+
+SUPPORTED_DATABASE_PROVIDERS = ("inmemory", "sqlite", "postgres")
+SUPPORTED_DATABASE_DDL_MODES = ("create", "validate")
+NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+def _env_choice(name: str, default: str, choices: tuple[str, ...]) -> str:
+    value = (os.getenv(name, default) or default).strip().lower()
+    if value not in choices:
+        msg = f"{name} must be one of: {', '.join(choices)}"
+        raise ValueError(msg)
+    return value
+
+
+def _env_value(name: str) -> str | None:
+    value = os.getenv(name)
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
 
 
 def get_llm_profiles() -> dict:
@@ -62,6 +85,26 @@ def get_llm_profiles() -> dict:
     }
 
 
+def get_database_config() -> dict:
+    """Build MemU database config from environment variables."""
+    provider = _env_choice("MEMU_DATABASE_PROVIDER", "inmemory", SUPPORTED_DATABASE_PROVIDERS)
+    ddl_mode = _env_choice("MEMU_DATABASE_DDL_MODE", "create", SUPPORTED_DATABASE_DDL_MODES)
+    dsn = _env_value("MEMU_DATABASE_DSN")
+
+    if provider == "postgres" and not dsn:
+        msg = "MEMU_DATABASE_DSN is required when MEMU_DATABASE_PROVIDER=postgres"
+        raise ValueError(msg)
+
+    metadata_store = {
+        "provider": provider,
+        "ddl_mode": ddl_mode,
+    }
+    if dsn:
+        metadata_store["dsn"] = dsn
+
+    return {"metadata_store": metadata_store}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize MemU memory service on startup."""
@@ -69,10 +112,12 @@ async def lifespan(app: FastAPI):
 
     try:
         llm_profiles = get_llm_profiles()
-        memory_service = MemoryService(llm_profiles=llm_profiles)
-        print("✓ MemU Memory Service initialized successfully")
+        database_config = get_database_config()
+        memory_service = MemoryService(llm_profiles=llm_profiles, database_config=database_config)
+        provider = database_config["metadata_store"]["provider"]
+        print(f"[OK] MemU Memory Service initialized successfully (database: {provider})")
     except Exception as e:
-        print(f"✗ Failed to initialize MemU: {e}")
+        print(f"[ERROR] Failed to initialize MemU: {e}")
         raise
 
     yield
@@ -99,8 +144,8 @@ app.add_middleware(
 
 # Request/Response Models
 class ChatRequest(BaseModel):
-    message: str
-    user_id: str = "default"
+    message: NonEmptyString
+    user_id: NonEmptyString = "default"
 
 
 class ChatResponse(BaseModel):
@@ -110,8 +155,8 @@ class ChatResponse(BaseModel):
 
 
 class MemorizeRequest(BaseModel):
-    content: str
-    user_id: str = "default"
+    content: NonEmptyString
+    user_id: NonEmptyString = "default"
 
 
 class MemorizeResponse(BaseModel):
@@ -169,7 +214,10 @@ async def chat(request: ChatRequest):
 
     try:
         # Retrieve relevant memories
-        retrieve_result = await memory_service.retrieve(queries=[{"role": "user", "content": request.message}])
+        retrieve_result = await memory_service.retrieve(
+            queries=[{"role": "user", "content": request.message}],
+            where={"user_id": request.user_id},
+        )
 
         memories = retrieve_result.get("items", [])
 
@@ -200,7 +248,8 @@ async def chat(request: ChatRequest):
         try:
             memorize_result = await memory_service.memorize(
                 resource_url=temp_file,
-                modality="text",
+                modality="document",
+                user={"user_id": request.user_id},
             )
             memories_stored = len(memorize_result.get("items", []))
         finally:
@@ -232,7 +281,8 @@ async def memorize(request: MemorizeRequest):
         try:
             result = await memory_service.memorize(
                 resource_url=temp_file,
-                modality="text",
+                modality="document",
+                user={"user_id": request.user_id},
             )
             return MemorizeResponse(
                 status="stored",
@@ -247,13 +297,20 @@ async def memorize(request: MemorizeRequest):
 
 
 @app.get("/recall", response_model=RecallResponse)
-async def recall(query: str, limit: int = 5):
+async def recall(
+    query: NonEmptyString,
+    user_id: NonEmptyString = "default",
+    limit: int = Query(default=5, ge=1, le=20),
+):
     """Recall memories related to a query."""
     if not memory_service:
         raise HTTPException(status_code=503, detail="Memory service not initialized")
 
     try:
-        result = await memory_service.retrieve(queries=[{"role": "user", "content": query}])
+        result = await memory_service.retrieve(
+            queries=[{"role": "user", "content": query}],
+            where={"user_id": user_id},
+        )
 
         items = result.get("items", [])[:limit]
         memories = []

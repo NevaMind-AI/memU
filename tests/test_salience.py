@@ -8,8 +8,25 @@ Tests for salience-aware memory features:
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import math
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+
+def _load_runtime_vector_module():
+    vector_path = Path(__file__).resolve().parents[1] / "src/memu/database/inmemory/vector.py"
+    spec = importlib.util.spec_from_file_location("memu_runtime_vector", vector_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_RUNTIME_VECTOR = _load_runtime_vector_module()
+runtime_cosine_topk = _RUNTIME_VECTOR.cosine_topk
+runtime_cosine_topk_salience = _RUNTIME_VECTOR.cosine_topk_salience
 
 
 # Inline implementations to avoid circular import issues during testing
@@ -207,3 +224,13 @@ class TestCosineTopkSalience:
         results = cosine_topk_salience(query, corpus, k=2, recency_decay_days=30.0)
 
         assert len(results) == 2
+
+
+def test_runtime_vector_topk_returns_empty_for_non_positive_k() -> None:
+    query = [1.0, 0.0]
+    corpus = [("id1", [1.0, 0.0]), ("id2", [0.0, 1.0])]
+    salience_corpus = [("id1", [1.0, 0.0], 1, datetime.now(UTC))]
+
+    assert runtime_cosine_topk(query, corpus, k=0) == []
+    assert runtime_cosine_topk(query, corpus, k=-1) == []
+    assert runtime_cosine_topk_salience(query, salience_corpus, k=0) == []

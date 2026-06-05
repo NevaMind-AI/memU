@@ -30,18 +30,18 @@ To use Grok as your LLM provider, switch the `provider` setting to `grok`. This 
 ### Python Example
 
 ```python
-from memu.app.settings import LLMConfig
+from memu import MemoryService
 
-# Configure MemU to use Grok
-config = LLMConfig(
-    provider="grok",
-    # The default API key env var is XAI_API_KEY
-    # The default model is grok-2-latest
+# Configure MemU to use Grok through the default LLM profile.
+service = MemoryService(
+    llm_profiles={
+        "default": {
+            "provider": "grok",
+            # Defaults: api_key="XAI_API_KEY", base_url="https://api.x.ai/v1",
+            # chat_model="grok-2-latest"
+        }
+    }
 )
-
-print(f"Using provider: {config.provider}")
-print(f"Base URL: {config.base_url}")
-print(f"Chat Model: {config.chat_model}")
 ```
 
 ## Models Supported

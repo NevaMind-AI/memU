@@ -1,3 +1,4 @@
+import os
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal
 
@@ -24,7 +25,23 @@ def normalize_value(v: str) -> str:
     return v
 
 
+def resolve_api_key(value: str | None) -> str:
+    """Resolve an API key config value that may be a literal key or an environment variable name."""
+    if not value:
+        return ""
+    resolved = os.getenv(value, value)
+    return resolved.strip()
+
+
+def default_api_key_env(provider: str) -> str:
+    """Return the default API key environment variable for a provider."""
+    if provider.strip().lower() == "grok":
+        return "XAI_API_KEY"
+    return "OPENAI_API_KEY"
+
+
 Normalize = BeforeValidator(normalize_value)
+ProfileName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 def _default_memory_types() -> list[str]:
@@ -67,7 +84,7 @@ CompleteCategoryPrompt = AfterValidator(lambda v: complete_prompt_blocks(v, DEFA
 class CategoryConfig(BaseModel):
     name: str
     description: str = ""
-    target_length: int | None = None
+    target_length: int | None = Field(default=None, ge=1)
     summary_prompt: str | Annotated[CustomPrompt, CompleteCategoryPrompt] | None = None
 
 
@@ -100,16 +117,16 @@ class LazyLLMSource(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    provider: str = Field(
+    provider: Annotated[str, Normalize] = Field(
         default="openai",
         description="Identifier for the LLM provider implementation (used by HTTP client backend).",
     )
     base_url: str = Field(default="https://api.openai.com/v1")
     api_key: str = Field(default="OPENAI_API_KEY")
     chat_model: str = Field(default="gpt-4o-mini")
-    client_backend: str = Field(
+    client_backend: Annotated[Literal["httpx", "sdk", "lazyllm_backend"], Normalize] = Field(
         default="sdk",
-        description="Which LLM client backend to use: 'httpx' (httpx), 'sdk' (official OpenAI), or 'lazyllm_backend' (for more LLM source like Qwen, Doubao, SIliconflow, etc.)",
+        description="Which LLM client backend to use: 'httpx' (httpx), 'sdk' (official OpenAI), or 'lazyllm_backend' (for more LLM source like Qwen, Doubao, SiliconFlow, etc.)",
     )
     lazyllm_source: LazyLLMSource = Field(default=LazyLLMSource())
     endpoint_overrides: dict[str, str] = Field(
@@ -122,6 +139,7 @@ class LLMConfig(BaseModel):
     )
     embed_batch_size: int = Field(
         default=1,
+        ge=1,
         description="Maximum batch size for embedding API calls (used by SDK client backends).",
     )
 
@@ -131,8 +149,8 @@ class LLMConfig(BaseModel):
             # If values match the OpenAI defaults, switch them to Grok defaults
             if self.base_url == "https://api.openai.com/v1":
                 self.base_url = "https://api.x.ai/v1"
-            if self.api_key == "OPENAI_API_KEY":
-                self.api_key = "XAI_API_KEY"
+            if self.api_key == default_api_key_env("openai"):
+                self.api_key = default_api_key_env("grok")
             if self.chat_model == "gpt-4o-mini":
                 self.chat_model = "grok-2-latest"
         return self
@@ -145,12 +163,12 @@ class BlobConfig(BaseModel):
 
 class RetrieveCategoryConfig(BaseModel):
     enabled: bool = Field(default=True, description="Whether to enable category retrieval.")
-    top_k: int = Field(default=5, description="Total number of categories to retrieve.")
+    top_k: int = Field(default=5, ge=1, description="Total number of categories to retrieve.")
 
 
 class RetrieveItemConfig(BaseModel):
     enabled: bool = Field(default=True, description="Whether to enable item retrieval.")
-    top_k: int = Field(default=5, description="Total number of items to retrieve.")
+    top_k: int = Field(default=5, ge=1, description="Total number of items to retrieve.")
     # Reference-aware retrieval
     use_category_references: bool = Field(
         default=False,
@@ -163,13 +181,14 @@ class RetrieveItemConfig(BaseModel):
     )
     recency_decay_days: float = Field(
         default=30.0,
+        gt=0,
         description="Half-life in days for recency decay in salience scoring. After this many days, recency factor is ~0.5.",
     )
 
 
 class RetrieveResourceConfig(BaseModel):
     enabled: bool = Field(default=True, description="Whether to enable resource retrieval.")
-    top_k: int = Field(default=5, description="Total number of resources to retrieve.")
+    top_k: int = Field(default=5, ge=1, description="Total number of resources to retrieve.")
 
 
 class RetrieveConfig(BaseModel):
@@ -191,32 +210,41 @@ class RetrieveConfig(BaseModel):
         default=True, description="Whether to route intention (judge needs retrieval & rewrite query)."
     )
     # route_intention_prompt: str = Field(default="", description="User prompt for route intention.")
-    # route_intention_llm_profile: str = Field(default="default", description="LLM profile for route intention.")
+    route_intention_llm_profile: ProfileName = Field(
+        default="default",
+        description="LLM profile for route intention.",
+    )
     category: RetrieveCategoryConfig = Field(default=RetrieveCategoryConfig())
     item: RetrieveItemConfig = Field(default=RetrieveItemConfig())
     resource: RetrieveResourceConfig = Field(default=RetrieveResourceConfig())
     sufficiency_check: bool = Field(default=True, description="Whether to check sufficiency after each tier.")
     sufficiency_check_prompt: str = Field(default="", description="User prompt for sufficiency check.")
-    sufficiency_check_llm_profile: str = Field(default="default", description="LLM profile for sufficiency check.")
-    llm_ranking_llm_profile: str = Field(default="default", description="LLM profile for LLM ranking.")
+    sufficiency_check_llm_profile: ProfileName = Field(
+        default="default",
+        description="LLM profile for sufficiency check.",
+    )
+    llm_ranking_llm_profile: ProfileName = Field(default="default", description="LLM profile for LLM ranking.")
 
 
 class MemorizeConfig(BaseModel):
-    category_assign_threshold: float = Field(default=0.25)
+    category_assign_threshold: float = Field(default=0.25, ge=0, le=1)
     multimodal_preprocess_prompts: dict[str, str | CustomPrompt] = Field(
         default_factory=dict,
         description="Optional mapping of modality -> preprocess system prompt.",
     )
-    preprocess_llm_profile: str = Field(default="default", description="LLM profile for preprocess.")
+    preprocess_llm_profile: ProfileName = Field(default="default", description="LLM profile for preprocess.")
     memory_types: list[str] = Field(
         default_factory=_default_memory_types,
-        description="Ordered list of memory types (profile/event/knowledge/behavior by default).",
+        description="Ordered list of memory types (profile/event/knowledge/behavior/skill/tool by default).",
     )
     memory_type_prompts: dict[str, str | Annotated[CustomPrompt, CompleteMemoryTypePrompt]] = Field(
         default_factory=_default_memory_type_prompts,
         description="User prompt overrides for each memory type extraction.",
     )
-    memory_extract_llm_profile: str = Field(default="default", description="LLM profile for memory extract.")
+    memory_extract_llm_profile: ProfileName = Field(
+        default="default",
+        description="LLM profile for memory extract.",
+    )
     memory_categories: list[CategoryConfig] = Field(
         default_factory=_default_memory_categories,
         description="Global memory category definitions embedded at service startup.",
@@ -228,9 +256,13 @@ class MemorizeConfig(BaseModel):
     )
     default_category_summary_target_length: int = Field(
         default=400,
+        ge=1,
         description="Target max length for auto-generated category summaries.",
     )
-    category_update_llm_profile: str = Field(default="default", description="LLM profile for category summary.")
+    category_update_llm_profile: ProfileName = Field(
+        default="default",
+        description="LLM profile for category summary.",
+    )
     # Reference tracking for category summaries
     enable_item_references: bool = Field(
         default=False,
@@ -257,10 +289,7 @@ class UserConfig(BaseModel):
     model: type[BaseModel] = Field(default=DefaultUserModel)
 
 
-Key = Annotated[str, StringConstraints(min_length=1)]
-
-
-class LLMProfilesConfig(RootModel[dict[Key, LLMConfig]]):
+class LLMProfilesConfig(RootModel[dict[ProfileName, LLMConfig]]):
     root: dict[str, LLMConfig] = Field(default_factory=lambda: {"default": LLMConfig()})
 
     def get(self, key: str, default: LLMConfig | None = None) -> LLMConfig | None:
@@ -278,7 +307,7 @@ class LLMProfilesConfig(RootModel[dict[Key, LLMConfig]]):
         if data is None:
             data = {}
         elif isinstance(data, dict):
-            data = dict(data)
+            data = {key.strip() if isinstance(key, str) else key: value for key, value in data.items()}
         else:
             return data
         if "default" not in data:
@@ -299,7 +328,10 @@ class LLMProfilesConfig(RootModel[dict[Key, LLMConfig]]):
 class MetadataStoreConfig(BaseModel):
     provider: Annotated[Literal["inmemory", "postgres", "sqlite"], Normalize] = "inmemory"
     ddl_mode: Annotated[Literal["create", "validate"], Normalize] = "create"
-    dsn: str | None = Field(default=None, description="Database connection string (required for postgres/sqlite).")
+    dsn: str | None = Field(
+        default=None,
+        description="Database connection string. Required for postgres; optional for sqlite.",
+    )
 
 
 class VectorIndexConfig(BaseModel):

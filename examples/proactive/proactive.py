@@ -1,6 +1,14 @@
 import asyncio
+import sys
+from pathlib import Path
+from typing import Any
 
-from claude_agent_sdk import (
+# Add src to sys.path before memory.local imports memu from a source checkout.
+src_path = str(Path(__file__).resolve().parents[2] / "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+
+from memory.claude_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
     ClaudeSDKClient,
@@ -17,7 +25,7 @@ N_MESSAGES_MEMORIZE = 2
 RUNNING_MEMORIZATION: asyncio.Task | None = None
 
 
-async def trigger_memorize(messages: list[dict[str, any]]) -> bool:
+async def trigger_memorize(messages: list[dict[str, Any]]) -> bool:
     """Create a background task to memorize conversation messages.
 
     Returns True if the task was successfully created and registered.
@@ -94,7 +102,7 @@ async def process_response(client: ClaudeSDKClient) -> list[str]:
     return assistant_text_parts
 
 
-async def check_and_memorize(conversation_messages: list[dict[str, any]]) -> None:
+async def check_and_memorize(conversation_messages: list[dict[str, Any]]) -> None:
     """Check if memorization threshold is reached and trigger if needed.
 
     Skips triggering if a previous memorization task is still running.
@@ -122,9 +130,9 @@ async def check_and_memorize(conversation_messages: list[dict[str, any]]) -> Non
         conversation_messages.clear()
 
 
-async def run_conversation_loop(client: ClaudeSDKClient) -> list[dict[str, any]]:
+async def run_conversation_loop(client: ClaudeSDKClient) -> list[dict[str, Any]]:
     """Run the main conversation loop."""
-    conversation_messages: list[dict[str, any]] = []
+    conversation_messages: list[dict[str, Any]] = []
     iteration = 0
 
     while True:
@@ -152,7 +160,7 @@ async def run_conversation_loop(client: ClaudeSDKClient) -> list[dict[str, any]]
     return conversation_messages
 
 
-async def main():
+async def main() -> None:
     options = ClaudeAgentOptions(
         mcp_servers={"memu": memu_server},
         allowed_tools=[

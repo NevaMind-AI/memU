@@ -1,14 +1,32 @@
+from __future__ import annotations
+
+import asyncio
 import os
+import sys
+from pathlib import Path
 
-from memu.app import MemoryService
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_POSTGRES_DSN = "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/memu"
+RUN_POSTGRES_TESTS_ENV = "MEMU_RUN_POSTGRES_TESTS"
+
+# Add src to sys.path before importing memu from a source checkout.
+src_path = str(PROJECT_ROOT / "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 
-async def main():
-    """Test with PostgreSQL storage."""
+async def run_postgres_workflow() -> None:
+    """Run the PostgreSQL-backed memorize/retrieve smoke workflow."""
+    from memu import MemoryService
+
     api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        msg = "OPENAI_API_KEY is required for the PostgreSQL integration workflow"
+        raise RuntimeError(msg)
+
     # Default port 5432; use 5433 if 5432 is occupied
-    postgres_dsn = os.environ.get("POSTGRES_DSN", "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/memu")
-    file_path = os.path.abspath("tests/example/example_conversation.json")
+    postgres_dsn = os.environ.get("POSTGRES_DSN", DEFAULT_POSTGRES_DSN)
+    file_path = Path(__file__).resolve().parent / "example" / "example_conversation.json"
 
     print("\n" + "=" * 60)
     print("[POSTGRES] Starting test...")
@@ -30,7 +48,7 @@ async def main():
 
     # Memorize
     print("\n[POSTGRES] Memorizing...")
-    memory = await service.memorize(resource_url=file_path, modality="conversation", user={"user_id": "123"})
+    memory = await service.memorize(resource_url=str(file_path), modality="conversation", user={"user_id": "123"})
     for cat in memory.get("categories", []):
         print(f"  - {cat.get('name')}: {(cat.get('summary') or '')[:80]}...")
 
@@ -76,7 +94,22 @@ async def main():
     print("\n[POSTGRES] Test completed!")
 
 
-if __name__ == "__main__":
-    import asyncio
+async def test_postgres_full_workflow() -> None:
+    """Opt-in pytest integration check for a local PostgreSQL + pgvector service."""
+    import pytest
 
-    asyncio.run(main())
+    if os.environ.get(RUN_POSTGRES_TESTS_ENV) != "1":
+        pytest.skip(f"Set {RUN_POSTGRES_TESTS_ENV}=1 to run the PostgreSQL integration workflow")
+    if not os.environ.get("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY is required for the PostgreSQL integration workflow")
+
+    await run_postgres_workflow()
+
+
+def main() -> int:
+    asyncio.run(run_postgres_workflow())
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

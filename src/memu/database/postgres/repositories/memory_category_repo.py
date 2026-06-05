@@ -57,8 +57,12 @@ class PostgresMemoryCategoryRepo(PostgresRepoBase, MemoryCategoryRepo):
             session.commit()
 
             # Clean up cache
-            for cat_id in deleted:
+            deleted_category_ids = set(deleted)
+            for cat_id in deleted_category_ids:
                 self.categories.pop(cat_id, None)
+            self._state.relations[:] = [
+                rel for rel in self._state.relations if rel.category_id not in deleted_category_ids
+            ]
 
         return deleted
 

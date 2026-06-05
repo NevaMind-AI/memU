@@ -8,6 +8,8 @@ import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import date, datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -602,6 +604,14 @@ def _get_attr_or_key(obj: Any, key: str) -> Any:
     return None
 
 
+def _get_first_attr_or_key(obj: Any, *keys: str) -> Any:
+    for key in keys:
+        value = _get_attr_or_key(obj, key)
+        if value is not None:
+            return value
+    return None
+
+
 def _extract_finish_reason(raw_response: Any) -> str | None:
     """Extract finish_reason from choices[0] if available."""
     choices = _get_attr_or_key(raw_response, "choices")
@@ -623,29 +633,66 @@ def _get_usage_object(raw_response: Any) -> Any:
 def _convert_to_dict(obj: Any) -> dict[str, Any] | None:
     """Convert object to dict using available methods."""
     if hasattr(obj, "model_dump"):
-        result: dict[str, Any] = obj.model_dump()
-        return result
+        result = _model_dump(obj)
+        return _json_safe_dict(result)
     if hasattr(obj, "__dict__"):
-        return dict(obj.__dict__)
+        return _json_safe_dict(dict(obj.__dict__))
     if isinstance(obj, dict):
-        return obj
+        return _json_safe_dict(obj)
     return None
+
+
+def _json_safe_dict(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    return {str(key): _json_safe_value(item) for key, item in value.items()}
+
+
+def _json_safe_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    if hasattr(value, "model_dump"):
+        return _json_safe_value(_model_dump(value))
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe_value(item) for key, item in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_json_safe_value(item) for item in value]
+    return str(value)
+
+
+def _model_dump(value: Any) -> Any:
+    try:
+        return value.model_dump(mode="json")
+    except TypeError:
+        return value.model_dump()
 
 
 def _extract_token_details(usage_obj: Any, usage_data: dict[str, Any]) -> None:
     """Extract token breakdown and cached tokens from usage object."""
-    completion_tokens_details = _get_attr_or_key(usage_obj, "completion_tokens_details")
-    if completion_tokens_details is not None:
-        breakdown = _convert_to_dict(completion_tokens_details)
+    output_tokens_details = _get_first_attr_or_key(
+        usage_obj,
+        "output_tokens_details",
+        "completion_tokens_details",
+    )
+    if output_tokens_details is not None:
+        breakdown = _convert_to_dict(output_tokens_details)
         if breakdown is not None:
             usage_data["tokens_breakdown"] = breakdown
-        reasoning_tokens = _get_attr_or_key(completion_tokens_details, "reasoning_tokens")
+        reasoning_tokens = _get_attr_or_key(output_tokens_details, "reasoning_tokens")
         if reasoning_tokens is not None:
             usage_data["reasoning_tokens"] = reasoning_tokens
 
-    prompt_tokens_details = _get_attr_or_key(usage_obj, "prompt_tokens_details")
-    if prompt_tokens_details is not None:
-        cached_tokens = _get_attr_or_key(prompt_tokens_details, "cached_tokens")
+    input_tokens_details = _get_first_attr_or_key(
+        usage_obj,
+        "input_tokens_details",
+        "prompt_tokens_details",
+    )
+    if input_tokens_details is not None:
+        cached_tokens = _get_attr_or_key(input_tokens_details, "cached_tokens")
         if cached_tokens is not None:
             usage_data["cached_input_tokens"] = cached_tokens
 
@@ -665,6 +712,8 @@ def _extract_usage_from_raw_response(kind: str, raw_response: Any) -> dict[str, 
 
     if raw_response is None:
         return usage_data
+    if _is_raw_response_batch(raw_response):
+        return _extract_usage_from_raw_response_batch(kind, raw_response)
 
     try:
         finish_reason = _extract_finish_reason(raw_response)
@@ -675,17 +724,15 @@ def _extract_usage_from_raw_response(kind: str, raw_response: Any) -> dict[str, 
         if usage_obj is None:
             return usage_data
 
-        # Map prompt_tokens -> input_tokens
-        prompt_tokens = _get_attr_or_key(usage_obj, "prompt_tokens")
-        if prompt_tokens is not None:
-            usage_data["input_tokens"] = prompt_tokens
+        # Normalize OpenAI-compatible chat-completions and responses-style usage names.
+        input_tokens = _get_first_attr_or_key(usage_obj, "input_tokens", "prompt_tokens")
+        if input_tokens is not None:
+            usage_data["input_tokens"] = input_tokens
 
-        # Map completion_tokens -> output_tokens
-        completion_tokens = _get_attr_or_key(usage_obj, "completion_tokens")
-        if completion_tokens is not None:
-            usage_data["output_tokens"] = completion_tokens
+        output_tokens = _get_first_attr_or_key(usage_obj, "output_tokens", "completion_tokens")
+        if output_tokens is not None:
+            usage_data["output_tokens"] = output_tokens
 
-        # total_tokens stays the same
         total_tokens = _get_attr_or_key(usage_obj, "total_tokens")
         if total_tokens is not None:
             usage_data["total_tokens"] = total_tokens
@@ -701,6 +748,44 @@ def _extract_usage_from_raw_response(kind: str, raw_response: Any) -> dict[str, 
         logger.debug("Failed to extract usage from raw response", exc_info=True)
 
     return usage_data
+
+
+def _is_raw_response_batch(raw_response: Any) -> bool:
+    return isinstance(raw_response, Sequence) and not isinstance(raw_response, (str, bytes, bytearray, dict))
+
+
+def _extract_usage_from_raw_response_batch(kind: str, raw_responses: Sequence[Any]) -> dict[str, Any]:
+    aggregated: dict[str, Any] = {}
+    token_fields = (
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "cached_input_tokens",
+        "reasoning_tokens",
+    )
+
+    for raw_response in raw_responses:
+        usage = _extract_usage_from_raw_response(kind, raw_response)
+        for field_name in token_fields:
+            value = usage.get(field_name)
+            if isinstance(value, int | float):
+                aggregated[field_name] = aggregated.get(field_name, 0) + value
+        if usage.get("finish_reason") is not None:
+            aggregated["finish_reason"] = usage["finish_reason"]
+        breakdown = usage.get("tokens_breakdown")
+        if isinstance(breakdown, dict):
+            _sum_token_breakdown(aggregated, breakdown)
+
+    return aggregated
+
+
+def _sum_token_breakdown(aggregated: dict[str, Any], breakdown: dict[str, Any]) -> None:
+    current = aggregated.setdefault("tokens_breakdown", {})
+    if not isinstance(current, dict):
+        return
+    for key, value in breakdown.items():
+        if isinstance(value, int | float):
+            current[key] = current.get(key, 0) + value
 
 
 def _coerce_filter(

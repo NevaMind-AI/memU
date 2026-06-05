@@ -5,6 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from memu.database.postgres.optional import postgres_extra_import_error
+
 try:
     from sqlmodel import SQLModel
 except ImportError as exc:
@@ -20,8 +22,7 @@ except ImportError as exc:
 try:
     from pgvector.sqlalchemy import VECTOR as Vector
 except ImportError as exc:
-    msg = "pgvector is required for Postgres vector support"
-    raise ImportError(msg) from exc
+    raise postgres_extra_import_error() from exc
 
 from memu.database.postgres.models import (
     CategoryItemModel,
@@ -72,6 +73,7 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
         MemoryCategoryModel,
         tablename="memory_categories",
         metadata=metadata_obj,
+        unique_with_scope=["name"],
     )
     memory_item_model = build_table_model(
         scope,

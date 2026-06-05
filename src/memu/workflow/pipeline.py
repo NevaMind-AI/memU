@@ -8,6 +8,8 @@ from typing import Any
 
 from memu.workflow.step import WorkflowStep
 
+LLM_PROFILE_CONFIG_KEYS = ("llm_profile", "chat_llm_profile", "embed_llm_profile")
+
 
 @dataclass
 class PipelineRevision:
@@ -144,11 +146,17 @@ class PipelineManager:
                     msg = f"Step '{step.step_id}' requests unavailable capabilities: {', '.join(sorted(unknown_caps))}"
                     raise ValueError(msg)
 
-            if getattr(step, "config", None):
-                profile_name = step.config.get("llm_profile")
-                if profile_name and profile_name not in self.llm_profiles:
+            for profile_key in LLM_PROFILE_CONFIG_KEYS:
+                profile_name = (getattr(step, "config", None) or {}).get(profile_key)
+                if profile_name is None:
+                    continue
+                if not isinstance(profile_name, str) or not profile_name.strip():
+                    msg = f"Step '{step.step_id}' references invalid {profile_key}; profile name must be non-empty"
+                    raise ValueError(msg)
+                profile_name = profile_name.strip()
+                if profile_name not in self.llm_profiles:
                     msg = (
-                        f"Step '{step.step_id}' references unknown llm_profile '{profile_name}'. "
+                        f"Step '{step.step_id}' references unknown {profile_key} '{profile_name}'. "
                         f"Available profiles: {', '.join(sorted(self.llm_profiles))}"
                     )
                     raise ValueError(msg)

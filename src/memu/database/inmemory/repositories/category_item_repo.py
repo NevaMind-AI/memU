@@ -21,6 +21,14 @@ class InMemoryCategoryItemRepository(CategoryItemRepo):
             return list(self.relations)
         return [rel for rel in self.relations if matches_where(rel, where)]
 
+    def clear_relations(self, where: Mapping[str, Any] | None = None) -> list[CategoryItem]:
+        deleted = self.list_relations(where)
+        if not deleted:
+            return []
+        deleted_ids = {rel.id for rel in deleted}
+        self.relations[:] = [rel for rel in self.relations if rel.id not in deleted_ids]
+        return deleted
+
     def link_item_category(self, item_id: str, cat_id: str, user_data: dict[str, Any]) -> CategoryItem:
         _ = item_id  # enforced by caller via existing state
         for rel in self.relations:
@@ -39,7 +47,9 @@ class InMemoryCategoryItemRepository(CategoryItemRepo):
 
     @override
     def unlink_item_category(self, item_id: str, cat_id: str) -> None:
-        self.relations = [rel for rel in self.relations if not (rel.item_id == item_id and rel.category_id == cat_id)]
+        self.relations[:] = [
+            rel for rel in self.relations if not (rel.item_id == item_id and rel.category_id == cat_id)
+        ]
 
 
 __all__ = ["InMemoryCategoryItemRepository"]

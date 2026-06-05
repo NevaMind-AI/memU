@@ -255,40 +255,43 @@ API Reference
 Basic Usage Example:
 
 ```python
-from memu.app import MemoryService
+from memu import MemoryService
 
 # Initialize service
 service = MemoryService(
-    llm_config={
-        "api_key": "your-api-key",
-        "chat_model": "gpt-4o-mini"
+    llm_profiles={
+        "default": {
+            "api_key": "OPENAI_API_KEY",
+            "chat_model": "gpt-4o-mini"
+        }
     }
 )
 
 # Store a memory
 result = await service.memorize(
     resource_url="conversation.json",
-    modality="conversation"
+    modality="conversation",
+    user={"user_id": "alex"}
 )
 
 # Retrieve memories
 memories = await service.retrieve(
-    query="What programming languages does Alex know?",
-    top_k=5
+    queries=["What programming languages does Alex know?"],
+    where={"user_id": "alex"}
 )
 
 # Access categories
-categories = service.store.categories
+categories = await service.list_memory_categories(where={"user_id": "alex"})
 ```
 
 Advanced Configuration:
 
 ```python
-# Custom memory types
+# Memory extraction configuration
 memorize_config = {
-    "memory_types": ["profile", "knowledge", "custom"],
+    "memory_types": ["profile", "knowledge", "skill"],
     "memory_type_prompts": {
-        "custom": "Extract specific information: {resource}"
+        "skill": "Extract actionable skills and workflows: {resource}"
     },
     "memory_categories": [
         {"name": "technical_skills", "description": "Programming and technical abilities"},
@@ -297,7 +300,7 @@ memorize_config = {
 }
 
 service = MemoryService(
-    llm_config=llm_config,
+    llm_profiles={"default": {"api_key": "OPENAI_API_KEY"}},
     memorize_config=memorize_config
 )
 ```
