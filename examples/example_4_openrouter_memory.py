@@ -12,11 +12,16 @@ Usage:
 import asyncio
 import os
 import sys
+from pathlib import Path
 
-from memu.app import MemoryService
+ROOT = Path(__file__).resolve().parents[1]
 
-src_path = os.path.abspath("src")
-sys.path.insert(0, src_path)
+# Add src to sys.path before importing memu from a source checkout.
+src_path = str(ROOT / "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+
+from memu import MemoryService
 
 
 async def generate_memory_md(categories, output_dir):
@@ -76,9 +81,9 @@ async def main():
     )
 
     conversation_files = [
-        "examples/resources/conversations/conv1.json",
-        "examples/resources/conversations/conv2.json",
-        "examples/resources/conversations/conv3.json",
+        ROOT / "examples" / "resources" / "conversations" / "conv1.json",
+        ROOT / "examples" / "resources" / "conversations" / "conv2.json",
+        ROOT / "examples" / "resources" / "conversations" / "conv3.json",
     ]
 
     print("\nProcessing conversations...")
@@ -86,19 +91,19 @@ async def main():
     categories = []
 
     for conv_file in conversation_files:
-        if not os.path.exists(conv_file):
+        if not conv_file.exists():
             print(f"Skipped: {conv_file} not found")
             continue
 
         try:
             print(f"Processing: {conv_file}")
-            result = await service.memorize(resource_url=conv_file, modality="conversation")
+            result = await service.memorize(resource_url=str(conv_file), modality="conversation")
             total_items += len(result.get("items", []))
             categories = result.get("categories", [])
         except Exception as e:
             print(f"Error processing {conv_file}: {e}")
 
-    output_dir = "examples/output/openrouter_example"
+    output_dir = ROOT / "examples" / "output" / "openrouter_example"
     os.makedirs(output_dir, exist_ok=True)
 
     await generate_memory_md(categories, output_dir)

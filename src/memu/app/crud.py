@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast, get_args
 
 from pydantic import BaseModel
 
+from memu.app.scope import concrete_scope_from_where, normalize_scope_where, record_matches_scope
 from memu.database.models import MemoryCategory, MemoryType
 from memu.prompts.category_patch import CATEGORY_PATCH_PROMPT
 from memu.workflow.step import WorkflowState, WorkflowStep
@@ -63,6 +64,9 @@ class CRUDMixin:
         ctx = self._get_context()
         store = self._get_database()
         where_filters = self._normalize_where(where)
+        bootstrap_scope = concrete_scope_from_where(where_filters)
+        if bootstrap_scope is not None:
+            await self._ensure_categories_ready(ctx, store, bootstrap_scope)
 
         state: WorkflowState = {
             "ctx": ctx,
@@ -150,6 +154,14 @@ class CRUDMixin:
     def _build_clear_memory_workflow(self) -> list[WorkflowStep]:
         steps = [
             WorkflowStep(
+                step_id="clear_category_item_relations",
+                role="delete_memories",
+                handler=self._crud_clear_category_item_relations,
+                requires={"ctx", "store", "where"},
+                produces={"deleted_relations"},
+                capabilities={"db"},
+            ),
+            WorkflowStep(
                 step_id="clear_memory_categories",
                 role="delete_memories",
                 handler=self._crud_clear_memory_categories,
@@ -177,7 +189,14 @@ class CRUDMixin:
                 step_id="build_response",
                 role="emit",
                 handler=self._crud_build_clear_memory_response,
-                requires={"ctx", "store", "deleted_categories", "deleted_items", "deleted_resources"},
+                requires={
+                    "ctx",
+                    "store",
+                    "deleted_relations",
+                    "deleted_categories",
+                    "deleted_items",
+                    "deleted_resources",
+                },
                 produces={"response"},
                 capabilities=set(),
             ),
@@ -194,22 +213,14 @@ class CRUDMixin:
 
     def _normalize_where(self, where: Mapping[str, Any] | None) -> dict[str, Any]:
         """Validate and clean the `where` scope filters against the configured user model."""
-        if not where:
-            return {}
+        return normalize_scope_where(self.user_model, where)
 
-        valid_fields = set(getattr(self.user_model, "model_fields", {}).keys())
-        cleaned: dict[str, Any] = {}
-
-        for raw_key, value in where.items():
-            if value is None:
-                continue
-            field = raw_key.split("__", 1)[0]
-            if field not in valid_fields:
-                msg = f"Unknown filter field '{field}' for current user scope"
-                raise ValueError(msg)
-            cleaned[raw_key] = value
-
-        return cleaned
+    @staticmethod
+    def _ensure_item_matches_user_scope(item: Any, user_scope: Mapping[str, Any] | None, memory_id: str) -> None:
+        if record_matches_scope(item, user_scope):
+            return
+        msg = f"Memory item with id {memory_id} not found"
+        raise ValueError(msg)
 
     def _crud_list_memory_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
@@ -243,6 +254,13 @@ class CRUDMixin:
         state["response"] = response
         return state
 
+    def _crud_clear_category_item_relations(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        where_filters = state.get("where") or {}
+        store = state["store"]
+        deleted = store.category_item_repo.clear_relations(where_filters)
+        state["deleted_relations"] = deleted
+        return state
+
     def _crud_clear_memory_categories(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
@@ -265,10 +283,12 @@ class CRUDMixin:
         return state
 
     def _crud_build_clear_memory_response(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        deleted_relations = state.get("deleted_relations", [])
         deleted_categories = state.get("deleted_categories", {})
         deleted_items = state.get("deleted_items", {})
         deleted_resources = state.get("deleted_resources", {})
         response = {
+            "deleted_relations": [self._model_dump_without_embeddings(rel) for rel in deleted_relations],
             "deleted_categories": [self._model_dump_without_embeddings(cat) for cat in deleted_categories.values()],
             "deleted_items": [self._model_dump_without_embeddings(item) for item in deleted_items.values()],
             "deleted_resources": [self._model_dump_without_embeddings(res) for res in deleted_resources.values()],
@@ -285,9 +305,9 @@ class CRUDMixin:
         user: dict[str, Any] | None = None,
         propagate: bool = True,
     ) -> dict[str, Any]:
-        if memory_type not in get_args(MemoryType):
-            msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}"
-            raise ValueError(msg)
+        memory_type = _normalize_memory_type(memory_type)
+        memory_content = _normalize_memory_content(memory_content, field_name="memory_content")
+        memory_categories = _normalize_memory_categories(memory_categories, field_name="memory_categories")
 
         ctx = self._get_context()
         store = self._get_database()
@@ -327,9 +347,13 @@ class CRUDMixin:
         if all((memory_type is None, memory_content is None, memory_categories is None)):
             msg = "At least one of memory type, memory content, or memory categories is required for UPDATE operation"
             raise ValueError(msg)
-        if memory_type and memory_type not in get_args(MemoryType):
-            msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}"
-            raise ValueError(msg)
+        memory_id = _normalize_memory_id(memory_id)
+        if memory_type is not None:
+            memory_type = _normalize_memory_type(memory_type)
+        if memory_content is not None:
+            memory_content = _normalize_memory_content(memory_content, field_name="memory_content")
+        if memory_categories is not None:
+            memory_categories = _normalize_memory_categories(memory_categories, field_name="memory_categories")
 
         ctx = self._get_context()
         store = self._get_database()
@@ -364,6 +388,8 @@ class CRUDMixin:
         user: dict[str, Any] | None = None,
         propagate: bool = True,
     ) -> dict[str, Any]:
+        memory_id = _normalize_memory_id(memory_id)
+
         ctx = self._get_context()
         store = self._get_database()
         user_scope = self.user_model(**user).model_dump() if user is not None else None
@@ -517,6 +543,7 @@ class CRUDMixin:
         content_embedding = (await self._get_step_embedding_client(step_context).embed(embed_payload))[0]
 
         item = store.memory_item_repo.create_item(
+            resource_id=None,
             memory_type=memory_payload["type"],
             summary=memory_payload["content"],
             embedding=content_embedding,
@@ -548,6 +575,7 @@ class CRUDMixin:
         if not item:
             msg = f"Memory item with id {memory_id} not found"
             raise ValueError(msg)
+        self._ensure_item_matches_user_scope(item, user, memory_id)
         old_content = item.summary
         old_item_categories = store.category_item_repo.get_item_categories(memory_id)
         mapped_old_cat_ids = [cat.category_id for cat in old_item_categories]
@@ -566,7 +594,10 @@ class CRUDMixin:
                 embedding=content_embedding,
             )
         new_cat_names = memory_payload["categories"]
-        mapped_new_cat_ids = self._map_category_names_to_ids(new_cat_names, ctx)
+        if new_cat_names is None:
+            mapped_new_cat_ids = mapped_old_cat_ids
+        else:
+            mapped_new_cat_ids = self._map_category_names_to_ids(new_cat_names, ctx)
 
         cats_to_remove = set(mapped_old_cat_ids) - set(mapped_new_cat_ids)
         cats_to_add = set(mapped_new_cat_ids) - set(mapped_old_cat_ids)
@@ -599,7 +630,8 @@ class CRUDMixin:
         if not item:
             msg = f"Memory item with id {memory_id} not found"
             raise ValueError(msg)
-        item_categories = store.category_item_repo.get_item_categories(memory_id)
+        self._ensure_item_matches_user_scope(item, state["user"], memory_id)
+        item_categories = store.category_item_repo.clear_relations({"item_id": memory_id})
         if propagate:
             for cat in item_categories:
                 category_memory_updates[cat.category_id] = (item.summary, None)
@@ -724,3 +756,36 @@ class CRUDMixin:
         if updated_content == "empty":
             updated_content = ""
         return need_update, updated_content
+
+
+def _normalize_memory_id(value: Any) -> str:
+    return _normalize_non_empty_string(value, field_name="memory_id")
+
+
+def _normalize_memory_type(value: Any) -> MemoryType:
+    memory_type = _normalize_non_empty_string(value, field_name="memory_type")
+    if memory_type not in get_args(MemoryType):
+        msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}"
+        raise ValueError(msg)
+    return cast(MemoryType, memory_type)
+
+
+def _normalize_memory_content(value: Any, *, field_name: str) -> str:
+    return _normalize_non_empty_string(value, field_name=field_name)
+
+
+def _normalize_memory_categories(value: Any, *, field_name: str) -> list[str]:
+    if not isinstance(value, list):
+        msg = f"'{field_name}' must be a list of non-empty strings"
+        raise ValueError(msg)
+    normalized: list[str] = []
+    for index, item in enumerate(value):
+        normalized.append(_normalize_non_empty_string(item, field_name=f"{field_name}[{index}]"))
+    return normalized
+
+
+def _normalize_non_empty_string(value: Any, *, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        msg = f"'{field_name}' must be a non-empty string"
+        raise ValueError(msg)
+    return value.strip()

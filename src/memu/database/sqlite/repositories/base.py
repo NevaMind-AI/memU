@@ -10,6 +10,7 @@ from typing import Any
 import pendulum
 
 from memu.database.sqlite.session import SQLiteSessionManager
+from memu.utils.filtering import normalize_filter_value, split_filter_key
 from memu.database.state import DatabaseState
 
 logger = logging.getLogger(__name__)
@@ -85,7 +86,8 @@ class SQLiteRepoBase:
         for raw_key, expected in where.items():
             if expected is None:
                 continue
-            field, op = [*raw_key.split("__", 1), None][:2]
+            field, op = split_filter_key(raw_key)
+            expected = normalize_filter_value(field, op, expected)
             column = getattr(model, str(field), None)
             if column is None:
                 msg = f"Unknown filter field '{field}' for model '{model.__name__}'"
@@ -107,7 +109,8 @@ class SQLiteRepoBase:
         for raw_key, expected in where.items():
             if expected is None:
                 continue
-            field, op = [*raw_key.split("__", 1), None][:2]
+            field, op = split_filter_key(raw_key)
+            expected = normalize_filter_value(field, op, expected)
             actual = getattr(obj, str(field), None)
             if op == "in":
                 if isinstance(expected, str):

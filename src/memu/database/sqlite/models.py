@@ -84,7 +84,7 @@ class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):
     # Store embedding as JSON string since SQLite doesn't have native vector type
     embedding_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     happened_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
-    extra: dict[str, Any] = Field(default={}, sa_column=Column(JSON, nullable=True))
+    extra: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True))
 
     @property
     def embedding(self) -> list[float] | None:

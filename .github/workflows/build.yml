@@ -2,13 +2,15 @@ name: build
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     strategy:
       matrix:
-        python-version: ["3.13"]
+        python-version: ["3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v6
@@ -24,12 +26,13 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Sync dependencies
-        run: |
-          uv sync --frozen
-          uv run pre-commit install
+        run: uv sync --frozen
 
       - name: Run style checks
-        run: uv run make check
+        run: make check
 
       - name: Run tests
-        run: uv run make test
+        run: make test
+
+      - name: Build docs
+        run: make docs-build

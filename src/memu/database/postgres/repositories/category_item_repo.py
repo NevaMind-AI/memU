@@ -32,6 +32,24 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
             rows = session.scalars(select(self._sqla_models.CategoryItem).where(*filters)).all()
         return [self._cache_relation(row) for row in rows]
 
+    def clear_relations(self, where: Mapping[str, Any] | None = None) -> list[CategoryItem]:
+        from sqlmodel import delete, select
+
+        filters = self._build_filters(self._sqla_models.CategoryItem, where)
+        with self._sessions.session() as session:
+            rows = session.scalars(select(self._sqla_models.CategoryItem).where(*filters)).all()
+            deleted = list(rows)
+
+            if not deleted:
+                return []
+
+            session.exec(delete(self._sqla_models.CategoryItem).where(*filters))
+            session.commit()
+
+        deleted_ids = {rel.id for rel in deleted}
+        self.relations[:] = [rel for rel in self.relations if rel.id not in deleted_ids]
+        return deleted
+
     def link_item_category(self, item_id: str, cat_id: str, user_data: dict[str, Any]) -> CategoryItem:
         from sqlmodel import select
 
@@ -76,6 +94,9 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
                 )
             )
             session.commit()
+        self.relations[:] = [
+            rel for rel in self.relations if not (rel.item_id == item_id and rel.category_id == cat_id)
+        ]
 
     def get_item_categories(self, item_id: str) -> list[CategoryItem]:
         from sqlmodel import select
@@ -95,6 +116,10 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
                 self._cache_relation(row)
 
     def _cache_relation(self, rel: CategoryItem) -> CategoryItem:
+        for idx, existing in enumerate(self.relations):
+            if existing.id == rel.id:
+                self.relations[idx] = rel
+                return rel
         self.relations.append(rel)
         return rel
 

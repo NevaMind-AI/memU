@@ -19,6 +19,7 @@ from memu.app.settings import (
     MemorizeConfig,
     RetrieveConfig,
     UserConfig,
+    resolve_api_key,
 )
 from memu.blob.local_fs import LocalFS
 from memu.database.factory import build_database
@@ -30,6 +31,7 @@ from memu.llm.wrapper import (
     LLMInterceptorHandle,
     LLMInterceptorRegistry,
 )
+from memu.utils.serialization import model_dump_without_embeddings
 from memu.workflow.interceptor import WorkflowInterceptorHandle, WorkflowInterceptorRegistry
 from memu.workflow.pipeline import PipelineManager
 from memu.workflow.runner import WorkflowRunner, resolve_workflow_runner
@@ -43,6 +45,8 @@ class Context:
     categories_ready: bool = False
     category_ids: list[str] = field(default_factory=list)
     category_name_to_id: dict[str, str] = field(default_factory=dict)
+    category_scope_key: tuple[tuple[str, str], ...] = field(default_factory=tuple)
+    category_cache: dict[tuple[tuple[str, str], ...], tuple[list[str], dict[str, str]]] = field(default_factory=dict)
     category_init_task: asyncio.Task | None = None
 
 
@@ -103,7 +107,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
 
             return OpenAISDKClient(
                 base_url=cfg.base_url,
-                api_key=cfg.api_key,
+                api_key=resolve_api_key(cfg.api_key),
                 chat_model=cfg.chat_model,
                 embed_model=cfg.embed_model,
                 embed_batch_size=cfg.embed_batch_size,
@@ -111,7 +115,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         elif backend == "httpx":
             return HTTPLLMClient(
                 base_url=cfg.base_url,
-                api_key=cfg.api_key,
+                api_key=resolve_api_key(cfg.api_key),
                 chat_model=cfg.chat_model,
                 provider=cfg.provider,
                 endpoint_overrides=cfg.endpoint_overrides,
@@ -373,8 +377,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         return value.replace("{", "{{").replace("}", "}}")
 
     def _model_dump_without_embeddings(self, obj: BaseModel) -> dict[str, Any]:
-        data = obj.model_dump(exclude={"embedding"})
-        return data
+        return model_dump_without_embeddings(obj)
 
     @staticmethod
     def _validate_config(

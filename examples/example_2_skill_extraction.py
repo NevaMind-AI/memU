@@ -12,14 +12,16 @@ Usage:
 import asyncio
 import os
 import sys
+from pathlib import Path
 
-from openai import AsyncOpenAI
+ROOT = Path(__file__).resolve().parents[1]
 
-from memu.app import MemoryService
+# Add src to sys.path before importing memu from a source checkout.
+src_path = str(ROOT / "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
-# Add src to sys.path
-src_path = os.path.abspath("src")
-sys.path.insert(0, src_path)
+from memu import MemoryService
 
 
 async def generate_skill_md(
@@ -107,22 +109,16 @@ async def generate_skill_md(
 
 Generate the complete markdown document now:"""
 
-    client = AsyncOpenAI(api_key=service.llm_config.api_key)
-
-    response = await client.chat.completions.create(
-        model=service.llm_config.chat_model,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are an expert technical writer creating concise, production-grade deployment guides from real experiences.",
-            },
-            {"role": "user", "content": prompt},
-        ],
+    system_prompt = (
+        "You are an expert technical writer creating concise, "
+        "production-grade deployment guides from real experiences."
+    )
+    generated_content = await service.llm_client.chat(
+        prompt,
+        system_prompt=system_prompt,
         temperature=0.7,
         max_tokens=3000,
     )
-
-    generated_content = response.choices[0].message.content
 
     # Write to file
     with open(output_file, "w", encoding="utf-8") as f:
@@ -157,7 +153,7 @@ async def main():
     For each significant action or phase:
 
     1. **Action/Phase**: What was being attempted?
-    2. **Status**: SUCCESS ✅ or FAILURE ❌
+    2. **Status**: SUCCESS or FAILURE
     3. **What Happened**: What was executed
     4. **Outcome**: What worked/failed, metrics
     5. **Root Cause** (for failures): Why did it fail?
@@ -177,7 +173,10 @@ async def main():
 
     # Define custom categories
     skill_categories = [
-        {"name": "deployment_execution", "description": "Deployment actions, traffic shifting, environment management"},
+        {
+            "name": "deployment_execution",
+            "description": "Deployment actions, traffic shifting, environment management",
+        },
         {
             "name": "pre_deployment_validation",
             "description": "Capacity validation, configuration checks, readiness verification",
@@ -216,9 +215,9 @@ async def main():
 
     # Resources to process
     resources = [
-        ("examples/resources/logs/log1.txt", "document"),
-        ("examples/resources/logs/log2.txt", "document"),
-        ("examples/resources/logs/log3.txt", "document"),
+        (ROOT / "examples" / "resources" / "logs" / "log1.txt", "document"),
+        (ROOT / "examples" / "resources" / "logs" / "log2.txt", "document"),
+        (ROOT / "examples" / "resources" / "logs" / "log3.txt", "document"),
     ]
 
     # Process each resource sequentially
@@ -227,16 +226,16 @@ async def main():
     categories = []
 
     for idx, (resource_file, modality) in enumerate(resources, 1):
-        if not os.path.exists(resource_file):
+        if not resource_file.exists():
             continue
 
         try:
-            result = await service.memorize(resource_url=resource_file, modality=modality)
+            result = await service.memorize(resource_url=str(resource_file), modality=modality)
 
             # Extract skill items
             for item in result.get("items", []):
                 if item.get("memory_type") == "skill":
-                    all_skills.append({"skill": item.get("summary", ""), "source": os.path.basename(resource_file)})
+                    all_skills.append({"skill": item.get("summary", ""), "source": resource_file.name})
 
             # Categories are returned in the result and updated after each memorize call
             categories = result.get("categories", [])
@@ -245,7 +244,7 @@ async def main():
             await generate_skill_md(
                 all_skills=all_skills,
                 service=service,
-                output_file=f"examples/output/skill_example/log_{idx}.md",
+                output_file=ROOT / "examples" / "output" / "skill_example" / f"log_{idx}.md",
                 attempt_number=idx,
                 total_attempts=len(resources),
                 categories=categories,
@@ -258,16 +257,16 @@ async def main():
     await generate_skill_md(
         all_skills=all_skills,
         service=service,
-        output_file="examples/output/skill_example/skill.md",
+        output_file=ROOT / "examples" / "output" / "skill_example" / "skill.md",
         attempt_number=len(resources),
         total_attempts=len(resources),
         categories=categories,
         is_final=True,
     )
 
-    print(f"\n✓ Processed {len(resources)} files, extracted {len(all_skills)} skills")
-    print(f"✓ Generated {len(categories)} categories")
-    print("✓ Output: examples/output/skill_example/")
+    print(f"\n[OK] Processed {len(resources)} files, extracted {len(all_skills)} skills")
+    print(f"[OK] Generated {len(categories)} categories")
+    print(f"[OK] Output: {ROOT / 'examples' / 'output' / 'skill_example'}/")
 
 
 if __name__ == "__main__":

@@ -16,11 +16,14 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
 
-# Ensure src is in the path for local usage if custom installing
-sys.path.insert(0, os.path.abspath("src"))
+# Add src to sys.path before importing memu from a source checkout.
+src_path = str(Path(__file__).resolve().parents[1] / "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
-from memu.app import MemoryService
+from memu import MemoryService
 
 # Configure logging to show info but suppress noisy libraries
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -69,6 +72,7 @@ async def main() -> None:
         # We manually inject a memory into the system.
         # This is useful for bootstrapping a user profile or adding explicit knowledge.
         print("[*] Injecting memory...")
+        user_scope = {"user_id": "demo_user"}
         memory_content = "The user is a senior Python architect who loves clean code and type hints."
 
         # We use 'create_memory_item' to insert a single memory record.
@@ -77,6 +81,7 @@ async def main() -> None:
             memory_type="profile",
             memory_content=memory_content,
             memory_categories=["User Facts"],
+            user=user_scope,
         )
         print(f"[OK] Memory created! ID: {result.get('memory_item', {}).get('id')}\n")
 
@@ -85,7 +90,10 @@ async def main() -> None:
         query_text = "What kind of code does the user like?"
         print(f"[*] Querying: '{query_text}'")
 
-        search_results = await service.retrieve(queries=[{"role": "user", "content": query_text}])
+        search_results = await service.retrieve(
+            queries=[{"role": "user", "content": query_text}],
+            where=user_scope,
+        )
 
         # 5. Display Results
         items = search_results.get("items", [])

@@ -6,7 +6,7 @@ Welcome to MemU! This guide will help you add robust long-term memory capabiliti
 
 Before we begin, ensure you have the following:
 
--   **Python 3.13+**: MemU takes advantage of modern Python features.
+-   **Python 3.12+**: MemU takes advantage of modern Python features.
 -   **OpenAI API Key**: This quickstart uses OpenAI's models (`gpt-4o-mini`). You will need a valid API key.
 
 ## Step-by-Step Guide
@@ -16,10 +16,12 @@ Before we begin, ensure you have the following:
 Install MemU using `pip` or `uv`:
 
 ```bash
-pip install memu
+pip install memu-py
 # OR
-uv add memu
+uv add memu-py
 ```
+
+The package installs the `memu` Python import namespace.
 
 ### 2. Configuration
 
@@ -61,7 +63,7 @@ import logging
 import os
 import sys
 
-from memu.app import MemoryService
+from memu import MemoryService
 
 # Configure logging to show info but suppress noisy libraries
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -110,6 +112,7 @@ async def main() -> None:
         # We manually inject a memory into the system.
         # This is useful for bootstrapping a user profile or adding explicit knowledge.
         print("[*] Injecting memory...")
+        user_scope = {"user_id": "demo_user"}
         memory_content = "The user is a senior Python architect who loves clean code and type hints."
 
         # We use 'create_memory_item' to insert a single memory record.
@@ -118,6 +121,7 @@ async def main() -> None:
             memory_type="profile",
             memory_content=memory_content,
             memory_categories=["User Facts"],
+            user=user_scope,
         )
         print(f"[OK] Memory created! ID: {result.get('memory_item', {}).get('id')}\n")
 
@@ -127,7 +131,8 @@ async def main() -> None:
         print(f"[*] Querying: '{query_text}'")
 
         search_results = await service.retrieve(
-            queries=[{"role": "user", "content": query_text}]
+            queries=[{"role": "user", "content": query_text}],
+            where=user_scope,
         )
 
         # 5. Display Results
@@ -153,8 +158,8 @@ if __name__ == "__main__":
 ### Understanding the Code
 
 1.  **Initialization**: We configure `MemoryService` with specific `llm_profiles`. This tells MemU which model to use. We also define a `memorize_config` with a "User Facts" category. Categories help the LLM organize and retrieve information more effectively.
-2.  **Memory Injection**: `create_memory_item` is used to explicitly add a piece of knowledge. We tag it with `memory_type="profile"` to semantically indicate this is a user attribute.
-3.  **Retrieval**: We use `retrieve` with a natural language query. MemU's internal workflow ("RAG" or "LLM" based) will determine the best way to find relevant memories.
+2.  **Memory Injection**: `create_memory_item` is used to explicitly add a piece of knowledge. We tag it with `memory_type="profile"` and `user=user_scope` to semantically indicate this is a scoped user attribute.
+3.  **Retrieval**: We use `retrieve` with a natural language query and the same `where=user_scope` filter. MemU's internal workflow ("RAG" or "LLM" based) will determine the best way to find relevant memories within that user scope.
 
 ## Troubleshooting
 

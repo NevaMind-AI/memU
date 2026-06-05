@@ -1,22 +1,32 @@
 .PHONY: install
 install:
-	@echo "🚀 Creating virtual environment using uv"
+	@echo "[install] Creating virtual environment using uv"
 	@uv sync
 	@uv run pre-commit install
 
 .PHONY: check
 check:
-	@echo "🚀 Checking lock file consistency with 'pyproject.toml'"
+	@echo "[check] Checking lock file consistency with 'pyproject.toml'"
 	@uv lock --locked
-	@echo "🚀 Linting code: Running pre-commit"
+	@echo "[check] Linting code: Running pre-commit"
 	@uv run pre-commit run -a
-	@echo "🚀 Static type checking: Running mypy"
+	@echo "[check] Static type checking: Running mypy"
 	@uv run mypy
-	@echo "🚀 Checking for obsolete dependencies: Running deptry"
+	@echo "[check] Checking for obsolete dependencies: Running deptry"
 	@uv run deptry src
 
 
 .PHONY: test
 test:
-	@echo "🚀 Testing code: Running pytest"
+	@echo "[test] Running pytest"
 	@uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=xml
+
+.PHONY: docs
+docs:
+	@echo "[docs] Serving documentation with MkDocs"
+	@uv run mkdocs serve
+
+.PHONY: docs-build
+docs-build:
+	@echo "[docs] Building documentation with MkDocs"
+	@uv run mkdocs build --strict

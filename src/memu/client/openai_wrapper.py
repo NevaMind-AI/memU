@@ -8,10 +8,54 @@ Fully opt-in and backward compatible.
 from __future__ import annotations
 
 import asyncio
+import inspect
 from typing import TYPE_CHECKING, Any
+
+from memu.utils.retrieve import normalize_retrieve_ranking
 
 if TYPE_CHECKING:
     from memu.app.service import MemoryService
+
+
+def _normalize_top_k(top_k: int) -> int:
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k <= 0:
+        msg = "top_k must be a positive integer"
+        raise ValueError(msg)
+    return top_k
+
+
+def _copy_user_data(user_data: dict[str, Any]) -> dict[str, Any]:
+    return dict(user_data)
+
+
+def _extract_text_from_message_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, dict):
+        text = content.get("text")
+        return text if isinstance(text, str) else ""
+    if isinstance(content, list):
+        chunks: list[str] = []
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            text = part.get("text")
+            if isinstance(text, str) and text:
+                chunks.append(text)
+        return "\n".join(chunks)
+    return ""
+
+
+def _append_recall_context(content: Any, recall_context: str) -> str | list[Any]:
+    if isinstance(content, str):
+        return content + recall_context
+    if isinstance(content, list):
+        copied_parts = [dict(part) if isinstance(part, dict) else part for part in content]
+        copied_parts.append({"type": "text", "text": recall_context.lstrip("\n")})
+        return copied_parts
+    if content is None:
+        return recall_context.lstrip("\n")
+    return f"{content}{recall_context}"
 
 
 class MemuChatCompletions:
@@ -27,22 +71,15 @@ class MemuChatCompletions:
     ):
         self._original = original_completions
         self._service = service
-        self._user_data = user_data
-        self._ranking = ranking
-        self._top_k = top_k
+        self._user_data = _copy_user_data(user_data)
+        self._ranking = normalize_retrieve_ranking(ranking, default="salience")
+        self._top_k = _normalize_top_k(top_k)
 
     def _extract_user_query(self, messages: list[dict]) -> str:
         """Extract the most recent user message."""
         for msg in reversed(messages):
             if msg.get("role") == "user":
-                content = msg.get("content", "")
-                if isinstance(content, str):
-                    return content
-                # Handle content as list (vision models)
-                if isinstance(content, list):
-                    for part in content:
-                        if isinstance(part, dict) and part.get("type") == "text":
-                            return part.get("text", "")
+                return _extract_text_from_message_content(msg.get("content", ""))
         return ""
 
     def _inject_memories(self, messages: list[dict], memories: list[dict]) -> list[dict]:
@@ -64,7 +101,7 @@ class MemuChatCompletions:
 
         # Inject into system message or create one
         if messages and messages[0].get("role") == "system":
-            messages[0]["content"] = messages[0]["content"] + recall_context
+            messages[0]["content"] = _append_recall_context(messages[0].get("content"), recall_context)
         else:
             messages.insert(0, {"role": "system", "content": recall_context.lstrip("\n")})
 
@@ -75,9 +112,13 @@ class MemuChatCompletions:
         try:
             result = await self._service.retrieve(
                 queries=[{"role": "user", "content": query}],
-                where=self._user_data,
+                where=_copy_user_data(self._user_data),
+                ranking=self._ranking,
             )
-            return result.get("items", [])
+            items = result.get("items", [])
+            if not isinstance(items, list):
+                return []
+            return items[: self._top_k]
         except Exception:
             # Fail silently - don't break the LLM call
             return []
@@ -119,8 +160,12 @@ class MemuChatCompletions:
 
         # Call original async method if available
         if hasattr(self._original, "acreate"):
-            return await self._original.acreate(**kwargs)
-        return self._original.create(**kwargs)
+            result = self._original.acreate(**kwargs)
+        else:
+            result = self._original.create(**kwargs)
+        if inspect.isawaitable(result):
+            return await result
+        return result
 
     def __getattr__(self, name: str) -> Any:
         """Proxy all other attributes to original."""
@@ -192,21 +237,21 @@ class MemuOpenAIWrapper:
             service: memU MemoryService instance
             user_data: User scope data (user_id, agent_id, session_id, etc.)
             ranking: Retrieval ranking strategy ("similarity" or "salience")
-            top_k: Number of memories to retrieve
+            top_k: Maximum number of recalled memory items to inject
         """
         self._client = client
         self._service = service
-        self._user_data = user_data
-        self._ranking = ranking
-        self._top_k = top_k
+        self._user_data = _copy_user_data(user_data)
+        self._ranking = normalize_retrieve_ranking(ranking, default="salience")
+        self._top_k = _normalize_top_k(top_k)
 
         # Wrap chat namespace
         self.chat = MemuChat(
             client.chat,
             service,
-            user_data,
-            ranking,
-            top_k,
+            self._user_data,
+            self._ranking,
+            self._top_k,
         )
 
     def __getattr__(self, name: str) -> Any:
@@ -235,7 +280,7 @@ def wrap_openai(
         agent_id: Agent identifier (for multi-agent scoping)
         session_id: Session identifier
         ranking: Retrieval ranking ("similarity" or "salience")
-        top_k: Number of memories to retrieve
+        top_k: Maximum number of recalled memory items to inject
 
     Returns:
         Wrapped client with auto-recall enabled
@@ -257,12 +302,14 @@ def wrap_openai(
         )
     """
     if user_data is None:
-        user_data = {}
+        scope: dict[str, Any] = {}
+    else:
+        scope = _copy_user_data(user_data)
     if user_id:
-        user_data["user_id"] = user_id
+        scope["user_id"] = user_id
     if agent_id:
-        user_data["agent_id"] = agent_id
+        scope["agent_id"] = agent_id
     if session_id:
-        user_data["session_id"] = session_id
+        scope["session_id"] = session_id
 
-    return MemuOpenAIWrapper(client, service, user_data, ranking, top_k)
+    return MemuOpenAIWrapper(client, service, scope, ranking, top_k)
