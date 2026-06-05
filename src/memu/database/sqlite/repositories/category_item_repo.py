@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from sqlmodel import select
+from sqlmodel import delete, select
 
 from memu.database.models import CategoryItem
 from memu.database.repositories.category_item import CategoryItemRepo
@@ -66,20 +66,34 @@ class SQLiteCategoryItemRepo(SQLiteRepoBase, CategoryItemRepo):
 
         result: list[CategoryItem] = []
         for row in rows:
-            rel = CategoryItem(
-                id=row.id,
-                item_id=row.item_id,
-                category_id=row.category_id,
-                created_at=row.created_at,
-                updated_at=row.updated_at,
-                **self._scope_kwargs_from(row),
-            )
+            rel = self._relation_from_row(row)
             result.append(rel)
-            # Update cache
-            if not any(r.id == rel.id for r in self.relations):
-                self.relations.append(rel)
+            self._cache_relation(rel)
 
         return result
+
+    def clear_relations(self, where: Mapping[str, Any] | None = None) -> list[CategoryItem]:
+        """Clear category-item relations matching the where clause."""
+        filters = self._build_filters(self._category_item_model, where)
+        with self._sessions.session() as session:
+            stmt = select(self._category_item_model)
+            if filters:
+                stmt = stmt.where(*filters)
+            rows = session.exec(stmt).all()
+            deleted = [self._relation_from_row(row) for row in rows]
+
+            if not deleted:
+                return []
+
+            del_stmt = delete(self._category_item_model)
+            if filters:
+                del_stmt = del_stmt.where(*filters)
+            session.exec(del_stmt)
+            session.commit()
+
+        deleted_ids = {rel.id for rel in deleted}
+        self.relations[:] = [rel for rel in self.relations if rel.id not in deleted_ids]
+        return deleted
 
     def link_item_category(self, item_id: str, category_id: str, user_data: dict[str, Any]) -> CategoryItem:
         """Create a link between an item and a category.
@@ -106,15 +120,7 @@ class SQLiteCategoryItemRepo(SQLiteRepoBase, CategoryItemRepo):
             existing = session.exec(stmt).first()
 
             if existing:
-                rel = CategoryItem(
-                    id=existing.id,
-                    item_id=existing.item_id,
-                    category_id=existing.category_id,
-                    created_at=existing.created_at,
-                    updated_at=existing.updated_at,
-                    **self._scope_kwargs_from(existing),
-                )
-                return rel
+                return self._cache_relation(self._relation_from_row(existing))
 
             # Create new relation
             now = self._now()
@@ -129,16 +135,7 @@ class SQLiteCategoryItemRepo(SQLiteRepoBase, CategoryItemRepo):
             session.commit()
             session.refresh(row)
 
-        rel = CategoryItem(
-            id=row.id,
-            item_id=row.item_id,
-            category_id=row.category_id,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-            **user_data,
-        )
-        self.relations.append(rel)
-        return rel
+        return self._cache_relation(self._relation_from_row(row))
 
     def unlink_item_category(self, item_id: str, category_id: str) -> None:
         """Remove a link between an item and a category.
@@ -175,6 +172,24 @@ class SQLiteCategoryItemRepo(SQLiteRepoBase, CategoryItemRepo):
     def load_existing(self) -> None:
         """Load all existing relations from database into cache."""
         self.list_relations()
+
+    def _relation_from_row(self, row: Any) -> CategoryItem:
+        return CategoryItem(
+            id=row.id,
+            item_id=row.item_id,
+            category_id=row.category_id,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            **self._scope_kwargs_from(row),
+        )
+
+    def _cache_relation(self, rel: CategoryItem) -> CategoryItem:
+        for idx, existing in enumerate(self.relations):
+            if existing.id == rel.id:
+                self.relations[idx] = rel
+                return rel
+        self.relations.append(rel)
+        return rel
 
 
 __all__ = ["SQLiteCategoryItemRepo"]

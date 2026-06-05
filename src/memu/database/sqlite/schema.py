@@ -60,6 +60,7 @@ def get_sqlite_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) 
         SQLiteMemoryCategoryModel,
         tablename="sqlite_memory_categories",
         metadata=metadata_obj,
+        unique_with_scope=["name"],
     )
     memory_item_model = build_sqlite_table_model(
         scope,

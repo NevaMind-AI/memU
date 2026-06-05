@@ -11,12 +11,16 @@ MemU supports SQLite as a lightweight, file-based database backend for memory st
 
 ### Basic Configuration
 
+Set `OPENAI_API_KEY` in your environment before running these examples. The
+`api_key` value below is the environment variable name that memU resolves at
+runtime, not a literal secret to paste into source code.
+
 ```python
-from memu.app import MemoryService
+from memu import MemoryService
 
 # Using default SQLite file (memu.db in current directory)
 service = MemoryService(
-    llm_profiles={"default": {"api_key": "your-api-key"}},
+    llm_profiles={"default": {"api_key": "OPENAI_API_KEY"}},
     database_config={
         "metadata_store": {
             "provider": "sqlite",
@@ -26,7 +30,7 @@ service = MemoryService(
 
 # Or specify a custom database path
 service = MemoryService(
-    llm_profiles={"default": {"api_key": "your-api-key"}},
+    llm_profiles={"default": {"api_key": "OPENAI_API_KEY"}},
     database_config={
         "metadata_store": {
             "provider": "sqlite",
@@ -42,7 +46,7 @@ For testing or temporary storage, you can use an in-memory SQLite database:
 
 ```python
 service = MemoryService(
-    llm_profiles={"default": {"api_key": "your-api-key"}},
+    llm_profiles={"default": {"api_key": "OPENAI_API_KEY"}},
     database_config={
         "metadata_store": {
             "provider": "sqlite",
@@ -73,7 +77,7 @@ SQLite doesn't have native vector support like PostgreSQL's pgvector. MemU uses 
 
 ```python
 service = MemoryService(
-    llm_profiles={"default": {"api_key": "your-api-key"}},
+    llm_profiles={"default": {"api_key": "OPENAI_API_KEY"}},
     database_config={
         "metadata_store": {
             "provider": "sqlite",
@@ -114,13 +118,23 @@ shutil.copy("memu.db", "memu_backup.db")
 
 ### Import from SQLite to PostgreSQL
 
-To migrate data from SQLite to PostgreSQL:
+To migrate data from SQLite to PostgreSQL, install the optional PostgreSQL
+dependencies first:
+
+```bash
+pip install "memu-py[postgres]"
+# From a source checkout:
+uv sync --extra postgres
+```
+
+Then connect both backends with explicit DSNs. This migration snippet intentionally uses
+low-level repository builders so it can copy existing rows backend-to-backend; normal application code should continue to use `MemoryService(database_config=...)`.
 
 ```python
 import json
 from memu.database.sqlite import build_sqlite_database
 from memu.database.postgres import build_postgres_database
-from memu.app.settings import DatabaseConfig
+from memu import DatabaseConfig
 from pydantic import BaseModel
 
 class UserScope(BaseModel):
@@ -135,7 +149,10 @@ sqlite_db.load_existing()
 
 # Connect to PostgreSQL
 postgres_config = DatabaseConfig(
-    metadata_store={"provider": "postgres", "dsn": "postgresql://..."}
+    metadata_store={
+        "provider": "postgres",
+        "dsn": "postgresql+psycopg://user:password@host:5432/memu",
+    }
 )
 postgres_db = build_postgres_database(config=postgres_config, user_model=UserScope)
 
@@ -167,12 +184,12 @@ for res_id, resource in sqlite_db.resources.items():
 
 ```python
 import asyncio
-from memu.app import MemoryService
+from memu import MemoryService
 
 async def main():
     # Initialize with SQLite
     service = MemoryService(
-        llm_profiles={"default": {"api_key": "your-api-key"}},
+        llm_profiles={"default": {"api_key": "OPENAI_API_KEY"}},
         database_config={
             "metadata_store": {
                 "provider": "sqlite",
@@ -192,7 +209,7 @@ async def main():
     # Retrieve relevant memories
     memories = await service.retrieve(
         queries=[
-            {"role": "user", "content": {"text": "What are my preferences?"}}
+            {"role": "user", "content": "What are my preferences?"}
         ],
         where={"user_id": "alice"},
     )

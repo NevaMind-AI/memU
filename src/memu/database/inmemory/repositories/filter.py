@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from memu.utils.filtering import normalize_filter_value, split_filter_key
+
 
 def matches_where(obj: Any, where: Mapping[str, Any] | None) -> bool:
     """Basic field/`__in` matcher for in-memory repos."""
@@ -11,7 +13,8 @@ def matches_where(obj: Any, where: Mapping[str, Any] | None) -> bool:
     for raw_key, expected in where.items():
         if expected is None:
             continue
-        field, op = [*raw_key.split("__", 1), None][:2]
+        field, op = split_filter_key(raw_key)
+        expected = normalize_filter_value(field, op, expected)
         actual = getattr(obj, str(field), None)
         if op == "in":
             if isinstance(expected, str):

@@ -97,9 +97,10 @@ class HTTPEmbeddingClient:
             List of embedding vectors
 
         Example:
+            >>> import os
             >>> client = HTTPEmbeddingClient(
             ...     base_url="https://ark.cn-beijing.volces.com",
-            ...     api_key="your-api-key",
+            ...     api_key=os.environ["DOUBAO_API_KEY"],
             ...     embed_model="doubao-embedding-vision-250615",
             ...     provider="doubao",
             ... )

@@ -27,7 +27,7 @@ memorize_config = {
             "name": "todo",
             "description": "This file traces the latest status of the task. All records should be included in this file.",
             "target_length": None,
-            "custom_prompt": {
+            "summary_prompt": {
                 "objective": {
                     "ordinal": 10,
                     "prompt": "# Task Objective\nYou are a specialist in task management. You should update the markdown file to reflect the latest status of the task.",

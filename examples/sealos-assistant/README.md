@@ -17,6 +17,9 @@ A personal AI assistant with long-term memory, designed for deployment on [Sealo
 # Install dependencies
 pip install -r requirements.txt
 
+# For PostgreSQL-backed persistence
+pip install -r requirements-postgres.txt
+
 # Configure environment
 cp .env.example .env
 # Edit .env with your API key
@@ -29,7 +32,7 @@ python main.py
 
 1. Create a Python DevBox on [Sealos](https://cloud.sealos.io)
 2. Clone this project
-3. Set environment variables
+3. Install `requirements-postgres.txt` if you set `MEMU_DATABASE_PROVIDER=postgres`
 4. Click **Deploy**
 
 See the full guide: [docs/sealos-devbox-guide.md](../../docs/sealos-devbox-guide.md)
@@ -50,17 +53,17 @@ See the full guide: [docs/sealos-devbox-guide.md](../../docs/sealos-devbox-guide
 # Store a memory
 curl -X POST http://localhost:8000/memorize \
   -H "Content-Type: application/json" \
-  -d '{"content": "I prefer Python and dark mode"}'
+  -d '{"user_id":"demo","content":"I prefer Python and dark mode"}'
 
 # Chat with memory
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
-  -d '{"message": "What are my preferences?"}'
+  -d '{"user_id":"demo","message":"What are my preferences?"}'
 
 # Recall memories
-curl "http://localhost:8000/recall?query=preferences"
+curl "http://localhost:8000/recall?user_id=demo&query=preferences"
 ```
 
 ## License
 
-MIT - Part of the MemU project
+Apache License 2.0 - Part of the MemU project

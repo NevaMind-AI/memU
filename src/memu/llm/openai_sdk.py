@@ -152,22 +152,23 @@ class OpenAISDKClient:
         logger.debug("OpenAI vision response: %s", response)
         return content or "", response
 
-    async def embed(self, inputs: list[str]) -> tuple[list[list[float]], CreateEmbeddingResponse | None]:
+    async def embed(
+        self, inputs: list[str]
+    ) -> tuple[list[list[float]], CreateEmbeddingResponse | list[CreateEmbeddingResponse] | None]:
         """Create text embeddings via the official SDK."""
         if len(inputs) <= self.embed_batch_size:
             response = await self.client.embeddings.create(model=self.embed_model, input=inputs)
             return [cast(list[float], d.embedding) for d in response.data], response
 
-        # For batched requests, we aggregate embeddings but only return the last response for usage
         all_embeddings: list[list[float]] = []
-        last_response: CreateEmbeddingResponse | None = None
+        raw_responses: list[CreateEmbeddingResponse] = []
         for idx in range(0, len(inputs), self.embed_batch_size):
             batch = inputs[idx : idx + self.embed_batch_size]
             response = await self.client.embeddings.create(model=self.embed_model, input=batch)
             all_embeddings.extend([cast(list[float], d.embedding) for d in response.data])
-            last_response = response
+            raw_responses.append(response)
 
-        return all_embeddings, last_response
+        return all_embeddings, raw_responses
 
     async def transcribe(
         self,

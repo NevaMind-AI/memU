@@ -4,17 +4,31 @@ import asyncio
 import logging
 import os
 import sys
+from pathlib import Path
 
-# Try imports and fail proactively if missing
+INSTALL_HINT = (
+    "Missing LangGraph dependencies. Install them with "
+    "pip install 'memu-py[langgraph]', or run uv sync --extra langgraph "
+    "from a source checkout."
+)
+
+# Add src to sys.path before importing memu from a source checkout.
+src_path = str(Path(__file__).resolve().parents[1] / "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
+
+# Try optional integration imports first and fail proactively if missing.
 try:
     import langgraph  # noqa: F401
     from langchain_core.tools import BaseTool
-
-    from memu.app.service import MemoryService
-    from memu.integrations.langgraph import MemULangGraphTools
-except ImportError:
-    print("Missing dependencies. Please run: uv sync --extra langgraph")
+except ModuleNotFoundError as exc:
+    if exc.name not in {"langgraph", "langchain_core"}:
+        raise
+    print(INSTALL_HINT)
     sys.exit(1)
+
+from memu import MemoryService
+from memu.integrations.langgraph import MemULangGraphTools
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

@@ -1,0 +1,2 @@
+-r requirements.txt
+memu-py[postgres]>=1.5.1

@@ -105,8 +105,10 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
             session.commit()
 
             # Clean up cache
-            for item_id in deleted:
+            deleted_item_ids = set(deleted)
+            for item_id in deleted_item_ids:
                 self.items.pop(item_id, None)
+            self._drop_relation_cache_for_items(deleted_item_ids)
 
         return deleted
 
@@ -276,6 +278,8 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         with self._sessions.session() as session:
             session.exec(delete(self._sqla_models.MemoryItem).where(self._sqla_models.MemoryItem.id == item_id))
             session.commit()
+        self.items.pop(item_id, None)
+        self._drop_relation_cache_for_items({item_id})
 
     def vector_search_items(
         self,
@@ -286,6 +290,8 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         ranking: str = "similarity",
         recency_decay_days: float = 30.0,
     ) -> list[tuple[str, float]]:
+        if top_k <= 0:
+            return []
         if not self._use_vector or ranking == "salience":
             # For salience ranking or when pgvector is not available, use local search
             return self._vector_search_local(
@@ -326,10 +332,9 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         recency_decay_days: float = 30.0,
     ) -> list[tuple[str, float]]:
         scored: list[tuple[str, float]] = []
-        for item in self.items.values():
+        pool = self.list_items(where)
+        for item in pool.values():
             if item.embedding is None:
-                continue
-            if not self._matches_where(item, where):
                 continue
 
             similarity = self._cosine(query_vec, item.embedding)
@@ -375,6 +380,13 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
     def _cache_item(self, item: MemoryItem) -> MemoryItem:
         self.items[item.id] = item
         return item
+
+    def _drop_relation_cache_for_items(self, item_ids: set[str]) -> None:
+        if not item_ids:
+            return
+        self._state.relations[:] = [
+            rel for rel in self._state.relations if rel.item_id not in item_ids
+        ]
 
     @staticmethod
     def _parse_datetime(dt_str: str | None) -> datetime | None:

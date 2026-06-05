@@ -1,8 +1,14 @@
 blank_issues_enabled: false
 contact_links:
   - name: GitHub Discussions
-    url: https://github.com/NevaMind-AI/memU/discussions
+    url: https://github.com/NevaMind-AI/MemU/discussions
     about: For questions and general discussions about memU
+  - name: Security Reports
+    url: https://github.com/NevaMind-AI/MemU/security/policy
+    about: Please report suspected vulnerabilities privately
   - name: Documentation
-    url: https://github.com/NevaMind-AI/memU/blob/main/README.md
+    url: https://github.com/NevaMind-AI/MemU/blob/main/README.md
     about: Check out the memU documentation
+  - name: Community Chat
+    url: https://discord.com/invite/hQZntfGsbJ
+    about: Join the memU Discord community

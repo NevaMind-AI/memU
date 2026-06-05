@@ -48,7 +48,7 @@ def add_tool_call(item: MemoryItem, tool_call: ToolCallResult) -> None:
         raise ValueError(msg)
     tool_call.ensure_hash()
     tool_calls = get_tool_calls(item)
-    tool_calls.append(tool_call.model_dump())
+    tool_calls.append(tool_call.model_dump(mode="json"))
     set_tool_calls(item, tool_calls)
 
 

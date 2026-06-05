@@ -6,11 +6,12 @@ from typing import Any
 
 import pendulum
 
+from memu.database.postgres.optional import postgres_extra_import_error
+
 try:
     from pgvector.sqlalchemy import VECTOR as Vector
 except ImportError as exc:
-    msg = "pgvector is required for Postgres vector support"
-    raise ImportError(msg) from exc
+    raise postgres_extra_import_error() from exc
 
 from pydantic import BaseModel
 from sqlalchemy import ForeignKey, MetaData, String, Text
@@ -57,7 +58,7 @@ class MemoryItemModel(BaseModelMixin, MemoryItem):
     summary: str = Field(sa_column=Column(Text, nullable=False))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
     happened_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
-    extra: dict[str, Any] = Field(default={}, sa_column=Column(JSONB, nullable=True))
+    extra: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=True))
 
 
 class MemoryCategoryModel(BaseModelMixin, MemoryCategory):

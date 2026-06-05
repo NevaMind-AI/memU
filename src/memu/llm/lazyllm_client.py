@@ -1,9 +1,28 @@
 import asyncio
 import functools
+import logging
 from typing import Any, cast
 
-import lazyllm
-from lazyllm import LOG
+try:
+    import lazyllm
+    from lazyllm import LOG
+except ImportError as exc:  # pragma: no cover - covered by optional-dependency smoke tests.
+    lazyllm = None  # type: ignore[assignment]
+    LOG = logging.getLogger("memu.llm.lazyllm")
+    _LAZYLLM_IMPORT_ERROR: ImportError | None = exc
+else:
+    _LAZYLLM_IMPORT_ERROR = None
+
+
+def _lazyllm_module() -> Any:
+    if _LAZYLLM_IMPORT_ERROR is None:
+        return lazyllm
+    msg = (
+        "Please install the LazyLLM backend dependencies with "
+        "`pip install 'memu-py[lazyllm]'`, or run `uv sync --extra lazyllm` "
+        "from a source checkout."
+    )
+    raise ImportError(msg) from _LAZYLLM_IMPORT_ERROR
 
 
 class LazyLLMClient:
@@ -23,6 +42,7 @@ class LazyLLMClient:
         embed_model: str | None = None,
         stt_model: str | None = None,
     ):
+        _lazyllm_module()
         self.llm_source = llm_source or self.DEFAULT_SOURCE
         self.vlm_source = vlm_source or self.DEFAULT_SOURCE
         self.embed_source = embed_source or self.DEFAULT_SOURCE
@@ -59,7 +79,9 @@ class LazyLLMClient:
         Return:
             The generated summary text as a string.
         """
-        client = lazyllm.namespace("MEMU").OnlineModule(source=self.llm_source, model=self.chat_model, type="llm")
+        client = _lazyllm_module().namespace("MEMU").OnlineModule(
+            source=self.llm_source, model=self.chat_model, type="llm"
+        )
         prompt = f"{system_prompt}\n\n" if system_prompt else ""
         full_prompt = f"{prompt}text:\n{text}"
         LOG.debug(f"Summarizing text with {self.llm_source}/{self.chat_model}")
@@ -83,7 +105,9 @@ class LazyLLMClient:
         Return:
             The generated summary text as a string.
         """
-        client = lazyllm.namespace("MEMU").OnlineModule(source=self.llm_source, model=self.chat_model, type="llm")
+        client = _lazyllm_module().namespace("MEMU").OnlineModule(
+            source=self.llm_source, model=self.chat_model, type="llm"
+        )
         prompt = system_prompt or "Summarize the text in one short paragraph."
         full_prompt = f"{prompt}\n\ntext:\n{text}"
         LOG.debug(f"Summarizing text with {self.llm_source}/{self.chat_model}")
@@ -110,7 +134,9 @@ class LazyLLMClient:
         Return:
             A tuple containing the generated text response and None (reserved for metadata).
         """
-        client = lazyllm.namespace("MEMU").OnlineModule(source=self.vlm_source, model=self.vlm_model, type="vlm")
+        client = _lazyllm_module().namespace("MEMU").OnlineModule(
+            source=self.vlm_source, model=self.vlm_model, type="vlm"
+        )
         LOG.debug(f"Processing image with {self.vlm_source}/{self.vlm_model}: {image_path}")
         # LazyLLM VLM accepts prompt as first positional argument and image_path as keyword argument
         response = await self._call_async(client, prompt, lazyllm_files=image_path)
@@ -130,7 +156,7 @@ class LazyLLMClient:
         Return:
             A list of embedding vectors (list of floats), one for each input text.
         """
-        client = lazyllm.namespace("MEMU").OnlineModule(
+        client = _lazyllm_module().namespace("MEMU").OnlineModule(
             source=self.embed_source, model=self.embed_model, type="embed", batch_size=batch_size
         )
         LOG.debug(f"embed {len(texts)} texts with {self.embed_source}/{self.embed_model}")
@@ -153,7 +179,12 @@ class LazyLLMClient:
         Return:
             The transcribed text as a string.
         """
-        client = lazyllm.namespace("MEMU").OnlineModule(source=self.stt_source, model=self.stt_model, type="stt")
+        client = _lazyllm_module().namespace("MEMU").OnlineModule(
+            source=self.stt_source, model=self.stt_model, type="stt"
+        )
         LOG.debug(f"Transcribing audio with {self.stt_source}/{self.stt_model}: {audio_path}")
         response = await self._call_async(client, audio_path)
         return cast(str, response)
+
+
+__all__ = ["LazyLLMClient"]

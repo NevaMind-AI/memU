@@ -24,7 +24,7 @@ MemU enables AI agents to maintain persistent, structured memory across conversa
 1. Log in to [Sealos Dashboard](https://cloud.sealos.io)
 2. Navigate to **DevBox** module
 3. Click **Create New Project**
-4. Select **Python 3.11+** template
+4. Select a **Python 3.12+** template
 5. Configure resources (recommended: 2 vCPU, 4GB RAM)
 6. Click **Create** - your environment will be ready in ~60 seconds
 
@@ -47,7 +47,7 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install memu fastapi uvicorn python-dotenv
+pip install memu-py fastapi uvicorn python-dotenv
 ```
 
 ## Step 4: Create the Application
@@ -69,6 +69,16 @@ OPENAI_BASE_URL=https://api.openai.com/v1
 CHAT_MODEL=gpt-4o-mini
 EMBED_MODEL=text-embedding-3-small
 
+# Memory Storage Configuration
+MEMU_DATABASE_PROVIDER=inmemory
+MEMU_DATABASE_DDL_MODE=create
+# For SQLite persistence:
+# MEMU_DATABASE_PROVIDER=sqlite
+# MEMU_DATABASE_DSN=sqlite:///./data/memu.db
+# For PostgreSQL persistence, install memu-py[postgres] and set:
+# MEMU_DATABASE_PROVIDER=postgres
+# MEMU_DATABASE_DSN=postgresql+psycopg://user:password@host:5432/memu
+
 # Server Configuration
 HOST=0.0.0.0
 PORT=8000
@@ -84,18 +94,76 @@ Powered by MemU + FastAPI on Sealos DevBox
 
 import os
 from contextlib import asynccontextmanager
+from typing import Annotated
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
 
 load_dotenv()
 
 # MemU imports
-from memu.app import MemoryService
+from memu import MemoryService
 
 # Global memory service
 memory_service: MemoryService | None = None
+SUPPORTED_DATABASE_PROVIDERS = ("inmemory", "sqlite", "postgres")
+SUPPORTED_DATABASE_DDL_MODES = ("create", "validate")
+NonEmptyString = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+def _env_choice(name: str, default: str, choices: tuple[str, ...]) -> str:
+    value = (os.getenv(name, default) or default).strip().lower()
+    if value not in choices:
+        raise ValueError(f"{name} must be one of: {', '.join(choices)}")
+    return value
+
+
+def _env_value(name: str) -> str | None:
+    value = os.getenv(name)
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
+
+
+def get_database_config() -> dict:
+    provider = _env_choice("MEMU_DATABASE_PROVIDER", "inmemory", SUPPORTED_DATABASE_PROVIDERS)
+    ddl_mode = _env_choice("MEMU_DATABASE_DDL_MODE", "create", SUPPORTED_DATABASE_DDL_MODES)
+    dsn = _env_value("MEMU_DATABASE_DSN")
+
+    if provider == "postgres" and not dsn:
+        raise ValueError("MEMU_DATABASE_DSN is required when MEMU_DATABASE_PROVIDER=postgres")
+
+    metadata_store = {"provider": provider, "ddl_mode": ddl_mode}
+    if dsn:
+        metadata_store["dsn"] = dsn
+    return {"metadata_store": metadata_store}
+
+
+def get_llm_profiles() -> dict:
+    base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    api_key = os.getenv("OPENAI_API_KEY")
+
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY environment variable is required")
+
+    return {
+        "default": {
+            "provider": "openai",
+            "base_url": base_url,
+            "api_key": api_key,
+            "chat_model": os.getenv("CHAT_MODEL", "gpt-4o-mini"),
+            "client_backend": "sdk",
+        },
+        "embedding": {
+            "provider": "openai",
+            "base_url": base_url,
+            "api_key": api_key,
+            "embed_model": os.getenv("EMBED_MODEL", "text-embedding-3-small"),
+            "client_backend": "sdk",
+        },
+    }
 
 
 @asynccontextmanager
@@ -103,25 +171,11 @@ async def lifespan(app: FastAPI):
     """Initialize MemU on startup."""
     global memory_service
 
-    llm_profiles = {
-        "default": {
-            "provider": "openai",
-            "base_url": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-            "api_key": os.getenv("OPENAI_API_KEY"),
-            "chat_model": os.getenv("CHAT_MODEL", "gpt-4o-mini"),
-            "client_backend": "sdk",
-        },
-        "embedding": {
-            "provider": "openai",
-            "base_url": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-            "api_key": os.getenv("OPENAI_API_KEY"),
-            "embed_model": os.getenv("EMBED_MODEL", "text-embedding-3-small"),
-            "client_backend": "sdk",
-        },
-    }
-
-    memory_service = MemoryService(llm_profiles=llm_profiles)
-    print("✓ MemU Memory Service initialized")
+    llm_profiles = get_llm_profiles()
+    database_config = get_database_config()
+    memory_service = MemoryService(llm_profiles=llm_profiles, database_config=database_config)
+    provider = database_config["metadata_store"]["provider"]
+    print(f"[OK] MemU Memory Service initialized (database: {provider})")
     yield
     print("Shutting down...")
 
@@ -141,8 +195,8 @@ app.add_middleware(
 
 
 class ChatRequest(BaseModel):
-    message: str
-    user_id: str = "default"
+    message: NonEmptyString
+    user_id: NonEmptyString = "default"
 
 
 class ChatResponse(BaseModel):
@@ -152,8 +206,20 @@ class ChatResponse(BaseModel):
 
 
 class MemorizeRequest(BaseModel):
-    content: str
-    user_id: str = "default"
+    content: NonEmptyString
+    user_id: NonEmptyString = "default"
+
+
+class MemorizeResponse(BaseModel):
+    status: str
+    items_created: int
+    categories: int
+
+
+class RecallResponse(BaseModel):
+    query: str
+    memories_found: int
+    memories: list[dict]
 
 
 @app.get("/")
@@ -183,7 +249,8 @@ async def chat(request: ChatRequest):
 
     # Step 1: Retrieve relevant memories
     retrieve_result = await memory_service.retrieve(
-        queries=[{"role": "user", "content": request.message}]
+        queries=[{"role": "user", "content": request.message}],
+        where={"user_id": request.user_id},
     )
 
     memories = retrieve_result.get("items", [])
@@ -202,14 +269,15 @@ async def chat(request: ChatRequest):
 
     # Step 3: Store the conversation as a new memory
     import tempfile
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
         f.write(f"User ({request.user_id}): {request.message}")
         temp_file = f.name
 
     try:
         memorize_result = await memory_service.memorize(
             resource_url=temp_file,
-            modality="text",
+            modality="document",
+            user={"user_id": request.user_id},
         )
         memories_stored = len(memorize_result.get("items", []))
     finally:
@@ -222,50 +290,53 @@ async def chat(request: ChatRequest):
     )
 
 
-@app.post("/memorize")
+@app.post("/memorize", response_model=MemorizeResponse)
 async def memorize(request: MemorizeRequest):
     """Store information in long-term memory."""
     if not memory_service:
         raise HTTPException(status_code=503, detail="Memory service not initialized")
 
     import tempfile
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
         f.write(request.content)
         temp_file = f.name
 
     try:
         result = await memory_service.memorize(
             resource_url=temp_file,
-            modality="text",
+            modality="document",
+            user={"user_id": request.user_id},
         )
-        return {
-            "status": "stored",
-            "items_created": len(result.get("items", [])),
-            "categories": len(result.get("categories", [])),
-        }
+        return MemorizeResponse(
+            status="stored",
+            items_created=len(result.get("items", [])),
+            categories=len(result.get("categories", [])),
+        )
     finally:
         os.unlink(temp_file)
 
 
-@app.get("/recall")
-async def recall(query: str, limit: int = 5):
+@app.get("/recall", response_model=RecallResponse)
+async def recall(
+    query: NonEmptyString,
+    user_id: NonEmptyString = "default",
+    limit: int = Query(default=5, ge=1, le=20),
+):
     """Recall memories related to a query."""
     if not memory_service:
         raise HTTPException(status_code=503, detail="Memory service not initialized")
 
     result = await memory_service.retrieve(
-        queries=[{"role": "user", "content": query}]
+        queries=[{"role": "user", "content": query}],
+        where={"user_id": user_id},
     )
 
     items = result.get("items", [])[:limit]
-    return {
-        "query": query,
-        "memories_found": len(items),
-        "memories": [
-            {"summary": item.get("summary", str(item)) if isinstance(item, dict) else str(item)}
-            for item in items
-        ],
-    }
+    memories = [
+        {"summary": item.get("summary", str(item)) if isinstance(item, dict) else str(item)}
+        for item in items
+    ]
+    return RecallResponse(query=query, memories_found=len(items), memories=memories)
 
 
 if __name__ == "__main__":
@@ -281,18 +352,35 @@ if __name__ == "__main__":
 ### `requirements.txt`
 
 ```
-memu>=0.1.0
+memu-py>=1.5.1
 fastapi>=0.100.0
 uvicorn[standard]>=0.23.0
 python-dotenv>=1.0.0
+```
+
+### `requirements-postgres.txt`
+
+Use this optional file when `MEMU_DATABASE_PROVIDER=postgres`:
+
+```
+-r requirements.txt
+memu-py[postgres]>=1.5.1
 ```
 
 ### `entrypoint.sh`
 
 ```bash
 #!/bin/bash
-source venv/bin/activate
-uvicorn main:app --host 0.0.0.0 --port 8000
+set -e
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
+if [ -d "venv" ]; then
+    source venv/bin/activate
+fi
+
+exec uvicorn main:app --host "${HOST:-0.0.0.0}" --port "${PORT:-8000}"
 ```
 
 ## Step 5: Test Locally in DevBox
@@ -338,13 +426,25 @@ For production deployments with persistent storage:
 
 1. In Sealos Dashboard, go to **Database** module
 2. Create a PostgreSQL instance
-3. Update your `.env` with the connection string:
+3. Install the Postgres dependency set:
 
-```env
-DATABASE_URL=postgresql://user:password@host:5432/memu
+```bash
+pip install -r requirements-postgres.txt
 ```
 
-4. Update `main.py` to use PostgreSQL backend (see MemU documentation)
+   If you are not using the checked-in requirements files, install
+   `pip install "memu-py[postgres]" fastapi uvicorn python-dotenv` instead.
+
+4. Update your `.env` with the memU storage configuration:
+
+```env
+MEMU_DATABASE_PROVIDER=postgres
+MEMU_DATABASE_DSN=postgresql+psycopg://user:password@host:5432/memu
+MEMU_DATABASE_DDL_MODE=create
+```
+
+The same `MEMU_DATABASE_DSN` is used for metadata and pgvector-backed search
+when `MEMU_DATABASE_PROVIDER=postgres`.
 
 ## API Reference
 
@@ -359,29 +459,28 @@ DATABASE_URL=postgresql://user:password@host:5432/memu
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Sealos DevBox                        │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │              FastAPI Application                 │   │
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────────────┐  │   │
-│  │  │  /chat  │  │/memorize│  │    /recall      │  │   │
-│  │  └────┬────┘  └────┬────┘  └────────┬────────┘  │   │
-│  │       │            │                │           │   │
-│  │       └────────────┼────────────────┘           │   │
-│  │                    │                            │   │
-│  │            ┌───────▼───────┐                    │   │
-│  │            │  MemU Service │                    │   │
-│  │            │  (Memory Mgmt)│                    │   │
-│  │            └───────┬───────┘                    │   │
-│  │                    │                            │   │
-│  │       ┌────────────┼────────────┐               │   │
-│  │       │            │            │               │   │
-│  │  ┌────▼────┐  ┌────▼────┐  ┌───▼────┐          │   │
-│  │  │ Vector  │  │   LLM   │  │Postgres│          │   │
-│  │  │ Store   │  │   API   │  │(opt.)  │          │   │
-│  │  └─────────┘  └─────────┘  └────────┘          │   │
-│  └─────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
+Sealos DevBox
+  |
+  +-- FastAPI application
+      |
+      +-- POST /chat
+      |     retrieve memories -> compose response -> memorize turn
+      |
+      +-- POST /memorize
+      |     write user-scoped content to memU
+      |
+      +-- GET /recall
+            retrieve user-scoped memories
+
+memU MemoryService
+  |
+  +-- LLM profiles
+  |     default chat profile + embedding profile
+  |
+  +-- Storage
+        inmemory by default
+        sqlite with MEMU_DATABASE_PROVIDER=sqlite
+        postgres + pgvector with MEMU_DATABASE_PROVIDER=postgres
 ```
 
 ## Benefits of This Setup
@@ -401,10 +500,11 @@ DATABASE_URL=postgresql://user:password@host:5432/memu
 
 ## Resources
 
-- [MemU Documentation](https://github.com/NevaMind-AI/memU)
+- [MemU Documentation](https://github.com/NevaMind-AI/MemU)
 - [Sealos DevBox Guide](https://sealos.io/blog/how-to-setup-devbox)
 - [FastAPI Documentation](https://fastapi.tiangolo.com)
 
 ---
 
 *This guide was created for the MemU PR Hackathon - 2026 New Year Challenge (Issue #228)*
+

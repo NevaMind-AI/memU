@@ -12,6 +12,7 @@ from xml.etree.ElementTree import Element
 import defusedxml.ElementTree as ET
 from pydantic import BaseModel
 
+from memu.app.scope import scope_key_from_user
 from memu.app.settings import CategoryConfig, CustomPrompt
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
 from memu.prompts.category_summary import (
@@ -32,6 +33,7 @@ from memu.prompts.memory_type import (
 )
 from memu.prompts.preprocess import PROMPTS as PREPROCESS_PROMPTS
 from memu.utils.conversation import format_conversation_for_preprocess
+from memu.utils.dedupe import dedupe_resource_plans
 from memu.utils.video import VideoFrameExtractor
 from memu.workflow.step import WorkflowState, WorkflowStep
 
@@ -227,8 +229,7 @@ class MemorizeMixin:
         return state
 
     def _memorize_dedupe_merge(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        # Placeholder for future dedup/merge logic
-        state["resource_plans"] = state.get("resource_plans", [])
+        state["resource_plans"] = dedupe_resource_plans(state.get("resource_plans", []))
         return state
 
     async def _memorize_categorize_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
@@ -301,7 +302,7 @@ class MemorizeMixin:
         store = state["store"]
         resources = [self._model_dump_without_embeddings(r) for r in state.get("resources", [])]
         items = [self._model_dump_without_embeddings(item) for item in state.get("items", [])]
-        relations = [rel.model_dump() for rel in state.get("relations", [])]
+        relations = [self._model_dump_without_embeddings(rel) for rel in state.get("relations", [])]
         category_ids = state.get("category_ids") or list(ctx.category_ids)
         categories = [
             self._model_dump_without_embeddings(store.memory_category_repo.categories[c]) for c in category_ids
@@ -637,20 +638,48 @@ class MemorizeMixin:
     async def _ensure_categories_ready(
         self, ctx: Context, store: Database, user_scope: Mapping[str, Any] | None = None
     ) -> None:
-        if ctx.categories_ready:
+        scope_key = scope_key_from_user(user_scope)
+        if ctx.categories_ready and ctx.category_scope_key == scope_key:
+            return
+        cached = ctx.category_cache.get(scope_key)
+        if cached is not None:
+            ctx.category_ids = list(cached[0])
+            ctx.category_name_to_id = dict(cached[1])
+            ctx.category_scope_key = scope_key
+            ctx.categories_ready = True
             return
         if ctx.category_init_task:
             await ctx.category_init_task
             ctx.category_init_task = None
-            return
+            if ctx.categories_ready and ctx.category_scope_key == scope_key:
+                return
+            cached = ctx.category_cache.get(scope_key)
+            if cached is not None:
+                ctx.category_ids = list(cached[0])
+                ctx.category_name_to_id = dict(cached[1])
+                ctx.category_scope_key = scope_key
+                ctx.categories_ready = True
+                return
         await self._initialize_categories(ctx, store, user_scope)
 
     async def _initialize_categories(
         self, ctx: Context, store: Database, user: Mapping[str, Any] | None = None
     ) -> None:
-        if ctx.categories_ready:
+        scope_key = scope_key_from_user(user)
+        if ctx.categories_ready and ctx.category_scope_key == scope_key:
+            return
+        cached = ctx.category_cache.get(scope_key)
+        if cached is not None:
+            ctx.category_ids = list(cached[0])
+            ctx.category_name_to_id = dict(cached[1])
+            ctx.category_scope_key = scope_key
+            ctx.categories_ready = True
             return
         if not self.category_configs:
+            ctx.category_ids = []
+            ctx.category_name_to_id = {}
+            ctx.category_scope_key = scope_key
+            ctx.category_cache[scope_key] = ([], {})
             ctx.categories_ready = True
             return
         cat_texts = [self._category_embedding_text(cfg) for cfg in self.category_configs]
@@ -665,6 +694,8 @@ class MemorizeMixin:
             )
             ctx.category_ids.append(cat.id)
             ctx.category_name_to_id[name.lower()] = cat.id
+        ctx.category_scope_key = scope_key
+        ctx.category_cache[scope_key] = (list(ctx.category_ids), dict(ctx.category_name_to_id))
         ctx.categories_ready = True
 
     @staticmethod

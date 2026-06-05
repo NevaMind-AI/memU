@@ -11,7 +11,7 @@
 
 This PR enhances MemU's memory type system to support specialized memory structures with type-specific metadata and introduces Tool Memory for agent self-improvement.
 
-**Current State:** MemU has a `memory_type` field with 5 types (profile, event, knowledge, behavior, skill) and uses different LLM prompts to extract each type. However, after extraction, all memories share the same storage schema - just `summary` and `embedding`. There's no type-specific metadata, no type-aware retrieval, and no way for agents to learn from their tool usage.
+**Current State:** MemU has a `memory_type` field with 6 supported types (profile, event, knowledge, behavior, skill, tool) and uses different LLM prompts to extract each type. Tool memories can store tool-specific metadata and execution history, while other memories continue to share the common `summary` and `embedding` storage shape.
 
 **Enhancement:** Extend the memory system to support:
 - Type-specific metadata fields (e.g., `when_to_use` for smarter retrieval)

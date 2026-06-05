@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast, get_args
 
 from pydantic import BaseModel
 
+from memu.app.scope import record_matches_scope
 from memu.database.models import MemoryCategory, MemoryType
 from memu.prompts.category_patch import CATEGORY_PATCH_PROMPT
 from memu.workflow.step import WorkflowState, WorkflowStep
@@ -43,9 +44,9 @@ class PatchMixin:
         user: dict[str, Any] | None = None,
         propagate: bool = True,
     ) -> dict[str, Any]:
-        if memory_type not in get_args(MemoryType):
-            msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}"
-            raise ValueError(msg)
+        memory_type = _normalize_memory_type(memory_type)
+        memory_content = _normalize_memory_content(memory_content, field_name="memory_content")
+        memory_categories = _normalize_memory_categories(memory_categories, field_name="memory_categories")
 
         ctx = self._get_context()
         store = self._get_database()
@@ -85,9 +86,13 @@ class PatchMixin:
         if all((memory_type is None, memory_content is None, memory_categories is None)):
             msg = "At least one of memory type, memory content, or memory categories is required for UPDATE operation"
             raise ValueError(msg)
-        if memory_type and memory_type not in get_args(MemoryType):
-            msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}"
-            raise ValueError(msg)
+        memory_id = _normalize_memory_id(memory_id)
+        if memory_type is not None:
+            memory_type = _normalize_memory_type(memory_type)
+        if memory_content is not None:
+            memory_content = _normalize_memory_content(memory_content, field_name="memory_content")
+        if memory_categories is not None:
+            memory_categories = _normalize_memory_categories(memory_categories, field_name="memory_categories")
 
         ctx = self._get_context()
         store = self._get_database()
@@ -122,6 +127,8 @@ class PatchMixin:
         user: dict[str, Any] | None = None,
         propagate: bool = True,
     ) -> dict[str, Any]:
+        memory_id = _normalize_memory_id(memory_id)
+
         ctx = self._get_context()
         store = self._get_database()
         user_scope = self.user_model(**user).model_dump() if user is not None else None
@@ -258,6 +265,13 @@ class PatchMixin:
             "user",
         }
 
+    @staticmethod
+    def _ensure_item_matches_user_scope(item: Any, user_scope: Mapping[str, Any] | None, memory_id: str) -> None:
+        if record_matches_scope(item, user_scope):
+            return
+        msg = f"Memory item with id {memory_id} not found"
+        raise ValueError(msg)
+
     async def _patch_create_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         memory_payload = state["memory_payload"]
         ctx = state["ctx"]
@@ -270,6 +284,7 @@ class PatchMixin:
         content_embedding = (await self._get_llm_client().embed(embed_payload))[0]
 
         item = store.memory_item_repo.create_item(
+            resource_id=None,
             memory_type=memory_payload["type"],
             summary=memory_payload["content"],
             embedding=content_embedding,
@@ -301,6 +316,7 @@ class PatchMixin:
         if not item:
             msg = f"Memory item with id {memory_id} not found"
             raise ValueError(msg)
+        self._ensure_item_matches_user_scope(item, user, memory_id)
         old_content = item.summary
         old_item_categories = store.category_item_repo.get_item_categories(memory_id)
         mapped_old_cat_ids = [cat.category_id for cat in old_item_categories]
@@ -319,7 +335,10 @@ class PatchMixin:
                 embedding=content_embedding,
             )
         new_cat_names = memory_payload["categories"]
-        mapped_new_cat_ids = self._map_category_names_to_ids(new_cat_names, ctx)
+        if new_cat_names is None:
+            mapped_new_cat_ids = mapped_old_cat_ids
+        else:
+            mapped_new_cat_ids = self._map_category_names_to_ids(new_cat_names, ctx)
 
         cats_to_remove = set(mapped_old_cat_ids) - set(mapped_new_cat_ids)
         cats_to_add = set(mapped_new_cat_ids) - set(mapped_old_cat_ids)
@@ -352,7 +371,8 @@ class PatchMixin:
         if not item:
             msg = f"Memory item with id {memory_id} not found"
             raise ValueError(msg)
-        item_categories = store.category_item_repo.get_item_categories(memory_id)
+        self._ensure_item_matches_user_scope(item, state["user"], memory_id)
+        item_categories = store.category_item_repo.clear_relations({"item_id": memory_id})
         if propagate:
             for cat in item_categories:
                 category_memory_updates[cat.category_id] = (item.summary, None)
@@ -477,3 +497,36 @@ class PatchMixin:
         if updated_content == "empty":
             updated_content = ""
         return need_update, updated_content
+
+
+def _normalize_memory_id(value: Any) -> str:
+    return _normalize_non_empty_string(value, field_name="memory_id")
+
+
+def _normalize_memory_type(value: Any) -> MemoryType:
+    memory_type = _normalize_non_empty_string(value, field_name="memory_type")
+    if memory_type not in get_args(MemoryType):
+        msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}"
+        raise ValueError(msg)
+    return cast(MemoryType, memory_type)
+
+
+def _normalize_memory_content(value: Any, *, field_name: str) -> str:
+    return _normalize_non_empty_string(value, field_name=field_name)
+
+
+def _normalize_memory_categories(value: Any, *, field_name: str) -> list[str]:
+    if not isinstance(value, list):
+        msg = f"'{field_name}' must be a list of non-empty strings"
+        raise ValueError(msg)
+    normalized: list[str] = []
+    for index, item in enumerate(value):
+        normalized.append(_normalize_non_empty_string(item, field_name=f"{field_name}[{index}]"))
+    return normalized
+
+
+def _normalize_non_empty_string(value: Any, *, field_name: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        msg = f"'{field_name}' must be a non-empty string"
+        raise ValueError(msg)
+    return value.strip()

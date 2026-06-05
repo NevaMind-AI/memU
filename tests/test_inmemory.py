@@ -1,14 +1,33 @@
+#!/usr/bin/env python3
+"""Opt-in live LLM smoke test for the in-memory backend."""
+
+from __future__ import annotations
+
+import asyncio
 import os
+import sys
+from pathlib import Path
+from typing import Any
 
-from memu.app import MemoryService
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+RUN_LIVE_LLM_TESTS_ENV = "MEMU_RUN_LIVE_LLM_TESTS"
+
+# Add src to sys.path before importing memu from a source checkout.
+src_path = str(PROJECT_ROOT / "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 
-async def main():
-    """Test with in-memory storage (default)."""
+async def run_inmemory_workflow() -> None:
+    """Run the in-memory memorize/retrieve smoke workflow against a real LLM."""
+    from memu import MemoryService
+
     api_key = os.environ.get("OPENAI_API_KEY")
-    # dashscope_api_key = os.environ.get("DASHSCOPE_API_KEY")
-    # voyage_api_key = os.environ.get("VOYAGE_API_KEY")
-    file_path = os.path.abspath("example/example_conversation.json")
+    if not api_key:
+        msg = "OPENAI_API_KEY is required for the in-memory live LLM workflow"
+        raise RuntimeError(msg)
+
+    file_path = Path(__file__).resolve().parent / "example" / "example_conversation.json"
 
     print("\n" + "=" * 60)
     print("[INMEMORY] Starting test...")
@@ -16,74 +35,69 @@ async def main():
 
     service = MemoryService(
         llm_profiles={"default": {"api_key": api_key}},
-        # llm_profiles={
-        #     "default": {
-        #         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        #         "api_key": dashscope_api_key,
-        #         "chat_model": "qwen3-max",
-        #         "client_backend": "sdk"
-        #     },
-        #     "embedding": {
-        #         "base_url": "https://api.voyageai.com/v1",
-        #         "api_key": voyage_api_key,
-        #         "embed_model": "voyage-3.5-lite"
-        #     }
-        # },
         database_config={
             "metadata_store": {"provider": "inmemory"},
         },
         retrieve_config={"method": "rag"},
     )
 
-    # Memorize
     print("\n[INMEMORY] Memorizing...")
-    memory = await service.memorize(resource_url=file_path, modality="conversation", user={"user_id": "123"})
+    memory = await service.memorize(resource_url=str(file_path), modality="conversation", user={"user_id": "123"})
     for cat in memory.get("categories", []):
         print(f"  - {cat.get('name')}: {(cat.get('summary') or '')[:80]}...")
 
-    queries = [
-        {"role": "user", "content": {"text": "Tell me about preferences"}},
-        {"role": "assistant", "content": {"text": "Sure, I'll tell you about their preferences"}},
-        {
-            "role": "user",
-            "content": {"text": "What are they"},
-        },  # This is the query that will be used to retrieve the memory, the context will be used for query rewriting
-    ]
+    queries = _sample_queries()
 
-    # RAG-based retrieval
     print("\n[INMEMORY] RETRIEVED - RAG")
     service.retrieve_config.method = "rag"
     result_rag = await service.retrieve(queries=queries, where={"user_id": "123"})
-    print("  Categories:")
-    for cat in result_rag.get("categories", [])[:3]:
-        print(f"    - {cat.get('name')}: {(cat.get('summary') or cat.get('description', ''))[:80]}...")
-    print("  Items:")
-    for item in result_rag.get("items", [])[:3]:
-        print(f"    - [{item.get('memory_type')}] {item.get('summary', '')[:100]}...")
-    if result_rag.get("resources"):
-        print("  Resources:")
-        for res in result_rag.get("resources", [])[:3]:
-            print(f"    - [{res.get('modality')}] {res.get('url', '')[:80]}...")
+    _print_results(result_rag)
 
-    # LLM-based retrieval
     print("\n[INMEMORY] RETRIEVED - LLM")
     service.retrieve_config.method = "llm"
     result_llm = await service.retrieve(queries=queries, where={"user_id": "123"})
-    print("  Categories:")
-    for cat in result_llm.get("categories", [])[:3]:
-        print(f"    - {cat.get('name')}: {(cat.get('summary') or cat.get('description', ''))[:80]}...")
-    print("  Items:")
-    for item in result_llm.get("items", [])[:3]:
-        print(f"    - [{item.get('memory_type')}] {item.get('summary', '')[:100]}...")
-    if result_llm.get("resources"):
-        print("  Resources:")
-        for res in result_llm.get("resources", [])[:3]:
-            print(f"    - [{res.get('modality')}] {res.get('url', '')[:80]}...")
+    _print_results(result_llm)
 
     print("\n[INMEMORY] Test completed!")
 
 
-if __name__ == "__main__":
-    import asyncio
+async def test_inmemory_full_workflow() -> None:
+    """Opt-in pytest integration check for the in-memory backend and a real LLM."""
+    import pytest
 
-    asyncio.run(main())
+    if os.environ.get(RUN_LIVE_LLM_TESTS_ENV) != "1":
+        pytest.skip(f"Set {RUN_LIVE_LLM_TESTS_ENV}=1 to run live LLM storage workflows")
+    if not os.environ.get("OPENAI_API_KEY"):
+        pytest.skip("OPENAI_API_KEY is required for live LLM storage workflows")
+
+    await run_inmemory_workflow()
+
+
+def _sample_queries() -> list[dict[str, dict[str, str] | str]]:
+    return [
+        {"role": "user", "content": {"text": "Tell me about preferences"}},
+        {"role": "assistant", "content": {"text": "Sure, I'll tell you about their preferences"}},
+        {"role": "user", "content": {"text": "What are they"}},
+    ]
+
+
+def _print_results(result: dict[str, Any]) -> None:
+    print("  Categories:")
+    for cat in result.get("categories", [])[:3]:
+        print(f"    - {cat.get('name')}: {(cat.get('summary') or cat.get('description', ''))[:80]}...")
+    print("  Items:")
+    for item in result.get("items", [])[:3]:
+        print(f"    - [{item.get('memory_type')}] {item.get('summary', '')[:100]}...")
+    if result.get("resources"):
+        print("  Resources:")
+        for res in result.get("resources", [])[:3]:
+            print(f"    - [{res.get('modality')}] {res.get('url', '')[:80]}...")
+
+
+def main() -> int:
+    asyncio.run(run_inmemory_workflow())
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
