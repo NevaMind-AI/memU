@@ -1,21 +1,28 @@
 include README.md
-recursive-include memu *.py
-prune example
-include setup_postgres_env.sh
+include LICENSE.txt
+include CODE_OF_CONDUCT.md
+include CONTRIBUTING.md
+include SECURITY.md
+include SUPPORT.md
+include pyproject.toml
+include Cargo.toml
+include Cargo.lock
+include mkdocs.yml
+recursive-include src/memu *.py *.pyi py.typed
+recursive-include assets *.png *.gif *.jpg *.jpeg
+recursive-include readme *.md
+recursive-include docs *.md
+recursive-include examples *.py *.md *.json *.txt *.png *.jpg *.jpeg *.sh .env.example
 exclude .env
-exclude .env.example
 exclude setup.py.backup
-exclude */__pycache__/*
-exclude *.pyc
-exclude *.pyo
-exclude .git/*
-exclude .github/*
-exclude server/*
-exclude docs/*
-exclude scripts/*
 exclude docker-compose.yml
 exclude Dockerfile
 exclude .dockerignore
 exclude PROJECT_RELEASE_SUMMARY.md
 exclude Makefile
 exclude .pre-commit-config.yaml
+prune .git
+prune .github
+prune tmp
+global-exclude __pycache__
+global-exclude *.py[cod]

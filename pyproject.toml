@@ -6,15 +6,18 @@ authors = [
 ]
 description = "AI Memory and Conversation Management Framework - Simple as mem0, Powerful as MemU"
 readme = "README.md"
-# license = {file = "LICENSE"}
-requires-python = ">=3.13"
+license = {file = "LICENSE.txt"}
+requires-python = ">=3.12"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
 
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
 ]
 keywords = ["ai", "memory", "conversation", "llm", "chatbot", "agent"]
 dependencies = [
@@ -26,8 +29,6 @@ dependencies = [
     "sqlmodel>=0.0.27",
     "alembic>=1.14.0",
     "pendulum>=3.1.0",
-    "langchain-core>=1.2.7",
-    "lazyllm>=0.7.3",
 ]
 
 [build-system]
@@ -38,6 +39,7 @@ build-backend = "maturin"
 module-name = "memu._core"
 python-packages = ["memu"]
 python-source = "src"
+include = ["memu/py.typed"]
 
 [dependency-groups]
 dev = [
@@ -68,16 +70,22 @@ test = [
 
 [project.optional-dependencies]
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
-langgraph = ["langgraph>=0.0.10", "langchain-core>=0.1.0"]
+langgraph = ["langgraph>=1.0.6", "langchain-core>=1.2.7"]
+lazyllm = ["lazyllm>=0.7.3"]
 claude = ["claude-agent-sdk>=0.1.24"]
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
 "Bug Tracker" = "https://github.com/NevaMind-AI/MemU/issues"
 "Documentation" = "https://github.com/NevaMind-AI/MemU#readme"
+"Changelog" = "https://github.com/NevaMind-AI/MemU/blob/main/CHANGELOG.md"
+"Source" = "https://github.com/NevaMind-AI/MemU"
 
 [project.scripts]
-memu-server = "memu.server.cli:main"
+memu-context = "memu.app.context_cli:main"
+memu-folder = "memu.app.folder_cli:main"
+memu-harness = "memu.app.context_harness_cli:main"
+memu-skill-trace = "memu.app.skill_trace_cli:main"
 
 [tool.deptry.per_rule_ignores]
 # Optional dependencies used in examples/
@@ -85,7 +93,7 @@ DEP002 = ["claude-agent-sdk"]
 
 [tool.mypy]
 files = ["src", "tests"]
-python_version = "3.13"
+python_version = "3.12"
 disallow_untyped_defs = true
 disallow_any_unimported = true
 no_implicit_optional = true
@@ -115,7 +123,7 @@ disallow_untyped_defs = false
 warn_return_any = false
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py312"
 line-length = 120
 fix = true
 

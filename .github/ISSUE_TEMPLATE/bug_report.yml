@@ -7,6 +7,7 @@ body:
     attributes:
       value: |
         Thanks for taking the time to report a bug in memU! Please fill in the following details.
+        If this report involves a vulnerability, leaked credential, private user data, or authentication bypass, do not open a public issue. Follow the Security Policy instead: https://github.com/NevaMind-AI/MemU/security/policy
 
   - type: textarea
     id: description

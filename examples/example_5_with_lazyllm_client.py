@@ -23,13 +23,14 @@ import os
 import sys
 from pathlib import Path
 
-# Add src to sys.path FIRST before importing memu
-project_root = Path(__file__).parent.parent
+# Add src to sys.path before importing memu from a source checkout.
+project_root = Path(__file__).resolve().parents[1]
+examples_dir = project_root / "examples"
 src_path = str(project_root / "src")
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
-from memu.app import MemoryService
+from memu import MemoryService
 
 # ==========================================
 # PART 1: Conversation Memory Processing
@@ -42,33 +43,33 @@ async def run_conversation_memory_demo(service):
     print("=" * 60)
 
     conversation_files = [
-        "examples/resources/conversations/conv1.json",
-        "examples/resources/conversations/conv2.json",
-        "examples/resources/conversations/conv3.json",
+        examples_dir / "resources" / "conversations" / "conv1.json",
+        examples_dir / "resources" / "conversations" / "conv2.json",
+        examples_dir / "resources" / "conversations" / "conv3.json",
     ]
 
     total_items = 0
     categories = []
 
     for conv_file in conversation_files:
-        if not os.path.exists(conv_file):
-            print(f"⚠ File not found: {conv_file}")
+        if not conv_file.exists():
+            print(f"[WARN] File not found: {conv_file}")
             continue
 
         try:
             print(f"  Processing: {conv_file}")
-            result = await service.memorize(resource_url=conv_file, modality="conversation")
+            result = await service.memorize(resource_url=str(conv_file), modality="conversation")
             total_items += len(result.get("items", []))
             categories = result.get("categories", [])
-            print(f"    ✓ Extracted {len(result.get('items', []))} items")
+            print(f"    [OK] Extracted {len(result.get('items', []))} items")
         except Exception as e:
-            print(f"  ✗ Error processing {conv_file}: {e}")
+            print(f"  [ERROR] Error processing {conv_file}: {e}")
 
     # Output generation
-    output_dir = "examples/output/lazyllm_example/conversation"
+    output_dir = examples_dir / "output" / "lazyllm_example" / "conversation"
     os.makedirs(output_dir, exist_ok=True)
     await generate_markdown_output(categories, output_dir)
-    print(f"✓ Conversation processing complete. Output: {output_dir}")
+    print(f"[OK] Conversation processing complete. Output: {output_dir}")
 
 
 # ==========================================
@@ -106,28 +107,32 @@ async def run_skill_extraction_demo(service):
     service.memorize_config.memory_types = ["skill"]
     service.memorize_config.memory_type_prompts = {"skill": skill_prompt}
 
-    logs = ["examples/resources/logs/log1.txt", "examples/resources/logs/log2.txt", "examples/resources/logs/log3.txt"]
+    logs = [
+        examples_dir / "resources" / "logs" / "log1.txt",
+        examples_dir / "resources" / "logs" / "log2.txt",
+        examples_dir / "resources" / "logs" / "log3.txt",
+    ]
 
     all_skills = []
     for log_file in logs:
-        if not os.path.exists(log_file):
+        if not log_file.exists():
             continue
 
         print(f"  Processing log: {log_file}")
         try:
-            result = await service.memorize(resource_url=log_file, modality="document")
+            result = await service.memorize(resource_url=str(log_file), modality="document")
             for item in result.get("items", []):
                 if item.get("memory_type") == "skill":
                     all_skills.append(item.get("summary", ""))
-            print(f"    ✓ Extracted {len(result.get('items', []))} skills")
+            print(f"    [OK] Extracted {len(result.get('items', []))} skills")
         except Exception as e:
-            print(f"  ✗ Error: {e}")
+            print(f"  [ERROR] Error: {e}")
 
     # Generate summary guide
     if all_skills:
-        output_file = "examples/output/lazyllm_example/skills/skill_guide.md"
+        output_file = examples_dir / "output" / "lazyllm_example" / "skills" / "skill_guide.md"
         await generate_skill_guide(all_skills, service, output_file)
-        print(f"✓ Skill guide generated: {output_file}")
+        print(f"[OK] Skill guide generated: {output_file}")
 
 
 # ==========================================
@@ -159,27 +164,27 @@ async def run_multimodal_demo(service):
     service.memorize_config.memory_type_prompts = {"knowledge": xml_prompt}
 
     resources = [
-        ("examples/resources/docs/doc1.txt", "document"),
-        ("examples/resources/images/image1.png", "image"),
+        (examples_dir / "resources" / "docs" / "doc1.txt", "document"),
+        (examples_dir / "resources" / "images" / "image1.png", "image"),
     ]
 
     categories = []
     for res_file, modality in resources:
-        if not os.path.exists(res_file):
+        if not res_file.exists():
             continue
 
         print(f"  Processing {modality}: {res_file}")
         try:
-            result = await service.memorize(resource_url=res_file, modality=modality)
+            result = await service.memorize(resource_url=str(res_file), modality=modality)
             categories = result.get("categories", [])
-            print(f"    ✓ Extracted {len(result.get('items', []))} items")
+            print(f"    [OK] Extracted {len(result.get('items', []))} items")
         except Exception as e:
-            print(f"  ✗ Error: {e}")
+            print(f"  [ERROR] Error: {e}")
 
-    output_dir = "examples/output/lazyllm_example/multimodal"
+    output_dir = examples_dir / "output" / "lazyllm_example" / "multimodal"
     os.makedirs(output_dir, exist_ok=True)
     await generate_markdown_output(categories, output_dir)
-    print(f"✓ Multimodal processing complete. Output: {output_dir}")
+    print(f"[OK] Multimodal processing complete. Output: {output_dir}")
 
 
 # ==========================================

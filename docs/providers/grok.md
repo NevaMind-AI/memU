@@ -19,7 +19,7 @@ The integration is designed to work out-of-the-box with minimal configuration.
 Set the following environment variable in your `.env` file or system environment:
 
 ```bash
-GROK_API_KEY=xai-YOUR_API_KEY_HERE
+XAI_API_KEY=xai-YOUR_API_KEY_HERE
 ```
 
 ### Defaults
@@ -36,31 +36,37 @@ You can enable the Grok provider by setting the `provider` field to `"grok"` in 
 ### Using Python Configuration
 
 ```python
-from memu.app.settings import LLMConfig
-from memu.app.service import MemoryService
-
-# Configure the LLM provider to use Grok
-llm_config = LLMConfig(provider="grok")
+from memu import MemoryService
 
 # Initialize the service
-service = MemoryService(llm_config=llm_config)
-print(f"Service initialized with model: {llm_config.chat_model}")
-# Output: Service initialized with model: grok-2-latest
+service = MemoryService(
+    llm_profiles={
+        "default": {
+            "provider": "grok",
+            # Defaults: api_key="XAI_API_KEY", base_url="https://api.x.ai/v1",
+            # chat_model="grok-2-latest"
+        }
+    }
+)
 ```
 
 ## Troubleshooting
 
 ### Connection Issues
 If you are unable to connect to the xAI API:
-1.  Verify that your `GROK_API_KEY` is set correctly and has not expired.
+1.  Verify that your `XAI_API_KEY` is set correctly and has not expired.
 2.  Ensure that the `base_url` is resolving to `https://api.x.ai/v1`. If you have manual overrides in your settings, they might be conflicting with the default.
 
 ### Model Availability
 If you receive a `404` or "Model not found" error, xAI may have updated their model names. You can override the model manually in the config if needed:
 
 ```python
-config = LLMConfig(
-    provider="grok",
-    chat_model="grok-beta" # Example override
+service = MemoryService(
+    llm_profiles={
+        "default": {
+            "provider": "grok",
+            "chat_model": "grok-beta",  # Example override
+        }
+    }
 )
 ```

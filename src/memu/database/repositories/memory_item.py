@@ -21,7 +21,7 @@ class MemoryItemRepo(Protocol):
     def create_item(
         self,
         *,
-        resource_id: str,
+        resource_id: str | None = None,
         memory_type: MemoryType,
         summary: str,
         embedding: list[float],

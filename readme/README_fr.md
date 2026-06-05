@@ -8,7 +8,7 @@
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/memu)
 [![Twitter](https://img.shields.io/badge/Twitter-Follow-1DA1F2?logo=x&logoColor=white)](https://x.com/memU_ai)
 
@@ -28,7 +28,7 @@ memU **capture et comprend continuellement l'intention de l'utilisateur**. Même
 
 ## 🤖 [OpenClaw (Moltbot, Clawdbot) Alternative](https://memu.bot)
 
-<img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/memUbot.png" />
+<img width="100%" src="https://github.com/NevaMind-AI/MemU/blob/main/assets/memUbot.png" />
 
 - **Download-and-use and simple** to get started.
 - Builds long-term memory to **understand user intent** and act proactively.
@@ -77,7 +77,7 @@ Tout comme un système de fichiers transforme des octets bruts en données organ
 
 ## ⭐️ Mettez une étoile au dépôt
 
-<img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/star.gif" />
+<img width="100%" src="https://github.com/NevaMind-AI/MemU/blob/main/assets/star.gif" />
 Si vous trouvez memU utile ou intéressant, une étoile GitHub ⭐️ serait grandement appréciée.
 
 ---
@@ -95,10 +95,14 @@ Si vous trouvez memU utile ou intéressant, une étoile GitHub ⭐️ serait gra
 ## 🔄 Comment Fonctionne la Mémoire Proactive
 
 ```bash
-
+pip install "memu-py[claude]"
+# From a source checkout, use: uv sync --extra claude
+export OPENAI_API_KEY="..."
+export ANTHROPIC_API_KEY="..."
+# Optional when using memory.platform instead of memory.local:
+export MEMU_API_KEY="..."
 cd examples/proactive
 python proactive.py
-
 ```
 
 ---
@@ -275,18 +279,17 @@ Pour un déploiement entreprise avec des workflows proactifs personnalisés, con
 
 #### Installation
 ```bash
-pip install -e .
+pip install memu-py
 ```
 
 #### Exemple de Base
 
-> **Prérequis**: Python 3.13+ et une clé API OpenAI
+> **Prérequis**: Python 3.12+ et une clé API OpenAI
 
 **Tester l'Apprentissage Continu** (en mémoire):
 ```bash
 export OPENAI_API_KEY=your_api_key
-cd tests
-python test_inmemory.py
+python examples/getting_started_robust.py
 ```
 
 **Tester avec Stockage Persistant** (PostgreSQL):
@@ -301,9 +304,10 @@ docker run -d \
   pgvector/pgvector:pg16
 
 # Exécuter le test d'apprentissage continu
+uv sync --extra postgres
 export OPENAI_API_KEY=your_api_key
-cd tests
-python test_postgres.py
+export MEMU_RUN_POSTGRES_TESTS=1
+uv run python -m pytest tests/test_postgres.py
 ```
 
 Les deux exemples démontrent **les workflows de mémoire proactive**:
@@ -311,7 +315,9 @@ Les deux exemples démontrent **les workflows de mémoire proactive**:
 2. **Auto-Extraction**: Création immédiate de mémoire
 3. **Récupération Proactive**: Affichage de mémoire contextuel
 
-Voir [`tests/test_inmemory.py`](../tests/test_inmemory.py) et [`tests/test_postgres.py`](../tests/test_postgres.py) pour les détails d'implémentation.
+Voir [`tests/test_inmemory.py`](../tests/test_inmemory.py), [`tests/test_sqlite.py`](../tests/test_sqlite.py)
+et [`tests/test_postgres.py`](../tests/test_postgres.py) pour les détails d'implémentation. Les vérifications live LLM
+in-memory et SQLite sont opt-in avec `MEMU_RUN_LIVE_LLM_TESTS=1`.
 
 ---
 
@@ -326,19 +332,32 @@ service = MemUService(
         # Profil par défaut pour les opérations LLM
         "default": {
             "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-            "api_key": "your_api_key",
+            "api_key": "MEMU_QWEN_API_KEY",
             "chat_model": "qwen3-max",
-            "client_backend": "sdk"  # "sdk" ou "http"
+            "client_backend": "sdk"  # "sdk", "httpx" ou "lazyllm_backend"
         },
         # Profil séparé pour les embeddings
         "embedding": {
             "base_url": "https://api.voyageai.com/v1",
-            "api_key": "your_voyage_api_key",
+            "api_key": "VOYAGE_API_KEY",
             "embed_model": "voyage-3.5-lite"
         }
     },
     # ... autre configuration
 )
+```
+
+The `lazyllm_backend` adapter is optional. Install it with
+`pip install "memu-py[lazyllm]"` or, from a source checkout,
+`uv sync --extra lazyllm`.
+
+Optional LazyLLM live check:
+
+```bash
+uv sync --extra lazyllm
+export MEMU_QWEN_API_KEY=your_api_key
+export MEMU_RUN_LAZYLLM_TESTS=1
+uv run python -m pytest tests/test_lazyllm.py
 ```
 
 ---
@@ -357,7 +376,7 @@ service = MemoryService(
             "provider": "openrouter",
             "client_backend": "httpx",
             "base_url": "https://openrouter.ai",
-            "api_key": "your_openrouter_api_key",
+            "api_key": "OPENROUTER_API_KEY",
             "chat_model": "anthropic/claude-3.5-sonnet",  # N'importe quel modèle OpenRouter
             "embed_model": "openai/text-embedding-3-small",  # Modèle d'embedding
         },
@@ -385,15 +404,10 @@ service = MemoryService(
 #### Exécuter les Tests OpenRouter
 ```bash
 export OPENROUTER_API_KEY=your_api_key
+export MEMU_RUN_OPENROUTER_TESTS=1
 
 # Test de workflow complet (memorize + retrieve)
-python tests/test_openrouter.py
-
-# Tests spécifiques aux embeddings
-python tests/test_openrouter_embedding.py
-
-# Tests spécifiques à la vision
-python tests/test_openrouter_vision.py
+uv run python -m pytest tests/test_openrouter.py
 ```
 
 Voir [`examples/example_4_openrouter_memory.py`](../examples/example_4_openrouter_memory.py) pour un exemple complet fonctionnel.
@@ -464,8 +478,8 @@ MemU supporte à la fois **le chargement proactif de contexte** et **les requêt
 # Récupération proactive avec historique de contexte
 result = await service.retrieve(
     queries=[
-        {"role": "user", "content": {"text": "Quelles sont leurs préférences?"}},
-        {"role": "user", "content": {"text": "Parle-moi des habitudes de travail"}}
+        {"role": "user", "content": "Quelles sont leurs préférences?"},
+        {"role": "user", "content": "Parle-moi des habitudes de travail"}
     ],
     where={"user_id": "123"},  # Optionnel: filtre de portée
     method="rag"  # ou "llm" pour raisonnement plus profond
@@ -485,7 +499,7 @@ result = await service.retrieve(
 - `where={"agent_id__in": ["1", "2"]}` - Coordination multi-agent
 - Omettre `where` pour conscience de contexte globale
 
-> 📚 **Pour la documentation API complète**, voir [SERVICE_API.md](../docs/SERVICE_API.md) - inclut les patterns de workflow proactif, configuration de pipeline et gestion des mises à jour en temps réel.
+> 📚 **Pour la documentation API complète**, voir [memu.pro/docs](https://memu.pro/docs) - inclut les patterns de workflow proactif, configuration de pipeline et gestion des mises à jour en temps réel.
 
 ---
 
@@ -559,7 +573,7 @@ Voir les données expérimentales détaillées: [memU-experiment](https://github
 
 | Dépôt | Description | Fonctionnalités Proactives |
 |-------|-------------|---------------------------|
-| **[memU](https://github.com/NevaMind-AI/memU)** | Moteur principal de mémoire proactive | Pipeline d'apprentissage 7×24, auto-catégorisation |
+| **[memU](https://github.com/NevaMind-AI/MemU)** | Moteur principal de mémoire proactive | Pipeline d'apprentissage 7×24, auto-catégorisation |
 | **[memU-server](https://github.com/NevaMind-AI/memU-server)** | Backend avec synchronisation continue | Mises à jour de mémoire en temps réel, déclencheurs webhook |
 | **[memU-ui](https://github.com/NevaMind-AI/memU-ui)** | Dashboard visuel de mémoire | Surveillance de l'évolution de la mémoire en direct |
 
@@ -596,7 +610,7 @@ Nous accueillons les contributions de la communauté! Que vous corrigiez des bug
 Pour commencer à contribuer à MemU, vous devrez configurer votre environnement de développement:
 
 #### Prérequis
-- Python 3.13+
+- Python 3.12+
 - [uv](https://github.com/astral-sh/uv) (gestionnaire de paquets Python)
 - Git
 
@@ -649,7 +663,7 @@ Pour des directives de contribution détaillées, standards de code et pratiques
 
 ## 🌍 Communauté
 
-- **GitHub Issues**: [Signaler des bugs & demander des fonctionnalités](https://github.com/NevaMind-AI/memU/issues)
+- **GitHub Issues**: [Signaler des bugs & demander des fonctionnalités](https://github.com/NevaMind-AI/MemU/issues)
 - **Discord**: [Rejoindre la communauté](https://discord.com/invite/hQZntfGsbJ)
 - **X (Twitter)**: [Suivre @memU_ai](https://x.com/memU_ai)
 - **Contact**: info@nevamind.ai

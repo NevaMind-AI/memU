@@ -9,31 +9,15 @@ from typing import Any, Literal
 import pendulum
 from pydantic import BaseModel, ConfigDict, Field
 
+from memu.utils.dedupe import compute_content_hash
+
 MemoryType = Literal["profile", "event", "knowledge", "behavior", "skill", "tool"]
-
-
-def compute_content_hash(summary: str, memory_type: str) -> str:
-    """
-    Generate unique hash for memory deduplication.
-
-    Operates on post-summary content. Normalizes whitespace to handle
-    minor formatting differences like "I love coffee" vs "I  love  coffee".
-
-    Args:
-        summary: The memory summary text
-        memory_type: The type of memory (profile, event, etc.)
-
-    Returns:
-        A 16-character hex hash string
-    """
-    # Normalize: lowercase, strip, collapse whitespace
-    normalized = " ".join(summary.lower().split())
-    content = f"{memory_type}:{normalized}"
-    return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
 class BaseRecord(BaseModel):
     """Backend-agnostic record interface."""
+
+    model_config = ConfigDict(extra="allow")
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=lambda: pendulum.now("UTC"))
@@ -79,7 +63,7 @@ class MemoryItem(BaseRecord):
     summary: str
     embedding: list[float] | None = None
     happened_at: datetime | None = None
-    extra: dict[str, Any] = {}
+    extra: dict[str, Any] = Field(default_factory=dict)
     # extra may contain:
     # # reinforcement tracking fields
     # - content_hash: str

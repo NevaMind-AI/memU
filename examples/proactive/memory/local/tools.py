@@ -1,7 +1,6 @@
 from typing import Any
 
-from claude_agent_sdk import create_sdk_mcp_server, tool
-
+from ..claude_sdk import create_sdk_mcp_server, tool
 from .common import get_memory_service
 
 USER_ID = "claude_user"
@@ -14,7 +13,7 @@ async def get_memory(args: dict[str, Any]) -> dict[str, Any]:
 
     memory_service = get_memory_service()
 
-    result = await memory_service.retrieve(query, where={"user_id": USER_ID})
+    result = await memory_service.retrieve(queries=[query], where={"user_id": USER_ID})
 
     return {"content": [{"type": "text", "text": str(result)}]}
 

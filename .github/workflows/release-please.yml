@@ -4,15 +4,21 @@ on:
       - main
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
+  contents: read
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
 
 name: release-please
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -36,27 +42,27 @@ jobs:
             label: linux-x86_64
             target: x86_64-unknown-linux-gnu
             extra-args: "--compatibility manylinux_2_39"
-            python-version: "3.13"
+            python-version: "3.12"
           - os: ubuntu-latest
             label: linux-aarch64
             target: aarch64-unknown-linux-gnu
             extra-args: "--compatibility manylinux_2_39"
-            python-version: "3.13"
+            python-version: "3.12"
           - os: macos-15-intel
             label: macos-x86_64
             target: ""
             extra-args: ""
-            python-version: "3.13"
+            python-version: "3.12"
           - os: macos-latest
             label: macos-aarch64
             target: ""
             extra-args: ""
-            python-version: "3.13"
+            python-version: "3.12"
           - os: windows-latest
             label: windows-x86_64
             target: ""
             extra-args: ""
-            python-version: "3.13"
+            python-version: "3.12"
     steps:
       - uses: actions/checkout@v6
 
@@ -85,7 +91,7 @@ jobs:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
 
       - name: Upload wheel artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.label }}
           path: dist/*.whl
@@ -102,7 +108,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.13"
+          python-version: "3.12"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -114,7 +120,7 @@ jobs:
         run: uvx maturin sdist --out dist
 
       - name: Upload sdist artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: sdist
           path: dist/*.tar.gz
@@ -130,18 +136,19 @@ jobs:
     if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
     environment: pypi
     permissions:
+      actions: read
       id-token: write
       contents: write
     steps:
       - name: Download wheel artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           merge-multiple: true
           path: dist
 
       - name: Download sdist artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: sdist
           path: dist

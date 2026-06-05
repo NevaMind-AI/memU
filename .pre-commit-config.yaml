@@ -9,7 +9,12 @@ repos:
       - id: check-json
       - id: pretty-format-json
         args: [--autofix, --no-sort-keys]
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: detect-private-key
       - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
       - id: trailing-whitespace
 
   - repo: https://github.com/astral-sh/ruff-pre-commit

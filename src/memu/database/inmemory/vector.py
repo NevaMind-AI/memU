@@ -58,6 +58,9 @@ def cosine_topk(
     corpus: Iterable[tuple[str, list[float] | None]],
     k: int = 5,
 ) -> list[tuple[str, float]]:
+    if k <= 0:
+        return []
+
     # Filter out None vectors and collect valid entries
     ids: list[str] = []
     vecs: list[list[float]] = []
@@ -111,6 +114,9 @@ def cosine_topk_salience(
     Returns:
         List of (id, salience_score) tuples, sorted by score descending
     """
+    if k <= 0:
+        return []
+
     q = np.array(query_vec, dtype=np.float32)
     scored: list[tuple[str, float]] = []
 

@@ -19,10 +19,12 @@ Nebius provides:
 import asyncio
 import os
 import sys
+from pathlib import Path
 
-# Add src to path for local development
-src_path = os.path.abspath("src")
-sys.path.insert(0, src_path)
+# Add src to sys.path before importing memu from a source checkout.
+src_path = str(Path(__file__).resolve().parents[1] / "src")
+if src_path not in sys.path:
+    sys.path.insert(0, src_path)
 
 # Nebius configuration
 NEBIUS_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
@@ -68,10 +70,10 @@ async def test_nebius_chat():
         # Truncate long responses for display
         display = content[:100] + "..." if len(content) > 100 else content
         print(f"  Response: {display}")
-        print("  ✓ Chat API works!")
+        print("  [OK] Chat API works!")
         return True
     except Exception as e:
-        print(f"  ✗ Chat API failed: {e}")
+        print(f"  [ERROR] Chat API failed: {e}")
         return False
 
 
@@ -97,16 +99,16 @@ async def test_nebius_embeddings():
         )
         print(f"  Embedding dimensions: {len(response.data[0].embedding)}")
         print(f"  Number of embeddings: {len(response.data)}")
-        print("  ✓ Embeddings API works!")
+        print("  [OK] Embeddings API works!")
         return True
     except Exception as e:
-        print(f"  ✗ Embeddings API failed: {e}")
+        print(f"  [ERROR] Embeddings API failed: {e}")
         return False
 
 
 async def test_memu_with_nebius():
     """Test MemU with Nebius as the LLM provider."""
-    from memu.app import MemoryService
+    from memu import MemoryService
 
     api_key = os.environ.get("NEBIUS_API_KEY")
     if not api_key:
@@ -136,7 +138,7 @@ async def test_memu_with_nebius():
     try:
         # Create MemU service with Nebius
         service = MemoryService(llm_profiles=llm_profiles)
-        print("  ✓ MemoryService initialized with Nebius!")
+        print("  [OK] MemoryService initialized with Nebius!")
 
         # Test memorize with a file (create temp file)
         print("\n  Testing memorize...")
@@ -149,11 +151,11 @@ async def test_memu_with_nebius():
         try:
             result = await service.memorize(
                 resource_url=temp_file,
-                modality="text",
+                modality="document",
             )
             items_count = len(result.get("items", []))
             categories_count = len(result.get("categories", []))
-            print(f"  ✓ Memorized! Items: {items_count}, Categories: {categories_count}")
+            print(f"  [OK] Memorized! Items: {items_count}, Categories: {categories_count}")
 
             # Show what was extracted
             for item in result.get("items", [])[:3]:
@@ -167,7 +169,7 @@ async def test_memu_with_nebius():
         retrieve_result = await service.retrieve(
             queries=[{"role": "user", "content": "What programming language does the user like?"}]
         )
-        print(f"  ✓ Retrieved! Needs retrieval: {retrieve_result.get('needs_retrieval')}")
+        print(f"  [OK] Retrieved! Needs retrieval: {retrieve_result.get('needs_retrieval')}")
 
         items = retrieve_result.get("items", [])
         if items:
@@ -180,12 +182,12 @@ async def test_memu_with_nebius():
                 print(f"    - {summary}...")
 
         print("\n" + "=" * 60)
-        print("✓ SUCCESS: MemU works with Nebius!")
+        print("[OK] SUCCESS: MemU works with Nebius!")
         print("=" * 60)
         return True
 
     except Exception as e:
-        print(f"  ✗ MemU with Nebius failed: {e}")
+        print(f"  [ERROR] MemU with Nebius failed: {e}")
         import traceback
 
         traceback.print_exc()
@@ -220,7 +222,7 @@ async def main():
         await test_memu_with_nebius()
     else:
         print("\n" + "=" * 60)
-        print("✗ FAILED: Basic API tests failed, skipping MemU test")
+        print("[ERROR] FAILED: Basic API tests failed, skipping MemU test")
         print("=" * 60)
 
 

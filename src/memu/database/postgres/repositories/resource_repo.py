@@ -57,8 +57,20 @@ class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
             session.commit()
 
             # Clean up cache
-            for res_id in deleted:
+            deleted_resource_ids = set(deleted)
+            for res_id in deleted_resource_ids:
                 self.resources.pop(res_id, None)
+            deleted_item_ids = {
+                item_id
+                for item_id, item in self._state.items.items()
+                if item.resource_id in deleted_resource_ids
+            }
+            for item_id in deleted_item_ids:
+                self._state.items.pop(item_id, None)
+            if deleted_item_ids:
+                self._state.relations[:] = [
+                    rel for rel in self._state.relations if rel.item_id not in deleted_item_ids
+                ]
 
         return deleted
 
