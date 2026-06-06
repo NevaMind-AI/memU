@@ -68,11 +68,17 @@ async def main():
         # RAG-based retrieval
         service.retrieve_config.method = "rag"
         result_rag = await service.retrieve(queries=queries, where={"user_id": "123"})
+        assert isinstance(result_rag, dict)
+        assert "items" in result_rag
+        assert "categories" in result_rag
         _print_results("RAG", result_rag)
 
         # LLM-based retrieval
         service.retrieve_config.method = "llm"
         result_llm = await service.retrieve(queries=queries, where={"user_id": "123"})
+        assert isinstance(result_llm, dict)
+        assert "items" in result_llm
+        assert "categories" in result_llm
         _print_results("LLM", result_llm)
 
         print("\n[SQLITE] Test completed!")
