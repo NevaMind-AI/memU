@@ -27,7 +27,6 @@ dependencies = [
     "alembic>=1.14.0",
     "pendulum>=3.1.0",
     "langchain-core>=1.2.7",
-    "lazyllm>=0.7.3",
 ]
 
 [build-system]
@@ -70,6 +69,7 @@ test = [
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
 langgraph = ["langgraph>=0.0.10", "langchain-core>=0.1.0"]
 claude = ["claude-agent-sdk>=0.1.24"]
+lazyllm = ["lazyllm>=0.7.3"]
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
