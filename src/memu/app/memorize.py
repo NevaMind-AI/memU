@@ -645,6 +645,30 @@ class MemorizeMixin:
             return
         await self._initialize_categories(ctx, store, user_scope)
 
+    @staticmethod
+    def _classify_categories(
+        configs: list[CategoryConfig],
+        existing_by_name: dict[str, MemoryCategory],
+    ) -> tuple[
+        list[tuple[int, CategoryConfig]],
+        list[tuple[int, CategoryConfig, MemoryCategory]],
+        dict[int, MemoryCategory],
+    ]:
+        to_create: list[tuple[int, CategoryConfig]] = []
+        to_update: list[tuple[int, CategoryConfig, MemoryCategory]] = []
+        ready: dict[int, MemoryCategory] = {}
+        for i, cfg in enumerate(configs):
+            name = cfg.name.strip() or "Untitled"
+            description = cfg.description.strip()
+            ex = existing_by_name.get(name)
+            if ex is None:
+                to_create.append((i, cfg))
+            elif ex.embedding is None or (ex.description or "") != description:
+                to_update.append((i, cfg, ex))
+            else:
+                ready[i] = ex
+        return to_create, to_update, ready
+
     async def _initialize_categories(
         self, ctx: Context, store: Database, user: Mapping[str, Any] | None = None
     ) -> None:
@@ -653,17 +677,47 @@ class MemorizeMixin:
         if not self.category_configs:
             ctx.categories_ready = True
             return
-        cat_texts = [self._category_embedding_text(cfg) for cfg in self.category_configs]
-        cat_vecs = await self._get_llm_client("embedding").embed(cat_texts)
-        ctx.category_ids = []
-        ctx.category_name_to_id = {}
-        for cfg, vec in zip(self.category_configs, cat_vecs, strict=True):
+
+        user_data = dict(user or {})
+        existing = store.memory_category_repo.list_categories(where=user_data or None)
+        existing_by_name: dict[str, MemoryCategory] = {c.name: c for c in existing.values()}
+
+        to_create, to_update, ready = self._classify_categories(self.category_configs, existing_by_name)
+
+        needs_embed: list[tuple[int, CategoryConfig]] = []
+        needs_embed.extend(to_create)
+        needs_embed.extend((i, cfg) for i, cfg, _ in to_update)
+
+        embed_map: dict[int, list[float]] = {}
+        if needs_embed:
+            texts = [self._category_embedding_text(cfg) for _, cfg in needs_embed]
+            vecs = await self._get_llm_client("embedding").embed(texts)
+            for (i, _), vec in zip(needs_embed, vecs, strict=True):
+                embed_map[i] = vec
+
+        cats: dict[int, MemoryCategory] = dict(ready)
+
+        for i, cfg in to_create:
             name = cfg.name.strip() or "Untitled"
             description = cfg.description.strip()
             cat = store.memory_category_repo.get_or_create_category(
-                name=name, description=description, embedding=vec, user_data=dict(user or {})
+                name=name, description=description, embedding=embed_map[i], user_data=user_data
             )
+            cats[i] = cat
+
+        for i, cfg, ex in to_update:
+            description = cfg.description.strip()
+            cat = store.memory_category_repo.update_category(
+                category_id=ex.id, description=description, embedding=embed_map[i]
+            )
+            cats[i] = cat
+
+        ctx.category_ids = []
+        ctx.category_name_to_id = {}
+        for i in range(len(self.category_configs)):
+            cat = cats[i]
             ctx.category_ids.append(cat.id)
+            name = self.category_configs[i].name.strip() or "Untitled"
             ctx.category_name_to_id[name.lower()] = cat.id
         ctx.categories_ready = True
 
