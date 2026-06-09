@@ -36,14 +36,18 @@ You can enable the Grok provider by setting the `provider` field to `"grok"` in 
 ### Using Python Configuration
 
 ```python
+import os
 from memu.app.settings import LLMConfig
 from memu.app.service import MemoryService
 
 # Configure the LLM provider to use Grok
-llm_config = LLMConfig(provider="grok")
+llm_config = LLMConfig(
+    provider="grok",
+    api_key=os.environ.get("GROK_API_KEY", ""),
+)
 
-# Initialize the service
-service = MemoryService(llm_config=llm_config)
+# Initialize the service — pass config via llm_profiles, not llm_config
+service = MemoryService(llm_profiles={"default": llm_config})
 print(f"Service initialized with model: {llm_config.chat_model}")
 # Output: Service initialized with model: grok-2-latest
 ```
