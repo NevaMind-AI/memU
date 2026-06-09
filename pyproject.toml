@@ -76,9 +76,6 @@ lazyllm = ["lazyllm>=0.7.3"]
 "Bug Tracker" = "https://github.com/NevaMind-AI/MemU/issues"
 "Documentation" = "https://github.com/NevaMind-AI/MemU#readme"
 
-[project.scripts]
-memu-server = "memu.server.cli:main"
-
 [tool.deptry.per_rule_ignores]
 # Optional dependencies used in examples/
 DEP002 = ["claude-agent-sdk"]
