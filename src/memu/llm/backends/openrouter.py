@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
-from memu.llm.backends.base import LLMBackend
+from memu.llm.backends.base import LLMBackend, _extract_content_from_dict
 
 
 class OpenRouterLLMBackend(LLMBackend):
@@ -30,7 +30,7 @@ class OpenRouterLLMBackend(LLMBackend):
 
     def parse_summary_response(self, data: dict[str, Any]) -> str:
         """Parse OpenRouter response (OpenAI-compatible format)."""
-        return cast(str, data["choices"][0]["message"]["content"])
+        return _extract_content_from_dict(data)
 
     def build_vision_payload(
         self,
