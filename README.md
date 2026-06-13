@@ -21,80 +21,78 @@
 ---
 
 memU is a **data-to-memory engine** for AI agents.
-It turns raw conversations, documents, images, audio, video, tool logs, and workspace files into an agent memory filesystem that agents can navigate, retrieve from, and use directly.
+It turns raw conversations, documents, images, audio, video, tool logs, and workspace files into structured, scoped memory that agents can retrieve and use directly.
 
 - **Raw in**: chats, docs, URLs, images, audio/video, logs, and local workspaces
-- **Structured out**: `index.md`, `memory.md`, `skill.md`, topic subdocs, typed memory items, relations, and embeddings
-- **Agent-ready**: read the compact Markdown entrypoints, drill into subfiles, or load ranked context in one call
+- **Structured out**: resources, typed memory items, categories, relations, summaries, and embeddings
+- **Agent-ready**: ingest once, then load ranked context in one call with user/session/task scope
 
 ---
 
 ## 🔄 How It Works
 
-**Raw Multimodal Data → Agent Memory Filesystem → Agent Context**
+**Raw Multimodal Data → Structured Memory Store → Agent Context**
 
 ```
-Raw Input                    memU Pipeline                 Filesystem Output
+Raw Input                    memorize() Pipeline           Stored Memory
 ─────────────────────        ─────────────────────         ─────────────────────
-chat logs                →   parse + segment           →   memory/preferences.md
-documents / URLs         →   extract facts             →   index/api.md
-images / video           →   caption + describe        →   memory/visual_context.md
-audio                    →   transcribe + summarize    →   memory/events.md
-tool logs                →   mine usage patterns       →   skill/tool_usage.md
-workspace files          →   categorize + link         →   index/files.md
+chat logs                →   parse + extract           →   profile / event / behavior items
+documents / URLs         →   ingest + extract facts    →   knowledge / skill / tool items
+images / video           →   caption + describe        →   resources + memory item summaries
+audio                    →   transcribe + extract      →   resources + event / knowledge items
+tool logs                →   mine usage patterns       →   tool / skill memory items
+workspace files          →   summarize + categorize    →   resources, categories, relations
+
+Query Input                  retrieve() Pipeline           Agent Context
+─────────────────────        ─────────────────────         ─────────────────────
+user / task query        →   route + rank by scope     →   relevant categories, items, resources
 ```
 
 1. **Ingest** — store each source as a `Resource` with its modality and source location
 2. **Preprocess** — parse text, caption images/video, transcribe audio, and normalize inputs
 3. **Extract** — turn raw content into typed `MemoryItem`s such as profile, event, knowledge, behavior, skill, or tool memories
 4. **Organize** — categorize, cross-link, embed, and summarize memories into a browsable structure
-5. **Write** — emit compact Markdown entrypoints plus detailed subdocs under `index/`, `memory/`, and `skill/`
+5. **Persist** — write records, relations, embeddings, and category summaries through the configured backend
 6. **Retrieve** — return only the relevant context for the current user, agent, session, or task
 
 ---
 
-## 🗂️ Agent Memory Filesystem
+## 🗂️ Structured Memory Graph
 
-memU's primary output is a filesystem-like memory bundle for agents. The top-level files are compact entrypoints. The matching directories contain deeper subdocs that agents can open only when needed.
+memU's primary output is a structured memory graph, persisted through repository contracts and returned as dictionaries from `memorize()` and `retrieve()`.
 
 ```txt
-.memu/
-├── index.md
-├── memory.md
-├── skill.md
-├── index/
-│   ├── architecture.md
-│   ├── api.md
-│   └── files.md
-├── memory/
-│   ├── decisions.md
-│   ├── product_context.md
-│   └── open_questions.md
-└── skill/
-    ├── testing.md
-    ├── release.md
-    └── coding_style.md
+Resource
+├── url, modality, local_path, caption, embedding
+└── MemoryItem[]
+    ├── memory_type: profile | event | knowledge | behavior | skill | tool
+    ├── summary, extra, happened_at, embedding
+    └── CategoryItem edges
+        └── MemoryCategory
+            ├── name, description, summary
+            └── embedding
 ```
 
-| Entry | Role | Subdocs |
-|-------|------|---------|
-| `index.md` | The map of the workspace: what exists, where it lives, and how to navigate it | `index/` holds deeper maps for architecture, APIs, modules, examples, and files |
-| `memory.md` | The compact long-term context an agent should load first | `memory/` holds decisions, constraints, product context, bugs, roadmap, and open questions |
-| `skill.md` | The operating manual for how to work in this project | `skill/` holds repo-specific workflows for testing, release, migrations, coding style, and tool use |
+| Record | Role | Used By |
+|--------|------|---------|
+| `Resource` | Preserve the original source artifact and derived caption/text | Trace context back to the source |
+| `MemoryItem` | Store typed atomic memories with summaries and optional metadata | Inject precise facts, preferences, events, skills, and tool patterns |
+| `MemoryCategory` | Maintain topic-level summaries over related items | Load compact context for broad queries |
+| `CategoryItem` | Link items to categories | Navigate related memories without reprocessing the source |
 
-This gives agents a stable memory surface: they can start from three small files, then follow paths into focused Markdown documents instead of rereading the raw workspace every time.
+This gives agents a stable memory surface: they can ingest raw sources once, then request scoped and ranked context instead of rereading every source artifact.
 
 ---
 
 ## 🧩 What memU Builds
 
-The Markdown filesystem is backed by structured memory records:
+The memory graph is stored as structured records:
 
 | Layer | What It Represents | Why Agents Use It |
 |-------|--------------------|-------------------|
 | **Resource** | Original source artifact: conversation, document, image, video, audio, URL, or file | Trace memory back to its source |
 | **MemoryItem** | Atomic structured memory with a type and summary | Inject precise facts, preferences, events, skills, and tool patterns |
-| **MemoryCategory** | Auto-generated topic or folder with an evolving summary | Load high-level context before drilling into details |
+| **MemoryCategory** | Auto-generated topic category with an evolving summary | Load high-level context before drilling into details |
 | **CategoryItem** | Relationship between items and categories | Navigate related memories without reprocessing the source |
 | **Embedding** | Vector representation for resources, items, and categories | Retrieve relevant context with low latency |
 
@@ -163,7 +161,7 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 | Capability | Description |
 |------------|-------------|
 | 🗂️ **Multimodal Ingestion** | Ingest conversations, documents, images, video, audio, URLs, logs, and workspace files |
-| 📁 **Memory Filesystem** | Produce `index.md`, `memory.md`, `skill.md`, and focused subdocs under `index/`, `memory/`, and `skill/` |
+| 📁 **Structured Memory Graph** | Persist resources, memory items, categories, relations, summaries, and embeddings |
 | 🧠 **Typed Memory Extraction** | Extract profile, event, knowledge, behavior, skill, and tool memories from raw sources |
 | 🧭 **Automatic Organization** | Build categories, relations, summaries, and embeddings without manual tagging |
 | 🤖 **Agent-Ready Retrieval** | Return scoped, ranked context that can be injected into any agent workflow |

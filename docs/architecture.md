@@ -8,7 +8,7 @@ The repository also describes a hosted Cloud product in `README.md`, but this do
 
 ## System overview
 
-memU follows the "memory as file system" concept from the README and implements it with three persistent layers:
+memU implements structured agent memory with four persistent record types:
 
 - `Resource`: raw source artifacts (conversation/document/image/video/audio)
 - `MemoryItem`: extracted atomic memories with embeddings
