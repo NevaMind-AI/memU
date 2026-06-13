@@ -13,7 +13,6 @@ from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
 
-
 _NO_SQL_COLUMN: Any = False
 
 
