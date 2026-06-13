@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.5.2](https://github.com/NevaMind-AI/memU/compare/v1.5.1...v1.5.2) (2026-06-13)
+
+
+### Bug Fixes
+
+* handle multiple root-level XML elements from non-conformant LLMs ([#409](https://github.com/NevaMind-AI/memU/issues/409)) ([fed42b6](https://github.com/NevaMind-AI/memU/commit/fed42b6142ec1e9f9820e46d8899823d68de8276))
+* make lazyllm an optional dependency (fixes [#373](https://github.com/NevaMind-AI/memU/issues/373)) ([#402](https://github.com/NevaMind-AI/memU/issues/402)) ([7652982](https://github.com/NevaMind-AI/memU/commit/7652982a016b2a2426d20bc11c46491d909704d0))
+* optimize category initialization to avoid unnecessary embedding ([#388](https://github.com/NevaMind-AI/memU/issues/388)) ([a92f266](https://github.com/NevaMind-AI/memU/commit/a92f2666bf94336f8c6bf950088249e611915e7d))
+* remove broken memu-server entry point (fixes [#354](https://github.com/NevaMind-AI/memU/issues/354)) ([#398](https://github.com/NevaMind-AI/memU/issues/398)) ([0672b56](https://github.com/NevaMind-AI/memU/commit/0672b56725e12c35bd46061bb23ccd93690a5fbb))
+* remove duplicate document text from preprocess prompt ([#420](https://github.com/NevaMind-AI/memU/issues/420)) ([44aa5ff](https://github.com/NevaMind-AI/memU/commit/44aa5ff0cbceae56ab283848e722a9d4bd8eddd0))
+* remove stale memu-server script entry point (fixes [#393](https://github.com/NevaMind-AI/memU/issues/393)) ([#403](https://github.com/NevaMind-AI/memU/issues/403)) ([c5fe493](https://github.com/NevaMind-AI/memU/commit/c5fe493b0596d68479b0ce6c6d83e362ffb04e90))
+* resolve SQLite embedding TypeError by using sa_column=False ([#401](https://github.com/NevaMind-AI/memU/issues/401)) ([7e198f3](https://github.com/NevaMind-AI/memU/commit/7e198f3718fa6028c809ba7d816a96541fe7e13f))
+* return empty list for non-positive top_k in cosine_topk ([#423](https://github.com/NevaMind-AI/memU/issues/423)) ([39023a8](https://github.com/NevaMind-AI/memU/commit/39023a81d758eb4447ed7d88503b8d782aecaf73))
+
+
+### Documentation
+
+* **grok:** fix MemoryService initialization example ([#405](https://github.com/NevaMind-AI/memU/issues/405)) ([96e693a](https://github.com/NevaMind-AI/memU/commit/96e693aa09add032f67b342e21b86fa96078611b))
+* Refine OpenClaw reference and feature descriptions ([#410](https://github.com/NevaMind-AI/memU/issues/410)) ([707b80e](https://github.com/NevaMind-AI/memU/commit/707b80e5f4394b8e4aafff1ef23fd331a8b557f8))
+* refine README memory filesystem positioning ([#429](https://github.com/NevaMind-AI/memU/issues/429)) ([dda0374](https://github.com/NevaMind-AI/memU/commit/dda03743b007c0863c7fe7237592f7e4a0de32b6))
+* rewrite README — raw data → memory → agent ([#426](https://github.com/NevaMind-AI/memU/issues/426)) ([c2a2aac](https://github.com/NevaMind-AI/memU/commit/c2a2aac52b4424583955f85f5a35776e76beb68a))
+
 ## [1.5.1](https://github.com/NevaMind-AI/memU/compare/v1.5.0...v1.5.1) (2026-03-23)
 
 
