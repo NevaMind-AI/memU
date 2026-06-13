@@ -4,7 +4,7 @@
 
 # memU
 
-### Turn Any Raw Workspace into Agent Memory
+### Turn Raw Multimodal Data into Agent-Ready Structured Memory
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -20,77 +20,133 @@
 
 ---
 
-memU is a **memory harness** for AI agents.
-Feed it raw data — conversations, documents, images — and it automatically builds a structured, queryable memory layer your agents can call at any time.
+memU is a **data-to-memory engine** for AI agents.
+It turns raw conversations, documents, images, audio, video, tool logs, and workspace files into an agent memory filesystem that agents can navigate, retrieve from, and use directly.
 
-- **Ingest anything**: conversations, files, URLs, multimodal inputs
-- **Auto-structure**: no manual tagging — memU extracts, categorizes, and cross-links memories automatically
-- **Agent-ready**: retrieve relevant context in one call, reduce token cost by up to 10x
-
----
-
-## 🤖 [memU Bot — Open Source Agent](https://github.com/NevaMind-AI/memUBot)
-
-<img width="100%" src="https://github.com/NevaMind-AI/memU/blob/main/assets/memUbot.png" />
-
-**[memU Bot](https://github.com/NevaMind-AI/memUBot)** — The enterprise-ready proactive AI assistant built on memU. Remembers everything, acts autonomously.
-
-- One-click install, running in under 3 minutes
-- Builds long-term memory and acts on user intent proactively (24/7)
-- Reduces LLM token cost with compressed, structured context (~1/10 comparable usage)
-
-Try now: [memu.bot](https://memu.bot) · Source: [memUBot on GitHub](https://github.com/NevaMind-AI/memUBot)
+- **Raw in**: chats, docs, URLs, images, audio/video, logs, and local workspaces
+- **Structured out**: `index.md`, `memory.md`, `skill.md`, topic subdocs, typed memory items, relations, and embeddings
+- **Agent-ready**: read the compact Markdown entrypoints, drill into subfiles, or load ranked context in one call
 
 ---
 
 ## 🔄 How It Works
 
-**Raw Data → Structured Memory → Agent Context**
+**Raw Multimodal Data → Agent Memory Filesystem → Agent Context**
 
 ```
-Your Workspace                memU Pipeline               Agent
-─────────────────────         ─────────────────────       ──────────────────
-chat logs                 →   ingest & parse           →  retrieve()
-documents                 →   extract & categorize     →  one call, typed results
-images / audio            →   cross-link memories      →  10x less tokens
-URLs / APIs               →   build filesystem index   →  always up to date
+Raw Input                    memU Pipeline                 Filesystem Output
+─────────────────────        ─────────────────────         ─────────────────────
+chat logs                →   parse + segment           →   memory/preferences.md
+documents / URLs         →   extract facts             →   index/api.md
+images / video           →   caption + describe        →   memory/visual_context.md
+audio                    →   transcribe + summarize    →   memory/events.md
+tool logs                →   mine usage patterns       →   skill/tool_usage.md
+workspace files          →   categorize + link         →   index/files.md
 ```
 
-1. **Ingest** — feed memU your raw workspace: chat logs, docs, images, any modality
-2. **Extract** — facts, preferences, skills, and relationships are pulled out automatically
-3. **Organize** — memories are structured like a filesystem: hierarchical, browsable, linkable
-4. **Retrieve** — agents get back only the relevant context, scoped to user or task
+1. **Ingest** — store each source as a `Resource` with its modality and source location
+2. **Preprocess** — parse text, caption images/video, transcribe audio, and normalize inputs
+3. **Extract** — turn raw content into typed `MemoryItem`s such as profile, event, knowledge, behavior, skill, or tool memories
+4. **Organize** — categorize, cross-link, embed, and summarize memories into a browsable structure
+5. **Write** — emit compact Markdown entrypoints plus detailed subdocs under `index/`, `memory/`, and `skill/`
+6. **Retrieve** — return only the relevant context for the current user, agent, session, or task
 
 ---
 
-## 🗃️ Memory as a Filesystem
+## 🗂️ Agent Memory Filesystem
 
-memU treats memory like a file system — structured, hierarchical, and instantly accessible.
+memU's primary output is a filesystem-like memory bundle for agents. The top-level files are compact entrypoints. The matching directories contain deeper subdocs that agents can open only when needed.
 
-| File System | memU Memory |
-|-------------|-------------|
-| 📁 Folders | 🏷️ Categories (auto-organized topics) |
-| 📄 Files | 🧠 Memory Items (extracted facts, preferences, skills) |
-| 🔗 Symlinks | 🔄 Cross-references (related memories linked) |
-| 📂 Mount points | 📥 Resources (conversations, documents, images) |
-
-```
-memory/
-├── preferences/
-│   ├── communication_style.md
-│   └── topic_interests.md
-├── relationships/
-│   ├── contacts/
-│   └── interaction_history/
-├── knowledge/
-│   ├── domain_expertise/
-│   └── learned_skills/
-└── context/
-    ├── recent_conversations/
-    └── pending_tasks/
+```txt
+.memu/
+├── index.md
+├── memory.md
+├── skill.md
+├── index/
+│   ├── architecture.md
+│   ├── api.md
+│   └── files.md
+├── memory/
+│   ├── decisions.md
+│   ├── product_context.md
+│   └── open_questions.md
+└── skill/
+    ├── testing.md
+    ├── release.md
+    └── coding_style.md
 ```
 
-Just as a file system turns raw bytes into organized data, memU transforms raw interactions into **structured, searchable, proactive intelligence**.
+| Entry | Role | Subdocs |
+|-------|------|---------|
+| `index.md` | The map of the workspace: what exists, where it lives, and how to navigate it | `index/` holds deeper maps for architecture, APIs, modules, examples, and files |
+| `memory.md` | The compact long-term context an agent should load first | `memory/` holds decisions, constraints, product context, bugs, roadmap, and open questions |
+| `skill.md` | The operating manual for how to work in this project | `skill/` holds repo-specific workflows for testing, release, migrations, coding style, and tool use |
+
+This gives agents a stable memory surface: they can start from three small files, then follow paths into focused Markdown documents instead of rereading the raw workspace every time.
+
+---
+
+## 🧩 What memU Builds
+
+The Markdown filesystem is backed by structured memory records:
+
+| Layer | What It Represents | Why Agents Use It |
+|-------|--------------------|-------------------|
+| **Resource** | Original source artifact: conversation, document, image, video, audio, URL, or file | Trace memory back to its source |
+| **MemoryItem** | Atomic structured memory with a type and summary | Inject precise facts, preferences, events, skills, and tool patterns |
+| **MemoryCategory** | Auto-generated topic or folder with an evolving summary | Load high-level context before drilling into details |
+| **CategoryItem** | Relationship between items and categories | Navigate related memories without reprocessing the source |
+| **Embedding** | Vector representation for resources, items, and categories | Retrieve relevant context with low latency |
+
+Example `memorize()` output:
+
+```json
+{
+  "resource": {
+    "id": "res_01",
+    "url": "workspace/launch-meeting.mp4",
+    "modality": "video",
+    "caption": "A product planning discussion about onboarding and launch risks."
+  },
+  "items": [
+    {
+      "id": "mem_01",
+      "memory_type": "event",
+      "summary": "The team decided to simplify onboarding before the next launch review."
+    },
+    {
+      "id": "mem_02",
+      "memory_type": "profile",
+      "summary": "The user prefers concise implementation plans with explicit verification steps."
+    },
+    {
+      "id": "mem_03",
+      "memory_type": "tool",
+      "summary": "Use repository-wide search before editing configuration files to avoid missing duplicated settings."
+    }
+  ],
+  "categories": [
+    {
+      "id": "cat_01",
+      "name": "product_goals",
+      "summary": "Current launch priorities, onboarding decisions, and unresolved risks."
+    }
+  ],
+  "relations": [
+    { "item_id": "mem_01", "category_id": "cat_01" }
+  ]
+}
+```
+
+Then an agent can call `retrieve()` to get a scoped, ranked context payload:
+
+```python
+context = await service.retrieve(
+    queries=[{"role": "user", "content": {"text": "What context matters for this launch task?"}}],
+    where={"user_id": "123"},
+    method="rag",
+)
+```
 
 ---
 
@@ -106,114 +162,85 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 
 | Capability | Description |
 |------------|-------------|
-| 🗂️ **Raw Workspace Ingestion** | Automatically ingests conversations, documents, images, and multimodal data from any source |
-| 🧠 **Auto Memory Extraction** | Extracts facts, preferences, skills, and relationships without manual tagging |
-| 🤖 **Agent-Ready Retrieval** | One-call context loading — scoped, ranked, and ready for injection into any agent |
-| 💰 **10x Token Reduction** | Compressed, structured memory eliminates redundant context and cuts LLM costs dramatically |
-| 🎯 **Intent Capture** | Continuously understands and updates user goals and preferences across sessions |
-| 🔄 **24/7 Proactive Updates** | Memory evolves in the background — agents always have fresh context without re-ingesting |
-
----
-
-## 🔄 Proactive Memory Lifecycle
-
-```
-┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                         USER QUERY                                               │
-└──────────────────────────────────────────────────────────────────────────────────────────────────┘
-                 │                                                           │
-                 ▼                                                           ▼
-┌────────────────────────────────────────┐         ┌────────────────────────────────────────────────┐
-│         🤖 MAIN AGENT                  │         │              🧠 MEMU BOT                        │
-│                                        │         │                                                │
-│  Handle user queries & execute tasks   │  ◄───►  │  Monitor, memorize & proactive intelligence    │
-├────────────────────────────────────────┤         ├────────────────────────────────────────────────┤
-│                                        │         │                                                │
-│  ┌──────────────────────────────────┐  │         │  ┌──────────────────────────────────────────┐  │
-│  │  1. RECEIVE USER INPUT           │  │         │  │  1. MONITOR INPUT/OUTPUT                 │  │
-│  │     Parse query, understand      │  │   ───►  │  │     Observe agent interactions           │  │
-│  │     context and intent           │  │         │  │     Track conversation flow              │  │
-│  └──────────────────────────────────┘  │         │  └──────────────────────────────────────────┘  │
-│                 │                      │         │                    │                           │
-│                 ▼                      │         │                    ▼                           │
-│  ┌──────────────────────────────────┐  │         │  ┌──────────────────────────────────────────┐  │
-│  │  2. PLAN & EXECUTE               │  │         │  │  2. MEMORIZE & EXTRACT                   │  │
-│  │     Break down tasks             │  │   ◄───  │  │     Store insights, facts, preferences   │  │
-│  │     Call tools, retrieve data    │  │  inject │  │     Extract skills & knowledge           │  │
-│  │     Generate responses           │  │  memory │  │     Update user profile                  │  │
-│  └──────────────────────────────────┘  │         │  └──────────────────────────────────────────┘  │
-│                 │                      │         │                    │                           │
-│                 ▼                      │         │                    ▼                           │
-│  ┌──────────────────────────────────┐  │         │  ┌──────────────────────────────────────────┐  │
-│  │  3. RESPOND TO USER              │  │         │  │  3. PREDICT USER INTENT                  │  │
-│  │     Deliver answer/result        │  │   ───►  │  │     Anticipate next steps                │  │
-│  │     Continue conversation        │  │         │  │     Identify upcoming needs              │  │
-│  └──────────────────────────────────┘  │         │  └──────────────────────────────────────────┘  │
-│                 │                      │         │                    │                           │
-│                 ▼                      │         │                    ▼                           │
-│  ┌──────────────────────────────────┐  │         │  ┌──────────────────────────────────────────┐  │
-│  │  4. LOOP                         │  │         │  │  4. RUN PROACTIVE TASKS                  │  │
-│  │     Wait for next user input     │  │   ◄───  │  │     Pre-fetch relevant context           │  │
-│  │     or proactive suggestions     │  │  suggest│  │     Prepare recommendations              │  │
-│  └──────────────────────────────────┘  │         │  │     Update todolist autonomously         │  │
-│                                        │         │  └──────────────────────────────────────────┘  │
-└────────────────────────────────────────┘         └────────────────────────────────────────────────┘
-                 │                                                           │
-                 └───────────────────────────┬───────────────────────────────┘
-                                             ▼
-                              ┌──────────────────────────────┐
-                              │     CONTINUOUS SYNC LOOP     │
-                              │  Agent ◄──► MemU Bot ◄──► DB │
-                              └──────────────────────────────┘
-```
+| 🗂️ **Multimodal Ingestion** | Ingest conversations, documents, images, video, audio, URLs, logs, and workspace files |
+| 📁 **Memory Filesystem** | Produce `index.md`, `memory.md`, `skill.md`, and focused subdocs under `index/`, `memory/`, and `skill/` |
+| 🧠 **Typed Memory Extraction** | Extract profile, event, knowledge, behavior, skill, and tool memories from raw sources |
+| 🧭 **Automatic Organization** | Build categories, relations, summaries, and embeddings without manual tagging |
+| 🤖 **Agent-Ready Retrieval** | Return scoped, ranked context that can be injected into any agent workflow |
+| 🧱 **Pluggable Storage** | Use in-memory, SQLite, or Postgres backends with the same repository contracts |
+| 🔀 **Profile-Based LLM Routing** | Route chat, embedding, vision, and transcription work through configurable LLM profiles |
 
 ---
 
 ## 🎯 Use Cases
 
-### 1. **Customer-Facing AI Agent (B2B)**
-*Build agents that remember every customer interaction and act on accumulated context*
-```python
-# Ingest customer workspace: emails, tickets, chat history
-await service.memorize(resource_url="customer_workspace/", modality="conversation", user={"user_id": "acme-corp"})
+### 1. **Conversation Memory**
+*Turn chat logs into user preferences, goals, events, and relationship context.*
 
-# Agent retrieves full customer context before responding
-context = await service.retrieve(queries=[{"role": "user", "content": {"text": "What does this customer need?"}}], where={"user_id": "acme-corp"})
+```python
+await service.memorize(
+    resource_url="conversations/user_123.json",
+    modality="conversation",
+    user={"user_id": "123"},
+)
+
+context = await service.retrieve(
+    queries=[{"role": "user", "content": {"text": "What should I remember about this user?"}}],
+    where={"user_id": "123"},
+)
 ```
 
-### 2. **Developer Agent / Coding Assistant**
-*Agent learns your codebase, preferences, and past decisions automatically*
+### 2. **Workspace Context for Coding Agents**
+*Convert docs, PR notes, logs, and design decisions into reusable project memory.*
+
 ```python
-# Ingest repo docs, past PRs, coding style guides
 await service.memorize(resource_url="docs/architecture.md", modality="document")
+await service.memorize(resource_url="examples/resources/logs/log1.txt", modality="document")
 
-# Agent has full project context without re-reading files
-context = await service.retrieve(queries=[{"role": "user", "content": {"text": "How should I structure this module?"}}])
+context = await service.retrieve(
+    queries=[{"role": "user", "content": {"text": "How should I structure this module?"}}],
+)
 ```
 
-### 3. **Trading & Financial Monitoring**
-*Agent tracks market context and user investment behavior continuously*
-```python
-# MemU learns trading preferences from history
-await service.memorize(resource_url="trading_history.json", modality="document")
+### 3. **Multimodal Knowledge Layer**
+*Extract searchable facts from documents, screenshots, images, videos, and audio notes.*
 
-# Proactive alerts grounded in personal context
-context = await service.retrieve(queries=[{"role": "user", "content": {"text": "Any relevant market events today?"}}])
+```python
+await service.memorize(resource_url="research-notes.pdf", modality="document")
+await service.memorize(resource_url="whiteboard.png", modality="image")
+await service.memorize(resource_url="meeting-audio.mp3", modality="audio")
+
+context = await service.retrieve(
+    queries=[{"role": "user", "content": {"text": "What matters for the next research plan?"}}],
+)
+```
+
+### 4. **Tool and Agent Learning**
+*Turn execution traces into tool memories that tell future agents when to use a tool and what mistakes to avoid.*
+
+```python
+await service.memorize(resource_url="agent_run.log", modality="document")
+
+context = await service.retrieve(
+    queries=[{"role": "user", "content": {"text": "Which tools worked for config editing?"}}],
+)
 ```
 
 ---
 
-## 🗂️ Hierarchical Memory Architecture
+## 🗂️ Architecture
 
-memU's three-layer system enables both **reactive queries** and **proactive context loading**:
+memU's memory model is hierarchical enough for browsing and structured enough for direct retrieval:
 
 <img width="100%" alt="structure" src="assets/structure.png" />
 
-| Layer | Reactive Use | Proactive Use |
-|-------|--------------|---------------|
-| **Resource** | Direct access to original data | Background monitoring for new patterns |
-| **Item** | Targeted fact retrieval | Real-time extraction from ongoing interactions |
-| **Category** | Summary-level overview | Automatic context assembly for anticipation |
+| Layer | Primary Role | Retrieval Role |
+|-------|--------------|----------------|
+| **Resource** | Preserve source artifacts and captions | Recall original context when item/category summaries are not enough |
+| **Item** | Store typed atomic memories | Load precise facts, events, preferences, skills, and tool patterns |
+| **Category** | Maintain topic-level summaries | Assemble compact context for broad queries |
+
+See [docs/architecture.md](docs/architecture.md) for the runtime view of `MemoryService`, workflow pipelines, storage backends, and LLM routing.
 
 ---
 
@@ -221,7 +248,7 @@ memU's three-layer system enables both **reactive queries** and **proactive cont
 
 ### Option 1: Cloud Version
 
-👉 **[memu.so](https://memu.so)** — Hosted service, zero setup, 7×24 continuous learning
+👉 **[memu.so](https://memu.so)** — Hosted API for managed ingestion, structured memory, and retrieval
 
 For enterprise deployment: **info@nevamind.ai**
 
@@ -233,7 +260,7 @@ For enterprise deployment: **info@nevamind.ai**
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/v3/memory/memorize` | Ingest raw data and build memory |
+| `POST` | `/api/v3/memory/memorize` | Ingest raw data and build structured memory |
 | `GET` | `/api/v3/memory/memorize/status/{task_id}` | Check processing status |
 | `POST` | `/api/v3/memory/categories` | List auto-generated categories |
 | `POST` | `/api/v3/memory/retrieve` | Query memory for agent context |
@@ -320,23 +347,23 @@ service = MemoryService(
 
 ## 📖 Core APIs
 
-### `memorize()` — Build Memory from Raw Data
+### `memorize()` — Structure Raw Data
 
 <img width="100%" alt="memorize" src="assets/memorize.png" />
 
 ```python
 result = await service.memorize(
-    resource_url="path/to/file.json",   # file path, URL, or directory
-    modality="conversation",             # conversation | document | image | video | audio
-    user={"user_id": "123"}              # optional: scope to a user or agent
+    resource_url="path/to/file.json",    # file path, URL, or directory
+    modality="conversation",            # conversation | document | image | video | audio
+    user={"user_id": "123"},            # optional: scope to a user or agent
 )
 # Returns immediately:
-# { "resource": {...}, "items": [...], "categories": [...] }
+# { "resource": {...}, "items": [...], "categories": [...], "relations": [...] }
 ```
 
-- Zero-delay: memories are available instantly after ingestion
-- Automatic categorization — no manual tagging needed
-- Cross-references existing memories for pattern detection
+- Converts raw input into typed memory items
+- Categorizes and embeds items without manual tagging
+- Preserves source resources and item-category relations
 
 ---
 
@@ -357,7 +384,7 @@ result = await service.retrieve(
 | Method | Speed | Cost | Best For |
 |--------|-------|------|----------|
 | `rag` | ⚡ ms | embedding only | real-time agent context |
-| `llm` | 🐢 seconds | LLM inference | complex anticipation |
+| `llm` | 🐢 seconds | LLM inference | deeper semantic ranking |
 
 ---
 
@@ -398,7 +425,7 @@ View detailed results: [memU-experiment](https://github.com/NevaMind-AI/memU-exp
 
 | Repository | Description |
 |------------|-------------|
-| **[memU](https://github.com/NevaMind-AI/memU)** | Core memory harness — ingestion, extraction, retrieval |
+| **[memU](https://github.com/NevaMind-AI/memU)** | Core data-to-memory engine — ingestion, extraction, retrieval |
 | **[memU-server](https://github.com/NevaMind-AI/memU-server)** | Backend with real-time sync and webhook triggers |
 | **[memU-ui](https://github.com/NevaMind-AI/memU-ui)** | Visual dashboard for browsing and monitoring memory |
 
