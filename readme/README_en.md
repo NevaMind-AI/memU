@@ -418,7 +418,7 @@ result = await service.memorize(
     user={"user_id": "123"}             # Optional: scope to a user
 )
 
-# Returns immediately with extracted memory:
+# Returns after processing completes:
 {
     "resource": {...},      # Stored resource metadata
     "items": [...],         # Extracted memory items (available instantly)
@@ -464,6 +464,8 @@ Deep **anticipatory reasoning** for complex contexts:
 
 #### Usage
 ```python
+# The retrieval strategy is set once on the service via retrieve_config:
+#   MemoryService(retrieve_config={"method": "rag"})  # or "llm" for deeper reasoning
 # Proactive retrieval with context history
 result = await service.retrieve(
     queries=[
@@ -471,7 +473,6 @@ result = await service.retrieve(
         {"role": "user", "content": {"text": "Tell me about work habits"}}
     ],
     where={"user_id": "123"},  # Optional: scope filter
-    method="rag"  # or "llm" for deeper reasoning
 )
 
 # Returns context-aware results:
