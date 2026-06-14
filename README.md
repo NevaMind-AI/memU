@@ -21,9 +21,9 @@
 ---
 
 memU is a **data-to-memory engine** for AI agents.
-It turns raw conversations, documents, images, audio, video, tool logs, and workspace files into structured, scoped memory that agents can retrieve and use directly.
+It turns raw conversations, documents, images, audio, video, tool logs, and local files into structured, scoped memory that agents can retrieve and use directly.
 
-- **Raw in**: chats, docs, URLs, images, audio/video, logs, and local workspaces
+- **Raw in**: chats, docs, URLs, images, audio/video, logs, and local files
 - **Structured out**: resources, typed memory items, categories, relations, summaries, and embeddings
 - **Agent-ready**: ingest once, then load ranked context in one call with user/session/task scope
 
@@ -41,7 +41,7 @@ documents / URLs         →   ingest + extract facts    →   knowledge / skill
 images / video           →   caption + describe        →   resources + memory item summaries
 audio                    →   transcribe + extract      →   resources + event / knowledge items
 tool logs                →   mine usage patterns       →   tool / skill memory items
-workspace files          →   summarize + categorize    →   resources, categories, relations
+local files              →   summarize + categorize    →   resources, categories, relations
 
 Query Input                  retrieve() Pipeline           Agent Context
 ─────────────────────        ─────────────────────         ─────────────────────
@@ -102,7 +102,7 @@ Example `memorize()` output:
 {
   "resource": {
     "id": "res_01",
-    "url": "workspace/launch-meeting.mp4",
+    "url": "files/launch-meeting.mp4",
     "modality": "video",
     "caption": "A product planning discussion about onboarding and launch risks."
   },
@@ -142,7 +142,6 @@ Then an agent can call `retrieve()` to get a scoped, ranked context payload:
 context = await service.retrieve(
     queries=[{"role": "user", "content": {"text": "What context matters for this launch task?"}}],
     where={"user_id": "123"},
-    method="rag",
 )
 ```
 
@@ -160,7 +159,7 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 
 | Capability | Description |
 |------------|-------------|
-| 🗂️ **Multimodal Ingestion** | Ingest conversations, documents, images, video, audio, URLs, logs, and workspace files |
+| 🗂️ **Multimodal Ingestion** | Ingest conversations, documents, images, video, audio, URLs, logs, and local files |
 | 📁 **Structured Memory Graph** | Persist resources, memory items, categories, relations, summaries, and embeddings |
 | 🧠 **Typed Memory Extraction** | Extract profile, event, knowledge, behavior, skill, and tool memories from raw sources |
 | 🧭 **Automatic Organization** | Build categories, relations, summaries, and embeddings without manual tagging |
@@ -177,7 +176,7 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 
 ```python
 await service.memorize(
-    resource_url="conversations/user_123.json",
+    resource_url="examples/resources/conversations/conv1.json",
     modality="conversation",
     user={"user_id": "123"},
 )
@@ -204,8 +203,9 @@ context = await service.retrieve(
 *Extract searchable facts from documents, screenshots, images, videos, and audio notes.*
 
 ```python
-await service.memorize(resource_url="research-notes.pdf", modality="document")
-await service.memorize(resource_url="whiteboard.png", modality="image")
+await service.memorize(resource_url="examples/resources/docs/doc1.txt", modality="document")
+await service.memorize(resource_url="examples/resources/images/image1.png", modality="image")
+# Audio is supported for your own .mp3/.wav/.m4a files.
 await service.memorize(resource_url="meeting-audio.mp3", modality="audio")
 
 context = await service.retrieve(
@@ -217,7 +217,7 @@ context = await service.retrieve(
 *Turn execution traces into tool memories that tell future agents when to use a tool and what mistakes to avoid.*
 
 ```python
-await service.memorize(resource_url="agent_run.log", modality="document")
+await service.memorize(resource_url="examples/resources/logs/log1.txt", modality="document")
 
 context = await service.retrieve(
     queries=[{"role": "user", "content": {"text": "Which tools worked for config editing?"}}],
@@ -270,29 +270,44 @@ For enterprise deployment: **info@nevamind.ai**
 ### Option 2: Self-Hosted
 
 #### Installation
+
+From a clone of this repository:
+
 ```bash
-pip install -e .
+uv sync
+# or, for the full development setup:
+make install
 ```
 
-> **Requirements**: Python 3.13+ and an OpenAI API key
+To install the published package instead:
 
-**Test with in-memory storage:**
+```bash
+pip install memu-py
+```
+
+> **Requirements**: Python 3.13+. The default examples use OpenAI, so set `OPENAI_API_KEY` or pass another provider through `llm_profiles`.
+
+**Run an in-memory smoke script:**
 ```bash
 export OPENAI_API_KEY=your_key
-cd tests && python test_inmemory.py
+cd tests
+uv run python test_inmemory.py
 ```
 
-**Test with PostgreSQL:**
+**Run with PostgreSQL + pgvector:**
 ```bash
+uv sync --extra postgres
 docker run -d --name memu-postgres \
   -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=your_password \
+  -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=memu \
   -p 5432:5432 \
   pgvector/pgvector:pg16
 
 export OPENAI_API_KEY=your_key
-cd tests && python test_postgres.py
+export POSTGRES_DSN=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/memu
+cd tests
+uv run python test_postgres.py
 ```
 
 ---
@@ -351,11 +366,11 @@ service = MemoryService(
 
 ```python
 result = await service.memorize(
-    resource_url="path/to/file.json",    # file path, URL, or directory
+    resource_url="path/to/file.json",    # local file path or HTTP URL
     modality="conversation",            # conversation | document | image | video | audio
     user={"user_id": "123"},            # optional: scope to a user or agent
 )
-# Returns immediately:
+# Returns after processing completes:
 # { "resource": {...}, "items": [...], "categories": [...], "relations": [...] }
 ```
 
@@ -370,19 +385,29 @@ result = await service.memorize(
 <img width="100%" alt="retrieve" src="assets/retrieve.png" />
 
 ```python
+# The retrieval strategy is set once on the service via retrieve_config:
+#   MemoryService(retrieve_config={"method": "rag"})   # vector-first recall
+#   MemoryService(retrieve_config={"method": "llm"})   # LLM-ranked recall
 result = await service.retrieve(
     queries=[{"role": "user", "content": {"text": "What are their preferences?"}}],
     where={"user_id": "123"},   # scope filter
-    method="rag"                # "rag" (fast) or "llm" (deep reasoning)
 )
 # Returns:
-# { "categories": [...], "items": [...], "resources": [...], "next_step_query": "..." }
+# {
+#   "needs_retrieval": true,
+#   "original_query": "...",
+#   "rewritten_query": "...",
+#   "next_step_query": "...",
+#   "categories": [...],
+#   "items": [...],
+#   "resources": [...]
+# }
 ```
 
-| Method | Speed | Cost | Best For |
-|--------|-------|------|----------|
-| `rag` | ⚡ ms | embedding only | real-time agent context |
-| `llm` | 🐢 seconds | LLM inference | deeper semantic ranking |
+| `retrieve_config.method` | Behavior | Cost | Best For |
+|--------------------------|----------|------|----------|
+| `rag` | Vector-first category/item/resource recall, with optional LLM routing and sufficiency checks enabled by default | Embeddings plus LLM calls unless `route_intention` and `sufficiency_check` are disabled | Fast scoped recall with controllable reasoning |
+| `llm` | LLM-ranked category/item/resource recall | LLM ranking at each tier | Deeper semantic ranking |
 
 ---
 
@@ -391,19 +416,19 @@ result = await service.retrieve(
 ### Always-Learning Assistant
 ```bash
 export OPENAI_API_KEY=your_key
-python examples/example_1_conversation_memory.py
+uv run python examples/example_1_conversation_memory.py
 ```
 Automatically extracts preferences, builds relationship models, and surfaces relevant context in future conversations.
 
 ### Self-Improving Agent
 ```bash
-python examples/example_2_skill_extraction.py
+uv run python examples/example_2_skill_extraction.py
 ```
 Monitors agent actions, identifies patterns in successes and failures, auto-generates skill guides from experience.
 
 ### Multimodal Context Builder
 ```bash
-python examples/example_3_multimodal_memory.py
+uv run python examples/example_3_multimodal_memory.py
 ```
 Cross-references text, images, and documents automatically into a unified memory layer.
 

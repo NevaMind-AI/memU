@@ -57,18 +57,21 @@ memU treats **memory like a file system**—structured, hierarchical, and instan
 
 ```
 memory/
-├── preferences/
-│   ├── communication_style.md
-│   └── topic_interests.md
-├── relationships/
-│   ├── contacts/
-│   └── interaction_history/
-├── knowledge/
-│   ├── domain_expertise/
-│   └── learned_skills/
-└── context/
-    ├── recent_conversations/
-    └── pending_tasks/
+├── preference.md
+├── soul.md
+└── xxx.md
+
+MEMORY.md
+
+skill/
+├── {skill_name}/
+│   └── SKILL.md
+└── {another_skill_name}/
+    └── SKILL.md
+
+SKILL.md
+
+INDEX.md
 ```
 
 Just as a file system turns raw bytes into organized data, memU transforms raw interactions into **structured, searchable, proactive intelligence**.

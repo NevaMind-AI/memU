@@ -57,18 +57,21 @@ memUは**メモリをファイルシステムのように**扱います—構造
 
 ```
 memory/
-├── preferences/
-│   ├── communication_style.md
-│   └── topic_interests.md
-├── relationships/
-│   ├── contacts/
-│   └── interaction_history/
-├── knowledge/
-│   ├── domain_expertise/
-│   └── learned_skills/
-└── context/
-    ├── recent_conversations/
-    └── pending_tasks/
+├── preference.md
+├── soul.md
+└── xxx.md
+
+MEMORY.md
+
+skill/
+├── {skill_name}/
+│   └── SKILL.md
+└── {another_skill_name}/
+    └── SKILL.md
+
+SKILL.md
+
+INDEX.md
 ```
 
 ファイルシステムが生のバイトを整理されたデータに変換するように、memUは生のインタラクションを**構造化された、検索可能な、プロアクティブなインテリジェンス**に変換します。
