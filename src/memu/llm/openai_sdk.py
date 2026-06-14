@@ -53,12 +53,15 @@ class OpenAISDKClient:
         user_message: ChatCompletionUserMessageParam = {"role": "user", "content": prompt}
         messages.append(user_message)
 
-        response = await self.client.chat.completions.create(
-            model=self.chat_model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        kwargs: dict[str, Any] = {
+            "model": self.chat_model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+
+        response = await self.client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content
         logger.debug("OpenAI chat response: %s", response)
         return content or "", response
@@ -76,12 +79,15 @@ class OpenAISDKClient:
         user_message: ChatCompletionUserMessageParam = {"role": "user", "content": text}
         messages: list[ChatCompletionMessageParam] = [system_message, user_message]
 
-        response = await self.client.chat.completions.create(
-            model=self.chat_model,
-            messages=messages,
-            temperature=1,
-            max_tokens=max_tokens,
-        )
+        kwargs: dict[str, Any] = {
+            "model": self.chat_model,
+            "messages": messages,
+            "temperature": 1,
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+
+        response = await self.client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content
         logger.debug("OpenAI summarize response: %s", response)
         return content or "", response
@@ -142,12 +148,15 @@ class OpenAISDKClient:
         }
         messages.append(user_message)
 
-        response = await self.client.chat.completions.create(
-            model=self.chat_model,
-            messages=messages,
-            temperature=1,
-            max_tokens=max_tokens,
-        )
+        kwargs: dict[str, Any] = {
+            "model": self.chat_model,
+            "messages": messages,
+            "temperature": 1,
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+
+        response = await self.client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content
         logger.debug("OpenAI vision response: %s", response)
         return content or "", response
