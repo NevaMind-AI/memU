@@ -57,18 +57,21 @@ memU treats **memory like a file system**—structured, hierarchical, and instan
 
 ```
 memory/
-├── preferences/
-│   ├── communication_style.md
-│   └── topic_interests.md
-├── relationships/
-│   ├── contacts/
-│   └── interaction_history/
-├── knowledge/
-│   ├── domain_expertise/
-│   └── learned_skills/
-└── context/
-    ├── recent_conversations/
-    └── pending_tasks/
+├── preference.md
+├── soul.md
+└── xxx.md
+
+MEMORY.md
+
+skill/
+├── {skill_name}/
+│   └── SKILL.md
+└── {another_skill_name}/
+    └── SKILL.md
+
+SKILL.md
+
+INDEX.md
 ```
 
 Just as a file system turns raw bytes into organized data, memU transforms raw interactions into **structured, searchable, proactive intelligence**.
@@ -415,7 +418,7 @@ result = await service.memorize(
     user={"user_id": "123"}             # Optional: scope to a user
 )
 
-# Returns immediately with extracted memory:
+# Returns after processing completes:
 {
     "resource": {...},      # Stored resource metadata
     "items": [...],         # Extracted memory items (available instantly)
@@ -461,6 +464,8 @@ Deep **anticipatory reasoning** for complex contexts:
 
 #### Usage
 ```python
+# The retrieval strategy is set once on the service via retrieve_config:
+#   MemoryService(retrieve_config={"method": "rag"})  # or "llm" for deeper reasoning
 # Proactive retrieval with context history
 result = await service.retrieve(
     queries=[
@@ -468,7 +473,6 @@ result = await service.retrieve(
         {"role": "user", "content": {"text": "Tell me about work habits"}}
     ],
     where={"user_id": "123"},  # Optional: scope filter
-    method="rag"  # or "llm" for deeper reasoning
 )
 
 # Returns context-aware results:

@@ -57,18 +57,21 @@ memU traite la **mémoire comme un système de fichiers**—structurée, hiérar
 
 ```
 memory/
-├── preferences/
-│   ├── communication_style.md
-│   └── topic_interests.md
-├── relationships/
-│   ├── contacts/
-│   └── interaction_history/
-├── knowledge/
-│   ├── domain_expertise/
-│   └── learned_skills/
-└── context/
-    ├── recent_conversations/
-    └── pending_tasks/
+├── preference.md
+├── soul.md
+└── xxx.md
+
+MEMORY.md
+
+skill/
+├── {skill_name}/
+│   └── SKILL.md
+└── {another_skill_name}/
+    └── SKILL.md
+
+SKILL.md
+
+INDEX.md
 ```
 
 Tout comme un système de fichiers transforme des octets bruts en données organisées, memU transforme les interactions brutes en **intelligence structurée, recherchable et proactive**.

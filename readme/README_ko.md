@@ -57,18 +57,21 @@ memU는 **메모리를 파일 시스템처럼** 다룹니다—구조화되고, 
 
 ```
 memory/
-├── preferences/
-│   ├── communication_style.md
-│   └── topic_interests.md
-├── relationships/
-│   ├── contacts/
-│   └── interaction_history/
-├── knowledge/
-│   ├── domain_expertise/
-│   └── learned_skills/
-└── context/
-    ├── recent_conversations/
-    └── pending_tasks/
+├── preference.md
+├── soul.md
+└── xxx.md
+
+MEMORY.md
+
+skill/
+├── {skill_name}/
+│   └── SKILL.md
+└── {another_skill_name}/
+    └── SKILL.md
+
+SKILL.md
+
+INDEX.md
 ```
 
 파일 시스템이 원시 바이트를 정리된 데이터로 변환하듯, memU는 원시 상호작용을 **구조화되고, 검색 가능하며, 프로액티브한 인텔리전스**로 변환합니다.

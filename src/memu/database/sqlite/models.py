@@ -67,7 +67,7 @@ class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):
     # Actual column storing the embedding as a JSON string
     embedding_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     happened_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
-    extra: dict[str, Any] = Field(default={}, sa_column=Column(JSON, nullable=True))
+    extra: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True))
 
 
 class SQLiteMemoryCategoryModel(SQLiteBaseModelMixin, MemoryCategory):
