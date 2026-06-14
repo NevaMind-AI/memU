@@ -58,9 +58,24 @@ class LocalFS:
         # Local path
         p = pathlib.Path(url)
         if p.exists():
+            # Security: Validate that resolved path stays within allowed boundaries
+            # and prevent path traversal attacks
+            try:
+                resolved_path = p.resolve()
+                # Only allow absolute paths that don't contain traversal sequences
+                if ".." in p.parts:
+                    raise ValueError(f"Path traversal detected in: {url}")
+                
+                # Additional check: ensure the resolved path is an actual file
+                if not resolved_path.is_file():
+                    raise ValueError(f"Path must be a file: {url}")
+                    
+            except (ValueError, OSError) as e:
+                raise ValueError(f"Invalid or unsafe file path: {url}") from e
+            
             dst = self.base / p.name
-            if str(p.resolve()) != str(dst.resolve()):
-                shutil.copyfile(p, dst)
+            if str(resolved_path) != str(dst.resolve()):
+                shutil.copyfile(resolved_path, dst)
             text = None
             if modality in ("conversation", "text", "document"):
                 text = dst.read_text(encoding="utf-8")
