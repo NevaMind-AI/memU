@@ -136,6 +136,8 @@ class LLMConfig(BaseModel):
             if self.chat_model == "gpt-4o-mini":
                 self.chat_model = "grok-2-latest"
         elif self.provider == "litellm":
+            if self.client_backend == "sdk":
+                self.client_backend = "litellm"
             if self.base_url == "https://api.openai.com/v1":
                 self.base_url = "http://localhost:4000"
             if self.api_key == "OPENAI_API_KEY":

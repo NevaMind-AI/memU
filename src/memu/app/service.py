@@ -117,6 +117,16 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
                 endpoint_overrides=cfg.endpoint_overrides,
                 embed_model=cfg.embed_model,
             )
+        elif backend == "litellm":
+            from memu.llm.litellm_sdk import LiteLLMSDKClient
+
+            return LiteLLMSDKClient(
+                chat_model=cfg.chat_model,
+                embed_model=cfg.embed_model,
+                api_key=cfg.api_key,
+                api_base=cfg.base_url if cfg.base_url != "http://localhost:4000" else None,
+                embed_batch_size=cfg.embed_batch_size,
+            )
         elif backend == "lazyllm_backend":
             from memu.llm.lazyllm_client import LazyLLMClient
 
