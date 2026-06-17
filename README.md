@@ -4,7 +4,7 @@
 
 # memU
 
-### Turn Raw Multimodal Data into Agent-Ready Structured Memory
+### File System as Memory, Memory Shapes the Agent
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -20,81 +20,87 @@
 
 ---
 
-memU is a **data-to-memory engine** for AI agents.
-It turns raw conversations, documents, images, audio, video, tool logs, and local files into structured, scoped memory that agents can retrieve and use directly.
+memU is a **memory file system** for AI agents.
 
-- **Raw in**: chats, docs, URLs, images, audio/video, logs, and local files
-- **Structured out**: resources, typed memory items, categories, relations, summaries, and embeddings
-- **Agent-ready**: ingest once, then load ranked context in one call with user/session/task scope
+Instead of flattening everything an agent learns into one giant prompt or an opaque vector blob, memU organizes memory the way you organize a computer — as a navigable, self-organizing file system:
+
+- **Resources** are the *raw files* an agent ingests: chats, docs, URLs, images, audio, video, and logs
+- **Memory items** are the *files* — typed, structured notes extracted from those sources
+- **Categories** are the *folders* — they group related memories and keep evolving summaries
+- **The agent is the operating system** — it `memorize()`s new sources and `retrieve()`s scoped, ranked context on demand
+
+**File system as memory**: a hierarchical, browsable surface where every memory traces back to its source.
+**Memory shapes the agent**: because that surface is structured and self-organizing, it stops being passive storage and becomes the layer that shapes how the agent thinks and acts.
 
 ---
 
 ## 🔄 How It Works
 
-**Raw Multimodal Data → Structured Memory Store → Agent Context**
+Think of it as two file-system operations: **writing** raw sources into organized memory, and **reading** the right files back into the agent.
 
 ```
-Raw Input                    memorize() Pipeline           Stored Memory
-─────────────────────        ─────────────────────         ─────────────────────
-chat logs                →   parse + extract           →   profile / event / behavior items
-documents / URLs         →   ingest + extract facts    →   knowledge / skill / tool items
-images / video           →   caption + describe        →   resources + memory item summaries
-audio                    →   transcribe + extract      →   resources + event / knowledge items
-tool logs                →   mine usage patterns       →   tool / skill memory items
-local files              →   summarize + categorize    →   resources, categories, relations
-
-Query Input                  retrieve() Pipeline           Agent Context
-─────────────────────        ─────────────────────         ─────────────────────
-user / task query        →   route + rank by scope     →   relevant categories, items, resources
+WRITE — memorize()                                         READ — retrieve()
+──────────────────────────────────────────────            ──────────────────────────────────────────────
+raw files        →  extract  →  files + folders            query  →  walk folders  →  ranked files
+─────────────       ─────────    ──────────────            ─────     ────────────     ─────────────
+chat logs        →  parse    →  profile / event items      user / task query
+documents / URLs →  facts    →  knowledge / skill items       │
+images / video   →  caption  →  resources + summaries         ├─ route + scope    → relevant folders (categories)
+audio            →  transcribe→ event / knowledge items       ├─ rank by relevance → matching files (items)
+tool logs        →  mine      → tool / skill items            └─ trace to source   → original resources
 ```
 
-1. **Ingest** — store each source as a `Resource` with its modality and source location
+**Writing to the file system (`memorize`)**
+
+1. **Ingest** — store each source as a `Resource` (the raw file) with its modality and source location
 2. **Preprocess** — parse text, caption images/video, transcribe audio, and normalize inputs
-3. **Extract** — turn raw content into typed `MemoryItem`s such as profile, event, knowledge, behavior, skill, or tool memories
-4. **Organize** — categorize, cross-link, embed, and summarize memories into a browsable structure
-5. **Persist** — write records, relations, embeddings, and category summaries through the configured backend
-6. **Retrieve** — return only the relevant context for the current user, agent, session, or task
+3. **Extract** — turn raw content into typed `MemoryItem`s (the files): profile, event, knowledge, behavior, skill, or tool memories
+4. **Organize** — sort items into `MemoryCategory` folders, cross-link, embed, and summarize into a browsable tree
+5. **Persist** — write records, relations, embeddings, and folder summaries through the configured backend
+
+**Reading from the file system (`retrieve`)**
+
+6. **Retrieve** — navigate the folders and return only the files relevant to the current user, agent, session, or task
 
 ---
 
-## 🗂️ Structured Memory Graph
+## 🗂️ The Memory File System
 
-memU's primary output is a structured memory graph, persisted through repository contracts and returned as dictionaries from `memorize()` and `retrieve()`.
+memU's primary output is a navigable memory tree — folders, files, and the source artifacts behind them — persisted through repository contracts and returned as dictionaries from `memorize()` and `retrieve()`.
 
 ```txt
-Resource
-├── url, modality, local_path, caption, embedding
-└── MemoryItem[]
+MemoryCategory                       ← folder: a topic with an evolving summary
+├── name, description, summary
+├── embedding
+└── MemoryItem[]                     ← files: typed, atomic memories
     ├── memory_type: profile | event | knowledge | behavior | skill | tool
     ├── summary, extra, happened_at, embedding
-    └── CategoryItem edges
-        └── MemoryCategory
-            ├── name, description, summary
-            └── embedding
+    └── Resource                     ← source: the raw file this memory came from
+        └── url, modality, local_path, caption, embedding
 ```
 
-| Record | Role | Used By |
-|--------|------|---------|
-| `Resource` | Preserve the original source artifact and derived caption/text | Trace context back to the source |
-| `MemoryItem` | Store typed atomic memories with summaries and optional metadata | Inject precise facts, preferences, events, skills, and tool patterns |
-| `MemoryCategory` | Maintain topic-level summaries over related items | Load compact context for broad queries |
-| `CategoryItem` | Link items to categories | Navigate related memories without reprocessing the source |
+| Record | File-System Role | Used By |
+|--------|------------------|---------|
+| `MemoryCategory` | **Folder** — groups related memories and keeps a topic-level summary | Load compact context for broad queries |
+| `MemoryItem` | **File** — a typed atomic memory with a summary and optional metadata | Inject precise facts, preferences, events, skills, and tool patterns |
+| `Resource` | **Source artifact** — the original file behind a memory, with caption/text | Trace context back to where it came from |
+| `CategoryItem` | **Link** — the edge that files an item under a folder | Navigate related memories without reprocessing the source |
 
-This gives agents a stable memory surface: they can ingest raw sources once, then request scoped and ranked context instead of rereading every source artifact.
+This gives agents a stable file system for memory: ingest raw sources once, then request scoped and ranked files instead of rereading every source artifact.
 
 ---
 
 ## 🧩 What memU Builds
 
-The memory graph is stored as structured records:
+Every layer of the file system is stored as a structured record:
 
 | Layer | What It Represents | Why Agents Use It |
 |-------|--------------------|-------------------|
-| **Resource** | Original source artifact: conversation, document, image, video, audio, URL, or file | Trace memory back to its source |
-| **MemoryItem** | Atomic structured memory with a type and summary | Inject precise facts, preferences, events, skills, and tool patterns |
-| **MemoryCategory** | Auto-generated topic category with an evolving summary | Load high-level context before drilling into details |
-| **CategoryItem** | Relationship between items and categories | Navigate related memories without reprocessing the source |
-| **Embedding** | Vector representation for resources, items, and categories | Retrieve relevant context with low latency |
+| **MemoryCategory** | Auto-generated folder: a topic with an evolving summary | Load high-level context before drilling into details |
+| **MemoryItem** | A file: atomic structured memory with a type and summary | Inject precise facts, preferences, events, skills, and tool patterns |
+| **Resource** | Source artifact behind a file: conversation, document, image, video, audio, URL, or file | Trace memory back to its source |
+| **CategoryItem** | The link that files an item under a folder | Navigate related memories without reprocessing the source |
+| **Embedding** | Vector index over folders, files, and sources | Retrieve relevant context with low latency |
 
 Example `memorize()` output:
 
@@ -159,11 +165,11 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 
 | Capability | Description |
 |------------|-------------|
-| 🗂️ **Multimodal Ingestion** | Ingest conversations, documents, images, video, audio, URLs, logs, and local files |
-| 📁 **Structured Memory Graph** | Persist resources, memory items, categories, relations, summaries, and embeddings |
+| 🗂️ **Multimodal Ingestion** | Write conversations, documents, images, video, audio, URLs, logs, and local files into memory |
+| 📁 **Memory File System** | Persist folders (categories), files (items), source artifacts, links, summaries, and embeddings |
 | 🧠 **Typed Memory Extraction** | Extract profile, event, knowledge, behavior, skill, and tool memories from raw sources |
-| 🧭 **Automatic Organization** | Build categories, relations, summaries, and embeddings without manual tagging |
-| 🤖 **Agent-Ready Retrieval** | Return scoped, ranked context that can be injected into any agent workflow |
+| 🧭 **Self-Organizing Folders** | Auto-build categories, links, summaries, and embeddings without manual tagging |
+| 🤖 **Agent-Ready Retrieval** | Read scoped, ranked context that can be injected into any agent workflow |
 | 🧱 **Pluggable Storage** | Use in-memory, SQLite, or Postgres backends with the same repository contracts |
 | 🔀 **Profile-Based LLM Routing** | Route chat, embedding, vision, and transcription work through configurable LLM profiles |
 
@@ -228,15 +234,15 @@ context = await service.retrieve(
 
 ## 🗂️ Architecture
 
-memU's memory model is hierarchical enough for browsing and structured enough for direct retrieval:
+The memory file system is hierarchical enough for browsing and structured enough for direct retrieval:
 
 <img width="100%" alt="structure" src="assets/structure.png" />
 
 | Layer | Primary Role | Retrieval Role |
 |-------|--------------|----------------|
-| **Resource** | Preserve source artifacts and captions | Recall original context when item/category summaries are not enough |
-| **Item** | Store typed atomic memories | Load precise facts, events, preferences, skills, and tool patterns |
-| **Category** | Maintain topic-level summaries | Assemble compact context for broad queries |
+| **Category (folder)** | Maintain topic-level summaries | Assemble compact context for broad queries |
+| **Item (file)** | Store typed atomic memories | Load precise facts, events, preferences, skills, and tool patterns |
+| **Resource (source)** | Preserve source artifacts and captions | Recall original context when item/category summaries are not enough |
 
 See [docs/architecture.md](docs/architecture.md) for the runtime view of `MemoryService`, workflow pipelines, storage backends, and LLM routing.
 
@@ -448,7 +454,7 @@ View detailed results: [memU-experiment](https://github.com/NevaMind-AI/memU-exp
 
 | Repository | Description |
 |------------|-------------|
-| **[memU](https://github.com/NevaMind-AI/memU)** | Core data-to-memory engine — ingestion, extraction, retrieval |
+| **[memU](https://github.com/NevaMind-AI/memU)** | Core memory file system — ingestion, extraction, retrieval |
 | **[memU-server](https://github.com/NevaMind-AI/memU-server)** | Backend with real-time sync and webhook triggers |
 | **[memU-ui](https://github.com/NevaMind-AI/memU-ui)** | Visual dashboard for browsing and monitoring memory |
 
