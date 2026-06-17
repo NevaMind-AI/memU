@@ -4,7 +4,7 @@
 
 # memU
 
-### File System as Memory, Memory as Agent
+### File System as Memory, Memory Shapes the Agent
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -30,7 +30,7 @@ Instead of flattening everything an agent learns into one giant prompt or an opa
 - **The agent is the operating system** — it `memorize()`s new sources and `retrieve()`s scoped, ranked context on demand
 
 **File system as memory**: a hierarchical, browsable surface where every memory traces back to its source.
-**Memory as agent**: because that surface is structured and self-organizing, it stops being passive storage and becomes the layer that shapes how the agent thinks and acts.
+**Memory shapes the agent**: because that surface is structured and self-organizing, it stops being passive storage and becomes the layer that shapes how the agent thinks and acts.
 
 ---
 
