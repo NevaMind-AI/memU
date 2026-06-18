@@ -26,7 +26,6 @@ class TestGrokProvider(unittest.IsolatedAsyncioTestCase):
             base_url=config.base_url,
             api_key="fake-key",  # In real app, this would be os.getenv(config.api_key)
             chat_model=config.chat_model,
-            embed_model=config.embed_model,
         )
 
         # Assert AsyncOpenAI was called with the correct base_url

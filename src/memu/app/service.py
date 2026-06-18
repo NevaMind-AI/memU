@@ -9,7 +9,9 @@ from pydantic import BaseModel
 
 from memu.app.crud import CRUDMixin
 from memu.app.memorize import MemorizeMixin
+from memu.app.memorize_parse import MemorizeParseMixin
 from memu.app.retrieve import RetrieveMixin
+from memu.app.retrieve_llm import RetrieveLlmMixin
 from memu.app.settings import (
     BlobConfig,
     CategoryConfig,
@@ -48,7 +50,7 @@ class Context:
     category_init_task: asyncio.Task | None = None
 
 
-class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
+class MemoryService(MemorizeMixin, MemorizeParseMixin, RetrieveMixin, RetrieveLlmMixin, CRUDMixin):
     def __init__(
         self,
         *,
@@ -85,8 +87,11 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         # We need the concrete user scope (user_id: xxx) to initialize the categories
         # self._start_category_initialization(self._context, self.database)
 
-        # Initialize client caches (lazy creation on first use)
+        # Initialize client caches (lazy creation on first use). Chat-like and
+        # embedding clients are cached separately so embedding is fully decoupled
+        # from the chat LLM (different implementation, possibly different profile).
         self._llm_clients: dict[str, Any] = {}
+        self._embedding_clients: dict[str, Any] = {}
         self._llm_interceptors = LLMInterceptorRegistry()
         self._workflow_interceptors = WorkflowInterceptorRegistry()
 
@@ -116,8 +121,6 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
                 base_url=cfg.base_url,
                 api_key=cfg.api_key,
                 chat_model=cfg.chat_model,
-                embed_model=cfg.embed_model,
-                embed_batch_size=cfg.embed_batch_size,
             )
         elif backend == "httpx":
             return HTTPLLMClient(
@@ -126,7 +129,6 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
                 chat_model=cfg.chat_model,
                 provider=cfg.provider,
                 endpoint_overrides=cfg.endpoint_overrides,
-                embed_model=cfg.embed_model,
             )
         elif backend == "lazyllm_backend":
             from memu.llm.lazyllm_client import LazyLLMClient
@@ -145,6 +147,41 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             msg = f"Unknown llm_client_backend '{cfg.client_backend}'"
             raise ValueError(msg)
 
+    def _init_embedding_client(self, config: LLMConfig | None = None) -> Any:
+        """Initialize a dedicated embedding client, decoupled from the chat LLM.
+
+        Embedding goes through ``memu.embedding`` rather than the chat LLM clients,
+        so chat and embedding are separate concerns. The ``lazyllm`` backend is the
+        sole exception: it exposes a single unified client (chat/embed/vision/stt)
+        with no standalone embedding counterpart, so we reuse it for embedding too.
+        """
+        cfg = config or self.llm_profiles.profiles.get("embedding") or self.llm_config
+        backend = cfg.client_backend
+        if backend == "sdk":
+            from memu.embedding import OpenAIEmbeddingSDKClient
+
+            return OpenAIEmbeddingSDKClient(
+                base_url=cfg.base_url,
+                api_key=cfg.api_key,
+                embed_model=cfg.embed_model,
+                batch_size=cfg.embed_batch_size,
+            )
+        elif backend == "httpx":
+            from memu.embedding import HTTPEmbeddingClient
+
+            return HTTPEmbeddingClient(
+                base_url=cfg.base_url,
+                api_key=cfg.api_key,
+                embed_model=cfg.embed_model,
+                provider=cfg.provider,
+                endpoint_overrides=cfg.endpoint_overrides,
+            )
+        elif backend == "lazyllm_backend":
+            return self._init_llm_client(cfg)
+        else:
+            msg = f"Unknown llm_client_backend '{cfg.client_backend}'"
+            raise ValueError(msg)
+
     def _get_llm_base_client(self, profile: str | None = None) -> Any:
         """
         Lazily initialize and cache LLM clients per profile to avoid eager network setup.
@@ -159,6 +196,20 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             raise KeyError(msg)
         client = self._init_llm_client(cfg)
         self._llm_clients[name] = client
+        return client
+
+    def _get_embedding_base_client(self, profile: str | None = None) -> Any:
+        """Lazily initialize and cache embedding clients per profile."""
+        name = profile or "embedding"
+        client = self._embedding_clients.get(name)
+        if client is not None:
+            return client
+        cfg: LLMConfig | None = self.llm_profiles.profiles.get(name)
+        if cfg is None:
+            msg = f"Unknown llm profile '{name}'"
+            raise KeyError(msg)
+        client = self._init_embedding_client(cfg)
+        self._embedding_clients[name] = client
         return client
 
     @staticmethod
@@ -199,6 +250,10 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         base_client = self._get_llm_base_client(profile)
         return self._wrap_llm_client(base_client, profile=profile, step_context=step_context)
 
+    def _get_embedding_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
+        base_client = self._get_embedding_base_client(profile)
+        return self._wrap_llm_client(base_client, profile=profile or "embedding", step_context=step_context)
+
     @property
     def llm_client(self) -> Any:
         """Default LLM client (lazy)."""
@@ -234,7 +289,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
 
     def _get_step_embedding_client(self, step_context: Mapping[str, Any] | None) -> Any:
         profile = self._llm_profile_from_context(step_context, task="embedding") or "embedding"
-        return self._get_llm_client(profile, step_context=step_context)
+        return self._get_embedding_client(profile, step_context=step_context)
 
     def intercept_before_llm_call(
         self,
@@ -401,26 +456,43 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         memory_body: str | None = None
         skills: dict[str, str] | None = None
 
+        is_update = changed is not None and self._memory_file_exporter.artifacts_exist()
+
+        # The shared description trunk: the just-changed sources for an incremental
+        # update, otherwise the full in-scope store for (re)initialization.
+        if is_update:
+            descriptions = MemoryFileExporter._build_descriptions(changed)  # type: ignore[arg-type]
+        else:
+            resources = list(self.database.resource_repo.list_resources(where=where or None).values())
+            descriptions = MemoryFileExporter._build_descriptions(resources)
+
+        client = self._get_llm_client(self.memory_files_config.synthesis_llm_profile)
+
         if self.memory_files_config.synthesize:
-            client = self._get_llm_client(self.memory_files_config.synthesis_llm_profile)
-            if changed is not None and self._memory_file_exporter.artifacts_exist():
-                # UPDATE: merge the changed descriptions into existing artifacts.
+            # MEMORY.md and the skill/ tree are both synthesized from descriptions.
+            if is_update:
                 existing_memory = await asyncio.to_thread(self._memory_file_exporter.read_memory_body)
                 existing_skills = await asyncio.to_thread(self._memory_file_exporter.read_skills)
                 synthesized = await self._memory_synthesizer.update(
-                    MemoryFileExporter._build_descriptions(changed),
+                    descriptions,
                     existing_memory=existing_memory,
                     existing_skills=existing_skills,
                     chat=client.chat,
                 )
             else:
-                # INIT: build from scratch over all in-scope descriptions.
-                resources = list(self.database.resource_repo.list_resources(where=where or None).values())
-                synthesized = await self._memory_synthesizer.synthesize(
-                    MemoryFileExporter._build_descriptions(resources),
-                    chat=client.chat,
-                )
+                synthesized = await self._memory_synthesizer.synthesize(descriptions, chat=client.chat)
             memory_body, skills = synthesized.memory_body, synthesized.skills
+        else:
+            # MEMORY.md is rendered deterministically from category summaries, but
+            # the skill/ tree is a sibling bypass: always synthesized from the
+            # descriptions, never derived from extracted skill-type memory items.
+            if is_update:
+                existing_skills = await asyncio.to_thread(self._memory_file_exporter.read_skills)
+                skills = await self._memory_synthesizer.update_skills(
+                    descriptions, existing_skills=existing_skills, chat=client.chat
+                )
+            else:
+                skills = await self._memory_synthesizer.synthesize_skills(descriptions, chat=client.chat)
 
         async with self._memory_files_lock:
             result: ExportResult = await asyncio.to_thread(

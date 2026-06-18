@@ -119,6 +119,10 @@ Storage is abstracted through a `Database` protocol with four repositories:
 - `MemoryCategoryRepo`
 - `CategoryItemRepo`
 
+All record access goes through these repositories, which enforce scope (`where`)
+filtering. The `Database` protocol intentionally does **not** expose the raw
+in-process record stores, so business logic cannot bypass scope rules.
+
 ### Backends
 
 `build_database(...)` selects backend by `database_config.metadata_store.provider`:
@@ -144,11 +148,20 @@ LLM access is profile-based (`llm_profiles`):
 
 Per-step profile routing happens through step config (`chat_llm_profile`, `embed_llm_profile`, or `llm_profile`).
 
-Client backends:
+Chat and embedding are decoupled concerns with separate client implementations
+and separate per-profile caches in `MemoryService`:
+
+- chat-like clients (`chat`/`summarize`/`vision`/`transcribe`) live in `memu.llm`
+- embedding clients live in `memu.embedding` and are used for all vectorization
+  (the embedding profile is resolved to an embedding client, then wrapped by the
+  same `LLMClientWrapper` for observability)
+
+Client backends (apply to both chat and embedding clients):
 
 - `sdk`: official OpenAI SDK wrapper
 - `httpx`: provider-adapted HTTP backend (OpenAI, Doubao, Grok, OpenRouter)
-- `lazyllm_backend`: LazyLLM adapter
+- `lazyllm_backend`: LazyLLM adapter (a single unified client that also serves
+  embedding, since LazyLLM has no standalone embedding client)
 
 ## Integration surfaces
 
@@ -175,22 +188,29 @@ description is the shared trunk, and three sibling *bypasses* project it into:
   duplicating summaries.
 - `MEMORY.md` aggregates `MemoryCategory` summaries (profile, preferences, goals,
   events).
-- `skill/<name>/SKILL.md` breaks each skill-type `MemoryItem` out as a standalone
-  document; the folder name comes from the skill's frontmatter `name:`.
+- `skill/<name>/SKILL.md` is a skill synthesized from the descriptions by an LLM;
+  the folder name comes from the synthesized skill's `name`.
 
 The three bypasses are siblings — none is upstream of another; each is a
-different aggregation of the same descriptions.
+different aggregation of the same descriptions. In particular, `skill/` is **not**
+derived from extracted `skill`-type `MemoryItem`s: skill is independent of (and
+parallel to) the memorize/extract pipeline, so `skill` is not a memory type the
+ingest flow needs to extract.
 
 ### Synthesis mode (optional)
 
-By default `MEMORY.md` and the `skill/` tree are rendered deterministically from
-already-extracted records. When `memory_files_config.synthesize=True`, they are
-instead synthesized directly from the per-source descriptions by an LLM
-(`memu.memory_fs.MemorySynthesizer`, prompts in `memu.prompts.memory_fs`):
+The `skill/` tree is **always** synthesized from the per-source descriptions by an
+LLM (`memu.memory_fs.MemorySynthesizer`, prompts in `memu.prompts.memory_fs`),
+regardless of mode — it is a sibling bypass decoupled from memory-item extraction.
 
-- `MEMORY.md`: one LLM pass turns all descriptions into a consolidated memory doc.
+`MEMORY.md` defaults to a deterministic rendering of `MemoryCategory` summaries.
+When `memory_files_config.synthesize=True`, `MEMORY.md` is instead synthesized from
+the descriptions in the same LLM pass that produces the skills:
+
+- `MEMORY.md`: one LLM pass turns all descriptions into a consolidated memory doc
+  (only when `synthesize=True`; otherwise rendered from category summaries).
 - `skill/<name>/SKILL.md`: one LLM pass extracts skills as a JSON array of
-  `{name, body}` objects, each written as its own skill doc.
+  `{name, body}` objects, each written as its own skill doc (in both modes).
 
 `INDEX.md` stays deterministic in both modes. Synthesis uses the
 `synthesis_llm_profile` profile and leaves the existing memorize/extract pipeline
@@ -203,13 +223,14 @@ model. `MemoryService._build_memory_files(where, changed=...)` decides between t
 paths:
 
 - **Initialization** (no prior tree on disk, or `changed is None`): scan all
-  in-scope sources, turn each into its multimodal description, and synthesize
-  `MEMORY.md` + the `skill/` tree from scratch (`MemorySynthesizer.synthesize`).
+  in-scope sources, turn each into its multimodal description, and synthesize the
+  `skill/` tree from scratch (`MemorySynthesizer.synthesize_skills`, or
+  `synthesize` together with `MEMORY.md` when `synthesize=True`).
 - **Incremental update** (a tree already exists and a changed set is supplied):
-  read the existing `MEMORY.md` body and existing skill bodies back off disk and
-  merge only the changed sources' descriptions into them
-  (`MemorySynthesizer.update`, prompts `MEMORY_UPDATE_PROMPT` / `SKILL_UPDATE_PROMPT`).
-  Skills are upserted by slug, so untouched skills survive.
+  read the existing skill bodies (and `MEMORY.md` body when `synthesize=True`) back
+  off disk and merge only the changed sources' descriptions into them
+  (`MemorySynthesizer.update_skills` / `update`, prompts `MEMORY_UPDATE_PROMPT` /
+  `SKILL_UPDATE_PROMPT`). Skills are upserted by slug, so untouched skills survive.
 
 `INDEX.md` is always recomputed from the current source set, so it needs no LLM
 merge. `export_memory_files(user=...)` always takes the initialization path (full

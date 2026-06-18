@@ -10,6 +10,7 @@ import httpx
 from memu.embedding.backends.base import EmbeddingBackend
 from memu.embedding.backends.doubao import DoubaoEmbeddingBackend, DoubaoMultimodalEmbeddingInput
 from memu.embedding.backends.openai import OpenAIEmbeddingBackend
+from memu.embedding.backends.openrouter import OpenRouterEmbeddingBackend
 
 
 def _load_proxy() -> str | None:
@@ -21,6 +22,9 @@ logger = logging.getLogger(__name__)
 EMBEDDING_BACKENDS: dict[str, Callable[[], EmbeddingBackend]] = {
     OpenAIEmbeddingBackend.name: OpenAIEmbeddingBackend,
     DoubaoEmbeddingBackend.name: DoubaoEmbeddingBackend,
+    OpenRouterEmbeddingBackend.name: OpenRouterEmbeddingBackend,
+    # Grok exposes an OpenAI-compatible embedding API.
+    "grok": OpenAIEmbeddingBackend,
 }
 
 

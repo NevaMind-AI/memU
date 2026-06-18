@@ -9,7 +9,17 @@ from memu.app import MemoryService
 from memu.memory_fs import MemoryFileExporter
 from memu.memory_fs.exporter import MANIFEST_NAME
 
-_SKILL_BODY = "---\nname: pour-over\n---\n# Pour-over brewing\nUse a 1:16 ratio."
+# Deterministic MEMORY.md is rendered from category summaries, but the skill/ tree
+# is always synthesized from the per-source descriptions via the LLM. This canned
+# client returns a skill payload for the skill prompt; MEMORY.md never hits it.
+_SKILLS_JSON = '[{"name": "pour-over", "body": "# Pour-over brewing\\nUse a 1:16 ratio."}]'
+
+
+class _FakeChatClient:
+    async def chat(self, prompt: str, system_prompt: str | None = None) -> str:
+        if "JSON array" in prompt:
+            return _SKILLS_JSON
+        return ""
 
 
 def _build_service(output_dir: Path) -> MemoryService:
@@ -37,20 +47,13 @@ def _seed(service: MemoryService, *, user: dict[str, str]) -> dict[str, str]:
         user_data=dict(user),
     )
     store.memory_category_repo.update_category(category_id=category.id, summary="The user likes pour-over coffee.")
-    skill = store.memory_item_repo.create_item(
-        resource_id=resource.id,
-        memory_type="skill",
-        summary=_SKILL_BODY,
-        embedding=[0.1, 0.2],
-        user_data=dict(user),
-    )
-    store.category_item_repo.link_item_category(skill.id, category.id, user_data=dict(user))
-    return {"category_id": category.id, "resource_id": resource.id, "skill_id": skill.id}
+    return {"category_id": category.id, "resource_id": resource.id}
 
 
-async def test_export_writes_readme_layout(tmp_path: Path) -> None:
+async def test_export_writes_readme_layout(tmp_path: Path, monkeypatch) -> None:
     service = _build_service(tmp_path)
     _seed(service, user={"user_id": "u1"})
+    monkeypatch.setattr(service, "_get_llm_client", lambda *a, **k: _FakeChatClient())
 
     result = await service.export_memory_files(user={"user_id": "u1"})
 
@@ -73,9 +76,10 @@ async def test_export_writes_readme_layout(tmp_path: Path) -> None:
     assert "Pour-over brewing" in skill_text
 
 
-async def test_export_is_idempotent_until_data_changes(tmp_path: Path) -> None:
+async def test_export_is_idempotent_until_data_changes(tmp_path: Path, monkeypatch) -> None:
     service = _build_service(tmp_path)
     ids = _seed(service, user={"user_id": "u1"})
+    monkeypatch.setattr(service, "_get_llm_client", lambda *a, **k: _FakeChatClient())
 
     first = await service.export_memory_files(user={"user_id": "u1"})
     assert first["changed"] is True
@@ -96,21 +100,23 @@ async def test_export_is_idempotent_until_data_changes(tmp_path: Path) -> None:
     assert "INDEX.md" in third["unchanged"]
 
 
-async def test_export_removes_stale_skill_and_prunes_dirs(tmp_path: Path) -> None:
+async def test_export_removes_stale_skill_and_prunes_dirs(tmp_path: Path, monkeypatch) -> None:
     service = _build_service(tmp_path)
     _seed(service, user={"user_id": "u1"})
+    monkeypatch.setattr(service, "_get_llm_client", lambda *a, **k: _FakeChatClient())
 
     await service.export_memory_files(user={"user_id": "u1"})
     assert (tmp_path / "skill" / "pour-over" / "SKILL.md").exists()
 
-    service.database.memory_item_repo.clear_items(where={"user_id": "u1"})
+    # Removing the source drops its description, so no skill is synthesized.
+    service.database.resource_repo.clear_resources(where={"user_id": "u1"})
     result = await service.export_memory_files(user={"user_id": "u1"})
 
     assert "skill/pour-over/SKILL.md" in result["removed"]
     assert not (tmp_path / "skill" / "pour-over").exists()
 
 
-async def test_export_respects_user_scope(tmp_path: Path) -> None:
+async def test_export_respects_user_scope(tmp_path: Path, monkeypatch) -> None:
     service = _build_service(tmp_path)
     _seed(service, user={"user_id": "u1"})
     service.database.memory_category_repo.get_or_create_category(
@@ -119,6 +125,7 @@ async def test_export_respects_user_scope(tmp_path: Path) -> None:
         embedding=[0.3, 0.4],
         user_data={"user_id": "u2"},
     )
+    monkeypatch.setattr(service, "_get_llm_client", lambda *a, **k: _FakeChatClient())
 
     await service.export_memory_files(user={"user_id": "u1"})
 
@@ -134,13 +141,6 @@ async def test_export_disabled_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(RuntimeError, match="disabled"):
         await service.export_memory_files(user={"user_id": "u1"})
-
-
-def test_skill_name_from_frontmatter_and_fallbacks(tmp_path: Path) -> None:
-    exporter = MemoryFileExporter(str(tmp_path))
-    assert exporter._skill_name("---\nname: My Skill\n---\nbody", fallback="x") == "my-skill"
-    assert exporter._skill_name("# Heading Title\nbody", fallback="x") == "heading-title"
-    assert exporter._skill_name("plain text only", fallback="skill-abc123") == "skill-abc123"
 
 
 def test_exporter_manifest_roundtrip(tmp_path: Path) -> None:

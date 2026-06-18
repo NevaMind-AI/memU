@@ -30,13 +30,11 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["maturin>=1.0,<2.0"]
-build-backend = "maturin"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.maturin]
-module-name = "memu._core"
-python-packages = ["memu"]
-python-source = "src"
+[tool.hatch.build.targets.wheel]
+packages = ["src/memu"]
 
 [dependency-groups]
 dev = [

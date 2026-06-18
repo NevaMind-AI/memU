@@ -11,17 +11,17 @@ from memu.database.repositories import CategoryItemRepo, MemoryCategoryRepo, Mem
 
 @runtime_checkable
 class Database(Protocol):
-    """Backend-agnostic database contract."""
+    """Backend-agnostic database contract.
+
+    Access to records goes exclusively through the repositories, which enforce
+    scope (``where``) filtering. The contract intentionally does not expose the
+    raw in-process record stores, so business logic cannot bypass scope rules.
+    """
 
     resource_repo: ResourceRepo
     memory_category_repo: MemoryCategoryRepo
     memory_item_repo: MemoryItemRepo
     category_item_repo: CategoryItemRepo
-
-    resources: dict[str, ResourceRecord]
-    items: dict[str, MemoryItemRecord]
-    categories: dict[str, MemoryCategoryRecord]
-    relations: list[CategoryItemRecord]
 
     def close(self) -> None: ...
 
