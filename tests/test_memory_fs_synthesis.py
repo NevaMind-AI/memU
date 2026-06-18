@@ -97,3 +97,112 @@ async def test_service_synthesis_wiring(tmp_path: Path, monkeypatch) -> None:
     assert "skill/pour-over/SKILL.md" in result["written"]
     memory_text = (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
     assert "The user is a coffee enthusiast." in memory_text
+
+
+# -- incremental update path -------------------------------------------------
+
+_UPDATE_MEMORY_MD = "## Profile\nThe user is a coffee enthusiast.\n\n## Preferences\nLikes oat milk."
+_UPDATE_SKILLS_JSON = '[{"name": "Latte Art", "body": "# Latte art\\nPour slowly."}]'
+
+
+class _InitUpdateChatClient:
+    """Returns init vs update payloads based on which prompt template fired."""
+
+    async def chat(self, prompt: str, system_prompt: str | None = None) -> str:
+        is_update = "CURRENT memory document" in prompt or "EXISTING skills" in prompt
+        if "JSON array" in prompt:
+            return _UPDATE_SKILLS_JSON if is_update else _SKILLS_JSON
+        return _UPDATE_MEMORY_MD if is_update else _MEMORY_MD
+
+
+async def test_synthesizer_update_merges_into_existing() -> None:
+    synth = MemorySynthesizer()
+    result = await synth.update(
+        _descriptions(),
+        existing_memory="## Profile\nOld profile.",
+        existing_skills={"pour-over": "# Pour-over\nUse a 1:16 ratio."},
+        chat=_InitUpdateChatClient().chat,
+    )
+
+    assert "Likes oat milk." in result.memory_body
+    # Existing skill is preserved, the new one is upserted alongside it.
+    assert result.skills["pour-over"] == "# Pour-over\nUse a 1:16 ratio."
+    assert result.skills["latte-art"] == "# Latte art\nPour slowly."
+
+
+async def test_synthesizer_update_noop_without_descriptions() -> None:
+    synth = MemorySynthesizer()
+    existing_skills = {"pour-over": "# Pour-over"}
+    result = await synth.update(
+        [],
+        existing_memory="## Profile\nKeep me.",
+        existing_skills=existing_skills,
+        chat=_InitUpdateChatClient().chat,
+    )
+    assert result.memory_body == "## Profile\nKeep me."
+    assert result.skills == existing_skills
+
+
+def test_exporter_read_helpers_roundtrip(tmp_path: Path) -> None:
+    service = MemoryService(
+        llm_profiles={"default": {"api_key": "test-key"}},
+        database_config={"metadata_store": {"provider": "inmemory"}},
+    )
+    exporter = MemoryFileExporter(str(tmp_path))
+
+    assert exporter.artifacts_exist() is False
+    exporter.export(
+        service.database,
+        memory_body="## Profile\nSynthesized body.",
+        skills={"brewing": "# Brewing\nbody"},
+    )
+
+    assert exporter.artifacts_exist() is True
+    assert exporter.read_memory_body() == "## Profile\nSynthesized body."
+    assert exporter.read_skills() == {"brewing": "# Brewing\nbody"}
+
+
+async def test_service_init_then_update(tmp_path: Path, monkeypatch) -> None:
+    service = MemoryService(
+        llm_profiles={"default": {"api_key": "test-key"}},
+        database_config={"metadata_store": {"provider": "inmemory"}},
+        memory_files_config={
+            "enabled": True,
+            "output_dir": str(tmp_path),
+            "synthesize": True,
+            "update_on_memorize": True,
+        },
+    )
+    monkeypatch.setattr(service, "_get_llm_client", lambda *a, **k: _InitUpdateChatClient())
+
+    repo = service.database.resource_repo
+    repo.create_resource(
+        url="docs/coffee.txt",
+        modality="document",
+        local_path="coffee.txt",
+        caption="The user likes pour-over coffee.",
+        embedding=None,
+        user_data={"user_id": "u1"},
+    )
+
+    # First pass: no tree yet -> initialization from the full store.
+    init = await service.export_memory_files(user={"user_id": "u1"})
+    assert "skill/pour-over/SKILL.md" in init["written"]
+    assert "coffee enthusiast" in (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
+
+    # Second pass: tree exists -> incremental update from the changed resource only.
+    changed = repo.create_resource(
+        url="docs/latte.txt",
+        modality="document",
+        local_path="latte.txt",
+        caption="The user enjoys latte art and oat milk.",
+        embedding=None,
+        user_data={"user_id": "u1"},
+    )
+    updated = await service._build_memory_files({"user_id": "u1"}, changed=[changed])
+
+    memory_text = (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
+    assert "Likes oat milk." in memory_text
+    assert "skill/latte-art/SKILL.md" in (updated["written"] + updated["unchanged"])
+    # The originally-initialized skill survives the incremental update.
+    assert (tmp_path / "skill" / "pour-over" / "SKILL.md").exists()

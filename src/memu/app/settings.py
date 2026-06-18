@@ -169,6 +169,13 @@ class MemoryFilesConfig(BaseModel):
         default="default",
         description="LLM profile used when synthesize=True.",
     )
+    update_on_memorize: bool = Field(
+        default=False,
+        description=(
+            "Automatically initialize or incrementally update the memory file tree after each "
+            "memorize() call, using the just-created resources as the changed file set."
+        ),
+    )
 
 
 class RetrieveCategoryConfig(BaseModel):

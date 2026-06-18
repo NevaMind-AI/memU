@@ -334,6 +334,41 @@ class MemoryFileExporter:
             else:
                 break
 
+    # -- reading existing artifacts (for incremental update) ---------------
+
+    def artifacts_exist(self) -> bool:
+        """Whether a prior memory tree is already present (init vs update)."""
+        return (self.output_dir / MEMORY_FILENAME).exists()
+
+    def read_memory_body(self) -> str:
+        """Read MEMORY.md and strip the heading/notice, returning just the body."""
+        path = self.output_dir / MEMORY_FILENAME
+        if not path.exists():
+            return ""
+        return self._strip_chrome(path.read_text(encoding="utf-8"), drop_heading="# Memory")
+
+    def read_skills(self) -> dict[str, str]:
+        """Read existing ``skill/<slug>/SKILL.md`` bodies keyed by slug."""
+        skills: dict[str, str] = {}
+        skill_root = self.output_dir / SKILL_DIRNAME
+        if not skill_root.is_dir():
+            return skills
+        for child in sorted(skill_root.iterdir()):
+            doc = child / SKILL_FILENAME
+            if child.is_dir() and doc.exists():
+                skills[child.name] = self._strip_chrome(doc.read_text(encoding="utf-8"))
+        return skills
+
+    @staticmethod
+    def _strip_chrome(text: str, *, drop_heading: str | None = None) -> str:
+        lines = text.splitlines()
+        kept = [
+            line
+            for line in lines
+            if line.strip() != _GENERATED_NOTICE and (drop_heading is None or line.strip() != drop_heading)
+        ]
+        return "\n".join(kept).strip()
+
     def _load_manifest(self) -> dict[str, str]:
         manifest_path = self.output_dir / MANIFEST_NAME
         if not manifest_path.exists():

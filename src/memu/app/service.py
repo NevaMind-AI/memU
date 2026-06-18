@@ -383,14 +383,43 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             msg = "Memory files are disabled; set memory_files_config.enabled=True to use export_memory_files()."
             raise RuntimeError(msg)
         where = self.user_model(**user).model_dump() if user is not None else None
+        # No changed set => full (re)initialization of the tree.
+        return await self._build_memory_files(where, changed=None)
 
+    async def _build_memory_files(
+        self,
+        where: dict[str, Any] | None,
+        *,
+        changed: list[Any] | None,
+    ) -> dict[str, Any]:
+        """Initialize or incrementally update the memory file tree.
+
+        ``changed`` is the list of just-memorized ``Resource`` objects driving an
+        incremental update. When it is ``None`` (or no prior tree exists), the tree
+        is (re)initialized from the full scoped store.
+        """
         memory_body: str | None = None
         skills: dict[str, str] | None = None
+
         if self.memory_files_config.synthesize:
-            resources = list(self.database.resource_repo.list_resources(where=where or None).values())
-            descriptions = MemoryFileExporter._build_descriptions(resources)
             client = self._get_llm_client(self.memory_files_config.synthesis_llm_profile)
-            synthesized = await self._memory_synthesizer.synthesize(descriptions, chat=client.chat)
+            if changed is not None and self._memory_file_exporter.artifacts_exist():
+                # UPDATE: merge the changed descriptions into existing artifacts.
+                existing_memory = await asyncio.to_thread(self._memory_file_exporter.read_memory_body)
+                existing_skills = await asyncio.to_thread(self._memory_file_exporter.read_skills)
+                synthesized = await self._memory_synthesizer.update(
+                    MemoryFileExporter._build_descriptions(changed),
+                    existing_memory=existing_memory,
+                    existing_skills=existing_skills,
+                    chat=client.chat,
+                )
+            else:
+                # INIT: build from scratch over all in-scope descriptions.
+                resources = list(self.database.resource_repo.list_resources(where=where or None).values())
+                synthesized = await self._memory_synthesizer.synthesize(
+                    MemoryFileExporter._build_descriptions(resources),
+                    chat=client.chat,
+                )
             memory_body, skills = synthesized.memory_body, synthesized.skills
 
         async with self._memory_files_lock:

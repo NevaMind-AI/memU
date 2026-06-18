@@ -61,6 +61,8 @@ class MemorizeMixin:
         _extract_json_blob: Callable[[str], str]
         _escape_prompt_value: Callable[[str], str]
         user_model: type[BaseModel]
+        memory_files_config: Any
+        _build_memory_files: Callable[..., Awaitable[dict[str, Any]]]
 
     async def memorize(
         self,
@@ -92,7 +94,32 @@ class MemorizeMixin:
         if response is None:
             msg = "Memorize workflow failed to produce a response"
             raise RuntimeError(msg)
+
+        await self._maybe_update_memory_files(result, user_scope)
         return response
+
+    async def _maybe_update_memory_files(
+        self, result: WorkflowState, user_scope: dict[str, Any] | None
+    ) -> None:
+        """Drive the memory file tree from a memorize call (init or incremental update).
+
+        Gated behind ``memory_files_config.enabled`` and ``update_on_memorize`` so the
+        default memorize behavior is unchanged. The just-created resources are the
+        "changed part of the file system" that an existing tree is updated against;
+        if no tree exists yet, ``_build_memory_files`` initializes it from the full
+        scoped store instead. Failures are best-effort: the memory is already
+        persisted, so an export error must not fail memorize.
+        """
+        cfg = self.memory_files_config
+        if not (getattr(cfg, "enabled", False) and getattr(cfg, "update_on_memorize", False)):
+            return
+        changed = cast("list[Resource]", result.get("resources") or [])
+        if not changed:
+            return
+        try:
+            await self._build_memory_files(user_scope, changed=changed)
+        except Exception:
+            logger.exception("Memory file export failed after memorize")
 
     def _build_memorize_workflow(self) -> list[WorkflowStep]:
         steps = [

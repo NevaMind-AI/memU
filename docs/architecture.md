@@ -196,6 +196,29 @@ instead synthesized directly from the per-source descriptions by an LLM
 `synthesis_llm_profile` profile and leaves the existing memorize/extract pipeline
 untouched.
 
+### Initialize vs. incremental update
+
+Synthesis is stateful and mirrors the "submit the changed part of the file system"
+model. `MemoryService._build_memory_files(where, changed=...)` decides between two
+paths:
+
+- **Initialization** (no prior tree on disk, or `changed is None`): scan all
+  in-scope sources, turn each into its multimodal description, and synthesize
+  `MEMORY.md` + the `skill/` tree from scratch (`MemorySynthesizer.synthesize`).
+- **Incremental update** (a tree already exists and a changed set is supplied):
+  read the existing `MEMORY.md` body and existing skill bodies back off disk and
+  merge only the changed sources' descriptions into them
+  (`MemorySynthesizer.update`, prompts `MEMORY_UPDATE_PROMPT` / `SKILL_UPDATE_PROMPT`).
+  Skills are upserted by slug, so untouched skills survive.
+
+`INDEX.md` is always recomputed from the current source set, so it needs no LLM
+merge. `export_memory_files(user=...)` always takes the initialization path (full
+rebuild). When `memory_files_config.update_on_memorize=True`, each `memorize()`
+call drives this builder with its just-created resources as the changed set, so the
+tree initializes on first run and incrementally updates afterwards. The hook is
+best-effort: an export failure is logged and never fails memorize, since the
+structured memory is already persisted.
+
 The exporter is read-only against the database and disabled by default
 (`memory_files_config.enabled`). Diff detection is handled by a sidecar manifest
 (`.memufs_manifest.json`) that stores per-file content hashes, so each export

@@ -17,8 +17,11 @@ from typing import TYPE_CHECKING
 from memu.memory_fs.exporter import slugify
 from memu.prompts.memory_fs import (
     DESCRIPTIONS_PLACEHOLDER,
+    EXISTING_PLACEHOLDER,
     MEMORY_SYNTHESIS_PROMPT,
+    MEMORY_UPDATE_PROMPT,
     SKILL_SYNTHESIS_PROMPT,
+    SKILL_UPDATE_PROMPT,
 )
 
 if TYPE_CHECKING:
@@ -43,11 +46,16 @@ class MemorySynthesizer:
         *,
         memory_prompt: str = MEMORY_SYNTHESIS_PROMPT,
         skill_prompt: str = SKILL_SYNTHESIS_PROMPT,
+        memory_update_prompt: str = MEMORY_UPDATE_PROMPT,
+        skill_update_prompt: str = SKILL_UPDATE_PROMPT,
     ) -> None:
         self._memory_prompt = memory_prompt
         self._skill_prompt = skill_prompt
+        self._memory_update_prompt = memory_update_prompt
+        self._skill_update_prompt = skill_update_prompt
 
     async def synthesize(self, descriptions: list[FileDescription], *, chat: ChatFn) -> SynthesisResult:
+        """Initialization: build MEMORY/SKILL from scratch over all descriptions."""
         formatted = self._format(descriptions)
         if not formatted:
             return SynthesisResult()
@@ -59,6 +67,38 @@ class MemorySynthesizer:
             memory_body=self._clean_markdown(memory_raw),
             skills=self._parse_skills(skills_raw),
         )
+
+    async def update(
+        self,
+        descriptions: list[FileDescription],
+        *,
+        existing_memory: str,
+        existing_skills: dict[str, str],
+        chat: ChatFn,
+    ) -> SynthesisResult:
+        """Incremental: merge the changed descriptions into existing artifacts."""
+        formatted = self._format(descriptions)
+        if not formatted:
+            return SynthesisResult(memory_body=existing_memory, skills=dict(existing_skills))
+
+        memory_prompt = self._memory_update_prompt.replace(
+            EXISTING_PLACEHOLDER, existing_memory.strip() or "(empty)"
+        ).replace(DESCRIPTIONS_PLACEHOLDER, formatted)
+        memory_raw = await chat(memory_prompt)
+
+        skill_prompt = self._skill_update_prompt.replace(
+            EXISTING_PLACEHOLDER, self._format_existing_skills(existing_skills) or "(none)"
+        ).replace(DESCRIPTIONS_PLACEHOLDER, formatted)
+        upserts = self._parse_skills(await chat(skill_prompt))
+
+        return SynthesisResult(
+            memory_body=self._clean_markdown(memory_raw),
+            skills={**existing_skills, **upserts},
+        )
+
+    @staticmethod
+    def _format_existing_skills(skills: dict[str, str]) -> str:
+        return "\n\n".join(f"## {slug}\n{body}".strip() for slug, body in sorted(skills.items()))
 
     @staticmethod
     def _format(descriptions: list[FileDescription]) -> str:
