@@ -22,12 +22,23 @@
 
 memU es un **sistema de archivos de memoria** para agentes de IA.
 
-En lugar de aplastar todo lo que un agente aprende en un único prompt gigante o en un blob vectorial opaco, memU organiza la memoria como organizarías una computadora: como un sistema de archivos navegable y autoorganizado.
+En lugar de aplastar todo lo que un agente aprende en un único prompt gigante o en un blob vectorial opaco, memU organiza la memoria como organizarías una computadora: como un árbol navegable de archivos Markdown legibles por humanos.
 
-- **Recursos (Resources)** son los *archivos en bruto* que el agente ingiere: chats, documentos, URLs, imágenes, audio, video y registros
-- **Elementos de memoria (Memory items)** son los *archivos*: notas tipadas y estructuradas extraídas de esas fuentes
-- **Categorías (Categories)** son las *carpetas*: agrupan memorias relacionadas y mantienen resúmenes en constante evolución
-- **El agente es el sistema operativo**: usa `memorize()` para escribir nuevas fuentes y `retrieve()` para leer, bajo demanda, contexto delimitado y ordenado por relevancia
+- **`MEMORY.md`**: la memoria viva del agente: quién es el usuario, sus preferencias, objetivos y los eventos extraídos de cada fuente
+- **`SKILL.md`**: habilidades y patrones de herramientas aprendidos: qué funcionó, qué evitar y cómo repetir tareas recurrentes
+- **`INDEX.md`**: la tabla de contenidos: un mapa navegable de todos los archivos de memoria, para que el agente sepa dónde mirar antes de leer
+- **El agente lee y escribe estos archivos**: usa `memorize()` para escribir nuevas fuentes en ellos y `retrieve()` para leer, bajo demanda, solo las secciones que importan
+
+```txt
+memory/
+├── INDEX.md              ← mapa de todo: categorías, archivos y resúmenes
+├── MEMORY.md             ← perfil, preferencias, objetivos y eventos clave
+└── skill/
+    ├── {skill_name}/
+    │   └── SKILL.md       ← una habilidad o patrón de herramienta aprendido
+    └── {another_skill}/
+        └── SKILL.md
+```
 
 **El sistema de archivos como memoria**: una superficie jerárquica y navegable donde cada memoria puede rastrearse hasta su fuente.
 **La memoria moldea al agente**: como esa superficie es estructurada y autoorganizada, deja de ser almacenamiento pasivo y se convierte en la capa que moldea cómo piensa y actúa el agente.
