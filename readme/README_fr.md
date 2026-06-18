@@ -22,12 +22,23 @@
 
 memU est un **système de fichiers de mémoire** pour les agents d'IA.
 
-Plutôt que d'aplatir tout ce qu'un agent apprend dans un unique prompt géant ou un blob vectoriel opaque, memU organise la mémoire comme vous organisez un ordinateur : sous la forme d'un système de fichiers navigable et auto-organisé.
+Plutôt que d'aplatir tout ce qu'un agent apprend dans un unique prompt géant ou un blob vectoriel opaque, memU organise la mémoire comme vous organisez un ordinateur : sous la forme d'une arborescence navigable de fichiers Markdown lisibles par l'humain.
 
-- **Ressources (Resources)** sont les *fichiers bruts* qu'un agent ingère : conversations, documents, URL, images, audio, vidéo et journaux
-- **Éléments de mémoire (Memory items)** sont les *fichiers* : des notes typées et structurées extraites de ces sources
-- **Catégories (Categories)** sont les *dossiers* : elles regroupent les mémoires liées et tiennent à jour des résumés en évolution constante
-- **L'agent est le système d'exploitation** : il utilise `memorize()` pour écrire de nouvelles sources et `retrieve()` pour lire, à la demande, un contexte délimité et classé par pertinence
+- **`MEMORY.md`** : la mémoire vivante de l'agent : qui est l'utilisateur, ses préférences, ses objectifs et les événements extraits de chaque source
+- **`SKILL.md`** : les compétences et schémas d'outils appris : ce qui a fonctionné, ce qu'il faut éviter et comment reproduire les tâches récurrentes
+- **`INDEX.md`** : la table des matières : une carte navigable de tous les fichiers de mémoire, pour que l'agent sache où chercher avant de lire
+- **L'agent lit et écrit ces fichiers** : il utilise `memorize()` pour y écrire de nouvelles sources et `retrieve()` pour ne lire, à la demande, que les sections qui comptent
+
+```txt
+memory/
+├── INDEX.md              ← carte de tout : catégories, fichiers et résumés
+├── MEMORY.md             ← profil, préférences, objectifs et événements clés
+└── skill/
+    ├── {skill_name}/
+    │   └── SKILL.md       ← une compétence ou un schéma d'outil appris
+    └── {another_skill}/
+        └── SKILL.md
+```
 
 **Le système de fichiers comme mémoire** : une surface hiérarchique et navigable où chaque mémoire remonte jusqu'à sa source.
 **La mémoire façonne l'agent** : comme cette surface est structurée et auto-organisée, elle cesse d'être un stockage passif et devient la couche qui façonne la manière dont l'agent pense et agit.
