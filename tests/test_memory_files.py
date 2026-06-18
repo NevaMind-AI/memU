@@ -6,8 +6,10 @@ from pathlib import Path
 import pytest
 
 from memu.app import MemoryService
-from memu.memory_fs import MemoryFileExporter, slugify
+from memu.memory_fs import MemoryFileExporter
 from memu.memory_fs.exporter import MANIFEST_NAME
+
+_SKILL_BODY = "---\nname: pour-over\n---\n# Pour-over brewing\nUse a 1:16 ratio."
 
 
 def _build_service(output_dir: Path) -> MemoryService:
@@ -38,7 +40,7 @@ def _seed(service: MemoryService, *, user: dict[str, str]) -> dict[str, str]:
     skill = store.memory_item_repo.create_item(
         resource_id=resource.id,
         memory_type="skill",
-        summary="---\nname: pour-over\n---\n# Pour-over brewing\nUse a 1:16 ratio.",
+        summary=_SKILL_BODY,
         embedding=[0.1, 0.2],
         user_data=dict(user),
     )
@@ -46,32 +48,29 @@ def _seed(service: MemoryService, *, user: dict[str, str]) -> dict[str, str]:
     return {"category_id": category.id, "resource_id": resource.id, "skill_id": skill.id}
 
 
-async def test_export_writes_expected_artifacts(tmp_path: Path) -> None:
+async def test_export_writes_readme_layout(tmp_path: Path) -> None:
     service = _build_service(tmp_path)
     _seed(service, user={"user_id": "u1"})
 
     result = await service.export_memory_files(user={"user_id": "u1"})
 
     assert result["changed"] is True
+    assert "INDEX.md" in result["written"]
     assert "MEMORY.md" in result["written"]
-    assert "index.md" in result["written"]
-    assert "skill.md" in result["written"]
-    assert f"categories/{slugify('Preferences')}.md" in result["written"]
+    assert "skill/pour-over/SKILL.md" in result["written"]
 
-    category_file = tmp_path / "categories" / "preferences.md"
-    assert "The user likes pour-over coffee." in category_file.read_text(encoding="utf-8")
-    assert "name: Preferences" in category_file.read_text(encoding="utf-8")
+    memory_text = (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
+    assert "## Preferences" in memory_text
+    assert "The user likes pour-over coffee." in memory_text
 
-    index_text = (tmp_path / "index.md").read_text(encoding="utf-8")
+    index_text = (tmp_path / "INDEX.md").read_text(encoding="utf-8")
     assert "docs/coffee.txt" in index_text
     assert "coffee preferences" in index_text
+    assert "[pour-over](./skill/pour-over/SKILL.md)" in index_text
+    assert "**Preferences**" in index_text
 
-    skill_text = (tmp_path / "skill.md").read_text(encoding="utf-8")
+    skill_text = (tmp_path / "skill" / "pour-over" / "SKILL.md").read_text(encoding="utf-8")
     assert "Pour-over brewing" in skill_text
-
-    overview = (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
-    assert "[Preferences](categories/preferences.md)" in overview
-    assert "(1 items)" in overview
 
 
 async def test_export_is_idempotent_until_data_changes(tmp_path: Path) -> None:
@@ -86,35 +85,35 @@ async def test_export_is_idempotent_until_data_changes(tmp_path: Path) -> None:
     assert second["written"] == []
     assert "MEMORY.md" in second["unchanged"]
 
+    # Changing only a folder summary touches MEMORY.md but not INDEX.md (a TOC).
     service.database.memory_category_repo.update_category(
         category_id=ids["category_id"],
         summary="The user now prefers espresso.",
     )
     third = await service.export_memory_files(user={"user_id": "u1"})
     assert third["changed"] is True
-    assert f"categories/{slugify('Preferences')}.md" in third["written"]
-    assert "index.md" in third["unchanged"]
+    assert "MEMORY.md" in third["written"]
+    assert "INDEX.md" in third["unchanged"]
 
 
-async def test_export_removes_stale_artifacts(tmp_path: Path) -> None:
+async def test_export_removes_stale_skill_and_prunes_dirs(tmp_path: Path) -> None:
     service = _build_service(tmp_path)
     _seed(service, user={"user_id": "u1"})
 
     await service.export_memory_files(user={"user_id": "u1"})
-    assert (tmp_path / "skill.md").exists()
+    assert (tmp_path / "skill" / "pour-over" / "SKILL.md").exists()
 
     service.database.memory_item_repo.clear_items(where={"user_id": "u1"})
     result = await service.export_memory_files(user={"user_id": "u1"})
 
-    assert "skill.md" in result["removed"]
-    assert not (tmp_path / "skill.md").exists()
+    assert "skill/pour-over/SKILL.md" in result["removed"]
+    assert not (tmp_path / "skill" / "pour-over").exists()
 
 
 async def test_export_respects_user_scope(tmp_path: Path) -> None:
     service = _build_service(tmp_path)
     _seed(service, user={"user_id": "u1"})
-    store = service.database
-    store.memory_category_repo.get_or_create_category(
+    service.database.memory_category_repo.get_or_create_category(
         name="Secret",
         description="Other user's folder",
         embedding=[0.3, 0.4],
@@ -123,9 +122,9 @@ async def test_export_respects_user_scope(tmp_path: Path) -> None:
 
     await service.export_memory_files(user={"user_id": "u1"})
 
-    overview = (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
-    assert "Preferences" in overview
-    assert "Secret" not in overview
+    memory_text = (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
+    assert "Preferences" in memory_text
+    assert "Secret" not in memory_text
 
 
 async def test_export_disabled_raises(tmp_path: Path) -> None:
@@ -135,6 +134,13 @@ async def test_export_disabled_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(RuntimeError, match="disabled"):
         await service.export_memory_files(user={"user_id": "u1"})
+
+
+def test_skill_name_from_frontmatter_and_fallbacks(tmp_path: Path) -> None:
+    exporter = MemoryFileExporter(str(tmp_path))
+    assert exporter._skill_name("---\nname: My Skill\n---\nbody", fallback="x") == "my-skill"
+    assert exporter._skill_name("# Heading Title\nbody", fallback="x") == "heading-title"
+    assert exporter._skill_name("plain text only", fallback="skill-abc123") == "skill-abc123"
 
 
 def test_exporter_manifest_roundtrip(tmp_path: Path) -> None:

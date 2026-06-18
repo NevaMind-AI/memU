@@ -155,8 +155,8 @@ class MemoryFilesConfig(BaseModel):
         description="Enable rendering structured memory into browsable markdown files.",
     )
     output_dir: str = Field(
-        default="./data/memory_files",
-        description="Directory where memory markdown artifacts are written.",
+        default="./data/memory",
+        description="Directory where the memory markdown tree (INDEX.md/MEMORY.md/skill/) is written.",
     )
 
 
