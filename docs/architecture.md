@@ -155,6 +155,23 @@ Client backends:
 - `memu.client.openai_wrapper`: opt-in OpenAI client wrapper that auto-retrieves memories and injects them into system context
 - `memu.integrations.langgraph`: LangChain/LangGraph tool adapter (`save_memory`, `search_memory`)
 
+## Memory file system export (`memu.memory_fs`)
+
+`MemoryService.export_memory_files(...)` renders the structured store into
+browsable markdown artifacts, treating the memory model as an actual file system:
+
+- `MEMORY.md`: top-level overview of all folders (categories)
+- `index.md`: source-file description index (one entry per `Resource`)
+- `categories/<slug>.md`: per-folder summary file (e.g. `preferences.md`)
+- `skill.md`: standalone aggregation of skill-type memories
+
+The exporter is read-only against the database and disabled by default
+(`memory_files_config.enabled`). Diff detection is handled by a sidecar manifest
+(`.memufs_manifest.json`) that stores per-file content hashes, so each export
+only rewrites artifacts whose rendered content changed — no database schema
+change is required. Rendered content avoids volatile values so an unchanged store
+re-exports as a no-op. Exports are serialized through a per-service lock.
+
 ## Current constraints and tradeoffs
 
 - workflow state is dict-based, so step contracts are validated by key names rather than static types

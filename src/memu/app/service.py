@@ -17,6 +17,7 @@ from memu.app.settings import (
     LLMConfig,
     LLMProfilesConfig,
     MemorizeConfig,
+    MemoryFilesConfig,
     RetrieveConfig,
     UserConfig,
 )
@@ -30,6 +31,7 @@ from memu.llm.wrapper import (
     LLMInterceptorHandle,
     LLMInterceptorRegistry,
 )
+from memu.memory_fs import ExportResult, MemoryFileExporter
 from memu.workflow.interceptor import WorkflowInterceptorHandle, WorkflowInterceptorRegistry
 from memu.workflow.pipeline import PipelineManager
 from memu.workflow.runner import WorkflowRunner, resolve_workflow_runner
@@ -57,6 +59,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         retrieve_config: RetrieveConfig | dict[str, Any] | None = None,
         workflow_runner: WorkflowRunner | str | None = None,
         user_config: UserConfig | dict[str, Any] | None = None,
+        memory_files_config: MemoryFilesConfig | dict[str, Any] | None = None,
     ):
         self.llm_profiles = self._validate_config(llm_profiles, LLMProfilesConfig)
         self.user_config = self._validate_config(user_config, UserConfig)
@@ -66,6 +69,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self.database_config = self._validate_config(database_config, DatabaseConfig)
         self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
+        self.memory_files_config = self._validate_config(memory_files_config, MemoryFilesConfig)
 
         self.fs = LocalFS(self.blob_config.resources_dir)
         self.category_configs: list[CategoryConfig] = list(self.memorize_config.memory_categories or [])
@@ -87,6 +91,12 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self._workflow_interceptors = WorkflowInterceptorRegistry()
 
         self._workflow_runner = resolve_workflow_runner(workflow_runner)
+
+        # Optional markdown "memory file system" artifact layer (additive, read-only).
+        # Writes are serialized through a single lock so concurrent exports never
+        # interleave on the shared output directory.
+        self._memory_file_exporter = MemoryFileExporter(self.memory_files_config.output_dir)
+        self._memory_files_lock = asyncio.Lock()
 
         self._pipelines = PipelineManager(
             available_capabilities={"llm", "vector", "db", "io", "vision"},
@@ -358,6 +368,27 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             runner_context,
             interceptor_registry=self._workflow_interceptors,
         )
+
+    async def export_memory_files(self, *, user: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Render the (optionally scoped) memory store into browsable markdown files.
+
+        Read-only against the database; only artifacts whose rendered content
+        changed since the last export are rewritten (diff detection via a sidecar
+        manifest). Returns a summary of written/unchanged/removed relative paths.
+
+        Requires ``memory_files_config.enabled=True``.
+        """
+        if not self.memory_files_config.enabled:
+            msg = "Memory files are disabled; set memory_files_config.enabled=True to use export_memory_files()."
+            raise RuntimeError(msg)
+        where = self.user_model(**user).model_dump() if user is not None else None
+        async with self._memory_files_lock:
+            result: ExportResult = await asyncio.to_thread(
+                self._memory_file_exporter.export,
+                self.database,
+                where=where,
+            )
+        return result.to_dict()
 
     @staticmethod
     def _extract_json_blob(raw: str) -> str:
