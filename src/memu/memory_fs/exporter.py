@@ -107,8 +107,21 @@ class MemoryFileExporter:
     def __init__(self, output_dir: str) -> None:
         self.output_dir = pathlib.Path(output_dir)
 
-    def export(self, database: Database, *, where: Mapping[str, Any] | None = None) -> ExportResult:
-        """Render the (optionally scoped) store and write only changed artifacts."""
+    def export(
+        self,
+        database: Database,
+        *,
+        where: Mapping[str, Any] | None = None,
+        memory_body: str | None = None,
+        skills: dict[str, str] | None = None,
+    ) -> ExportResult:
+        """Render the (optionally scoped) store and write only changed artifacts.
+
+        ``memory_body`` and ``skills`` are optional synthesized overrides (e.g.
+        produced by :class:`~memu.memory_fs.synthesizer.MemorySynthesizer`). When
+        provided they replace the deterministic, database-derived rendering of
+        ``MEMORY.md`` / the ``skill/`` tree; ``INDEX.md`` is always deterministic.
+        """
         self.output_dir.mkdir(parents=True, exist_ok=True)
         scope = dict(where) if where else None
 
@@ -119,12 +132,20 @@ class MemoryFileExporter:
         # The shared trunk: one multimodal description per source file.
         descriptions = self._build_descriptions(resources)
 
-        skill_artifacts = self._skill_bypass(items)
+        if skills is not None:
+            skill_artifacts = {
+                f"{SKILL_DIRNAME}/{slug}/{SKILL_FILENAME}": self._skill_document(body)
+                for slug, body in skills.items()
+            }
+        else:
+            skill_artifacts = self._skill_bypass(items)
         skill_slugs = sorted(rel.split("/")[1] for rel in skill_artifacts)
+
+        body = memory_body if memory_body is not None else self._memory_body(categories)
 
         artifacts: dict[str, str] = {}
         artifacts.update(skill_artifacts)
-        artifacts[MEMORY_FILENAME] = self._memory_bypass(categories)
+        artifacts[MEMORY_FILENAME] = self._memory_document(body)
         artifacts[INDEX_FILENAME] = self._index_bypass(categories, descriptions, skill_slugs, items, database=database)
 
         return self._sync(artifacts)
@@ -162,8 +183,12 @@ class MemoryFileExporter:
             slug = base if count == 0 else f"{base}-{count + 1}"
             used[base] = count + 1
             rel_path = f"{SKILL_DIRNAME}/{slug}/{SKILL_FILENAME}"
-            artifacts[rel_path] = f"{_GENERATED_NOTICE}\n\n{body}\n"
+            artifacts[rel_path] = self._skill_document(body)
         return artifacts
+
+    @staticmethod
+    def _skill_document(body: str) -> str:
+        return f"{_GENERATED_NOTICE}\n\n{body.strip()}\n"
 
     @staticmethod
     def _skill_name(body: str, *, fallback: str) -> str:
@@ -181,22 +206,26 @@ class MemoryFileExporter:
 
     # -- bypass: MEMORY ----------------------------------------------------
 
-    def _memory_bypass(self, categories: list[MemoryCategory]) -> str:
-        """The living memory: folder (category) summaries aggregated into one file."""
-        lines = ["# Memory", "", _GENERATED_NOTICE, ""]
+    @staticmethod
+    def _memory_document(body: str) -> str:
+        body = body.strip() or "_No memory yet._"
+        return f"# Memory\n\n{_GENERATED_NOTICE}\n\n{body}\n"
+
+    def _memory_body(self, categories: list[MemoryCategory]) -> str:
+        """The living memory body: folder (category) summaries aggregated."""
         if not categories:
-            lines += ["_No memory yet._", ""]
-            return "\n".join(lines)
+            return ""
+        sections: list[str] = []
         for category in sorted(categories, key=lambda c: (c.name.lower(), c.id)):
             description = self._inline((category.description or "").strip())
             summary = (category.summary or "").strip()
-            lines.append(f"## {category.name}")
+            block = [f"## {category.name}"]
             if description:
-                lines.append(f"_{description}_")
-            lines.append("")
-            lines.append(summary or "_No summary yet._")
-            lines.append("")
-        return "\n".join(lines)
+                block.append(f"_{description}_")
+            block.append("")
+            block.append(summary or "_No summary yet._")
+            sections.append("\n".join(block))
+        return "\n\n".join(sections)
 
     # -- bypass: INDEX -----------------------------------------------------
 

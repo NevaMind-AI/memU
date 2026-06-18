@@ -181,6 +181,21 @@ description is the shared trunk, and three sibling *bypasses* project it into:
 The three bypasses are siblings — none is upstream of another; each is a
 different aggregation of the same descriptions.
 
+### Synthesis mode (optional)
+
+By default `MEMORY.md` and the `skill/` tree are rendered deterministically from
+already-extracted records. When `memory_files_config.synthesize=True`, they are
+instead synthesized directly from the per-source descriptions by an LLM
+(`memu.memory_fs.MemorySynthesizer`, prompts in `memu.prompts.memory_fs`):
+
+- `MEMORY.md`: one LLM pass turns all descriptions into a consolidated memory doc.
+- `skill/<name>/SKILL.md`: one LLM pass extracts skills as a JSON array of
+  `{name, body}` objects, each written as its own skill doc.
+
+`INDEX.md` stays deterministic in both modes. Synthesis uses the
+`synthesis_llm_profile` profile and leaves the existing memorize/extract pipeline
+untouched.
+
 The exporter is read-only against the database and disabled by default
 (`memory_files_config.enabled`). Diff detection is handled by a sidecar manifest
 (`.memufs_manifest.json`) that stores per-file content hashes, so each export

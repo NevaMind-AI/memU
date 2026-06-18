@@ -31,7 +31,7 @@ from memu.llm.wrapper import (
     LLMInterceptorHandle,
     LLMInterceptorRegistry,
 )
-from memu.memory_fs import ExportResult, MemoryFileExporter
+from memu.memory_fs import ExportResult, MemoryFileExporter, MemorySynthesizer
 from memu.workflow.interceptor import WorkflowInterceptorHandle, WorkflowInterceptorRegistry
 from memu.workflow.pipeline import PipelineManager
 from memu.workflow.runner import WorkflowRunner, resolve_workflow_runner
@@ -96,6 +96,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         # Writes are serialized through a single lock so concurrent exports never
         # interleave on the shared output directory.
         self._memory_file_exporter = MemoryFileExporter(self.memory_files_config.output_dir)
+        self._memory_synthesizer = MemorySynthesizer()
         self._memory_files_lock = asyncio.Lock()
 
         self._pipelines = PipelineManager(
@@ -382,11 +383,23 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             msg = "Memory files are disabled; set memory_files_config.enabled=True to use export_memory_files()."
             raise RuntimeError(msg)
         where = self.user_model(**user).model_dump() if user is not None else None
+
+        memory_body: str | None = None
+        skills: dict[str, str] | None = None
+        if self.memory_files_config.synthesize:
+            resources = list(self.database.resource_repo.list_resources(where=where or None).values())
+            descriptions = MemoryFileExporter._build_descriptions(resources)
+            client = self._get_llm_client(self.memory_files_config.synthesis_llm_profile)
+            synthesized = await self._memory_synthesizer.synthesize(descriptions, chat=client.chat)
+            memory_body, skills = synthesized.memory_body, synthesized.skills
+
         async with self._memory_files_lock:
             result: ExportResult = await asyncio.to_thread(
                 self._memory_file_exporter.export,
                 self.database,
                 where=where,
+                memory_body=memory_body,
+                skills=skills,
             )
         return result.to_dict()
 
