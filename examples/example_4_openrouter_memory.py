@@ -75,35 +75,27 @@ async def main():
         },
     )
 
-    conversation_files = [
-        "examples/resources/conversations/conv1.json",
-        "examples/resources/conversations/conv2.json",
-        "examples/resources/conversations/conv3.json",
-    ]
+    # memorize() scans this folder and infers modality per file (.json -> conversation).
+    conversation_folder = "examples/resources/conversations"
 
     print("\nProcessing conversations...")
     total_items = 0
     categories = []
 
-    for conv_file in conversation_files:
-        if not os.path.exists(conv_file):
-            print(f"Skipped: {conv_file} not found")
-            continue
-
-        try:
-            print(f"Processing: {conv_file}")
-            result = await service.memorize(resource_url=conv_file, modality="conversation")
-            total_items += len(result.get("items", []))
-            categories = result.get("categories", [])
-        except Exception as e:
-            print(f"Error processing {conv_file}: {e}")
+    try:
+        print(f"Processing folder: {conversation_folder}")
+        result = await service.memorize(folder=conversation_folder)
+        total_items = len(result.get("items", []))
+        categories = result.get("categories", [])
+    except Exception as e:
+        print(f"Error processing {conversation_folder}: {e}")
 
     output_dir = "examples/output/openrouter_example"
     os.makedirs(output_dir, exist_ok=True)
 
     await generate_memory_md(categories, output_dir)
 
-    print(f"\nProcessed {len(conversation_files)} files, extracted {total_items} items")
+    print(f"\nProcessed folder {conversation_folder}, extracted {total_items} items")
     print(f"Generated {len(categories)} categories")
     print(f"Output: {output_dir}/")
 

@@ -214,58 +214,38 @@ async def main():
         memorize_config=memorize_config,
     )
 
-    # Resources to process
-    resources = [
-        ("examples/resources/logs/log1.txt", "document"),
-        ("examples/resources/logs/log2.txt", "document"),
-        ("examples/resources/logs/log3.txt", "document"),
-    ]
+    # Folder of logs to process; memorize() scans it and infers modality per file.
+    logs_folder = "examples/resources/logs"
 
-    # Process each resource sequentially
+    # Process the whole folder in one incremental sync.
     print("\nProcessing files...")
     all_skills = []
     categories = []
 
-    for idx, (resource_file, modality) in enumerate(resources, 1):
-        if not os.path.exists(resource_file):
-            continue
+    try:
+        result = await service.memorize(folder=logs_folder)
 
-        try:
-            result = await service.memorize(resource_url=resource_file, modality=modality)
+        # Extract skill items
+        for item in result.get("items", []):
+            if item.get("memory_type") == "skill":
+                all_skills.append({"skill": item.get("summary", ""), "source": logs_folder})
 
-            # Extract skill items
-            for item in result.get("items", []):
-                if item.get("memory_type") == "skill":
-                    all_skills.append({"skill": item.get("summary", ""), "source": os.path.basename(resource_file)})
-
-            # Categories are returned in the result and updated after each memorize call
-            categories = result.get("categories", [])
-
-            # Generate intermediate skill.md
-            await generate_skill_md(
-                all_skills=all_skills,
-                service=service,
-                output_file=f"examples/output/skill_example/log_{idx}.md",
-                attempt_number=idx,
-                total_attempts=len(resources),
-                categories=categories,
-            )
-
-        except Exception as e:
-            print(f"Error: {e}")
+        categories = result.get("categories", [])
+    except Exception as e:
+        print(f"Error: {e}")
 
     # Generate final comprehensive skill.md
     await generate_skill_md(
         all_skills=all_skills,
         service=service,
         output_file="examples/output/skill_example/skill.md",
-        attempt_number=len(resources),
-        total_attempts=len(resources),
+        attempt_number=1,
+        total_attempts=1,
         categories=categories,
         is_final=True,
     )
 
-    print(f"\n✓ Processed {len(resources)} files, extracted {len(all_skills)} skills")
+    print(f"\n✓ Processed folder {logs_folder}, extracted {len(all_skills)} skills")
     print(f"✓ Generated {len(categories)} categories")
     print("✓ Output: examples/output/skill_example/")
 

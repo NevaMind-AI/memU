@@ -72,17 +72,39 @@ LLM wrappers also extract best-effort usage metadata from raw provider responses
 
 ## Ingestion architecture (`memorize`)
 
-`memorize(...)` executes the `memorize` pipeline:
+`memorize(folder=..., user=...)` ingests a **folder** and incrementally syncs it
+into memory using an input-side manifest. Each call:
+
+1. Recursively scans `folder`, inferring each file's modality from its extension
+   (`.json` → conversation, `.txt/.md` → document, image/video/audio by
+   extension). Unsupported extensions are skipped (and logged); hidden files and
+   the manifest itself are ignored.
+2. Loads the sidecar `<folder>/.memu_manifest.json` (`relative path -> content
+   hash`) and diffs it against the scan to compute **added / modified / deleted**.
+3. For modified + deleted files: cascade-deletes the prior `Resource` together
+   with its `MemoryItem`s and item-category relations, then recomputes the
+   affected category summaries (discarded content fed in as `(before, None)`).
+4. For added + modified files: runs the per-file `memorize` pipeline below to
+   (re)extract memory. One input file maps to exactly one `Resource`.
+5. Refreshes the memory file tree (`memory_fs`): a full rebuild when anything was
+   modified/deleted, an incremental update for pure additions.
+6. Rewrites the manifest, and returns a sync summary (`added`, `modified`,
+   `deleted`, `resources`, `removed_resources`, `items`).
+
+The per-file pipeline (`_memorize_one`) executes the `memorize` workflow:
 
 1. `ingest_resource`: fetch local/remote resource into `blob_config.resources_dir` via `LocalFS`
 2. `preprocess_multimodal`: modality-specific preprocessing for conversation/document/audio (text-oriented path) and image/video (vision-oriented path)
-3. `extract_items`: per-memory-type LLM extraction into structured entries
+3. `extract_items`: per-memory-type LLM extraction into structured entries. Conversation segments are an internal extraction detail only — all segment entries/captions are aggregated into a single resource plan.
 4. `dedupe_merge`: placeholder stage (currently pass-through)
 5. `categorize_items`: persist resource + memory items + item-category relations and embeddings
 6. `persist_index`: update category summaries; optionally persist item references
-7. `build_response`: return resource(s), items, categories, relations
+7. `build_response`: return resource, items, categories, relations
 
 Category bootstrap is lazy and scoped: categories are initialized when needed with embeddings, and mapped by normalized category name.
+
+> The input manifest is keyed by folder (and is user-agnostic): a given folder is
+> expected to be synced for a single user scope.
 
 ## Retrieval architecture (`retrieve`)
 
@@ -171,77 +193,88 @@ Client backends (apply to both chat and embedding clients):
 ## Memory file system export (`memu.memory_fs`)
 
 `MemoryService.export_memory_files(...)` renders the structured store into the
-markdown tree described in the README. Every source first becomes a **multimodal
-description** (the modality-agnostic caption/text from preprocessing); that
-description is the shared trunk, and three sibling *bypasses* project it into:
+markdown tree described in the README:
 
 ```txt
 <output_dir>/
-├── INDEX.md                     ← map of everything: folders, skills, sources
-├── MEMORY.md                    ← living memory: folder (category) summaries
+├── INDEX.md                     ← index of the raw files under resource/
+├── MEMORY.md                    ← overall overview + index of memory/
+├── SKILL.md                     ← index of the skills under skill/
+├── resource/
+│   └── <file_name>              ← one copied raw source file
+├── memory/
+│   └── <slug>.md                ← one memory category (description + summary)
 └── skill/
-    └── <skill_name>/SKILL.md    ← one learned skill / tool pattern per folder
+    └── <skill_name>/SKILL.md    ← one extracted skill profile per folder
 ```
 
-- `INDEX.md` is a table of contents (where to look before reading); it lists
-  folders, skills, and the per-source descriptions, linking out rather than
-  duplicating summaries.
-- `MEMORY.md` aggregates `MemoryCategory` summaries (profile, preferences, goals,
-  events).
-- `skill/<name>/SKILL.md` is a skill synthesized from the descriptions by an LLM;
-  the folder name comes from the synthesized skill's `name`.
+- `resource/` holds the raw source files copied verbatim out of the blob store
+  (`Resource.local_path`), so the ingested bytes live next to the memory.
+- `INDEX.md` is an index of those raw files: for each in-scope `Resource` it lists
+  the file name, modality, multimodal description, and a link into `resource/`
+  (resources without a readable `local_path` are listed without a link). It does
+  not list folders or skills.
+- `memory/` splits the living memory one file per `MemoryCategory`
+  (`memory/<slug>.md`), each holding the category's description and summary
+  (profile, preferences, goals, events).
+- `MEMORY.md` opens with a deterministic `## Overview` of the `MemoryCategory`
+  structure, where each entry links to its `memory/<slug>.md` file.
+- `SKILL.md` (root) is a generated index/table of contents over the `skill/`
+  tree: one line per skill with its slug, one-line description, and a link to
+  `skill/<name>/SKILL.md`.
+- `skill/<name>/SKILL.md` is one `skill`-type `MemoryItem` extracted during
+  memorize. Each item's summary is a comprehensive skill profile (Markdown with
+  `name`/`description` frontmatter, produced by `memu.prompts.memory_type.skill`
+  from logs / workflow traces / technical content); the exporter renders it
+  verbatim and parses the frontmatter for the folder slug and index description.
 
-The three bypasses are siblings — none is upstream of another; each is a
-different aggregation of the same descriptions. In particular, `skill/` is **not**
-derived from extracted `skill`-type `MemoryItem`s: skill is independent of (and
-parallel to) the memorize/extract pipeline, so `skill` is not a memory type the
-ingest flow needs to extract.
+### How skills are produced
 
-### Synthesis mode (optional)
+The `skill/` tree is derived from the memorize/extract pipeline, **not** from a
+separate description-synthesis bypass. `skill` (along with `behavior` and `tool`)
+is a default memory type (`memu.prompts.memory_type.DEFAULT_MEMORY_TYPES`), so the
+extract step turns demonstrated skills in the source content into `skill`-type
+`MemoryItem`s. The exporter (`MemoryFileExporter._skills_from_items`) reads those
+items from the (scoped) store on every export and renders them into `skill/` plus
+the root `SKILL.md` index. This is fully deterministic and needs no extra LLM call.
 
-The `skill/` tree is **always** synthesized from the per-source descriptions by an
-LLM (`memu.memory_fs.MemorySynthesizer`, prompts in `memu.prompts.memory_fs`),
-regardless of mode — it is a sibling bypass decoupled from memory-item extraction.
+### MEMORY.md synthesis mode (optional)
 
-`MEMORY.md` defaults to a deterministic rendering of `MemoryCategory` summaries.
-When `memory_files_config.synthesize=True`, `MEMORY.md` is instead synthesized from
-the descriptions in the same LLM pass that produces the skills:
-
-- `MEMORY.md`: one LLM pass turns all descriptions into a consolidated memory doc
-  (only when `synthesize=True`; otherwise rendered from category summaries).
-- `skill/<name>/SKILL.md`: one LLM pass extracts skills as a JSON array of
-  `{name, body}` objects, each written as its own skill doc (in both modes).
-
-`INDEX.md` stays deterministic in both modes. Synthesis uses the
-`synthesis_llm_profile` profile and leaves the existing memorize/extract pipeline
-untouched.
+`MEMORY.md` defaults to a deterministic rendering of `MemoryCategory` summaries
+(`## Overview` plus per-category sections). When
+`memory_files_config.synthesize=True`, the `MEMORY.md` body is instead synthesized
+from the per-source multimodal descriptions by an LLM
+(`memu.memory_fs.MemorySynthesizer`, prompts in `memu.prompts.memory_fs`), using
+the `synthesis_llm_profile` profile. This affects only the `MEMORY.md` body;
+`resource/`, the per-category `memory/` files, `INDEX.md`, the `skill/` tree, and
+the root `SKILL.md` index stay deterministic in both modes.
 
 ### Initialize vs. incremental update
 
-Synthesis is stateful and mirrors the "submit the changed part of the file system"
-model. `MemoryService._build_memory_files(where, changed=...)` decides between two
-paths:
+`MEMORY.md` synthesis is stateful and mirrors the "submit the changed part of the
+file system" model. `MemoryService._build_memory_files(where, changed=...)` decides
+between two paths (only relevant when `synthesize=True`):
 
-- **Initialization** (no prior tree on disk, or `changed is None`): scan all
-  in-scope sources, turn each into its multimodal description, and synthesize the
-  `skill/` tree from scratch (`MemorySynthesizer.synthesize_skills`, or
-  `synthesize` together with `MEMORY.md` when `synthesize=True`).
+- **Initialization** (no prior tree on disk, or `changed is None`): synthesize the
+  `MEMORY.md` body from all in-scope source descriptions
+  (`MemorySynthesizer.synthesize`).
 - **Incremental update** (a tree already exists and a changed set is supplied):
-  read the existing skill bodies (and `MEMORY.md` body when `synthesize=True`) back
-  off disk and merge only the changed sources' descriptions into them
-  (`MemorySynthesizer.update_skills` / `update`, prompts `MEMORY_UPDATE_PROMPT` /
-  `SKILL_UPDATE_PROMPT`). Skills are upserted by slug, so untouched skills survive.
+  read the existing `MEMORY.md` body back off disk and merge only the changed
+  sources' descriptions into it (`MemorySynthesizer.update`, prompt
+  `MEMORY_UPDATE_PROMPT`).
 
-`INDEX.md` is always recomputed from the current source set, so it needs no LLM
-merge. `export_memory_files(user=...)` always takes the initialization path (full
-rebuild). When `memory_files_config.update_on_memorize=True`, each `memorize()`
-call drives this builder with its just-created resources as the changed set, so the
-tree initializes on first run and incrementally updates afterwards. The hook is
+The `resource/` copies, the per-category `memory/` files, `INDEX.md`, the `skill/`
+tree, and the root `SKILL.md` index are always recomputed from the current store,
+so they need no LLM merge.
+`export_memory_files(user=...)` always takes the initialization path (full
+rebuild). Each `memorize(folder=...)` call drives this builder after the folder
+sync: when any file was modified or deleted it forces the full-rebuild path (so
+stale skills/entries do not linger and cascade deletions are reflected), and for
+pure additions it incrementally merges the just-created resources. The hook is
 best-effort: an export failure is logged and never fails memorize, since the
 structured memory is already persisted.
 
-The exporter is read-only against the database and disabled by default
-(`memory_files_config.enabled`). Diff detection is handled by a sidecar manifest
+The exporter is read-only against the database. Diff detection is handled by a sidecar manifest
 (`.memufs_manifest.json`) that stores per-file content hashes, so each export
 only rewrites artifacts whose rendered content changed (and prunes stale skill
 files/dirs) — no database schema change is required. Rendered content avoids

@@ -11,6 +11,7 @@ Usage:
 
 import asyncio
 import os
+import shutil
 import sys
 
 from memu.app import MemoryService
@@ -98,28 +99,29 @@ async def main():
         memorize_config={"memory_categories": multimodal_categories},
     )
 
-    # Resources to process (file_path, modality)
-    resources = [
-        ("examples/resources/docs/doc1.txt", "document"),
-        ("examples/resources/docs/doc2.txt", "document"),
-        ("examples/resources/images/image1.png", "image"),
+    # Stage a mixed-modality folder; memorize() scans it and infers each file's
+    # modality from its extension (.txt -> document, .png -> image, ...).
+    source_files = [
+        "examples/resources/docs/doc1.txt",
+        "examples/resources/docs/doc2.txt",
+        "examples/resources/images/image1.png",
     ]
+    input_folder = "examples/output/multimodal_example_input"
+    os.makedirs(input_folder, exist_ok=True)
+    for src in source_files:
+        if os.path.exists(src):
+            shutil.copy(src, os.path.join(input_folder, os.path.basename(src)))
 
-    # Process each resource
+    # Process the whole folder in one incremental sync.
     print("\nProcessing resources...")
     total_items = 0
     categories = []
-    for resource_file, modality in resources:
-        if not os.path.exists(resource_file):
-            continue
-
-        try:
-            result = await service.memorize(resource_url=resource_file, modality=modality)
-            total_items += len(result.get("items", []))
-            # Categories are returned in the result and updated after each memorize call
-            categories = result.get("categories", [])
-        except Exception as e:
-            print(f"Error: {e}")
+    try:
+        result = await service.memorize(folder=input_folder)
+        total_items = len(result.get("items", []))
+        categories = result.get("categories", [])
+    except Exception as e:
+        print(f"Error: {e}")
 
     # Write to output files
     output_dir = "examples/output/multimodal_example"
@@ -128,7 +130,7 @@ async def main():
     # 1. Generate individual Markdown files for each category
     await generate_memory_md(categories, output_dir)
 
-    print(f"\n✓ Processed {len(resources)} files, extracted {total_items} items")
+    print(f"\n✓ Processed folder {input_folder}, extracted {total_items} items")
     print(f"✓ Generated {len(categories)} categories")
     print(f"✓ Output: {output_dir}/")
 

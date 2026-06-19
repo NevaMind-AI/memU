@@ -23,7 +23,7 @@ def _print_results(title: str, result: dict) -> None:
 async def main():
     """Test with SQLite storage."""
     api_key = os.environ.get("OPENAI_API_KEY")
-    file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "example", "example_conversation.json"))
+    folder = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "resources", "conversations"))
 
     # Create a temporary SQLite database file
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
@@ -52,7 +52,7 @@ async def main():
 
         # Memorize
         print("\n[SQLITE] Memorizing...")
-        memory = await service.memorize(resource_url=file_path, modality="conversation", user={"user_id": "123"})
+        memory = await service.memorize(folder=folder, user={"user_id": "123"})
         for cat in memory.get("categories", []):
             print(f"  - {cat.get('name')}: {(cat.get('summary') or '')[:80]}...")
 

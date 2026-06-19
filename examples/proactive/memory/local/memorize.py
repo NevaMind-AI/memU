@@ -24,15 +24,18 @@ def dump_conversation_resource(
         ]
     }
     time_string = pendulum.now().format("YYYYMMDD_HHmmss")
-    resource_url = Path(__file__).parent / "data" / f"conv_{time_string}.json"
-    resource_url.parent.mkdir(parents=True, exist_ok=True)
+    data_dir = Path(__file__).parent / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    resource_url = data_dir / f"conv_{time_string}.json"
     with open(resource_url, "w") as f:
         json.dump(resource_data, f, indent=4, ensure_ascii=False)
-    return resource_url.as_posix()
+    return data_dir.as_posix()
 
 
 def memorize(conversation_messages: list[dict[str, Any]]) -> Awaitable[dict[str, Any]]:
     memory_service = get_memory_service()
 
-    resource_url = dump_conversation_resource(conversation_messages)
-    return memory_service.memorize(resource_url=resource_url, modality="conversation", user={"user_id": USER_ID})
+    # Append the new conversation to the data folder, then incrementally sync the
+    # whole folder; the input manifest ensures only the new file is processed.
+    data_folder = dump_conversation_resource(conversation_messages)
+    return memory_service.memorize(folder=data_folder, user={"user_id": USER_ID})

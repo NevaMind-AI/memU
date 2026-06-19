@@ -78,28 +78,20 @@ async def main():
         },
     )
 
-    # Conversation files to process
-    conversation_files = [
-        "examples/resources/conversations/conv1.json",
-        "examples/resources/conversations/conv2.json",
-        "examples/resources/conversations/conv3.json",
-    ]
+    # Folder of conversation files to process. memorize() scans the folder and
+    # infers each file's modality from its extension (.json -> conversation).
+    conversation_folder = "examples/resources/conversations"
 
-    # Process each conversation
+    # Process the whole folder in one incremental sync.
     print("\nProcessing conversations...")
     total_items = 0
     categories = []
-    for conv_file in conversation_files:
-        if not os.path.exists(conv_file):
-            continue
-
-        try:
-            result = await service.memorize(resource_url=conv_file, modality="conversation")
-            total_items += len(result.get("items", []))
-            # Categories are returned in the result and updated after each memorize call
-            categories = result.get("categories", [])
-        except Exception as e:
-            print(f"Error: {e}")
+    try:
+        result = await service.memorize(folder=conversation_folder)
+        total_items = len(result.get("items", []))
+        categories = result.get("categories", [])
+    except Exception as e:
+        print(f"Error: {e}")
 
     # Write to output files
     output_dir = "examples/output/conversation_example"
@@ -108,7 +100,7 @@ async def main():
     # 1. Generate individual Markdown files for each category
     await generate_memory_md(categories, output_dir)
 
-    print(f"\n✓ Processed {len(conversation_files)} files, extracted {total_items} items")
+    print(f"\n✓ Processed folder {conversation_folder}, extracted {total_items} items")
     print(f"✓ Generated {len(categories)} categories")
     print(f"✓ Output: {output_dir}/")
 

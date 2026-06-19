@@ -8,7 +8,7 @@ async def main():
     api_key = os.environ.get("OPENAI_API_KEY")
     # Default port 5432; use 5433 if 5432 is occupied
     postgres_dsn = os.environ.get("POSTGRES_DSN", "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/memu")
-    file_path = os.path.abspath("tests/example/example_conversation.json")
+    folder = os.path.abspath("examples/resources/conversations")
 
     print("\n" + "=" * 60)
     print("[POSTGRES] Starting test...")
@@ -30,7 +30,7 @@ async def main():
 
     # Memorize
     print("\n[POSTGRES] Memorizing...")
-    memory = await service.memorize(resource_url=file_path, modality="conversation", user={"user_id": "123"})
+    memory = await service.memorize(folder=folder, user={"user_id": "123"})
     for cat in memory.get("categories", []):
         print(f"  - {cat.get('name')}: {(cat.get('summary') or '')[:80]}...")
 

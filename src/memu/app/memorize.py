@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 from pydantic import BaseModel
 
 from memu.app.settings import CategoryConfig, CustomPrompt
+from memu.blob.folder import diff_folder, load_manifest, manifest_from_scan, save_manifest, scan_folder
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
 from memu.prompts.category_summary import (
     CUSTOM_PROMPT as CATEGORY_SUMMARY_CUSTOM_PROMPT,
@@ -61,6 +62,15 @@ class MemorizeMixin:
         user_model: type[BaseModel]
         memory_files_config: Any
         _build_memory_files: Callable[..., Awaitable[dict[str, Any]]]
+
+        # Provided by CRUDMixin (composed onto MemoryService).
+        async def _patch_category_summaries(
+            self,
+            updates: dict[str, tuple[str | None, str | None]],
+            ctx: Context,
+            store: Database,
+            llm_client: Any | None = None,
+        ) -> None: ...
         # Provided by MemorizeParseMixin (composed onto MemoryService).
         _parse_memory_type_response_xml: Callable[[str], list[dict[str, Any]]]
         _parse_conversation_preprocess_with_segments: Callable[
@@ -71,17 +81,80 @@ class MemorizeMixin:
     async def memorize(
         self,
         *,
-        resource_url: str,
-        modality: str,
+        folder: str,
         user: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """Sync a folder into memory by diffing against an input-side manifest.
+
+        Scans ``folder`` recursively, infers each file's modality by extension
+        (unsupported extensions are skipped), and diffs against the sidecar
+        ``.memu_manifest.json`` to find added/modified/deleted files. Modified and
+        deleted files have their previously extracted memory cascade-deleted (with
+        affected category summaries recomputed); added and modified files are
+        (re)memorized. The memory file tree is refreshed and the manifest rewritten.
+        """
         ctx = self._get_context()
         store = self._get_database()
         user_scope = self.user_model(**user).model_dump() if user is not None else None
         await self._ensure_categories_ready(ctx, store, user_scope)
 
-        memory_types = self._resolve_memory_types()
+        root = pathlib.Path(folder).resolve()
+        scanned = scan_folder(root)
+        manifest = load_manifest(root)
+        diff = diff_folder(scanned, manifest)
 
+        # 1. Cascade-delete memory for files that were modified or removed.
+        stale_urls = {sf.abs_path for sf in diff.modified}
+        stale_urls.update(str(root / rel) for rel in diff.deleted)
+        removed_resources = await self._cascade_delete_by_urls(stale_urls, ctx=ctx, store=store, user_scope=user_scope)
+
+        # 2. (Re)memorize added and modified files; each file maps to one Resource.
+        changed_resources: list[Resource] = []
+        items: list[dict[str, Any]] = []
+        categories: list[dict[str, Any]] = []
+        for scanned_file in [*diff.added, *diff.modified]:
+            result = await self._memorize_one(
+                resource_url=scanned_file.abs_path,
+                modality=scanned_file.modality,
+                user_scope=user_scope,
+                ctx=ctx,
+                store=store,
+            )
+            changed_resources.extend(cast("list[Resource]", result.get("resources") or []))
+            response = cast("dict[str, Any]", result.get("response") or {})
+            items.extend(response.get("items", []))
+            # Categories reflect the cumulative scoped state, so the latest wins.
+            if response.get("categories"):
+                categories = response["categories"]
+
+        # 3. Refresh the memory file tree (full rebuild when anything was removed).
+        await self._update_memory_files(changed_resources, user_scope, force_full=diff.has_removals)
+
+        # 4. Persist the updated input manifest.
+        save_manifest(root, manifest_from_scan(scanned))
+
+        return {
+            "folder": str(root),
+            "added": [sf.rel_path for sf in diff.added],
+            "modified": [sf.rel_path for sf in diff.modified],
+            "deleted": list(diff.deleted),
+            "resources": [self._model_dump_without_embeddings(r) for r in changed_resources],
+            "removed_resources": [self._model_dump_without_embeddings(r) for r in removed_resources],
+            "items": items,
+            "categories": categories,
+        }
+
+    async def _memorize_one(
+        self,
+        *,
+        resource_url: str,
+        modality: str,
+        user_scope: dict[str, Any] | None,
+        ctx: Context,
+        store: Database,
+    ) -> WorkflowState:
+        """Run the memorize workflow for a single file (one file -> one Resource)."""
+        memory_types = self._resolve_memory_types()
         state: WorkflowState = {
             "resource_url": resource_url,
             "modality": modality,
@@ -92,34 +165,74 @@ class MemorizeMixin:
             "category_ids": list(ctx.category_ids),
             "user": user_scope,
         }
-
         result = await self._run_workflow("memorize", state)
-        response = cast(dict[str, Any] | None, result.get("response"))
-        if response is None:
+        if result.get("response") is None:
             msg = "Memorize workflow failed to produce a response"
             raise RuntimeError(msg)
+        return result
 
-        await self._maybe_update_memory_files(result, user_scope)
-        return response
+    async def _cascade_delete_by_urls(
+        self,
+        urls: set[str],
+        *,
+        ctx: Context,
+        store: Database,
+        user_scope: dict[str, Any] | None,
+    ) -> list[Resource]:
+        """Delete resources (and their items/relations) whose url is in ``urls``.
 
-    async def _maybe_update_memory_files(self, result: WorkflowState, user_scope: dict[str, Any] | None) -> None:
-        """Drive the memory file tree from a memorize call (init or incremental update).
-
-        Gated behind ``memory_files_config.enabled`` and ``update_on_memorize`` so the
-        default memorize behavior is unchanged. The just-created resources are the
-        "changed part of the file system" that an existing tree is updated against;
-        if no tree exists yet, ``_build_memory_files`` initializes it from the full
-        scoped store instead. Failures are best-effort: the memory is already
-        persisted, so an export error must not fail memorize.
+        Affected category summaries are recomputed so the structured memory and the
+        rendered file tree stay consistent after a source file is changed/removed.
         """
-        cfg = self.memory_files_config
-        if not (getattr(cfg, "enabled", False) and getattr(cfg, "update_on_memorize", False)):
-            return
-        changed = cast("list[Resource]", result.get("resources") or [])
-        if not changed:
+        if not urls:
+            return []
+        where = user_scope or None
+        targets = [res for res in store.resource_repo.list_resources(where=where).values() if res.url in urls]
+        if not targets:
+            return []
+        target_ids = {res.id for res in targets}
+
+        # Discarded item summaries per category, used to recompute summaries.
+        category_discards: dict[str, list[str]] = {}
+        for item in store.memory_item_repo.list_items(where=where).values():
+            if item.resource_id not in target_ids:
+                continue
+            for relation in store.category_item_repo.get_item_categories(item.id):
+                store.category_item_repo.unlink_item_category(item.id, relation.category_id)
+                category_discards.setdefault(relation.category_id, []).append(item.summary)
+            store.memory_item_repo.delete_item(item.id)
+
+        for res in targets:
+            store.resource_repo.delete_resource(res.id)
+
+        updates: dict[str, tuple[str | None, str | None]] = {
+            cid: ("\n".join(s for s in summaries if s and s.strip()), None)
+            for cid, summaries in category_discards.items()
+            if any(s and s.strip() for s in summaries)
+        }
+        if updates:
+            await self._patch_category_summaries(updates, ctx=ctx, store=store, llm_client=self._get_llm_client())
+        return targets
+
+    async def _update_memory_files(
+        self,
+        changed_resources: list[Resource],
+        user_scope: dict[str, Any] | None,
+        *,
+        force_full: bool = False,
+    ) -> None:
+        """Drive the memory file tree after a folder sync (init or incremental).
+
+        When any file was modified or deleted (``force_full``), the tree is rebuilt
+        from the full scoped store so stale skills/entries do not linger. Otherwise
+        an incremental update merges the just-created resources. Failures are
+        best-effort: the structured memory is already persisted, so an export error
+        must not fail memorize.
+        """
+        if not changed_resources and not force_full:
             return
         try:
-            await self._build_memory_files(user_scope, changed=changed)
+            await self._build_memory_files(user_scope, changed=None if force_full else changed_resources)
         except Exception:
             logger.exception("Memory file export failed after memorize")
 
@@ -228,31 +341,37 @@ class MemorizeMixin:
     async def _memorize_extract_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         llm_client = self._get_step_llm_client(step_context)
         preprocessed_resources = state.get("preprocessed_resources", [])
-        resource_plans: list[dict[str, Any]] = []
-        total_segments = len(preprocessed_resources) or 1
 
-        for idx, prep in enumerate(preprocessed_resources):
-            res_url = self._segment_resource_url(state["resource_url"], idx, total_segments)
+        # A single input file maps to a single Resource: segmentation (e.g. for
+        # conversations) is only an internal preprocessing/extraction detail, so
+        # all segment entries and captions are aggregated into one resource plan.
+        all_entries: list[tuple[MemoryType, str, list[str]]] = []
+        captions: list[str] = []
+        for prep in preprocessed_resources:
             text = prep.get("text")
             caption = prep.get("caption")
+            if caption and caption.strip():
+                captions.append(caption.strip())
 
             structured_entries = await self._generate_structured_entries(
-                resource_url=res_url,
+                resource_url=state["resource_url"],
                 modality=state["modality"],
                 memory_types=state["memory_types"],
                 text=text,
                 categories_prompt_str=state["categories_prompt_str"],
                 llm_client=llm_client,
             )
+            all_entries.extend(structured_entries)
 
-            resource_plans.append({
-                "resource_url": res_url,
-                "text": text,
-                "caption": caption,
-                "entries": structured_entries,
-            })
-
-        state["resource_plans"] = resource_plans
+        combined_caption = " ".join(captions) if captions else None
+        state["resource_plans"] = [
+            {
+                "resource_url": state["resource_url"],
+                "text": None,
+                "caption": combined_caption,
+                "entries": all_entries,
+            }
+        ]
         return state
 
     def _memorize_dedupe_merge(self, state: WorkflowState, step_context: Any) -> WorkflowState:
@@ -352,12 +471,6 @@ class MemorizeMixin:
             }
         state["response"] = response
         return state
-
-    def _segment_resource_url(self, base_url: str, idx: int, total_segments: int) -> str:
-        if total_segments <= 1:
-            return base_url
-        path = pathlib.Path(base_url)
-        return f"{path.stem}_#segment_{idx}{path.suffix}"
 
     async def _fetch_and_preprocess_resource(
         self, resource_url: str, modality: str, llm_client: Any | None = None

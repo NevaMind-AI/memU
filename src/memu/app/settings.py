@@ -146,17 +146,19 @@ class BlobConfig(BaseModel):
 class MemoryFilesConfig(BaseModel):
     """Render structured memory into a browsable markdown "memory file system".
 
-    Purely additive and read-only against the store; disabled by default so it
-    never changes existing memorize/retrieve behavior.
+    Read-only against the store. The INDEX.md/MEMORY.md/SKILL.md tree (with the
+    sibling resource/, memory/, and skill/ directories) is always
+    initialized/updated on every ``memorize()`` call, so it stays current without
+    an explicit ``export_memory_files()`` call. Updates are best-effort: a render
+    failure is logged and never fails ``memorize()``.
     """
 
-    enabled: bool = Field(
-        default=False,
-        description="Enable rendering structured memory into browsable markdown files.",
-    )
     output_dir: str = Field(
         default="./data/memory",
-        description="Directory where the memory markdown tree (INDEX.md/MEMORY.md/skill/) is written.",
+        description=(
+            "Directory where the memory markdown tree (INDEX.md/MEMORY.md/SKILL.md plus the "
+            "resource/, memory/, and skill/ directories) is written."
+        ),
     )
     synthesize: bool = Field(
         default=False,
@@ -168,13 +170,6 @@ class MemoryFilesConfig(BaseModel):
     synthesis_llm_profile: str = Field(
         default="default",
         description="LLM profile used when synthesize=True.",
-    )
-    update_on_memorize: bool = Field(
-        default=False,
-        description=(
-            "Automatically initialize or incrementally update the memory file tree after each "
-            "memorize() call, using the just-created resources as the changed file set."
-        ),
     )
 
 

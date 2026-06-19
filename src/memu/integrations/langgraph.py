@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import shutil
 import tempfile
 import uuid
 from typing import Any
@@ -75,18 +76,18 @@ class MemULangGraphTools:
 
         async def _save(content: str, user_id: str, metadata: dict | None = None) -> str:
             logger.info("Entering save_memory_tool for user_id: %s", user_id)
-            filename = f"memu_input_{uuid.uuid4()}.txt"
-            temp_dir = tempfile.gettempdir()
-            file_path = os.path.join(temp_dir, filename)
+            # memorize() ingests a folder, so stage the content as a single file
+            # inside a throwaway directory and sync that directory.
+            temp_dir = tempfile.mkdtemp(prefix="memu_input_")
+            file_path = os.path.join(temp_dir, f"{uuid.uuid4()}.txt")
 
             try:
                 with open(file_path, "w", encoding="utf-8") as f:
                     f.write(content)
 
-                logger.debug("Calling memory_service.memorize with temporary file: %s", file_path)
+                logger.debug("Calling memory_service.memorize with temporary folder: %s", temp_dir)
                 await self.memory_service.memorize(
-                    resource_url=file_path,
-                    modality="conversation",
+                    folder=temp_dir,
                     user={"user_id": user_id, **(metadata or {})},
                 )
                 logger.info("Successfully saved memory for user_id: %s", user_id)
@@ -95,10 +96,9 @@ class MemULangGraphTools:
                 logger.exception(error_msg)
                 return str(MemUIntegrationError(error_msg))
             finally:
-                if os.path.exists(file_path):
-                    with contextlib.suppress(OSError):
-                        os.remove(file_path)
-                        logger.debug("Cleaned up temporary file: %s", file_path)
+                with contextlib.suppress(OSError):
+                    shutil.rmtree(temp_dir)
+                    logger.debug("Cleaned up temporary folder: %s", temp_dir)
 
             return "Memory saved successfully."
 

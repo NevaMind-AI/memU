@@ -138,19 +138,17 @@ async def test_memu_with_nebius():
         service = MemoryService(llm_profiles=llm_profiles)
         print("  ✓ MemoryService initialized with Nebius!")
 
-        # Test memorize with a file (create temp file)
+        # Test memorize with a folder (memorize() ingests a directory).
         print("\n  Testing memorize...")
+        import shutil
         import tempfile
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        temp_dir = tempfile.mkdtemp(prefix="memu_nebius_")
+        with open(os.path.join(temp_dir, "note.txt"), "w", encoding="utf-8") as f:
             f.write("User likes Python programming and AI development. They prefer dark mode in their IDE.")
-            temp_file = f.name
 
         try:
-            result = await service.memorize(
-                resource_url=temp_file,
-                modality="text",
-            )
+            result = await service.memorize(folder=temp_dir)
             items_count = len(result.get("items", []))
             categories_count = len(result.get("categories", []))
             print(f"  ✓ Memorized! Items: {items_count}, Categories: {categories_count}")
@@ -160,7 +158,7 @@ async def test_memu_with_nebius():
                 summary = item.get("summary", "")[:80]
                 print(f"    - {summary}...")
         finally:
-            os.unlink(temp_file)
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
         # Test retrieve
         print("\n  Testing retrieve...")

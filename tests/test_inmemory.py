@@ -8,7 +8,7 @@ async def main():
     api_key = os.environ.get("OPENAI_API_KEY")
     # dashscope_api_key = os.environ.get("DASHSCOPE_API_KEY")
     # voyage_api_key = os.environ.get("VOYAGE_API_KEY")
-    file_path = os.path.abspath("example/example_conversation.json")
+    folder = os.path.abspath("examples/resources/conversations")
 
     print("\n" + "=" * 60)
     print("[INMEMORY] Starting test...")
@@ -37,7 +37,7 @@ async def main():
 
     # Memorize
     print("\n[INMEMORY] Memorizing...")
-    memory = await service.memorize(resource_url=file_path, modality="conversation", user={"user_id": "123"})
+    memory = await service.memorize(folder=folder, user={"user_id": "123"})
     for cat in memory.get("categories", []):
         print(f"  - {cat.get('name')}: {(cat.get('summary') or '')[:80]}...")
 

@@ -43,12 +43,10 @@ def _print_items(items, max_items=3):
             print(f"    - [{memory_type}] {summary}...")
 
 
-async def _test_memorize(service, file_path, output_data):
+async def _test_memorize(service, folder, output_data):
     """Test conversation memorization."""
     print("\n[OPENROUTER] Test 1: Memorizing conversation...")
-    memory = await service.memorize(
-        resource_url=file_path, modality="conversation", user={"user_id": "openrouter_test_user"}
-    )
+    memory = await service.memorize(folder=folder, user={"user_id": "openrouter_test_user"})
     items_count = len(memory.get("items", []))
     categories_count = len(memory.get("categories", []))
 
@@ -89,9 +87,9 @@ async def test_openrouter_full_workflow():
     if not api_key:
         pytest.skip("OPENROUTER_API_KEY environment variable not set")
 
-    file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "example", "example_conversation.json"))
-    if not os.path.exists(file_path):
-        pytest.skip(f"Test file not found: {file_path}")
+    folder = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples", "resources", "conversations"))
+    if not os.path.isdir(folder):
+        pytest.skip(f"Test folder not found: {folder}")
 
     output_data: dict[str, Any] = {}
 
@@ -123,7 +121,7 @@ async def test_openrouter_full_workflow():
         {"role": "user", "content": {"text": "What foods does the user like to eat?"}},
     ]
 
-    await _test_memorize(service, file_path, output_data)
+    await _test_memorize(service, folder, output_data)
     await _test_retrieve(service, queries, "rag", 2, output_data)
     await _test_retrieve(service, queries, "llm", 3, output_data)
 

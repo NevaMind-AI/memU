@@ -20,6 +20,7 @@ Usage:
 
 import asyncio
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -41,28 +42,19 @@ async def run_conversation_memory_demo(service):
     print("PART 1: Conversation Memory Processing")
     print("=" * 60)
 
-    conversation_files = [
-        "examples/resources/conversations/conv1.json",
-        "examples/resources/conversations/conv2.json",
-        "examples/resources/conversations/conv3.json",
-    ]
+    conversation_folder = "examples/resources/conversations"
 
     total_items = 0
     categories = []
 
-    for conv_file in conversation_files:
-        if not os.path.exists(conv_file):
-            print(f"⚠ File not found: {conv_file}")
-            continue
-
-        try:
-            print(f"  Processing: {conv_file}")
-            result = await service.memorize(resource_url=conv_file, modality="conversation")
-            total_items += len(result.get("items", []))
-            categories = result.get("categories", [])
-            print(f"    ✓ Extracted {len(result.get('items', []))} items")
-        except Exception as e:
-            print(f"  ✗ Error processing {conv_file}: {e}")
+    try:
+        print(f"  Processing folder: {conversation_folder}")
+        result = await service.memorize(folder=conversation_folder)
+        total_items = len(result.get("items", []))
+        categories = result.get("categories", [])
+        print(f"    ✓ Extracted {total_items} items")
+    except Exception as e:
+        print(f"  ✗ Error processing {conversation_folder}: {e}")
 
     # Output generation
     output_dir = "examples/output/lazyllm_example/conversation"
@@ -106,22 +98,18 @@ async def run_skill_extraction_demo(service):
     service.memorize_config.memory_types = ["skill"]
     service.memorize_config.memory_type_prompts = {"skill": skill_prompt}
 
-    logs = ["examples/resources/logs/log1.txt", "examples/resources/logs/log2.txt", "examples/resources/logs/log3.txt"]
+    logs_folder = "examples/resources/logs"
 
     all_skills = []
-    for log_file in logs:
-        if not os.path.exists(log_file):
-            continue
-
-        print(f"  Processing log: {log_file}")
-        try:
-            result = await service.memorize(resource_url=log_file, modality="document")
-            for item in result.get("items", []):
-                if item.get("memory_type") == "skill":
-                    all_skills.append(item.get("summary", ""))
-            print(f"    ✓ Extracted {len(result.get('items', []))} skills")
-        except Exception as e:
-            print(f"  ✗ Error: {e}")
+    print(f"  Processing logs folder: {logs_folder}")
+    try:
+        result = await service.memorize(folder=logs_folder)
+        for item in result.get("items", []):
+            if item.get("memory_type") == "skill":
+                all_skills.append(item.get("summary", ""))
+        print(f"    ✓ Extracted {len(result.get('items', []))} skills")
+    except Exception as e:
+        print(f"  ✗ Error: {e}")
 
     # Generate summary guide
     if all_skills:
@@ -158,23 +146,24 @@ async def run_multimodal_demo(service):
     service.memorize_config.memory_types = ["knowledge"]
     service.memorize_config.memory_type_prompts = {"knowledge": xml_prompt}
 
-    resources = [
-        ("examples/resources/docs/doc1.txt", "document"),
-        ("examples/resources/images/image1.png", "image"),
+    source_files = [
+        "examples/resources/docs/doc1.txt",
+        "examples/resources/images/image1.png",
     ]
+    input_folder = "examples/output/lazyllm_example/multimodal_input"
+    os.makedirs(input_folder, exist_ok=True)
+    for src in source_files:
+        if os.path.exists(src):
+            shutil.copy(src, os.path.join(input_folder, os.path.basename(src)))
 
     categories = []
-    for res_file, modality in resources:
-        if not os.path.exists(res_file):
-            continue
-
-        print(f"  Processing {modality}: {res_file}")
-        try:
-            result = await service.memorize(resource_url=res_file, modality=modality)
-            categories = result.get("categories", [])
-            print(f"    ✓ Extracted {len(result.get('items', []))} items")
-        except Exception as e:
-            print(f"  ✗ Error: {e}")
+    print(f"  Processing folder: {input_folder}")
+    try:
+        result = await service.memorize(folder=input_folder)
+        categories = result.get("categories", [])
+        print(f"    ✓ Extracted {len(result.get('items', []))} items")
+    except Exception as e:
+        print(f"  ✗ Error: {e}")
 
     output_dir = "examples/output/lazyllm_example/multimodal"
     os.makedirs(output_dir, exist_ok=True)

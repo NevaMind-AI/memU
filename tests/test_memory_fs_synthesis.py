@@ -6,15 +6,19 @@ from memu.app import MemoryService
 from memu.memory_fs import FileDescription, MemoryFileExporter, MemorySynthesizer
 
 _MEMORY_MD = "## Profile\nThe user is a coffee enthusiast.\n\n## Preferences\nPrefers pour-over."
-_SKILLS_JSON = '[{"name": "Pour Over", "body": "# Pour-over\\nUse a 1:16 ratio."}]'
+_UPDATE_MEMORY_MD = "## Profile\nThe user is a coffee enthusiast.\n\n## Preferences\nLikes oat milk."
+
+
+def _skill_profile(name: str, description: str, body: str) -> str:
+    return f"---\nname: {name}\ndescription: {description}\ncategory: technical_skills\n---\n\n{body}\n"
 
 
 class _FakeChatClient:
-    """Stand-in LLM client: returns canned memory/skill responses by prompt shape."""
+    """Stand-in LLM client: returns init vs update MEMORY.md bodies by prompt shape."""
 
     async def chat(self, prompt: str, system_prompt: str | None = None) -> str:
-        if "JSON array" in prompt:
-            return _SKILLS_JSON
+        if "CURRENT memory document" in prompt:
+            return _UPDATE_MEMORY_MD
         return _MEMORY_MD
 
 
@@ -29,77 +33,171 @@ def _descriptions() -> list[FileDescription]:
     ]
 
 
-async def test_synthesizer_parses_memory_and_skills() -> None:
-    synth = MemorySynthesizer()
-    result = await synth.synthesize(_descriptions(), chat=_FakeChatClient().chat)
+# -- MemorySynthesizer (MEMORY.md only) --------------------------------------
 
-    assert "## Profile" in result.memory_body
-    assert "pour-over" in result.memory_body.lower()
-    assert result.skills == {"pour-over": "# Pour-over\nUse a 1:16 ratio."}
+
+async def test_synthesizer_synthesizes_memory_body() -> None:
+    synth = MemorySynthesizer()
+    body = await synth.synthesize(_descriptions(), chat=_FakeChatClient().chat)
+    assert "## Profile" in body
+    assert "coffee enthusiast" in body.lower()
 
 
 async def test_synthesizer_empty_when_no_descriptions() -> None:
     synth = MemorySynthesizer()
-    result = await synth.synthesize([], chat=_FakeChatClient().chat)
-    assert result.memory_body == ""
-    assert result.skills == {}
+    assert await synth.synthesize([], chat=_FakeChatClient().chat) == ""
 
 
-async def test_synthesize_skills_only_decoupled_from_memory() -> None:
-    """The skill bypass can be built on its own, without touching MEMORY.md."""
+async def test_synthesizer_update_merges_into_existing() -> None:
     synth = MemorySynthesizer()
-    skills = await synth.synthesize_skills(_descriptions(), chat=_FakeChatClient().chat)
-    assert skills == {"pour-over": "# Pour-over\nUse a 1:16 ratio."}
+    body = await synth.update(
+        _descriptions(),
+        existing_memory="## Profile\nOld profile.",
+        chat=_FakeChatClient().chat,
+    )
+    assert "Likes oat milk." in body
 
 
-async def test_synthesize_skills_empty_without_descriptions() -> None:
+async def test_synthesizer_update_noop_without_descriptions() -> None:
     synth = MemorySynthesizer()
-    assert await synth.synthesize_skills([], chat=_FakeChatClient().chat) == {}
+    body = await synth.update([], existing_memory="## Profile\nKeep me.", chat=_FakeChatClient().chat)
+    assert body == "## Profile\nKeep me."
 
 
-def test_synthesizer_helpers() -> None:
+def test_synthesizer_cleans_code_fences() -> None:
     synth = MemorySynthesizer()
     assert synth._clean_markdown("```markdown\n# Hi\n```") == "# Hi"
-    assert synth._parse_skills("garbage, no array") == {}
-    assert synth._parse_skills("[]") == {}
-    assert synth._parse_skills('[{"name": "A", "body": ""}]') == {}
-    duplicate = '[{"name": "A", "body": "x"}, {"name": "A", "body": "y"}]'
-    assert synth._parse_skills(duplicate) == {"a": "x", "a-2": "y"}
 
 
-def test_exporter_override_path(tmp_path: Path) -> None:
+# -- skill/ rendered from skill-type memory items ----------------------------
+
+
+def _seed_skill(service: MemoryService, *, name: str, description: str, body: str, user: dict[str, str]) -> None:
+    resource = service.database.resource_repo.create_resource(
+        url=f"docs/{name}.txt",
+        modality="document",
+        local_path=f"{name}.txt",
+        caption=f"Source for {name}.",
+        embedding=None,
+        user_data=dict(user),
+    )
+    service.database.memory_item_repo.create_item(
+        resource_id=resource.id,
+        memory_type="skill",
+        summary=_skill_profile(name, description, body),
+        embedding=[0.1, 0.2],
+        user_data=dict(user),
+    )
+
+
+def _service(tmp_path: Path, **memory_files: object) -> MemoryService:
+    return MemoryService(
+        llm_profiles={"default": {"api_key": "test-key"}},
+        database_config={"metadata_store": {"provider": "inmemory"}},
+        memory_files_config={"output_dir": str(tmp_path), **memory_files},
+    )
+
+
+async def test_export_renders_skill_tree_from_items(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    _seed_skill(
+        service,
+        name="canary-deployment",
+        description="Gradually shift traffic with monitoring.",
+        body="# Canary deployment\nShift traffic slowly.",
+        user={"user_id": "u1"},
+    )
+
+    result = await service.export_memory_files(user={"user_id": "u1"})
+
+    assert "skill/canary-deployment/SKILL.md" in result["written"]
+    skill_text = (tmp_path / "skill" / "canary-deployment" / "SKILL.md").read_text(encoding="utf-8")
+    assert "# Canary deployment" in skill_text
+    index_text = (tmp_path / "SKILL.md").read_text(encoding="utf-8")
+    assert "Gradually shift traffic with monitoring." in index_text
+
+
+def test_exporter_parses_frontmatter_and_dedupes_slugs(tmp_path: Path) -> None:
     service = MemoryService(
         llm_profiles={"default": {"api_key": "test-key"}},
         database_config={"metadata_store": {"provider": "inmemory"}},
     )
     exporter = MemoryFileExporter(str(tmp_path))
 
-    result = exporter.export(
-        service.database,
-        memory_body="## Profile\nSynthesized.",
-        skills={"brewing": "# Brewing\nbody"},
-    )
+    # No frontmatter -> name/description fall back to derived values.
+    assert exporter._parse_skill_frontmatter("# Just a heading\nbody") == ("", "")
+    name, description = exporter._parse_skill_frontmatter(_skill_profile("brew", "Brew coffee.", "body"))
+    assert name == "brew"
+    assert description == "Brew coffee."
 
-    assert "MEMORY.md" in result.written
-    assert "skill/brewing/SKILL.md" in result.written
-    assert "Synthesized." in (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
-    assert "# Brewing" in (tmp_path / "skill" / "brewing" / "SKILL.md").read_text(encoding="utf-8")
-    assert "[brewing](./skill/brewing/SKILL.md)" in (tmp_path / "INDEX.md").read_text(encoding="utf-8")
+    items = [
+        service.database.memory_item_repo.create_item(
+            resource_id="r1",
+            memory_type="skill",
+            summary=_skill_profile("brew", "Brew coffee.", "first"),
+            embedding=[0.1],
+            user_data={},
+        ),
+        service.database.memory_item_repo.create_item(
+            resource_id="r2",
+            memory_type="skill",
+            summary=_skill_profile("brew", "Brew tea too.", "second"),
+            embedding=[0.1],
+            user_data={},
+        ),
+        service.database.memory_item_repo.create_item(
+            resource_id="r3",
+            memory_type="event",
+            summary="not a skill",
+            embedding=[0.1],
+            user_data={},
+        ),
+    ]
+    skills = exporter._skills_from_items(items)
+    assert set(skills) == {"brew", "brew-2"}
 
 
-async def test_service_synthesis_wiring(tmp_path: Path, monkeypatch) -> None:
+def test_exporter_memory_body_override(tmp_path: Path) -> None:
     service = MemoryService(
         llm_profiles={"default": {"api_key": "test-key"}},
         database_config={"metadata_store": {"provider": "inmemory"}},
-        memory_files_config={"enabled": True, "output_dir": str(tmp_path), "synthesize": True},
     )
-    service.database.resource_repo.create_resource(
-        url="docs/coffee.txt",
-        modality="document",
-        local_path="coffee.txt",
-        caption="The user likes pour-over coffee.",
-        embedding=None,
-        user_data={"user_id": "u1"},
+    exporter = MemoryFileExporter(str(tmp_path))
+
+    result = exporter.export(service.database, memory_body="## Profile\nSynthesized.")
+
+    assert "MEMORY.md" in result.written
+    assert "Synthesized." in (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
+    # No skill items -> the root SKILL.md is still written as an empty index.
+    assert "SKILL.md" in result.written
+    assert "_No skills yet._" in (tmp_path / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_exporter_read_memory_body_roundtrip(tmp_path: Path) -> None:
+    service = MemoryService(
+        llm_profiles={"default": {"api_key": "test-key"}},
+        database_config={"metadata_store": {"provider": "inmemory"}},
+    )
+    exporter = MemoryFileExporter(str(tmp_path))
+
+    assert exporter.artifacts_exist() is False
+    exporter.export(service.database, memory_body="## Profile\nSynthesized body.")
+
+    assert exporter.artifacts_exist() is True
+    assert exporter.read_memory_body() == "## Profile\nSynthesized body."
+
+
+# -- service synthesis wiring ------------------------------------------------
+
+
+async def test_service_synthesis_wiring(tmp_path: Path, monkeypatch) -> None:
+    service = _service(tmp_path, synthesize=True)
+    _seed_skill(
+        service,
+        name="pour-over",
+        description="Brew pour-over coffee.",
+        body="# Pour-over\nUse a 1:16 ratio.",
+        user={"user_id": "u1"},
     )
     monkeypatch.setattr(service, "_get_llm_client", lambda *a, **k: _FakeChatClient())
 
@@ -111,117 +209,25 @@ async def test_service_synthesis_wiring(tmp_path: Path, monkeypatch) -> None:
     assert "The user is a coffee enthusiast." in memory_text
 
 
-# -- incremental update path -------------------------------------------------
-
-_UPDATE_MEMORY_MD = "## Profile\nThe user is a coffee enthusiast.\n\n## Preferences\nLikes oat milk."
-_UPDATE_SKILLS_JSON = '[{"name": "Latte Art", "body": "# Latte art\\nPour slowly."}]'
-
-
-class _InitUpdateChatClient:
-    """Returns init vs update payloads based on which prompt template fired."""
-
-    async def chat(self, prompt: str, system_prompt: str | None = None) -> str:
-        is_update = "CURRENT memory document" in prompt or "EXISTING skills" in prompt
-        if "JSON array" in prompt:
-            return _UPDATE_SKILLS_JSON if is_update else _SKILLS_JSON
-        return _UPDATE_MEMORY_MD if is_update else _MEMORY_MD
-
-
-async def test_synthesizer_update_merges_into_existing() -> None:
-    synth = MemorySynthesizer()
-    result = await synth.update(
-        _descriptions(),
-        existing_memory="## Profile\nOld profile.",
-        existing_skills={"pour-over": "# Pour-over\nUse a 1:16 ratio."},
-        chat=_InitUpdateChatClient().chat,
-    )
-
-    assert "Likes oat milk." in result.memory_body
-    # Existing skill is preserved, the new one is upserted alongside it.
-    assert result.skills["pour-over"] == "# Pour-over\nUse a 1:16 ratio."
-    assert result.skills["latte-art"] == "# Latte art\nPour slowly."
-
-
-async def test_synthesizer_update_noop_without_descriptions() -> None:
-    synth = MemorySynthesizer()
-    existing_skills = {"pour-over": "# Pour-over"}
-    result = await synth.update(
-        [],
-        existing_memory="## Profile\nKeep me.",
-        existing_skills=existing_skills,
-        chat=_InitUpdateChatClient().chat,
-    )
-    assert result.memory_body == "## Profile\nKeep me."
-    assert result.skills == existing_skills
-
-
-async def test_update_skills_only_upserts_and_preserves() -> None:
-    """Skill-only incremental update keeps untouched skills and upserts new ones."""
-    synth = MemorySynthesizer()
-    skills = await synth.update_skills(
-        _descriptions(),
-        existing_skills={"pour-over": "# Pour-over\nUse a 1:16 ratio."},
-        chat=_InitUpdateChatClient().chat,
-    )
-    assert skills["pour-over"] == "# Pour-over\nUse a 1:16 ratio."
-    assert skills["latte-art"] == "# Latte art\nPour slowly."
-
-
-async def test_update_skills_noop_without_descriptions() -> None:
-    synth = MemorySynthesizer()
-    existing = {"pour-over": "# Pour-over"}
-    assert await synth.update_skills([], existing_skills=existing, chat=_InitUpdateChatClient().chat) == existing
-
-
-def test_exporter_read_helpers_roundtrip(tmp_path: Path) -> None:
-    service = MemoryService(
-        llm_profiles={"default": {"api_key": "test-key"}},
-        database_config={"metadata_store": {"provider": "inmemory"}},
-    )
-    exporter = MemoryFileExporter(str(tmp_path))
-
-    assert exporter.artifacts_exist() is False
-    exporter.export(
-        service.database,
-        memory_body="## Profile\nSynthesized body.",
-        skills={"brewing": "# Brewing\nbody"},
-    )
-
-    assert exporter.artifacts_exist() is True
-    assert exporter.read_memory_body() == "## Profile\nSynthesized body."
-    assert exporter.read_skills() == {"brewing": "# Brewing\nbody"}
-
-
 async def test_service_init_then_update(tmp_path: Path, monkeypatch) -> None:
-    service = MemoryService(
-        llm_profiles={"default": {"api_key": "test-key"}},
-        database_config={"metadata_store": {"provider": "inmemory"}},
-        memory_files_config={
-            "enabled": True,
-            "output_dir": str(tmp_path),
-            "synthesize": True,
-            "update_on_memorize": True,
-        },
-    )
-    monkeypatch.setattr(service, "_get_llm_client", lambda *a, **k: _InitUpdateChatClient())
+    service = _service(tmp_path, synthesize=True)
+    monkeypatch.setattr(service, "_get_llm_client", lambda *a, **k: _FakeChatClient())
 
-    repo = service.database.resource_repo
-    repo.create_resource(
-        url="docs/coffee.txt",
-        modality="document",
-        local_path="coffee.txt",
-        caption="The user likes pour-over coffee.",
-        embedding=None,
-        user_data={"user_id": "u1"},
+    _seed_skill(
+        service,
+        name="pour-over",
+        description="Brew pour-over coffee.",
+        body="# Pour-over\nUse a 1:16 ratio.",
+        user={"user_id": "u1"},
     )
 
-    # First pass: no tree yet -> initialization from the full store.
+    # First pass: no tree yet -> initialization synthesizes the MEMORY.md body.
     init = await service.export_memory_files(user={"user_id": "u1"})
     assert "skill/pour-over/SKILL.md" in init["written"]
     assert "coffee enthusiast" in (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
 
-    # Second pass: tree exists -> incremental update from the changed resource only.
-    changed = repo.create_resource(
+    # Second pass: tree exists -> incremental MEMORY.md update from the changed resource.
+    changed = service.database.resource_repo.create_resource(
         url="docs/latte.txt",
         modality="document",
         local_path="latte.txt",
@@ -233,6 +239,6 @@ async def test_service_init_then_update(tmp_path: Path, monkeypatch) -> None:
 
     memory_text = (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
     assert "Likes oat milk." in memory_text
-    assert "skill/latte-art/SKILL.md" in (updated["written"] + updated["unchanged"])
-    # The originally-initialized skill survives the incremental update.
+    # The skill folder, rebuilt from the persisted skill item, survives.
     assert (tmp_path / "skill" / "pour-over" / "SKILL.md").exists()
+    assert "MEMORY.md" in (updated["written"] + updated["unchanged"])

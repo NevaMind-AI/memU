@@ -31,8 +31,13 @@ Instead of flattening everything an agent learns into one giant prompt or an opa
 
 ```txt
 memory/
-├── INDEX.md              ← map of everything: categories, files, and summaries
-├── MEMORY.md             ← profile, preferences, goals, and key events
+├── INDEX.md              ← index of the raw files under resource/
+├── MEMORY.md             ← overall overview + index of memory/
+├── SKILL.md              ← index of the skills under skill/
+├── resource/
+│   └── {file_name}       ← a copied raw source file
+├── memory/
+│   └── {slug}.md         ← profile, preferences, goals, and key events (one per category)
 └── skill/
     ├── {skill_name}/
     │   └── SKILL.md       ← a learned skill or tool pattern
@@ -192,9 +197,10 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 *Turn chat logs into user preferences, goals, events, and relationship context.*
 
 ```python
+# memorize() ingests a folder: it scans the directory, infers each file's
+# modality from its extension, and incrementally syncs (add/modify/delete).
 await service.memorize(
-    resource_url="examples/resources/conversations/conv1.json",
-    modality="conversation",
+    folder="examples/resources/conversations",
     user={"user_id": "123"},
 )
 
@@ -208,8 +214,8 @@ context = await service.retrieve(
 *Convert docs, PR notes, logs, and design decisions into reusable project memory.*
 
 ```python
-await service.memorize(resource_url="docs/architecture.md", modality="document")
-await service.memorize(resource_url="examples/resources/logs/log1.txt", modality="document")
+# Point memorize() at a folder of docs/notes/logs; modality is inferred per file.
+await service.memorize(folder="docs")
 
 context = await service.retrieve(
     queries=[{"role": "user", "content": {"text": "How should I structure this module?"}}],
@@ -220,10 +226,9 @@ context = await service.retrieve(
 *Extract searchable facts from documents, screenshots, images, videos, and audio notes.*
 
 ```python
-await service.memorize(resource_url="examples/resources/docs/doc1.txt", modality="document")
-await service.memorize(resource_url="examples/resources/images/image1.png", modality="image")
-# Audio is supported for your own .mp3/.wav/.m4a files.
-await service.memorize(resource_url="meeting-audio.mp3", modality="audio")
+# A single folder can mix modalities (documents, images, video, audio); each
+# file's modality is inferred from its extension during the scan.
+await service.memorize(folder="examples/resources")
 
 context = await service.retrieve(
     queries=[{"role": "user", "content": {"text": "What matters for the next research plan?"}}],
@@ -234,7 +239,7 @@ context = await service.retrieve(
 *Turn execution traces into tool memories that tell future agents when to use a tool and what mistakes to avoid.*
 
 ```python
-await service.memorize(resource_url="examples/resources/logs/log1.txt", modality="document")
+await service.memorize(folder="examples/resources/logs")
 
 context = await service.retrieve(
     queries=[{"role": "user", "content": {"text": "Which tools worked for config editing?"}}],
@@ -383,17 +388,21 @@ service = MemoryService(
 
 ```python
 result = await service.memorize(
-    resource_url="path/to/file.json",    # local file path or HTTP URL
-    modality="conversation",            # conversation | document | image | video | audio
-    user={"user_id": "123"},            # optional: scope to a user or agent
+    folder="path/to/folder",   # a directory; modality is inferred per file by extension
+    user={"user_id": "123"},   # optional: scope to a user or agent
 )
-# Returns after processing completes:
-# { "resource": {...}, "items": [...], "categories": [...], "relations": [...] }
+# Scans the folder, diffs against <folder>/.memu_manifest.json, and returns a
+# sync summary after processing completes:
+# {
+#   "folder": "...", "added": [...], "modified": [...], "deleted": [...],
+#   "resources": [...], "removed_resources": [...], "items": [...]
+# }
 ```
 
-- Converts raw input into typed memory items
+- Ingests a folder and incrementally syncs it (add / modify / delete)
+- Converts raw input into typed memory items; one input file maps to one resource
+- Cascade-deletes memory for modified/removed files and recomputes summaries
 - Categorizes and embeds items without manual tagging
-- Preserves source resources and item-category relations
 
 ---
 

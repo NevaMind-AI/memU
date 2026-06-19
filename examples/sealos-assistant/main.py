@@ -190,21 +190,19 @@ async def chat(request: ChatRequest):
         else:
             response_text = f"I received your message: '{request.message}'. I don't have any relevant memories yet."
 
-        # Store the conversation
+        # Store the conversation (memorize() ingests a folder).
+        import shutil
         import tempfile
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        temp_dir = tempfile.mkdtemp(prefix="memu_chat_")
+        with open(os.path.join(temp_dir, "message.txt"), "w", encoding="utf-8") as f:
             f.write(f"User ({request.user_id}) said: {request.message}")
-            temp_file = f.name
 
         try:
-            memorize_result = await memory_service.memorize(
-                resource_url=temp_file,
-                modality="text",
-            )
+            memorize_result = await memory_service.memorize(folder=temp_dir)
             memories_stored = len(memorize_result.get("items", []))
         finally:
-            os.unlink(temp_file)
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
         return ChatResponse(
             response=response_text,
@@ -223,24 +221,22 @@ async def memorize(request: MemorizeRequest):
         raise HTTPException(status_code=503, detail="Memory service not initialized")
 
     try:
+        import shutil
         import tempfile
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as f:
+        temp_dir = tempfile.mkdtemp(prefix="memu_memorize_")
+        with open(os.path.join(temp_dir, "content.txt"), "w", encoding="utf-8") as f:
             f.write(f"[User: {request.user_id}] {request.content}")
-            temp_file = f.name
 
         try:
-            result = await memory_service.memorize(
-                resource_url=temp_file,
-                modality="text",
-            )
+            result = await memory_service.memorize(folder=temp_dir)
             return MemorizeResponse(
                 status="stored",
                 items_created=len(result.get("items", [])),
                 categories=len(result.get("categories", [])),
             )
         finally:
-            os.unlink(temp_file)
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Memorize failed: {e!s}")
