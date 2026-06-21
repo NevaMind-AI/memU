@@ -4,7 +4,7 @@
 
 # memU
 
-### File System as Memory, Memory Shapes the Agent
+### Every agent needs a workspace runtime
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -20,34 +20,36 @@
 
 ---
 
-memU is a **memory file system** for AI agents.
+memU is a **workspace runtime** for AI agents.
 
-Instead of flattening everything an agent learns into one giant prompt or an opaque vector blob, memU organizes memory the way you organize a computer — as a navigable tree of human-readable Markdown files:
+Every agent needs a workspace runtime. memU compiles any workspace — chat logs, documents, code, images, audio, and tool traces — into three durable layers so agents can act with **context, continuity, and control**:
 
-- **`MEMORY.md`** — the agent's living memory: who the user is, their preferences, goals, and the events extracted from every source
-- **`SKILL.md`** — learned skills and tool patterns: what worked, what to avoid, and how to repeat recurring tasks
-- **`INDEX.md`** — the table of contents: a navigable map across every memory file, so the agent knows where to look before it reads
-- **The agent reads and writes these files** — it `memorize()`s new sources into them and `retrieve()`s only the sections that matter on demand
+- **Index** — a navigable map across everything the agent knows, so it knows where to look before it reads (`INDEX.md`)
+- **Skill** — learned skills and tool patterns: what worked, what to avoid, and how to repeat recurring tasks (`SKILL.md`)
+- **Memory** — the agent's living memory: who the user is, their preferences, goals, and the events extracted from every source (`MEMORY.md`)
 
 ```txt
-memory/
-├── INDEX.md              ← map of everything: categories, files, and summaries
-├── MEMORY.md             ← profile, preferences, goals, and key events
+workspace/
+├── INDEX.md              ← Index: map of everything — categories, files, and summaries
+├── MEMORY.md             ← Memory: profile, preferences, goals, and key events
 └── skill/
     ├── {skill_name}/
-    │   └── SKILL.md       ← a learned skill or tool pattern
+    │   └── SKILL.md       ← Skill: a learned skill or tool pattern
     └── {another_skill}/
         └── SKILL.md
 ```
 
-**File system as memory**: a hierarchical, browsable surface where every memory traces back to its source.
-**Memory shapes the agent**: because that surface is structured and self-organizing, it stops being passive storage and becomes the layer that shapes how the agent thinks and acts.
+memU compiles raw sources into this workspace once, then serves it back on demand — the agent `memorize()`s new sources into the layers and `retrieve()`s only the parts that matter:
+
+- **Context** — agents act on the right facts, preferences, and source material instead of a cold prompt.
+- **Continuity** — the workspace persists and self-organizes across sessions, sources, and tasks, so nothing has to be relearned.
+- **Control** — every layer is a structured, inspectable record that traces back to its source, so you can audit and edit what the agent knows.
 
 ---
 
 ## 🔄 How It Works
 
-Think of it as two file-system operations: **writing** raw sources into organized memory, and **reading** the right files back into the agent.
+Think of it as two runtime operations: **compiling** raw sources into the workspace, and **serving** the right layers back to the agent.
 
 ```
 WRITE — memorize()                                         READ — retrieve()
@@ -61,7 +63,7 @@ audio            →  transcribe→ event / knowledge items       ├─ rank by
 tool logs        →  mine      → tool / skill items            └─ trace to source   → original resources
 ```
 
-**Writing to the file system (`memorize`)**
+**Compiling the workspace (`memorize`)**
 
 1. **Ingest** — store each source as a `Resource` (the raw file) with its modality and source location
 2. **Preprocess** — parse text, caption images/video, transcribe audio, and normalize inputs
@@ -69,15 +71,15 @@ tool logs        →  mine      → tool / skill items            └─ trace t
 4. **Organize** — sort items into `MemoryCategory` folders, cross-link, embed, and summarize into a browsable tree
 5. **Persist** — write records, relations, embeddings, and folder summaries through the configured backend
 
-**Reading from the file system (`retrieve`)**
+**Serving the workspace (`retrieve`)**
 
 6. **Retrieve** — navigate the folders and return only the files relevant to the current user, agent, session, or task
 
 ---
 
-## 🗂️ The Memory File System
+## 🗂️ The Compiled Workspace
 
-memU's primary output is a navigable memory tree — folders, files, and the source artifacts behind them — persisted through repository contracts and returned as dictionaries from `memorize()` and `retrieve()`.
+memU compiles its primary output into a navigable workspace — Index, Skill, and Memory layers backed by the source artifacts behind them — persisted through repository contracts and returned as dictionaries from `memorize()` and `retrieve()`.
 
 ```txt
 MemoryCategory                       ← folder: a topic with an evolving summary
@@ -97,13 +99,13 @@ MemoryCategory                       ← folder: a topic with an evolving summar
 | `Resource` | **Source artifact** — the original file behind a memory, with caption/text | Trace context back to where it came from |
 | `CategoryItem` | **Link** — the edge that files an item under a folder | Navigate related memories without reprocessing the source |
 
-This gives agents a stable file system for memory: ingest raw sources once, then request scoped and ranked files instead of rereading every source artifact.
+This gives agents a stable workspace runtime: compile raw sources once, then request scoped and ranked layers instead of rereading every source artifact.
 
 ---
 
 ## 🧩 What memU Builds
 
-Every layer of the file system is stored as a structured record:
+Every layer of the workspace is stored as a structured record:
 
 | Layer | What It Represents | Why Agents Use It |
 |-------|--------------------|-------------------|
@@ -177,7 +179,7 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 | Capability | Description |
 |------------|-------------|
 | 🗂️ **Multimodal Ingestion** | Write conversations, documents, images, video, audio, URLs, logs, and local files into memory |
-| 📁 **Memory File System** | Persist folders (categories), files (items), source artifacts, links, summaries, and embeddings |
+| 📁 **Compiled Workspace** | Persist the Index, Skill, and Memory layers — folders (categories), files (items), source artifacts, links, summaries, and embeddings |
 | 🧠 **Typed Memory Extraction** | Extract profile, event, knowledge, behavior, skill, and tool memories from raw sources |
 | 🧭 **Self-Organizing Folders** | Auto-build categories, links, summaries, and embeddings without manual tagging |
 | 🤖 **Agent-Ready Retrieval** | Read scoped, ranked context that can be injected into any agent workflow |
@@ -245,7 +247,7 @@ context = await service.retrieve(
 
 ## 🗂️ Architecture
 
-The memory file system is hierarchical enough for browsing and structured enough for direct retrieval:
+The compiled workspace is hierarchical enough for browsing and structured enough for direct retrieval:
 
 <img width="100%" alt="structure" src="assets/structure.png" />
 
@@ -465,7 +467,7 @@ View detailed results: [memU-experiment](https://github.com/NevaMind-AI/memU-exp
 
 | Repository | Description |
 |------------|-------------|
-| **[memU](https://github.com/NevaMind-AI/memU)** | Core memory file system — ingestion, extraction, retrieval |
+| **[memU](https://github.com/NevaMind-AI/memU)** | Core workspace runtime — ingestion, extraction, retrieval |
 | **[memU-server](https://github.com/NevaMind-AI/memU-server)** | Backend with real-time sync and webhook triggers |
 | **[memU-ui](https://github.com/NevaMind-AI/memU-ui)** | Visual dashboard for browsing and monitoring memory |
 
