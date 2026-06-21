@@ -211,7 +211,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
     def create_item(
         self,
         *,
-        resource_id: str,
+        resource_id: str | None = None,
         memory_type: MemoryType,
         summary: str,
         embedding: list[float],
@@ -285,7 +285,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
     def create_item_reinforce(
         self,
         *,
-        resource_id: str,
+        resource_id: str | None = None,
         memory_type: MemoryType,
         summary: str,
         embedding: list[float],
