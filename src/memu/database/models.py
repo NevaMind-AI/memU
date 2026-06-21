@@ -36,8 +36,8 @@ class BaseRecord(BaseModel):
     """Backend-agnostic record interface."""
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = Field(default_factory=lambda: pendulum.now("UTC"))
-    updated_at: datetime = Field(default_factory=lambda: pendulum.now("UTC"))
+    created_at: datetime | None = Field(default_factory=lambda: pendulum.now("UTC"))
+    updated_at: datetime | None = Field(default_factory=lambda: pendulum.now("UTC"))
 
 
 class ToolCallResult(BaseModel):
