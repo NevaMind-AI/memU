@@ -155,6 +155,40 @@ Client backends:
 - `memu.client.openai_wrapper`: opt-in OpenAI client wrapper that auto-retrieves memories and injects them into system context
 - `memu.integrations.langgraph`: LangChain/LangGraph tool adapter (`save_memory`, `search_memory`)
 
+## Memory file system export (`memu.memory_fs`)
+
+`MemoryService.export_memory_files(...)` renders the structured store into the
+markdown tree described in the README. Every source first becomes a **multimodal
+description** (the modality-agnostic caption/text from preprocessing); that
+description is the shared trunk, and three sibling *bypasses* project it into:
+
+```txt
+<output_dir>/
+├── INDEX.md                     ← map of everything: folders, skills, sources
+├── MEMORY.md                    ← living memory: folder (category) summaries
+└── skill/
+    └── <skill_name>/SKILL.md    ← one learned skill / tool pattern per folder
+```
+
+- `INDEX.md` is a table of contents (where to look before reading); it lists
+  folders, skills, and the per-source descriptions, linking out rather than
+  duplicating summaries.
+- `MEMORY.md` aggregates `MemoryCategory` summaries (profile, preferences, goals,
+  events).
+- `skill/<name>/SKILL.md` breaks each skill-type `MemoryItem` out as a standalone
+  document; the folder name comes from the skill's frontmatter `name:`.
+
+The three bypasses are siblings — none is upstream of another; each is a
+different aggregation of the same descriptions.
+
+The exporter is read-only against the database and disabled by default
+(`memory_files_config.enabled`). Diff detection is handled by a sidecar manifest
+(`.memufs_manifest.json`) that stores per-file content hashes, so each export
+only rewrites artifacts whose rendered content changed (and prunes stale skill
+files/dirs) — no database schema change is required. Rendered content avoids
+volatile values so an unchanged store re-exports as a no-op. Exports are
+serialized through a per-service lock.
+
 ## Current constraints and tradeoffs
 
 - workflow state is dict-based, so step contracts are validated by key names rather than static types

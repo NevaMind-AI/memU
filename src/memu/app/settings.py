@@ -143,6 +143,23 @@ class BlobConfig(BaseModel):
     resources_dir: str = Field(default="./data/resources")
 
 
+class MemoryFilesConfig(BaseModel):
+    """Render structured memory into a browsable markdown "memory file system".
+
+    Purely additive and read-only against the store; disabled by default so it
+    never changes existing memorize/retrieve behavior.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable rendering structured memory into browsable markdown files.",
+    )
+    output_dir: str = Field(
+        default="./data/memory",
+        description="Directory where the memory markdown tree (INDEX.md/MEMORY.md/skill/) is written.",
+    )
+
+
 class RetrieveCategoryConfig(BaseModel):
     enabled: bool = Field(default=True, description="Whether to enable category retrieval.")
     top_k: int = Field(default=5, description="Total number of categories to retrieve.")

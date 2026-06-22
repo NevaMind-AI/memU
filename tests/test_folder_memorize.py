@@ -210,3 +210,85 @@ async def test_memorize_workspace_sync_add_modify_delete(tmp_path: Path, monkeyp
     urls = {r.url for r in store.resource_repo.list_resources(where=user).values()}
     assert urls == {str(root / "a.txt"), str(root / "c.txt")}
     assert set(json.loads(manifest_path.read_text(encoding="utf-8"))) == {"a.txt", "c.txt"}
+
+
+async def test_memorize_workspace_exports_when_enabled(tmp_path: Path, monkeypatch) -> None:
+    """When memory files are enabled, a workspace sync refreshes the markdown tree."""
+    out_dir = tmp_path / "out"
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    service = MemoryService(
+        llm_profiles={"default": {"api_key": "test-key"}},
+        database_config={"metadata_store": {"provider": "inmemory"}},
+        memory_files_config={"enabled": True, "output_dir": str(out_dir)},
+    )
+    user = {"user_id": "u1"}
+
+    async def _noop_categories(*a, **k) -> None:
+        return None
+
+    async def _fake_memorize_one(*, resource_url, modality, user_scope, ctx, store) -> dict[str, Any]:
+        res = store.resource_repo.create_resource(
+            url=resource_url,
+            modality=modality,
+            local_path=resource_url,
+            caption="cap",
+            embedding=None,
+            user_data=dict(user_scope or {}),
+        )
+        return {"resources": [res], "response": {"items": []}}
+
+    exported: list[Any] = []
+    real_export = service._memory_file_exporter.export
+
+    def _spy_export(database, *, where=None):
+        exported.append(where)
+        return real_export(database, where=where)
+
+    monkeypatch.setattr(service, "_ensure_categories_ready", _noop_categories)
+    monkeypatch.setattr(service, "_memorize_one", _fake_memorize_one)
+    monkeypatch.setattr(service._memory_file_exporter, "export", _spy_export)
+
+    (src_dir / "a.txt").write_text("hello", encoding="utf-8")
+    await service.memorize_workspace(folder=str(src_dir), user=user)
+
+    # Export ran (scoped to the user) and produced the root index on disk.
+    assert exported == [user]
+    assert (out_dir / "INDEX.md").exists()
+
+
+async def test_memorize_workspace_export_failure_does_not_fail_sync(tmp_path: Path, monkeypatch) -> None:
+    """An export error is best-effort: the sync still completes and persists state."""
+    service = MemoryService(
+        llm_profiles={"default": {"api_key": "test-key"}},
+        database_config={"metadata_store": {"provider": "inmemory"}},
+        memory_files_config={"enabled": True, "output_dir": str(tmp_path / "out")},
+    )
+    user = {"user_id": "u1"}
+
+    async def _noop_categories(*a, **k) -> None:
+        return None
+
+    async def _fake_memorize_one(*, resource_url, modality, user_scope, ctx, store) -> dict[str, Any]:
+        res = store.resource_repo.create_resource(
+            url=resource_url,
+            modality=modality,
+            local_path=resource_url,
+            caption="cap",
+            embedding=None,
+            user_data=dict(user_scope or {}),
+        )
+        return {"resources": [res], "response": {"items": []}}
+
+    def _boom(database, *, where=None):
+        raise RuntimeError("export blew up")  # noqa: TRY003
+
+    monkeypatch.setattr(service, "_ensure_categories_ready", _noop_categories)
+    monkeypatch.setattr(service, "_memorize_one", _fake_memorize_one)
+    monkeypatch.setattr(service._memory_file_exporter, "export", _boom)
+
+    (tmp_path / "a.txt").write_text("hello", encoding="utf-8")
+    result = await service.memorize_workspace(folder=str(tmp_path), user=user)
+
+    assert result["added"] == ["a.txt"]
+    assert (tmp_path / MANIFEST_FILENAME).exists()  # manifest still persisted

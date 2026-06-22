@@ -63,6 +63,11 @@ class MemorizeMixin:
         _escape_prompt_value: Callable[[str], str]
         user_model: type[BaseModel]
 
+        # Memory file system export (provided by MemoryService).
+        memory_files_config: Any
+        _memory_file_exporter: Any
+        _memory_files_lock: asyncio.Lock
+
         # Provided by CRUDMixin (composed onto MemoryService).
         async def _patch_category_summaries(
             self,
@@ -157,7 +162,10 @@ class MemorizeMixin:
             if response.get("categories"):
                 categories = response["categories"]
 
-        # 3. Persist the updated input manifest.
+        # 3. Refresh the memory file tree (best-effort; gated by config).
+        await self._update_memory_files(user_scope)
+
+        # 4. Persist the updated input manifest.
         save_manifest(root, manifest_from_scan(scanned))
 
         return {
@@ -245,6 +253,26 @@ class MemorizeMixin:
         if updates:
             await self._patch_category_summaries(updates, ctx=ctx, store=store, llm_client=self._get_llm_client())
         return targets
+
+    async def _update_memory_files(self, user_scope: dict[str, Any] | None) -> None:
+        """Re-render the memory file tree after a workspace sync.
+
+        Gated behind ``memory_files_config.enabled`` so a workspace sync without the
+        export feature configured is a no-op. Best-effort: the structured memory is
+        already persisted, so an export error must not fail the sync. This step does a
+        full (re)export; the incremental init-vs-update path is added in a later step.
+        """
+        if not getattr(self.memory_files_config, "enabled", False):
+            return
+        try:
+            async with self._memory_files_lock:
+                await asyncio.to_thread(
+                    self._memory_file_exporter.export,
+                    self._get_database(),
+                    where=user_scope,
+                )
+        except Exception:
+            logger.exception("Memory file export failed after workspace memorize")
 
     def _build_memorize_workflow(self) -> list[WorkflowStep]:
         steps = [
