@@ -650,7 +650,7 @@ class CRUDMixin:
 
     async def _patch_category_summaries(
         self,
-        updates: dict[str, list[str]],
+        updates: dict[str, tuple[str | None, str | None]],
         ctx: Context,
         store: Database,
         llm_client: Any | None = None,

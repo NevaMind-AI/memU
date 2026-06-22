@@ -134,6 +134,13 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
 
         return deleted
 
+    def delete_resource(self, resource_id: str) -> None:
+        """Delete a single resource by id (used for cascade sync)."""
+        with self._sessions.session() as session:
+            session.exec(delete(self._resource_model).where(self._resource_model.id == resource_id))
+            session.commit()
+        self.resources.pop(resource_id, None)
+
     def create_resource(
         self,
         *,

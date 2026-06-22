@@ -62,6 +62,15 @@ class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
 
         return deleted
 
+    def delete_resource(self, resource_id: str) -> None:
+        """Delete a single resource by id (used for cascade sync)."""
+        from sqlmodel import delete
+
+        with self._sessions.session() as session:
+            session.exec(delete(self._sqla_models.Resource).where(self._sqla_models.Resource.id == resource_id))
+            session.commit()
+        self.resources.pop(resource_id, None)
+
     def create_resource(
         self,
         *,
