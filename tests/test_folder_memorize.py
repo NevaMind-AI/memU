@@ -241,9 +241,9 @@ async def test_memorize_workspace_exports_when_enabled(tmp_path: Path, monkeypat
     exported: list[Any] = []
     real_export = service._memory_file_exporter.export
 
-    def _spy_export(database, *, where=None):
+    def _spy_export(database, *, where=None, **kwargs):
         exported.append(where)
-        return real_export(database, where=where)
+        return real_export(database, where=where, **kwargs)
 
     monkeypatch.setattr(service, "_ensure_categories_ready", _noop_categories)
     monkeypatch.setattr(service, "_memorize_one", _fake_memorize_one)
@@ -280,7 +280,7 @@ async def test_memorize_workspace_export_failure_does_not_fail_sync(tmp_path: Pa
         )
         return {"resources": [res], "response": {"items": []}}
 
-    def _boom(database, *, where=None):
+    def _boom(database, *, where=None, **kwargs):
         raise RuntimeError("export blew up")  # noqa: TRY003
 
     monkeypatch.setattr(service, "_ensure_categories_ready", _noop_categories)

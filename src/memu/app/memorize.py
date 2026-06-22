@@ -65,8 +65,7 @@ class MemorizeMixin:
 
         # Memory file system export (provided by MemoryService).
         memory_files_config: Any
-        _memory_file_exporter: Any
-        _memory_files_lock: asyncio.Lock
+        _build_memory_files: Callable[..., Awaitable[dict[str, Any]]]
 
         # Provided by CRUDMixin (composed onto MemoryService).
         async def _patch_category_summaries(
@@ -162,8 +161,8 @@ class MemorizeMixin:
             if response.get("categories"):
                 categories = response["categories"]
 
-        # 3. Refresh the memory file tree (best-effort; gated by config).
-        await self._update_memory_files(user_scope)
+        # 3. Refresh the memory file tree (full rebuild when anything was removed).
+        await self._update_memory_files(changed_resources, user_scope, force_full=diff.has_removals)
 
         # 4. Persist the updated input manifest.
         save_manifest(root, manifest_from_scan(scanned))
@@ -254,23 +253,28 @@ class MemorizeMixin:
             await self._patch_category_summaries(updates, ctx=ctx, store=store, llm_client=self._get_llm_client())
         return targets
 
-    async def _update_memory_files(self, user_scope: dict[str, Any] | None) -> None:
-        """Re-render the memory file tree after a workspace sync.
+    async def _update_memory_files(
+        self,
+        changed_resources: list[Resource],
+        user_scope: dict[str, Any] | None,
+        *,
+        force_full: bool = False,
+    ) -> None:
+        """Refresh the memory file tree after a workspace sync (init or incremental).
 
-        Gated behind ``memory_files_config.enabled`` so a workspace sync without the
-        export feature configured is a no-op. Best-effort: the structured memory is
-        already persisted, so an export error must not fail the sync. This step does a
-        full (re)export; the incremental init-vs-update path is added in a later step.
+        Gated behind ``memory_files_config.enabled`` so a sync without the export
+        feature configured is a no-op. When any file was modified or deleted
+        (``force_full``), the tree is rebuilt from the full scoped store so stale
+        skills/entries do not linger; otherwise an incremental update merges the
+        just-created resources. Best-effort: the structured memory is already
+        persisted, so an export error must not fail the sync.
         """
         if not getattr(self.memory_files_config, "enabled", False):
             return
+        if not changed_resources and not force_full:
+            return
         try:
-            async with self._memory_files_lock:
-                await asyncio.to_thread(
-                    self._memory_file_exporter.export,
-                    self._get_database(),
-                    where=user_scope,
-                )
+            await self._build_memory_files(user_scope, changed=None if force_full else changed_resources)
         except Exception:
             logger.exception("Memory file export failed after workspace memorize")
 

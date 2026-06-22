@@ -158,6 +158,24 @@ class MemoryFilesConfig(BaseModel):
         default="./data/memory",
         description="Directory where the memory markdown tree (INDEX.md/MEMORY.md/skill/) is written.",
     )
+    synthesize: bool = Field(
+        default=False,
+        description=(
+            "Synthesize MEMORY.md and skill docs from per-source descriptions via the LLM "
+            "instead of rendering already-extracted records. INDEX.md stays deterministic."
+        ),
+    )
+    synthesis_llm_profile: str = Field(
+        default="default",
+        description="LLM profile used when synthesize=True.",
+    )
+    update_on_memorize: bool = Field(
+        default=False,
+        description=(
+            "Automatically initialize or incrementally update the memory file tree after each "
+            "memorize() call, using the just-created resources as the changed file set."
+        ),
+    )
 
 
 class RetrieveCategoryConfig(BaseModel):
