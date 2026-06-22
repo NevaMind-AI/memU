@@ -28,6 +28,7 @@ class PatchMixin:
         _get_database: Callable[[], Database]
         _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
         _get_llm_client: Callable[..., Any]
+        _get_embedding_client: Callable[..., Any]
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
         _extract_json_blob: Callable[[str], str]
         _escape_prompt_value: Callable[[str], str]
@@ -267,7 +268,7 @@ class PatchMixin:
         category_memory_updates: dict[str, tuple[Any, Any]] = {}
 
         embed_payload = [memory_payload["content"]]
-        content_embedding = (await self._get_llm_client().embed(embed_payload))[0]
+        content_embedding = (await self._get_embedding_client().embed(embed_payload))[0]
 
         item = store.memory_item_repo.create_item(
             memory_type=memory_payload["type"],
@@ -307,7 +308,7 @@ class PatchMixin:
 
         if memory_payload["content"]:
             embed_payload = [memory_payload["content"]]
-            content_embedding = (await self._get_llm_client().embed(embed_payload))[0]
+            content_embedding = (await self._get_embedding_client().embed(embed_payload))[0]
         else:
             content_embedding = None
 

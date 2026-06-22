@@ -87,8 +87,11 @@ class MemoryService(MemorizeMixin, MemorizeParseMixin, RetrieveMixin, RetrieveLl
         # We need the concrete user scope (user_id: xxx) to initialize the categories
         # self._start_category_initialization(self._context, self.database)
 
-        # Initialize client caches (lazy creation on first use)
+        # Initialize client caches (lazy creation on first use). Chat-like and
+        # embedding clients are cached separately so embedding is fully decoupled
+        # from the chat LLM (different implementation, possibly different profile).
         self._llm_clients: dict[str, Any] = {}
+        self._embedding_clients: dict[str, Any] = {}
         self._llm_interceptors = LLMInterceptorRegistry()
         self._workflow_interceptors = WorkflowInterceptorRegistry()
 
@@ -118,8 +121,6 @@ class MemoryService(MemorizeMixin, MemorizeParseMixin, RetrieveMixin, RetrieveLl
                 base_url=cfg.base_url,
                 api_key=cfg.api_key,
                 chat_model=cfg.chat_model,
-                embed_model=cfg.embed_model,
-                embed_batch_size=cfg.embed_batch_size,
             )
         elif backend == "httpx":
             return HTTPLLMClient(
@@ -128,7 +129,6 @@ class MemoryService(MemorizeMixin, MemorizeParseMixin, RetrieveMixin, RetrieveLl
                 chat_model=cfg.chat_model,
                 provider=cfg.provider,
                 endpoint_overrides=cfg.endpoint_overrides,
-                embed_model=cfg.embed_model,
             )
         elif backend == "lazyllm_backend":
             from memu.llm.lazyllm_client import LazyLLMClient
@@ -147,6 +147,41 @@ class MemoryService(MemorizeMixin, MemorizeParseMixin, RetrieveMixin, RetrieveLl
             msg = f"Unknown llm_client_backend '{cfg.client_backend}'"
             raise ValueError(msg)
 
+    def _init_embedding_client(self, config: LLMConfig | None = None) -> Any:
+        """Initialize a dedicated embedding client, decoupled from the chat LLM.
+
+        Embedding goes through ``memu.embedding`` rather than the chat LLM clients,
+        so chat and embedding are separate concerns. The ``lazyllm`` backend is the
+        sole exception: it exposes a single unified client (chat/embed/vision/stt)
+        with no standalone embedding counterpart, so we reuse it for embedding too.
+        """
+        cfg = config or self.llm_profiles.profiles.get("embedding") or self.llm_config
+        backend = cfg.client_backend
+        if backend == "sdk":
+            from memu.embedding import OpenAIEmbeddingSDKClient
+
+            return OpenAIEmbeddingSDKClient(
+                base_url=cfg.base_url,
+                api_key=cfg.api_key,
+                embed_model=cfg.embed_model,
+                batch_size=cfg.embed_batch_size,
+            )
+        elif backend == "httpx":
+            from memu.embedding import HTTPEmbeddingClient
+
+            return HTTPEmbeddingClient(
+                base_url=cfg.base_url,
+                api_key=cfg.api_key,
+                embed_model=cfg.embed_model,
+                provider=cfg.provider,
+                endpoint_overrides=cfg.endpoint_overrides,
+            )
+        elif backend == "lazyllm_backend":
+            return self._init_llm_client(cfg)
+        else:
+            msg = f"Unknown llm_client_backend '{cfg.client_backend}'"
+            raise ValueError(msg)
+
     def _get_llm_base_client(self, profile: str | None = None) -> Any:
         """
         Lazily initialize and cache LLM clients per profile to avoid eager network setup.
@@ -161,6 +196,20 @@ class MemoryService(MemorizeMixin, MemorizeParseMixin, RetrieveMixin, RetrieveLl
             raise KeyError(msg)
         client = self._init_llm_client(cfg)
         self._llm_clients[name] = client
+        return client
+
+    def _get_embedding_base_client(self, profile: str | None = None) -> Any:
+        """Lazily initialize and cache embedding clients per profile."""
+        name = profile or "embedding"
+        client = self._embedding_clients.get(name)
+        if client is not None:
+            return client
+        cfg: LLMConfig | None = self.llm_profiles.profiles.get(name)
+        if cfg is None:
+            msg = f"Unknown llm profile '{name}'"
+            raise KeyError(msg)
+        client = self._init_embedding_client(cfg)
+        self._embedding_clients[name] = client
         return client
 
     @staticmethod
@@ -201,6 +250,10 @@ class MemoryService(MemorizeMixin, MemorizeParseMixin, RetrieveMixin, RetrieveLl
         base_client = self._get_llm_base_client(profile)
         return self._wrap_llm_client(base_client, profile=profile, step_context=step_context)
 
+    def _get_embedding_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
+        base_client = self._get_embedding_base_client(profile)
+        return self._wrap_llm_client(base_client, profile=profile or "embedding", step_context=step_context)
+
     @property
     def llm_client(self) -> Any:
         """Default LLM client (lazy)."""
@@ -236,7 +289,7 @@ class MemoryService(MemorizeMixin, MemorizeParseMixin, RetrieveMixin, RetrieveLl
 
     def _get_step_embedding_client(self, step_context: Mapping[str, Any] | None) -> Any:
         profile = self._llm_profile_from_context(step_context, task="embedding") or "embedding"
-        return self._get_llm_client(profile, step_context=step_context)
+        return self._get_embedding_client(profile, step_context=step_context)
 
     def intercept_before_llm_call(
         self,

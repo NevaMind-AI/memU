@@ -144,7 +144,18 @@ LLM access is profile-based (`llm_profiles`):
 
 Per-step profile routing happens through step config (`chat_llm_profile`, `embed_llm_profile`, or `llm_profile`).
 
-Client backends:
+Chat and embedding are decoupled concerns with separate client implementations and
+caches (`_llm_clients` vs `_embedding_clients`):
+
+- chat-like clients (`chat`/`summarize`/`vision`/`transcribe`) come from `memu.llm`;
+  the chat clients no longer expose `embed()`.
+- embedding clients live in `memu.embedding` and handle all vectorization. The
+  embedding profile is resolved to a dedicated embedding client (then wrapped by the
+  same interceptor layer). The `lazyllm_backend` is the one exception — it is a
+  single unified client with no standalone embedding counterpart, so it is reused
+  for embedding too.
+
+Client backends (apply to both chat and embedding clients):
 
 - `sdk`: official OpenAI SDK wrapper
 - `httpx`: provider-adapted HTTP backend (OpenAI, Doubao, Grok, OpenRouter)
