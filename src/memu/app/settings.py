@@ -147,7 +147,8 @@ class MemoryFilesConfig(BaseModel):
     """Render structured memory into a browsable markdown "memory file system".
 
     Purely additive and read-only against the store; disabled by default so it
-    never changes existing memorize/retrieve behavior.
+    never changes existing memorize/retrieve behavior. When enabled, the tree is
+    refreshed by ``memorize_workspace`` (and on demand via ``export_memory_files``).
     """
 
     enabled: bool = Field(
@@ -156,7 +157,10 @@ class MemoryFilesConfig(BaseModel):
     )
     output_dir: str = Field(
         default="./data/memory",
-        description="Directory where the memory markdown tree (INDEX.md/MEMORY.md/skill/) is written.",
+        description=(
+            "Directory where the memory markdown tree (the INDEX.md/MEMORY.md/SKILL.md root "
+            "indexes plus the resource/, memory/, and skill/ directories) is written."
+        ),
     )
     synthesize: bool = Field(
         default=False,
@@ -168,13 +172,6 @@ class MemoryFilesConfig(BaseModel):
     synthesis_llm_profile: str = Field(
         default="default",
         description="LLM profile used when synthesize=True.",
-    )
-    update_on_memorize: bool = Field(
-        default=False,
-        description=(
-            "Automatically initialize or incrementally update the memory file tree after each "
-            "memorize() call, using the just-created resources as the changed file set."
-        ),
     )
 
 

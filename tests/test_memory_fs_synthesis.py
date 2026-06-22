@@ -81,10 +81,12 @@ def test_exporter_override_path(tmp_path: Path) -> None:
     )
 
     assert "MEMORY.md" in result.written
+    assert "SKILL.md" in result.written
     assert "skill/brewing/SKILL.md" in result.written
     assert "Synthesized." in (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
     assert "# Brewing" in (tmp_path / "skill" / "brewing" / "SKILL.md").read_text(encoding="utf-8")
-    assert "[brewing](./skill/brewing/SKILL.md)" in (tmp_path / "INDEX.md").read_text(encoding="utf-8")
+    # The synthesized skill/ tree is indexed by the root SKILL.md.
+    assert "skill/brewing/SKILL.md" in (tmp_path / "SKILL.md").read_text(encoding="utf-8")
 
 
 async def test_service_synthesis_wiring(tmp_path: Path, monkeypatch) -> None:
@@ -200,7 +202,6 @@ async def test_service_init_then_update(tmp_path: Path, monkeypatch) -> None:
             "enabled": True,
             "output_dir": str(tmp_path),
             "synthesize": True,
-            "update_on_memorize": True,
         },
     )
     monkeypatch.setattr(service, "_get_llm_client", lambda *a, **k: _InitUpdateChatClient())

@@ -160,41 +160,47 @@ Client backends:
 `MemoryService.export_memory_files(...)` renders the structured store into the
 markdown tree described in the README. Every source first becomes a **multimodal
 description** (the modality-agnostic caption/text from preprocessing); that
-description is the shared trunk, and three sibling *bypasses* project it into:
+description is the shared trunk. The output splits each root index from a sibling
+payload directory:
 
 ```txt
 <output_dir>/
-├── INDEX.md                     ← map of everything: folders, skills, sources
-├── MEMORY.md                    ← living memory: folder (category) summaries
+├── INDEX.md                     ← index of the raw files under resource/
+├── MEMORY.md                    ← overview + index of memory/
+├── SKILL.md                     ← index of the skills under skill/
+├── resource/
+│   └── <file_name>              ← one copied raw source file (verbatim bytes)
+├── memory/
+│   └── <slug>.md                ← one MemoryCategory (description + summary)
 └── skill/
-    └── <skill_name>/SKILL.md    ← one learned skill / tool pattern per folder
+    └── <skill_name>/SKILL.md    ← one synthesized skill per folder
 ```
 
-- `INDEX.md` is a table of contents (where to look before reading); it lists
-  folders, skills, and the per-source descriptions, linking out rather than
-  duplicating summaries.
-- `MEMORY.md` aggregates `MemoryCategory` summaries (profile, preferences, goals,
-  events).
-- `skill/<name>/SKILL.md` breaks each skill-type `MemoryItem` out as a standalone
-  document; the folder name comes from the skill's frontmatter `name:`.
+- `resource/` holds the raw source files copied verbatim out of the blob store
+  (`Resource.local_path`); `INDEX.md` indexes them (name, modality, description,
+  link), so an agent knows which raw resources exist.
+- `memory/<slug>.md` is the living memory split one file per `MemoryCategory`
+  (its description + summary); `MEMORY.md` is an overview that links to each one.
+- `skill/<name>/SKILL.md` is a reusable skill synthesized from the descriptions
+  (a sibling of `MEMORY.md`, never derived from extracted skill-type memory
+  items); the root `SKILL.md` indexes the tree.
 
-The three bypasses are siblings — none is upstream of another; each is a
-different aggregation of the same descriptions.
+### Synthesis mode
 
-### Synthesis mode (optional)
+The `skill/` tree is always synthesized from the per-source descriptions by an LLM
+(`memu.memory_fs.MemorySynthesizer`, prompts in `memu.prompts.memory_fs`) — one
+pass extracts skills as a JSON array of `{name, body}` objects, each written as its
+own `skill/<name>/SKILL.md` doc. It is never derived from extracted skill-type
+memory items.
 
-By default `MEMORY.md` and the `skill/` tree are rendered deterministically from
-already-extracted records. When `memory_files_config.synthesize=True`, they are
-instead synthesized directly from the per-source descriptions by an LLM
-(`memu.memory_fs.MemorySynthesizer`, prompts in `memu.prompts.memory_fs`):
+`MEMORY.md` is rendered deterministically by default: an overview that links to the
+per-category `memory/<slug>.md` files (themselves deterministic from category
+description + summary). When `memory_files_config.synthesize=True`, the `MEMORY.md`
+body is instead synthesized from all descriptions in one LLM pass.
 
-- `MEMORY.md`: one LLM pass turns all descriptions into a consolidated memory doc.
-- `skill/<name>/SKILL.md`: one LLM pass extracts skills as a JSON array of
-  `{name, body}` objects, each written as its own skill doc.
-
-`INDEX.md` stays deterministic in both modes. Synthesis uses the
-`synthesis_llm_profile` profile and leaves the existing memorize/extract pipeline
-untouched.
+`INDEX.md`, the `resource/` copies, and `memory/<slug>.md` stay deterministic in
+both modes. Synthesis uses the `synthesis_llm_profile` profile and leaves the
+existing memorize/extract pipeline untouched.
 
 ### Initialize vs. incremental update
 
@@ -203,21 +209,23 @@ model. `MemoryService._build_memory_files(where, changed=...)` decides between t
 paths:
 
 - **Initialization** (no prior tree on disk, or `changed is None`): scan all
-  in-scope sources, turn each into its multimodal description, and synthesize
-  `MEMORY.md` + the `skill/` tree from scratch (`MemorySynthesizer.synthesize`).
+  in-scope sources, turn each into its multimodal description, and synthesize the
+  `skill/` tree (and, when `synthesize=True`, the `MEMORY.md` body) from scratch
+  (`MemorySynthesizer.synthesize` / `synthesize_skills`).
 - **Incremental update** (a tree already exists and a changed set is supplied):
-  read the existing `MEMORY.md` body and existing skill bodies back off disk and
-  merge only the changed sources' descriptions into them
-  (`MemorySynthesizer.update`, prompts `MEMORY_UPDATE_PROMPT` / `SKILL_UPDATE_PROMPT`).
-  Skills are upserted by slug, so untouched skills survive.
+  read the existing skill bodies (and `MEMORY.md` body) back off disk and merge
+  only the changed sources' descriptions into them (`MemorySynthesizer.update` /
+  `update_skills`, prompts `MEMORY_UPDATE_PROMPT` / `SKILL_UPDATE_PROMPT`). Skills
+  are upserted by slug, so untouched skills survive.
 
-`INDEX.md` is always recomputed from the current source set, so it needs no LLM
-merge. `export_memory_files(user=...)` always takes the initialization path (full
-rebuild). When `memory_files_config.update_on_memorize=True`, each `memorize()`
-call drives this builder with its just-created resources as the changed set, so the
-tree initializes on first run and incrementally updates afterwards. The hook is
-best-effort: an export failure is logged and never fails memorize, since the
-structured memory is already persisted.
+`INDEX.md`, `resource/`, and `memory/` are always recomputed from the current
+store, so they need no LLM merge. `export_memory_files(user=...)` always takes the
+initialization path (full rebuild). `memorize_workspace(...)` drives this builder
+after each folder sync — passing the just-created resources as the changed set, or
+forcing a full rebuild when files were modified/deleted. That refresh is
+best-effort: an export failure is logged and never fails the sync, since the
+structured memory is already persisted. The single-file `memorize(...)` entry point
+does **not** drive the exporter; it is left entirely untouched.
 
 The exporter is read-only against the database and disabled by default
 (`memory_files_config.enabled`). Diff detection is handled by a sidecar manifest

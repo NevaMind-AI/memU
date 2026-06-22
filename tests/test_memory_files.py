@@ -60,17 +60,27 @@ async def test_export_writes_readme_layout(tmp_path: Path, monkeypatch) -> None:
     assert result["changed"] is True
     assert "INDEX.md" in result["written"]
     assert "MEMORY.md" in result["written"]
+    assert "SKILL.md" in result["written"]
+    assert "memory/preferences.md" in result["written"]
     assert "skill/pour-over/SKILL.md" in result["written"]
 
+    # MEMORY.md is now an overview that links to each memory/<slug>.md file; the
+    # category summary itself lives in memory/preferences.md.
     memory_text = (tmp_path / "MEMORY.md").read_text(encoding="utf-8")
-    assert "## Preferences" in memory_text
-    assert "The user likes pour-over coffee." in memory_text
+    assert "**Preferences**" in memory_text
+    assert "memory/preferences.md" in memory_text
 
+    category_text = (tmp_path / "memory" / "preferences.md").read_text(encoding="utf-8")
+    assert "The user likes pour-over coffee." in category_text
+
+    # INDEX.md indexes the raw source files under resource/.
     index_text = (tmp_path / "INDEX.md").read_text(encoding="utf-8")
-    assert "docs/coffee.txt" in index_text
+    assert "coffee.txt" in index_text
     assert "coffee preferences" in index_text
-    assert "[pour-over](./skill/pour-over/SKILL.md)" in index_text
-    assert "**Preferences**" in index_text
+
+    # The root SKILL.md indexes the synthesized skill/ tree.
+    skill_index = (tmp_path / "SKILL.md").read_text(encoding="utf-8")
+    assert "skill/pour-over/SKILL.md" in skill_index
 
     skill_text = (tmp_path / "skill" / "pour-over" / "SKILL.md").read_text(encoding="utf-8")
     assert "Pour-over brewing" in skill_text
@@ -89,14 +99,16 @@ async def test_export_is_idempotent_until_data_changes(tmp_path: Path, monkeypat
     assert second["written"] == []
     assert "MEMORY.md" in second["unchanged"]
 
-    # Changing only a folder summary touches MEMORY.md but not INDEX.md (a TOC).
+    # Changing only a folder summary rewrites that category's memory/<slug>.md but
+    # not MEMORY.md (an overview of links) nor INDEX.md (a file TOC).
     service.database.memory_category_repo.update_category(
         category_id=ids["category_id"],
         summary="The user now prefers espresso.",
     )
     third = await service.export_memory_files(user={"user_id": "u1"})
     assert third["changed"] is True
-    assert "MEMORY.md" in third["written"]
+    assert "memory/preferences.md" in third["written"]
+    assert "MEMORY.md" in third["unchanged"]
     assert "INDEX.md" in third["unchanged"]
 
 
