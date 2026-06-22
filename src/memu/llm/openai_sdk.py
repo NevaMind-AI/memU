@@ -17,6 +17,19 @@ from openai.types.chat import (
 logger = logging.getLogger(__name__)
 
 
+def _extract_content(response: ChatCompletion) -> str:
+    """Extract text content from a chat completion, with fallback for reasoning models.
+
+    Some reasoning models (e.g. MiniMax-M2.7, DeepSeek-R1) return their output in
+    ``reasoning_content`` instead of ``content``.  This helper checks both fields.
+    """
+    msg = response.choices[0].message
+    content = msg.content
+    if not content:
+        content = getattr(msg, "reasoning_content", None)
+    return content or ""
+
+
 class OpenAISDKClient:
     """OpenAI LLM client that relies on the official Python SDK."""
 
@@ -59,9 +72,9 @@ class OpenAISDKClient:
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        content = response.choices[0].message.content
+        content = _extract_content(response)
         logger.debug("OpenAI chat response: %s", response)
-        return content or "", response
+        return content, response
 
     async def summarize(
         self,
@@ -82,9 +95,9 @@ class OpenAISDKClient:
             temperature=1,
             max_tokens=max_tokens,
         )
-        content = response.choices[0].message.content
+        content = _extract_content(response)
         logger.debug("OpenAI summarize response: %s", response)
-        return content or "", response
+        return content, response
 
     async def vision(
         self,
@@ -148,9 +161,9 @@ class OpenAISDKClient:
             temperature=1,
             max_tokens=max_tokens,
         )
-        content = response.choices[0].message.content
+        content = _extract_content(response)
         logger.debug("OpenAI vision response: %s", response)
-        return content or "", response
+        return content, response
 
     async def embed(self, inputs: list[str]) -> tuple[list[list[float]], CreateEmbeddingResponse | None]:
         """Create text embeddings via the official SDK."""

@@ -3,6 +3,19 @@ from __future__ import annotations
 from typing import Any
 
 
+def _extract_content_from_dict(data: dict[str, Any]) -> str:
+    """Extract text content from a raw API response dict.
+
+    Falls back to ``reasoning_content`` for reasoning models (e.g. MiniMax-M2.7,
+    DeepSeek-R1) that put their output there instead of ``content``.
+    """
+    msg = data["choices"][0]["message"]
+    content = msg.get("content")
+    if not content:
+        content = msg.get("reasoning_content")
+    return content or ""
+
+
 class LLMBackend:
     """Defines how to talk to a specific HTTP LLM provider."""
 
