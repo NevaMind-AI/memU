@@ -117,12 +117,6 @@ class SQLiteStore(Database):
             scope_fields=self._scope_fields,
         )
 
-        # Set up cache references
-        self.resources = self._state.resources
-        self.items = self._state.items
-        self.categories = self._state.categories
-        self.relations = self._state.relations
-
     def _create_tables(self) -> None:
         """Create SQLite tables if they don't exist."""
         SQLModel.metadata.create_all(self._sessions.engine)

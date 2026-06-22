@@ -37,10 +37,6 @@ class InMemoryStore(Database):
         ) = build_inmemory_models(self.scope_model)
 
         self.state = state or InMemoryState()
-        self.resources: dict[str, Resource] = self.state.resources
-        self.items: dict[str, MemoryItem] = self.state.items
-        self.categories: dict[str, MemoryCategory] = self.state.categories
-        self.relations: list[CategoryItem] = self.state.relations
 
         resource_model = resource_model or default_resource_model or Resource
         memory_item_model = memory_item_model or default_memory_item_model or MemoryItem
