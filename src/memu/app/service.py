@@ -17,6 +17,7 @@ from memu.app.settings import (
     LLMConfig,
     LLMProfilesConfig,
     MemorizeConfig,
+    MemoryFilesConfig,
     RetrieveConfig,
     UserConfig,
 )
@@ -30,6 +31,7 @@ from memu.llm.wrapper import (
     LLMInterceptorHandle,
     LLMInterceptorRegistry,
 )
+from memu.memory_fs import ExportResult, MemoryFileExporter, MemorySynthesizer
 from memu.workflow.interceptor import WorkflowInterceptorHandle, WorkflowInterceptorRegistry
 from memu.workflow.pipeline import PipelineManager
 from memu.workflow.runner import WorkflowRunner, resolve_workflow_runner
@@ -57,6 +59,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         retrieve_config: RetrieveConfig | dict[str, Any] | None = None,
         workflow_runner: WorkflowRunner | str | None = None,
         user_config: UserConfig | dict[str, Any] | None = None,
+        memory_files_config: MemoryFilesConfig | dict[str, Any] | None = None,
     ):
         self.llm_profiles = self._validate_config(llm_profiles, LLMProfilesConfig)
         self.user_config = self._validate_config(user_config, UserConfig)
@@ -66,6 +69,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self.database_config = self._validate_config(database_config, DatabaseConfig)
         self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
+        self.memory_files_config = self._validate_config(memory_files_config, MemoryFilesConfig)
 
         self.fs = LocalFS(self.blob_config.resources_dir)
         self.category_configs: list[CategoryConfig] = list(self.memorize_config.memory_categories or [])
@@ -87,6 +91,13 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self._workflow_interceptors = WorkflowInterceptorRegistry()
 
         self._workflow_runner = resolve_workflow_runner(workflow_runner)
+
+        # Optional markdown "memory file system" artifact layer (additive, read-only).
+        # Writes are serialized through a single lock so concurrent exports never
+        # interleave on the shared output directory.
+        self._memory_file_exporter = MemoryFileExporter(self.memory_files_config.output_dir)
+        self._memory_synthesizer = MemorySynthesizer()
+        self._memory_files_lock = asyncio.Lock()
 
         self._pipelines = PipelineManager(
             available_capabilities={"llm", "vector", "db", "io", "vision"},
@@ -358,6 +369,85 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             runner_context,
             interceptor_registry=self._workflow_interceptors,
         )
+
+    async def export_memory_files(self, *, user: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Render the (optionally scoped) memory store into browsable markdown files.
+
+        Read-only against the database; only artifacts whose rendered content
+        changed since the last export are rewritten (diff detection via a sidecar
+        manifest). Returns a summary of written/unchanged/removed relative paths.
+
+        Requires ``memory_files_config.enabled=True``.
+        """
+        if not self.memory_files_config.enabled:
+            msg = "Memory files are disabled; set memory_files_config.enabled=True to use export_memory_files()."
+            raise RuntimeError(msg)
+        where = self.user_model(**user).model_dump() if user is not None else None
+        # No changed set => full (re)initialization of the tree.
+        return await self._build_memory_files(where, changed=None)
+
+    async def _build_memory_files(
+        self,
+        where: dict[str, Any] | None,
+        *,
+        changed: list[Any] | None,
+    ) -> dict[str, Any]:
+        """Initialize or incrementally update the memory file tree.
+
+        ``changed`` is the list of just-memorized ``Resource`` objects driving an
+        incremental update. When it is ``None`` (or no prior tree exists), the tree
+        is (re)initialized from the full scoped store.
+        """
+        memory_body: str | None = None
+        skills: dict[str, str] | None = None
+
+        is_update = changed is not None and self._memory_file_exporter.artifacts_exist()
+
+        # The shared description trunk: the just-changed sources for an incremental
+        # update, otherwise the full in-scope store for (re)initialization.
+        if is_update:
+            descriptions = MemoryFileExporter._build_descriptions(changed)  # type: ignore[arg-type]
+        else:
+            resources = list(self.database.resource_repo.list_resources(where=where or None).values())
+            descriptions = MemoryFileExporter._build_descriptions(resources)
+
+        client = self._get_llm_client(self.memory_files_config.synthesis_llm_profile)
+
+        if self.memory_files_config.synthesize:
+            # MEMORY.md and the skill/ tree are both synthesized from descriptions.
+            if is_update:
+                existing_memory = await asyncio.to_thread(self._memory_file_exporter.read_memory_body)
+                existing_skills = await asyncio.to_thread(self._memory_file_exporter.read_skills)
+                synthesized = await self._memory_synthesizer.update(
+                    descriptions,
+                    existing_memory=existing_memory,
+                    existing_skills=existing_skills,
+                    chat=client.chat,
+                )
+            else:
+                synthesized = await self._memory_synthesizer.synthesize(descriptions, chat=client.chat)
+            memory_body, skills = synthesized.memory_body, synthesized.skills
+        else:
+            # MEMORY.md is rendered deterministically from category summaries, but
+            # the skill/ tree is a sibling bypass: always synthesized from the
+            # descriptions, never derived from extracted skill-type memory items.
+            if is_update:
+                existing_skills = await asyncio.to_thread(self._memory_file_exporter.read_skills)
+                skills = await self._memory_synthesizer.update_skills(
+                    descriptions, existing_skills=existing_skills, chat=client.chat
+                )
+            else:
+                skills = await self._memory_synthesizer.synthesize_skills(descriptions, chat=client.chat)
+
+        async with self._memory_files_lock:
+            result: ExportResult = await asyncio.to_thread(
+                self._memory_file_exporter.export,
+                self.database,
+                where=where,
+                memory_body=memory_body,
+                skills=skills,
+            )
+        return result.to_dict()
 
     @staticmethod
     def _extract_json_blob(raw: str) -> str:

@@ -143,6 +143,38 @@ class BlobConfig(BaseModel):
     resources_dir: str = Field(default="./data/resources")
 
 
+class MemoryFilesConfig(BaseModel):
+    """Render structured memory into a browsable markdown "memory file system".
+
+    Purely additive and read-only against the store; disabled by default so it
+    never changes existing memorize/retrieve behavior. When enabled, the tree is
+    refreshed by ``memorize_workspace`` (and on demand via ``export_memory_files``).
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable rendering structured memory into browsable markdown files.",
+    )
+    output_dir: str = Field(
+        default="./data/memory",
+        description=(
+            "Directory where the memory markdown tree (the INDEX.md/MEMORY.md/SKILL.md root "
+            "indexes plus the resource/, memory/, and skill/ directories) is written."
+        ),
+    )
+    synthesize: bool = Field(
+        default=False,
+        description=(
+            "Synthesize MEMORY.md and skill docs from per-source descriptions via the LLM "
+            "instead of rendering already-extracted records. INDEX.md stays deterministic."
+        ),
+    )
+    synthesis_llm_profile: str = Field(
+        default="default",
+        description="LLM profile used when synthesize=True.",
+    )
+
+
 class RetrieveCategoryConfig(BaseModel):
     enabled: bool = Field(default=True, description="Whether to enable category retrieval.")
     top_k: int = Field(default=5, description="Total number of categories to retrieve.")

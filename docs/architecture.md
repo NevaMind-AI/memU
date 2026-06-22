@@ -155,6 +155,86 @@ Client backends:
 - `memu.client.openai_wrapper`: opt-in OpenAI client wrapper that auto-retrieves memories and injects them into system context
 - `memu.integrations.langgraph`: LangChain/LangGraph tool adapter (`save_memory`, `search_memory`)
 
+## Memory file system export (`memu.memory_fs`)
+
+`MemoryService.export_memory_files(...)` renders the structured store into the
+markdown tree described in the README. Every source first becomes a **multimodal
+description** (the modality-agnostic caption/text from preprocessing); that
+description is the shared trunk. The output splits each root index from a sibling
+payload directory:
+
+```txt
+<output_dir>/
+├── INDEX.md                     ← index of the raw files under resource/
+├── MEMORY.md                    ← overview + index of memory/
+├── SKILL.md                     ← index of the skills under skill/
+├── resource/
+│   └── <file_name>              ← one copied raw source file (verbatim bytes)
+├── memory/
+│   └── <slug>.md                ← one MemoryCategory (description + summary)
+└── skill/
+    └── <skill_name>/SKILL.md    ← one synthesized skill per folder
+```
+
+- `resource/` holds the raw source files copied verbatim out of the blob store
+  (`Resource.local_path`); `INDEX.md` indexes them (name, modality, description,
+  link), so an agent knows which raw resources exist.
+- `memory/<slug>.md` is the living memory split one file per `MemoryCategory`
+  (its description + summary); `MEMORY.md` is an overview that links to each one.
+- `skill/<name>/SKILL.md` is a reusable skill synthesized from the descriptions
+  (a sibling of `MEMORY.md`, never derived from extracted skill-type memory
+  items); the root `SKILL.md` indexes the tree.
+
+### Synthesis mode
+
+The `skill/` tree is always synthesized from the per-source descriptions by an LLM
+(`memu.memory_fs.MemorySynthesizer`, prompts in `memu.prompts.memory_fs`) — one
+pass extracts skills as a JSON array of `{name, body}` objects, each written as its
+own `skill/<name>/SKILL.md` doc. It is never derived from extracted skill-type
+memory items.
+
+`MEMORY.md` is rendered deterministically by default: an overview that links to the
+per-category `memory/<slug>.md` files (themselves deterministic from category
+description + summary). When `memory_files_config.synthesize=True`, the `MEMORY.md`
+body is instead synthesized from all descriptions in one LLM pass.
+
+`INDEX.md`, the `resource/` copies, and `memory/<slug>.md` stay deterministic in
+both modes. Synthesis uses the `synthesis_llm_profile` profile and leaves the
+existing memorize/extract pipeline untouched.
+
+### Initialize vs. incremental update
+
+Synthesis is stateful and mirrors the "submit the changed part of the file system"
+model. `MemoryService._build_memory_files(where, changed=...)` decides between two
+paths:
+
+- **Initialization** (no prior tree on disk, or `changed is None`): scan all
+  in-scope sources, turn each into its multimodal description, and synthesize the
+  `skill/` tree (and, when `synthesize=True`, the `MEMORY.md` body) from scratch
+  (`MemorySynthesizer.synthesize` / `synthesize_skills`).
+- **Incremental update** (a tree already exists and a changed set is supplied):
+  read the existing skill bodies (and `MEMORY.md` body) back off disk and merge
+  only the changed sources' descriptions into them (`MemorySynthesizer.update` /
+  `update_skills`, prompts `MEMORY_UPDATE_PROMPT` / `SKILL_UPDATE_PROMPT`). Skills
+  are upserted by slug, so untouched skills survive.
+
+`INDEX.md`, `resource/`, and `memory/` are always recomputed from the current
+store, so they need no LLM merge. `export_memory_files(user=...)` always takes the
+initialization path (full rebuild). `memorize_workspace(...)` drives this builder
+after each folder sync — passing the just-created resources as the changed set, or
+forcing a full rebuild when files were modified/deleted. That refresh is
+best-effort: an export failure is logged and never fails the sync, since the
+structured memory is already persisted. The single-file `memorize(...)` entry point
+does **not** drive the exporter; it is left entirely untouched.
+
+The exporter is read-only against the database and disabled by default
+(`memory_files_config.enabled`). Diff detection is handled by a sidecar manifest
+(`.memufs_manifest.json`) that stores per-file content hashes, so each export
+only rewrites artifacts whose rendered content changed (and prunes stale skill
+files/dirs) — no database schema change is required. Rendered content avoids
+volatile values so an unchanged store re-exports as a no-op. Exports are
+serialized through a per-service lock.
+
 ## Current constraints and tradeoffs
 
 - workflow state is dict-based, so step contracts are validated by key names rather than static types

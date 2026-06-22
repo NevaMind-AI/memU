@@ -211,3 +211,5 @@ models/
 secrets.txt
 api_keys.txt
 .cursor
+
+.local/

@@ -30,6 +30,9 @@ class InMemoryResourceRepository(ResourceRepoProtocol):
         self.resources = {rid: res for rid, res in self.resources.items() if rid not in matches}
         return matches
 
+    def delete_resource(self, resource_id: str) -> None:
+        self.resources.pop(resource_id, None)
+
     def create_resource(
         self,
         *,
