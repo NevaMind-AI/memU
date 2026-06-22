@@ -401,26 +401,43 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         memory_body: str | None = None
         skills: dict[str, str] | None = None
 
+        is_update = changed is not None and self._memory_file_exporter.artifacts_exist()
+
+        # The shared description trunk: the just-changed sources for an incremental
+        # update, otherwise the full in-scope store for (re)initialization.
+        if is_update:
+            descriptions = MemoryFileExporter._build_descriptions(changed)  # type: ignore[arg-type]
+        else:
+            resources = list(self.database.resource_repo.list_resources(where=where or None).values())
+            descriptions = MemoryFileExporter._build_descriptions(resources)
+
+        client = self._get_llm_client(self.memory_files_config.synthesis_llm_profile)
+
         if self.memory_files_config.synthesize:
-            client = self._get_llm_client(self.memory_files_config.synthesis_llm_profile)
-            if changed is not None and self._memory_file_exporter.artifacts_exist():
-                # UPDATE: merge the changed descriptions into existing artifacts.
+            # MEMORY.md and the skill/ tree are both synthesized from descriptions.
+            if is_update:
                 existing_memory = await asyncio.to_thread(self._memory_file_exporter.read_memory_body)
                 existing_skills = await asyncio.to_thread(self._memory_file_exporter.read_skills)
                 synthesized = await self._memory_synthesizer.update(
-                    MemoryFileExporter._build_descriptions(changed),
+                    descriptions,
                     existing_memory=existing_memory,
                     existing_skills=existing_skills,
                     chat=client.chat,
                 )
             else:
-                # INIT: build from scratch over all in-scope descriptions.
-                resources = list(self.database.resource_repo.list_resources(where=where or None).values())
-                synthesized = await self._memory_synthesizer.synthesize(
-                    MemoryFileExporter._build_descriptions(resources),
-                    chat=client.chat,
-                )
+                synthesized = await self._memory_synthesizer.synthesize(descriptions, chat=client.chat)
             memory_body, skills = synthesized.memory_body, synthesized.skills
+        else:
+            # MEMORY.md is rendered deterministically from category summaries, but
+            # the skill/ tree is a sibling bypass: always synthesized from the
+            # descriptions, never derived from extracted skill-type memory items.
+            if is_update:
+                existing_skills = await asyncio.to_thread(self._memory_file_exporter.read_skills)
+                skills = await self._memory_synthesizer.update_skills(
+                    descriptions, existing_skills=existing_skills, chat=client.chat
+                )
+            else:
+                skills = await self._memory_synthesizer.synthesize_skills(descriptions, chat=client.chat)
 
         async with self._memory_files_lock:
             result: ExportResult = await asyncio.to_thread(

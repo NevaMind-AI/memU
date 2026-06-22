@@ -45,6 +45,18 @@ async def test_synthesizer_empty_when_no_descriptions() -> None:
     assert result.skills == {}
 
 
+async def test_synthesize_skills_only_decoupled_from_memory() -> None:
+    """The skill bypass can be built on its own, without touching MEMORY.md."""
+    synth = MemorySynthesizer()
+    skills = await synth.synthesize_skills(_descriptions(), chat=_FakeChatClient().chat)
+    assert skills == {"pour-over": "# Pour-over\nUse a 1:16 ratio."}
+
+
+async def test_synthesize_skills_empty_without_descriptions() -> None:
+    synth = MemorySynthesizer()
+    assert await synth.synthesize_skills([], chat=_FakeChatClient().chat) == {}
+
+
 def test_synthesizer_helpers() -> None:
     synth = MemorySynthesizer()
     assert synth._clean_markdown("```markdown\n# Hi\n```") == "# Hi"
@@ -141,6 +153,24 @@ async def test_synthesizer_update_noop_without_descriptions() -> None:
     )
     assert result.memory_body == "## Profile\nKeep me."
     assert result.skills == existing_skills
+
+
+async def test_update_skills_only_upserts_and_preserves() -> None:
+    """Skill-only incremental update keeps untouched skills and upserts new ones."""
+    synth = MemorySynthesizer()
+    skills = await synth.update_skills(
+        _descriptions(),
+        existing_skills={"pour-over": "# Pour-over\nUse a 1:16 ratio."},
+        chat=_InitUpdateChatClient().chat,
+    )
+    assert skills["pour-over"] == "# Pour-over\nUse a 1:16 ratio."
+    assert skills["latte-art"] == "# Latte art\nPour slowly."
+
+
+async def test_update_skills_noop_without_descriptions() -> None:
+    synth = MemorySynthesizer()
+    existing = {"pour-over": "# Pour-over"}
+    assert await synth.update_skills([], existing_skills=existing, chat=_InitUpdateChatClient().chat) == existing
 
 
 def test_exporter_read_helpers_roundtrip(tmp_path: Path) -> None:

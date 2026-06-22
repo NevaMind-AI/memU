@@ -61,12 +61,23 @@ class MemorySynthesizer:
             return SynthesisResult()
 
         memory_raw = await chat(self._memory_prompt.replace(DESCRIPTIONS_PLACEHOLDER, formatted))
-        skills_raw = await chat(self._skill_prompt.replace(DESCRIPTIONS_PLACEHOLDER, formatted))
 
         return SynthesisResult(
             memory_body=self._clean_markdown(memory_raw),
-            skills=self._parse_skills(skills_raw),
+            skills=await self._synthesize_skills_formatted(formatted, chat=chat),
         )
+
+    async def synthesize_skills(self, descriptions: list[FileDescription], *, chat: ChatFn) -> dict[str, str]:
+        """Initialization for the skill bypass only (decoupled from MEMORY.md).
+
+        The ``skill/`` tree is a sibling of ``MEMORY.md`` projected from the same
+        description trunk, so it can be (re)built independently of how MEMORY.md is
+        produced.
+        """
+        formatted = self._format(descriptions)
+        if not formatted:
+            return {}
+        return await self._synthesize_skills_formatted(formatted, chat=chat)
 
     async def update(
         self,
@@ -86,15 +97,36 @@ class MemorySynthesizer:
         ).replace(DESCRIPTIONS_PLACEHOLDER, formatted)
         memory_raw = await chat(memory_prompt)
 
+        return SynthesisResult(
+            memory_body=self._clean_markdown(memory_raw),
+            skills=await self._update_skills_formatted(formatted, existing_skills=existing_skills, chat=chat),
+        )
+
+    async def update_skills(
+        self,
+        descriptions: list[FileDescription],
+        *,
+        existing_skills: dict[str, str],
+        chat: ChatFn,
+    ) -> dict[str, str]:
+        """Incremental update for the skill bypass only (decoupled from MEMORY.md)."""
+        formatted = self._format(descriptions)
+        if not formatted:
+            return dict(existing_skills)
+        return await self._update_skills_formatted(formatted, existing_skills=existing_skills, chat=chat)
+
+    async def _synthesize_skills_formatted(self, formatted: str, *, chat: ChatFn) -> dict[str, str]:
+        skills_raw = await chat(self._skill_prompt.replace(DESCRIPTIONS_PLACEHOLDER, formatted))
+        return self._parse_skills(skills_raw)
+
+    async def _update_skills_formatted(
+        self, formatted: str, *, existing_skills: dict[str, str], chat: ChatFn
+    ) -> dict[str, str]:
         skill_prompt = self._skill_update_prompt.replace(
             EXISTING_PLACEHOLDER, self._format_existing_skills(existing_skills) or "(none)"
         ).replace(DESCRIPTIONS_PLACEHOLDER, formatted)
         upserts = self._parse_skills(await chat(skill_prompt))
-
-        return SynthesisResult(
-            memory_body=self._clean_markdown(memory_raw),
-            skills={**existing_skills, **upserts},
-        )
+        return {**existing_skills, **upserts}
 
     @staticmethod
     def _format_existing_skills(skills: dict[str, str]) -> str:
@@ -103,9 +135,7 @@ class MemorySynthesizer:
     @staticmethod
     def _format(descriptions: list[FileDescription]) -> str:
         lines = [
-            f"- [{desc.modality}] {desc.url}: {desc.description}"
-            for desc in descriptions
-            if desc.description.strip()
+            f"- [{desc.modality}] {desc.url}: {desc.description}" for desc in descriptions if desc.description.strip()
         ]
         return "\n".join(lines)
 
