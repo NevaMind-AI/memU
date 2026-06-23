@@ -225,7 +225,10 @@ class MemoryFileExporter:
 
         descriptions: list[FileDescription] = []
         for resource in sorted(resources, key=lambda r: (r.url, r.id)):
-            res_items = items_by_resource.get(resource.id, [])
+            res_items = sorted(
+                items_by_resource.get(resource.id, []),
+                key=lambda i: (i.memory_type, i.created_at, i.id),
+            )
             parts = [
                 f"[{item.memory_type}] {' '.join((item.summary or '').split())}"
                 for item in res_items
