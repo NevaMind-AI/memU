@@ -31,7 +31,7 @@ from memu.llm.wrapper import (
     LLMInterceptorHandle,
     LLMInterceptorRegistry,
 )
-from memu.memory_fs import ExportResult, MemoryFileExporter, MemorySynthesizer
+from memu.memory_fs import ExistingArtifacts, ExportResult, MemoryFileExporter, MemorySynthesizer
 from memu.workflow.interceptor import WorkflowInterceptorHandle, WorkflowInterceptorRegistry
 from memu.workflow.pipeline import PipelineManager
 from memu.workflow.runner import WorkflowRunner, resolve_workflow_runner
@@ -413,31 +413,30 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
 
         client = self._get_llm_client(self.memory_files_config.synthesis_llm_profile)
 
+        # An incremental update merges the changed descriptions into the prior
+        # artifacts; a full (re)initialization starts from empty existing state so
+        # stale entries are dropped (the exporter's manifest diff prunes any files no
+        # longer produced — no explicit delete needed).
+        existing = (
+            await asyncio.to_thread(self._memory_file_exporter.read_existing) if is_update else ExistingArtifacts()
+        )
+
         if self.memory_files_config.synthesize:
             # MEMORY.md and the skill/ tree are both synthesized from descriptions.
-            if is_update:
-                existing_memory = await asyncio.to_thread(self._memory_file_exporter.read_memory_body)
-                existing_skills = await asyncio.to_thread(self._memory_file_exporter.read_skills)
-                synthesized = await self._memory_synthesizer.update(
-                    descriptions,
-                    existing_memory=existing_memory,
-                    existing_skills=existing_skills,
-                    chat=client.chat,
-                )
-            else:
-                synthesized = await self._memory_synthesizer.synthesize(descriptions, chat=client.chat)
+            synthesized = await self._memory_synthesizer.synthesize(
+                descriptions,
+                existing_memory=existing.memory_body,
+                existing_skills=existing.skills,
+                chat=client.chat,
+            )
             memory_body, skills = synthesized.memory_body, synthesized.skills
         else:
             # MEMORY.md is rendered deterministically from category summaries, but
             # the skill/ tree is a sibling bypass: always synthesized from the
             # descriptions, never derived from extracted skill-type memory items.
-            if is_update:
-                existing_skills = await asyncio.to_thread(self._memory_file_exporter.read_skills)
-                skills = await self._memory_synthesizer.update_skills(
-                    descriptions, existing_skills=existing_skills, chat=client.chat
-                )
-            else:
-                skills = await self._memory_synthesizer.synthesize_skills(descriptions, chat=client.chat)
+            skills = await self._memory_synthesizer.synthesize_skills(
+                descriptions, existing_skills=existing.skills, chat=client.chat
+            )
 
         async with self._memory_files_lock:
             result: ExportResult = await asyncio.to_thread(

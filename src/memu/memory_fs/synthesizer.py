@@ -8,6 +8,7 @@ docs directly. ``INDEX.md`` stays deterministic and is handled by the exporter.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections.abc import Awaitable, Callable
@@ -19,9 +20,7 @@ from memu.prompts.memory_fs import (
     DESCRIPTIONS_PLACEHOLDER,
     EXISTING_PLACEHOLDER,
     MEMORY_SYNTHESIS_PROMPT,
-    MEMORY_UPDATE_PROMPT,
     SKILL_SYNTHESIS_PROMPT,
-    SKILL_UPDATE_PROMPT,
 )
 
 if TYPE_CHECKING:
@@ -46,86 +45,69 @@ class MemorySynthesizer:
         *,
         memory_prompt: str = MEMORY_SYNTHESIS_PROMPT,
         skill_prompt: str = SKILL_SYNTHESIS_PROMPT,
-        memory_update_prompt: str = MEMORY_UPDATE_PROMPT,
-        skill_update_prompt: str = SKILL_UPDATE_PROMPT,
     ) -> None:
         self._memory_prompt = memory_prompt
         self._skill_prompt = skill_prompt
-        self._memory_update_prompt = memory_update_prompt
-        self._skill_update_prompt = skill_update_prompt
 
-    async def synthesize(self, descriptions: list[FileDescription], *, chat: ChatFn) -> SynthesisResult:
-        """Initialization: build MEMORY/SKILL from scratch over all descriptions."""
-        formatted = self._format(descriptions)
-        if not formatted:
-            return SynthesisResult()
-
-        memory_raw = await chat(self._memory_prompt.replace(DESCRIPTIONS_PLACEHOLDER, formatted))
-
-        return SynthesisResult(
-            memory_body=self._clean_markdown(memory_raw),
-            skills=await self._synthesize_skills_formatted(formatted, chat=chat),
-        )
-
-    async def synthesize_skills(self, descriptions: list[FileDescription], *, chat: ChatFn) -> dict[str, str]:
-        """Initialization for the skill bypass only (decoupled from MEMORY.md).
-
-        The ``skill/`` tree is a sibling of ``MEMORY.md`` projected from the same
-        description trunk, so it can be (re)built independently of how MEMORY.md is
-        produced.
-        """
-        formatted = self._format(descriptions)
-        if not formatted:
-            return {}
-        return await self._synthesize_skills_formatted(formatted, chat=chat)
-
-    async def update(
+    async def synthesize(
         self,
         descriptions: list[FileDescription],
         *,
-        existing_memory: str,
-        existing_skills: dict[str, str],
+        existing_memory: str = "",
+        existing_skills: dict[str, str] | None = None,
         chat: ChatFn,
     ) -> SynthesisResult:
-        """Incremental: merge the changed descriptions into existing artifacts."""
+        """Synthesize MEMORY + SKILL from the descriptions, merging into any existing
+        artifacts.
+
+        Pass empty ``existing_*`` (the default) to build from scratch; pass the prior
+        artifacts to incrementally fold the (changed) descriptions into them. The two
+        LLM calls are independent and run concurrently.
+        """
+        existing_skills = existing_skills or {}
         formatted = self._format(descriptions)
         if not formatted:
             return SynthesisResult(memory_body=existing_memory, skills=dict(existing_skills))
 
-        memory_prompt = self._memory_update_prompt.replace(
-            EXISTING_PLACEHOLDER, existing_memory.strip() or "(empty)"
-        ).replace(DESCRIPTIONS_PLACEHOLDER, formatted)
-        memory_raw = await chat(memory_prompt)
-
-        return SynthesisResult(
-            memory_body=self._clean_markdown(memory_raw),
-            skills=await self._update_skills_formatted(formatted, existing_skills=existing_skills, chat=chat),
+        memory_body, skills = await asyncio.gather(
+            self._synthesize_memory_formatted(formatted, existing_memory=existing_memory, chat=chat),
+            self._synthesize_skills_formatted(formatted, existing_skills=existing_skills, chat=chat),
         )
+        return SynthesisResult(memory_body=memory_body, skills=skills)
 
-    async def update_skills(
+    async def synthesize_skills(
         self,
         descriptions: list[FileDescription],
         *,
-        existing_skills: dict[str, str],
+        existing_skills: dict[str, str] | None = None,
         chat: ChatFn,
     ) -> dict[str, str]:
-        """Incremental update for the skill bypass only (decoupled from MEMORY.md)."""
+        """Synthesize only the skill bypass (decoupled from MEMORY.md).
+
+        The ``skill/`` tree is a sibling of ``MEMORY.md`` projected from the same
+        description trunk, so it can be (re)built independently of how MEMORY.md is
+        produced. As with :meth:`synthesize`, empty ``existing_skills`` builds from
+        scratch and a populated map merges the changed descriptions into it.
+        """
+        existing_skills = existing_skills or {}
         formatted = self._format(descriptions)
         if not formatted:
             return dict(existing_skills)
-        return await self._update_skills_formatted(formatted, existing_skills=existing_skills, chat=chat)
+        return await self._synthesize_skills_formatted(formatted, existing_skills=existing_skills, chat=chat)
 
-    async def _synthesize_skills_formatted(self, formatted: str, *, chat: ChatFn) -> dict[str, str]:
-        skills_raw = await chat(self._skill_prompt.replace(DESCRIPTIONS_PLACEHOLDER, formatted))
-        return self._parse_skills(skills_raw)
+    async def _synthesize_memory_formatted(self, formatted: str, *, existing_memory: str, chat: ChatFn) -> str:
+        prompt = self._memory_prompt.replace(EXISTING_PLACEHOLDER, existing_memory.strip() or "(empty)").replace(
+            DESCRIPTIONS_PLACEHOLDER, formatted
+        )
+        return self._clean_markdown(await chat(prompt))
 
-    async def _update_skills_formatted(
+    async def _synthesize_skills_formatted(
         self, formatted: str, *, existing_skills: dict[str, str], chat: ChatFn
     ) -> dict[str, str]:
-        skill_prompt = self._skill_update_prompt.replace(
+        prompt = self._skill_prompt.replace(
             EXISTING_PLACEHOLDER, self._format_existing_skills(existing_skills) or "(none)"
         ).replace(DESCRIPTIONS_PLACEHOLDER, formatted)
-        upserts = self._parse_skills(await chat(skill_prompt))
+        upserts = self._parse_skills(await chat(prompt))
         return {**existing_skills, **upserts}
 
     @staticmethod

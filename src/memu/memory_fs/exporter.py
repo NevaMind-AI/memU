@@ -86,6 +86,18 @@ class FileDescription:
 
 
 @dataclass
+class ExistingArtifacts:
+    """The prior on-disk state the synthesizer merges new descriptions into.
+
+    An empty instance (the default) signals a from-scratch (re)build: nothing is
+    carried forward, and the exporter's manifest diff prunes any now-stale files.
+    """
+
+    memory_body: str = ""
+    skills: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
 class ExportResult:
     """Outcome of a single export pass."""
 
@@ -419,6 +431,10 @@ class MemoryFileExporter:
         """Whether a prior memory tree is already present (init vs update)."""
         return (self.output_dir / MEMORY_FILENAME).exists()
 
+    def read_existing(self) -> ExistingArtifacts:
+        """Load the prior MEMORY/SKILL artifacts as a single bundle for merging."""
+        return ExistingArtifacts(memory_body=self.read_memory_body(), skills=self.read_skills())
+
     def read_memory_body(self) -> str:
         """Read MEMORY.md and strip the heading/notice, returning just the body."""
         path = self.output_dir / MEMORY_FILENAME
@@ -465,4 +481,4 @@ class MemoryFileExporter:
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8")
 
 
-__all__ = ["ExportResult", "FileDescription", "MemoryFileExporter", "slugify"]
+__all__ = ["ExistingArtifacts", "ExportResult", "FileDescription", "MemoryFileExporter", "slugify"]
