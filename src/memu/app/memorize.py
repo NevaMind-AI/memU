@@ -371,10 +371,12 @@ class MemorizeMixin:
 
     async def _memorize_preprocess_multimodal(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         modality = state["modality"]
+        client = self._get_step_llm_client(step_context)
         if modality in self._VISION_MODALITIES:
-            client = self._get_vlm_client(self.memorize_config.vlm_profile, step_context=step_context)
-        else:
-            client = self._get_step_llm_client(step_context)
+            try:
+                client = self._get_vlm_client(self.memorize_config.vlm_profile, step_context=step_context)
+            except ValueError:
+                pass
         preprocessed = await self._preprocess_resource_url(
             local_path=state["local_path"],
             text=state.get("raw_text"),
