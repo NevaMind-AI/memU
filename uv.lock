@@ -929,14 +929,13 @@ wheels = [
 
 [[package]]
 name = "memu-py"
-version = "1.5.0"
+version = "1.5.1"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "defusedxml" },
     { name = "httpx" },
     { name = "langchain-core" },
-    { name = "lazyllm" },
     { name = "numpy" },
     { name = "openai" },
     { name = "pendulum" },
@@ -951,6 +950,9 @@ claude = [
 langgraph = [
     { name = "langchain-core" },
     { name = "langgraph" },
+]
+lazyllm = [
+    { name = "lazyllm" },
 ]
 postgres = [
     { name = "pgvector" },
@@ -1002,7 +1004,7 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=1.2.7" },
     { name = "langchain-core", marker = "extra == 'langgraph'", specifier = ">=0.1.0" },
     { name = "langgraph", marker = "extra == 'langgraph'", specifier = ">=0.0.10" },
-    { name = "lazyllm", specifier = ">=0.7.3" },
+    { name = "lazyllm", marker = "extra == 'lazyllm'", specifier = ">=0.7.3" },
     { name = "numpy", specifier = ">=2.3.4" },
     { name = "openai", specifier = ">=2.8.0" },
     { name = "pendulum", specifier = ">=3.1.0" },
@@ -1011,7 +1013,7 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["postgresql-psycopgbinary"], marker = "extra == 'postgres'", specifier = ">=2.0.36" },
     { name = "sqlmodel", specifier = ">=0.0.27" },
 ]
-provides-extras = ["postgres", "langgraph", "claude"]
+provides-extras = ["postgres", "langgraph", "claude", "lazyllm"]
 
 [package.metadata.requires-dev]
 dev = [

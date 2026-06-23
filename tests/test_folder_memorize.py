@@ -131,9 +131,7 @@ async def test_cascade_delete_removes_resource_items_relations(monkeypatch) -> N
 
     monkeypatch.setattr(service, "_patch_category_summaries", _fake_patch)
 
-    removed = await service._cascade_delete_by_urls(
-        {"/folder/drop.txt"}, ctx=ctx, store=store, user_scope=user
-    )
+    removed = await service._cascade_delete_by_urls({"/folder/drop.txt"}, ctx=ctx, store=store, user_scope=user)
 
     assert [r.id for r in removed] == [drop_id]
     remaining = store.resource_repo.list_resources(where=user)

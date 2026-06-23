@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from memu.app.service import Context
-    from memu.app.settings import MemorizeConfig
+    from memu.app.settings import MemorizeConfig, MemoryFilesConfig
     from memu.blob.local_fs import LocalFS
     from memu.database.interfaces import Database
 
@@ -64,7 +64,7 @@ class MemorizeMixin:
         user_model: type[BaseModel]
 
         # Memory file system export (provided by MemoryService).
-        memory_files_config: Any
+        memory_files_config: MemoryFilesConfig
         _build_memory_files: Callable[..., Awaitable[dict[str, Any]]]
 
         # Provided by CRUDMixin (composed onto MemoryService).
