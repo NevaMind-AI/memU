@@ -81,6 +81,20 @@ class LazyLLMSource(BaseModel):
     stt_model: str = Field(default="qwen-audio-turbo", description="Speech-to-text model for lazyllm client backend")
 
 
+# Per-provider defaults: provider -> (base_url, api_key_env_or_value, chat_model).
+# Used by ``LLMConfig.set_provider_defaults`` to swap OpenAI defaults when a provider is selected.
+# Each provider defaults to its latest small/fast model (verified June 2026).
+_PROVIDER_DEFAULTS: dict[str, tuple[str, str, str]] = {
+    "grok": ("https://api.x.ai/v1", "XAI_API_KEY", "grok-4-1-fast"),
+    "claude": ("https://api.anthropic.com", "ANTHROPIC_API_KEY", "claude-haiku-4-5"),
+    "deepseek": ("https://api.deepseek.com/v1", "DEEPSEEK_API_KEY", "deepseek-v4-flash"),
+    "kimi": ("https://api.moonshot.cn/v1", "MOONSHOT_API_KEY", "kimi-k2.7-code-highspeed"),
+    "minimax": ("https://api.minimax.io/v1", "MINIMAX_API_KEY", "MiniMax-M3"),
+    "doubao": ("https://ark.cn-beijing.volces.com", "ARK_API_KEY", "doubao-seed-2.0-lite"),
+    "openrouter": ("https://openrouter.ai", "OPENROUTER_API_KEY", "openai/gpt-5.4-mini"),
+}
+
+
 class LLMConfig(BaseModel):
     provider: str = Field(
         default="openai",
@@ -88,10 +102,15 @@ class LLMConfig(BaseModel):
     )
     base_url: str = Field(default="https://api.openai.com/v1")
     api_key: str = Field(default="OPENAI_API_KEY")
-    chat_model: str = Field(default="gpt-4o-mini")
+    chat_model: str = Field(default="gpt-5.4-mini")
     client_backend: str = Field(
         default="sdk",
-        description="Which LLM client backend to use: 'httpx' (httpx), 'sdk' (official OpenAI), or 'lazyllm_backend' (for more LLM source like Qwen, Doubao, SIliconflow, etc.)",
+        description=(
+            "Which LLM client backend to use: 'sdk' (official OpenAI SDK), "
+            "'anthropic' (official Anthropic/Claude SDK), 'httpx' (raw HTTP, supports "
+            "all providers in memu.llm.backends), or 'lazyllm_backend' (Qwen, Doubao, "
+            "SiliconFlow, etc.)."
+        ),
     )
     lazyllm_source: LazyLLMSource = Field(default=LazyLLMSource())
     endpoint_overrides: dict[str, str] = Field(
@@ -109,15 +128,91 @@ class LLMConfig(BaseModel):
 
     @model_validator(mode="after")
     def set_provider_defaults(self) -> "LLMConfig":
-        if self.provider == "grok":
-            # If values match the OpenAI defaults, switch them to Grok defaults
+        # Per-provider defaults for the HTTP client backend. Each entry only
+        # overrides a field when it still holds the OpenAI default, so explicit
+        # user values are always preserved.
+        defaults = _PROVIDER_DEFAULTS.get(self.provider)
+        if defaults is not None:
+            base_url, api_key, chat_model = defaults
             if self.base_url == "https://api.openai.com/v1":
-                self.base_url = "https://api.x.ai/v1"
+                self.base_url = base_url
             if self.api_key == "OPENAI_API_KEY":
-                self.api_key = "XAI_API_KEY"
-            if self.chat_model == "gpt-4o-mini":
-                self.chat_model = "grok-2-latest"
+                self.api_key = api_key
+            if self.chat_model == "gpt-5.4-mini":
+                self.chat_model = chat_model
         return self
+
+
+class VLMConfig(BaseModel):
+    """Configuration for a vision-language (multimodal) model client.
+
+    Sibling to :class:`LLMConfig` but scoped to the ``vision`` capability used by
+    image/video preprocessing. Defaults to each provider's latest VLM model (see
+    ``memu.vlm.VLM_PROVIDER_DEFAULTS``) instead of the small/fast chat default.
+    """
+
+    provider: str = Field(
+        default="openai",
+        description="Identifier for the VLM provider implementation (used by HTTP client backend).",
+    )
+    base_url: str = Field(default="https://api.openai.com/v1")
+    api_key: str = Field(default="OPENAI_API_KEY")
+    vlm_model: str = Field(default="gpt-5.4", description="Vision-language model used for image/video understanding.")
+    client_backend: str = Field(
+        default="sdk",
+        description=(
+            "Which VLM client backend to use: 'sdk' (official OpenAI SDK), "
+            "'anthropic' (official Anthropic/Claude SDK), or 'httpx' (raw HTTP, "
+            "supports all providers in memu.vlm.backends)."
+        ),
+    )
+    endpoint_overrides: dict[str, str] = Field(
+        default_factory=dict,
+        description="Optional overrides for HTTP endpoints (key: 'vision').",
+    )
+
+    @model_validator(mode="after")
+    def set_provider_defaults(self) -> "VLMConfig":
+        # base_url/api_key reuse the shared per-provider HTTP defaults; vlm_model
+        # comes from the VLM-specific defaults. Each field is only overridden
+        # while it still holds the OpenAI default, so explicit values survive.
+        from memu.vlm.defaults import default_vlm_model
+
+        defaults = _PROVIDER_DEFAULTS.get(self.provider)
+        if defaults is not None:
+            base_url, api_key, _chat_model = defaults
+            if self.base_url == "https://api.openai.com/v1":
+                self.base_url = base_url
+            if self.api_key == "OPENAI_API_KEY":
+                self.api_key = api_key
+        if self.vlm_model == "gpt-5.4":
+            resolved = default_vlm_model(self.provider)
+            if resolved is not None:
+                self.vlm_model = resolved
+        return self
+
+
+def vlm_config_from_llm(llm: "LLMConfig") -> "VLMConfig":
+    """Derive a :class:`VLMConfig` from an :class:`LLMConfig`.
+
+    Reuses the LLM provider/credentials/transport so vision steps work with zero
+    extra configuration, swapping only the model for the provider's latest VLM
+    (falling back to the LLM chat model when the provider has no known VLM).
+    """
+    from memu.vlm.defaults import default_vlm_model
+
+    # The anthropic SDK backend leaves ``provider`` at its generic default, so
+    # map it explicitly to resolve the right VLM model.
+    provider = "claude" if llm.client_backend == "anthropic" else llm.provider
+    vlm_model = default_vlm_model(provider) or llm.chat_model
+    return VLMConfig(
+        provider=provider,
+        base_url=llm.base_url,
+        api_key=llm.api_key,
+        vlm_model=vlm_model,
+        client_backend=llm.client_backend,
+        endpoint_overrides=dict(llm.endpoint_overrides),
+    )
 
 
 class BlobConfig(BaseModel):
@@ -222,6 +317,10 @@ class MemorizeConfig(BaseModel):
         description="Optional mapping of modality -> preprocess system prompt.",
     )
     preprocess_llm_profile: str = Field(default="default", description="LLM profile for preprocess.")
+    vlm_profile: str = Field(
+        default="default",
+        description="LLM profile whose provider/credentials back the VLM client used for image/video vision.",
+    )
     memory_types: list[str] = Field(
         default_factory=_default_memory_types,
         description="Ordered list of memory types (profile/event/knowledge/behavior by default).",

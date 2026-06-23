@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import pathlib
@@ -15,6 +16,7 @@ from pydantic import BaseModel
 from memu.app.settings import CategoryConfig, CustomPrompt
 from memu.blob.folder import diff_folder, load_manifest, manifest_from_scan, save_manifest, scan_folder
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
+from memu.preprocess import PreprocessContext, preprocess_resource
 from memu.prompts.category_summary import (
     CUSTOM_PROMPT as CATEGORY_SUMMARY_CUSTOM_PROMPT,
 )
@@ -31,9 +33,6 @@ from memu.prompts.memory_type import (
 from memu.prompts.memory_type import (
     PROMPTS as MEMORY_TYPE_PROMPTS,
 )
-from memu.prompts.preprocess import PROMPTS as PREPROCESS_PROMPTS
-from memu.utils.conversation import format_conversation_for_preprocess
-from memu.utils.video import VideoFrameExtractor
 from memu.workflow.step import WorkflowState, WorkflowStep
 
 logger = logging.getLogger(__name__)
@@ -58,6 +57,7 @@ class MemorizeMixin:
         _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
         _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
         _get_llm_client: Callable[..., Any]
+        _get_vlm_client: Callable[..., Any]
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
         _extract_json_blob: Callable[[str], str]
         _escape_prompt_value: Callable[[str], str]
@@ -367,13 +367,20 @@ class MemorizeMixin:
         state.update({"local_path": local_path, "raw_text": raw_text})
         return state
 
+    # Modalities whose preprocessing analyzes media via the VLM (vision) client.
+    _VISION_MODALITIES = frozenset({"image", "video"})
+
     async def _memorize_preprocess_multimodal(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        llm_client = self._get_step_llm_client(step_context)
+        modality = state["modality"]
+        client = self._get_step_llm_client(step_context)
+        if modality in self._VISION_MODALITIES:
+            with contextlib.suppress(KeyError):
+                client = self._get_vlm_client(self.memorize_config.vlm_profile, step_context=step_context)
         preprocessed = await self._preprocess_resource_url(
             local_path=state["local_path"],
             text=state.get("raw_text"),
-            modality=state["modality"],
-            llm_client=llm_client,
+            modality=modality,
+            llm_client=client,
         )
         if not preprocessed:
             preprocessed = [{"text": state.get("raw_text"), "caption": None}]
@@ -983,243 +990,28 @@ class MemorizeMixin:
     async def _preprocess_resource_url(
         self, *, local_path: str, text: str | None, modality: str, llm_client: Any | None = None
     ) -> list[dict[str, str | None]]:
+        """Preprocess a resource by delegating to the per-format ``preprocess`` package.
+
+        Returns a list of preprocessed resources, each with 'text' and 'caption'.
         """
-        Preprocess resource based on modality.
-
-        General preprocessing dispatcher for all modalities:
-        - Text-based modalities (conversation, document): require text content
-        - Audio modality: transcribe audio file first, then process as text
-        - Media modalities (video, image): process media files directly
-
-        Args:
-            local_path: Local file path to the resource
-            text: Text content if available (for text-based modalities)
-            modality: Resource modality type
-
-        Returns:
-            List of preprocessed resources, each with 'text' and 'caption'
-        """
-        configured_prompt = self.memorize_config.multimodal_preprocess_prompts.get(modality)
-        if configured_prompt is None:
-            template = PREPROCESS_PROMPTS.get(modality)
-        elif isinstance(configured_prompt, str):
-            template = configured_prompt
-        else:
-            # No custom prompts configured for preprocssing for now,
-            # If the user decide to use their custom prompt, they must provide ALL prompt blocks.
-            template = self._resolve_custom_prompt(configured_prompt, {})
-
-        if not template:
-            return [{"text": text, "caption": None}]
-
-        if modality == "audio":
-            text = await self._prepare_audio_text(local_path, text, llm_client=llm_client)
-            if text is None:
-                return [{"text": None, "caption": None}]
-
-        if self._modality_requires_text(modality) and not text:
-            return [{"text": text, "caption": None}]
-
-        return await self._dispatch_preprocessor(
+        return await preprocess_resource(
             modality=modality,
             local_path=local_path,
             text=text,
-            template=template,
+            ctx=self._build_preprocess_context(),
             llm_client=llm_client,
         )
 
-    async def _prepare_audio_text(self, local_path: str, text: str | None, llm_client: Any | None = None) -> str | None:
-        """Ensure audio resources provide text either via transcription or file read."""
-        if text:
-            return text
-
-        audio_extensions = {".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"}
-        text_extensions = {".txt", ".text"}
-        file_ext = pathlib.Path(local_path).suffix.lower()
-
-        if file_ext in audio_extensions:
-            try:
-                logger.info(f"Transcribing audio file: {local_path}")
-                client = llm_client or self._get_llm_client()
-                transcribed = cast(str, await client.transcribe(local_path))
-                logger.info(f"Audio transcription completed: {len(transcribed)} characters")
-            except Exception:
-                logger.exception("Audio transcription failed for %s", local_path)
-                return None
-            else:
-                return transcribed
-
-        if file_ext in text_extensions:
-            path_obj = pathlib.Path(local_path)
-            try:
-                text_content = path_obj.read_text(encoding="utf-8")
-                logger.info(f"Read pre-transcribed text file: {len(text_content)} characters")
-            except Exception:
-                logger.exception("Failed to read text file %s", local_path)
-                return None
-            else:
-                return text_content
-
-        logger.warning(f"Unknown audio file type: {file_ext}, skipping transcription")
-        return None
-
-    def _modality_requires_text(self, modality: str) -> bool:
-        return modality in ("conversation", "document")
-
-    async def _dispatch_preprocessor(
-        self,
-        *,
-        modality: str,
-        local_path: str,
-        text: str | None,
-        template: str,
-        llm_client: Any | None = None,
-    ) -> list[dict[str, str | None]]:
-        if modality == "conversation" and text is not None:
-            return await self._preprocess_conversation(text, template, llm_client=llm_client)
-        if modality == "video":
-            return await self._preprocess_video(local_path, template, llm_client=llm_client)
-        if modality == "image":
-            return await self._preprocess_image(local_path, template, llm_client=llm_client)
-        if modality == "document" and text is not None:
-            return await self._preprocess_document(text, template, llm_client=llm_client)
-        if modality == "audio" and text is not None:
-            return await self._preprocess_audio(text, template, llm_client=llm_client)
-        return [{"text": text, "caption": None}]
-
-    async def _preprocess_conversation(
-        self, text: str, template: str, llm_client: Any | None = None
-    ) -> list[dict[str, str | None]]:
-        """Preprocess conversation data with segmentation, returns list of resources (one per segment)."""
-        preprocessed_text = format_conversation_for_preprocess(text)
-        prompt = template.format(conversation=self._escape_prompt_value(preprocessed_text))
-        client = llm_client or self._get_llm_client()
-        processed = await client.chat(prompt)
-        _conv, segments = self._parse_conversation_preprocess_with_segments(processed, preprocessed_text)
-
-        # Important: always use the original JSON-derived, indexed conversation text for downstream
-        # segmentation and memory extraction. The LLM may rewrite the conversation and drop fields
-        # like created_at, which would cause them to be lost.
-        conversation_text = preprocessed_text
-        # If no segments, return single resource
-        if not segments:
-            return [{"text": conversation_text, "caption": None}]
-
-        # Generate caption for each segment and return as separate resources
-        lines = conversation_text.split("\n")
-        max_idx = len(lines) - 1
-        resources: list[dict[str, str | None]] = []
-
-        for segment in segments:
-            start = int(segment.get("start", 0))
-            end = int(segment.get("end", max_idx))
-            start = max(0, min(start, max_idx))
-            end = max(0, min(end, max_idx))
-            segment_text = "\n".join(lines[start : end + 1])
-
-            if segment_text.strip():
-                caption = await self._summarize_segment(segment_text, llm_client=client)
-                resources.append({"text": segment_text, "caption": caption})
-        return resources if resources else [{"text": conversation_text, "caption": None}]
-
-    async def _summarize_segment(self, segment_text: str, llm_client: Any | None = None) -> str | None:
-        """Summarize a single conversation segment."""
-        system_prompt = (
-            "Summarize the given conversation segment in 1-2 concise sentences. "
-            "Focus on the main topic or theme discussed."
+    def _build_preprocess_context(self) -> PreprocessContext:
+        """Bundle the service dependencies the preprocessors need."""
+        return PreprocessContext(
+            get_llm_client=self._get_llm_client,
+            get_vlm_client=lambda: self._get_vlm_client(self.memorize_config.vlm_profile),
+            escape_prompt_value=self._escape_prompt_value,
+            extract_json_blob=self._extract_json_blob,
+            resolve_custom_prompt=self._resolve_custom_prompt,
+            multimodal_preprocess_prompts=self.memorize_config.multimodal_preprocess_prompts,
         )
-        try:
-            client = llm_client or self._get_llm_client()
-            response = await client.chat(segment_text, system_prompt=system_prompt)
-            return response.strip() if response else None
-        except Exception:
-            logger.exception("Failed to summarize segment")
-            return None
-
-    async def _preprocess_video(
-        self, local_path: str, template: str, llm_client: Any | None = None
-    ) -> list[dict[str, str | None]]:
-        """
-        Preprocess video data - extract description and caption using Vision API.
-
-        Extracts the middle frame from the video and analyzes it using Vision API.
-
-        Args:
-            local_path: Path to the video file
-            template: Prompt template for video analysis
-
-        Returns:
-            List with single resource containing text (description) and caption
-        """
-        try:
-            # Check if ffmpeg is available
-            if not VideoFrameExtractor.is_ffmpeg_available():
-                logger.warning("ffmpeg not available, cannot process video. Returning None.")
-                return [{"text": None, "caption": None}]
-
-            # Extract middle frame from video
-            logger.info(f"Extracting frame from video: {local_path}")
-            frame_path = VideoFrameExtractor.extract_middle_frame(local_path)
-
-            try:
-                # Call Vision API with extracted frame
-                logger.info(f"Analyzing video frame with Vision API: {frame_path}")
-                client = llm_client or self._get_llm_client()
-                processed = await client.vision(prompt=template, image_path=frame_path, system_prompt=None)
-                description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
-                return [{"text": description, "caption": caption}]
-            finally:
-                # Clean up temporary frame file
-                import pathlib
-
-                try:
-                    pathlib.Path(frame_path).unlink(missing_ok=True)
-                    logger.debug(f"Cleaned up temporary frame: {frame_path}")
-                except Exception as e:
-                    logger.warning(f"Failed to clean up frame {frame_path}: {e}")
-
-        except Exception as e:
-            logger.error(f"Video preprocessing failed: {e}", exc_info=True)
-            return [{"text": None, "caption": None}]
-
-    async def _preprocess_image(
-        self, local_path: str, template: str, llm_client: Any | None = None
-    ) -> list[dict[str, str | None]]:
-        """
-        Preprocess image data - extract description and caption using Vision API.
-
-        Args:
-            local_path: Path to the image file
-            template: Prompt template for image analysis
-
-        Returns:
-            List with single resource containing text (description) and caption
-        """
-        # Call Vision API with image
-        client = llm_client or self._get_llm_client()
-        processed = await client.vision(prompt=template, image_path=local_path, system_prompt=None)
-        description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
-        return [{"text": description, "caption": caption}]
-
-    async def _preprocess_document(
-        self, text: str, template: str, llm_client: Any | None = None
-    ) -> list[dict[str, str | None]]:
-        """Preprocess document data - condense and extract caption"""
-        prompt = template.format(document_text=self._escape_prompt_value(text))
-        client = llm_client or self._get_llm_client()
-        processed = await client.chat(prompt)
-        processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
-        return [{"text": processed_content or text, "caption": caption}]
-
-    async def _preprocess_audio(
-        self, text: str, template: str, llm_client: Any | None = None
-    ) -> list[dict[str, str | None]]:
-        """Preprocess audio data - format transcription and extract caption"""
-        prompt = template.format(transcription=self._escape_prompt_value(text))
-        client = llm_client or self._get_llm_client()
-        processed = await client.chat(prompt)
-        processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
-        return [{"text": processed_content or text, "caption": caption}]
 
     def _format_categories_for_prompt(self, categories: list[CategoryConfig]) -> str:
         adaptive_hint = (
@@ -1441,84 +1233,6 @@ class MemorizeMixin:
         conversation = self._extract_tag_content(raw, "conversation")
         summary = self._extract_tag_content(raw, "summary")
         return conversation, summary
-
-    def _parse_multimodal_response(self, raw: str, content_tag: str, caption_tag: str) -> tuple[str | None, str | None]:
-        """
-        Parse multimodal preprocessing response (video, image, document, audio).
-        Extracts content and caption from XML-like tags.
-
-        Args:
-            raw: Raw LLM response
-            content_tag: Tag name for main content (e.g., "detailed_description", "processed_content")
-            caption_tag: Tag name for caption (typically "caption")
-
-        Returns:
-            Tuple of (content, caption)
-        """
-        content = self._extract_tag_content(raw, content_tag)
-        caption = self._extract_tag_content(raw, caption_tag)
-
-        # Fallback: if no tags found, try to use raw response as content
-        if not content:
-            content = raw.strip()
-
-        # Fallback for caption: use first sentence of content if no caption found
-        if not caption and content:
-            first_sentence = content.split(".")[0]
-            caption = first_sentence if len(first_sentence) <= 200 else first_sentence[:200]
-
-        return content, caption
-
-    def _parse_conversation_preprocess_with_segments(
-        self, raw: str, original_text: str
-    ) -> tuple[str | None, list[dict[str, int | str]] | None]:
-        """
-        Parse conversation preprocess response and extract segments.
-        Returns: (conversation_text, segments)
-        """
-        conversation = self._extract_tag_content(raw, "conversation")
-        segments = self._extract_segments_with_fallback(raw)
-        return conversation, segments
-
-    def _extract_segments_with_fallback(self, raw: str) -> list[dict[str, int | str]] | None:
-        segments = self._segments_from_json_payload(raw)
-        if segments is not None:
-            return segments
-        try:
-            blob = self._extract_json_blob(raw)
-        except Exception:
-            logging.exception("Failed to extract segments from conversation preprocess response")
-            return None
-        return self._segments_from_json_payload(blob)
-
-    def _segments_from_json_payload(self, payload: str) -> list[dict[str, int | str]] | None:
-        try:
-            parsed = json.loads(payload)
-        except (json.JSONDecodeError, TypeError):
-            return None
-        return self._segments_from_parsed_data(parsed)
-
-    @staticmethod
-    def _segments_from_parsed_data(parsed: Any) -> list[dict[str, int | str]] | None:
-        if not isinstance(parsed, dict):
-            return None
-        segments_data = parsed.get("segments")
-        if not isinstance(segments_data, list):
-            return None
-        segments: list[dict[str, int | str]] = []
-        for seg in segments_data:
-            if isinstance(seg, dict) and "start" in seg and "end" in seg:
-                try:
-                    segment: dict[str, int | str] = {
-                        "start": int(seg["start"]),
-                        "end": int(seg["end"]),
-                    }
-                    if "caption" in seg and isinstance(seg["caption"], str):
-                        segment["caption"] = seg["caption"]
-                    segments.append(segment)
-                except (TypeError, ValueError):
-                    continue
-        return segments or None
 
     @staticmethod
     def _extract_tag_content(raw: str, tag: str) -> str | None:

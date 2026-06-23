@@ -10,8 +10,12 @@ from typing import Any, cast
 import httpx
 
 from memu.llm.backends.base import LLMBackend
+from memu.llm.backends.claude import ClaudeLLMBackend
+from memu.llm.backends.deepseek import DeepSeekLLMBackend
 from memu.llm.backends.doubao import DoubaoLLMBackend
 from memu.llm.backends.grok import GrokBackend
+from memu.llm.backends.kimi import KimiLLMBackend
+from memu.llm.backends.minimax import MiniMaxLLMBackend
 from memu.llm.backends.openai import OpenAILLMBackend
 from memu.llm.backends.openrouter import OpenRouterLLMBackend
 
@@ -71,8 +75,12 @@ logger = logging.getLogger(__name__)
 
 LLM_BACKENDS: dict[str, Callable[[], LLMBackend]] = {
     OpenAILLMBackend.name: OpenAILLMBackend,
-    DoubaoLLMBackend.name: DoubaoLLMBackend,
+    ClaudeLLMBackend.name: ClaudeLLMBackend,
     GrokBackend.name: GrokBackend,
+    DeepSeekLLMBackend.name: DeepSeekLLMBackend,
+    KimiLLMBackend.name: KimiLLMBackend,
+    MiniMaxLLMBackend.name: MiniMaxLLMBackend,
+    DoubaoLLMBackend.name: DoubaoLLMBackend,
     OpenRouterLLMBackend.name: OpenRouterLLMBackend,
 }
 
@@ -277,7 +285,7 @@ class HTTPLLMClient:
             return result or "", raw_response
 
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.api_key}"}
+        return self.backend.default_headers(self.api_key)
 
     def _load_backend(self, provider: str) -> LLMBackend:
         factory = LLM_BACKENDS.get(provider)
@@ -287,14 +295,13 @@ class HTTPLLMClient:
         return factory()
 
     def _load_embedding_backend(self, provider: str) -> _EmbeddingBackend:
+        # Providers with a non-standard embedding endpoint are registered
+        # explicitly; everything else is treated as OpenAI-compatible. The chat
+        # backend (loaded first) already validates unknown providers, so this
+        # fallback never masks a typo.
         backends: dict[str, type[_EmbeddingBackend]] = {
-            _OpenAIEmbeddingBackend.name: _OpenAIEmbeddingBackend,
             _DoubaoEmbeddingBackend.name: _DoubaoEmbeddingBackend,
-            "grok": _OpenAIEmbeddingBackend,
             _OpenRouterEmbeddingBackend.name: _OpenRouterEmbeddingBackend,
         }
-        factory = backends.get(provider)
-        if not factory:
-            msg = f"Unsupported embedding provider '{provider}'. Available: {', '.join(backends.keys())}"
-            raise ValueError(msg)
+        factory = backends.get(provider, _OpenAIEmbeddingBackend)
         return factory()

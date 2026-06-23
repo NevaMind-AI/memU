@@ -18,6 +18,7 @@ classifiers = [
 ]
 keywords = ["ai", "memory", "conversation", "llm", "chatbot", "agent"]
 dependencies = [
+    "anthropic>=0.40.0",
     "defusedxml>=0.7.1",
     "httpx>=0.28.1",
     "numpy>=2.3.4",

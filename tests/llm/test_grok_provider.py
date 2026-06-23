@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from memu.app.settings import LLMConfig
 from memu.llm.backends.grok import GrokBackend
-from memu.llm.openai_sdk import OpenAISDKClient
+from memu.llm.openai_client import OpenAIClient
 
 
 class TestGrokProvider(unittest.IsolatedAsyncioTestCase):
@@ -12,17 +12,17 @@ class TestGrokProvider(unittest.IsolatedAsyncioTestCase):
         config = LLMConfig(provider="grok")
         self.assertEqual(config.base_url, "https://api.x.ai/v1")
         self.assertEqual(config.api_key, "XAI_API_KEY")
-        self.assertEqual(config.chat_model, "grok-2-latest")
+        self.assertEqual(config.chat_model, "grok-4-1-fast")
 
-    @patch("memu.llm.openai_sdk.AsyncOpenAI")
+    @patch("memu.llm.openai_client.AsyncOpenAI")
     async def test_client_initialization_with_grok_config(self, mock_async_openai):
-        """Test that OpenAISDKClient initializes with Grok base URL when configured."""
+        """Test that OpenAIClient initializes with Grok base URL when configured."""
         # Setup config
         config = LLMConfig(provider="grok")
 
         # Instantiate client with Grok config
         # We simulate what the application factory would do: pass the config values
-        client = OpenAISDKClient(
+        client = OpenAIClient(
             base_url=config.base_url,
             api_key="fake-key",  # In real app, this would be os.getenv(config.api_key)
             chat_model=config.chat_model,
@@ -33,7 +33,7 @@ class TestGrokProvider(unittest.IsolatedAsyncioTestCase):
         mock_async_openai.assert_called_with(api_key="fake-key", base_url="https://api.x.ai/v1")
 
         # Verify client attributes
-        self.assertEqual(client.chat_model, "grok-2-latest")
+        self.assertEqual(client.chat_model, "grok-4-1-fast")
 
     def test_grok_backend_payload_parsing(self):
         """Test that GrokBackend parses responses correctly (inherited from OpenAI)."""

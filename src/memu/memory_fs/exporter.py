@@ -173,8 +173,7 @@ class MemoryFileExporter:
         # trunk (see MemorySynthesizer); ``skills`` is supplied by the caller.
         skill_map = skills or {}
         skill_artifacts = {
-            f"{SKILL_DIRNAME}/{slug}/{SKILL_FILENAME}": self._skill_document(body)
-            for slug, body in skill_map.items()
+            f"{SKILL_DIRNAME}/{slug}/{SKILL_FILENAME}": self._skill_document(body) for slug, body in skill_map.items()
         }
 
         artifacts: dict[str, str | bytes] = {}
