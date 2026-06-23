@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from memu.database.models import MemoryItem, MemoryType
 
@@ -48,7 +48,13 @@ class MemoryItemRepo(Protocol):
     ) -> dict[str, MemoryItem]: ...
 
     def vector_search_items(
-        self, query_vec: list[float], top_k: int, where: Mapping[str, Any] | None = None
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+        *,
+        ranking: Literal["similarity", "salience"] = "similarity",
+        recency_decay_days: float = 30.0,
     ) -> list[tuple[str, float]]: ...
 
     def load_existing(self) -> None: ...

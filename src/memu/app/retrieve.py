@@ -1253,7 +1253,7 @@ class RetrieveMixin:
     ) -> list[dict[str, Any]]:
         """Use LLM to rank memory items from relevant categories"""
         if not category_ids:
-            print("[LLM Rank Items] No category_ids provided")
+            logger.debug("[LLM Rank Items] No category_ids provided")
             return []
 
         item_pool = items if items is not None else store.memory_item_repo.items

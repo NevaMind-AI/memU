@@ -76,6 +76,47 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
                 )
             )
             session.commit()
+        self.relations[:] = [r for r in self.relations if not (r.item_id == item_id and r.category_id == cat_id)]
+
+    def _row_to_record(self, row: Any) -> CategoryItem:
+        return CategoryItem(
+            id=row.id,
+            item_id=row.item_id,
+            category_id=row.category_id,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            **self._scope_kwargs_from(row),
+        )
+
+    def unlink_item(self, item_id: str) -> list[CategoryItem]:
+        from sqlmodel import delete, select
+
+        with self._sessions.session() as session:
+            rows = session.scalars(
+                select(self._sqla_models.CategoryItem).where(self._sqla_models.CategoryItem.item_id == item_id)
+            ).all()
+            removed = [self._row_to_record(row) for row in rows]
+            if removed:
+                session.exec(
+                    delete(self._sqla_models.CategoryItem).where(self._sqla_models.CategoryItem.item_id == item_id)
+                )
+                session.commit()
+        self.relations[:] = [r for r in self.relations if r.item_id != item_id]
+        return removed
+
+    def clear_relations(self, where: Mapping[str, Any] | None = None) -> list[CategoryItem]:
+        from sqlmodel import delete, select
+
+        filters = self._build_filters(self._sqla_models.CategoryItem, where)
+        with self._sessions.session() as session:
+            rows = session.scalars(select(self._sqla_models.CategoryItem).where(*filters)).all()
+            removed = [self._row_to_record(row) for row in rows]
+            if removed:
+                session.exec(delete(self._sqla_models.CategoryItem).where(*filters))
+                session.commit()
+        removed_ids = {rel.id for rel in removed}
+        self.relations[:] = [r for r in self.relations if r.id not in removed_ids]
+        return removed
 
     def get_item_categories(self, item_id: str) -> list[CategoryItem]:
         from sqlmodel import select
