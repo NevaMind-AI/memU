@@ -66,8 +66,7 @@ class ConversationPreprocessor(Preprocessor):
 async def _summarize_segment(segment_text: str, client: Any) -> str | None:
     """Summarize a single conversation segment in 1-2 sentences."""
     system_prompt = (
-        "Summarize the given conversation segment in 1-2 concise sentences. "
-        "Focus on the main topic or theme discussed."
+        "Summarize the given conversation segment in 1-2 concise sentences. Focus on the main topic or theme discussed."
     )
     try:
         response = await client.chat(segment_text, system_prompt=system_prompt)

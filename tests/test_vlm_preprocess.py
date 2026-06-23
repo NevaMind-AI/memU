@@ -77,12 +77,11 @@ def test_image_preprocess_uses_vlm_client() -> None:
     llm = _RecordingVisionClient("llm")
     vlm = _RecordingVisionClient("vlm")
     ctx = _make_ctx(llm_client=llm, vlm_client=vlm)
+    image_path = "/workspace/x.png"
 
-    result = asyncio.run(
-        preprocess_resource(modality="image", local_path="/tmp/x.png", text=None, ctx=ctx)
-    )
+    result = asyncio.run(preprocess_resource(modality="image", local_path=image_path, text=None, ctx=ctx))
 
-    assert vlm.vision_calls == ["/tmp/x.png"]
+    assert vlm.vision_calls == [image_path]
     assert llm.vision_calls == []
     assert result[0]["text"] == "a cat"
 
@@ -98,9 +97,10 @@ def test_service_routes_vision_modalities_to_vlm(monkeypatch: Any) -> None:
     monkeypatch.setattr(svc, "_preprocess_resource_url", _fake_preprocess)
     monkeypatch.setattr(svc, "_get_vlm_client", lambda *a, **k: "VLM_CLIENT")
     monkeypatch.setattr(svc, "_get_step_llm_client", lambda *a, **k: "CHAT_CLIENT")
+    resource_path = "/workspace/x"
 
     async def _run(modality: str) -> Any:
-        state = {"local_path": "/tmp/x", "raw_text": None, "modality": modality}
+        state = {"local_path": resource_path, "raw_text": None, "modality": modality}
         await svc._memorize_preprocess_multimodal(state, {})
         return captured["client"]
 
