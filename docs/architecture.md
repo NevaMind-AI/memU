@@ -144,11 +144,33 @@ LLM access is profile-based (`llm_profiles`):
 
 Per-step profile routing happens through step config (`chat_llm_profile`, `embed_llm_profile`, or `llm_profile`).
 
-Client backends:
+Client backends (selected per profile via `client_backend`):
 
 - `sdk`: official OpenAI SDK wrapper
-- `httpx`: provider-adapted HTTP backend (OpenAI, Doubao, Grok, OpenRouter)
+- `anthropic`: official Anthropic/Claude SDK wrapper
+- `httpx`: provider-adapted HTTP backend (OpenAI, Claude, Grok, DeepSeek, Kimi, MiniMax, Doubao, OpenRouter — see `memu.llm.backends`)
 - `lazyllm_backend`: LazyLLM adapter
+
+### VLM (vision-language) architecture
+
+Image/video understanding uses a dedicated `memu.vlm` package, a sibling of
+`memu.llm` mirroring its layout (`backends/`, `*_client.py`, `gateway.py`),
+scoped to the multimodal `vision` capability. Only providers whose first-party
+API offers native image understanding are included (`memu.vlm.backends`:
+OpenAI, Claude, Grok, Kimi, MiniMax, Doubao, OpenRouter); text-only providers
+such as DeepSeek are intentionally excluded.
+
+VLM profiles are **derived** from the LLM profiles (`vlm_config_from_llm`): each
+VLM client reuses the matching LLM profile's provider, credentials, and
+`client_backend`, swapping only the model for that provider's latest VLM
+(`memu.vlm.VLM_PROVIDER_DEFAULTS`), falling back to the LLM chat model when the
+provider has no known VLM. This makes vision work with zero extra configuration.
+
+During `preprocess_multimodal`, `MemoryService` routes by modality: `image` and
+`video` use the VLM client (`_get_vlm_client`, profile from
+`memorize_config.vlm_profile`), while `conversation`/`document`/`audio` use the
+chat LLM client. VLM clients are cached per profile and wrapped by the same
+`LLMClientWrapper`, so interceptors and usage metadata behave identically.
 
 ## Integration surfaces
 
