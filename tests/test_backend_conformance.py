@@ -250,6 +250,43 @@ def test_update_with_new_categories_swaps_links(store):
     assert linked == {cat_b.id}
 
 
+class _FakeEmbedClient:
+    async def embed(self, texts):
+        return [[float(len(t)), 1.0, 0.0] for t in texts]
+
+
+def test_resolve_category_ids_creates_unknown_adaptively(store):
+    """Open/adaptive taxonomy: extractor-proposed names are created on first sight."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from memu.app.memorize import MemorizeMixin
+    from memu.app.service import Context
+
+    ctx = Context(categories_ready=True)
+    fake_self = SimpleNamespace(
+        _get_llm_client=lambda profile=None: _FakeEmbedClient(),
+        _partition_category_names=MemorizeMixin._partition_category_names,
+    )
+
+    ids = asyncio.run(
+        MemorizeMixin._resolve_category_ids(
+            fake_self, ["Programming", "programming", "Cooking"], ctx, store, user={"user_id": "alice"}
+        )
+    )
+    # "Programming"/"programming" collapse (case-insensitive); "Cooking" is distinct.
+    assert len(ids) == 2
+    names = {c.name for c in store.memory_category_repo.list_categories().values()}
+    assert names == {"Programming", "Cooking"}
+
+    # A subsequent call reuses the cached ids and creates nothing new.
+    ids2 = asyncio.run(
+        MemorizeMixin._resolve_category_ids(fake_self, ["Programming"], ctx, store, user={"user_id": "alice"})
+    )
+    assert ids2 == [ctx.category_name_to_id["programming"]]
+    assert len(store.memory_category_repo.list_categories()) == 2
+
+
 def test_sqlite_extra_survives_cache_miss(tmp_path):
     """A fresh SQLite store (cold cache) must reconstruct ``extra`` from the DB."""
     db, dsn = _make_sqlite(tmp_path)
