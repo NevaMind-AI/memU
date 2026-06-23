@@ -20,11 +20,13 @@ from memu.app.settings import (
     MemoryFilesConfig,
     RetrieveConfig,
     UserConfig,
+    VLMConfig,
+    vlm_config_from_llm,
 )
 from memu.blob.local_fs import LocalFS
 from memu.database.factory import build_database
 from memu.database.interfaces import Database
-from memu.llm.http_client import HTTPLLMClient
+from memu.llm.gateway import build_llm_client
 from memu.llm.wrapper import (
     LLMCallMetadata,
     LLMClientWrapper,
@@ -32,6 +34,7 @@ from memu.llm.wrapper import (
     LLMInterceptorRegistry,
 )
 from memu.memory_fs import ExportResult, MemoryFileExporter, MemorySynthesizer
+from memu.vlm.gateway import build_vlm_client
 from memu.workflow.interceptor import WorkflowInterceptorHandle, WorkflowInterceptorRegistry
 from memu.workflow.pipeline import PipelineManager
 from memu.workflow.runner import WorkflowRunner, resolve_workflow_runner
@@ -85,8 +88,16 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         # We need the concrete user scope (user_id: xxx) to initialize the categories
         # self._start_category_initialization(self._context, self.database)
 
+        # VLM (vision-language) profiles are derived from the LLM profiles so
+        # image/video vision reuses the same provider/credentials with a stronger
+        # multimodal model (see ``vlm_config_from_llm``).
+        self.vlm_profiles: dict[str, VLMConfig] = {
+            name: vlm_config_from_llm(cfg) for name, cfg in self.llm_profiles.profiles.items()
+        }
+
         # Initialize client caches (lazy creation on first use)
         self._llm_clients: dict[str, Any] = {}
+        self._vlm_clients: dict[str, Any] = {}
         self._llm_interceptors = LLMInterceptorRegistry()
         self._workflow_interceptors = WorkflowInterceptorRegistry()
 
@@ -106,44 +117,9 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self._register_pipelines()
 
     def _init_llm_client(self, config: LLMConfig | None = None) -> Any:
-        """Initialize LLM client based on configuration."""
+        """Initialize LLM client based on configuration via the LLM gateway."""
         cfg = config or self.llm_config
-        backend = cfg.client_backend
-        if backend == "sdk":
-            from memu.llm.openai_sdk import OpenAISDKClient
-
-            return OpenAISDKClient(
-                base_url=cfg.base_url,
-                api_key=cfg.api_key,
-                chat_model=cfg.chat_model,
-                embed_model=cfg.embed_model,
-                embed_batch_size=cfg.embed_batch_size,
-            )
-        elif backend == "httpx":
-            return HTTPLLMClient(
-                base_url=cfg.base_url,
-                api_key=cfg.api_key,
-                chat_model=cfg.chat_model,
-                provider=cfg.provider,
-                endpoint_overrides=cfg.endpoint_overrides,
-                embed_model=cfg.embed_model,
-            )
-        elif backend == "lazyllm_backend":
-            from memu.llm.lazyllm_client import LazyLLMClient
-
-            return LazyLLMClient(
-                llm_source=cfg.lazyllm_source.llm_source or cfg.lazyllm_source.source,
-                vlm_source=cfg.lazyllm_source.vlm_source or cfg.lazyllm_source.source,
-                embed_source=cfg.lazyllm_source.embed_source or cfg.lazyllm_source.source,
-                stt_source=cfg.lazyllm_source.stt_source or cfg.lazyllm_source.source,
-                chat_model=cfg.chat_model,
-                embed_model=cfg.embed_model,
-                vlm_model=cfg.lazyllm_source.vlm_model,
-                stt_model=cfg.lazyllm_source.stt_model,
-            )
-        else:
-            msg = f"Unknown llm_client_backend '{cfg.client_backend}'"
-            raise ValueError(msg)
+        return build_llm_client(cfg)
 
     def _get_llm_base_client(self, profile: str | None = None) -> Any:
         """
@@ -198,6 +174,33 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
     def _get_llm_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
         base_client = self._get_llm_base_client(profile)
         return self._wrap_llm_client(base_client, profile=profile, step_context=step_context)
+
+    def _get_vlm_base_client(self, profile: str | None = None) -> Any:
+        """Lazily initialize and cache VLM clients per profile."""
+        name = profile or "default"
+        client = self._vlm_clients.get(name)
+        if client is not None:
+            return client
+        cfg: VLMConfig | None = self.vlm_profiles.get(name)
+        if cfg is None:
+            msg = f"Unknown vlm profile '{name}'"
+            raise KeyError(msg)
+        client = build_vlm_client(cfg)
+        self._vlm_clients[name] = client
+        return client
+
+    def _get_vlm_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
+        base_client = self._get_vlm_base_client(profile)
+        cfg = self.vlm_profiles.get(profile or "default")
+        provider = cfg.provider if cfg is not None else None
+        metadata = self._llm_call_metadata(profile or "default", step_context)
+        return LLMClientWrapper(
+            base_client,
+            registry=self._llm_interceptors,
+            metadata=metadata,
+            provider=provider,
+            chat_model=getattr(base_client, "vlm_model", None),
+        )
 
     @property
     def llm_client(self) -> Any:

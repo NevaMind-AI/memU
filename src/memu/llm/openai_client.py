@@ -17,7 +17,7 @@ from openai.types.chat import (
 logger = logging.getLogger(__name__)
 
 
-class OpenAISDKClient:
+class OpenAIClient:
     """OpenAI LLM client that relies on the official Python SDK."""
 
     def __init__(
