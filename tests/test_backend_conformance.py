@@ -21,18 +21,22 @@ if str(src_path) not in sys.path:
 
 import pytest  # noqa: E402
 
-from memu.app.settings import DatabaseConfig, DefaultUserModel  # noqa: E402
+from memu.app.settings import (  # noqa: E402
+    DatabaseConfig,
+    DefaultUserModel,
+    MetadataStoreConfig,
+)
 from memu.database.factory import build_database  # noqa: E402
 
 
 def _make_inmemory():
-    config = DatabaseConfig(metadata_store={"provider": "inmemory"})
+    config = DatabaseConfig(metadata_store=MetadataStoreConfig(provider="inmemory"))
     return build_database(config=config, user_model=DefaultUserModel)
 
 
 def _make_sqlite(tmp_path: Path):
     dsn = f"sqlite:///{tmp_path / 'conformance.db'}"
-    config = DatabaseConfig(metadata_store={"provider": "sqlite", "dsn": dsn})
+    config = DatabaseConfig(metadata_store=MetadataStoreConfig(provider="sqlite", dsn=dsn))
     return build_database(config=config, user_model=DefaultUserModel), dsn
 
 
@@ -171,7 +175,7 @@ def _reconcile(crud_self, store, *, item_id, new_cat_names, mapped_old_cat_ids, 
 
     fake_self = SimpleNamespace(_map_category_names_to_ids=lambda names, ctx: [name_to_id[n] for n in names])
     CRUDMixin._reconcile_update_categories(
-        fake_self,
+        fake_self,  # type: ignore[arg-type]
         memory_id=item_id,
         new_cat_names=new_cat_names,
         mapped_old_cat_ids=mapped_old_cat_ids,
@@ -271,7 +275,11 @@ def test_resolve_category_ids_creates_unknown_adaptively(store):
 
     ids = asyncio.run(
         MemorizeMixin._resolve_category_ids(
-            fake_self, ["Programming", "programming", "Cooking"], ctx, store, user={"user_id": "alice"}
+            fake_self,  # type: ignore[arg-type]
+            ["Programming", "programming", "Cooking"],
+            ctx,
+            store,
+            user={"user_id": "alice"},
         )
     )
     # "Programming"/"programming" collapse (case-insensitive); "Cooking" is distinct.
@@ -281,7 +289,13 @@ def test_resolve_category_ids_creates_unknown_adaptively(store):
 
     # A subsequent call reuses the cached ids and creates nothing new.
     ids2 = asyncio.run(
-        MemorizeMixin._resolve_category_ids(fake_self, ["Programming"], ctx, store, user={"user_id": "alice"})
+        MemorizeMixin._resolve_category_ids(
+            fake_self,  # type: ignore[arg-type]
+            ["Programming"],
+            ctx,
+            store,
+            user={"user_id": "alice"},
+        )
     )
     assert ids2 == [ctx.category_name_to_id["programming"]]
     assert len(store.memory_category_repo.list_categories()) == 2
@@ -310,7 +324,7 @@ def test_sqlite_extra_survives_cache_miss(tmp_path):
     db.close()
 
     # Re-open the same DB file: caches are empty, so reads hit the DB read path.
-    config = DatabaseConfig(metadata_store={"provider": "sqlite", "dsn": dsn})
+    config = DatabaseConfig(metadata_store=MetadataStoreConfig(provider="sqlite", dsn=dsn))
     db2 = build_database(config=config, user_model=DefaultUserModel)
     try:
         fetched = db2.memory_item_repo.get_item(item_id)

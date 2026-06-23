@@ -207,9 +207,7 @@ class MemoryFileExporter:
         return descriptions
 
     @staticmethod
-    def build_synthesis_descriptions(
-        resources: list[Resource], items: list[MemoryItem]
-    ) -> list[FileDescription]:
+    def build_synthesis_descriptions(resources: list[Resource], items: list[MemoryItem]) -> list[FileDescription]:
         """Build synthesizer input from the structured store (extracted items).
 
         The synthesizer is fed the extracted memory items per source so that the
