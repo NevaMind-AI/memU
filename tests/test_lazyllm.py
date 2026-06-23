@@ -11,9 +11,15 @@ import asyncio
 import os
 import sys
 
+import pytest
+
 # Add src to sys.path
 src_path = os.path.abspath("src")
 sys.path.insert(0, src_path)
+
+pytest.importorskip("lazyllm")
+if not os.getenv("MEMU_QWEN_API_KEY"):
+    pytest.skip("requires MEMU_QWEN_API_KEY for optional LazyLLM integration test", allow_module_level=True)
 
 from memu.llm.lazyllm_client import LazyLLMClient  # noqa: E402
 
