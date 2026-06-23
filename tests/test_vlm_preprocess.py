@@ -108,3 +108,21 @@ def test_service_routes_vision_modalities_to_vlm(monkeypatch: Any) -> None:
     assert asyncio.run(_run("video")) == "VLM_CLIENT"
     assert asyncio.run(_run("document")) == "CHAT_CLIENT"
     assert asyncio.run(_run("conversation")) == "CHAT_CLIENT"
+
+
+def test_service_falls_back_to_chat_client_when_vlm_profile_missing(monkeypatch: Any) -> None:
+    svc = MemoryService()
+    captured: dict[str, Any] = {}
+
+    async def _fake_preprocess(*, local_path: str, text: str | None, modality: str, llm_client: Any) -> list:
+        captured["client"] = llm_client
+        return []
+
+    monkeypatch.setattr(svc, "_preprocess_resource_url", _fake_preprocess)
+    monkeypatch.setattr(svc, "_get_vlm_client", lambda *a, **k: (_ for _ in ()).throw(KeyError("missing profile")))
+    monkeypatch.setattr(svc, "_get_step_llm_client", lambda *a, **k: "CHAT_CLIENT")
+
+    state = {"local_path": "/workspace/x", "raw_text": None, "modality": "image"}
+    asyncio.run(svc._memorize_preprocess_multimodal(state, {}))
+
+    assert captured["client"] == "CHAT_CLIENT"

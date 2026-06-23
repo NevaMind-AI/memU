@@ -374,7 +374,7 @@ class MemorizeMixin:
         modality = state["modality"]
         client = self._get_step_llm_client(step_context)
         if modality in self._VISION_MODALITIES:
-            with contextlib.suppress(ValueError):
+            with contextlib.suppress(KeyError):
                 client = self._get_vlm_client(self.memorize_config.vlm_profile, step_context=step_context)
         preprocessed = await self._preprocess_resource_url(
             local_path=state["local_path"],
