@@ -99,8 +99,8 @@ class LazyLLMSource(BaseModel):
     stt_model: str = Field(default="qwen-audio-turbo", description="Speech-to-text model for lazyllm client backend")
 
 
-# Per-provider HTTP defaults: provider -> (base_url, api_key_env_or_value, chat_model).
-# Used by ``LLMConfig.set_provider_defaults`` when the HTTP client backend is selected.
+# Per-provider defaults: provider -> (base_url, api_key_env_or_value, chat_model).
+# Used by ``LLMConfig.set_provider_defaults`` to swap OpenAI defaults when a provider is selected.
 # Each provider defaults to its latest small/fast model (verified June 2026).
 _PROVIDER_DEFAULTS: dict[str, tuple[str, str, str]] = {
     "grok": ("https://api.x.ai/v1", "XAI_API_KEY", "grok-4-1-fast"),
