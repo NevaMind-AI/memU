@@ -16,15 +16,20 @@ plus one edge:
   (`lane="source"`, modality conversation/document/image/video/audio; the
   canonical preprocessing text lives in `content`) or a generated markdown doc
   (`lane` ∈ {index, memory, skill}, `modality="markdown"`). A memory-lane
-  `Resource` is the former "category"; a skill-lane one is a skill page.
+  `Resource` is the former "category".
 - `Entry`: a `lane`-tagged searchable atom with an embedding (index → a
-  description, memory → a memory item, skill → a step). Links to its origin via
-  `source_id`/`source_path`.
+  description, memory → a memory item, skill → a tool/log). Its per-lane
+  `entry_type` (memory: profile/event/knowledge, skill: tool/log, index:
+  description) selects the extraction prompt during memorize. Links to its origin
+  via `source_id`/`source_path`.
 - `ResourceEntry`: membership edge from an `Entry` to its coarse (lane) `Resource`.
 
-The three retrieval lanes (index/memory/skill) are parallel, structurally
-identical tracks over the shared `Resource.content` trunk; retrieval is the same
-`Resource recall → Entry recall` waterfall in every lane, parameterized by `lane`.
+The retrieval lanes (index/memory/skill) are parallel, structurally identical
+tracks over the shared `Resource.content` trunk; retrieval runs the same
+`Resource recall → Entry recall` per lane, parameterized by `lane`. Per-lane
+extraction/grouping is configured via `MemorizeConfig.lanes`; `index` uses
+`per_resource` grouping (1:1 description docs) while `memory`/`skill` use
+`adaptive` grouping (LLM-grouped, summarized docs).
 
 At runtime, `MemoryService` orchestrates ingestion, retrieval, and manual CRUD over these layers.
 
@@ -248,13 +253,10 @@ payload directory:
 <output_dir>/
 ├── INDEX.md                     ← index of the raw files under resource/
 ├── MEMORY.md                    ← overview + index of memory/
-├── SKILL.md                     ← index of the skills under skill/
 ├── resource/
 │   └── <file_name>              ← one copied raw source file (verbatim bytes)
-├── memory/
-│   └── <slug>.md                ← one memory-lane Resource (description + summary)
-└── skill/
-    └── <skill_name>/SKILL.md    ← one synthesized skill per folder
+└── memory/
+    └── <slug>.md                ← one memory-lane Resource (description + summary)
 ```
 
 - `resource/` holds the raw source files copied verbatim out of the blob store
@@ -262,22 +264,14 @@ payload directory:
   link), so an agent knows which raw resources exist.
 - `memory/<slug>.md` is the living memory split one file per memory-lane
   `Resource` (its description + summary); `MEMORY.md` is an overview that links to each one.
-- `skill/<name>/SKILL.md` is a reusable skill synthesized from the descriptions
-  (a sibling of `MEMORY.md`, never derived from extracted skill-type memory
-  items); the root `SKILL.md` indexes the tree.
 
 ### Synthesis mode
-
-The `skill/` tree is always synthesized from the per-source descriptions by an LLM
-(`memu.memory_fs.MemorySynthesizer`, prompts in `memu.prompts.memory_fs`) — one
-pass extracts skills as a JSON array of `{name, body}` objects, each written as its
-own `skill/<name>/SKILL.md` doc. It is never derived from extracted skill-type
-memory items.
 
 `MEMORY.md` is rendered deterministically by default: an overview that links to the
 per-category `memory/<slug>.md` files (themselves deterministic from category
 description + summary). When `memory_files_config.synthesize=True`, the `MEMORY.md`
-body is instead synthesized from all descriptions in one LLM pass.
+body is instead synthesized from all descriptions in one LLM pass
+(`memu.memory_fs.MemorySynthesizer`, prompts in `memu.prompts.memory_fs`).
 
 `INDEX.md`, the `resource/` copies, and `memory/<slug>.md` stay deterministic in
 both modes. Synthesis uses the `synthesis_llm_profile` profile and leaves the
@@ -291,13 +285,10 @@ model. `MemoryFilesBuilder.build(database, where, changed=...)` (delegated to fr
 
 - **Initialization** (no prior tree on disk, or `changed is None`): scan all
   in-scope sources, turn each into its multimodal description, and synthesize the
-  `skill/` tree (and, when `synthesize=True`, the `MEMORY.md` body) from scratch
-  (`MemorySynthesizer.synthesize` / `synthesize_skills`).
+  `MEMORY.md` body from scratch (`MemorySynthesizer.synthesize`).
 - **Incremental update** (a tree already exists and a changed set is supplied):
-  read the existing skill bodies (and `MEMORY.md` body) back off disk and merge
-  only the changed sources' descriptions into them (`MemorySynthesizer.update` /
-  `update_skills`, prompts `MEMORY_UPDATE_PROMPT` / `SKILL_UPDATE_PROMPT`). Skills
-  are upserted by slug, so untouched skills survive.
+  read the existing `MEMORY.md` body back off disk and merge only the changed
+  sources' descriptions into it.
 
 `INDEX.md`, `resource/`, and `memory/` are always recomputed from the current
 store, so they need no LLM merge. `export_memory_files(user=...)` always takes the
@@ -311,7 +302,7 @@ does **not** drive the exporter; it is left entirely untouched.
 The exporter is read-only against the database and disabled by default
 (`memory_files_config.enabled`). Diff detection is handled by a sidecar manifest
 (`.memufs_manifest.json`) that stores per-file content hashes, so each export
-only rewrites artifacts whose rendered content changed (and prunes stale skill
+only rewrites artifacts whose rendered content changed (and prunes stale
 files/dirs) — no database schema change is required. Rendered content avoids
 volatile values so an unchanged store re-exports as a no-op. Exports are
 serialized through a per-service lock.

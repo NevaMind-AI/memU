@@ -13,10 +13,10 @@ from datetime import UTC, datetime, timedelta
 
 
 # Inline implementations to avoid circular import issues during testing
-def compute_content_hash(summary: str, memory_type: str) -> str:
+def compute_content_hash(summary: str, entry_type: str) -> str:
     """Generate unique hash for memory deduplication."""
     normalized = " ".join(summary.lower().split())
-    content = f"{memory_type}:{normalized}"
+    content = f"{entry_type}:{normalized}"
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 

@@ -50,13 +50,11 @@ class MemoryFilesBuilder:
         tree is (re)initialized from the full scoped store. ``make_client`` builds
         the LLM client used for synthesis from a profile name.
 
-        LLM work only happens when ``synthesize=True``: MEMORY.md and the skill/
-        tree are synthesized from the per-source descriptions. Otherwise both are
-        left as ``None`` so the exporter renders MEMORY.md deterministically from
-        category summaries and falls back to its rule-based skill bypass.
+        LLM work only happens when ``synthesize=True``: MEMORY.md is synthesized
+        from the per-source descriptions. Otherwise it is left as ``None`` so the
+        exporter renders MEMORY.md deterministically from category summaries.
         """
         memory_body: str | None = None
-        skills: dict[str, str] | None = None
 
         if self.config.synthesize:
             # The shared description trunk is the just-changed sources for an
@@ -74,13 +72,11 @@ class MemoryFilesBuilder:
             # files no longer produced).
             existing = await asyncio.to_thread(self.exporter.read_existing) if is_update else ExistingArtifacts()
             client = make_client(self.config.synthesis_llm_profile)
-            synthesized = await self.synthesizer.synthesize(
+            memory_body = await self.synthesizer.synthesize(
                 descriptions,
                 existing_memory=existing.memory_body,
-                existing_skills=existing.skills,
                 chat=client.chat,
             )
-            memory_body, skills = synthesized.memory_body, synthesized.skills
 
         async with self.lock:
             result: ExportResult = await asyncio.to_thread(
@@ -88,7 +84,6 @@ class MemoryFilesBuilder:
                 database,
                 where=where,
                 memory_body=memory_body,
-                skills=skills,
             )
         return result.to_dict()
 

@@ -13,20 +13,20 @@ from memu.prompts.retrieve.llm_item_ranker import PROMPT as LLM_ITEM_RANKER_PROM
 from memu.prompts.retrieve.llm_resource_ranker import PROMPT as LLM_RESOURCE_RANKER_PROMPT
 from memu.prompts.retrieve.pre_retrieval_decision import SYSTEM_PROMPT as PRE_RETRIEVAL_SYSTEM_PROMPT
 from memu.prompts.retrieve.pre_retrieval_decision import USER_PROMPT as PRE_RETRIEVAL_USER_PROMPT
-from memu.vector import cosine_topk
 from memu.workflow.step import WorkflowState, WorkflowStep
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from memu.app.service import Context
-    from memu.app.settings import RetrieveConfig
+    from memu.app.settings import MemorizeConfig, RetrieveConfig
     from memu.database.interfaces import Database
 
 
 class RetrieveMixin:
     if TYPE_CHECKING:
         retrieve_config: RetrieveConfig
+        memorize_config: MemorizeConfig
         _run_workflow: Callable[..., Awaitable[WorkflowState]]
         _get_context: Callable[[], Context]
         _get_database: Callable[[], Database]
@@ -114,71 +114,21 @@ class RetrieveMixin:
                 config={"chat_llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
             ),
             WorkflowStep(
-                step_id="route_category",
-                role="route_category",
-                handler=self._rag_route_category,
-                requires={"retrieve_category", "needs_retrieval", "active_query", "ctx", "store", "where"},
-                produces={"category_hits", "category_summary_lookup", "query_vector"},
-                capabilities={"vector"},
-                config={"embed_llm_profile": "embedding"},
-            ),
-            WorkflowStep(
-                step_id="sufficiency_after_category",
-                role="sufficiency_check",
-                handler=self._rag_category_sufficiency,
+                step_id="recall_lanes",
+                role="recall_lanes",
+                handler=self._rag_recall_lanes,
                 requires={
                     "retrieve_category",
+                    "retrieve_item",
                     "needs_retrieval",
                     "active_query",
-                    "context_queries",
-                    "category_hits",
                     "ctx",
                     "store",
                     "where",
                 },
-                produces={"next_step_query", "proceed_to_items", "query_vector"},
-                capabilities={"llm"},
-                config={
-                    "chat_llm_profile": self.retrieve_config.sufficiency_check_llm_profile,
-                    "embed_llm_profile": "embedding",
-                },
-            ),
-            WorkflowStep(
-                step_id="recall_items",
-                role="recall_items",
-                handler=self._rag_recall_items,
-                requires={
-                    "needs_retrieval",
-                    "proceed_to_items",
-                    "ctx",
-                    "store",
-                    "where",
-                    "active_query",
-                    "query_vector",
-                },
-                produces={"item_hits", "query_vector"},
+                produces={"lane_hits", "query_vector"},
                 capabilities={"vector"},
                 config={"embed_llm_profile": "embedding"},
-            ),
-            WorkflowStep(
-                step_id="sufficiency_after_items",
-                role="sufficiency_check",
-                handler=self._rag_item_sufficiency,
-                requires={
-                    "needs_retrieval",
-                    "active_query",
-                    "context_queries",
-                    "item_hits",
-                    "ctx",
-                    "store",
-                    "where",
-                },
-                produces={"next_step_query", "proceed_to_resources", "query_vector"},
-                capabilities={"llm"},
-                config={
-                    "chat_llm_profile": self.retrieve_config.sufficiency_check_llm_profile,
-                    "embed_llm_profile": "embedding",
-                },
             ),
             WorkflowStep(
                 step_id="recall_resources",
@@ -186,7 +136,7 @@ class RetrieveMixin:
                 handler=self._rag_recall_resources,
                 requires={
                     "needs_retrieval",
-                    "proceed_to_resources",
+                    "retrieve_resource",
                     "ctx",
                     "store",
                     "where",
@@ -201,7 +151,16 @@ class RetrieveMixin:
                 step_id="build_context",
                 role="build_context",
                 handler=self._rag_build_context,
-                requires={"needs_retrieval", "original_query", "rewritten_query", "ctx", "store", "where"},
+                requires={
+                    "needs_retrieval",
+                    "original_query",
+                    "rewritten_query",
+                    "lane_hits",
+                    "resource_hits",
+                    "ctx",
+                    "store",
+                    "where",
+                },
                 produces={"response"},
                 capabilities=set(),
             ),
@@ -256,158 +215,73 @@ class RetrieveMixin:
         })
         return state
 
-    async def _rag_route_category(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("retrieve_category") or not state.get("needs_retrieval"):
-            state["category_hits"] = []
-            state["category_summary_lookup"] = {}
+    def _retrievable_lanes(self) -> list[str]:
+        """Enabled lanes that participate in retrieval, in canonical order."""
+        from memu.database.models import RETRIEVAL_LANES
+
+        enabled = self.memorize_config.enabled_lanes
+        return [lane for lane in RETRIEVAL_LANES if lane in enabled]
+
+    async def _rag_recall_lanes(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Single-pass per-lane recall: coarse lane docs + entries for each lane."""
+        lane_hits: dict[str, dict[str, list[tuple[str, float]]]] = {}
+        if not state.get("needs_retrieval"):
+            state["lane_hits"] = lane_hits
             state["query_vector"] = None
             return state
 
+        store = state["store"]
+        where_filters = state.get("where") or {}
         embed_client = self._get_step_embedding_client(step_context)
-        store = state["store"]
-        where_filters = state.get("where") or {}
-        category_pool = store.resource_repo.list_resources(where_filters, lane="memory")
         qvec = (await embed_client.embed([state["active_query"]]))[0]
-        hits, summary_lookup = await self._rank_categories_by_summary(
-            qvec,
-            self.retrieve_config.category.top_k,
-            state["ctx"],
-            store,
-            embed_client=embed_client,
-            categories=category_pool,
-        )
-        state.update({
-            "query_vector": qvec,
-            "category_hits": hits,
-            "category_summary_lookup": summary_lookup,
-            "category_pool": category_pool,
-        })
-        return state
+        state["query_vector"] = qvec
 
-    async def _rag_category_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("needs_retrieval"):
-            state["proceed_to_items"] = False
-            return state
-        if not state.get("retrieve_category") or not state.get("sufficiency_check"):
-            state["proceed_to_items"] = True
-            return state
-
-        retrieved_content = ""
-        store = state["store"]
-        where_filters = state.get("where") or {}
-        category_pool = state.get("category_pool") or store.resource_repo.list_resources(where_filters, lane="memory")
-        hits = state.get("category_hits") or []
-        if hits:
-            retrieved_content = self._format_category_content(
-                hits,
-                state.get("category_summary_lookup", {}),
-                store,
-                categories=category_pool,
-            )
-
-        llm_client = self._get_step_llm_client(step_context)
-        needs_more, rewritten_query = await self._decide_if_retrieval_needed(
-            state["active_query"],
-            state["context_queries"],
-            retrieved_content=retrieved_content or "No content retrieved yet.",
-            llm_client=llm_client,
-        )
-        state["next_step_query"] = rewritten_query
-        state["active_query"] = rewritten_query
-        state["proceed_to_items"] = needs_more
-        if needs_more:
-            embed_client = self._get_step_embedding_client(step_context)
-            state["query_vector"] = (await embed_client.embed([state["active_query"]]))[0]
-        return state
-
-    async def _rag_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("retrieve_item") or not state.get("needs_retrieval") or not state.get("proceed_to_items"):
-            state["item_hits"] = []
-            return state
-
-        store = state["store"]
-        where_filters = state.get("where") or {}
-        items_pool = store.entry_repo.list_entries(where_filters, lane="memory")
-        qvec = state.get("query_vector")
-        if qvec is None:
-            embed_client = self._get_step_embedding_client(step_context)
-            qvec = (await embed_client.embed([state["active_query"]]))[0]
-            state["query_vector"] = qvec
-        state["item_hits"] = store.entry_repo.vector_search_entries(
-            qvec,
-            self.retrieve_config.item.top_k,
-            where=where_filters,
-            lane="memory",
-            ranking=self.retrieve_config.item.ranking,
-            recency_decay_days=self.retrieve_config.item.recency_decay_days,
-        )
-        state["item_pool"] = items_pool
-        return state
-
-    async def _rag_item_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("needs_retrieval"):
-            state["proceed_to_resources"] = False
-            return state
-        if not state.get("retrieve_item") or not state.get("sufficiency_check"):
-            state["proceed_to_resources"] = True
-            return state
-
-        store = state["store"]
-        where_filters = state.get("where") or {}
-        items_pool = state.get("item_pool") or store.entry_repo.list_entries(where_filters, lane="memory")
-        retrieved_content = ""
-        hits = state.get("item_hits") or []
-        if hits:
-            retrieved_content = self._format_item_content(hits, store, items=items_pool)
-
-        llm_client = self._get_step_llm_client(step_context)
-        needs_more, rewritten_query = await self._decide_if_retrieval_needed(
-            state["active_query"],
-            state["context_queries"],
-            retrieved_content=retrieved_content or "No content retrieved yet.",
-            llm_client=llm_client,
-        )
-        state["next_step_query"] = rewritten_query
-        state["active_query"] = rewritten_query
-        state["proceed_to_resources"] = needs_more
-        if needs_more:
-            embed_client = self._get_step_embedding_client(step_context)
-            state["query_vector"] = (await embed_client.embed([state["active_query"]]))[0]
+        retrieve_docs = bool(state.get("retrieve_category"))
+        retrieve_entries = bool(state.get("retrieve_item"))
+        for lane in self._retrievable_lanes():
+            doc_hits: list[tuple[str, float]] = []
+            entry_hits: list[tuple[str, float]] = []
+            if retrieve_docs:
+                doc_hits = store.resource_repo.vector_search_resources(
+                    qvec, self.retrieve_config.category.top_k, where=where_filters, lane=lane
+                )
+            if retrieve_entries:
+                entry_hits = store.entry_repo.vector_search_entries(
+                    qvec,
+                    self.retrieve_config.item.top_k,
+                    where=where_filters,
+                    lane=lane,
+                    ranking=self.retrieve_config.item.ranking,
+                    recency_decay_days=self.retrieve_config.item.recency_decay_days,
+                )
+            lane_hits[lane] = {"docs": doc_hits, "entries": entry_hits}
+        state["lane_hits"] = lane_hits
         return state
 
     async def _rag_recall_resources(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if (
-            not state.get("needs_retrieval")
-            or not state.get("retrieve_resource")
-            or not state.get("proceed_to_resources")
-        ):
+        if not state.get("needs_retrieval") or not state.get("retrieve_resource"):
             state["resource_hits"] = []
             return state
 
         store = state["store"]
         where_filters = state.get("where") or {}
-        resource_pool = store.resource_repo.list_resources(where_filters)
-        state["resource_pool"] = resource_pool
-        if not resource_pool:
-            state["resource_hits"] = []
-            return state
-
         qvec = state.get("query_vector")
         if qvec is None:
             embed_client = self._get_step_embedding_client(step_context)
             qvec = (await embed_client.embed([state["active_query"]]))[0]
             state["query_vector"] = qvec
         state["resource_hits"] = store.resource_repo.vector_search_resources(
-            qvec, self.retrieve_config.resource.top_k, where=where_filters
+            qvec, self.retrieve_config.resource.top_k, where=where_filters, lane="source"
         )
         return state
 
     def _rag_build_context(self, state: WorkflowState, _: Any) -> WorkflowState:
-        response = {
+        response: dict[str, Any] = {
             "needs_retrieval": bool(state.get("needs_retrieval")),
             "original_query": state["original_query"],
             "rewritten_query": state.get("rewritten_query", state["original_query"]),
             "next_step_query": state.get("next_step_query"),
+            "lanes": {},
             "categories": [],
             "items": [],
             "resources": [],
@@ -415,20 +289,22 @@ class RetrieveMixin:
         if state.get("needs_retrieval"):
             store = state["store"]
             where_filters = state.get("where") or {}
-            categories_pool = state.get("category_pool") or store.resource_repo.list_resources(
-                where_filters, lane="memory"
-            )
-            items_pool = state.get("item_pool") or store.entry_repo.list_entries(where_filters, lane="memory")
-            resources_pool = state.get("resource_pool") or store.resource_repo.list_resources(where_filters)
-            response["categories"] = self._materialize_hits(
-                state.get("category_hits", []),
-                categories_pool,
-            )
-            response["items"] = self._materialize_hits(state.get("item_hits", []), items_pool)
-            response["resources"] = self._materialize_hits(
-                state.get("resource_hits", []),
-                resources_pool,
-            )
+            lane_hits: dict[str, dict[str, list[tuple[str, float]]]] = state.get("lane_hits", {})
+            lanes_out: dict[str, dict[str, Any]] = {}
+            for lane, hits in lane_hits.items():
+                docs_pool = store.resource_repo.list_resources(where_filters, lane=lane)
+                entries_pool = store.entry_repo.list_entries(where_filters, lane=lane)
+                lanes_out[lane] = {
+                    "categories": self._materialize_hits(hits.get("docs", []), docs_pool),
+                    "items": self._materialize_hits(hits.get("entries", []), entries_pool),
+                }
+            resources_pool = store.resource_repo.list_resources(where_filters, lane="source")
+            response["lanes"] = lanes_out
+            response["resources"] = self._materialize_hits(state.get("resource_hits", []), resources_pool)
+            # Backward-compatible top-level view: the memory lane.
+            memory_out = lanes_out.get("memory", {})
+            response["categories"] = memory_out.get("categories", [])
+            response["items"] = memory_out.get("items", [])
         state["response"] = response
         return state
 
@@ -444,48 +320,13 @@ class RetrieveMixin:
                 config={"llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
             ),
             WorkflowStep(
-                step_id="route_category",
-                role="route_category",
-                handler=self._llm_route_category,
+                step_id="recall_lanes",
+                role="recall_lanes",
+                handler=self._llm_recall_lanes,
                 requires={"needs_retrieval", "active_query", "ctx", "store", "where"},
-                produces={"category_hits"},
+                produces={"lane_hits"},
                 capabilities={"llm"},
                 config={"llm_profile": self.retrieve_config.llm_ranking_llm_profile},
-            ),
-            WorkflowStep(
-                step_id="sufficiency_after_category",
-                role="sufficiency_check",
-                handler=self._llm_category_sufficiency,
-                requires={"needs_retrieval", "active_query", "context_queries", "category_hits"},
-                produces={"next_step_query", "proceed_to_items"},
-                capabilities={"llm"},
-                config={"llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
-            ),
-            WorkflowStep(
-                step_id="recall_items",
-                role="recall_items",
-                handler=self._llm_recall_items,
-                requires={
-                    "needs_retrieval",
-                    "proceed_to_items",
-                    "ctx",
-                    "store",
-                    "where",
-                    "active_query",
-                    "category_hits",
-                },
-                produces={"item_hits"},
-                capabilities={"llm"},
-                config={"llm_profile": self.retrieve_config.llm_ranking_llm_profile},
-            ),
-            WorkflowStep(
-                step_id="sufficiency_after_items",
-                role="sufficiency_check",
-                handler=self._llm_item_sufficiency,
-                requires={"needs_retrieval", "active_query", "context_queries", "item_hits"},
-                produces={"next_step_query", "proceed_to_resources"},
-                capabilities={"llm"},
-                config={"llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
             ),
             WorkflowStep(
                 step_id="recall_resources",
@@ -493,13 +334,12 @@ class RetrieveMixin:
                 handler=self._llm_recall_resources,
                 requires={
                     "needs_retrieval",
-                    "proceed_to_resources",
+                    "retrieve_resource",
                     "active_query",
                     "ctx",
                     "store",
                     "where",
-                    "item_hits",
-                    "category_hits",
+                    "lane_hits",
                 },
                 produces={"resource_hits"},
                 capabilities={"llm"},
@@ -509,7 +349,7 @@ class RetrieveMixin:
                 step_id="build_context",
                 role="build_context",
                 handler=self._llm_build_context,
-                requires={"needs_retrieval", "original_query", "rewritten_query"},
+                requires={"needs_retrieval", "original_query", "rewritten_query", "lane_hits", "resource_hits"},
                 produces={"response"},
                 capabilities=set(),
             ),
@@ -548,181 +388,92 @@ class RetrieveMixin:
         })
         return state
 
-    async def _llm_route_category(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _llm_recall_lanes(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Single-pass per-lane LLM recall: rank coarse lane docs + entries per lane."""
+        lane_hits: dict[str, dict[str, list[dict[str, Any]]]] = {}
         if not state.get("needs_retrieval"):
-            state["category_hits"] = []
+            state["lane_hits"] = lane_hits
             return state
+
         llm_client = self._get_step_llm_client(step_context)
         store = state["store"]
         where_filters = state.get("where") or {}
-        category_pool = store.resource_repo.list_resources(where_filters, lane="memory")
-        hits = await self._llm_rank_categories(
-            state["active_query"],
-            self.retrieve_config.category.top_k,
-            state["ctx"],
-            store,
-            llm_client=llm_client,
-            categories=category_pool,
-        )
-        state["category_hits"] = hits
-        state["category_pool"] = category_pool
-        return state
+        active_query = state["active_query"]
 
-    async def _llm_category_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("needs_retrieval"):
-            state["proceed_to_items"] = False
-            return state
-        if not state.get("retrieve_category") or not state.get("sufficiency_check"):
-            state["proceed_to_items"] = True
-            return state
-
-        retrieved_content = ""
-        hits = state.get("category_hits") or []
-        if hits:
-            retrieved_content = self._format_llm_category_content(hits)
-
-        llm_client = self._get_step_llm_client(step_context)
-        needs_more, rewritten_query = await self._decide_if_retrieval_needed(
-            state["active_query"],
-            state["context_queries"],
-            retrieved_content=retrieved_content or "No content retrieved yet.",
-            llm_client=llm_client,
-        )
-        state["next_step_query"] = rewritten_query
-        state["active_query"] = rewritten_query
-        state["proceed_to_items"] = needs_more
-        return state
-
-    async def _llm_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("needs_retrieval") or not state.get("proceed_to_items"):
-            state["item_hits"] = []
-            return state
-
-        where_filters = state.get("where") or {}
-        category_hits = state.get("category_hits", [])
-        category_ids = [cat["id"] for cat in category_hits]
-        llm_client = self._get_step_llm_client(step_context)
-        store = state["store"]
-
-        use_refs = getattr(self.retrieve_config.item, "use_category_references", False)
-        ref_ids: list[str] = []
-        if use_refs and category_hits:
-            # Extract all ref_ids from category summaries
-            from memu.utils.references import extract_references
-
-            for cat in category_hits:
-                summary = cat.get("summary") or ""
-                ref_ids.extend(extract_references(summary))
-        if ref_ids:
-            # Query items by ref_ids
-            items_pool = store.entry_repo.list_entries_by_ref_ids(ref_ids, where_filters)
-        else:
-            items_pool = store.entry_repo.list_entries(where_filters, lane="memory")
-
-        relations = store.resource_entry_repo.list_relations(where_filters)
-        category_pool = state.get("category_pool") or store.resource_repo.list_resources(where_filters, lane="memory")
-        state["item_hits"] = await self._llm_rank_items(
-            state["active_query"],
-            self.retrieve_config.item.top_k,
-            category_ids,
-            state.get("category_hits", []),
-            state["ctx"],
-            store,
-            llm_client=llm_client,
-            categories=category_pool,
-            items=items_pool,
-            relations=relations,
-        )
-        state["item_pool"] = items_pool
-        state["relation_pool"] = relations
-        return state
-
-    async def _llm_item_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("needs_retrieval"):
-            state["proceed_to_resources"] = False
-            return state
-        if not state.get("retrieve_item") or not state.get("sufficiency_check"):
-            state["proceed_to_resources"] = True
-            return state
-
-        retrieved_content = ""
-        hits = state.get("item_hits") or []
-        if hits:
-            retrieved_content = self._format_llm_item_content(hits)
-
-        llm_client = self._get_step_llm_client(step_context)
-        needs_more, rewritten_query = await self._decide_if_retrieval_needed(
-            state["active_query"],
-            state["context_queries"],
-            retrieved_content=retrieved_content or "No content retrieved yet.",
-            llm_client=llm_client,
-        )
-        state["next_step_query"] = rewritten_query
-        state["active_query"] = rewritten_query
-        state["proceed_to_resources"] = needs_more
+        for lane in self._retrievable_lanes():
+            docs_pool = store.resource_repo.list_resources(where_filters, lane=lane)
+            doc_hits = await self._llm_rank_categories(
+                active_query,
+                self.retrieve_config.category.top_k,
+                state["ctx"],
+                store,
+                llm_client=llm_client,
+                categories=docs_pool,
+            )
+            entries_pool = store.entry_repo.list_entries(where_filters, lane=lane)
+            entry_hits = await self._llm_rank_entries(
+                active_query,
+                self.retrieve_config.item.top_k,
+                doc_hits,
+                state["ctx"],
+                store,
+                llm_client=llm_client,
+                entries=entries_pool,
+            )
+            lane_hits[lane] = {"categories": doc_hits, "items": entry_hits}
+        state["lane_hits"] = lane_hits
         return state
 
     async def _llm_recall_resources(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("needs_retrieval") or not state.get("proceed_to_resources"):
+        if not state.get("needs_retrieval") or not state.get("retrieve_resource"):
             state["resource_hits"] = []
             return state
 
         llm_client = self._get_step_llm_client(step_context)
         store = state["store"]
         where_filters = state.get("where") or {}
-        resource_pool = store.resource_repo.list_resources(where_filters)
-        items_pool = state.get("item_pool") or store.entry_repo.list_entries(where_filters, lane="memory")
+        resource_pool = store.resource_repo.list_resources(where_filters, lane="source")
+        lane_hits: dict[str, dict[str, list[dict[str, Any]]]] = state.get("lane_hits", {})
+        # Aggregate entry/doc hits across lanes for resource ranking context.
+        all_item_hits: list[dict[str, Any]] = []
+        all_category_hits: list[dict[str, Any]] = []
+        for hits in lane_hits.values():
+            all_item_hits.extend(hits.get("items", []))
+            all_category_hits.extend(hits.get("categories", []))
+        items_pool = store.entry_repo.list_entries(where_filters)
         state["resource_hits"] = await self._llm_rank_resources(
             state["active_query"],
             self.retrieve_config.resource.top_k,
-            state.get("category_hits", []),
-            state.get("item_hits", []),
+            all_category_hits,
+            all_item_hits,
             state["ctx"],
             store,
             llm_client=llm_client,
             items=items_pool,
             resources=resource_pool,
         )
-        state["resource_pool"] = resource_pool
         return state
 
     def _llm_build_context(self, state: WorkflowState, _: Any) -> WorkflowState:
-        response = {
+        response: dict[str, Any] = {
             "needs_retrieval": bool(state.get("needs_retrieval")),
             "original_query": state["original_query"],
             "rewritten_query": state.get("rewritten_query", state["original_query"]),
             "next_step_query": state.get("next_step_query"),
+            "lanes": {},
             "categories": [],
             "items": [],
             "resources": [],
         }
         if state.get("needs_retrieval"):
-            response["categories"] = list(state.get("category_hits") or [])
-            response["items"] = list(state.get("item_hits") or [])
+            lane_hits: dict[str, dict[str, list[dict[str, Any]]]] = state.get("lane_hits", {})
+            response["lanes"] = lane_hits
             response["resources"] = list(state.get("resource_hits") or [])
+            memory_out = lane_hits.get("memory", {})
+            response["categories"] = list(memory_out.get("categories", []))
+            response["items"] = list(memory_out.get("items", []))
         state["response"] = response
         return state
-
-    async def _rank_categories_by_summary(
-        self,
-        query_vec: list[float],
-        top_k: int,
-        ctx: Context,
-        store: Database,
-        embed_client: Any | None = None,
-        categories: Mapping[str, Any] | None = None,
-    ) -> tuple[list[tuple[str, float]], dict[str, str]]:
-        category_pool = categories if categories is not None else store.resource_repo.list_resources(lane="memory")
-        entries = [(cid, cat.summary) for cid, cat in category_pool.items() if cat.summary]
-        if not entries:
-            return [], {}
-        summary_texts = [summary for _, summary in entries]
-        client = embed_client or self._get_embedding_client()
-        summary_embeddings = await client.embed(summary_texts)
-        corpus = [(cid, emb) for (cid, _), emb in zip(entries, summary_embeddings, strict=True)]
-        hits = cosine_topk(query_vec, corpus, k=top_k)
-        summary_lookup = dict(entries)
-        return hits, summary_lookup
 
     async def _decide_if_retrieval_needed(
         self,
@@ -856,35 +607,6 @@ class RetrieveMixin:
             out.append(data)
         return out
 
-    def _format_category_content(
-        self,
-        hits: list[tuple[str, float]],
-        summaries: dict[str, str],
-        store: Database,
-        categories: Mapping[str, Any] | None = None,
-    ) -> str:
-        category_pool = categories if categories is not None else store.resource_repo.list_resources(lane="memory")
-        lines = []
-        for cid, score in hits:
-            cat = category_pool.get(cid)
-            if not cat:
-                continue
-            summary = summaries.get(cid) or cat.summary or ""
-            lines.append(f"Category: {cat.title}\nSummary: {summary}\nScore: {score:.3f}")
-        return "\n\n".join(lines).strip()
-
-    def _format_item_content(
-        self, hits: list[tuple[str, float]], store: Database, items: Mapping[str, Any] | None = None
-    ) -> str:
-        item_pool = items if items is not None else store.entry_repo.list_entries(lane="memory")
-        lines = []
-        for iid, score in hits:
-            item = item_pool.get(iid)
-            if not item:
-                continue
-            lines.append(f"Memory Item ({item.entry_kind}): {item.text}\nScore: {score:.3f}")
-        return "\n\n".join(lines).strip()
-
     def _format_categories_for_llm(
         self,
         store: Database,
@@ -943,7 +665,7 @@ class RetrieveMixin:
         lines = []
         for item in items_to_format:
             lines.append(f"ID: {item.id}")
-            lines.append(f"Type: {item.entry_kind}")
+            lines.append(f"Type: {item.entry_type}")
             lines.append(f"Summary: {item.text}")
             lines.append("---")
 
@@ -1009,44 +731,44 @@ class RetrieveMixin:
         llm_response = await client.chat(prompt)
         return self._parse_llm_category_response(llm_response, store, categories=category_pool)
 
-    async def _llm_rank_items(
+    async def _llm_rank_entries(
         self,
         query: str,
         top_k: int,
-        category_ids: list[str],
-        category_hits: list[dict[str, Any]],
+        doc_hits: list[dict[str, Any]],
         ctx: Context,
         store: Database,
         llm_client: Any | None = None,
-        categories: Mapping[str, Any] | None = None,
-        items: Mapping[str, Any] | None = None,
-        relations: Sequence[Any] | None = None,
+        entries: Mapping[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
-        """Use LLM to rank memory items from relevant categories"""
-        if not category_ids:
-            logger.debug("[LLM Rank Items] No category_ids provided")
+        """Use LLM to rank a single lane's entries directly (no per-doc filtering).
+
+        Coarse lane docs (``doc_hits``) are passed only as relevance context; all
+        entries of the lane are candidates so retrieval stays single-pass.
+        """
+        entry_pool = entries if entries is not None else store.entry_repo.list_entries()
+        if not entry_pool:
             return []
 
-        item_pool = items if items is not None else store.entry_repo.list_entries(lane="memory")
-        items_data = self._format_items_for_llm(store, category_ids, items=item_pool, relations=relations)
+        items_data = self._format_items_for_llm(store, items=entry_pool)
         if items_data == "No memory items available.":
             return []
 
-        # Format relevant categories for context
-        relevant_categories_info = "\n".join([
-            f"- {cat['name']}: {cat.get('summary', cat.get('description', ''))}" for cat in category_hits
+        relevant_docs_info = "\n".join([
+            f"- {doc.get('title') or doc.get('name', '')}: {doc.get('summary') or doc.get('description', '')}"
+            for doc in doc_hits
         ])
 
         prompt = LLM_ITEM_RANKER_PROMPT.format(
             query=self._escape_prompt_value(query),
             top_k=top_k,
-            relevant_categories=self._escape_prompt_value(relevant_categories_info),
+            relevant_categories=self._escape_prompt_value(relevant_docs_info),
             items_data=self._escape_prompt_value(items_data),
         )
 
         client = llm_client or self._get_llm_client()
         llm_response = await client.chat(prompt)
-        return self._parse_llm_item_response(llm_response, store, items=item_pool)
+        return self._parse_llm_item_response(llm_response, store, items=entry_pool)
 
     async def _llm_rank_resources(
         self,
@@ -1076,7 +798,7 @@ class RetrieveMixin:
         context_parts = []
         if category_hits:
             context_parts.append("Relevant Categories:")
-            context_parts.extend([f"- {cat['name']}" for cat in category_hits])
+            context_parts.extend([f"- {cat.get('title') or cat.get('name', '')}" for cat in category_hits])
         if item_hits:
             context_parts.append("\nRelevant Memory Items:")
             context_parts.extend([f"- {item.get('summary', '')[:100]}..." for item in item_hits[:3]])
@@ -1164,18 +886,3 @@ class RetrieveMixin:
             logger.warning(f"Failed to parse LLM resource ranking response: {e}")
 
         return results
-
-    def _format_llm_category_content(self, hits: list[dict[str, Any]]) -> str:
-        """Format LLM-ranked category content for judger"""
-        lines = []
-        for cat in hits:
-            summary = cat.get("summary", "") or cat.get("description", "")
-            lines.append(f"Category: {cat['name']}\nSummary: {summary}")
-        return "\n\n".join(lines).strip()
-
-    def _format_llm_item_content(self, hits: list[dict[str, Any]]) -> str:
-        """Format LLM-ranked item content for judger"""
-        lines = []
-        for item in hits:
-            lines.append(f"Memory Item ({item['memory_type']}): {item['summary']}")
-        return "\n\n".join(lines).strip()

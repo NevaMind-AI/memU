@@ -107,7 +107,7 @@ def _seed_resource_with_item(service: MemoryService, *, url: str, category_id: s
     item = store.entry_repo.create_entry(
         lane="memory",
         source_id=res.id,
-        entry_kind="profile",
+        entry_type="profile",
         text=f"summary for {url}",
         embedding=[0.0],
         user_data=dict(user),
@@ -174,14 +174,14 @@ async def test_memorize_workspace_sync_add_modify_delete(tmp_path: Path, monkeyp
         store.entry_repo.create_entry(
             lane="memory",
             source_id=res.id,
-            entry_kind="profile",
+            entry_type="profile",
             text=f"summary {resource_url}",
             embedding=[0.0],
             user_data=dict(user_scope or {}),
         )
         return {"resources": [res], "response": {"items": [{"text": "x"}]}}
 
-    monkeypatch.setattr(service, "_ensure_categories_ready", _noop_categories)
+    monkeypatch.setattr(service, "_ensure_lanes_ready", _noop_categories)
     monkeypatch.setattr(service, "_patch_category_summaries", _noop_patch)
     monkeypatch.setattr(service, "_memorize_one", _fake_memorize_one)
 
@@ -248,7 +248,7 @@ async def test_memorize_workspace_exports_when_enabled(tmp_path: Path, monkeypat
         exported.append(where)
         return real_export(database, where=where, **kwargs)
 
-    monkeypatch.setattr(service, "_ensure_categories_ready", _noop_categories)
+    monkeypatch.setattr(service, "_ensure_lanes_ready", _noop_categories)
     monkeypatch.setattr(service, "_memorize_one", _fake_memorize_one)
     monkeypatch.setattr(service._memory_file_exporter, "export", _spy_export)
 
@@ -287,7 +287,7 @@ async def test_memorize_workspace_export_failure_does_not_fail_sync(tmp_path: Pa
     def _boom(database, *, where=None, **kwargs):
         raise RuntimeError("export blew up")  # noqa: TRY003
 
-    monkeypatch.setattr(service, "_ensure_categories_ready", _noop_categories)
+    monkeypatch.setattr(service, "_ensure_lanes_ready", _noop_categories)
     monkeypatch.setattr(service, "_memorize_one", _fake_memorize_one)
     monkeypatch.setattr(service._memory_file_exporter, "export", _boom)
 

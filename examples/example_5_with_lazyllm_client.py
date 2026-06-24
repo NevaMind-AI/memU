@@ -4,12 +4,10 @@ Unified Example: LazyLLM Integration Demo
 
 This example merges functionalities from:
 1. Example 1: Conversation Memory Processing
-2. Example 2: Skill Extraction
-3. Example 3: Multimodal Processing
+2. Example 3: Multimodal Processing
 
 It demonstrates how to use the LazyLLM backend for:
 - Processing conversation history
-- Extracting technical skills from logs
 - Handling multimodal content (images + text)
 - defaut source and model are from qwen
 
@@ -72,72 +70,13 @@ async def run_conversation_memory_demo(service):
 
 
 # ==========================================
-# PART 2: Skill Extraction
-# ==========================================
-
-
-async def run_skill_extraction_demo(service):
-    print("\n" + "=" * 60)
-    print("PART 2: Skill Extraction from Logs")
-    print("=" * 60)
-
-    # Configure prompt for skill extraction
-    skill_prompt = """
-    You are analyzing an agent execution log. Extract the key actions taken, their outcomes, and lessons learned.
-
-    Output MUST be valid XML wrapped in <skills> tags.
-    Format:
-    <skills>
-        <memory>
-            <content>
-                [Action] Description...
-                [Lesson] Key lesson...
-            </content>
-            <categories>
-                <category>Category Name</category>
-            </categories>
-        </memory>
-    </skills>
-
-    Text: {resource}
-    """
-
-    # Update service config for skill extraction
-    service.memorize_config.memory_types = ["skill"]
-    service.memorize_config.memory_type_prompts = {"skill": skill_prompt}
-
-    logs = ["examples/resources/logs/log1.txt", "examples/resources/logs/log2.txt", "examples/resources/logs/log3.txt"]
-
-    all_skills = []
-    for log_file in logs:
-        if not os.path.exists(log_file):
-            continue
-
-        print(f"  Processing log: {log_file}")
-        try:
-            result = await service.memorize(resource_url=log_file, modality="document")
-            for item in result.get("items", []):
-                if item.get("memory_type") == "skill":
-                    all_skills.append(item.get("summary", ""))
-            print(f"    ✓ Extracted {len(result.get('items', []))} skills")
-        except Exception as e:
-            print(f"  ✗ Error: {e}")
-
-    # Generate summary guide
-    if all_skills:
-        output_file = "examples/output/lazyllm_example/skills/skill_guide.md"
-        await generate_skill_guide(all_skills, service, output_file)
-        print(f"✓ Skill guide generated: {output_file}")
-
-
-# ==========================================
-# PART 3: Multimodal Memory
+# PART 2: Multimodal Memory
 # ==========================================
 
 
 async def run_multimodal_demo(service):
     print("\n" + "=" * 60)
-    print("PART 3: Multimodal Memory Processing")
+    print("PART 2: Multimodal Memory Processing")
     print("=" * 60)
 
     # Configure for knowledge extraction
@@ -155,8 +94,8 @@ async def run_multimodal_demo(service):
     Content: {resource}
     """
 
-    service.memorize_config.memory_types = ["knowledge"]
-    service.memorize_config.memory_type_prompts = {"knowledge": xml_prompt}
+    service.memorize_config.entry_types = ["knowledge"]
+    service.memorize_config.entry_type_prompts = {"knowledge": xml_prompt}
 
     resources = [
         ("examples/resources/docs/doc1.txt", "document"),
@@ -200,18 +139,6 @@ async def generate_markdown_output(categories, output_dir):
             f.write(cleaned)
 
 
-async def generate_skill_guide(skills, service, output_file):
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    skills_text = "\n\n".join(skills)
-    prompt = f"Summarize these skills into a guide:\n\n{skills_text}"
-
-    # Use LazyLLM via service
-    summary = await service.llm_client.chat(text=prompt)
-
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(summary)
-
-
 # ==========================================
 # Main Entry
 # ==========================================
@@ -242,7 +169,6 @@ async def main():
 
     # 2. Run Demos
     await run_conversation_memory_demo(service)
-    # await run_skill_extraction_demo(service)
     # await run_multimodal_demo(service)
 
 

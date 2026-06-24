@@ -11,7 +11,7 @@ from memu.memory_fs.exporter import (
     MemoryFileExporter,
     slugify,
 )
-from memu.memory_fs.synthesizer import MemorySynthesizer, SynthesisResult
+from memu.memory_fs.synthesizer import MemorySynthesizer
 
 __all__ = [
     "ExistingArtifacts",
@@ -19,6 +19,5 @@ __all__ = [
     "FileDescription",
     "MemoryFileExporter",
     "MemorySynthesizer",
-    "SynthesisResult",
     "slugify",
 ]

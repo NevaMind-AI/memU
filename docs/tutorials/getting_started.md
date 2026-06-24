@@ -113,9 +113,9 @@ async def main() -> None:
         memory_content = "The user is a senior Python architect who loves clean code and type hints."
 
         # We use 'create_memory_item' to insert a single memory record.
-        # memory_type='profile' indicates this is an attribute of the user.
+        # entry_type='profile' indicates this is an attribute of the user.
         result = await service.create_memory_item(
-            memory_type="profile",
+            entry_type="profile",
             memory_content=memory_content,
             memory_categories=["User Facts"],
         )
@@ -135,7 +135,7 @@ async def main() -> None:
         if items:
             print(f"[OK] Found {len(items)} relevant memory item(s):")
             for idx, item in enumerate(items, 1):
-                print(f"   {idx}. {item.get('summary')} (Type: {item.get('memory_type')})")
+                print(f"   {idx}. {item.get('text')} (Type: {item.get('entry_type')})")
         else:
             print("[!] No relevant memories found.")
 
@@ -153,7 +153,7 @@ if __name__ == "__main__":
 ### Understanding the Code
 
 1.  **Initialization**: We configure `MemoryService` with specific `llm_profiles`. This tells MemU which model to use. We also define a `memorize_config` with a "User Facts" category. Categories help the LLM organize and retrieve information more effectively.
-2.  **Memory Injection**: `create_memory_item` is used to explicitly add a piece of knowledge. We tag it with `memory_type="profile"` to semantically indicate this is a user attribute.
+2.  **Memory Injection**: `create_memory_item` is used to explicitly add a piece of knowledge. We tag it with `entry_type="profile"` to semantically indicate this is a user attribute.
 3.  **Retrieval**: We use `retrieve` with a natural language query. MemU's internal workflow ("RAG" or "LLM" based) will determine the best way to find relevant memories.
 
 ## Troubleshooting

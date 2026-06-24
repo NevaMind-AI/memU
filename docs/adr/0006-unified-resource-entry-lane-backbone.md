@@ -1,6 +1,6 @@
 # ADR 0006: Unify INDEX / MEMORY / SKILL onto a Resource + Entry Lane Backbone
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-06-25
 
 ## Context
@@ -8,18 +8,17 @@
 memU historically modeled structured memory as four record types — `Resource`,
 `MemoryItem`, `MemoryCategory`, `CategoryItem` — with retrieval running a fixed
 `category -> item -> resource` waterfall. Separately, the read-only `memory_fs`
-exporter projected three markdown trees (`INDEX.md`, `MEMORY.md`, `SKILL.md`)
-that were decoupled from retrieval, and skills were handled by an ad-hoc dual
-track (`memory_type="skill"` items *or* LLM synthesis).
+exporter projected markdown trees that were decoupled from retrieval.
 
-This produced three asymmetric concepts:
+This produced asymmetric concepts:
 
 - INDEX: `Resource.caption` + verbatim `resource/` copies
 - MEMORY: `MemoryCategory.summary` + `memory/<slug>.md`
-- SKILL: synthesized or bypassed, not part of retrieval
 
 We want INDEX, MEMORY, and SKILL to share **one backbone** with **consistent
 storage and retrieval**, all derived from the same per-resource canonical text.
+Each lane is the same processing track; lanes differ only in their entry-type
+set, extraction prompts, and how entries are grouped into coarse lane docs.
 
 ## Decision
 
@@ -27,10 +26,23 @@ Collapse the model to **two first-class, lane-tagged entities plus one edge**.
 
 ### Lane
 
-A `lane` discriminator with three values: `index`, `memory`, `skill`. (Raw
-inputs use `lane="source"`.) The three lanes are parallel, structurally
-identical processing tracks over a shared trunk; they differ only in *what the
-extractor pulls out* and *the entry→resource grouping cardinality*.
+A `lane` discriminator: `index`, `memory`, and `skill`. (Raw inputs use
+`lane="source"`.) The lanes are parallel, structurally identical processing
+tracks over a shared trunk; they differ only in *what the extractor pulls out*
+(per-lane `entry_type` set and prompts) and *the entry→resource grouping
+cardinality*:
+
+- `index` — `entry_type` ∈ {`description`}, **`per_resource`** grouping: one
+  coarse description doc per source resource (1:1, no LLM grouping).
+- `memory` — `entry_type` ∈ {`profile`, `event`, `knowledge`}, **`adaptive`**
+  grouping: the extractor proposes group names and a summarized category doc is
+  synthesized per group.
+- `skill` — `entry_type` ∈ {`tool`, `log`}, **`adaptive`** grouping: entries are
+  grouped into summarized skill docs (analogous to memory categories).
+
+Per-lane behavior is configured via `MemorizeConfig.lanes` (a `dict[str,
+LaneConfig]`); all three lanes are enabled by default. Each adaptive lane has its
+own summary prompt / target length / LLM profile.
 
 ### Entities
 
@@ -38,8 +50,8 @@ extractor pulls out* and *the entry→resource grouping cardinality*.
    - Raw source artifacts (`lane="source"`, `modality` = video/image/audio/
      conversation/document); multimodal preprocessing fills `content` (the
      canonical, modality-agnostic text — the shared trunk).
-   - Generated coarse docs (`lane` ∈ {index, memory, skill}, `modality="markdown"`),
-     each rendered as a file under the `resource/` root:
+   - Generated coarse docs (`lane` ∈ {index, memory, skill},
+     `modality="markdown"`), each rendered as a file under the `resource/` root:
      - `resource/index/<slug>.md` — a description page linking to a raw resource
      - `resource/memory/<slug>.md` — a category page
      - `resource/skill/<slug>.md` — a skill page
@@ -49,16 +61,15 @@ extractor pulls out* and *the entry→resource grouping cardinality*.
      `lane="memory"` markdown resource).
 
 2. **`Entry`** (lane-tagged, one physical table — the searchable atom):
-   - index → a resource description; memory → a memory item; skill → a reusable
-     operation step.
-   - Carries `text`, `embedding`, `entry_kind` (memory sub-type / step kind),
-     `extra`, and `source_path` — a back-link to the originating raw resource,
-     relative to the `resource/` root. (This **generalizes the former
-     `MemoryItem`**.)
+   - index → a resource description; memory → a memory item; skill → a tool/log.
+   - Carries `text`, `embedding`, `entry_type` (the per-lane sub-type, which
+     selects the extraction prompt), `extra`, and `source_path` — a back-link to
+     the originating raw resource, relative to the `resource/` root. (This
+     **generalizes the former `MemoryItem`**.)
 
 3. **`ResourceEntry`** (edge): membership of an `Entry` in its coarse lane
-   `Resource` (memory item ∈ category page, skill step ∈ skill page, description
-   ∈ index page). Many-to-many. (This **generalizes the former `CategoryItem`**.)
+   `Resource` (memory item ∈ category page, description ∈ index page, tool/log ∈
+   skill page). Many-to-many. (This **generalizes the former `CategoryItem`**.)
 
 ### Links / provenance
 
@@ -72,12 +83,16 @@ extractor pulls out* and *the entry→resource grouping cardinality*.
 ### Pipelines
 
 - **memorize**: `ingest -> preprocess_multimodal (-> Resource.content) ->
-  extract_lanes (index/memory/skill extractors) -> embed_entries ->
-  persist lane resources -> build_response`.
-- **retrieve**: for each enabled lane, `Resource` recall (stored embedding,
-  `where lane=`) → `Entry` recall (stored embedding, `where lane=`), returning a
-  per-lane shape `{index: {...}, memory: {...}, skill: {...}, resources: [...]}`.
-  All lanes traverse the same code path; only the `lane` filter differs.
+  extract_lanes (per enabled lane: index/memory/skill extractors) ->
+  embed_entries -> persist lane resources (per_resource 1:1 doc or adaptive
+  grouped+summarized docs) -> build_response`.
+- **retrieve**: a single `route_intention` pass, then for each enabled lane,
+  `Resource` recall (stored embedding, `where lane=`) → `Entry` recall (stored
+  embedding, `where lane=`), plus a `source`-lane resource recall, returning a
+  per-lane shape `{lanes: {index, memory, skill}, resources: [...]}` (with
+  backward-compatible top-level `categories`/`items` mirroring the memory lane).
+  All lanes traverse the same code path; only the `lane` filter differs. Both
+  `rag` and `llm` ranking methods are supported.
 
 ### Naming
 
@@ -90,10 +105,8 @@ a document.
 
 Positive:
 
-- One storage schema and one retrieval path for all three lanes (true
+- One storage schema and one retrieval path for all lanes (true
   storage/retrieval consistency).
-- Skills become first-class and searchable; the dual-track synthesis/bypass goes
-  away.
 - Every entry and coarse resource is traceable back to its raw source.
 - "Everything is a resource" keeps the mental model and the on-disk tree aligned.
 

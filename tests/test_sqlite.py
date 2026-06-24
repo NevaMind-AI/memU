@@ -13,7 +13,7 @@ def _print_results(title: str, result: dict) -> None:
         print(f"    - {cat.get('title')}: {(cat.get('summary') or cat.get('description', ''))[:80]}...")
     print("  Items:")
     for item in result.get("items", [])[:3]:
-        print(f"    - [{item.get('entry_kind')}] {item.get('text', '')[:100]}...")
+        print(f"    - [{item.get('entry_type')}] {item.get('text', '')[:100]}...")
     if result.get("resources"):
         print("  Resources:")
         for res in result.get("resources", [])[:3]:

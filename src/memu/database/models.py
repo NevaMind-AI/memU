@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import uuid
 from datetime import datetime
 from os.path import basename
@@ -10,30 +9,33 @@ from typing import Any, Literal
 import pendulum
 from pydantic import BaseModel, ConfigDict, Field
 
-# Sub-type of a memory-lane entry (kept for prompt routing / backward semantics).
-MemoryType = Literal["profile", "event", "knowledge", "behavior", "skill", "tool"]
+# Sub-type of a lane entry; selects the extraction prompt during memorize. The
+# concrete set is per-lane (see ``LANE_ENTRY_TYPES``): memory uses
+# profile/event/knowledge, skill uses tool/log, index uses description. This
+# alias keeps the memory-lane default for typing/back-compat purposes.
+EntryType = Literal["profile", "event", "knowledge"]
 
 # A lane is one of the parallel, structurally identical processing tracks that
 # share the same Resource -> canonical-text trunk:
 #   - "source": raw input artifacts (conversation/document/image/video/audio)
-#   - "index":  per-resource catalog/description docs
-#   - "memory": grouped memory docs (the former "category")
-#   - "skill":  grouped reusable-skill docs
-# index/memory/skill are the three retrievable lanes; "source" holds raw inputs.
+#   - "index":  per-resource catalog/description docs (1:1, per_resource grouping)
+#   - "memory": grouped memory docs (the former "category", adaptive grouping)
+#   - "skill":  grouped skill docs (tool/log entries, adaptive grouping)
+# index/memory/skill are the retrievable lanes; "source" holds raw inputs.
 Lane = Literal["source", "index", "memory", "skill"]
 SOURCE_LANE: Lane = "source"
 RETRIEVAL_LANES: tuple[Lane, ...] = ("index", "memory", "skill")
 MARKDOWN_MODALITY = "markdown"
 
 
-def compute_content_hash(text: str, entry_kind: str) -> str:
+def compute_content_hash(text: str, entry_type: str) -> str:
     """Generate a stable hash for entry deduplication.
 
     Operates on post-extraction content. Normalizes whitespace to absorb minor
     formatting differences ("I love coffee" vs "I  love  coffee").
     """
     normalized = " ".join(text.lower().split())
-    content = f"{entry_kind}:{normalized}"
+    content = f"{entry_type}:{normalized}"
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
@@ -43,31 +45,6 @@ class BaseRecord(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=lambda: pendulum.now("UTC"))
     updated_at: datetime = Field(default_factory=lambda: pendulum.now("UTC"))
-
-
-class ToolCallResult(BaseModel):
-    """Represents the result of a tool invocation for Tool Memory."""
-
-    tool_name: str = Field(..., description="Name of the tool that was called")
-    input: dict[str, Any] | str = Field(default="", description="Tool input parameters")
-    output: str = Field(default="", description="Tool output result")
-    success: bool = Field(default=True, description="Whether the tool invocation succeeded")
-    time_cost: float = Field(default=0.0, description="Time consumed by the tool invocation in seconds")
-    token_cost: int = Field(default=-1, description="Token consumption of the tool (-1 if unknown)")
-    score: float = Field(default=0.0, description="Quality score from 0.0 to 1.0")
-    call_hash: str = Field(default="", description="Hash of input+output for deduplication")
-    created_at: datetime = Field(default_factory=lambda: pendulum.now("UTC"))
-
-    def generate_hash(self) -> str:
-        """Generate MD5 hash from tool input and output for deduplication."""
-        input_str = json.dumps(self.input, sort_keys=True) if isinstance(self.input, dict) else str(self.input)
-        combined = f"{self.tool_name}|{input_str}|{self.output}"
-        return hashlib.md5(combined.encode("utf-8"), usedforsecurity=False).hexdigest()
-
-    def ensure_hash(self) -> None:
-        """Ensure call_hash is set, generate if empty."""
-        if not self.call_hash:
-            self.call_hash = self.generate_hash()
 
 
 class Resource(BaseRecord):
@@ -111,14 +88,14 @@ class Resource(BaseRecord):
 
 
 class Entry(BaseRecord):
-    """The searchable atom of a lane (index description / memory item / skill step)."""
+    """The searchable atom of a lane (index description / memory item)."""
 
     lane: str
     # Originating raw source resource (provenance), and its relative path.
     source_id: str | None = None
     source_path: str | None = None
-    # Sub-type within a lane (memory: profile/event/...; skill: step kind; etc.).
-    entry_kind: str
+    # Sub-type within a lane (memory: profile/event/knowledge).
+    entry_type: str
     text: str
     embedding: list[float] | None = None
     happened_at: datetime | None = None
@@ -126,7 +103,6 @@ class Entry(BaseRecord):
     # extra may contain:
     # - content_hash / reinforcement_count / last_reinforced_at (salience)
     # - ref_id (reference tracking)
-    # - when_to_use / metadata / tool_calls (tool memory)
 
 
 class ResourceEntry(BaseRecord):
@@ -168,11 +144,10 @@ __all__ = [
     "SOURCE_LANE",
     "BaseRecord",
     "Entry",
+    "EntryType",
     "Lane",
-    "MemoryType",
     "Resource",
     "ResourceEntry",
-    "ToolCallResult",
     "build_scoped_models",
     "compute_content_hash",
     "merge_scope_model",

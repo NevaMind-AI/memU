@@ -14,37 +14,31 @@ class EntryRepo(Protocol):
 
     def get_entry(self, entry_id: str) -> Entry | None: ...
 
-    def list_entries(
-        self, where: Mapping[str, Any] | None = None, *, lane: str | None = None
-    ) -> dict[str, Entry]: ...
+    def list_entries(self, where: Mapping[str, Any] | None = None, *, lane: str | None = None) -> dict[str, Entry]: ...
 
-    def clear_entries(
-        self, where: Mapping[str, Any] | None = None, *, lane: str | None = None
-    ) -> dict[str, Entry]: ...
+    def clear_entries(self, where: Mapping[str, Any] | None = None, *, lane: str | None = None) -> dict[str, Entry]: ...
 
     def create_entry(
         self,
         *,
         lane: str,
         source_id: str | None,
-        entry_kind: str,
+        entry_type: str,
         text: str,
         embedding: list[float],
         user_data: dict[str, Any],
         source_path: str | None = None,
         reinforce: bool = False,
-        tool_record: dict[str, Any] | None = None,
     ) -> Entry: ...
 
     def update_entry(
         self,
         *,
         entry_id: str,
-        entry_kind: str | None = None,
+        entry_type: str | None = None,
         text: str | None = None,
         embedding: list[float] | None = None,
         extra: dict[str, Any] | None = None,
-        tool_record: dict[str, Any] | None = None,
     ) -> Entry: ...
 
     def delete_entry(self, entry_id: str) -> None: ...

@@ -9,11 +9,6 @@ from memu.app import MemoryService
 from memu.memory_fs import MemoryFileExporter
 from memu.memory_fs.exporter import MANIFEST_NAME, slugify
 
-# With synthesize=False (the default) the whole tree is LLM-free: MEMORY.md is
-# rendered from category summaries and the skill/ tree from the deterministic
-# bypass over extracted skill-type memory items. This body seeds one such item.
-_SKILL_BODY = "---\nname: pour-over\n---\n# Pour-over brewing\nUse a 1:16 ratio."
-
 
 def _build_service(output_dir: Path) -> MemoryService:
     return MemoryService(
@@ -43,16 +38,7 @@ def _seed(service: MemoryService, *, user: dict[str, str]) -> dict[str, str]:
         slug=slugify("Preferences"),
     )
     store.resource_repo.update_resource(resource_id=category.id, summary="The user likes pour-over coffee.")
-    skill = store.entry_repo.create_entry(
-        lane="memory",
-        source_id=resource.id,
-        entry_kind="skill",
-        text=_SKILL_BODY,
-        embedding=[0.1, 0.2],
-        user_data=dict(user),
-    )
-    store.resource_entry_repo.link_entry_resource(skill.id, category.id, user_data=dict(user))
-    return {"category_id": category.id, "resource_id": resource.id, "skill_id": skill.id}
+    return {"category_id": category.id, "resource_id": resource.id}
 
 
 async def test_export_writes_readme_layout(tmp_path: Path) -> None:
@@ -64,9 +50,7 @@ async def test_export_writes_readme_layout(tmp_path: Path) -> None:
     assert result["changed"] is True
     assert "INDEX.md" in result["written"]
     assert "MEMORY.md" in result["written"]
-    assert "SKILL.md" in result["written"]
     assert "memory/preferences.md" in result["written"]
-    assert "skill/pour-over/SKILL.md" in result["written"]
 
     # MEMORY.md is now an overview that links to each memory/<slug>.md file; the
     # category summary itself lives in memory/preferences.md.
@@ -81,13 +65,6 @@ async def test_export_writes_readme_layout(tmp_path: Path) -> None:
     index_text = (tmp_path / "INDEX.md").read_text(encoding="utf-8")
     assert "coffee.txt" in index_text
     assert "coffee preferences" in index_text
-
-    # The root SKILL.md indexes the synthesized skill/ tree.
-    skill_index = (tmp_path / "SKILL.md").read_text(encoding="utf-8")
-    assert "skill/pour-over/SKILL.md" in skill_index
-
-    skill_text = (tmp_path / "skill" / "pour-over" / "SKILL.md").read_text(encoding="utf-8")
-    assert "Pour-over brewing" in skill_text
 
 
 async def test_export_is_idempotent_until_data_changes(tmp_path: Path) -> None:
@@ -115,19 +92,19 @@ async def test_export_is_idempotent_until_data_changes(tmp_path: Path) -> None:
     assert "INDEX.md" in third["unchanged"]
 
 
-async def test_export_removes_stale_skill_and_prunes_dirs(tmp_path: Path) -> None:
+async def test_export_removes_stale_category_and_prunes(tmp_path: Path) -> None:
     service = _build_service(tmp_path)
     _seed(service, user={"user_id": "u1"})
 
     await service.export_memory_files(user={"user_id": "u1"})
-    assert (tmp_path / "skill" / "pour-over" / "SKILL.md").exists()
+    assert (tmp_path / "memory" / "preferences.md").exists()
 
-    # Dropping the skill-type item removes it from the bypass, so its doc goes stale.
-    service.database.entry_repo.clear_entries(where={"user_id": "u1"})
+    # Dropping the memory-lane category removes its rendered doc on the next export.
+    service.database.resource_repo.clear_resources(where={"user_id": "u1"}, lane="memory")
     result = await service.export_memory_files(user={"user_id": "u1"})
 
-    assert "skill/pour-over/SKILL.md" in result["removed"]
-    assert not (tmp_path / "skill" / "pour-over").exists()
+    assert "memory/preferences.md" in result["removed"]
+    assert not (tmp_path / "memory" / "preferences.md").exists()
 
 
 async def test_export_respects_user_scope(tmp_path: Path) -> None:
@@ -156,13 +133,6 @@ async def test_export_disabled_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(RuntimeError, match="disabled"):
         await service.export_memory_files(user={"user_id": "u1"})
-
-
-def test_skill_name_from_frontmatter_and_fallbacks(tmp_path: Path) -> None:
-    exporter = MemoryFileExporter(str(tmp_path))
-    assert exporter._skill_name("---\nname: My Skill\n---\nbody", fallback="x") == "my-skill"
-    assert exporter._skill_name("# Heading Title\nbody", fallback="x") == "heading-title"
-    assert exporter._skill_name("plain text only", fallback="skill-abc123") == "skill-abc123"
 
 
 def test_exporter_manifest_roundtrip(tmp_path: Path) -> None:

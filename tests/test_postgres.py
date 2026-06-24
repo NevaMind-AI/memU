@@ -52,7 +52,7 @@ async def main():
         print(f"    - {cat.get('name')}: {(cat.get('summary') or cat.get('description', ''))[:80]}...")
     print("  Items:")
     for item in result_rag.get("items", [])[:3]:
-        print(f"    - [{item.get('memory_type')}] {item.get('summary', '')[:100]}...")
+        print(f"    - [{item.get('entry_type')}] {item.get('text', '')[:100]}...")
     if result_rag.get("resources"):
         print("  Resources:")
         for res in result_rag.get("resources", [])[:3]:
@@ -67,7 +67,7 @@ async def main():
         print(f"    - {cat.get('name')}: {(cat.get('summary') or cat.get('description', ''))[:80]}...")
     print("  Items:")
     for item in result_llm.get("items", [])[:3]:
-        print(f"    - [{item.get('memory_type')}] {item.get('summary', '')[:100]}...")
+        print(f"    - [{item.get('entry_type')}] {item.get('text', '')[:100]}...")
     if result_llm.get("resources"):
         print("  Resources:")
         for res in result_llm.get("resources", [])[:3]:

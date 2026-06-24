@@ -45,7 +45,7 @@ class SQLiteResourceModel(SQLiteBaseModelMixin, Resource):
     """SQLite resource model.
 
     A single physical table holds both raw inputs (``lane="source"``) and the
-    generated lane docs (``lane`` in {index, memory, skill}).
+    generated lane docs (``lane`` in {index, memory}).
     """
 
     lane: str = Field(default="source", sa_column=Column(String, nullable=False, index=True))
@@ -69,7 +69,7 @@ class SQLiteEntryModel(SQLiteBaseModelMixin, Entry):
     lane: str = Field(sa_column=Column(String, nullable=False, index=True))
     source_id: str | None = Field(default=None, sa_column=Column(String, nullable=True))
     source_path: str | None = Field(default=None, sa_column=Column(String, nullable=True))
-    entry_kind: str = Field(sa_column=Column(String, nullable=False))
+    entry_type: str = Field(sa_column=Column(String, nullable=False))
     text: str = Field(sa_column=Column(Text, nullable=False))
     # Override inherited embedding field: SQLite has no native vector type, so store the
     # vector in a JSON column (a bare ``list`` annotation is not mappable by SQLModel).

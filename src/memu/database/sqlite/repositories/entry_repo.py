@@ -58,7 +58,7 @@ class SQLiteEntryRepo(SQLiteRepoBase, EntryRepo):
             lane=row.lane,
             source_id=row.source_id,
             source_path=row.source_path,
-            entry_kind=row.entry_kind,
+            entry_type=row.entry_type,
             text=row.text,
             embedding=self._normalize_embedding(row.embedding),
             happened_at=row.happened_at,
@@ -84,9 +84,7 @@ class SQLiteEntryRepo(SQLiteRepoBase, EntryRepo):
         self.entries[row.id] = entry
         return entry
 
-    def list_entries(
-        self, where: Mapping[str, Any] | None = None, *, lane: str | None = None
-    ) -> dict[str, Entry]:
+    def list_entries(self, where: Mapping[str, Any] | None = None, *, lane: str | None = None) -> dict[str, Entry]:
         """List entries matching the where clause and optional lane filter."""
         filters = self._build_filters(self._entry_model, where)
         filters.extend(self._lane_filters(self._entry_model, lane))
@@ -104,9 +102,7 @@ class SQLiteEntryRepo(SQLiteRepoBase, EntryRepo):
 
         return result
 
-    def list_entries_by_ref_ids(
-        self, ref_ids: list[str], where: Mapping[str, Any] | None = None
-    ) -> dict[str, Entry]:
+    def list_entries_by_ref_ids(self, ref_ids: list[str], where: Mapping[str, Any] | None = None) -> dict[str, Entry]:
         """List entries whose ``extra.ref_id`` is in ``ref_ids``."""
         if not ref_ids:
             return {}
@@ -129,9 +125,7 @@ class SQLiteEntryRepo(SQLiteRepoBase, EntryRepo):
 
         return result
 
-    def clear_entries(
-        self, where: Mapping[str, Any] | None = None, *, lane: str | None = None
-    ) -> dict[str, Entry]:
+    def clear_entries(self, where: Mapping[str, Any] | None = None, *, lane: str | None = None) -> dict[str, Entry]:
         """Clear entries matching the where clause and optional lane filter."""
         filters = self._build_filters(self._entry_model, where)
         filters.extend(self._lane_filters(self._entry_model, lane))
@@ -162,41 +156,34 @@ class SQLiteEntryRepo(SQLiteRepoBase, EntryRepo):
         *,
         lane: str,
         source_id: str | None,
-        entry_kind: str,
+        entry_type: str,
         text: str,
         embedding: list[float],
         user_data: dict[str, Any],
         source_path: str | None = None,
         reinforce: bool = False,
-        tool_record: dict[str, Any] | None = None,
     ) -> Entry:
         """Create a new entry (optionally reinforcing a duplicate)."""
-        if reinforce and entry_kind != "tool":
+        if reinforce:
             return self.create_entry_reinforce(
                 lane=lane,
                 source_id=source_id,
-                entry_kind=entry_kind,
+                entry_type=entry_type,
                 text=text,
                 embedding=embedding,
                 user_data=user_data,
                 source_path=source_path,
             )
 
-        extra: dict[str, Any] = {}
-        if tool_record:
-            for key in ("when_to_use", "metadata", "tool_calls"):
-                if tool_record.get(key) is not None:
-                    extra[key] = tool_record[key]
-
         now = self._now()
         row = self._entry_model(
             lane=lane,
             source_id=source_id,
             source_path=source_path,
-            entry_kind=entry_kind,
+            entry_type=entry_type,
             text=text,
             embedding=self._prepare_embedding(embedding),
-            extra=extra if extra else {},
+            extra={},
             created_at=now,
             updated_at=now,
             **user_data,
@@ -215,7 +202,7 @@ class SQLiteEntryRepo(SQLiteRepoBase, EntryRepo):
         *,
         lane: str,
         source_id: str | None,
-        entry_kind: str,
+        entry_type: str,
         text: str,
         embedding: list[float],
         user_data: dict[str, Any],
@@ -226,7 +213,7 @@ class SQLiteEntryRepo(SQLiteRepoBase, EntryRepo):
         If an entry with the same content hash exists in the same scope, reinforce
         it instead of creating a duplicate.
         """
-        content_hash = compute_content_hash(text, entry_kind)
+        content_hash = compute_content_hash(text, entry_type)
 
         with self._sessions.session() as session:
             content_hash_col = func.json_extract(self._entry_model.extra, "$.content_hash")
@@ -264,7 +251,7 @@ class SQLiteEntryRepo(SQLiteRepoBase, EntryRepo):
                 lane=lane,
                 source_id=source_id,
                 source_path=source_path,
-                entry_kind=entry_kind,
+                entry_type=entry_type,
                 text=text,
                 embedding=self._prepare_embedding(embedding),
                 extra=entry_extra,
@@ -284,11 +271,10 @@ class SQLiteEntryRepo(SQLiteRepoBase, EntryRepo):
         self,
         *,
         entry_id: str,
-        entry_kind: str | None = None,
+        entry_type: str | None = None,
         text: str | None = None,
         embedding: list[float] | None = None,
         extra: dict[str, Any] | None = None,
-        tool_record: dict[str, Any] | None = None,
     ) -> Entry:
         """Update an existing entry.
 
@@ -303,22 +289,15 @@ class SQLiteEntryRepo(SQLiteRepoBase, EntryRepo):
                 msg = f"Entry with id {entry_id} not found"
                 raise KeyError(msg)
 
-            if entry_kind is not None:
-                row.entry_kind = entry_kind
+            if entry_type is not None:
+                row.entry_type = entry_type
             if text is not None:
                 row.text = text
             if embedding is not None:
                 row.embedding = self._prepare_embedding(embedding)
 
-            current_extra = row.extra or {}
             if extra is not None:
-                current_extra = {**current_extra, **extra}
-            if tool_record is not None:
-                for key in ("when_to_use", "metadata", "tool_calls"):
-                    if tool_record.get(key) is not None:
-                        current_extra[key] = tool_record[key]
-            if extra is not None or tool_record is not None:
-                row.extra = current_extra
+                row.extra = {**(row.extra or {}), **extra}
 
             row.updated_at = self._now()
 

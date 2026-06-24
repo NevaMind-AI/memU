@@ -23,7 +23,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
     """SQLite implementation of the resource repository.
 
     A single physical table holds both raw inputs (``lane="source"``) and the
-    generated lane docs (``lane`` in {index, memory, skill}).
+    generated lane docs (``lane`` in {index, memory}).
     """
 
     def __init__(

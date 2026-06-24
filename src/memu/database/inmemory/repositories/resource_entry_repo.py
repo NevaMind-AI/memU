@@ -25,9 +25,7 @@ class InMemoryResourceEntryRepository(ResourceEntryRepo):
         for rel in self.relations:
             if rel.entry_id == entry_id and rel.resource_id == resource_id:
                 return rel
-        rel = self.resource_entry_model(
-            id=str(uuid.uuid4()), entry_id=entry_id, resource_id=resource_id, **user_data
-        )
+        rel = self.resource_entry_model(id=str(uuid.uuid4()), entry_id=entry_id, resource_id=resource_id, **user_data)
         self.relations.append(rel)
         return rel
 

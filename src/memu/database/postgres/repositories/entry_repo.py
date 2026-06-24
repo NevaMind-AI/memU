@@ -41,9 +41,7 @@ class PostgresEntryRepo(PostgresRepoBase, EntryRepo):
                 return self._cache_entry(row)
         return None
 
-    def list_entries(
-        self, where: Mapping[str, Any] | None = None, *, lane: str | None = None
-    ) -> dict[str, Entry]:
+    def list_entries(self, where: Mapping[str, Any] | None = None, *, lane: str | None = None) -> dict[str, Entry]:
         from sqlmodel import select
 
         model = self._sqla_models.Entry
@@ -59,9 +57,7 @@ class PostgresEntryRepo(PostgresRepoBase, EntryRepo):
                 result[entry.id] = entry
         return result
 
-    def list_entries_by_ref_ids(
-        self, ref_ids: list[str], where: Mapping[str, Any] | None = None
-    ) -> dict[str, Entry]:
+    def list_entries_by_ref_ids(self, ref_ids: list[str], where: Mapping[str, Any] | None = None) -> dict[str, Entry]:
         if not ref_ids:
             return {}
 
@@ -82,9 +78,7 @@ class PostgresEntryRepo(PostgresRepoBase, EntryRepo):
                 result[entry.id] = entry
         return result
 
-    def clear_entries(
-        self, where: Mapping[str, Any] | None = None, *, lane: str | None = None
-    ) -> dict[str, Entry]:
+    def clear_entries(self, where: Mapping[str, Any] | None = None, *, lane: str | None = None) -> dict[str, Entry]:
         from sqlmodel import delete, select
 
         model = self._sqla_models.Entry
@@ -114,39 +108,32 @@ class PostgresEntryRepo(PostgresRepoBase, EntryRepo):
         *,
         lane: str,
         source_id: str | None,
-        entry_kind: str,
+        entry_type: str,
         text: str,
         embedding: list[float],
         user_data: dict[str, Any],
         source_path: str | None = None,
         reinforce: bool = False,
-        tool_record: dict[str, Any] | None = None,
     ) -> Entry:
-        if reinforce and entry_kind != "tool":
+        if reinforce:
             return self.create_entry_reinforce(
                 lane=lane,
                 source_id=source_id,
-                entry_kind=entry_kind,
+                entry_type=entry_type,
                 text=text,
                 embedding=embedding,
                 user_data=user_data,
                 source_path=source_path,
             )
 
-        extra: dict[str, Any] = {}
-        if tool_record:
-            for key in ("when_to_use", "metadata", "tool_calls"):
-                if tool_record.get(key) is not None:
-                    extra[key] = tool_record[key]
-
         entry = self._entry_model(
             lane=lane,
             source_id=source_id,
             source_path=source_path,
-            entry_kind=entry_kind,
+            entry_type=entry_type,
             text=text,
             embedding=self._prepare_embedding(embedding),
-            extra=extra if extra else {},
+            extra={},
             **user_data,
             created_at=self._now(),
             updated_at=self._now(),
@@ -165,7 +152,7 @@ class PostgresEntryRepo(PostgresRepoBase, EntryRepo):
         *,
         lane: str,
         source_id: str | None,
-        entry_kind: str,
+        entry_type: str,
         text: str,
         embedding: list[float],
         user_data: dict[str, Any],
@@ -174,7 +161,7 @@ class PostgresEntryRepo(PostgresRepoBase, EntryRepo):
         from sqlmodel import select
 
         model = self._sqla_models.Entry
-        content_hash = compute_content_hash(text, entry_kind)
+        content_hash = compute_content_hash(text, entry_type)
         entry_extra = user_data.pop("extra", {}) if "extra" in user_data else {}
 
         with self._sessions.session() as session:
@@ -209,7 +196,7 @@ class PostgresEntryRepo(PostgresRepoBase, EntryRepo):
                 lane=lane,
                 source_id=source_id,
                 source_path=source_path,
-                entry_kind=entry_kind,
+                entry_type=entry_type,
                 text=text,
                 embedding=self._prepare_embedding(embedding),
                 **user_data,
@@ -229,11 +216,10 @@ class PostgresEntryRepo(PostgresRepoBase, EntryRepo):
         self,
         *,
         entry_id: str,
-        entry_kind: str | None = None,
+        entry_type: str | None = None,
         text: str | None = None,
         embedding: list[float] | None = None,
         extra: dict[str, Any] | None = None,
-        tool_record: dict[str, Any] | None = None,
     ) -> Entry:
         from sqlmodel import select
 
@@ -245,22 +231,15 @@ class PostgresEntryRepo(PostgresRepoBase, EntryRepo):
                 msg = f"Entry with id {entry_id} not found"
                 raise KeyError(msg)
 
-            if entry_kind is not None:
-                entry.entry_kind = entry_kind
+            if entry_type is not None:
+                entry.entry_type = entry_type
             if text is not None:
                 entry.text = text
             if embedding is not None:
                 entry.embedding = self._prepare_embedding(embedding)
 
-            current_extra = entry.extra or {}
             if extra is not None:
-                current_extra = {**current_extra, **extra}
-            if tool_record is not None:
-                for key in ("when_to_use", "metadata", "tool_calls"):
-                    if tool_record.get(key) is not None:
-                        current_extra[key] = tool_record[key]
-            if extra is not None or tool_record is not None:
-                entry.extra = current_extra
+                entry.extra = {**(entry.extra or {}), **extra}
 
             entry.updated_at = now
             session.add(entry)
@@ -301,12 +280,7 @@ class PostgresEntryRepo(PostgresRepoBase, EntryRepo):
         filters.extend(self._build_filters(model, where))
         if lane is not None:
             filters.append(model.lane == lane)
-        stmt = (
-            select(model.id, (1 - distance).label("score"))
-            .where(*filters)
-            .order_by(distance)
-            .limit(top_k)
-        )
+        stmt = select(model.id, (1 - distance).label("score")).where(*filters).order_by(distance).limit(top_k)
         with self._sessions.session() as session:
             rows = session.execute(stmt).all()
         return [(rid, float(score)) for rid, score in rows]

@@ -6,7 +6,7 @@ live server so it is exercised separately). They guard the Phase 0 fixes:
 
 - ``clear_*`` with a ``where`` scope mutates the shared state in place (no rebinding
   that orphans the ``DatabaseState`` reference).
-- the SQLite read path preserves ``extra`` (reinforcement / ref_id / tool metadata).
+- the SQLite read path preserves ``extra`` (reinforcement / ref_id metadata).
 - deleting an entry / clearing memory leaves no orphan ``ResourceEntry`` relations.
 """
 
@@ -65,7 +65,7 @@ def _seed_entry(store, *, text: str, user_id: str, embedding=None):
     entry = store.entry_repo.create_entry(
         lane="memory",
         source_id=res.id,
-        entry_kind="knowledge",
+        entry_type="knowledge",
         text=text,
         embedding=embedding or [0.1, 0.2, 0.3],
         user_data={"user_id": user_id},
@@ -145,31 +145,31 @@ def test_clear_relations_with_scope(store):
     assert store.resource_entry_repo.list_relations({"user_id": "alice"}) == []
 
 
-def test_extra_round_trips_through_create_and_read(store):
-    """``extra`` (tool metadata / ref_id / reinforcement) must survive a read."""
+def test_extra_round_trips_through_update_and_read(store):
+    """``extra`` (ref_id / reinforcement metadata) must survive a read."""
     res = store.resource_repo.create_resource(
         lane="source",
-        url="mem://tool",
+        url="mem://extra",
         modality="document",
         local_path="",
-        summary="tool",
+        summary="extra",
         embedding=None,
         user_data={"user_id": "alice"},
     )
     entry = store.entry_repo.create_entry(
         lane="memory",
         source_id=res.id,
-        entry_kind="tool",
-        text="tool memory",
+        entry_type="knowledge",
+        text="memory with extra",
         embedding=[0.1, 0.2, 0.3],
         user_data={"user_id": "alice"},
-        tool_record={"when_to_use": "always"},
     )
-    assert entry.extra.get("when_to_use") == "always"
+    updated = store.entry_repo.update_entry(entry_id=entry.id, extra={"ref_id": "always"})
+    assert updated.extra.get("ref_id") == "always"
 
     fetched = store.entry_repo.get_entry(entry.id)
     assert fetched is not None
-    assert fetched.extra.get("when_to_use") == "always"
+    assert fetched.extra.get("ref_id") == "always"
 
 
 def _reconcile(crud_self, store, *, entry_id, new_cat_names, mapped_old_cat_ids, name_to_id):
@@ -255,23 +255,25 @@ class _FakeEmbedClient:
         return [[float(len(t)), 1.0, 0.0] for t in texts]
 
 
-def test_resolve_category_ids_creates_unknown_adaptively(store):
-    """Open/adaptive taxonomy: extractor-proposed names are created on first sight."""
+def test_resolve_group_ids_creates_unknown_adaptively(store):
+    """Open/adaptive taxonomy: extractor-proposed names are created on first sight (per lane)."""
     import asyncio
     from types import SimpleNamespace
 
     from memu.app.memorize import MemorizeMixin
     from memu.app.service import Context
 
-    ctx = Context(categories_ready=True)
+    ctx = Context()
+    ctx.lane("memory").ready = True
     fake_self = SimpleNamespace(
         _get_embedding_client=lambda profile=None: _FakeEmbedClient(),
-        _partition_category_names=MemorizeMixin._partition_category_names,
+        _partition_group_names=MemorizeMixin._partition_group_names,
     )
 
     ids = asyncio.run(
-        MemorizeMixin._resolve_category_ids(
+        MemorizeMixin._resolve_group_ids(
             fake_self,  # type: ignore[arg-type]
+            "memory",
             ["Programming", "programming", "Cooking"],
             ctx,
             store,
@@ -285,16 +287,152 @@ def test_resolve_category_ids_creates_unknown_adaptively(store):
 
     # A subsequent call reuses the cached ids and creates nothing new.
     ids2 = asyncio.run(
-        MemorizeMixin._resolve_category_ids(
+        MemorizeMixin._resolve_group_ids(
             fake_self,  # type: ignore[arg-type]
+            "memory",
             ["Programming"],
             ctx,
             store,
             user={"user_id": "alice"},
         )
     )
-    assert ids2 == [ctx.category_name_to_id["programming"]]
+    assert ids2 == [ctx.lane("memory").name_to_id["programming"]]
     assert len(store.resource_repo.list_resources(lane="memory")) == 2
+
+
+def test_persist_lane_entries_per_resource_and_adaptive(store):
+    """Per-lane persistence: index=1:1 coarse doc, skill=adaptive group docs."""
+    import asyncio
+
+    from memu.app.service import Context, MemoryService
+    from memu.app.settings import LaneConfig
+
+    svc = MemoryService(database_config={"metadata_store": {"provider": "inmemory"}})
+    # Avoid real embedding clients when resolving unknown adaptive group names.
+    svc._get_embedding_client = lambda profile=None, **kw: _FakeEmbedClient()  # type: ignore[method-assign]
+
+    ctx = Context()
+    src = store.resource_repo.create_resource(
+        lane="source",
+        url="mem://doc.txt",
+        modality="document",
+        local_path="",
+        summary="caption",
+        embedding=[1.0, 0.0, 0.0],
+        user_data={"user_id": "alice"},
+    )
+    embed = _FakeEmbedClient()
+
+    # index lane (per_resource): one coarse doc 1:1 with the source.
+    index_cfg = LaneConfig(grouping="per_resource", entry_types=["description"])
+    items, rels, _ = asyncio.run(
+        svc._persist_lane_entries(
+            lane="index",
+            lane_cfg=index_cfg,
+            source_resource=src,
+            structured_entries=[("description", "A document about cats", [])],
+            ctx=ctx,
+            store=store,
+            embed_client=embed,
+            user={"user_id": "alice"},
+        )
+    )
+    assert len(items) == 1 and items[0].lane == "index"
+    index_docs = list(store.resource_repo.list_resources(lane="index").values())
+    assert len(index_docs) == 1
+    assert index_docs[0].summary == "A document about cats"
+    assert len(rels) == 1
+
+    # skill lane (adaptive): tool/log entries grouped under a named skill doc.
+    skill_cfg = LaneConfig(grouping="adaptive", entry_types=["tool", "log"])
+    ctx.lane("skill").ready = True
+    items2, _, updates2 = asyncio.run(
+        svc._persist_lane_entries(
+            lane="skill",
+            lane_cfg=skill_cfg,
+            source_resource=src,
+            structured_entries=[
+                ("tool", "Search files with rg", ["Search"]),
+                ("log", "Ran rg and found 3 matches", ["Search"]),
+            ],
+            ctx=ctx,
+            store=store,
+            embed_client=embed,
+            user={"user_id": "alice"},
+        )
+    )
+    assert {i.entry_type for i in items2} == {"tool", "log"}
+    skill_titles = {d.title for d in store.resource_repo.list_resources(lane="skill").values()}
+    assert skill_titles == {"Search"}
+    assert len(updates2) == 1  # exactly one skill group doc was touched
+
+
+def test_rag_recall_lanes_returns_per_lane_shape(store):
+    """RAG recall fans out over every enabled lane and returns a per-lane response."""
+    import asyncio
+
+    from memu.app.service import Context, MemoryService
+
+    svc = MemoryService(
+        database_config={"metadata_store": {"provider": "inmemory"}},
+        retrieve_config={"method": "rag", "route_intention": False},
+    )
+    fake = _FakeEmbedClient()
+    svc._get_step_embedding_client = lambda step_context=None: fake  # type: ignore[method-assign]
+
+    for lane in ("index", "memory", "skill"):
+        store.resource_repo.create_resource(
+            lane=lane,
+            modality="markdown",
+            title=f"{lane}-doc",
+            summary=f"{lane} summary",
+            embedding=[1.0, 0.0, 0.0],
+            user_data={"user_id": "alice"},
+        )
+        store.entry_repo.create_entry(
+            lane=lane,
+            source_id=None,
+            entry_type="x",
+            text=f"{lane} entry",
+            embedding=[1.0, 0.0, 0.0],
+            user_data={"user_id": "alice"},
+        )
+    store.resource_repo.create_resource(
+        lane="source",
+        url="mem://src.txt",
+        modality="document",
+        local_path="",
+        summary="raw source",
+        embedding=[1.0, 0.0, 0.0],
+        user_data={"user_id": "alice"},
+    )
+
+    state = {
+        "needs_retrieval": True,
+        "active_query": "q",
+        "retrieve_category": True,
+        "retrieve_item": True,
+        "retrieve_resource": True,
+        "ctx": Context(),
+        "store": store,
+        "where": {},
+        "original_query": "q",
+        "rewritten_query": "q",
+        "next_step_query": None,
+    }
+    state = asyncio.run(svc._rag_recall_lanes(state, None))
+    state = asyncio.run(svc._rag_recall_resources(state, None))
+    state = svc._rag_build_context(state, None)
+    resp = state["response"]
+
+    assert set(resp["lanes"]) == {"index", "memory", "skill"}
+    for lane in ("index", "memory", "skill"):
+        assert len(resp["lanes"][lane]["categories"]) == 1
+        assert len(resp["lanes"][lane]["items"]) == 1
+    assert len(resp["resources"]) == 1
+    # Backward-compatible top-level view mirrors the memory lane.
+    assert resp["categories"] == resp["lanes"]["memory"]["categories"]
+    assert resp["items"] == resp["lanes"]["memory"]["items"]
 
 
 def test_sqlite_extra_survives_cache_miss(tmp_path):
@@ -302,22 +440,22 @@ def test_sqlite_extra_survives_cache_miss(tmp_path):
     db, dsn = _make_sqlite(tmp_path)
     res = db.resource_repo.create_resource(
         lane="source",
-        url="mem://tool",
+        url="mem://extra",
         modality="document",
         local_path="",
-        summary="tool",
+        summary="extra",
         embedding=None,
         user_data={"user_id": "alice"},
     )
     entry = db.entry_repo.create_entry(
         lane="memory",
         source_id=res.id,
-        entry_kind="tool",
-        text="tool memory",
+        entry_type="knowledge",
+        text="memory with extra",
         embedding=[0.1, 0.2, 0.3],
         user_data={"user_id": "alice"},
-        tool_record={"when_to_use": "cold-read"},
     )
+    db.entry_repo.update_entry(entry_id=entry.id, extra={"ref_id": "cold-read"})
     entry_id = entry.id
     db.close()
 
@@ -327,9 +465,9 @@ def test_sqlite_extra_survives_cache_miss(tmp_path):
     try:
         fetched = db2.entry_repo.get_entry(entry_id)
         assert fetched is not None
-        assert fetched.extra.get("when_to_use") == "cold-read"
+        assert fetched.extra.get("ref_id") == "cold-read"
 
         listed = db2.entry_repo.list_entries()
-        assert listed[entry_id].extra.get("when_to_use") == "cold-read"
+        assert listed[entry_id].extra.get("ref_id") == "cold-read"
     finally:
         db2.close()

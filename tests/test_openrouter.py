@@ -38,9 +38,9 @@ def _print_items(items, max_items=3):
     if items:
         print("  Items:")
         for item in items[:max_items]:
-            entry_kind = item.get("entry_kind", "unknown")
+            entry_type = item.get("entry_type", "unknown")
             summary = item.get("text", "")[:80]
-            print(f"    - [{entry_kind}] {summary}...")
+            print(f"    - [{entry_type}] {summary}...")
 
 
 async def _test_memorize(service, file_path, output_data):

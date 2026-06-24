@@ -76,9 +76,7 @@ class PostgresResourceEntryRepo(PostgresRepoBase, ResourceEntryRepo):
                 )
             )
             session.commit()
-        self.relations[:] = [
-            r for r in self.relations if not (r.entry_id == entry_id and r.resource_id == resource_id)
-        ]
+        self.relations[:] = [r for r in self.relations if not (r.entry_id == entry_id and r.resource_id == resource_id)]
 
     def unlink_entry(self, entry_id: str) -> list[ResourceEntry]:
         from sqlmodel import delete, select
@@ -90,9 +88,7 @@ class PostgresResourceEntryRepo(PostgresRepoBase, ResourceEntryRepo):
             removed = [self._row_to_record(row) for row in rows]
             if removed:
                 session.exec(
-                    delete(self._sqla_models.ResourceEntry).where(
-                        self._sqla_models.ResourceEntry.entry_id == entry_id
-                    )
+                    delete(self._sqla_models.ResourceEntry).where(self._sqla_models.ResourceEntry.entry_id == entry_id)
                 )
                 session.commit()
         self.relations[:] = [r for r in self.relations if r.entry_id != entry_id]

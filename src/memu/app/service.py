@@ -48,10 +48,25 @@ TConfigModel = TypeVar("TConfigModel", bound=BaseModel)
 
 
 @dataclass
+class LaneState:
+    """Per-lane grouping state cached across a service's lifetime.
+
+    For an adaptive lane (memory/skill) this tracks the known group docs (the
+    former "categories"): whether seeds have been initialized, the ordered doc
+    ids, and a name->id index for resolving extractor-proposed group names.
+    """
+
+    ready: bool = False
+    doc_ids: list[str] = field(default_factory=list)
+    name_to_id: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
 class Context:
-    categories_ready: bool = False
-    category_ids: list[str] = field(default_factory=list)
-    category_name_to_id: dict[str, str] = field(default_factory=dict)
+    lanes: dict[str, LaneState] = field(default_factory=dict)
+
+    def lane(self, name: str) -> LaneState:
+        return self.lanes.setdefault(name, LaneState())
 
 
 class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
@@ -79,11 +94,21 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self.memory_files_config = self._validate_config(memory_files_config, MemoryFilesConfig)
 
         self.fs = LocalFS(self.blob_config.resources_dir)
-        self.category_configs: list[CategoryConfig] = list(self.memorize_config.memory_categories or [])
-        self.category_config_map: dict[str, CategoryConfig] = {cfg.name: cfg for cfg in self.category_configs}
-        self._category_prompt_str = self._format_categories_for_prompt(self.category_configs)
+        # Per-lane wiring (ADR 0006): each lane carries its own seed group docs,
+        # extractor "existing groups" prompt string, and summary-prompt overrides.
+        self.lane_configs = self.memorize_config.lanes
+        self.lane_category_config_maps: dict[str, dict[str, CategoryConfig]] = {
+            lane: {cfg.name: cfg for cfg in lc.seed_categories} for lane, lc in self.lane_configs.items()
+        }
+        self.lane_prompt_strs: dict[str, str] = {
+            lane: self._format_categories_for_prompt(lc.seed_categories) for lane, lc in self.lane_configs.items()
+        }
 
-        self._context = Context(categories_ready=not bool(self.category_configs))
+        self._context = Context()
+        for lane, lc in self.memorize_config.enabled_lanes.items():
+            # per_resource lanes never need group-doc initialization; adaptive lanes
+            # are ready immediately only when they have no seeds to materialize.
+            self._context.lane(lane).ready = lc.grouping != "adaptive" or not lc.seed_categories
 
         self.database: Database = build_database(
             config=self.database_config,

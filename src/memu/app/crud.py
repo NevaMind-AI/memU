@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, cast, get_args
 
 from pydantic import BaseModel
 
-from memu.database.models import MemoryType, Resource
+from memu.database.models import EntryType, Resource
 from memu.prompts.category_patch import CATEGORY_PATCH_PROMPT
 from memu.workflow.step import WorkflowState, WorkflowStep
 
@@ -33,7 +33,7 @@ class CRUDMixin:
         _escape_prompt_value: Callable[[str], str]
         user_model: type[BaseModel]
         patch_config: PatchConfig
-        _ensure_categories_ready: Callable[[Context, Database, Mapping[str, Any] | None], Awaitable[None]]
+        _ensure_lanes_ready: Callable[[Context, Database, Mapping[str, Any] | None], Awaitable[None]]
 
     async def list_memory_items(
         self,
@@ -284,7 +284,7 @@ class CRUDMixin:
     def _crud_clear_memory_resources(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
-        # Remaining resources (raw sources + index/skill docs); memory docs were
+        # Remaining resources (raw sources + index docs); memory docs were
         # already cleared by _crud_clear_memory_categories.
         deleted = store.resource_repo.clear_resources(where_filters)
         state["deleted_resources"] = deleted
@@ -307,30 +307,29 @@ class CRUDMixin:
     async def create_memory_item(
         self,
         *,
-        memory_type: MemoryType,
+        entry_type: EntryType,
         memory_content: str,
         memory_categories: list[str],
         user: dict[str, Any] | None = None,
         propagate: bool = True,
     ) -> dict[str, Any]:
-        if memory_type not in get_args(MemoryType):
-            msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}"
+        if entry_type not in get_args(EntryType):
+            msg = f"Invalid entry type: '{entry_type}', must be one of {get_args(EntryType)}"
             raise ValueError(msg)
 
         ctx = self._get_context()
         store = self._get_database()
         user_scope = self.user_model(**user).model_dump() if user is not None else None
-        await self._ensure_categories_ready(ctx, store, user_scope)
+        await self._ensure_lanes_ready(ctx, store, user_scope)
 
         state: WorkflowState = {
             "memory_payload": {
-                "type": memory_type,
+                "type": entry_type,
                 "content": memory_content,
                 "categories": memory_categories,
             },
             "ctx": ctx,
             "store": store,
-            "category_ids": list(ctx.category_ids),
             "user": user_scope,
             "propagate": propagate,
         }
@@ -346,34 +345,33 @@ class CRUDMixin:
         self,
         *,
         memory_id: str,
-        memory_type: MemoryType | None = None,
+        entry_type: EntryType | None = None,
         memory_content: str | None = None,
         memory_categories: list[str] | None = None,
         user: dict[str, Any] | None = None,
         propagate: bool = True,
     ) -> dict[str, Any]:
-        if all((memory_type is None, memory_content is None, memory_categories is None)):
-            msg = "At least one of memory type, memory content, or memory categories is required for UPDATE operation"
+        if all((entry_type is None, memory_content is None, memory_categories is None)):
+            msg = "At least one of entry type, memory content, or memory categories is required for UPDATE operation"
             raise ValueError(msg)
-        if memory_type and memory_type not in get_args(MemoryType):
-            msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}"
+        if entry_type and entry_type not in get_args(EntryType):
+            msg = f"Invalid entry type: '{entry_type}', must be one of {get_args(EntryType)}"
             raise ValueError(msg)
 
         ctx = self._get_context()
         store = self._get_database()
         user_scope = self.user_model(**user).model_dump() if user is not None else None
-        await self._ensure_categories_ready(ctx, store, user_scope)
+        await self._ensure_lanes_ready(ctx, store, user_scope)
 
         state: WorkflowState = {
             "memory_id": memory_id,
             "memory_payload": {
-                "type": memory_type,
+                "type": entry_type,
                 "content": memory_content,
                 "categories": memory_categories,
             },
             "ctx": ctx,
             "store": store,
-            "category_ids": list(ctx.category_ids),
             "user": user_scope,
             "propagate": propagate,
         }
@@ -395,13 +393,12 @@ class CRUDMixin:
         ctx = self._get_context()
         store = self._get_database()
         user_scope = self.user_model(**user).model_dump() if user is not None else None
-        await self._ensure_categories_ready(ctx, store, user_scope)
+        await self._ensure_lanes_ready(ctx, store, user_scope)
 
         state: WorkflowState = {
             "memory_id": memory_id,
             "ctx": ctx,
             "store": store,
-            "category_ids": list(ctx.category_ids),
             "user": user_scope,
             "propagate": propagate,
         }
@@ -547,7 +544,7 @@ class CRUDMixin:
         item = store.entry_repo.create_entry(
             lane="memory",
             source_id=None,
-            entry_kind=memory_payload["type"],
+            entry_type=memory_payload["type"],
             text=memory_payload["content"],
             embedding=content_embedding,
             user_data=dict(user or {}),
@@ -591,7 +588,7 @@ class CRUDMixin:
         if memory_payload["type"] or memory_payload["content"]:
             item = store.entry_repo.update_entry(
                 entry_id=memory_id,
-                entry_kind=memory_payload["type"],
+                entry_type=memory_payload["type"],
                 text=memory_payload["content"],
                 embedding=content_embedding,
             )
@@ -709,11 +706,12 @@ class CRUDMixin:
     def _map_category_names_to_ids(self, names: list[str], ctx: Context) -> list[str]:
         if not names:
             return []
+        name_to_id = ctx.lane("memory").name_to_id
         mapped: list[str] = []
         seen: set[str] = set()
         for name in names:
             key = name.strip().lower()
-            cid = ctx.category_name_to_id.get(key)
+            cid = name_to_id.get(key)
             if cid and cid not in seen:
                 mapped.append(cid)
                 seen.add(cid)

@@ -19,19 +19,17 @@ class InMemoryEntryRepository(EntryRepo):
         self.entry_model = entry_model
         self.entries: dict[str, Entry] = self._state.entries
 
-    def list_entries(
-        self, where: Mapping[str, Any] | None = None, *, lane: str | None = None
-    ) -> dict[str, Entry]:
-        result = self.entries if not where else {
-            eid: entry for eid, entry in self.entries.items() if matches_where(entry, where)
-        }
+    def list_entries(self, where: Mapping[str, Any] | None = None, *, lane: str | None = None) -> dict[str, Entry]:
+        result = (
+            self.entries
+            if not where
+            else {eid: entry for eid, entry in self.entries.items() if matches_where(entry, where)}
+        )
         if lane is not None:
             result = {eid: entry for eid, entry in result.items() if getattr(entry, "lane", None) == lane}
         return dict(result)
 
-    def list_entries_by_ref_ids(
-        self, ref_ids: list[str], where: Mapping[str, Any] | None = None
-    ) -> dict[str, Entry]:
+    def list_entries_by_ref_ids(self, ref_ids: list[str], where: Mapping[str, Any] | None = None) -> dict[str, Entry]:
         if not ref_ids:
             return {}
         ref_id_set = set(ref_ids)
@@ -44,9 +42,7 @@ class InMemoryEntryRepository(EntryRepo):
                 result[eid] = entry
         return result
 
-    def clear_entries(
-        self, where: Mapping[str, Any] | None = None, *, lane: str | None = None
-    ) -> dict[str, Entry]:
+    def clear_entries(self, where: Mapping[str, Any] | None = None, *, lane: str | None = None) -> dict[str, Entry]:
         if not where and lane is None:
             matches = self.entries.copy()
             self.entries.clear()
@@ -70,30 +66,23 @@ class InMemoryEntryRepository(EntryRepo):
         *,
         lane: str,
         source_id: str | None,
-        entry_kind: str,
+        entry_type: str,
         text: str,
         embedding: list[float],
         user_data: dict[str, Any],
         source_path: str | None = None,
         reinforce: bool = False,
-        tool_record: dict[str, Any] | None = None,
     ) -> Entry:
-        if reinforce and entry_kind != "tool":
+        if reinforce:
             return self.create_entry_reinforce(
                 lane=lane,
                 source_id=source_id,
-                entry_kind=entry_kind,
+                entry_type=entry_type,
                 text=text,
                 embedding=embedding,
                 user_data=user_data,
                 source_path=source_path,
             )
-
-        extra: dict[str, Any] = {}
-        if tool_record:
-            for key in ("when_to_use", "metadata", "tool_calls"):
-                if tool_record.get(key) is not None:
-                    extra[key] = tool_record[key]
 
         eid = str(uuid.uuid4())
         entry = self.entry_model(
@@ -101,10 +90,10 @@ class InMemoryEntryRepository(EntryRepo):
             lane=lane,
             source_id=source_id,
             source_path=source_path,
-            entry_kind=entry_kind,
+            entry_type=entry_type,
             text=text,
             embedding=embedding,
-            extra=extra if extra else {},
+            extra={},
             **user_data,
         )
         self.entries[eid] = entry
@@ -115,13 +104,13 @@ class InMemoryEntryRepository(EntryRepo):
         *,
         lane: str,
         source_id: str | None,
-        entry_kind: str,
+        entry_type: str,
         text: str,
         embedding: list[float],
         user_data: dict[str, Any],
         source_path: str | None = None,
     ) -> Entry:
-        content_hash = compute_content_hash(text, entry_kind)
+        content_hash = compute_content_hash(text, entry_type)
         existing = self._find_by_hash(content_hash, user_data)
         if existing:
             current_extra = existing.extra or {}
@@ -147,7 +136,7 @@ class InMemoryEntryRepository(EntryRepo):
             lane=lane,
             source_id=source_id,
             source_path=source_path,
-            entry_kind=entry_kind,
+            entry_type=entry_type,
             text=text,
             embedding=embedding,
             extra=entry_extra,
@@ -210,33 +199,25 @@ class InMemoryEntryRepository(EntryRepo):
         self,
         *,
         entry_id: str,
-        entry_kind: str | None = None,
+        entry_type: str | None = None,
         text: str | None = None,
         embedding: list[float] | None = None,
         extra: dict[str, Any] | None = None,
-        tool_record: dict[str, Any] | None = None,
     ) -> Entry:
         entry = self.entries.get(entry_id)
         if entry is None:
             msg = f"Entry with id {entry_id} not found"
             raise KeyError(msg)
 
-        if entry_kind is not None:
-            entry.entry_kind = entry_kind
+        if entry_type is not None:
+            entry.entry_type = entry_type
         if text is not None:
             entry.text = text
         if embedding is not None:
             entry.embedding = embedding
 
-        current_extra = entry.extra or {}
         if extra is not None:
-            current_extra = {**current_extra, **extra}
-        if tool_record is not None:
-            for key in ("when_to_use", "metadata", "tool_calls"):
-                if tool_record.get(key) is not None:
-                    current_extra[key] = tool_record[key]
-        if extra is not None or tool_record is not None:
-            entry.extra = current_extra
+            entry.extra = {**(entry.extra or {}), **extra}
 
         self.entries[entry_id] = entry
         return entry

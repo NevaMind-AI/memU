@@ -9,12 +9,9 @@ from memu.prompts.category_summary import (
 from memu.prompts.category_summary import (
     PROMPT as CATEGORY_SUMMARY_PROMPT,
 )
-from memu.prompts.memory_type import (
+from memu.prompts.entry_type import (
     DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL,
-    DEFAULT_MEMORY_TYPES,
-)
-from memu.prompts.memory_type import (
-    PROMPTS as DEFAULT_MEMORY_TYPE_PROMPTS,
+    LANE_ENTRY_TYPES,
 )
 
 
@@ -25,14 +22,6 @@ def normalize_value(v: str) -> str:
 
 
 Normalize = BeforeValidator(normalize_value)
-
-
-def _default_memory_types() -> list[str]:
-    return list(DEFAULT_MEMORY_TYPES)
-
-
-def _default_memory_type_prompts() -> "dict[str, str | CustomPrompt]":
-    return dict(DEFAULT_MEMORY_TYPE_PROMPTS)
 
 
 class PromptBlock(BaseModel):
@@ -58,7 +47,7 @@ def complete_prompt_blocks(prompt: CustomPrompt, default_blocks: Mapping[str, in
     return prompt
 
 
-CompleteMemoryTypePrompt = AfterValidator(lambda v: complete_prompt_blocks(v, DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL))
+CompleteEntryTypePrompt = AfterValidator(lambda v: complete_prompt_blocks(v, DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL))
 
 
 CompleteCategoryPrompt = AfterValidator(lambda v: complete_prompt_blocks(v, DEFAULT_CATEGORY_SUMMARY_PROMPT_ORDINAL))
@@ -69,6 +58,71 @@ class CategoryConfig(BaseModel):
     description: str = ""
     target_length: int | None = None
     summary_prompt: str | Annotated[CustomPrompt, CompleteCategoryPrompt] | None = None
+
+
+class LaneConfig(BaseModel):
+    """Per-lane extraction/grouping configuration (see ADR 0006).
+
+    Each lane (``index`` / ``memory`` / ``skill``) is a structurally identical
+    processing track over the shared per-resource canonical text; lanes differ
+    only in their entry-type set, extraction prompts, and how entries are grouped
+    into coarse lane documents.
+    """
+
+    enabled: bool = Field(default=True, description="Whether this lane is processed during memorize/retrieve.")
+    grouping: Annotated[Literal["adaptive", "per_resource"], Normalize] = Field(
+        default="adaptive",
+        description=(
+            "How entries map to coarse lane documents. 'adaptive': the extractor proposes "
+            "group names and a summarized doc is synthesized per group (memory/skill). "
+            "'per_resource': one coarse doc per source resource, no grouping (index)."
+        ),
+    )
+    entry_types: list[str] = Field(
+        default_factory=list,
+        description="Ordered list of entry types extracted for this lane.",
+    )
+    entry_type_prompts: dict[str, str | Annotated[CustomPrompt, CompleteEntryTypePrompt]] = Field(
+        default_factory=dict,
+        description="User prompt overrides per entry type; falls back to the built-in template per type.",
+    )
+    extract_llm_profile: str = Field(default="default", description="LLM profile used for this lane's extraction.")
+    # Adaptive-grouping (memory/skill) coarse-doc summary synthesis. Ignored for per_resource lanes.
+    seed_categories: list[CategoryConfig] = Field(
+        default_factory=list,
+        description="Optional seed group docs for an adaptive lane (e.g. memory categories).",
+    )
+    summary_prompt: str | Annotated[CustomPrompt, CompleteCategoryPrompt] = Field(
+        default=CATEGORY_SUMMARY_PROMPT,
+        description="System prompt for synthesizing an adaptive lane's group-doc summary.",
+    )
+    summary_target_length: int = Field(default=400, description="Target max length for the group-doc summary.")
+    summary_llm_profile: str = Field(default="default", description="LLM profile for group-doc summary synthesis.")
+    enable_item_references: bool = Field(
+        default=False,
+        description="Enable inline [ref:ITEM_ID] citations in this lane's group-doc summaries.",
+    )
+    enable_item_reinforcement: bool = Field(
+        default=False,
+        description="Enable reinforcement tracking for this lane's entries.",
+    )
+
+
+def _default_lane_configs() -> "dict[str, LaneConfig]":
+    return {
+        "index": LaneConfig(
+            grouping="per_resource",
+            entry_types=list(LANE_ENTRY_TYPES["index"]),
+        ),
+        "memory": LaneConfig(
+            grouping="adaptive",
+            entry_types=list(LANE_ENTRY_TYPES["memory"]),
+        ),
+        "skill": LaneConfig(
+            grouping="adaptive",
+            entry_types=list(LANE_ENTRY_TYPES["skill"]),
+        ),
+    }
 
 
 class LazyLLMSource(BaseModel):
@@ -326,14 +380,14 @@ class MemoryFilesConfig(BaseModel):
     output_dir: str = Field(
         default="./data/memory",
         description=(
-            "Directory where the memory markdown tree (the INDEX.md/MEMORY.md/SKILL.md root "
-            "indexes plus the resource/, memory/, and skill/ directories) is written."
+            "Directory where the memory markdown tree (the INDEX.md/MEMORY.md root "
+            "indexes plus the resource/ and memory/ directories) is written."
         ),
     )
     synthesize: bool = Field(
         default=False,
         description=(
-            "Synthesize MEMORY.md and skill docs from per-source descriptions via the LLM "
+            "Synthesize MEMORY.md from per-source descriptions via the LLM "
             "instead of rendering already-extracted records. INDEX.md stays deterministic."
         ),
     )
@@ -412,42 +466,24 @@ class MemorizeConfig(BaseModel):
         default="default",
         description="LLM profile whose provider/credentials back the VLM client used for image/video vision.",
     )
-    memory_types: list[str] = Field(
-        default_factory=_default_memory_types,
-        description="Ordered list of memory types (profile/event/knowledge/behavior by default).",
-    )
-    memory_type_prompts: dict[str, str | Annotated[CustomPrompt, CompleteMemoryTypePrompt]] = Field(
-        default_factory=_default_memory_type_prompts,
-        description="User prompt overrides for each memory type extraction.",
-    )
-    memory_extract_llm_profile: str = Field(default="default", description="LLM profile for memory extract.")
-    memory_categories: list[CategoryConfig] = Field(
-        default_factory=list,
+    lanes: dict[str, LaneConfig] = Field(
+        default_factory=_default_lane_configs,
         description=(
-            "Optional seed categories. The kernel presets no taxonomy: categories are "
-            "discovered adaptively from ingested content. Provide seeds only to guide "
-            "(not constrain) the taxonomy; an empty list means fully open/adaptive."
+            "Per-lane extraction/grouping configuration. Defaults to index/memory/skill "
+            "(see ADR 0006); each lane runs the same pipeline with its own entry types, "
+            "prompts, and grouping cardinality."
         ),
     )
-    # default_category_summary_prompt: str | CustomPrompt = Field(
-    default_category_summary_prompt: str | Annotated[CustomPrompt, CompleteCategoryPrompt] = Field(
-        default=CATEGORY_SUMMARY_PROMPT,
-        description="Default system prompt for auto-generated category summaries.",
-    )
-    default_category_summary_target_length: int = Field(
-        default=400,
-        description="Target max length for auto-generated category summaries.",
-    )
-    category_update_llm_profile: str = Field(default="default", description="LLM profile for category summary.")
-    # Reference tracking for category summaries
-    enable_item_references: bool = Field(
-        default=False,
-        description="Enable inline [ref:ITEM_ID] citations in category summaries linking to source memory items.",
-    )
-    enable_item_reinforcement: bool = Field(
-        default=False,
-        description="Enable reinforcement tracking for memory items.",
-    )
+
+    @property
+    def enabled_lanes(self) -> dict[str, LaneConfig]:
+        """Lanes that are turned on, in a stable order (index, memory, skill first)."""
+        order = ["index", "memory", "skill"]
+        ordered = sorted(
+            self.lanes.items(),
+            key=lambda kv: (order.index(kv[0]) if kv[0] in order else len(order), kv[0]),
+        )
+        return {name: cfg for name, cfg in ordered if cfg.enabled}
 
 
 class PatchConfig(BaseModel):

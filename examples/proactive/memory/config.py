@@ -1,8 +1,8 @@
 memorize_config = {
-    "memory_types": [
+    "entry_types": [
         "record",
     ],
-    "memory_type_prompts": {
+    "entry_type_prompts": {
         "record": {
             "objective": {
                 "ordinal": 10,

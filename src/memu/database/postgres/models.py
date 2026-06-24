@@ -65,7 +65,7 @@ class PostgresEntryModel(BaseModelMixin, Entry):
     lane: str = Field(sa_column=Column(String, nullable=False, index=True))
     source_id: str | None = Field(default=None, sa_column=Column(String, nullable=True, index=True))
     source_path: str | None = Field(default=None, sa_column=Column(String, nullable=True))
-    entry_kind: str = Field(sa_column=Column(String, nullable=False))
+    entry_type: str = Field(sa_column=Column(String, nullable=False))
     text: str = Field(sa_column=Column(Text, nullable=False))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
     happened_at: datetime | None = Field(default=None, sa_column=Column(TZDateTime, nullable=True))
