@@ -14,6 +14,7 @@ from memu.database.sqlite.repositories.base import SQLiteRepoBase
 from memu.database.sqlite.schema import SQLiteSQLAModels
 from memu.database.sqlite.session import SQLiteSessionManager
 from memu.database.state import DatabaseState
+from memu.vector import cosine_topk
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +194,21 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
         )
         self.resources[row.id] = res
         return res
+
+    def vector_search_resources(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+    ) -> list[tuple[str, float]]:
+        """Rank resources by brute-force cosine similarity.
+
+        SQLite has no native vector support, so this mirrors the item repo and
+        scores stored embeddings in Python.
+        """
+        pool = self.list_resources(where)
+        corpus = [(rid, res.embedding) for rid, res in pool.items() if res.embedding]
+        return cosine_topk(query_vec, corpus, k=top_k)
 
     def load_existing(self) -> None:
         """Load all existing resources from database into cache."""

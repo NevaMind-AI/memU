@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel
 
-from memu.database.inmemory.vector import cosine_topk
 from memu.prompts.retrieve.llm_category_ranker import PROMPT as LLM_CATEGORY_RANKER_PROMPT
 from memu.prompts.retrieve.llm_item_ranker import PROMPT as LLM_ITEM_RANKER_PROMPT
 from memu.prompts.retrieve.llm_resource_ranker import PROMPT as LLM_RESOURCE_RANKER_PROMPT
 from memu.prompts.retrieve.pre_retrieval_decision import SYSTEM_PROMPT as PRE_RETRIEVAL_SYSTEM_PROMPT
 from memu.prompts.retrieve.pre_retrieval_decision import USER_PROMPT as PRE_RETRIEVAL_USER_PROMPT
+from memu.vector import cosine_topk
 from memu.workflow.step import WorkflowState, WorkflowStep
 
 logger = logging.getLogger(__name__)
@@ -411,8 +411,7 @@ class RetrieveMixin:
         where_filters = state.get("where") or {}
         resource_pool = store.resource_repo.list_resources(where_filters)
         state["resource_pool"] = resource_pool
-        corpus = self._resource_caption_corpus(store, resources=resource_pool)
-        if not corpus:
+        if not resource_pool:
             state["resource_hits"] = []
             return state
 
@@ -421,7 +420,9 @@ class RetrieveMixin:
             embed_client = self._get_step_embedding_client(step_context)
             qvec = (await embed_client.embed([state["active_query"]]))[0]
             state["query_vector"] = qvec
-        state["resource_hits"] = cosine_topk(qvec, corpus, k=self.retrieve_config.resource.top_k)
+        state["resource_hits"] = store.resource_repo.vector_search_resources(
+            qvec, self.retrieve_config.resource.top_k, where=where_filters
+        )
         return state
 
     def _rag_build_context(self, state: WorkflowState, _: Any) -> WorkflowState:
@@ -934,9 +935,8 @@ class RetrieveMixin:
             qvec = (await embed.embed([current_query]))[0]
 
         # Tier 3: Resources
-        resource_corpus = self._resource_caption_corpus(store, resources=resource_pool)
-        if resource_corpus:
-            res_hits = cosine_topk(qvec, resource_corpus, k=top_k)
+        if resource_pool:
+            res_hits = store.resource_repo.vector_search_resources(qvec, top_k, where=where_filters)
             if res_hits:
                 response["resources"] = self._materialize_hits(res_hits, resource_pool)
                 content_sections.append(self._format_resource_content(res_hits, store, resources=resource_pool))
@@ -995,16 +995,6 @@ class RetrieveMixin:
             caption = res.caption or f"Resource {res.url}"
             lines.append(f"Resource: {caption}\nScore: {score:.3f}")
         return "\n\n".join(lines).strip()
-
-    def _resource_caption_corpus(
-        self, store: Database, resources: Mapping[str, Any] | None = None
-    ) -> list[tuple[str, list[float]]]:
-        resource_pool = resources if resources is not None else store.resource_repo.resources
-        corpus: list[tuple[str, list[float]]] = []
-        for rid, res in resource_pool.items():
-            if res.embedding:
-                corpus.append((rid, res.embedding))
-        return corpus
 
     def _extract_judgement(self, raw: str) -> str:
         if not raw:

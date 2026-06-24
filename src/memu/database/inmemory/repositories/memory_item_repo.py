@@ -8,9 +8,9 @@ import pendulum
 
 from memu.database.inmemory.repositories.filter import matches_where
 from memu.database.inmemory.state import InMemoryState
-from memu.database.inmemory.vector import cosine_topk, cosine_topk_salience
 from memu.database.models import MemoryItem, MemoryType, compute_content_hash
 from memu.database.repositories.memory_item import MemoryItemRepo
+from memu.vector import cosine_topk, cosine_topk_salience
 
 
 class InMemoryMemoryItemRepository(MemoryItemRepo):
