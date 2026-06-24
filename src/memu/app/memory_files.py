@@ -3,24 +3,22 @@
 This collaborator owns the markdown "memory file system" artifact layer: the
 exporter, the LLM synthesizer, and the write lock. ``MemoryService`` keeps a
 thin ``_build_memory_files`` delegate so this stays an internal composition
-detail, but the ~70 lines of init-vs-incremental synthesis policy live here
-rather than bloating the service composition root.
+detail, but the init-vs-incremental synthesis policy lives here rather than
+bloating the service composition root.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from memu.memory_fs import ExportResult, MemoryFileExporter, MemorySynthesizer
+from memu.memory_fs import ExistingArtifacts, ExportResult, MemoryFileExporter, MemorySynthesizer
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from memu.app.settings import MemoryFilesConfig
     from memu.database.interfaces import Database
-
-# A factory that returns a wrapped LLM client (exposing ``.chat``) for a profile.
-MakeClient = Callable[[str], Any]
 
 
 class MemoryFilesBuilder:
@@ -43,7 +41,7 @@ class MemoryFilesBuilder:
         where: dict[str, Any] | None,
         *,
         changed: list[Any] | None,
-        make_client: MakeClient,
+        make_client: Callable[[str], Any],
     ) -> dict[str, Any]:
         """Initialize or incrementally update the memory file tree.
 
@@ -51,51 +49,38 @@ class MemoryFilesBuilder:
         incremental update. When it is ``None`` (or no prior tree exists), the
         tree is (re)initialized from the full scoped store. ``make_client`` builds
         the LLM client used for synthesis from a profile name.
+
+        LLM work only happens when ``synthesize=True``: MEMORY.md and the skill/
+        tree are synthesized from the per-source descriptions. Otherwise both are
+        left as ``None`` so the exporter renders MEMORY.md deterministically from
+        category summaries and falls back to its rule-based skill bypass.
         """
         memory_body: str | None = None
         skills: dict[str, str] | None = None
 
-        is_update = changed is not None and self.exporter.artifacts_exist()
-
-        # The synthesis trunk is the structured store (extracted memory items), not the
-        # lossy per-source captions: the just-changed sources for an incremental update,
-        # otherwise the full in-scope store for (re)initialization.
-        scoped_items = list(database.memory_item_repo.list_items(where=where or None).values())
-        if is_update:
-            changed_resources = list(changed or [])
-            changed_ids = {res.id for res in changed_resources}
-            changed_items = [item for item in scoped_items if item.resource_id in changed_ids]
-            descriptions = MemoryFileExporter.build_synthesis_descriptions(changed_resources, changed_items)
-        else:
-            resources = list(database.resource_repo.list_resources(where=where or None).values())
-            descriptions = MemoryFileExporter.build_synthesis_descriptions(resources, scoped_items)
-
-        client = make_client(self.config.synthesis_llm_profile)
-        chat: Callable[..., Awaitable[Any]] = client.chat
-
         if self.config.synthesize:
-            # MEMORY.md and the skill/ tree are both synthesized from descriptions.
+            # The shared description trunk is the just-changed sources for an
+            # incremental update, otherwise the full in-scope store.
+            is_update = changed is not None and self.exporter.artifacts_exist()
             if is_update:
-                existing_memory = await asyncio.to_thread(self.exporter.read_memory_body)
-                existing_skills = await asyncio.to_thread(self.exporter.read_skills)
-                synthesized = await self.synthesizer.update(
-                    descriptions,
-                    existing_memory=existing_memory,
-                    existing_skills=existing_skills,
-                    chat=chat,
-                )
+                descriptions = MemoryFileExporter._build_descriptions(changed)  # type: ignore[arg-type]
             else:
-                synthesized = await self.synthesizer.synthesize(descriptions, chat=chat)
+                resources = list(database.resource_repo.list_resources(where=where or None).values())
+                descriptions = MemoryFileExporter._build_descriptions(resources)
+
+            # An incremental update merges the changed descriptions into the prior
+            # artifacts; a full (re)initialization starts from empty existing state
+            # so stale entries are dropped (the exporter's manifest diff prunes any
+            # files no longer produced).
+            existing = await asyncio.to_thread(self.exporter.read_existing) if is_update else ExistingArtifacts()
+            client = make_client(self.config.synthesis_llm_profile)
+            synthesized = await self.synthesizer.synthesize(
+                descriptions,
+                existing_memory=existing.memory_body,
+                existing_skills=existing.skills,
+                chat=client.chat,
+            )
             memory_body, skills = synthesized.memory_body, synthesized.skills
-        else:
-            # MEMORY.md is rendered deterministically from category summaries, but
-            # the skill/ tree is a sibling bypass: always synthesized from the
-            # descriptions, never derived from extracted skill-type memory items.
-            if is_update:
-                existing_skills = await asyncio.to_thread(self.exporter.read_skills)
-                skills = await self.synthesizer.update_skills(descriptions, existing_skills=existing_skills, chat=chat)
-            else:
-                skills = await self.synthesizer.synthesize_skills(descriptions, chat=chat)
 
         async with self.lock:
             result: ExportResult = await asyncio.to_thread(

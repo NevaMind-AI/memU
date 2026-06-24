@@ -144,18 +144,21 @@ _UPDATE_SKILLS_JSON = '[{"name": "Latte Art", "body": "# Latte art\\nPour slowly
 
 
 class _InitUpdateChatClient:
-    """Returns init vs update payloads based on which prompt template fired."""
+    """Returns init vs update payloads based on whether existing content was injected.
+
+    The unified prompt renders ``(empty)``/``(none)`` when there is no prior artifact,
+    so the presence of those sentinels marks a from-scratch (init) call.
+    """
 
     async def chat(self, prompt: str, system_prompt: str | None = None) -> str:
-        is_update = "CURRENT memory document" in prompt or "EXISTING skills" in prompt
         if "JSON array" in prompt:
-            return _UPDATE_SKILLS_JSON if is_update else _SKILLS_JSON
-        return _UPDATE_MEMORY_MD if is_update else _MEMORY_MD
+            return _SKILLS_JSON if "(none)" in prompt else _UPDATE_SKILLS_JSON
+        return _MEMORY_MD if "(empty)" in prompt else _UPDATE_MEMORY_MD
 
 
 async def test_synthesizer_update_merges_into_existing() -> None:
     synth = MemorySynthesizer()
-    result = await synth.update(
+    result = await synth.synthesize(
         _descriptions(),
         existing_memory="## Profile\nOld profile.",
         existing_skills={"pour-over": "# Pour-over\nUse a 1:16 ratio."},
@@ -171,7 +174,7 @@ async def test_synthesizer_update_merges_into_existing() -> None:
 async def test_synthesizer_update_noop_without_descriptions() -> None:
     synth = MemorySynthesizer()
     existing_skills = {"pour-over": "# Pour-over"}
-    result = await synth.update(
+    result = await synth.synthesize(
         [],
         existing_memory="## Profile\nKeep me.",
         existing_skills=existing_skills,
@@ -184,7 +187,7 @@ async def test_synthesizer_update_noop_without_descriptions() -> None:
 async def test_update_skills_only_upserts_and_preserves() -> None:
     """Skill-only incremental update keeps untouched skills and upserts new ones."""
     synth = MemorySynthesizer()
-    skills = await synth.update_skills(
+    skills = await synth.synthesize_skills(
         _descriptions(),
         existing_skills={"pour-over": "# Pour-over\nUse a 1:16 ratio."},
         chat=_InitUpdateChatClient().chat,
@@ -196,7 +199,7 @@ async def test_update_skills_only_upserts_and_preserves() -> None:
 async def test_update_skills_noop_without_descriptions() -> None:
     synth = MemorySynthesizer()
     existing = {"pour-over": "# Pour-over"}
-    assert await synth.update_skills([], existing_skills=existing, chat=_InitUpdateChatClient().chat) == existing
+    assert await synth.synthesize_skills([], existing_skills=existing, chat=_InitUpdateChatClient().chat) == existing
 
 
 def test_exporter_read_helpers_roundtrip(tmp_path: Path) -> None:
