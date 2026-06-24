@@ -22,8 +22,6 @@ def _build_sdk_client(cfg: LLMConfig) -> Any:
         base_url=cfg.base_url,
         api_key=cfg.api_key,
         chat_model=cfg.chat_model,
-        embed_model=cfg.embed_model,
-        embed_batch_size=cfg.embed_batch_size,
     )
 
 
@@ -49,7 +47,6 @@ def _build_httpx_client(cfg: LLMConfig) -> Any:
         chat_model=cfg.chat_model,
         provider=cfg.provider,
         endpoint_overrides=cfg.endpoint_overrides,
-        embed_model=cfg.embed_model,
     )
 
 

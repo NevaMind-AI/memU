@@ -107,11 +107,6 @@ ignore_missing_imports = true
 module = ["pgvector.*"]
 ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-module = ["memu.client.openai_wrapper"]
-disallow_untyped_defs = false
-warn_return_any = false
-
 [tool.ruff]
 target-version = "py313"
 line-length = 120

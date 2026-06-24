@@ -117,13 +117,19 @@ class LLMConfig(BaseModel):
         default_factory=dict,
         description="Optional overrides for HTTP endpoints (keys: 'chat'/'summary').",
     )
+    # Backward-compat bridge: embedding is owned by the dedicated
+    # ``memu.embedding`` clients (``EmbeddingConfig``/``embedding_profiles``). The
+    # LLM/chat clients no longer embed. These fields are only consumed by
+    # ``embedding_config_from_llm`` to derive an embedding profile from an LLM
+    # profile when no explicit ``embedding_profiles`` is supplied. Prefer setting
+    # ``embedding_profiles`` directly.
     embed_model: str = Field(
         default="text-embedding-3-small",
-        description="Default embedding model used for vectorization.",
+        description="Embedding model used to derive an embedding profile from this LLM profile (bridge only).",
     )
     embed_batch_size: int = Field(
         default=1,
-        description="Maximum batch size for embedding API calls (used by SDK client backends).",
+        description="Embedding batch size used to derive an embedding profile from this LLM profile (bridge only).",
     )
 
     @model_validator(mode="after")
@@ -211,6 +217,91 @@ def vlm_config_from_llm(llm: "LLMConfig") -> "VLMConfig":
         api_key=llm.api_key,
         vlm_model=vlm_model,
         client_backend=llm.client_backend,
+        endpoint_overrides=dict(llm.endpoint_overrides),
+    )
+
+
+class EmbeddingConfig(BaseModel):
+    """Configuration for an embedding (vectorization) model client.
+
+    Sibling to :class:`LLMConfig`/:class:`VLMConfig` but scoped to the embedding
+    capability used by vector search. Defaults to OpenAI's
+    ``text-embedding-3-small``; embedding-only providers (Jina, Voyage) bring
+    their own ``base_url``/``api_key`` via provider defaults (see
+    ``memu.embedding.defaults``).
+    """
+
+    provider: str = Field(
+        default="openai",
+        description="Identifier for the embedding provider implementation (used by HTTP client backend).",
+    )
+    base_url: str = Field(default="https://api.openai.com/v1")
+    api_key: str = Field(default="OPENAI_API_KEY")
+    embed_model: str = Field(
+        default="text-embedding-3-small",
+        description="Embedding model used for vectorization.",
+    )
+    embed_batch_size: int = Field(
+        default=1,
+        description="Maximum batch size for embedding API calls (used by the SDK client backend).",
+    )
+    client_backend: str = Field(
+        default="sdk",
+        description=(
+            "Which embedding client backend to use: 'sdk' (official OpenAI SDK), "
+            "'httpx' (raw HTTP, supports all providers in memu.embedding.backends, "
+            "e.g. openai/jina/voyage/doubao/openrouter), or 'lazyllm_backend'."
+        ),
+    )
+    lazyllm_source: LazyLLMSource = Field(default=LazyLLMSource())
+    endpoint_overrides: dict[str, str] = Field(
+        default_factory=dict,
+        description="Optional overrides for HTTP endpoints (key: 'embeddings').",
+    )
+
+    @model_validator(mode="after")
+    def set_provider_defaults(self) -> "EmbeddingConfig":
+        from memu.embedding.defaults import EMBEDDING_PROVIDER_ENDPOINTS, default_embedding_model
+
+        # base_url/api_key: reuse the shared chat per-provider defaults when the
+        # provider is also a chat provider; otherwise fall back to the
+        # embedding-only endpoint table (Jina, Voyage). Each field is only
+        # overridden while it still holds the OpenAI default, so explicit values
+        # survive.
+        endpoint = _PROVIDER_DEFAULTS.get(self.provider)
+        base_url = endpoint[0] if endpoint is not None else None
+        api_key = endpoint[1] if endpoint is not None else None
+        if base_url is None:
+            embed_endpoint = EMBEDDING_PROVIDER_ENDPOINTS.get(self.provider)
+            if embed_endpoint is not None:
+                base_url, api_key = embed_endpoint
+        if base_url is not None and self.base_url == "https://api.openai.com/v1":
+            self.base_url = base_url
+        if api_key is not None and self.api_key == "OPENAI_API_KEY":
+            self.api_key = api_key
+        if self.embed_model == "text-embedding-3-small":
+            resolved = default_embedding_model(self.provider)
+            if resolved is not None:
+                self.embed_model = resolved
+        return self
+
+
+def embedding_config_from_llm(llm: "LLMConfig") -> "EmbeddingConfig":
+    """Derive an :class:`EmbeddingConfig` from an :class:`LLMConfig`.
+
+    Reuses the LLM provider/credentials/transport/embed model so vectorization
+    works with zero extra configuration when no dedicated embedding profile is
+    supplied. The ``anthropic`` transport has no embeddings API; the derived
+    config preserves that so the embedding gateway raises a clear error.
+    """
+    return EmbeddingConfig(
+        provider=llm.provider,
+        base_url=llm.base_url,
+        api_key=llm.api_key,
+        embed_model=llm.embed_model,
+        embed_batch_size=llm.embed_batch_size,
+        client_backend=llm.client_backend,
+        lazyllm_source=llm.lazyllm_source,
         endpoint_overrides=dict(llm.endpoint_overrides),
     )
 
@@ -411,6 +502,43 @@ class LLMProfilesConfig(RootModel[dict[Key, LLMConfig]]):
     @property
     def default(self) -> LLMConfig:
         return self.root.get("default", LLMConfig())
+
+
+class EmbeddingProfilesConfig(RootModel[dict[Key, EmbeddingConfig]]):
+    """Named embedding profiles, mirroring :class:`LLMProfilesConfig`.
+
+    When no explicit embedding profiles are supplied, the service derives them
+    from the LLM profiles (see ``embedding_config_from_llm``) so existing
+    configs keep vectorizing through the same provider/credentials.
+    """
+
+    root: dict[str, EmbeddingConfig] = Field(default_factory=lambda: {"default": EmbeddingConfig()})
+
+    def get(self, key: str, default: EmbeddingConfig | None = None) -> EmbeddingConfig | None:
+        return self.root.get(key, default)
+
+    @model_validator(mode="before")
+    @classmethod
+    def ensure_default(cls, data: Any) -> Any:
+        if data is None:
+            data = {}
+        elif isinstance(data, dict):
+            data = dict(data)
+        else:
+            return data
+        if "default" not in data:
+            data["default"] = EmbeddingConfig()
+        if "embedding" not in data:
+            data["embedding"] = data["default"]
+        return data
+
+    @property
+    def profiles(self) -> dict[str, EmbeddingConfig]:
+        return self.root
+
+    @property
+    def default(self) -> EmbeddingConfig:
+        return self.root.get("default", EmbeddingConfig())
 
 
 class MetadataStoreConfig(BaseModel):
