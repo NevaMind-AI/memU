@@ -8,6 +8,7 @@ from memu.database.postgres.repositories.base import PostgresRepoBase
 from memu.database.postgres.session import SessionManager
 from memu.database.repositories.resource import ResourceRepo
 from memu.database.state import DatabaseState
+from memu.vector import cosine_topk
 
 
 class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
@@ -98,6 +99,21 @@ class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
             session.refresh(res)
 
         return self._cache_resource(res)
+
+    def vector_search_resources(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+    ) -> list[tuple[str, float]]:
+        """Rank resources by cosine similarity over stored embeddings.
+
+        Resource captions are not indexed in pgvector, so this scores the loaded
+        resources in Python, matching the previous app-layer behavior.
+        """
+        pool = self.list_resources(where)
+        corpus = [(rid, res.embedding) for rid, res in pool.items() if res.embedding]
+        return cosine_topk(query_vec, corpus, k=top_k)
 
     def load_existing(self) -> None:
         from sqlmodel import select

@@ -38,10 +38,19 @@ flowchart TD
 - typed configs (`LLMProfilesConfig`, `DatabaseConfig`, `MemorizeConfig`, `RetrieveConfig`, `UserConfig`)
 - storage backend (`build_database(...)`)
 - resource filesystem fetcher (`LocalFS`)
-- LLM client cache and wrappers
+- per-capability client pools and wrappers (one `ClientPool` each for chat/LLM,
+  VLM and embedding; see `src/memu/app/client_pool.py`)
 - workflow and LLM interceptor registries
 - workflow runner (`local` by default, pluggable)
 - named workflow pipelines via `PipelineManager`
+- the markdown memory file-system builder (`MemoryFilesBuilder`,
+  `src/memu/app/memory_files.py`), which owns the exporter/synthesizer/lock
+
+The three client pools (`ClientPool[Config, Client]`) replace hand-rolled
+per-capability caches: each lazily builds and caches a client per profile name
+through the matching gateway (`build_llm_client` / `build_vlm_client` /
+`build_embedding_client`), so adding a new capability is one more pool rather
+than another copy of the get/cache/build dance.
 
 Public APIs are assembled by mixins:
 
@@ -114,10 +123,18 @@ Key behavior:
 
 Storage is abstracted through a `Database` protocol with four repositories:
 
-- `ResourceRepo`
-- `MemoryItemRepo`
+- `ResourceRepo` (incl. `vector_search_resources`)
+- `MemoryItemRepo` (incl. `vector_search_items`, similarity/salience)
 - `MemoryCategoryRepo`
 - `CategoryItemRepo`
+
+Vector ranking over **stored** embeddings is a repository responsibility:
+`vector_search_items` and `vector_search_resources` keep the retrieval layer from
+reaching into any concrete backend. The pure cosine/salience math lives in the
+storage-neutral `memu.vector` module (not under any backend), so the app layer
+and every backend depend on it instead of on each other. (Category recall still
+ranks freshly re-embedded summaries at query time in the retrieval layer, since
+that is query-time policy rather than search over stored vectors.)
 
 ### Backends
 
@@ -256,8 +273,8 @@ existing memorize/extract pipeline untouched.
 ### Initialize vs. incremental update
 
 Synthesis is stateful and mirrors the "submit the changed part of the file system"
-model. `MemoryService._build_memory_files(where, changed=...)` decides between two
-paths:
+model. `MemoryFilesBuilder.build(database, where, changed=...)` (delegated to from
+`MemoryService._build_memory_files`) decides between two paths:
 
 - **Initialization** (no prior tree on disk, or `changed is None`): scan all
   in-scope sources, turn each into its multimodal description, and synthesize the

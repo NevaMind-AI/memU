@@ -7,8 +7,10 @@ from typing import Any, Literal, TypeVar
 
 from pydantic import BaseModel
 
+from memu.app.client_pool import ClientPool
 from memu.app.crud import CRUDMixin
 from memu.app.memorize import MemorizeMixin
+from memu.app.memory_files import MemoryFilesBuilder
 from memu.app.retrieve import RetrieveMixin
 from memu.app.settings import (
     BlobConfig,
@@ -37,7 +39,6 @@ from memu.llm.wrapper import (
     LLMInterceptorHandle,
     LLMInterceptorRegistry,
 )
-from memu.memory_fs import ExportResult, MemoryFileExporter, MemorySynthesizer
 from memu.vlm.gateway import build_vlm_client
 from memu.workflow.interceptor import WorkflowInterceptorHandle, WorkflowInterceptorRegistry
 from memu.workflow.pipeline import PipelineManager
@@ -110,48 +111,35 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         else:
             self.embedding_profiles = self._validate_config(embedding_profiles, EmbeddingProfilesConfig).profiles
 
-        # Initialize client caches (lazy creation on first use)
-        self._llm_clients: dict[str, Any] = {}
-        self._vlm_clients: dict[str, Any] = {}
-        self._embedding_clients: dict[str, Any] = {}
+        # Lazy client pools (one per capability), keyed by profile name. Each
+        # builds and caches a concrete client on first use, sharing the same
+        # get/cache/build bookkeeping instead of three hand-rolled caches.
+        self._llm_pool: ClientPool[LLMConfig, Any] = ClientPool(
+            profiles=self.llm_profiles.profiles, builder=build_llm_client, label="llm"
+        )
+        self._vlm_pool: ClientPool[VLMConfig, Any] = ClientPool(
+            profiles=self.vlm_profiles, builder=build_vlm_client, label="vlm"
+        )
+        self._embedding_pool: ClientPool[EmbeddingConfig, Any] = ClientPool(
+            profiles=self.embedding_profiles, builder=build_embedding_client, label="embedding"
+        )
         self._llm_interceptors = LLMInterceptorRegistry()
         self._workflow_interceptors = WorkflowInterceptorRegistry()
 
         self._workflow_runner = resolve_workflow_runner(workflow_runner)
 
         # Optional markdown "memory file system" artifact layer (additive, read-only).
-        # Writes are serialized through a single lock so concurrent exports never
-        # interleave on the shared output directory.
-        self._memory_file_exporter = MemoryFileExporter(self.memory_files_config.output_dir)
-        self._memory_synthesizer = MemorySynthesizer()
-        self._memory_files_lock = asyncio.Lock()
+        # The build/synthesis policy lives in MemoryFilesBuilder; the exporter and
+        # synthesizer are re-exposed as attributes for back-compat with callers/tests.
+        self._memory_files = MemoryFilesBuilder(config=self.memory_files_config)
+        self._memory_file_exporter = self._memory_files.exporter
+        self._memory_synthesizer = self._memory_files.synthesizer
 
         self._pipelines = PipelineManager(
             available_capabilities={"llm", "vector", "db", "io", "vision"},
             llm_profiles=set(self.llm_profiles.profiles.keys()),
         )
         self._register_pipelines()
-
-    def _init_llm_client(self, config: LLMConfig | None = None) -> Any:
-        """Initialize LLM client based on configuration via the LLM gateway."""
-        cfg = config or self.llm_config
-        return build_llm_client(cfg)
-
-    def _get_llm_base_client(self, profile: str | None = None) -> Any:
-        """
-        Lazily initialize and cache LLM clients per profile to avoid eager network setup.
-        """
-        name = profile or "default"
-        client = self._llm_clients.get(name)
-        if client is not None:
-            return client
-        cfg: LLMConfig | None = self.llm_profiles.profiles.get(name)
-        if cfg is None:
-            msg = f"Unknown llm profile '{name}'"
-            raise KeyError(msg)
-        client = self._init_llm_client(cfg)
-        self._llm_clients[name] = client
-        return client
 
     @staticmethod
     def _llm_call_metadata(profile: str, step_context: Mapping[str, Any] | None) -> LLMCallMetadata:
@@ -175,7 +163,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         profile: str | None = None,
         step_context: Mapping[str, Any] | None = None,
     ) -> Any:
-        cfg: LLMConfig | None = self.llm_profiles.profiles.get(profile or "default")
+        cfg = self._llm_pool.config(profile)
         provider = cfg.provider if cfg is not None else None
         metadata = self._llm_call_metadata(profile or "default", step_context)
         return LLMClientWrapper(
@@ -187,26 +175,12 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         )
 
     def _get_llm_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
-        base_client = self._get_llm_base_client(profile)
+        base_client = self._llm_pool.get(profile)
         return self._wrap_llm_client(base_client, profile=profile, step_context=step_context)
 
-    def _get_vlm_base_client(self, profile: str | None = None) -> Any:
-        """Lazily initialize and cache VLM clients per profile."""
-        name = profile or "default"
-        client = self._vlm_clients.get(name)
-        if client is not None:
-            return client
-        cfg: VLMConfig | None = self.vlm_profiles.get(name)
-        if cfg is None:
-            msg = f"Unknown vlm profile '{name}'"
-            raise KeyError(msg)
-        client = build_vlm_client(cfg)
-        self._vlm_clients[name] = client
-        return client
-
     def _get_vlm_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
-        base_client = self._get_vlm_base_client(profile)
-        cfg = self.vlm_profiles.get(profile or "default")
+        base_client = self._vlm_pool.get(profile)
+        cfg = self._vlm_pool.config(profile)
         provider = cfg.provider if cfg is not None else None
         metadata = self._llm_call_metadata(profile or "default", step_context)
         return LLMClientWrapper(
@@ -217,23 +191,9 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             chat_model=getattr(base_client, "vlm_model", None),
         )
 
-    def _get_embedding_base_client(self, profile: str | None = None) -> Any:
-        """Lazily initialize and cache embedding clients per profile."""
-        name = profile or "default"
-        client = self._embedding_clients.get(name)
-        if client is not None:
-            return client
-        cfg: EmbeddingConfig | None = self.embedding_profiles.get(name)
-        if cfg is None:
-            msg = f"Unknown embedding profile '{name}'"
-            raise KeyError(msg)
-        client = build_embedding_client(cfg)
-        self._embedding_clients[name] = client
-        return client
-
     def _get_embedding_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
-        base_client = self._get_embedding_base_client(profile)
-        cfg = self.embedding_profiles.get(profile or "default")
+        base_client = self._embedding_pool.get(profile)
+        cfg = self._embedding_pool.config(profile)
         provider = cfg.provider if cfg is not None else None
         metadata = self._llm_call_metadata(profile or "default", step_context)
         return LLMClientWrapper(
@@ -439,65 +399,16 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
     ) -> dict[str, Any]:
         """Initialize or incrementally update the memory file tree.
 
-        ``changed`` is the list of just-memorized ``Resource`` objects driving an
-        incremental update. When it is ``None`` (or no prior tree exists), the tree
-        is (re)initialized from the full scoped store.
+        Thin delegate to :class:`MemoryFilesBuilder`; ``changed`` is the list of
+        just-memorized ``Resource`` objects driving an incremental update (``None``
+        forces a full (re)initialization from the scoped store).
         """
-        memory_body: str | None = None
-        skills: dict[str, str] | None = None
-
-        is_update = changed is not None and self._memory_file_exporter.artifacts_exist()
-
-        # The synthesis trunk is the structured store (extracted memory items), not the
-        # lossy per-source captions: the just-changed sources for an incremental update,
-        # otherwise the full in-scope store for (re)initialization.
-        scoped_items = list(self.database.memory_item_repo.list_items(where=where or None).values())
-        if is_update:
-            changed_resources = list(changed or [])
-            changed_ids = {res.id for res in changed_resources}
-            changed_items = [item for item in scoped_items if item.resource_id in changed_ids]
-            descriptions = MemoryFileExporter.build_synthesis_descriptions(changed_resources, changed_items)
-        else:
-            resources = list(self.database.resource_repo.list_resources(where=where or None).values())
-            descriptions = MemoryFileExporter.build_synthesis_descriptions(resources, scoped_items)
-
-        client = self._get_llm_client(self.memory_files_config.synthesis_llm_profile)
-
-        if self.memory_files_config.synthesize:
-            # MEMORY.md and the skill/ tree are both synthesized from descriptions.
-            if is_update:
-                existing_memory = await asyncio.to_thread(self._memory_file_exporter.read_memory_body)
-                existing_skills = await asyncio.to_thread(self._memory_file_exporter.read_skills)
-                synthesized = await self._memory_synthesizer.update(
-                    descriptions,
-                    existing_memory=existing_memory,
-                    existing_skills=existing_skills,
-                    chat=client.chat,
-                )
-            else:
-                synthesized = await self._memory_synthesizer.synthesize(descriptions, chat=client.chat)
-            memory_body, skills = synthesized.memory_body, synthesized.skills
-        else:
-            # MEMORY.md is rendered deterministically from category summaries, but
-            # the skill/ tree is a sibling bypass: always synthesized from the
-            # descriptions, never derived from extracted skill-type memory items.
-            if is_update:
-                existing_skills = await asyncio.to_thread(self._memory_file_exporter.read_skills)
-                skills = await self._memory_synthesizer.update_skills(
-                    descriptions, existing_skills=existing_skills, chat=client.chat
-                )
-            else:
-                skills = await self._memory_synthesizer.synthesize_skills(descriptions, chat=client.chat)
-
-        async with self._memory_files_lock:
-            result: ExportResult = await asyncio.to_thread(
-                self._memory_file_exporter.export,
-                self.database,
-                where=where,
-                memory_body=memory_body,
-                skills=skills,
-            )
-        return result.to_dict()
+        return await self._memory_files.build(
+            self.database,
+            where,
+            changed=changed,
+            make_client=self._get_llm_client,
+        )
 
     @staticmethod
     def _extract_json_blob(raw: str) -> str:

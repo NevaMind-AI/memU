@@ -9,13 +9,13 @@ from typing import Any
 import pendulum
 from sqlmodel import delete, select
 
-from memu.database.inmemory.vector import cosine_topk, cosine_topk_salience
 from memu.database.models import MemoryItem, MemoryType, compute_content_hash
 from memu.database.repositories.memory_item import MemoryItemRepo
 from memu.database.sqlite.repositories.base import SQLiteRepoBase
 from memu.database.sqlite.schema import SQLiteSQLAModels
 from memu.database.sqlite.session import SQLiteSessionManager
 from memu.database.state import DatabaseState
+from memu.vector import cosine_topk, cosine_topk_salience
 
 logger = logging.getLogger(__name__)
 
