@@ -161,6 +161,37 @@ class SQLiteCategoryItemRepo(SQLiteRepoBase, CategoryItemRepo):
                     r for r in self.relations if not (r.item_id == item_id and r.category_id == category_id)
                 ]
 
+    def unlink_item(self, item_id: str) -> list[CategoryItem]:
+        """Remove all relations for a given item (used on item deletion)."""
+        from sqlmodel import delete
+
+        removed = self.list_relations({"item_id": item_id})
+        if not removed:
+            return []
+        with self._sessions.session() as session:
+            session.exec(delete(self._category_item_model).where(self._category_item_model.item_id == item_id))
+            session.commit()
+        self.relations[:] = [r for r in self.relations if r.item_id != item_id]
+        return removed
+
+    def clear_relations(self, where: Mapping[str, Any] | None = None) -> list[CategoryItem]:
+        """Remove all relations matching the scope (used on clear_memory)."""
+        from sqlmodel import delete
+
+        removed = self.list_relations(where)
+        if not removed:
+            return []
+        filters = self._build_filters(self._category_item_model, where)
+        with self._sessions.session() as session:
+            del_stmt = delete(self._category_item_model)
+            if filters:
+                del_stmt = del_stmt.where(*filters)
+            session.exec(del_stmt)
+            session.commit()
+        removed_ids = {rel.id for rel in removed}
+        self.relations[:] = [r for r in self.relations if r.id not in removed_ids]
+        return removed
+
     def get_item_categories(self, item_id: str) -> list[CategoryItem]:
         """Get all category relations for a given item.
 

@@ -150,6 +150,14 @@ class CRUDMixin:
     def _build_clear_memory_workflow(self) -> list[WorkflowStep]:
         steps = [
             WorkflowStep(
+                step_id="clear_memory_relations",
+                role="delete_memories",
+                handler=self._crud_clear_memory_relations,
+                requires={"ctx", "store", "where"},
+                produces={"deleted_relations"},
+                capabilities={"db"},
+            ),
+            WorkflowStep(
                 step_id="clear_memory_categories",
                 role="delete_memories",
                 handler=self._crud_clear_memory_categories,
@@ -177,7 +185,14 @@ class CRUDMixin:
                 step_id="build_response",
                 role="emit",
                 handler=self._crud_build_clear_memory_response,
-                requires={"ctx", "store", "deleted_categories", "deleted_items", "deleted_resources"},
+                requires={
+                    "ctx",
+                    "store",
+                    "deleted_relations",
+                    "deleted_categories",
+                    "deleted_items",
+                    "deleted_resources",
+                },
                 produces={"response"},
                 capabilities=set(),
             ),
@@ -243,6 +258,13 @@ class CRUDMixin:
         state["response"] = response
         return state
 
+    def _crud_clear_memory_relations(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        where_filters = state.get("where") or {}
+        store = state["store"]
+        deleted = store.category_item_repo.clear_relations(where_filters)
+        state["deleted_relations"] = deleted
+        return state
+
     def _crud_clear_memory_categories(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
@@ -268,10 +290,12 @@ class CRUDMixin:
         deleted_categories = state.get("deleted_categories", {})
         deleted_items = state.get("deleted_items", {})
         deleted_resources = state.get("deleted_resources", {})
+        deleted_relations = state.get("deleted_relations", [])
         response = {
             "deleted_categories": [self._model_dump_without_embeddings(cat) for cat in deleted_categories.values()],
             "deleted_items": [self._model_dump_without_embeddings(item) for item in deleted_items.values()],
             "deleted_resources": [self._model_dump_without_embeddings(res) for res in deleted_resources.values()],
+            "deleted_relations": [rel.model_dump() for rel in deleted_relations],
         }
         state["response"] = response
         return state
@@ -565,29 +589,65 @@ class CRUDMixin:
                 summary=memory_payload["content"],
                 embedding=content_embedding,
             )
-        new_cat_names = memory_payload["categories"]
-        mapped_new_cat_ids = self._map_category_names_to_ids(new_cat_names, ctx)
-
-        cats_to_remove = set(mapped_old_cat_ids) - set(mapped_new_cat_ids)
-        cats_to_add = set(mapped_new_cat_ids) - set(mapped_old_cat_ids)
-        for cid in cats_to_remove:
-            store.category_item_repo.unlink_item_category(memory_id, cid)
-            if propagate:
-                category_memory_updates[cid] = (old_content, None)
-        for cid in cats_to_add:
-            store.category_item_repo.link_item_category(memory_id, cid, user_data=dict(user or {}))
-            if propagate:
-                category_memory_updates[cid] = (None, item.summary)
-
-        if propagate and memory_payload["content"]:
-            for cid in set(mapped_old_cat_ids) & set(mapped_new_cat_ids):
-                category_memory_updates[cid] = (old_content, item.summary)
+        self._reconcile_update_categories(
+            memory_id=memory_id,
+            new_cat_names=memory_payload["categories"],
+            mapped_old_cat_ids=mapped_old_cat_ids,
+            content_changed=bool(memory_payload["content"]),
+            old_content=old_content,
+            new_summary=item.summary,
+            ctx=ctx,
+            store=store,
+            user=user,
+            propagate=propagate,
+            category_memory_updates=category_memory_updates,
+        )
 
         state.update({
             "memory_item": item,
             "category_updates": category_memory_updates,
         })
         return state
+
+    def _reconcile_update_categories(
+        self,
+        *,
+        memory_id: str,
+        new_cat_names: list[str] | None,
+        mapped_old_cat_ids: list[str],
+        content_changed: bool,
+        old_content: Any,
+        new_summary: Any,
+        ctx: Any,
+        store: Database,
+        user: dict[str, Any] | None,
+        propagate: bool,
+        category_memory_updates: dict[str, tuple[Any, Any]],
+    ) -> None:
+        """Sync an item's category links for an UPDATE.
+
+        ``new_cat_names is None`` means the caller omitted categories, so existing
+        links are left untouched (an empty list, by contrast, clears all links).
+        """
+        if new_cat_names is None:
+            if propagate and content_changed:
+                for cid in mapped_old_cat_ids:
+                    category_memory_updates[cid] = (old_content, new_summary)
+            return
+
+        mapped_new_cat_ids = self._map_category_names_to_ids(new_cat_names, ctx)
+        old_set, new_set = set(mapped_old_cat_ids), set(mapped_new_cat_ids)
+        for cid in old_set - new_set:
+            store.category_item_repo.unlink_item_category(memory_id, cid)
+            if propagate:
+                category_memory_updates[cid] = (old_content, None)
+        for cid in new_set - old_set:
+            store.category_item_repo.link_item_category(memory_id, cid, user_data=dict(user or {}))
+            if propagate:
+                category_memory_updates[cid] = (None, new_summary)
+        if propagate and content_changed:
+            for cid in old_set & new_set:
+                category_memory_updates[cid] = (old_content, new_summary)
 
     async def _patch_delete_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         memory_id = state["memory_id"]
@@ -603,6 +663,9 @@ class CRUDMixin:
         if propagate:
             for cat in item_categories:
                 category_memory_updates[cat.category_id] = (item.summary, None)
+        # Remove the item's category relations first so deleting the item never
+        # leaves orphan edges pointing at a non-existent item.
+        store.category_item_repo.unlink_item(memory_id)
         store.memory_item_repo.delete_item(memory_id)
 
         state.update({

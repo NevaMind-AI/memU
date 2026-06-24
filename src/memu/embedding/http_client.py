@@ -3,13 +3,16 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 
 from memu.embedding.backends.base import EmbeddingBackend
 from memu.embedding.backends.doubao import DoubaoEmbeddingBackend, DoubaoMultimodalEmbeddingInput
+from memu.embedding.backends.jina import JinaEmbeddingBackend
 from memu.embedding.backends.openai import OpenAIEmbeddingBackend
+from memu.embedding.backends.openrouter import OpenRouterEmbeddingBackend
+from memu.embedding.backends.voyage import VoyageEmbeddingBackend
 
 
 def _load_proxy() -> str | None:
@@ -18,9 +21,14 @@ def _load_proxy() -> str | None:
 
 logger = logging.getLogger(__name__)
 
+# Providers with a non-OpenAI endpoint/payload are registered explicitly; any
+# other provider is treated as OpenAI-compatible (see ``_load_backend``).
 EMBEDDING_BACKENDS: dict[str, Callable[[], EmbeddingBackend]] = {
     OpenAIEmbeddingBackend.name: OpenAIEmbeddingBackend,
     DoubaoEmbeddingBackend.name: DoubaoEmbeddingBackend,
+    JinaEmbeddingBackend.name: JinaEmbeddingBackend,
+    VoyageEmbeddingBackend.name: VoyageEmbeddingBackend,
+    OpenRouterEmbeddingBackend.name: OpenRouterEmbeddingBackend,
 }
 
 
@@ -57,7 +65,7 @@ class HTTPEmbeddingClient:
         self.timeout = timeout
         self.proxy = _load_proxy()
 
-    async def embed(self, inputs: list[str]) -> list[list[float]]:
+    async def embed(self, inputs: list[str]) -> tuple[list[list[float]], dict[str, Any]]:
         """
         Create text embeddings.
 
@@ -65,7 +73,9 @@ class HTTPEmbeddingClient:
             inputs: List of text strings to embed
 
         Returns:
-            List of embedding vectors
+            Tuple of (list of embedding vectors, raw response dict). The raw
+            response carries provider ``usage`` so callers/interceptors can
+            track token consumption.
         """
         payload = self.backend.build_embedding_payload(inputs=inputs, embed_model=self.embed_model)
         async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, proxy=self.proxy) as client:
@@ -73,7 +83,7 @@ class HTTPEmbeddingClient:
             resp.raise_for_status()
             data = resp.json()
         logger.debug("HTTP embedding response: %s", data)
-        return self.backend.parse_embedding_response(data)
+        return self.backend.parse_embedding_response(data), data
 
     async def embed_multimodal(
         self,
@@ -139,11 +149,11 @@ class HTTPEmbeddingClient:
         return self.backend.parse_multimodal_embedding_response(data)
 
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.api_key}"}
+        return self.backend.default_headers(self.api_key)
 
     def _load_backend(self, provider: str) -> EmbeddingBackend:
-        factory = EMBEDDING_BACKENDS.get(provider)
-        if not factory:
-            msg = f"Unsupported embedding provider '{provider}'. Available: {', '.join(EMBEDDING_BACKENDS.keys())}"
-            raise ValueError(msg)
+        # Providers with a non-standard endpoint/payload are registered
+        # explicitly; everything else is treated as OpenAI-compatible (the most
+        # common case, e.g. grok/deepseek/kimi/minimax).
+        factory = EMBEDDING_BACKENDS.get(provider, OpenAIEmbeddingBackend)
         return factory()

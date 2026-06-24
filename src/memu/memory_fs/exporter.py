@@ -227,6 +227,43 @@ class MemoryFileExporter:
             )
         return descriptions
 
+    @staticmethod
+    def build_synthesis_descriptions(resources: list[Resource], items: list[MemoryItem]) -> list[FileDescription]:
+        """Build synthesizer input from the structured store (extracted items).
+
+        The synthesizer is fed the extracted memory items per source so that the
+        structured store is the single source of truth for synthesis, rather than the
+        lossy per-source caption. A source's caption is used only as a fallback when it
+        has no extracted items yet (e.g. it failed extraction or has not been processed).
+        """
+        items_by_resource: dict[str, list[MemoryItem]] = {}
+        for item in items:
+            if item.resource_id:
+                items_by_resource.setdefault(item.resource_id, []).append(item)
+
+        descriptions: list[FileDescription] = []
+        for resource in sorted(resources, key=lambda r: (r.url, r.id)):
+            res_items = sorted(
+                items_by_resource.get(resource.id, []),
+                key=lambda i: (i.memory_type, i.created_at, i.id),
+            )
+            parts = [
+                f"[{item.memory_type}] {' '.join((item.summary or '').split())}"
+                for item in res_items
+                if (item.summary or "").strip()
+            ]
+            description = "; ".join(parts) if parts else " ".join((resource.caption or "").split())
+            descriptions.append(
+                FileDescription(
+                    url=resource.url,
+                    modality=resource.modality,
+                    description=description,
+                    resource_id=resource.id,
+                    local_path=resource.local_path,
+                )
+            )
+        return descriptions
+
     # -- bypass: SKILL -----------------------------------------------------
 
     @staticmethod

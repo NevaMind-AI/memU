@@ -14,17 +14,23 @@ from memu.app.settings import (
     BlobConfig,
     CategoryConfig,
     DatabaseConfig,
+    EmbeddingConfig,
+    EmbeddingProfilesConfig,
     LLMConfig,
     LLMProfilesConfig,
     MemorizeConfig,
     MemoryFilesConfig,
     RetrieveConfig,
     UserConfig,
+    VLMConfig,
+    embedding_config_from_llm,
+    vlm_config_from_llm,
 )
 from memu.blob.local_fs import LocalFS
 from memu.database.factory import build_database
 from memu.database.interfaces import Database
-from memu.llm.http_client import HTTPLLMClient
+from memu.embedding.gateway import build_embedding_client
+from memu.llm.gateway import build_llm_client
 from memu.llm.wrapper import (
     LLMCallMetadata,
     LLMClientWrapper,
@@ -32,6 +38,7 @@ from memu.llm.wrapper import (
     LLMInterceptorRegistry,
 )
 from memu.memory_fs import ExistingArtifacts, ExportResult, MemoryFileExporter, MemorySynthesizer
+from memu.vlm.gateway import build_vlm_client
 from memu.workflow.interceptor import WorkflowInterceptorHandle, WorkflowInterceptorRegistry
 from memu.workflow.pipeline import PipelineManager
 from memu.workflow.runner import WorkflowRunner, resolve_workflow_runner
@@ -60,6 +67,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         workflow_runner: WorkflowRunner | str | None = None,
         user_config: UserConfig | dict[str, Any] | None = None,
         memory_files_config: MemoryFilesConfig | dict[str, Any] | None = None,
+        embedding_profiles: EmbeddingProfilesConfig | dict[str, Any] | None = None,
     ):
         self.llm_profiles = self._validate_config(llm_profiles, LLMProfilesConfig)
         self.user_config = self._validate_config(user_config, UserConfig)
@@ -85,8 +93,27 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         # We need the concrete user scope (user_id: xxx) to initialize the categories
         # self._start_category_initialization(self._context, self.database)
 
+        # VLM (vision-language) profiles are derived from the LLM profiles so
+        # image/video vision reuses the same provider/credentials with a stronger
+        # multimodal model (see ``vlm_config_from_llm``).
+        self.vlm_profiles: dict[str, VLMConfig] = {
+            name: vlm_config_from_llm(cfg) for name, cfg in self.llm_profiles.profiles.items()
+        }
+
+        # Embedding profiles: use explicit profiles when supplied (e.g. to point
+        # vectorization at a dedicated provider such as jina/voyage), otherwise
+        # derive them from the LLM profiles so existing configs keep working.
+        if embedding_profiles is None:
+            self.embedding_profiles: dict[str, EmbeddingConfig] = {
+                name: embedding_config_from_llm(cfg) for name, cfg in self.llm_profiles.profiles.items()
+            }
+        else:
+            self.embedding_profiles = self._validate_config(embedding_profiles, EmbeddingProfilesConfig).profiles
+
         # Initialize client caches (lazy creation on first use)
         self._llm_clients: dict[str, Any] = {}
+        self._vlm_clients: dict[str, Any] = {}
+        self._embedding_clients: dict[str, Any] = {}
         self._llm_interceptors = LLMInterceptorRegistry()
         self._workflow_interceptors = WorkflowInterceptorRegistry()
 
@@ -106,44 +133,9 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self._register_pipelines()
 
     def _init_llm_client(self, config: LLMConfig | None = None) -> Any:
-        """Initialize LLM client based on configuration."""
+        """Initialize LLM client based on configuration via the LLM gateway."""
         cfg = config or self.llm_config
-        backend = cfg.client_backend
-        if backend == "sdk":
-            from memu.llm.openai_sdk import OpenAISDKClient
-
-            return OpenAISDKClient(
-                base_url=cfg.base_url,
-                api_key=cfg.api_key,
-                chat_model=cfg.chat_model,
-                embed_model=cfg.embed_model,
-                embed_batch_size=cfg.embed_batch_size,
-            )
-        elif backend == "httpx":
-            return HTTPLLMClient(
-                base_url=cfg.base_url,
-                api_key=cfg.api_key,
-                chat_model=cfg.chat_model,
-                provider=cfg.provider,
-                endpoint_overrides=cfg.endpoint_overrides,
-                embed_model=cfg.embed_model,
-            )
-        elif backend == "lazyllm_backend":
-            from memu.llm.lazyllm_client import LazyLLMClient
-
-            return LazyLLMClient(
-                llm_source=cfg.lazyllm_source.llm_source or cfg.lazyllm_source.source,
-                vlm_source=cfg.lazyllm_source.vlm_source or cfg.lazyllm_source.source,
-                embed_source=cfg.lazyllm_source.embed_source or cfg.lazyllm_source.source,
-                stt_source=cfg.lazyllm_source.stt_source or cfg.lazyllm_source.source,
-                chat_model=cfg.chat_model,
-                embed_model=cfg.embed_model,
-                vlm_model=cfg.lazyllm_source.vlm_model,
-                stt_model=cfg.lazyllm_source.stt_model,
-            )
-        else:
-            msg = f"Unknown llm_client_backend '{cfg.client_backend}'"
-            raise ValueError(msg)
+        return build_llm_client(cfg)
 
     def _get_llm_base_client(self, profile: str | None = None) -> Any:
         """
@@ -192,12 +184,65 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             metadata=metadata,
             provider=provider,
             chat_model=getattr(client, "chat_model", None),
-            embed_model=getattr(client, "embed_model", None),
         )
 
     def _get_llm_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
         base_client = self._get_llm_base_client(profile)
         return self._wrap_llm_client(base_client, profile=profile, step_context=step_context)
+
+    def _get_vlm_base_client(self, profile: str | None = None) -> Any:
+        """Lazily initialize and cache VLM clients per profile."""
+        name = profile or "default"
+        client = self._vlm_clients.get(name)
+        if client is not None:
+            return client
+        cfg: VLMConfig | None = self.vlm_profiles.get(name)
+        if cfg is None:
+            msg = f"Unknown vlm profile '{name}'"
+            raise KeyError(msg)
+        client = build_vlm_client(cfg)
+        self._vlm_clients[name] = client
+        return client
+
+    def _get_vlm_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
+        base_client = self._get_vlm_base_client(profile)
+        cfg = self.vlm_profiles.get(profile or "default")
+        provider = cfg.provider if cfg is not None else None
+        metadata = self._llm_call_metadata(profile or "default", step_context)
+        return LLMClientWrapper(
+            base_client,
+            registry=self._llm_interceptors,
+            metadata=metadata,
+            provider=provider,
+            chat_model=getattr(base_client, "vlm_model", None),
+        )
+
+    def _get_embedding_base_client(self, profile: str | None = None) -> Any:
+        """Lazily initialize and cache embedding clients per profile."""
+        name = profile or "default"
+        client = self._embedding_clients.get(name)
+        if client is not None:
+            return client
+        cfg: EmbeddingConfig | None = self.embedding_profiles.get(name)
+        if cfg is None:
+            msg = f"Unknown embedding profile '{name}'"
+            raise KeyError(msg)
+        client = build_embedding_client(cfg)
+        self._embedding_clients[name] = client
+        return client
+
+    def _get_embedding_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
+        base_client = self._get_embedding_base_client(profile)
+        cfg = self.embedding_profiles.get(profile or "default")
+        provider = cfg.provider if cfg is not None else None
+        metadata = self._llm_call_metadata(profile or "default", step_context)
+        return LLMClientWrapper(
+            base_client,
+            registry=self._llm_interceptors,
+            metadata=metadata,
+            provider=provider,
+            embed_model=getattr(base_client, "embed_model", None),
+        )
 
     @property
     def llm_client(self) -> Any:
@@ -234,7 +279,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
 
     def _get_step_embedding_client(self, step_context: Mapping[str, Any] | None) -> Any:
         profile = self._llm_profile_from_context(step_context, task="embedding") or "embedding"
-        return self._get_llm_client(profile, step_context=step_context)
+        return self._get_embedding_client(profile, step_context=step_context)
 
     def intercept_before_llm_call(
         self,
@@ -401,11 +446,27 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         memory_body: str | None = None
         skills: dict[str, str] | None = None
 
+        is_update = changed is not None and self._memory_file_exporter.artifacts_exist()
+
+        # The synthesis trunk is the structured store (extracted memory items), not the
+        # lossy per-source captions: the just-changed sources for an incremental update,
+        # otherwise the full in-scope store for (re)initialization.
+        scoped_items = list(self.database.memory_item_repo.list_items(where=where or None).values())
+        if is_update:
+            changed_resources = list(changed or [])
+            changed_ids = {res.id for res in changed_resources}
+            changed_items = [item for item in scoped_items if item.resource_id in changed_ids]
+            descriptions = MemoryFileExporter.build_synthesis_descriptions(changed_resources, changed_items)
+        else:
+            resources = list(self.database.resource_repo.list_resources(where=where or None).values())
+            descriptions = MemoryFileExporter.build_synthesis_descriptions(resources, scoped_items)
+
+        client = self._get_llm_client(self.memory_files_config.synthesis_llm_profile)
+
         # TODO: consider splitting ``synthesize`` into separate ``synthesize_memory``
         # and ``synthesize_skills`` flags, so MEMORY.md and the skill/ tree can each
         # independently choose the LLM path or the deterministic bypass (finer control
         # than the current all-or-nothing toggle).
-
         if self.memory_files_config.synthesize:
             # LLM path: MEMORY.md and the skill/ tree are both synthesized from the
             # per-source descriptions. The shared description trunk is the just-changed

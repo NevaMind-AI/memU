@@ -39,7 +39,27 @@ class InMemoryCategoryItemRepository(CategoryItemRepo):
 
     @override
     def unlink_item_category(self, item_id: str, cat_id: str) -> None:
-        self.relations = [rel for rel in self.relations if not (rel.item_id == item_id and rel.category_id == cat_id)]
+        # Mutate the shared state list in place so the DatabaseState reference and
+        # this repo's view never diverge (rebinding self.relations would orphan the
+        # shared state.relations list).
+        self.relations[:] = [
+            rel for rel in self.relations if not (rel.item_id == item_id and rel.category_id == cat_id)
+        ]
+
+    def unlink_item(self, item_id: str) -> list[CategoryItem]:
+        removed = [rel for rel in self.relations if rel.item_id == item_id]
+        self.relations[:] = [rel for rel in self.relations if rel.item_id != item_id]
+        return removed
+
+    def clear_relations(self, where: Mapping[str, Any] | None = None) -> list[CategoryItem]:
+        if not where:
+            removed = list(self.relations)
+            self.relations.clear()
+            return removed
+        removed = [rel for rel in self.relations if matches_where(rel, where)]
+        removed_ids = {rel.id for rel in removed}
+        self.relations[:] = [rel for rel in self.relations if rel.id not in removed_ids]
+        return removed
 
 
 __all__ = ["InMemoryCategoryItemRepository"]

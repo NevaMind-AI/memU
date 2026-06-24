@@ -1,10 +1,9 @@
 import base64
 import logging
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
 from openai import AsyncOpenAI
-from openai.types import CreateEmbeddingResponse
 from openai.types.chat import (
     ChatCompletion,
     ChatCompletionContentPartImageParam,
@@ -17,8 +16,12 @@ from openai.types.chat import (
 logger = logging.getLogger(__name__)
 
 
-class OpenAISDKClient:
-    """OpenAI LLM client that relies on the official Python SDK."""
+class OpenAIClient:
+    """OpenAI LLM client that relies on the official Python SDK.
+
+    Scoped to text capabilities (chat/summarize/vision/transcribe). Embedding is
+    handled by the dedicated :mod:`memu.embedding` clients.
+    """
 
     def __init__(
         self,
@@ -26,14 +29,10 @@ class OpenAISDKClient:
         base_url: str,
         api_key: str,
         chat_model: str,
-        embed_model: str,
-        embed_batch_size: int = 1,
     ):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or ""
         self.chat_model = chat_model
-        self.embed_model = embed_model
-        self.embed_batch_size = embed_batch_size
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
 
     async def chat(
@@ -151,23 +150,6 @@ class OpenAISDKClient:
         content = response.choices[0].message.content
         logger.debug("OpenAI vision response: %s", response)
         return content or "", response
-
-    async def embed(self, inputs: list[str]) -> tuple[list[list[float]], CreateEmbeddingResponse | None]:
-        """Create text embeddings via the official SDK."""
-        if len(inputs) <= self.embed_batch_size:
-            response = await self.client.embeddings.create(model=self.embed_model, input=inputs)
-            return [cast(list[float], d.embedding) for d in response.data], response
-
-        # For batched requests, we aggregate embeddings but only return the last response for usage
-        all_embeddings: list[list[float]] = []
-        last_response: CreateEmbeddingResponse | None = None
-        for idx in range(0, len(inputs), self.embed_batch_size):
-            batch = inputs[idx : idx + self.embed_batch_size]
-            response = await self.client.embeddings.create(model=self.embed_model, input=batch)
-            all_embeddings.extend([cast(list[float], d.embedding) for d in response.data])
-            last_response = response
-
-        return all_embeddings, last_response
 
     async def transcribe(
         self,

@@ -44,28 +44,28 @@ class SQLiteRepoBase:
         return {field: getattr(obj, field, None) for field in self._scope_fields}
 
     def _normalize_embedding(self, embedding: Any) -> list[float] | None:
-        """Normalize embedding from various formats to list[float]."""
+        """Normalize an embedding read from the JSON column to list[float]."""
         if embedding is None:
             return None
-        # Handle JSON string format (SQLite stores embeddings as JSON)
+        # Legacy/defensive: tolerate a JSON-encoded string if one slipped in.
         if isinstance(embedding, str):
             try:
                 return [float(x) for x in json.loads(embedding)]
             except (json.JSONDecodeError, TypeError):
                 logger.debug("Could not parse embedding JSON: %s", embedding)
                 return None
-        # Handle list format
+        # Handle list format (the JSON column deserializes to a Python list).
         try:
             return [float(x) for x in embedding]
         except (ValueError, TypeError, OverflowError):
             logger.debug("Could not normalize embedding %s", embedding)
             return None
 
-    def _prepare_embedding(self, embedding: list[float] | None) -> str | None:
-        """Serialize embedding to JSON string for SQLite storage."""
+    def _prepare_embedding(self, embedding: list[float] | None) -> list[float] | None:
+        """Return the embedding for storage in the JSON column (no string encoding)."""
         if embedding is None:
             return None
-        return json.dumps(embedding)
+        return list(embedding)
 
     def _merge_and_commit(self, obj: Any) -> None:
         """Merge object into session and commit."""

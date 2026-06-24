@@ -56,7 +56,8 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             self.items.clear()
             return matches
         matches = {mid: item for mid, item in self.items.items() if matches_where(item, where)}
-        self.items = {mid: item for mid, item in self.items.items() if mid not in matches}
+        for mid in matches:
+            self.items.pop(mid, None)
         return matches
 
     def _find_by_hash(self, content_hash: str, user_data: dict[str, Any]) -> MemoryItem | None:

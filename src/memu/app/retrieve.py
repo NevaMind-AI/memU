@@ -34,6 +34,7 @@ class RetrieveMixin:
         _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
         _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
         _get_llm_client: Callable[..., Any]
+        _get_embedding_client: Callable[..., Any]
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
         _extract_json_blob: Callable[[str], str]
         _escape_prompt_value: Callable[[str], str]
@@ -736,7 +737,7 @@ class RetrieveMixin:
         if not entries:
             return [], {}
         summary_texts = [summary for _, summary in entries]
-        client = embed_client or self._get_llm_client()
+        client = embed_client or self._get_embedding_client()
         summary_embeddings = await client.embed(summary_texts)
         corpus = [(cid, emb) for (cid, _), emb in zip(entries, summary_embeddings, strict=True)]
         hits = cosine_topk(query_vec, corpus, k=top_k)
@@ -872,6 +873,7 @@ class RetrieveMixin:
         ctx: Context,
         store: Database,
         llm_client: Any | None = None,
+        embed_client: Any | None = None,
         where: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Embedding-based retrieval with query rewriting and judging at each tier"""
@@ -880,8 +882,9 @@ class RetrieveMixin:
         items_pool = store.memory_item_repo.list_items(where_filters)
         resource_pool = store.resource_repo.list_resources(where_filters)
         client = llm_client or self._get_llm_client()
+        embed = embed_client or self._get_embedding_client()
         current_query = query
-        qvec = (await client.embed([current_query]))[0]
+        qvec = (await embed.embed([current_query]))[0]
         response: dict[str, Any] = {"resources": [], "items": [], "categories": [], "next_step_query": None}
         content_sections: list[str] = []
 
@@ -891,7 +894,7 @@ class RetrieveMixin:
             top_k,
             ctx,
             store,
-            embed_client=client,
+            embed_client=embed,
             categories=category_pool,
         )
         if cat_hits:
@@ -910,7 +913,7 @@ class RetrieveMixin:
             if not needs_more:
                 return response
             # Re-embed with rewritten query
-            qvec = (await client.embed([current_query]))[0]
+            qvec = (await embed.embed([current_query]))[0]
 
         # Tier 2: Items
         item_hits = store.memory_item_repo.vector_search_items(qvec, top_k, where=where_filters)
@@ -928,7 +931,7 @@ class RetrieveMixin:
             if not needs_more:
                 return response
             # Re-embed with rewritten query
-            qvec = (await client.embed([current_query]))[0]
+            qvec = (await embed.embed([current_query]))[0]
 
         # Tier 3: Resources
         resource_corpus = self._resource_caption_corpus(store, resources=resource_pool)
@@ -1253,7 +1256,7 @@ class RetrieveMixin:
     ) -> list[dict[str, Any]]:
         """Use LLM to rank memory items from relevant categories"""
         if not category_ids:
-            print("[LLM Rank Items] No category_ids provided")
+            logger.debug("[LLM Rank Items] No category_ids provided")
             return []
 
         item_pool = items if items is not None else store.memory_item_repo.items

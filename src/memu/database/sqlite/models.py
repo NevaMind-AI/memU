@@ -13,8 +13,6 @@ from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
 from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
 
-_NO_SQL_COLUMN: Any = False
-
 
 class TZDateTime(DateTime):
     """DateTime type with timezone support."""
@@ -50,10 +48,9 @@ class SQLiteResourceModel(SQLiteBaseModelMixin, Resource):
     modality: str = Field(sa_column=Column(String, nullable=False))
     local_path: str = Field(sa_column=Column(String, nullable=False))
     caption: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-    # Override inherited embedding field: SQLite stores vectors as JSON, not a native column type
-    embedding: list[float] | None = Field(default=None, sa_column=_NO_SQL_COLUMN)
-    # Actual column storing the embedding as a JSON string
-    embedding_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    # Override inherited embedding field: SQLite has no native vector type, so store the
+    # vector in a JSON column (a bare ``list`` annotation is not mappable by SQLModel).
+    embedding: list[float] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 
 class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):
@@ -62,10 +59,9 @@ class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):
     resource_id: str | None = Field(sa_column=Column(String, nullable=True))
     memory_type: MemoryType = Field(sa_column=Column(String, nullable=False))
     summary: str = Field(sa_column=Column(Text, nullable=False))
-    # Override inherited embedding field: SQLite stores vectors as JSON, not a native column type
-    embedding: list[float] | None = Field(default=None, sa_column=_NO_SQL_COLUMN)
-    # Actual column storing the embedding as a JSON string
-    embedding_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    # Override inherited embedding field: SQLite has no native vector type, so store the
+    # vector in a JSON column (a bare ``list`` annotation is not mappable by SQLModel).
+    embedding: list[float] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     happened_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
     extra: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True))
 
@@ -75,10 +71,9 @@ class SQLiteMemoryCategoryModel(SQLiteBaseModelMixin, MemoryCategory):
 
     name: str = Field(sa_column=Column(String, nullable=False, index=True))
     description: str = Field(sa_column=Column(Text, nullable=False))
-    # Override inherited embedding field: SQLite stores vectors as JSON, not a native column type
-    embedding: list[float] | None = Field(default=None, sa_column=_NO_SQL_COLUMN)
-    # Actual column storing the embedding as a JSON string
-    embedding_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    # Override inherited embedding field: SQLite has no native vector type, so store the
+    # vector in a JSON column (a bare ``list`` annotation is not mappable by SQLModel).
+    embedding: list[float] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     summary: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
 
 

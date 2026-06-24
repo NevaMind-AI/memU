@@ -18,6 +18,7 @@ classifiers = [
 ]
 keywords = ["ai", "memory", "conversation", "llm", "chatbot", "agent"]
 dependencies = [
+    "anthropic>=0.40.0",
     "defusedxml>=0.7.1",
     "httpx>=0.28.1",
     "numpy>=2.3.4",
@@ -105,11 +106,6 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["pgvector.*"]
 ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = ["memu.client.openai_wrapper"]
-disallow_untyped_defs = false
-warn_return_any = false
 
 [tool.ruff]
 target-version = "py313"

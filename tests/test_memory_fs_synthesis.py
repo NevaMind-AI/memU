@@ -67,6 +67,30 @@ def test_synthesizer_helpers() -> None:
     assert synth._parse_skills(duplicate) == {"a": "x", "a-2": "y"}
 
 
+def test_build_synthesis_descriptions_uses_structured_items() -> None:
+    """Synthesis input is sourced from extracted items, with a caption fallback."""
+    from memu.database.models import MemoryItem, Resource
+
+    res_with_items = Resource(
+        id="r1", url="docs/a.txt", modality="document", local_path="a.txt", caption="raw caption a"
+    )
+    res_without_items = Resource(
+        id="r2", url="docs/b.txt", modality="document", local_path="b.txt", caption="raw caption b"
+    )
+    items = [
+        MemoryItem(id="i1", resource_id="r1", memory_type="knowledge", summary="Alpha fact."),
+        MemoryItem(id="i2", resource_id="r1", memory_type="profile", summary="Beta trait."),
+    ]
+
+    descriptions = MemoryFileExporter.build_synthesis_descriptions([res_with_items, res_without_items], items)
+    by_url = {d.url: d.description for d in descriptions}
+
+    # r1 is composed from its structured items, not the caption.
+    assert by_url["docs/a.txt"] == "[knowledge] Alpha fact.; [profile] Beta trait."
+    # r2 has no items, so it falls back to the caption.
+    assert by_url["docs/b.txt"] == "raw caption b"
+
+
 def test_exporter_override_path(tmp_path: Path) -> None:
     service = MemoryService(
         llm_profiles={"default": {"api_key": "test-key"}},
