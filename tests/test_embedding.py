@@ -95,7 +95,9 @@ async def test_http_client_embed_returns_vectors_and_raw(monkeypatch):
 
     monkeypatch.setattr(http_mod.httpx, "AsyncClient", _FakeAsyncClient)
 
-    client = HTTPEmbeddingClient(base_url="https://api.voyageai.com/v1", api_key="key", embed_model="voyage-3.5", provider="voyage")
+    client = HTTPEmbeddingClient(
+        base_url="https://api.voyageai.com/v1", api_key="key", embed_model="voyage-3.5", provider="voyage"
+    )
     vectors, raw = await client.embed(["hello"])
 
     assert vectors == [[1.0, 2.0]]
