@@ -236,12 +236,6 @@ async def test_memorize_workspace_exports_when_enabled(tmp_path: Path, monkeypat
         )
         return {"resources": [res], "response": {"items": []}}
 
-    # The skill/ tree is always synthesized from descriptions, so export needs a
-    # chat client even when synthesize is off; a canned client keeps it offline.
-    class _FakeChatClient:
-        async def chat(self, prompt: str, system_prompt: str | None = None) -> str:
-            return "[]"
-
     exported: list[Any] = []
     real_export = service._memory_file_exporter.export
 
@@ -251,7 +245,6 @@ async def test_memorize_workspace_exports_when_enabled(tmp_path: Path, monkeypat
 
     monkeypatch.setattr(service, "_ensure_categories_ready", _noop_categories)
     monkeypatch.setattr(service, "_memorize_one", _fake_memorize_one)
-    monkeypatch.setattr(service, "_get_llm_client", lambda *a, **k: _FakeChatClient())
     monkeypatch.setattr(service._memory_file_exporter, "export", _spy_export)
 
     (src_dir / "a.txt").write_text("hello", encoding="utf-8")

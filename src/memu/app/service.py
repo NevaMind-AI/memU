@@ -37,7 +37,7 @@ from memu.llm.wrapper import (
     LLMInterceptorHandle,
     LLMInterceptorRegistry,
 )
-from memu.memory_fs import ExportResult, MemoryFileExporter, MemorySynthesizer
+from memu.memory_fs import ExistingArtifacts, ExportResult, MemoryFileExporter, MemorySynthesizer
 from memu.vlm.gateway import build_vlm_client
 from memu.workflow.interceptor import WorkflowInterceptorHandle, WorkflowInterceptorRegistry
 from memu.workflow.pipeline import PipelineManager
@@ -463,31 +463,40 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
 
         client = self._get_llm_client(self.memory_files_config.synthesis_llm_profile)
 
+        # TODO: consider splitting ``synthesize`` into separate ``synthesize_memory``
+        # and ``synthesize_skills`` flags, so MEMORY.md and the skill/ tree can each
+        # independently choose the LLM path or the deterministic bypass (finer control
+        # than the current all-or-nothing toggle).
         if self.memory_files_config.synthesize:
-            # MEMORY.md and the skill/ tree are both synthesized from descriptions.
+            # LLM path: MEMORY.md and the skill/ tree are both synthesized from the
+            # per-source descriptions. The shared description trunk is the just-changed
+            # sources for an incremental update, otherwise the full in-scope store.
+            is_update = changed is not None and self._memory_file_exporter.artifacts_exist()
             if is_update:
-                existing_memory = await asyncio.to_thread(self._memory_file_exporter.read_memory_body)
-                existing_skills = await asyncio.to_thread(self._memory_file_exporter.read_skills)
-                synthesized = await self._memory_synthesizer.update(
-                    descriptions,
-                    existing_memory=existing_memory,
-                    existing_skills=existing_skills,
-                    chat=client.chat,
-                )
+                descriptions = MemoryFileExporter._build_descriptions(changed)  # type: ignore[arg-type]
             else:
-                synthesized = await self._memory_synthesizer.synthesize(descriptions, chat=client.chat)
+                resources = list(self.database.resource_repo.list_resources(where=where or None).values())
+                descriptions = MemoryFileExporter._build_descriptions(resources)
+
+            # An incremental update merges the changed descriptions into the prior
+            # artifacts; a full (re)initialization starts from empty existing state so
+            # stale entries are dropped (the exporter's manifest diff prunes any files
+            # no longer produced — no explicit delete needed).
+            existing = (
+                await asyncio.to_thread(self._memory_file_exporter.read_existing) if is_update else ExistingArtifacts()
+            )
+            client = self._get_llm_client(self.memory_files_config.synthesis_llm_profile)
+            synthesized = await self._memory_synthesizer.synthesize(
+                descriptions,
+                existing_memory=existing.memory_body,
+                existing_skills=existing.skills,
+                chat=client.chat,
+            )
             memory_body, skills = synthesized.memory_body, synthesized.skills
-        else:
-            # MEMORY.md is rendered deterministically from category summaries, but
-            # the skill/ tree is a sibling bypass: always synthesized from the
-            # descriptions, never derived from extracted skill-type memory items.
-            if is_update:
-                existing_skills = await asyncio.to_thread(self._memory_file_exporter.read_skills)
-                skills = await self._memory_synthesizer.update_skills(
-                    descriptions, existing_skills=existing_skills, chat=client.chat
-                )
-            else:
-                skills = await self._memory_synthesizer.synthesize_skills(descriptions, chat=client.chat)
+        # else:
+        # no LLM involved. Leaving memory_body/skills as None makes the exporter render
+        # MEMORY.md deterministically from category summaries and the skill/ tree via
+        # its rule-based bypass over the extracted skill-type memory items.
 
         async with self._memory_files_lock:
             result: ExportResult = await asyncio.to_thread(
