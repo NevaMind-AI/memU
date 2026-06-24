@@ -71,24 +71,6 @@ class CategoryConfig(BaseModel):
     summary_prompt: str | Annotated[CustomPrompt, CompleteCategoryPrompt] | None = None
 
 
-def _default_memory_categories() -> list[CategoryConfig]:
-    return [
-        CategoryConfig.model_validate(cat)
-        for cat in (
-            {"name": "personal_info", "description": "Personal information about the user"},
-            {"name": "preferences", "description": "User preferences, likes and dislikes"},
-            {"name": "relationships", "description": "Information about relationships with others"},
-            {"name": "activities", "description": "Activities, hobbies, and interests"},
-            {"name": "goals", "description": "Goals, aspirations, and objectives"},
-            {"name": "experiences", "description": "Past experiences and events"},
-            {"name": "knowledge", "description": "Knowledge, facts, and learned information"},
-            {"name": "opinions", "description": "Opinions, viewpoints, and perspectives"},
-            {"name": "habits", "description": "Habits, routines, and patterns"},
-            {"name": "work_life", "description": "Work-related information and professional life"},
-        )
-    ]
-
-
 class LazyLLMSource(BaseModel):
     source: str | None = Field(default=None, description="default source for lazyllm client backend")
     llm_source: str | None = Field(default=None, description="LLM source for lazyllm client backend")
@@ -349,8 +331,12 @@ class MemorizeConfig(BaseModel):
     )
     memory_extract_llm_profile: str = Field(default="default", description="LLM profile for memory extract.")
     memory_categories: list[CategoryConfig] = Field(
-        default_factory=_default_memory_categories,
-        description="Global memory category definitions embedded at service startup.",
+        default_factory=list,
+        description=(
+            "Optional seed categories. The kernel presets no taxonomy: categories are "
+            "discovered adaptively from ingested content. Provide seeds only to guide "
+            "(not constrain) the taxonomy; an empty list means fully open/adaptive."
+        ),
     )
     # default_category_summary_prompt: str | CustomPrompt = Field(
     default_category_summary_prompt: str | Annotated[CustomPrompt, CompleteCategoryPrompt] = Field(

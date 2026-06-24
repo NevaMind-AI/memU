@@ -27,7 +27,8 @@ class InMemoryResourceRepository(ResourceRepoProtocol):
             self.resources.clear()
             return matches
         matches = {rid: res for rid, res in self.resources.items() if matches_where(res, where)}
-        self.resources = {rid: res for rid, res in self.resources.items() if rid not in matches}
+        for rid in matches:
+            self.resources.pop(rid, None)
         return matches
 
     def delete_resource(self, resource_id: str) -> None:

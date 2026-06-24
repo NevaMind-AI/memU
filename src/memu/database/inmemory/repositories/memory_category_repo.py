@@ -29,7 +29,8 @@ class InMemoryMemoryCategoryRepository(MemoryCategoryRepoProtocol):
             self.categories.clear()
             return matches
         matches = {cid: cat for cid, cat in self.categories.items() if matches_where(cat, where)}
-        self.categories = {cid: cat for cid, cat in self.categories.items() if cid not in matches}
+        for cid in matches:
+            self.categories.pop(cid, None)
         return matches
 
     def get_or_create_category(

@@ -805,7 +805,7 @@ class MemorizeMixin:
             if reinforce and item.extra.get("reinforcement_count", 1) > 1:
                 # existing item
                 continue
-            mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
+            mapped_cat_ids = await self._resolve_category_ids(cat_names, ctx, store, user=user)
             for cid in mapped_cat_ids:
                 rels.append(store.category_item_repo.link_item_category(item.id, cid, user_data=dict(user or {})))
                 # Store (item_id, summary) tuple for reference support
@@ -931,6 +931,62 @@ class MemorizeMixin:
                 seen.add(cid)
         return mapped
 
+    @staticmethod
+    def _partition_category_names(names: list[str], ctx: Context) -> tuple[list[str], list[str]]:
+        """Split proposed names into (known category ids, unknown names) with dedup."""
+        known_ids: list[str] = []
+        known_seen: set[str] = set()
+        unknown: list[str] = []
+        unknown_seen: set[str] = set()
+        for name in names:
+            key = name.strip().lower()
+            if not key:
+                continue
+            cid = ctx.category_name_to_id.get(key)
+            if cid is not None:
+                if cid not in known_seen:
+                    known_ids.append(cid)
+                    known_seen.add(cid)
+            elif key not in unknown_seen:
+                unknown.append(name.strip())
+                unknown_seen.add(key)
+        return known_ids, unknown
+
+    async def _resolve_category_ids(
+        self,
+        names: list[str],
+        ctx: Context,
+        store: Database,
+        *,
+        user: Mapping[str, Any] | None = None,
+    ) -> list[str]:
+        """Resolve extractor-proposed category names to ids, creating unknown ones.
+
+        Implements the open/adaptive taxonomy: the kernel presets no categories, so any
+        category name the extractor proposes is created on first sight and cached in the
+        context. (Embedding-similarity merging of near-duplicate categories is handled
+        later by consolidation; here we only do exact-name dedup.)
+        """
+        if not names:
+            return []
+        user_data = dict(user or {})
+        resolved, unknown = self._partition_category_names(names, ctx)
+        seen: set[str] = set(resolved)
+
+        if unknown:
+            vecs = await self._get_llm_client("embedding").embed(unknown)
+            for name, vec in zip(unknown, vecs, strict=True):
+                cat = store.memory_category_repo.get_or_create_category(
+                    name=name, description="", embedding=vec, user_data=user_data
+                )
+                ctx.category_name_to_id[name.lower()] = cat.id
+                if cat.id not in ctx.category_ids:
+                    ctx.category_ids.append(cat.id)
+                if cat.id not in seen:
+                    resolved.append(cat.id)
+                    seen.add(cat.id)
+        return resolved
+
     async def _preprocess_resource_url(
         self, *, local_path: str, text: str | None, modality: str, llm_client: Any | None = None
     ) -> list[dict[str, str | None]]:
@@ -958,14 +1014,19 @@ class MemorizeMixin:
         )
 
     def _format_categories_for_prompt(self, categories: list[CategoryConfig]) -> str:
+        adaptive_hint = (
+            "Assign each memory item 1-3 concise, reusable category names (short noun "
+            "phrases). Reuse a listed category when one fits; otherwise propose a new "
+            "concise category name. Categories are created automatically."
+        )
         if not categories:
-            return "No categories provided."
+            return "No predefined categories yet.\n" + adaptive_hint
         lines = []
         for cat in categories:
             name = cat.name.strip() or "Untitled"
             desc = cat.description.strip()
             lines.append(f"- {name}: {desc}" if desc else f"- {name}")
-        return "\n".join(lines)
+        return "Existing categories (reuse when appropriate):\n" + "\n".join(lines) + "\n\n" + adaptive_hint
 
     def _add_conversation_indices(self, conversation: str) -> str:
         """

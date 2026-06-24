@@ -406,13 +406,18 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
 
         is_update = changed is not None and self._memory_file_exporter.artifacts_exist()
 
-        # The shared description trunk: the just-changed sources for an incremental
-        # update, otherwise the full in-scope store for (re)initialization.
+        # The synthesis trunk is the structured store (extracted memory items), not the
+        # lossy per-source captions: the just-changed sources for an incremental update,
+        # otherwise the full in-scope store for (re)initialization.
+        scoped_items = list(self.database.memory_item_repo.list_items(where=where or None).values())
         if is_update:
-            descriptions = MemoryFileExporter._build_descriptions(changed)  # type: ignore[arg-type]
+            changed_resources = list(changed or [])
+            changed_ids = {res.id for res in changed_resources}
+            changed_items = [item for item in scoped_items if item.resource_id in changed_ids]
+            descriptions = MemoryFileExporter.build_synthesis_descriptions(changed_resources, changed_items)
         else:
             resources = list(self.database.resource_repo.list_resources(where=where or None).values())
-            descriptions = MemoryFileExporter._build_descriptions(resources)
+            descriptions = MemoryFileExporter.build_synthesis_descriptions(resources, scoped_items)
 
         client = self._get_llm_client(self.memory_files_config.synthesis_llm_profile)
 
