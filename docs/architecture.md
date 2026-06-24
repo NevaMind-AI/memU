@@ -172,9 +172,38 @@ During `preprocess_multimodal`, `MemoryService` routes by modality: `image` and
 chat LLM client. VLM clients are cached per profile and wrapped by the same
 `LLMClientWrapper`, so interceptors and usage metadata behave identically.
 
+### Embedding (vectorization) architecture
+
+Vectorization uses a dedicated `memu.embedding` package, a sibling of `memu.llm`
+and `memu.vlm` mirroring their layout (`backends/`, `*_client.py`/`openai_sdk.py`,
+`gateway.py`, `defaults.py`), scoped to the `embed` capability used by vector
+search. `memu.embedding.backends` covers OpenAI, Jina, Voyage, Doubao and
+OpenRouter; the HTTP client falls back to an OpenAI-compatible backend for any
+other provider.
+
+Embedding is **fully decoupled** from the text/chat clients: `OpenAIClient`,
+`HTTPLLMClient` and `AnthropicClient` no longer expose `embed()` (the HTTP chat
+client also dropped its inline embedding backends). All vectorization — query
+embedding, category/item embedding, RAG ranking — flows through
+`_get_step_embedding_client` / `_get_embedding_client`, which build dedicated
+`memu.embedding` clients. (`LazyLLMClient` remains multi-capability, as it is the
+embedding transport for the `lazyllm_backend`.)
+
+Embedding profiles (`EmbeddingConfig`) are **derived** from the LLM profiles
+(`embedding_config_from_llm`) by default, reusing each profile's provider,
+credentials and transport. The LLM profile's `embed_model`/`embed_batch_size`
+remain only as a backward-compat bridge for this derivation; prefer passing an
+explicit `embedding_profiles` to `MemoryService` to point vectorization at a
+dedicated embedding provider (e.g. `jina`/`voyage`) independently of the chat
+provider. Embedding clients are built via `build_embedding_client`
+(`client_backend`: `sdk`/`httpx`/`lazyllm_backend`; `anthropic` raises, as Claude
+has no embeddings API), cached per profile, and wrapped by the same
+`LLMClientWrapper`, so interceptors and usage metadata behave identically.
+`_get_step_embedding_client` resolves the profile from step config
+(`embed_llm_profile`, default `embedding`).
+
 ## Integration surfaces
 
-- `memu.client.openai_wrapper`: opt-in OpenAI client wrapper that auto-retrieves memories and injects them into system context
 - `memu.integrations.langgraph`: LangChain/LangGraph tool adapter (`save_memory`, `search_memory`)
 
 ## Memory file system export (`memu.memory_fs`)

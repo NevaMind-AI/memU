@@ -14,6 +14,8 @@ from memu.app.settings import (
     BlobConfig,
     CategoryConfig,
     DatabaseConfig,
+    EmbeddingConfig,
+    EmbeddingProfilesConfig,
     LLMConfig,
     LLMProfilesConfig,
     MemorizeConfig,
@@ -21,11 +23,13 @@ from memu.app.settings import (
     RetrieveConfig,
     UserConfig,
     VLMConfig,
+    embedding_config_from_llm,
     vlm_config_from_llm,
 )
 from memu.blob.local_fs import LocalFS
 from memu.database.factory import build_database
 from memu.database.interfaces import Database
+from memu.embedding.gateway import build_embedding_client
 from memu.llm.gateway import build_llm_client
 from memu.llm.wrapper import (
     LLMCallMetadata,
@@ -63,6 +67,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         workflow_runner: WorkflowRunner | str | None = None,
         user_config: UserConfig | dict[str, Any] | None = None,
         memory_files_config: MemoryFilesConfig | dict[str, Any] | None = None,
+        embedding_profiles: EmbeddingProfilesConfig | dict[str, Any] | None = None,
     ):
         self.llm_profiles = self._validate_config(llm_profiles, LLMProfilesConfig)
         self.user_config = self._validate_config(user_config, UserConfig)
@@ -95,9 +100,20 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             name: vlm_config_from_llm(cfg) for name, cfg in self.llm_profiles.profiles.items()
         }
 
+        # Embedding profiles: use explicit profiles when supplied (e.g. to point
+        # vectorization at a dedicated provider such as jina/voyage), otherwise
+        # derive them from the LLM profiles so existing configs keep working.
+        if embedding_profiles is None:
+            self.embedding_profiles: dict[str, EmbeddingConfig] = {
+                name: embedding_config_from_llm(cfg) for name, cfg in self.llm_profiles.profiles.items()
+            }
+        else:
+            self.embedding_profiles = self._validate_config(embedding_profiles, EmbeddingProfilesConfig).profiles
+
         # Initialize client caches (lazy creation on first use)
         self._llm_clients: dict[str, Any] = {}
         self._vlm_clients: dict[str, Any] = {}
+        self._embedding_clients: dict[str, Any] = {}
         self._llm_interceptors = LLMInterceptorRegistry()
         self._workflow_interceptors = WorkflowInterceptorRegistry()
 
@@ -168,7 +184,6 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             metadata=metadata,
             provider=provider,
             chat_model=getattr(client, "chat_model", None),
-            embed_model=getattr(client, "embed_model", None),
         )
 
     def _get_llm_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
@@ -200,6 +215,33 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             metadata=metadata,
             provider=provider,
             chat_model=getattr(base_client, "vlm_model", None),
+        )
+
+    def _get_embedding_base_client(self, profile: str | None = None) -> Any:
+        """Lazily initialize and cache embedding clients per profile."""
+        name = profile or "default"
+        client = self._embedding_clients.get(name)
+        if client is not None:
+            return client
+        cfg: EmbeddingConfig | None = self.embedding_profiles.get(name)
+        if cfg is None:
+            msg = f"Unknown embedding profile '{name}'"
+            raise KeyError(msg)
+        client = build_embedding_client(cfg)
+        self._embedding_clients[name] = client
+        return client
+
+    def _get_embedding_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
+        base_client = self._get_embedding_base_client(profile)
+        cfg = self.embedding_profiles.get(profile or "default")
+        provider = cfg.provider if cfg is not None else None
+        metadata = self._llm_call_metadata(profile or "default", step_context)
+        return LLMClientWrapper(
+            base_client,
+            registry=self._llm_interceptors,
+            metadata=metadata,
+            provider=provider,
+            embed_model=getattr(base_client, "embed_model", None),
         )
 
     @property
@@ -237,7 +279,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
 
     def _get_step_embedding_client(self, step_context: Mapping[str, Any] | None) -> Any:
         profile = self._llm_profile_from_context(step_context, task="embedding") or "embedding"
-        return self._get_llm_client(profile, step_context=step_context)
+        return self._get_embedding_client(profile, step_context=step_context)
 
     def intercept_before_llm_call(
         self,

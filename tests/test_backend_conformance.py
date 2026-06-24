@@ -269,7 +269,7 @@ def test_resolve_category_ids_creates_unknown_adaptively(store):
 
     ctx = Context(categories_ready=True)
     fake_self = SimpleNamespace(
-        _get_llm_client=lambda profile=None: _FakeEmbedClient(),
+        _get_embedding_client=lambda profile=None: _FakeEmbedClient(),
         _partition_category_names=MemorizeMixin._partition_category_names,
     )
 

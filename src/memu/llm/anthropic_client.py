@@ -27,7 +27,8 @@ class AnthropicClient:
 
     Mirrors the surface of :class:`memu.llm.openai_client.OpenAIClient` so it can
     be wrapped by :class:`memu.llm.wrapper.LLMClientWrapper`. Anthropic does not
-    offer embeddings or audio transcription, so those methods raise.
+    offer audio transcription, so that method raises. Embedding is handled by the
+    dedicated :mod:`memu.embedding` clients.
     """
 
     def __init__(
@@ -45,7 +46,6 @@ class AnthropicClient:
         self.base_url = base_url.rstrip("/") if base_url else None
         self.api_key = api_key or ""
         self.chat_model = chat_model
-        self.embed_model: str | None = None
         self.max_tokens = max_tokens or _DEFAULT_MAX_TOKENS
         self.client = AsyncAnthropic(api_key=self.api_key, base_url=self.base_url)
 
@@ -127,10 +127,6 @@ class AnthropicClient:
         response = await self.client.messages.create(**kwargs)
         logger.debug("Anthropic vision response: %s", response)
         return _extract_text(response), response
-
-    async def embed(self, inputs: list[str]) -> tuple[list[list[float]], None]:
-        msg = "Anthropic does not provide an embeddings API; use an embedding LLM profile instead."
-        raise NotImplementedError(msg)
 
     async def transcribe(
         self,

@@ -56,6 +56,7 @@ class MemorizeMixin:
         _get_database: Callable[[], Database]
         _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
         _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
+        _get_embedding_client: Callable[..., Any]
         _get_llm_client: Callable[..., Any]
         _get_vlm_client: Callable[..., Any]
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
@@ -553,7 +554,7 @@ class MemorizeMixin:
     ) -> Resource:
         caption_text = caption.strip() if caption else None
         if caption_text:
-            client = embed_client or self._get_llm_client()
+            client = embed_client or self._get_embedding_client()
             caption_embedding = (await client.embed([caption_text]))[0]
         else:
             caption_embedding = None
@@ -784,7 +785,7 @@ class MemorizeMixin:
             where category_updates maps category_id -> list of (item_id, summary) tuples
         """
         summary_payloads = [content for _, content, _ in structured_entries]
-        client = embed_client or self._get_llm_client()
+        client = embed_client or self._get_embedding_client()
         item_embeddings = await client.embed(summary_payloads) if summary_payloads else []
         items: list[MemoryItem] = []
         rels: list[CategoryItem] = []
@@ -882,7 +883,7 @@ class MemorizeMixin:
         embed_map: dict[int, list[float]] = {}
         if needs_embed:
             texts = [self._category_embedding_text(cfg) for _, cfg in needs_embed]
-            vecs = await self._get_llm_client("embedding").embed(texts)
+            vecs = await self._get_embedding_client("embedding").embed(texts)
             for (i, _), vec in zip(needs_embed, vecs, strict=True):
                 embed_map[i] = vec
 
@@ -974,7 +975,7 @@ class MemorizeMixin:
         seen: set[str] = set(resolved)
 
         if unknown:
-            vecs = await self._get_llm_client("embedding").embed(unknown)
+            vecs = await self._get_embedding_client("embedding").embed(unknown)
             for name, vec in zip(unknown, vecs, strict=True):
                 cat = store.memory_category_repo.get_or_create_category(
                     name=name, description="", embedding=vec, user_data=user_data
