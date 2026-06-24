@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import JSON, MetaData, String, Text
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
-from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
+from memu.database.models import Entry, Resource, ResourceEntry
 
 
 class TZDateTime(DateTime):
@@ -42,23 +42,35 @@ class SQLiteBaseModelMixin(SQLModel):
 
 
 class SQLiteResourceModel(SQLiteBaseModelMixin, Resource):
-    """SQLite resource model."""
+    """SQLite resource model.
 
-    url: str = Field(sa_column=Column(String, nullable=False))
+    A single physical table holds both raw inputs (``lane="source"``) and the
+    generated lane docs (``lane`` in {index, memory, skill}).
+    """
+
+    lane: str = Field(default="source", sa_column=Column(String, nullable=False, index=True))
     modality: str = Field(sa_column=Column(String, nullable=False))
-    local_path: str = Field(sa_column=Column(String, nullable=False))
-    caption: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    url: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    local_path: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    slug: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    title: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    description: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    content: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    summary: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     # Override inherited embedding field: SQLite has no native vector type, so store the
     # vector in a JSON column (a bare ``list`` annotation is not mappable by SQLModel).
     embedding: list[float] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    resource_refs: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON, nullable=True))
 
 
-class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):
-    """SQLite memory item model."""
+class SQLiteEntryModel(SQLiteBaseModelMixin, Entry):
+    """SQLite entry model (the searchable atoms of a lane)."""
 
-    resource_id: str | None = Field(sa_column=Column(String, nullable=True))
-    memory_type: MemoryType = Field(sa_column=Column(String, nullable=False))
-    summary: str = Field(sa_column=Column(Text, nullable=False))
+    lane: str = Field(sa_column=Column(String, nullable=False, index=True))
+    source_id: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    source_path: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    entry_kind: str = Field(sa_column=Column(String, nullable=False))
+    text: str = Field(sa_column=Column(Text, nullable=False))
     # Override inherited embedding field: SQLite has no native vector type, so store the
     # vector in a JSON column (a bare ``list`` annotation is not mappable by SQLModel).
     embedding: list[float] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
@@ -66,24 +78,11 @@ class SQLiteMemoryItemModel(SQLiteBaseModelMixin, MemoryItem):
     extra: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=True))
 
 
-class SQLiteMemoryCategoryModel(SQLiteBaseModelMixin, MemoryCategory):
-    """SQLite memory category model."""
+class SQLiteResourceEntryModel(SQLiteBaseModelMixin, ResourceEntry):
+    """SQLite entry <-> coarse-resource membership edge model."""
 
-    name: str = Field(sa_column=Column(String, nullable=False, index=True))
-    description: str = Field(sa_column=Column(Text, nullable=False))
-    # Override inherited embedding field: SQLite has no native vector type, so store the
-    # vector in a JSON column (a bare ``list`` annotation is not mappable by SQLModel).
-    embedding: list[float] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
-    summary: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-
-
-class SQLiteCategoryItemModel(SQLiteBaseModelMixin, CategoryItem):
-    """SQLite category-item relation model."""
-
-    item_id: str = Field(sa_column=Column(String, nullable=False))
-    category_id: str = Field(sa_column=Column(String, nullable=False))
-
-    __table_args__ = (Index("idx_sqlite_category_items_unique", "item_id", "category_id", unique=True),)
+    entry_id: str = Field(sa_column=Column(String, nullable=False))
+    resource_id: str = Field(sa_column=Column(String, nullable=False))
 
 
 def _normalize_table_args(table_args: Any) -> tuple[list[Any], dict[str, Any]]:
@@ -171,9 +170,8 @@ def build_sqlite_table_model(
 
 __all__ = [
     "SQLiteBaseModelMixin",
-    "SQLiteCategoryItemModel",
-    "SQLiteMemoryCategoryModel",
-    "SQLiteMemoryItemModel",
+    "SQLiteEntryModel",
+    "SQLiteResourceEntryModel",
     "SQLiteResourceModel",
     "build_sqlite_table_model",
 ]

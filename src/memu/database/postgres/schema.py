@@ -24,10 +24,9 @@ except ImportError as exc:
     raise ImportError(msg) from exc
 
 from memu.database.postgres.models import (
-    CategoryItemModel,
-    MemoryCategoryModel,
-    MemoryItemModel,
-    ResourceModel,
+    PostgresEntryModel,
+    PostgresResourceEntryModel,
+    PostgresResourceModel,
     build_table_model,
 )
 
@@ -36,9 +35,8 @@ from memu.database.postgres.models import (
 class SQLAModels:
     Base: type[Any]
     Resource: type[Any]
-    MemoryCategory: type[Any]
-    MemoryItem: type[Any]
-    CategoryItem: type[Any]
+    Entry: type[Any]
+    ResourceEntry: type[Any]
 
 
 _MODEL_CACHE: dict[type[Any], SQLAModels] = {}
@@ -63,26 +61,20 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
 
     resource_model = build_table_model(
         scope,
-        ResourceModel,
-        tablename="resources",
+        PostgresResourceModel,
+        tablename="memu_resources",
         metadata=metadata_obj,
     )
-    memory_category_model = build_table_model(
+    entry_model = build_table_model(
         scope,
-        MemoryCategoryModel,
-        tablename="memory_categories",
+        PostgresEntryModel,
+        tablename="memu_entries",
         metadata=metadata_obj,
     )
-    memory_item_model = build_table_model(
+    resource_entry_model = build_table_model(
         scope,
-        MemoryItemModel,
-        tablename="memory_items",
-        metadata=metadata_obj,
-    )
-    category_item_model = build_table_model(
-        scope,
-        CategoryItemModel,
-        tablename="category_items",
+        PostgresResourceEntryModel,
+        tablename="memu_resource_entries",
         metadata=metadata_obj,
     )
 
@@ -93,9 +85,8 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
     models = SQLAModels(
         Base=Base,
         Resource=resource_model,
-        MemoryCategory=memory_category_model,
-        MemoryItem=memory_item_model,
-        CategoryItem=category_item_model,
+        Entry=entry_model,
+        ResourceEntry=resource_entry_model,
     )
     _MODEL_CACHE[cache_key] = models
     return models

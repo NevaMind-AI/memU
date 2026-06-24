@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypeVar
@@ -53,7 +52,6 @@ class Context:
     categories_ready: bool = False
     category_ids: list[str] = field(default_factory=list)
     category_name_to_id: dict[str, str] = field(default_factory=dict)
-    category_init_task: asyncio.Task | None = None
 
 
 class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
@@ -91,9 +89,6 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             config=self.database_config,
             user_model=self.user_model,
         )
-        # We need the concrete user scope (user_id: xxx) to initialize the categories
-        # self._start_category_initialization(self._context, self.database)
-
         # VLM (vision-language) profiles are derived from the LLM profiles so
         # image/video vision reuses the same provider/credentials with a stronger
         # multimodal model (see ``vlm_config_from_llm``).
@@ -315,18 +310,6 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
 
     def _get_database(self) -> Database:
         return self.database
-
-    def _provider_summary(self) -> dict[str, Any]:
-        vector_provider = None
-        if self.database_config.vector_index:
-            vector_provider = self.database_config.vector_index.provider
-        return {
-            "llm_profiles": list(self.llm_profiles.profiles.keys()),
-            "storage": {
-                "metadata_store": self.database_config.metadata_store.provider,
-                "vector_index": vector_provider,
-            },
-        }
 
     def _register_pipelines(self) -> None:
         memo_workflow = self._build_memorize_workflow()

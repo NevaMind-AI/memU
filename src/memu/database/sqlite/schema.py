@@ -10,9 +10,8 @@ from sqlalchemy import MetaData
 from sqlmodel import SQLModel
 
 from memu.database.sqlite.models import (
-    SQLiteCategoryItemModel,
-    SQLiteMemoryCategoryModel,
-    SQLiteMemoryItemModel,
+    SQLiteEntryModel,
+    SQLiteResourceEntryModel,
     SQLiteResourceModel,
     build_sqlite_table_model,
 )
@@ -24,9 +23,8 @@ class SQLiteSQLAModels:
 
     Base: type[Any]
     Resource: type[Any]
-    MemoryCategory: type[Any]
-    MemoryItem: type[Any]
-    CategoryItem: type[Any]
+    Entry: type[Any]
+    ResourceEntry: type[Any]
 
 
 _MODEL_CACHE: dict[type[Any], SQLiteSQLAModels] = {}
@@ -57,23 +55,18 @@ def get_sqlite_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) 
         tablename="memu_resources",
         metadata=metadata_obj,
     )
-    memory_category_model = build_sqlite_table_model(
+    entry_model = build_sqlite_table_model(
         scope,
-        SQLiteMemoryCategoryModel,
-        tablename="memu_memory_categories",
+        SQLiteEntryModel,
+        tablename="memu_entries",
         metadata=metadata_obj,
     )
-    memory_item_model = build_sqlite_table_model(
+    resource_entry_model = build_sqlite_table_model(
         scope,
-        SQLiteMemoryItemModel,
-        tablename="memu_memory_items",
+        SQLiteResourceEntryModel,
+        tablename="memu_resource_entries",
         metadata=metadata_obj,
-    )
-    category_item_model = build_sqlite_table_model(
-        scope,
-        SQLiteCategoryItemModel,
-        tablename="memu_category_items",
-        metadata=metadata_obj,
+        unique_with_scope=["entry_id", "resource_id"],
     )
 
     class SQLiteBase(SQLModel):
@@ -83,9 +76,8 @@ def get_sqlite_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) 
     models = SQLiteSQLAModels(
         Base=SQLiteBase,
         Resource=resource_model,
-        MemoryCategory=memory_category_model,
-        MemoryItem=memory_item_model,
-        CategoryItem=category_item_model,
+        Entry=entry_model,
+        ResourceEntry=resource_entry_model,
     )
     _MODEL_CACHE[cache_key] = models
     return models

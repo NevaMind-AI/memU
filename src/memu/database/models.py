@@ -4,31 +4,36 @@ import hashlib
 import json
 import uuid
 from datetime import datetime
+from os.path import basename
 from typing import Any, Literal
 
 import pendulum
 from pydantic import BaseModel, ConfigDict, Field
 
+# Sub-type of a memory-lane entry (kept for prompt routing / backward semantics).
 MemoryType = Literal["profile", "event", "knowledge", "behavior", "skill", "tool"]
 
+# A lane is one of the parallel, structurally identical processing tracks that
+# share the same Resource -> canonical-text trunk:
+#   - "source": raw input artifacts (conversation/document/image/video/audio)
+#   - "index":  per-resource catalog/description docs
+#   - "memory": grouped memory docs (the former "category")
+#   - "skill":  grouped reusable-skill docs
+# index/memory/skill are the three retrievable lanes; "source" holds raw inputs.
+Lane = Literal["source", "index", "memory", "skill"]
+SOURCE_LANE: Lane = "source"
+RETRIEVAL_LANES: tuple[Lane, ...] = ("index", "memory", "skill")
+MARKDOWN_MODALITY = "markdown"
 
-def compute_content_hash(summary: str, memory_type: str) -> str:
+
+def compute_content_hash(text: str, entry_kind: str) -> str:
+    """Generate a stable hash for entry deduplication.
+
+    Operates on post-extraction content. Normalizes whitespace to absorb minor
+    formatting differences ("I love coffee" vs "I  love  coffee").
     """
-    Generate unique hash for memory deduplication.
-
-    Operates on post-summary content. Normalizes whitespace to handle
-    minor formatting differences like "I love coffee" vs "I  love  coffee".
-
-    Args:
-        summary: The memory summary text
-        memory_type: The type of memory (profile, event, etc.)
-
-    Returns:
-        A 16-character hex hash string
-    """
-    # Normalize: lowercase, strip, collapse whitespace
-    normalized = " ".join(summary.lower().split())
-    content = f"{memory_type}:{normalized}"
+    normalized = " ".join(text.lower().split())
+    content = f"{entry_kind}:{normalized}"
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
@@ -66,43 +71,69 @@ class ToolCallResult(BaseModel):
 
 
 class Resource(BaseRecord):
-    url: str
+    """A node in the unified store: either a raw input or a generated lane doc.
+
+    "Everything is a resource":
+      - raw inputs:      ``lane="source"``, ``modality`` = conversation/document/
+                         image/video/audio; ``content`` holds the canonical,
+                         modality-agnostic text from preprocessing (the trunk).
+      - generated docs:  ``lane`` in {index, memory, skill}, ``modality="markdown"``,
+                         rendered as ``resource/<lane>/<slug>.md``; ``content`` holds
+                         the markdown body, ``summary`` the searchable condensation.
+    """
+
+    lane: str = SOURCE_LANE
     modality: str
-    local_path: str
-    caption: str | None = None
+    url: str | None = None
+    local_path: str | None = None
+    # Filename stem used for ``resource/<lane>/<slug>.md`` (generated docs only).
+    slug: str | None = None
+    # Human title of a generated doc (the former category/skill name).
+    title: str | None = None
+    # Short blurb for a generated doc (the former category description).
+    description: str | None = None
+    # Raw: canonical text from preprocessing. Doc: rendered markdown body.
+    content: str | None = None
+    # Searchable condensation used for coarse (resource-level) recall.
+    summary: str | None = None
     embedding: list[float] | None = None
+    # Provenance: raw sources a generated doc derives from. Each dict holds at
+    # least ``resource_id`` and ``source_path`` (plus optional ``modality``).
+    resource_refs: list[dict[str, Any]] = []
+
+    @property
+    def source_path(self) -> str:
+        """Path relative to the ``resource/`` root for this artifact."""
+        if self.lane != SOURCE_LANE and self.slug:
+            return f"resource/{self.lane}/{self.slug}.md"
+        name = basename(self.local_path or self.url or self.id)
+        return f"resource/{name}"
 
 
-class MemoryItem(BaseRecord):
-    resource_id: str | None
-    memory_type: str
-    summary: str
+class Entry(BaseRecord):
+    """The searchable atom of a lane (index description / memory item / skill step)."""
+
+    lane: str
+    # Originating raw source resource (provenance), and its relative path.
+    source_id: str | None = None
+    source_path: str | None = None
+    # Sub-type within a lane (memory: profile/event/...; skill: step kind; etc.).
+    entry_kind: str
+    text: str
     embedding: list[float] | None = None
     happened_at: datetime | None = None
     extra: dict[str, Any] = {}
     # extra may contain:
-    # # reinforcement tracking fields
-    # - content_hash: str
-    # - reinforcement_count: int
-    # - last_reinforced_at: str (isoformat)
-    # # Reference tracking field
-    # - ref_id: str
-    # # Tool memory fields
-    # - when_to_use: str - Hint for when this memory should be retrieved
-    # - metadata: dict - Type-specific metadata (e.g., tool_name, avg_success_rate)
-    # - tool_calls: list[dict] - Tool call history for tool memories (serialized ToolCallResult)
+    # - content_hash / reinforcement_count / last_reinforced_at (salience)
+    # - ref_id (reference tracking)
+    # - when_to_use / metadata / tool_calls (tool memory)
 
 
-class MemoryCategory(BaseRecord):
-    name: str
-    description: str
-    embedding: list[float] | None = None
-    summary: str | None = None
+class ResourceEntry(BaseRecord):
+    """Edge: membership of an Entry in its coarse (lane) Resource doc."""
 
-
-class CategoryItem(BaseRecord):
-    item_id: str
-    category_id: str
+    entry_id: str
+    resource_id: str
 
 
 def merge_scope_model[TBaseRecord: BaseRecord](
@@ -123,24 +154,24 @@ def merge_scope_model[TBaseRecord: BaseRecord](
 
 def build_scoped_models(
     user_model: type[BaseModel],
-) -> tuple[type[Resource], type[MemoryCategory], type[MemoryItem], type[CategoryItem]]:
-    """
-    Build scoped interface models (Pydantic) that inherit from the base record models and user scope.
-    """
+) -> tuple[type[Resource], type[Entry], type[ResourceEntry]]:
+    """Build scoped interface models that inherit base records and the user scope."""
     resource_model = merge_scope_model(user_model, Resource, name_suffix="Resource")
-    memory_category_model = merge_scope_model(user_model, MemoryCategory, name_suffix="MemoryCategory")
-    memory_item_model = merge_scope_model(user_model, MemoryItem, name_suffix="MemoryItem")
-    category_item_model = merge_scope_model(user_model, CategoryItem, name_suffix="CategoryItem")
-    return resource_model, memory_category_model, memory_item_model, category_item_model
+    entry_model = merge_scope_model(user_model, Entry, name_suffix="Entry")
+    resource_entry_model = merge_scope_model(user_model, ResourceEntry, name_suffix="ResourceEntry")
+    return resource_model, entry_model, resource_entry_model
 
 
 __all__ = [
+    "MARKDOWN_MODALITY",
+    "RETRIEVAL_LANES",
+    "SOURCE_LANE",
     "BaseRecord",
-    "CategoryItem",
-    "MemoryCategory",
-    "MemoryItem",
+    "Entry",
+    "Lane",
     "MemoryType",
     "Resource",
+    "ResourceEntry",
     "ToolCallResult",
     "build_scoped_models",
     "compute_content_hash",

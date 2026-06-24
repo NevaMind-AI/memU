@@ -9,11 +9,10 @@ from pydantic import BaseModel
 from sqlmodel import SQLModel
 
 from memu.database.interfaces import Database
-from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, Resource
-from memu.database.repositories import CategoryItemRepo, MemoryCategoryRepo, MemoryItemRepo, ResourceRepo
-from memu.database.sqlite.repositories.category_item_repo import SQLiteCategoryItemRepo
-from memu.database.sqlite.repositories.memory_category_repo import SQLiteMemoryCategoryRepo
-from memu.database.sqlite.repositories.memory_item_repo import SQLiteMemoryItemRepo
+from memu.database.models import Entry, Resource, ResourceEntry
+from memu.database.repositories import EntryRepo, ResourceEntryRepo, ResourceRepo
+from memu.database.sqlite.repositories.entry_repo import SQLiteEntryRepo
+from memu.database.sqlite.repositories.resource_entry_repo import SQLiteResourceEntryRepo
 from memu.database.sqlite.repositories.resource_repo import SQLiteResourceRepo
 from memu.database.sqlite.schema import SQLiteSQLAModels, get_sqlite_sqlalchemy_models
 from memu.database.sqlite.session import SQLiteSessionManager
@@ -30,24 +29,20 @@ class SQLiteStore(Database):
     for vector search (native vector support is not available in SQLite).
 
     Attributes:
-        resource_repo: Repository for resource records.
-        memory_category_repo: Repository for memory categories.
-        memory_item_repo: Repository for memory items.
-        category_item_repo: Repository for category-item relations.
+        resource_repo: Repository for resource records (raw inputs and lane docs).
+        entry_repo: Repository for lane entries (the searchable atoms).
+        resource_entry_repo: Repository for entry <-> resource membership edges.
         resources: Dict cache of resource records.
-        items: Dict cache of memory item records.
-        categories: Dict cache of memory category records.
-        relations: List cache of category-item relations.
+        entries: Dict cache of entry records.
+        relations: List cache of membership edges.
     """
 
     resource_repo: ResourceRepo
-    memory_category_repo: MemoryCategoryRepo
-    memory_item_repo: MemoryItemRepo
-    category_item_repo: CategoryItemRepo
+    entry_repo: EntryRepo
+    resource_entry_repo: ResourceEntryRepo
     resources: dict[str, Resource]
-    items: dict[str, MemoryItem]
-    categories: dict[str, MemoryCategory]
-    relations: list[CategoryItem]
+    entries: dict[str, Entry]
+    relations: list[ResourceEntry]
 
     def __init__(
         self,
@@ -55,9 +50,8 @@ class SQLiteStore(Database):
         dsn: str,
         scope_model: type[BaseModel] | None = None,
         resource_model: type[Any] | None = None,
-        memory_category_model: type[Any] | None = None,
-        memory_item_model: type[Any] | None = None,
-        category_item_model: type[Any] | None = None,
+        entry_model: type[Any] | None = None,
+        resource_entry_model: type[Any] | None = None,
         sqla_models: SQLiteSQLAModels | None = None,
     ) -> None:
         """Initialize SQLite database store.
@@ -65,10 +59,9 @@ class SQLiteStore(Database):
         Args:
             dsn: SQLite connection string (e.g., "sqlite:///path/to/db.sqlite").
             scope_model: Pydantic model defining user scope fields.
-            resource_model: Optional custom resource model.
-            memory_category_model: Optional custom memory category model.
-            memory_item_model: Optional custom memory item model.
-            category_item_model: Optional custom category-item model.
+            resource_model: Optional custom resource table model.
+            entry_model: Optional custom entry table model.
+            resource_entry_model: Optional custom membership-edge table model.
             sqla_models: Pre-built SQLAlchemy models container.
         """
         self.dsn = dsn
@@ -83,9 +76,8 @@ class SQLiteStore(Database):
 
         # Use provided models or defaults from sqla_models
         resource_model = resource_model or self._sqla_models.Resource
-        memory_category_model = memory_category_model or self._sqla_models.MemoryCategory
-        memory_item_model = memory_item_model or self._sqla_models.MemoryItem
-        category_item_model = category_item_model or self._sqla_models.CategoryItem
+        entry_model = entry_model or self._sqla_models.Entry
+        resource_entry_model = resource_entry_model or self._sqla_models.ResourceEntry
 
         # Initialize repositories
         self.resource_repo = SQLiteResourceRepo(
@@ -95,23 +87,16 @@ class SQLiteStore(Database):
             sessions=self._sessions,
             scope_fields=self._scope_fields,
         )
-        self.memory_category_repo = SQLiteMemoryCategoryRepo(
+        self.entry_repo = SQLiteEntryRepo(
             state=self._state,
-            memory_category_model=memory_category_model,
+            entry_model=entry_model,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
             scope_fields=self._scope_fields,
         )
-        self.memory_item_repo = SQLiteMemoryItemRepo(
+        self.resource_entry_repo = SQLiteResourceEntryRepo(
             state=self._state,
-            memory_item_model=memory_item_model,
-            sqla_models=self._sqla_models,
-            sessions=self._sessions,
-            scope_fields=self._scope_fields,
-        )
-        self.category_item_repo = SQLiteCategoryItemRepo(
-            state=self._state,
-            category_item_model=category_item_model,
+            resource_entry_model=resource_entry_model,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
             scope_fields=self._scope_fields,
@@ -119,8 +104,7 @@ class SQLiteStore(Database):
 
         # Set up cache references
         self.resources = self._state.resources
-        self.items = self._state.items
-        self.categories = self._state.categories
+        self.entries = self._state.entries
         self.relations = self._state.relations
 
     def _create_tables(self) -> None:
@@ -137,9 +121,8 @@ class SQLiteStore(Database):
     def load_existing(self) -> None:
         """Load all existing data from database into cache."""
         self.resource_repo.load_existing()
-        self.memory_category_repo.load_existing()
-        self.memory_item_repo.load_existing()
-        self.category_item_repo.load_existing()
+        self.entry_repo.load_existing()
+        self.resource_entry_repo.load_existing()
 
 
 __all__ = ["SQLiteStore"]

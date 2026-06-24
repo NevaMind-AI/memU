@@ -8,12 +8,23 @@ The repository also describes a hosted Cloud product in `README.md`, but this do
 
 ## System overview
 
-memU implements structured agent memory with four persistent record types:
+memU implements structured agent memory on a unified, lane-tagged backbone
+(see ADR 0006). "Everything is a resource", with two first-class record types
+plus one edge:
 
-- `Resource`: raw source artifacts (conversation/document/image/video/audio)
-- `MemoryItem`: extracted atomic memories with embeddings
-- `MemoryCategory`: grouped topic summaries
-- `CategoryItem`: item-category relation edges
+- `Resource`: a `lane`-tagged node — either a raw source artifact
+  (`lane="source"`, modality conversation/document/image/video/audio; the
+  canonical preprocessing text lives in `content`) or a generated markdown doc
+  (`lane` ∈ {index, memory, skill}, `modality="markdown"`). A memory-lane
+  `Resource` is the former "category"; a skill-lane one is a skill page.
+- `Entry`: a `lane`-tagged searchable atom with an embedding (index → a
+  description, memory → a memory item, skill → a step). Links to its origin via
+  `source_id`/`source_path`.
+- `ResourceEntry`: membership edge from an `Entry` to its coarse (lane) `Resource`.
+
+The three retrieval lanes (index/memory/skill) are parallel, structurally
+identical tracks over the shared `Resource.content` trunk; retrieval is the same
+`Resource recall → Entry recall` waterfall in every lane, parameterized by `lane`.
 
 At runtime, `MemoryService` orchestrates ingestion, retrieval, and manual CRUD over these layers.
 
@@ -23,10 +34,9 @@ flowchart TD
   B --> C["Workflow Pipelines"]
   C --> D["LLM Clients"]
   C --> E["Database Repositories"]
-  E --> F["Resources"]
-  E --> G["Memory Items"]
-  E --> H["Memory Categories"]
-  E --> I["Category Relations"]
+  E --> F["Resources (lane: source/index/memory/skill)"]
+  E --> G["Entries (lane: index/memory/skill)"]
+  E --> I["ResourceEntry edges"]
 ```
 
 ## Core runtime components
@@ -121,20 +131,23 @@ Key behavior:
 
 ### Repository contracts
 
-Storage is abstracted through a `Database` protocol with four repositories:
+Storage is abstracted through a `Database` protocol with three repositories:
 
-- `ResourceRepo` (incl. `vector_search_resources`)
-- `MemoryItemRepo` (incl. `vector_search_items`, similarity/salience)
-- `MemoryCategoryRepo`
-- `CategoryItemRepo`
+- `ResourceRepo` (incl. `get_or_create_doc`, `update_resource`, lane-filtered
+  `vector_search_resources`)
+- `EntryRepo` (incl. `vector_search_entries`, similarity/salience), lane-filtered
+- `ResourceEntryRepo` (membership edges)
+
+All three repos take an optional `lane` filter so a single physical table per
+record type backs every lane (the `lane` column is the discriminator).
 
 Vector ranking over **stored** embeddings is a repository responsibility:
-`vector_search_items` and `vector_search_resources` keep the retrieval layer from
-reaching into any concrete backend. The pure cosine/salience math lives in the
-storage-neutral `memu.vector` module (not under any backend), so the app layer
-and every backend depend on it instead of on each other. (Category recall still
-ranks freshly re-embedded summaries at query time in the retrieval layer, since
-that is query-time policy rather than search over stored vectors.)
+`vector_search_entries` and `vector_search_resources` keep the retrieval layer
+from reaching into any concrete backend. The pure cosine/salience math lives in
+the storage-neutral `memu.vector` module (not under any backend), so the app
+layer and every backend depend on it instead of on each other. (Memory-doc
+recall still ranks freshly re-embedded summaries at query time in the retrieval
+layer, since that is query-time policy rather than search over stored vectors.)
 
 ### Backends
 
@@ -148,7 +161,7 @@ For Postgres, startup runs migration bootstrap and attempts `CREATE EXTENSION IF
 
 ### Scope model propagation
 
-`UserConfig.model` is merged into record/table models so scope fields (for example `user_id`) become first-class columns/attributes across resources, items, categories, and relations.
+`UserConfig.model` is merged into record/table models so scope fields (for example `user_id`) become first-class columns/attributes across resources, entries, and resource-entry edges.
 
 This is why `where` filters and `user_data` writes are consistently available across APIs.
 
@@ -239,7 +252,7 @@ payload directory:
 ├── resource/
 │   └── <file_name>              ← one copied raw source file (verbatim bytes)
 ├── memory/
-│   └── <slug>.md                ← one MemoryCategory (description + summary)
+│   └── <slug>.md                ← one memory-lane Resource (description + summary)
 └── skill/
     └── <skill_name>/SKILL.md    ← one synthesized skill per folder
 ```
@@ -247,8 +260,8 @@ payload directory:
 - `resource/` holds the raw source files copied verbatim out of the blob store
   (`Resource.local_path`); `INDEX.md` indexes them (name, modality, description,
   link), so an agent knows which raw resources exist.
-- `memory/<slug>.md` is the living memory split one file per `MemoryCategory`
-  (its description + summary); `MEMORY.md` is an overview that links to each one.
+- `memory/<slug>.md` is the living memory split one file per memory-lane
+  `Resource` (its description + summary); `MEMORY.md` is an overview that links to each one.
 - `skill/<name>/SKILL.md` is a reusable skill synthesized from the descriptions
   (a sibling of `MEMORY.md`, never derived from extracted skill-type memory
   items); the root `SKILL.md` indexes the tree.
@@ -315,3 +328,4 @@ serialized through a per-service lock.
 - `docs/adr/0001-workflow-pipeline-architecture.md`
 - `docs/adr/0002-pluggable-storage-and-vector-strategy.md`
 - `docs/adr/0003-user-scope-in-data-model.md`
+- `docs/adr/0006-unified-resource-entry-lane-backbone.md`

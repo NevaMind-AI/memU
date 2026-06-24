@@ -13,11 +13,11 @@ except ImportError as exc:
     raise ImportError(msg) from exc
 
 from pydantic import BaseModel
-from sqlalchemy import ForeignKey, MetaData, String, Text
+from sqlalchemy import MetaData, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
-from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
+from memu.database.models import Entry, Resource, ResourceEntry
 
 
 class TZDateTime(DateTime):
@@ -43,35 +43,42 @@ class BaseModelMixin(SQLModel):
     )
 
 
-class ResourceModel(BaseModelMixin, Resource):
-    url: str = Field(sa_column=Column(String, nullable=False))
+class PostgresResourceModel(BaseModelMixin, Resource):
+    """A node in the unified store: raw input (``lane="source"``) or generated doc."""
+
+    lane: str = Field(sa_column=Column(String, nullable=False, index=True))
     modality: str = Field(sa_column=Column(String, nullable=False))
-    local_path: str = Field(sa_column=Column(String, nullable=False))
-    caption: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
-
-
-class MemoryItemModel(BaseModelMixin, MemoryItem):
-    resource_id: str | None = Field(sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), nullable=True))
-    memory_type: MemoryType = Field(sa_column=Column(String, nullable=False))
-    summary: str = Field(sa_column=Column(Text, nullable=False))
-    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
-    happened_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
-    extra: dict[str, Any] = Field(default={}, sa_column=Column(JSONB, nullable=True))
-
-
-class MemoryCategoryModel(BaseModelMixin, MemoryCategory):
-    name: str = Field(sa_column=Column(String, nullable=False, index=True))
-    description: str = Field(sa_column=Column(Text, nullable=False))
-    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
+    url: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    local_path: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    slug: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    title: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    description: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    content: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     summary: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
+    resource_refs: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSONB, nullable=True))
 
 
-class CategoryItemModel(BaseModelMixin, CategoryItem):
-    item_id: str = Field(sa_column=Column(ForeignKey("memory_items.id", ondelete="CASCADE"), nullable=False))
-    category_id: str = Field(sa_column=Column(ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False))
+class PostgresEntryModel(BaseModelMixin, Entry):
+    """The searchable atom of a lane (index description / memory item / skill step)."""
 
-    __table_args__ = (Index("idx_category_items_unique", "item_id", "category_id", unique=True),)
+    lane: str = Field(sa_column=Column(String, nullable=False, index=True))
+    source_id: str | None = Field(default=None, sa_column=Column(String, nullable=True, index=True))
+    source_path: str | None = Field(default=None, sa_column=Column(String, nullable=True))
+    entry_kind: str = Field(sa_column=Column(String, nullable=False))
+    text: str = Field(sa_column=Column(Text, nullable=False))
+    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
+    happened_at: datetime | None = Field(default=None, sa_column=Column(TZDateTime, nullable=True))
+    extra: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=True))
+
+
+class PostgresResourceEntryModel(BaseModelMixin, ResourceEntry):
+    """Edge: membership of an Entry in its coarse (lane) Resource doc."""
+
+    entry_id: str = Field(sa_column=Column(String, nullable=False, index=True))
+    resource_id: str = Field(sa_column=Column(String, nullable=False, index=True))
+
+    __table_args__ = (Index("idx_resource_entries_unique", "entry_id", "resource_id", unique=True),)
 
 
 def _normalize_table_args(table_args: Any) -> tuple[list[Any], dict[str, Any]]:
@@ -156,25 +163,19 @@ def build_table_model(
 
 def build_scoped_models(
     user_model: type[BaseModel],
-) -> tuple[type[SQLModel], type[SQLModel], type[SQLModel], type[SQLModel]]:
-    """
-    Build scoped SQLModel tables for each entity (resource, category, item, relation).
-    """
-    resource_model = build_table_model(user_model, ResourceModel, tablename="resources")
-    memory_category_model = build_table_model(
-        user_model, MemoryCategoryModel, tablename="memory_categories", unique_with_scope=["name"]
-    )
-    memory_item_model = build_table_model(user_model, MemoryItemModel, tablename="memory_items")
-    category_item_model = build_table_model(user_model, CategoryItemModel, tablename="category_items")
-    return resource_model, memory_category_model, memory_item_model, category_item_model
+) -> tuple[type[SQLModel], type[SQLModel], type[SQLModel]]:
+    """Build scoped SQLModel tables for each entity (resource, entry, resource-entry)."""
+    resource_model = build_table_model(user_model, PostgresResourceModel, tablename="memu_resources")
+    entry_model = build_table_model(user_model, PostgresEntryModel, tablename="memu_entries")
+    resource_entry_model = build_table_model(user_model, PostgresResourceEntryModel, tablename="memu_resource_entries")
+    return resource_model, entry_model, resource_entry_model
 
 
 __all__ = [
     "BaseModelMixin",
-    "CategoryItemModel",
-    "MemoryCategoryModel",
-    "MemoryItemModel",
-    "ResourceModel",
+    "PostgresEntryModel",
+    "PostgresResourceEntryModel",
+    "PostgresResourceModel",
     "build_scoped_models",
     "build_table_model",
 ]

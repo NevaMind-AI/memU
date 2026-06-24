@@ -30,7 +30,7 @@ def _print_categories(categories, max_items=3):
         print("  Categories:")
         for cat in categories[:max_items]:
             summary = cat.get("summary") or cat.get("description", "")
-            print(f"    - {cat.get('name')}: {summary[:60]}...")
+            print(f"    - {cat.get('title')}: {summary[:60]}...")
 
 
 def _print_items(items, max_items=3):
@@ -38,9 +38,9 @@ def _print_items(items, max_items=3):
     if items:
         print("  Items:")
         for item in items[:max_items]:
-            memory_type = item.get("memory_type", "unknown")
-            summary = item.get("summary", "")[:80]
-            print(f"    - [{memory_type}] {summary}...")
+            entry_kind = item.get("entry_kind", "unknown")
+            summary = item.get("text", "")[:80]
+            print(f"    - [{entry_kind}] {summary}...")
 
 
 async def _test_memorize(service, file_path, output_data):

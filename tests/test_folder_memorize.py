@@ -96,21 +96,23 @@ def _seed_resource_with_item(service: MemoryService, *, url: str, category_id: s
     """Create a resource + one item + one relation, returning the resource id."""
     store = service.database
     res = store.resource_repo.create_resource(
+        lane="source",
         url=url,
         modality="document",
         local_path=url,
-        caption="cap",
+        summary="cap",
         embedding=None,
         user_data=dict(user),
     )
-    item = store.memory_item_repo.create_item(
-        resource_id=res.id,
-        memory_type="profile",
-        summary=f"summary for {url}",
+    item = store.entry_repo.create_entry(
+        lane="memory",
+        source_id=res.id,
+        entry_kind="profile",
+        text=f"summary for {url}",
         embedding=[0.0],
         user_data=dict(user),
     )
-    store.category_item_repo.link_item_category(item.id, category_id, dict(user))
+    store.resource_entry_repo.link_entry_resource(item.id, category_id, dict(user))
     return res.id
 
 
@@ -138,9 +140,9 @@ async def test_cascade_delete_removes_resource_items_relations(monkeypatch) -> N
     assert keep_id in remaining
     assert drop_id not in remaining
     # The dropped resource's item and relation are gone; the kept one's survive.
-    items = store.memory_item_repo.list_items(where=user)
-    assert all(it.resource_id == keep_id for it in items.values())
-    relations = store.category_item_repo.list_relations(where=user)
+    items = store.entry_repo.list_entries(where=user)
+    assert all(it.source_id == keep_id for it in items.values())
+    relations = store.resource_entry_repo.list_relations(where=user)
     assert len(relations) == 1
     # Discarded content was fed to the summary recompute as (before, None).
     assert patched and category_id in patched[0]
@@ -161,21 +163,23 @@ async def test_memorize_workspace_sync_add_modify_delete(tmp_path: Path, monkeyp
 
     async def _fake_memorize_one(*, resource_url, modality, user_scope, ctx, store) -> dict[str, Any]:
         res = store.resource_repo.create_resource(
+            lane="source",
             url=resource_url,
             modality=modality,
             local_path=resource_url,
-            caption="cap",
+            summary="cap",
             embedding=None,
             user_data=dict(user_scope or {}),
         )
-        store.memory_item_repo.create_item(
-            resource_id=res.id,
-            memory_type="profile",
-            summary=f"summary {resource_url}",
+        store.entry_repo.create_entry(
+            lane="memory",
+            source_id=res.id,
+            entry_kind="profile",
+            text=f"summary {resource_url}",
             embedding=[0.0],
             user_data=dict(user_scope or {}),
         )
-        return {"resources": [res], "response": {"items": [{"summary": "x"}]}}
+        return {"resources": [res], "response": {"items": [{"text": "x"}]}}
 
     monkeypatch.setattr(service, "_ensure_categories_ready", _noop_categories)
     monkeypatch.setattr(service, "_patch_category_summaries", _noop_patch)
@@ -227,10 +231,11 @@ async def test_memorize_workspace_exports_when_enabled(tmp_path: Path, monkeypat
 
     async def _fake_memorize_one(*, resource_url, modality, user_scope, ctx, store) -> dict[str, Any]:
         res = store.resource_repo.create_resource(
+            lane="source",
             url=resource_url,
             modality=modality,
             local_path=resource_url,
-            caption="cap",
+            summary="cap",
             embedding=None,
             user_data=dict(user_scope or {}),
         )
@@ -269,10 +274,11 @@ async def test_memorize_workspace_export_failure_does_not_fail_sync(tmp_path: Pa
 
     async def _fake_memorize_one(*, resource_url, modality, user_scope, ctx, store) -> dict[str, Any]:
         res = store.resource_repo.create_resource(
+            lane="source",
             url=resource_url,
             modality=modality,
             local_path=resource_url,
-            caption="cap",
+            summary="cap",
             embedding=None,
             user_data=dict(user_scope or {}),
         )

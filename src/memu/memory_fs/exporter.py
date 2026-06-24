@@ -22,8 +22,8 @@ directory of payloads (``resource/`` / ``memory/`` / ``skill/``):
   (``Resource.local_path``), so the actual ingested bytes live next to the memory.
 - ``INDEX.md``  : an index of those raw files (name, modality, description, link
   into ``resource/``), so an agent knows which raw resources exist.
-- ``memory/``   : the living memory split one file per
-  :class:`~memu.database.models.MemoryCategory` (its description + summary).
+- ``memory/``   : the living memory split one file per memory-lane
+  :class:`~memu.database.models.Resource` (its description + summary).
 - ``MEMORY.md`` : an overall overview that links to each ``memory/<slug>.md`` file.
 - ``skill/**``  : reusable skills. When the caller supplies a synthesized
   ``slug -> body`` map (``synthesize=True``), the tree is rendered from it; when no
@@ -51,7 +51,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from memu.database.interfaces import Database
-    from memu.database.models import MemoryCategory, MemoryItem, Resource
+    from memu.database.models import Entry, Resource
 
 MANIFEST_NAME = ".memufs_manifest.json"
 SKILL_DIRNAME = "skill"
@@ -168,15 +168,15 @@ class MemoryFileExporter:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         scope = dict(where) if where else None
 
-        categories = list(database.memory_category_repo.list_categories(where=scope).values())
-        resources = list(database.resource_repo.list_resources(where=scope).values())
+        categories = list(database.resource_repo.list_resources(where=scope, lane="memory").values())
+        resources = list(database.resource_repo.list_resources(where=scope, lane="source").values())
 
         # The shared trunk: one multimodal description per source file.
         descriptions = self._build_descriptions(resources)
 
-        # The skill bypass reads extracted skill-type items only when no synthesized
+        # The skill bypass reads extracted skill-type entries only when no synthesized
         # map is supplied; listing is cheap and avoided otherwise.
-        items = list(database.memory_item_repo.list_items(where=scope).values()) if skills is None else []
+        items = list(database.entry_repo.list_entries(where=scope).values()) if skills is None else []
 
         # resource/: copy the raw source bytes verbatim; ``links`` maps each
         # resource id to its relative path under resource/ for the INDEX.md links.
@@ -218,17 +218,17 @@ class MemoryFileExporter:
         for resource in sorted(resources, key=lambda r: (r.url, r.id)):
             descriptions.append(
                 FileDescription(
-                    url=resource.url,
+                    url=resource.url or "",
                     modality=resource.modality,
-                    description=" ".join((resource.caption or "").split()),
+                    description=" ".join((resource.summary or "").split()),
                     resource_id=resource.id,
-                    local_path=resource.local_path,
+                    local_path=resource.local_path or "",
                 )
             )
         return descriptions
 
     @staticmethod
-    def build_synthesis_descriptions(resources: list[Resource], items: list[MemoryItem]) -> list[FileDescription]:
+    def build_synthesis_descriptions(resources: list[Resource], items: list[Entry]) -> list[FileDescription]:
         """Build synthesizer input from the structured store (extracted items).
 
         The synthesizer is fed the extracted memory items per source so that the
@@ -236,30 +236,30 @@ class MemoryFileExporter:
         lossy per-source caption. A source's caption is used only as a fallback when it
         has no extracted items yet (e.g. it failed extraction or has not been processed).
         """
-        items_by_resource: dict[str, list[MemoryItem]] = {}
+        items_by_resource: dict[str, list[Entry]] = {}
         for item in items:
-            if item.resource_id:
-                items_by_resource.setdefault(item.resource_id, []).append(item)
+            if item.source_id:
+                items_by_resource.setdefault(item.source_id, []).append(item)
 
         descriptions: list[FileDescription] = []
         for resource in sorted(resources, key=lambda r: (r.url, r.id)):
             res_items = sorted(
                 items_by_resource.get(resource.id, []),
-                key=lambda i: (i.memory_type, i.created_at, i.id),
+                key=lambda i: (i.entry_kind, i.created_at, i.id),
             )
             parts = [
-                f"[{item.memory_type}] {' '.join((item.summary or '').split())}"
+                f"[{item.entry_kind}] {' '.join((item.text or '').split())}"
                 for item in res_items
-                if (item.summary or "").strip()
+                if (item.text or "").strip()
             ]
-            description = "; ".join(parts) if parts else " ".join((resource.caption or "").split())
+            description = "; ".join(parts) if parts else " ".join((resource.summary or "").split())
             descriptions.append(
                 FileDescription(
-                    url=resource.url,
+                    url=resource.url or "",
                     modality=resource.modality,
                     description=description,
                     resource_id=resource.id,
-                    local_path=resource.local_path,
+                    local_path=resource.local_path or "",
                 )
             )
         return descriptions
@@ -270,22 +270,22 @@ class MemoryFileExporter:
     def _skill_document(body: str) -> str:
         return f"{_GENERATED_NOTICE}\n\n{body.strip()}\n"
 
-    def _skill_bypass(self, items: list[MemoryItem]) -> dict[str, str]:
-        """Deterministically break out skill-type memory items as a slug -> body map.
+    def _skill_bypass(self, items: list[Entry]) -> dict[str, str]:
+        """Deterministically break out skill-kind entries as a slug -> body map.
 
         The LLM-free fallback used when no synthesized skill map is supplied: each
-        skill-type item's summary becomes one ``skill/<slug>/SKILL.md`` document,
+        skill-kind entry's text becomes one ``skill/<slug>/SKILL.md`` document,
         slugged from its frontmatter ``name:``/first heading. Mirrors the shape of
         the synthesized map so the rest of :meth:`export` is path-agnostic.
         """
         skills = sorted(
-            (item for item in items if item.memory_type == SKILL_MEMORY_TYPE and (item.summary or "").strip()),
+            (item for item in items if item.entry_kind == SKILL_MEMORY_TYPE and (item.text or "").strip()),
             key=lambda i: (i.created_at, i.id),
         )
         skill_map: dict[str, str] = {}
         used: dict[str, int] = {}
         for item in skills:
-            body = (item.summary or "").strip()
+            body = (item.text or "").strip()
             base = self._skill_name(body, fallback=f"skill-{item.id[:6]}")
             count = used.get(base, 0)
             slug = base if count == 0 else f"{base}-{count + 1}"
@@ -350,28 +350,28 @@ class MemoryFileExporter:
         return f"# Memory\n\n{_GENERATED_NOTICE}\n\n{body}\n"
 
     @staticmethod
-    def _category_slugs(categories: list[MemoryCategory]) -> tuple[list[MemoryCategory], list[str]]:
+    def _category_slugs(categories: list[Resource]) -> tuple[list[Resource], list[str]]:
         """Order categories deterministically and assign a unique slug to each.
 
         Returns the ordered categories alongside a parallel list of slugs (used for
         the ``memory/<slug>.md`` file names and the MEMORY.md links). Slug clashes
         are de-duplicated with a numeric suffix so files never collide.
         """
-        ordered = sorted(categories, key=lambda c: (c.name.lower(), c.id))
+        ordered = sorted(categories, key=lambda c: ((c.title or "").lower(), c.id))
         slugs: list[str] = []
         used: dict[str, int] = {}
         for category in ordered:
-            base = slugify(category.name)
+            base = category.slug or slugify(category.title or "")
             count = used.get(base, 0)
             used[base] = count + 1
             slugs.append(base if count == 0 else f"{base}-{count + 1}")
         return ordered, slugs
 
-    def _category_document(self, category: MemoryCategory) -> str:
+    def _category_document(self, category: Resource) -> str:
         """A single ``memory/<slug>.md`` file: the category's description + summary."""
         description = self._inline((category.description or "").strip())
         summary = (category.summary or "").strip()
-        lines = [f"# {category.name}", "", _GENERATED_NOTICE, ""]
+        lines = [f"# {category.title}", "", _GENERATED_NOTICE, ""]
         if description:
             lines.append(f"_{description}_")
             lines.append("")
@@ -379,14 +379,14 @@ class MemoryFileExporter:
         lines.append("")
         return "\n".join(lines)
 
-    def _memory_index(self, ordered: list[MemoryCategory], slugs: list[str]) -> str:
+    def _memory_index(self, ordered: list[Resource], slugs: list[str]) -> str:
         """The deterministic ``MEMORY.md``: an overview linking to each category file."""
         lines = ["# Memory", "", _GENERATED_NOTICE, "", "## Overview", ""]
         if ordered:
             for category, slug in zip(ordered, slugs, strict=True):
                 description = self._inline((category.description or "").strip())
                 link = f"{MEMORY_DIRNAME}/{slug}.md"
-                line = f"- [**{category.name}**]({link})"
+                line = f"- [**{category.title}**]({link})"
                 if description:
                     line = f"{line} — {description}"
                 lines.append(line)

@@ -3,10 +3,9 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from memu.database.models import (
-    CategoryItem,
-    MemoryCategory,
-    MemoryItem,
+    Entry,
     Resource,
+    ResourceEntry,
     merge_scope_model,
 )
 
@@ -15,40 +14,31 @@ class InMemoryResource(Resource):
     """Concrete in-memory resource model."""
 
 
-class InMemoryMemoryItem(MemoryItem):
-    """Concrete in-memory memory item model."""
+class InMemoryEntry(Entry):
+    """Concrete in-memory entry model."""
 
 
-class InMemoryMemoryCategory(MemoryCategory):
-    """Concrete in-memory memory category model."""
-
-
-class InMemoryCategoryItem(CategoryItem):
-    """Concrete in-memory relation model."""
+class InMemoryResourceEntry(ResourceEntry):
+    """Concrete in-memory membership-edge model."""
 
 
 def build_inmemory_models(
     user_model: type[BaseModel],
 ) -> tuple[
     type[InMemoryResource],
-    type[InMemoryMemoryCategory],
-    type[InMemoryMemoryItem],
-    type[InMemoryCategoryItem],
+    type[InMemoryEntry],
+    type[InMemoryResourceEntry],
 ]:
-    """
-    Build scoped in-memory models that inherit from both the base interface and the user scope model.
-    """
+    """Build scoped in-memory models inheriting both base interface and user scope."""
     resource_model = merge_scope_model(user_model, InMemoryResource, name_suffix="Resource")
-    memory_category_model = merge_scope_model(user_model, InMemoryMemoryCategory, name_suffix="MemoryCategory")
-    memory_item_model = merge_scope_model(user_model, InMemoryMemoryItem, name_suffix="MemoryItem")
-    category_item_model = merge_scope_model(user_model, InMemoryCategoryItem, name_suffix="CategoryItem")
-    return resource_model, memory_category_model, memory_item_model, category_item_model
+    entry_model = merge_scope_model(user_model, InMemoryEntry, name_suffix="Entry")
+    resource_entry_model = merge_scope_model(user_model, InMemoryResourceEntry, name_suffix="ResourceEntry")
+    return resource_model, entry_model, resource_entry_model
 
 
 __all__ = [
-    "InMemoryCategoryItem",
-    "InMemoryMemoryCategory",
-    "InMemoryMemoryItem",
+    "InMemoryEntry",
     "InMemoryResource",
+    "InMemoryResourceEntry",
     "build_inmemory_models",
 ]

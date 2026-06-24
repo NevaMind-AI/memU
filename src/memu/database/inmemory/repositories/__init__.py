@@ -1,21 +1,9 @@
-from memu.database.inmemory.repositories.category_item_repo import (
-    CategoryItemRepo,
-    InMemoryCategoryItemRepository,
-)
-from memu.database.inmemory.repositories.memory_category_repo import (
-    InMemoryMemoryCategoryRepository,
-    MemoryCategoryRepo,
-)
-from memu.database.inmemory.repositories.memory_item_repo import InMemoryMemoryItemRepository, MemoryItemRepo
-from memu.database.inmemory.repositories.resource_repo import InMemoryResourceRepository, ResourceRepo
+from memu.database.inmemory.repositories.entry_repo import InMemoryEntryRepository
+from memu.database.inmemory.repositories.resource_entry_repo import InMemoryResourceEntryRepository
+from memu.database.inmemory.repositories.resource_repo import InMemoryResourceRepository
 
 __all__ = [
-    "CategoryItemRepo",
-    "InMemoryCategoryItemRepository",
-    "InMemoryMemoryCategoryRepository",
-    "InMemoryMemoryItemRepository",
+    "InMemoryEntryRepository",
+    "InMemoryResourceEntryRepository",
     "InMemoryResourceRepository",
-    "MemoryCategoryRepo",
-    "MemoryItemRepo",
-    "ResourceRepo",
 ]

@@ -10,10 +10,10 @@ def _print_results(title: str, result: dict) -> None:
     print(f"\n[SQLITE] RETRIEVED - {title}")
     print("  Categories:")
     for cat in result.get("categories", [])[:3]:
-        print(f"    - {cat.get('name')}: {(cat.get('summary') or cat.get('description', ''))[:80]}...")
+        print(f"    - {cat.get('title')}: {(cat.get('summary') or cat.get('description', ''))[:80]}...")
     print("  Items:")
     for item in result.get("items", [])[:3]:
-        print(f"    - [{item.get('memory_type')}] {item.get('summary', '')[:100]}...")
+        print(f"    - [{item.get('entry_kind')}] {item.get('text', '')[:100]}...")
     if result.get("resources"):
         print("  Resources:")
         for res in result.get("resources", [])[:3]:
@@ -54,7 +54,7 @@ async def main():
         print("\n[SQLITE] Memorizing...")
         memory = await service.memorize(resource_url=file_path, modality="conversation", user={"user_id": "123"})
         for cat in memory.get("categories", []):
-            print(f"  - {cat.get('name')}: {(cat.get('summary') or '')[:80]}...")
+            print(f"  - {cat.get('title')}: {(cat.get('summary') or '')[:80]}...")
 
         queries = [
             {"role": "user", "content": {"text": "Tell me about preferences"}},

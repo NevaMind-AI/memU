@@ -68,26 +68,26 @@ def test_synthesizer_helpers() -> None:
 
 
 def test_build_synthesis_descriptions_uses_structured_items() -> None:
-    """Synthesis input is sourced from extracted items, with a caption fallback."""
-    from memu.database.models import MemoryItem, Resource
+    """Synthesis input is sourced from extracted entries, with a summary fallback."""
+    from memu.database.models import Entry, Resource
 
     res_with_items = Resource(
-        id="r1", url="docs/a.txt", modality="document", local_path="a.txt", caption="raw caption a"
+        id="r1", lane="source", url="docs/a.txt", modality="document", local_path="a.txt", summary="raw caption a"
     )
     res_without_items = Resource(
-        id="r2", url="docs/b.txt", modality="document", local_path="b.txt", caption="raw caption b"
+        id="r2", lane="source", url="docs/b.txt", modality="document", local_path="b.txt", summary="raw caption b"
     )
     items = [
-        MemoryItem(id="i1", resource_id="r1", memory_type="knowledge", summary="Alpha fact."),
-        MemoryItem(id="i2", resource_id="r1", memory_type="profile", summary="Beta trait."),
+        Entry(id="i1", lane="memory", source_id="r1", entry_kind="knowledge", text="Alpha fact."),
+        Entry(id="i2", lane="memory", source_id="r1", entry_kind="profile", text="Beta trait."),
     ]
 
     descriptions = MemoryFileExporter.build_synthesis_descriptions([res_with_items, res_without_items], items)
     by_url = {d.url: d.description for d in descriptions}
 
-    # r1 is composed from its structured items, not the caption.
+    # r1 is composed from its structured entries, not the summary.
     assert by_url["docs/a.txt"] == "[knowledge] Alpha fact.; [profile] Beta trait."
-    # r2 has no items, so it falls back to the caption.
+    # r2 has no entries, so it falls back to the summary.
     assert by_url["docs/b.txt"] == "raw caption b"
 
 
@@ -120,10 +120,11 @@ async def test_service_synthesis_wiring(tmp_path: Path, monkeypatch) -> None:
         memory_files_config={"enabled": True, "output_dir": str(tmp_path), "synthesize": True},
     )
     service.database.resource_repo.create_resource(
+        lane="source",
         url="docs/coffee.txt",
         modality="document",
         local_path="coffee.txt",
-        caption="The user likes pour-over coffee.",
+        summary="The user likes pour-over coffee.",
         embedding=None,
         user_data={"user_id": "u1"},
     )
@@ -235,10 +236,11 @@ async def test_service_init_then_update(tmp_path: Path, monkeypatch) -> None:
 
     repo = service.database.resource_repo
     repo.create_resource(
+        lane="source",
         url="docs/coffee.txt",
         modality="document",
         local_path="coffee.txt",
-        caption="The user likes pour-over coffee.",
+        summary="The user likes pour-over coffee.",
         embedding=None,
         user_data={"user_id": "u1"},
     )
@@ -250,10 +252,11 @@ async def test_service_init_then_update(tmp_path: Path, monkeypatch) -> None:
 
     # Second pass: tree exists -> incremental update from the changed resource only.
     changed = repo.create_resource(
+        lane="source",
         url="docs/latte.txt",
         modality="document",
         local_path="latte.txt",
-        caption="The user enjoys latte art and oat milk.",
+        summary="The user enjoys latte art and oat milk.",
         embedding=None,
         user_data={"user_id": "u1"},
     )

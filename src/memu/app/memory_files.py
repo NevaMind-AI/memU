@@ -65,7 +65,7 @@ class MemoryFilesBuilder:
             if is_update:
                 descriptions = MemoryFileExporter._build_descriptions(changed)  # type: ignore[arg-type]
             else:
-                resources = list(database.resource_repo.list_resources(where=where or None).values())
+                resources = list(database.resource_repo.list_resources(where=where or None, lane="source").values())
                 descriptions = MemoryFileExporter._build_descriptions(resources)
 
             # An incremental update merges the changed descriptions into the prior

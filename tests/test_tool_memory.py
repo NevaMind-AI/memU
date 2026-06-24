@@ -1,4 +1,4 @@
-"""Tests for Tool Memory feature - specialized memory type for tracking tool usage."""
+"""Tests for Tool Memory feature - specialized entry kind for tracking tool usage."""
 
 from __future__ import annotations
 
@@ -31,9 +31,9 @@ rebuild_ns = {
     "ToolCallResult": models.ToolCallResult,
 }
 models.ToolCallResult.model_rebuild(_types_namespace=rebuild_ns)
-models.MemoryItem.model_rebuild(_types_namespace=rebuild_ns)
+models.Entry.model_rebuild(_types_namespace=rebuild_ns)
 
-MemoryItem = models.MemoryItem
+Entry = models.Entry
 MemoryType = models.MemoryType
 ToolCallResult = models.ToolCallResult
 
@@ -125,7 +125,7 @@ class TestToolCallResult:
 
 
 class TestMemoryItemToolType:
-    """Tests for MemoryItem with tool type."""
+    """Tests for Entry with tool kind."""
 
     def test_tool_memory_type_literal(self):
         """Test that 'tool' is a valid MemoryType."""
@@ -135,27 +135,29 @@ class TestMemoryItemToolType:
         assert "tool" in valid_types
 
     def test_create_tool_memory(self):
-        """Test creating a tool type memory item with tool fields in extra."""
-        item = MemoryItem(
-            resource_id=None,
-            memory_type="tool",
-            summary="file_reader tool usage for config files",
+        """Test creating a tool kind entry with tool fields in extra."""
+        item = Entry(
+            lane="memory",
+            source_id=None,
+            entry_kind="tool",
+            text="file_reader tool usage for config files",
             extra={
                 "when_to_use": "When needing to read configuration files",
                 "metadata": {"tool_name": "file_reader", "avg_success_rate": 0.95},
             },
         )
 
-        assert item.memory_type == "tool"
+        assert item.entry_kind == "tool"
         assert item.extra["when_to_use"] == "When needing to read configuration files"
         assert item.extra["metadata"]["tool_name"] == "file_reader"
 
     def test_add_tool_call(self):
         """Test adding tool call results to a tool memory."""
-        item = MemoryItem(
-            resource_id=None,
-            memory_type="tool",
-            summary="calculator tool usage",
+        item = Entry(
+            lane="memory",
+            source_id=None,
+            entry_kind="tool",
+            text="calculator tool usage",
         )
 
         tool_call = ToolCallResult(
@@ -176,10 +178,11 @@ class TestMemoryItemToolType:
 
     def test_add_tool_call_wrong_type(self):
         """Test that add_tool_call fails for non-tool memories."""
-        item = MemoryItem(
-            resource_id=None,
-            memory_type="profile",
-            summary="User profile info",
+        item = Entry(
+            lane="memory",
+            source_id=None,
+            entry_kind="profile",
+            text="User profile info",
         )
 
         tool_call = ToolCallResult(
@@ -193,10 +196,11 @@ class TestMemoryItemToolType:
 
     def test_get_tool_statistics_empty(self):
         """Test statistics for memory with no tool calls."""
-        item = MemoryItem(
-            resource_id=None,
-            memory_type="tool",
-            summary="empty tool memory",
+        item = Entry(
+            lane="memory",
+            source_id=None,
+            entry_kind="tool",
+            text="empty tool memory",
         )
 
         stats = get_tool_statistics(item)
@@ -211,10 +215,11 @@ class TestMemoryItemToolType:
     def test_get_tool_statistics(self):
         """Test statistics calculation for tool calls."""
         # Tool calls are stored as dicts in extra
-        item = MemoryItem(
-            resource_id=None,
-            memory_type="tool",
-            summary="calculator tool",
+        item = Entry(
+            lane="memory",
+            source_id=None,
+            entry_kind="tool",
+            text="calculator tool",
             extra={
                 "tool_calls": [
                     {
@@ -259,10 +264,11 @@ class TestMemoryItemToolType:
 
     def test_get_tool_statistics_recent_n(self):
         """Test statistics with recent_n limit."""
-        item = MemoryItem(
-            resource_id=None,
-            memory_type="tool",
-            summary="tool with many calls",
+        item = Entry(
+            lane="memory",
+            source_id=None,
+            entry_kind="tool",
+            text="tool with many calls",
             extra={
                 "tool_calls": [
                     {"tool_name": "t", "input": "1", "output": "1", "success": False, "time_cost": 1.0, "score": 0.0},
@@ -285,10 +291,11 @@ class TestMemoryItemNewFields:
 
     def test_when_to_use_field(self):
         """Test when_to_use field stored in extra for retrieval hints."""
-        item = MemoryItem(
-            resource_id=None,
-            memory_type="profile",
-            summary="User prefers dark mode",
+        item = Entry(
+            lane="memory",
+            source_id=None,
+            entry_kind="profile",
+            text="User prefers dark mode",
             extra={"when_to_use": "When configuring UI settings or themes"},
         )
 
@@ -296,10 +303,11 @@ class TestMemoryItemNewFields:
 
     def test_metadata_field(self):
         """Test metadata field stored in extra for type-specific data."""
-        item = MemoryItem(
-            resource_id=None,
-            memory_type="event",
-            summary="User attended conference",
+        item = Entry(
+            lane="memory",
+            source_id=None,
+            entry_kind="event",
+            text="User attended conference",
             extra={
                 "metadata": {
                     "event_date": "2026-01-15",
@@ -316,10 +324,11 @@ class TestMemoryItemNewFields:
 
     def test_default_values(self):
         """Test that extra defaults to empty dict."""
-        item = MemoryItem(
-            resource_id=None,
-            memory_type="knowledge",
-            summary="Python is a programming language",
+        item = Entry(
+            lane="memory",
+            source_id=None,
+            entry_kind="knowledge",
+            text="Python is a programming language",
         )
 
         assert item.extra.get("when_to_use") is None

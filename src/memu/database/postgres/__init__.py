@@ -26,9 +26,8 @@ def build_postgres_database(
         vector_provider=vector_provider,
         scope_model=user_model,
         resource_model=sqla_models.Resource,
-        memory_category_model=sqla_models.MemoryCategory,
-        memory_item_model=sqla_models.MemoryItem,
-        category_item_model=sqla_models.CategoryItem,
+        entry_model=sqla_models.Entry,
+        resource_entry_model=sqla_models.ResourceEntry,
         sqla_models=sqla_models,
     )
 

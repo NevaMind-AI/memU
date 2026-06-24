@@ -2,22 +2,19 @@
 
 from memu.database.factory import build_database
 from memu.database.interfaces import (
-    CategoryItemRecord,
     Database,
-    MemoryCategoryRecord,
-    MemoryItemRecord,
+    EntryRecord,
+    ResourceEntryRecord,
     ResourceRecord,
 )
-from memu.database.repositories import CategoryItemRepo, MemoryCategoryRepo, MemoryItemRepo, ResourceRepo
+from memu.database.repositories import EntryRepo, ResourceEntryRepo, ResourceRepo
 
 __all__ = [
-    "CategoryItemRecord",
-    "CategoryItemRepo",
     "Database",
-    "MemoryCategoryRecord",
-    "MemoryCategoryRepo",
-    "MemoryItemRecord",
-    "MemoryItemRepo",
+    "EntryRecord",
+    "EntryRepo",
+    "ResourceEntryRecord",
+    "ResourceEntryRepo",
     "ResourceRecord",
     "ResourceRepo",
     "build_database",

@@ -8,10 +8,6 @@ specific statements in category summaries to their source memory items.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from memu.database.interfaces import Database
 
 # Pattern to match references like [ref:abc123] or [ref:abc123,def456]
 REFERENCE_PATTERN = re.compile(r"\[ref:([a-zA-Z0-9_,\-]+)\]")
@@ -113,37 +109,6 @@ def format_references_as_citations(text: str | None) -> str | None:
     # Add reference list at end
     ref_list = "\n".join(f"[{num}] {ref_id}" for ref_id, num in id_to_num.items())
     return f"{result}\n\nReferences:\n{ref_list}"
-
-
-def fetch_referenced_items(
-    text: str,
-    store: Database,
-) -> list[dict]:
-    """
-    Fetch memory items referenced in text.
-
-    Args:
-        text: Text containing [ref:ITEM_ID] citations
-        store: Database store instance
-
-    Returns:
-        List of memory item dicts with id, summary, memory_type
-    """
-    item_ids = extract_references(text)
-    if not item_ids:
-        return []
-
-    items = []
-    for item_id in item_ids:
-        item = store.memory_item_repo.get_item(item_id)
-        if item:
-            items.append({
-                "id": item.id,
-                "summary": item.summary,
-                "memory_type": item.memory_type,
-            })
-
-    return items
 
 
 def build_item_reference_map(items: list[tuple[str, str]]) -> str:

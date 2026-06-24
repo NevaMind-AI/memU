@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from memu.database.models import MemoryItem, ToolCallResult
+    from memu.database.models import Entry, ToolCallResult
 
 
-def get_tool_calls(item: MemoryItem) -> list[dict[str, Any]]:
-    """Get tool calls from a memory item's extra field.
+def get_tool_calls(item: Entry) -> list[dict[str, Any]]:
+    """Get tool calls from an entry's extra field.
 
     Args:
-        item: The MemoryItem to get tool calls from
+        item: The Entry to get tool calls from
 
     Returns:
         List of tool call dicts, or empty list if none exist
@@ -21,11 +21,11 @@ def get_tool_calls(item: MemoryItem) -> list[dict[str, Any]]:
     return result
 
 
-def set_tool_calls(item: MemoryItem, tool_calls: list[dict[str, Any]]) -> None:
-    """Set tool calls in a memory item's extra field.
+def set_tool_calls(item: Entry, tool_calls: list[dict[str, Any]]) -> None:
+    """Set tool calls in an entry's extra field.
 
     Args:
-        item: The MemoryItem to set tool calls on
+        item: The Entry to set tool calls on
         tool_calls: The list of tool call dicts to set
     """
     if item.extra is None:
@@ -33,17 +33,17 @@ def set_tool_calls(item: MemoryItem, tool_calls: list[dict[str, Any]]) -> None:
     item.extra["tool_calls"] = tool_calls
 
 
-def add_tool_call(item: MemoryItem, tool_call: ToolCallResult) -> None:
-    """Add a tool call result to a memory item (for tool type memories).
+def add_tool_call(item: Entry, tool_call: ToolCallResult) -> None:
+    """Add a tool call result to an entry (for tool-kind entries).
 
     Args:
-        item: The MemoryItem to add the tool call to (must be tool type)
+        item: The Entry to add the tool call to (must be tool kind)
         tool_call: The ToolCallResult to add
 
     Raises:
-        ValueError: If the memory item is not of type 'tool'
+        ValueError: If the entry is not of kind 'tool'
     """
-    if item.memory_type != "tool":
+    if item.entry_kind != "tool":
         msg = "add_tool_call can only be used with tool type memories"
         raise ValueError(msg)
     tool_call.ensure_hash()
@@ -52,7 +52,7 @@ def add_tool_call(item: MemoryItem, tool_call: ToolCallResult) -> None:
     set_tool_calls(item, tool_calls)
 
 
-def get_tool_statistics(item: MemoryItem, recent_n: int = 20) -> dict[str, Any]:
+def get_tool_statistics(item: Entry, recent_n: int = 20) -> dict[str, Any]:
     """Calculate statistics for the most recent N tool calls.
 
     Args:

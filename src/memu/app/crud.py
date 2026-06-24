@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, cast, get_args
 
 from pydantic import BaseModel
 
-from memu.database.models import MemoryCategory, MemoryType
+from memu.database.models import MemoryType, Resource
 from memu.prompts.category_patch import CATEGORY_PATCH_PROMPT
 from memu.workflow.step import WorkflowState, WorkflowStep
 
@@ -229,14 +229,14 @@ class CRUDMixin:
     def _crud_list_memory_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
-        items = store.memory_item_repo.list_items(where_filters)
+        items = store.entry_repo.list_entries(where_filters, lane="memory")
         state["items"] = items
         return state
 
     def _crud_list_memory_categories(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
-        categories = store.memory_category_repo.list_categories(where_filters)
+        categories = store.resource_repo.list_resources(where_filters, lane="memory")
         state["categories"] = categories
         return state
 
@@ -261,27 +261,31 @@ class CRUDMixin:
     def _crud_clear_memory_relations(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
-        deleted = store.category_item_repo.clear_relations(where_filters)
+        deleted = store.resource_entry_repo.clear_relations(where_filters)
         state["deleted_relations"] = deleted
         return state
 
     def _crud_clear_memory_categories(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
-        deleted = store.memory_category_repo.clear_categories(where_filters)
+        # Memory-lane docs (the former categories).
+        deleted = store.resource_repo.clear_resources(where_filters, lane="memory")
         state["deleted_categories"] = deleted
         return state
 
     def _crud_clear_memory_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
-        deleted = store.memory_item_repo.clear_items(where_filters)
+        # Entries across all lanes.
+        deleted = store.entry_repo.clear_entries(where_filters)
         state["deleted_items"] = deleted
         return state
 
     def _crud_clear_memory_resources(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
+        # Remaining resources (raw sources + index/skill docs); memory docs were
+        # already cleared by _crud_clear_memory_categories.
         deleted = store.resource_repo.clear_resources(where_filters)
         state["deleted_resources"] = deleted
         return state
@@ -540,16 +544,18 @@ class CRUDMixin:
         embed_payload = [memory_payload["content"]]
         content_embedding = (await self._get_step_embedding_client(step_context).embed(embed_payload))[0]
 
-        item = store.memory_item_repo.create_item(
-            memory_type=memory_payload["type"],
-            summary=memory_payload["content"],
+        item = store.entry_repo.create_entry(
+            lane="memory",
+            source_id=None,
+            entry_kind=memory_payload["type"],
+            text=memory_payload["content"],
             embedding=content_embedding,
             user_data=dict(user or {}),
         )
         cat_names = memory_payload["categories"]
         mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
         for cid in mapped_cat_ids:
-            store.category_item_repo.link_item_category(item.id, cid, user_data=dict(user or {}))
+            store.resource_entry_repo.link_entry_resource(item.id, cid, user_data=dict(user or {}))
             if propagate:
                 category_memory_updates[cid] = (None, memory_payload["content"])
 
@@ -568,13 +574,13 @@ class CRUDMixin:
         propagate = state["propagate"]
         category_memory_updates: dict[str, tuple[Any, Any]] = {}
 
-        item = store.memory_item_repo.get_item(memory_id)
+        item = store.entry_repo.get_entry(memory_id)
         if not item:
             msg = f"Memory item with id {memory_id} not found"
             raise ValueError(msg)
-        old_content = item.summary
-        old_item_categories = store.category_item_repo.get_item_categories(memory_id)
-        mapped_old_cat_ids = [cat.category_id for cat in old_item_categories]
+        old_content = item.text
+        old_item_categories = store.resource_entry_repo.get_entry_resources(memory_id)
+        mapped_old_cat_ids = [rel.resource_id for rel in old_item_categories]
 
         if memory_payload["content"]:
             embed_payload = [memory_payload["content"]]
@@ -583,10 +589,10 @@ class CRUDMixin:
             content_embedding = None
 
         if memory_payload["type"] or memory_payload["content"]:
-            item = store.memory_item_repo.update_item(
-                item_id=memory_id,
-                memory_type=memory_payload["type"],
-                summary=memory_payload["content"],
+            item = store.entry_repo.update_entry(
+                entry_id=memory_id,
+                entry_kind=memory_payload["type"],
+                text=memory_payload["content"],
                 embedding=content_embedding,
             )
         self._reconcile_update_categories(
@@ -595,7 +601,7 @@ class CRUDMixin:
             mapped_old_cat_ids=mapped_old_cat_ids,
             content_changed=bool(memory_payload["content"]),
             old_content=old_content,
-            new_summary=item.summary,
+            new_summary=item.text,
             ctx=ctx,
             store=store,
             user=user,
@@ -638,11 +644,11 @@ class CRUDMixin:
         mapped_new_cat_ids = self._map_category_names_to_ids(new_cat_names, ctx)
         old_set, new_set = set(mapped_old_cat_ids), set(mapped_new_cat_ids)
         for cid in old_set - new_set:
-            store.category_item_repo.unlink_item_category(memory_id, cid)
+            store.resource_entry_repo.unlink_entry_resource(memory_id, cid)
             if propagate:
                 category_memory_updates[cid] = (old_content, None)
         for cid in new_set - old_set:
-            store.category_item_repo.link_item_category(memory_id, cid, user_data=dict(user or {}))
+            store.resource_entry_repo.link_entry_resource(memory_id, cid, user_data=dict(user or {}))
             if propagate:
                 category_memory_updates[cid] = (None, new_summary)
         if propagate and content_changed:
@@ -655,18 +661,18 @@ class CRUDMixin:
         propagate = state["propagate"]
         category_memory_updates: dict[str, tuple[Any, Any]] = {}
 
-        item = store.memory_item_repo.get_item(memory_id)
+        item = store.entry_repo.get_entry(memory_id)
         if not item:
             msg = f"Memory item with id {memory_id} not found"
             raise ValueError(msg)
-        item_categories = store.category_item_repo.get_item_categories(memory_id)
+        item_categories = store.resource_entry_repo.get_entry_resources(memory_id)
         if propagate:
-            for cat in item_categories:
-                category_memory_updates[cat.category_id] = (item.summary, None)
+            for rel in item_categories:
+                category_memory_updates[rel.resource_id] = (item.text, None)
         # Remove the item's category relations first so deleting the item never
         # leaves orphan edges pointing at a non-existent item.
-        store.category_item_repo.unlink_item(memory_id)
-        store.memory_item_repo.delete_item(memory_id)
+        store.resource_entry_repo.unlink_entry(memory_id)
+        store.entry_repo.delete_entry(memory_id)
 
         state.update({
             "memory_item": item,
@@ -689,7 +695,9 @@ class CRUDMixin:
         item = self._model_dump_without_embeddings(state["memory_item"])
         category_updates_ids = list(state.get("category_updates", {}).keys())
         category_updates = [
-            self._model_dump_without_embeddings(store.memory_category_repo.categories[c]) for c in category_updates_ids
+            self._model_dump_without_embeddings(res)
+            for c in category_updates_ids
+            if (res := store.resource_repo.get_resource(c)) is not None
         ]
         response = {
             "memory_item": item,
@@ -724,7 +732,7 @@ class CRUDMixin:
         target_ids: list[str] = []
         client = llm_client or self._get_llm_client()
         for cid, (content_before, content_after) in updates.items():
-            cat = store.memory_category_repo.categories.get(cid)
+            cat = store.resource_repo.get_resource(cid)
             if not cat or (not content_before and not content_after):
                 continue
             prompt = self._build_category_patch_prompt(
@@ -739,14 +747,13 @@ class CRUDMixin:
             need_update, summary = self._parse_category_patch_response(patch)
             if not need_update:
                 continue
-            cat = store.memory_category_repo.categories.get(cid)
-            store.memory_category_repo.update_category(
-                category_id=cid,
+            store.resource_repo.update_resource(
+                resource_id=cid,
                 summary=summary.strip(),
             )
 
     def _build_category_patch_prompt(
-        self, *, category: MemoryCategory, content_before: str | None, content_after: str | None
+        self, *, category: Resource, content_before: str | None, content_after: str | None
     ) -> str:
         if content_before and content_after:
             update_content = "\n".join([
@@ -768,7 +775,7 @@ class CRUDMixin:
         original_content = category.summary or ""
         prompt = CATEGORY_PATCH_PROMPT
         return prompt.format(
-            category=self._escape_prompt_value(category.name),
+            category=self._escape_prompt_value(category.title or ""),
             original_content=self._escape_prompt_value(original_content or ""),
             update_content=self._escape_prompt_value(update_content or ""),
         )

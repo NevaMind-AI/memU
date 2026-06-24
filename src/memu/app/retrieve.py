@@ -30,7 +30,6 @@ class RetrieveMixin:
         _run_workflow: Callable[..., Awaitable[WorkflowState]]
         _get_context: Callable[[], Context]
         _get_database: Callable[[], Database]
-        _ensure_categories_ready: Callable[[Context, Database], Awaitable[None]]
         _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
         _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
         _get_llm_client: Callable[..., Any]
@@ -50,7 +49,6 @@ class RetrieveMixin:
         ctx = self._get_context()
         store = self._get_database()
         original_query = self._extract_query_text(queries[-1])
-        # await self._ensure_categories_ready(ctx, store)
         where_filters = self._normalize_where(where)
 
         context_queries_objs = queries[:-1] if len(queries) > 1 else []
@@ -268,7 +266,7 @@ class RetrieveMixin:
         embed_client = self._get_step_embedding_client(step_context)
         store = state["store"]
         where_filters = state.get("where") or {}
-        category_pool = store.memory_category_repo.list_categories(where_filters)
+        category_pool = store.resource_repo.list_resources(where_filters, lane="memory")
         qvec = (await embed_client.embed([state["active_query"]]))[0]
         hits, summary_lookup = await self._rank_categories_by_summary(
             qvec,
@@ -297,7 +295,7 @@ class RetrieveMixin:
         retrieved_content = ""
         store = state["store"]
         where_filters = state.get("where") or {}
-        category_pool = state.get("category_pool") or store.memory_category_repo.list_categories(where_filters)
+        category_pool = state.get("category_pool") or store.resource_repo.list_resources(where_filters, lane="memory")
         hits = state.get("category_hits") or []
         if hits:
             retrieved_content = self._format_category_content(
@@ -322,28 +320,6 @@ class RetrieveMixin:
             state["query_vector"] = (await embed_client.embed([state["active_query"]]))[0]
         return state
 
-    def _extract_referenced_item_ids(self, state: WorkflowState) -> set[str]:
-        """Extract item IDs from category summary references."""
-        from memu.utils.references import extract_references
-
-        category_hits = state.get("category_hits") or []
-        summary_lookup = state.get("category_summary_lookup", {})
-        category_pool = state.get("category_pool") or {}
-        referenced_item_ids: set[str] = set()
-
-        for cid, _score in category_hits:
-            # Get summary from lookup or category
-            summary = summary_lookup.get(cid)
-            if not summary:
-                cat = category_pool.get(cid)
-                if cat:
-                    summary = cat.summary
-            if summary:
-                refs = extract_references(summary)
-                referenced_item_ids.update(refs)
-
-        return referenced_item_ids
-
     async def _rag_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("retrieve_item") or not state.get("needs_retrieval") or not state.get("proceed_to_items"):
             state["item_hits"] = []
@@ -351,16 +327,17 @@ class RetrieveMixin:
 
         store = state["store"]
         where_filters = state.get("where") or {}
-        items_pool = store.memory_item_repo.list_items(where_filters)
+        items_pool = store.entry_repo.list_entries(where_filters, lane="memory")
         qvec = state.get("query_vector")
         if qvec is None:
             embed_client = self._get_step_embedding_client(step_context)
             qvec = (await embed_client.embed([state["active_query"]]))[0]
             state["query_vector"] = qvec
-        state["item_hits"] = store.memory_item_repo.vector_search_items(
+        state["item_hits"] = store.entry_repo.vector_search_entries(
             qvec,
             self.retrieve_config.item.top_k,
             where=where_filters,
+            lane="memory",
             ranking=self.retrieve_config.item.ranking,
             recency_decay_days=self.retrieve_config.item.recency_decay_days,
         )
@@ -377,7 +354,7 @@ class RetrieveMixin:
 
         store = state["store"]
         where_filters = state.get("where") or {}
-        items_pool = state.get("item_pool") or store.memory_item_repo.list_items(where_filters)
+        items_pool = state.get("item_pool") or store.entry_repo.list_entries(where_filters, lane="memory")
         retrieved_content = ""
         hits = state.get("item_hits") or []
         if hits:
@@ -438,8 +415,10 @@ class RetrieveMixin:
         if state.get("needs_retrieval"):
             store = state["store"]
             where_filters = state.get("where") or {}
-            categories_pool = state.get("category_pool") or store.memory_category_repo.list_categories(where_filters)
-            items_pool = state.get("item_pool") or store.memory_item_repo.list_items(where_filters)
+            categories_pool = state.get("category_pool") or store.resource_repo.list_resources(
+                where_filters, lane="memory"
+            )
+            items_pool = state.get("item_pool") or store.entry_repo.list_entries(where_filters, lane="memory")
             resources_pool = state.get("resource_pool") or store.resource_repo.list_resources(where_filters)
             response["categories"] = self._materialize_hits(
                 state.get("category_hits", []),
@@ -576,7 +555,7 @@ class RetrieveMixin:
         llm_client = self._get_step_llm_client(step_context)
         store = state["store"]
         where_filters = state.get("where") or {}
-        category_pool = store.memory_category_repo.list_categories(where_filters)
+        category_pool = store.resource_repo.list_resources(where_filters, lane="memory")
         hits = await self._llm_rank_categories(
             state["active_query"],
             self.retrieve_config.category.top_k,
@@ -636,12 +615,12 @@ class RetrieveMixin:
                 ref_ids.extend(extract_references(summary))
         if ref_ids:
             # Query items by ref_ids
-            items_pool = store.memory_item_repo.list_items_by_ref_ids(ref_ids, where_filters)
+            items_pool = store.entry_repo.list_entries_by_ref_ids(ref_ids, where_filters)
         else:
-            items_pool = store.memory_item_repo.list_items(where_filters)
+            items_pool = store.entry_repo.list_entries(where_filters, lane="memory")
 
-        relations = store.category_item_repo.list_relations(where_filters)
-        category_pool = state.get("category_pool") or store.memory_category_repo.list_categories(where_filters)
+        relations = store.resource_entry_repo.list_relations(where_filters)
+        category_pool = state.get("category_pool") or store.resource_repo.list_resources(where_filters, lane="memory")
         state["item_hits"] = await self._llm_rank_items(
             state["active_query"],
             self.retrieve_config.item.top_k,
@@ -692,7 +671,7 @@ class RetrieveMixin:
         store = state["store"]
         where_filters = state.get("where") or {}
         resource_pool = store.resource_repo.list_resources(where_filters)
-        items_pool = state.get("item_pool") or store.memory_item_repo.list_items(where_filters)
+        items_pool = state.get("item_pool") or store.entry_repo.list_entries(where_filters, lane="memory")
         state["resource_hits"] = await self._llm_rank_resources(
             state["active_query"],
             self.retrieve_config.resource.top_k,
@@ -733,7 +712,7 @@ class RetrieveMixin:
         embed_client: Any | None = None,
         categories: Mapping[str, Any] | None = None,
     ) -> tuple[list[tuple[str, float]], dict[str, str]]:
-        category_pool = categories if categories is not None else store.memory_category_repo.categories
+        category_pool = categories if categories is not None else store.resource_repo.list_resources(lane="memory")
         entries = [(cid, cat.summary) for cid, cat in category_pool.items() if cat.summary]
         if not entries:
             return [], {}
@@ -866,83 +845,6 @@ class RetrieveMixin:
             return match.group(1).strip()
         return None
 
-    async def _embedding_based_retrieve(
-        self,
-        query: str,
-        top_k: int,
-        context_queries: list[dict[str, Any]] | None,
-        ctx: Context,
-        store: Database,
-        llm_client: Any | None = None,
-        embed_client: Any | None = None,
-        where: Mapping[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Embedding-based retrieval with query rewriting and judging at each tier"""
-        where_filters = self._normalize_where(where)
-        category_pool = store.memory_category_repo.list_categories(where_filters)
-        items_pool = store.memory_item_repo.list_items(where_filters)
-        resource_pool = store.resource_repo.list_resources(where_filters)
-        client = llm_client or self._get_llm_client()
-        embed = embed_client or self._get_embedding_client()
-        current_query = query
-        qvec = (await embed.embed([current_query]))[0]
-        response: dict[str, Any] = {"resources": [], "items": [], "categories": [], "next_step_query": None}
-        content_sections: list[str] = []
-
-        # Tier 1: Categories
-        cat_hits, summary_lookup = await self._rank_categories_by_summary(
-            qvec,
-            top_k,
-            ctx,
-            store,
-            embed_client=embed,
-            categories=category_pool,
-        )
-        if cat_hits:
-            response["categories"] = self._materialize_hits(cat_hits, category_pool)
-            content_sections.append(
-                self._format_category_content(cat_hits, summary_lookup, store, categories=category_pool)
-            )
-
-            needs_more, current_query = await self._decide_if_retrieval_needed(
-                current_query,
-                context_queries,
-                retrieved_content="\n\n".join(content_sections),
-                llm_client=client,
-            )
-            response["next_step_query"] = current_query
-            if not needs_more:
-                return response
-            # Re-embed with rewritten query
-            qvec = (await embed.embed([current_query]))[0]
-
-        # Tier 2: Items
-        item_hits = store.memory_item_repo.vector_search_items(qvec, top_k, where=where_filters)
-        if item_hits:
-            response["items"] = self._materialize_hits(item_hits, items_pool)
-            content_sections.append(self._format_item_content(item_hits, store, items=items_pool))
-
-            needs_more, current_query = await self._decide_if_retrieval_needed(
-                current_query,
-                context_queries,
-                retrieved_content="\n\n".join(content_sections),
-                llm_client=client,
-            )
-            response["next_step_query"] = current_query
-            if not needs_more:
-                return response
-            # Re-embed with rewritten query
-            qvec = (await embed.embed([current_query]))[0]
-
-        # Tier 3: Resources
-        if resource_pool:
-            res_hits = store.resource_repo.vector_search_resources(qvec, top_k, where=where_filters)
-            if res_hits:
-                response["resources"] = self._materialize_hits(res_hits, resource_pool)
-                content_sections.append(self._format_resource_content(res_hits, store, resources=resource_pool))
-
-        return response
-
     def _materialize_hits(self, hits: Sequence[tuple[str, float]], pool: dict[str, Any]) -> list[dict[str, Any]]:
         out = []
         for _id, score in hits:
@@ -961,153 +863,27 @@ class RetrieveMixin:
         store: Database,
         categories: Mapping[str, Any] | None = None,
     ) -> str:
-        category_pool = categories if categories is not None else store.memory_category_repo.categories
+        category_pool = categories if categories is not None else store.resource_repo.list_resources(lane="memory")
         lines = []
         for cid, score in hits:
             cat = category_pool.get(cid)
             if not cat:
                 continue
             summary = summaries.get(cid) or cat.summary or ""
-            lines.append(f"Category: {cat.name}\nSummary: {summary}\nScore: {score:.3f}")
+            lines.append(f"Category: {cat.title}\nSummary: {summary}\nScore: {score:.3f}")
         return "\n\n".join(lines).strip()
 
     def _format_item_content(
         self, hits: list[tuple[str, float]], store: Database, items: Mapping[str, Any] | None = None
     ) -> str:
-        item_pool = items if items is not None else store.memory_item_repo.items
+        item_pool = items if items is not None else store.entry_repo.list_entries(lane="memory")
         lines = []
         for iid, score in hits:
             item = item_pool.get(iid)
             if not item:
                 continue
-            lines.append(f"Memory Item ({item.memory_type}): {item.summary}\nScore: {score:.3f}")
+            lines.append(f"Memory Item ({item.entry_kind}): {item.text}\nScore: {score:.3f}")
         return "\n\n".join(lines).strip()
-
-    def _format_resource_content(
-        self, hits: list[tuple[str, float]], store: Database, resources: Mapping[str, Any] | None = None
-    ) -> str:
-        resource_pool = resources if resources is not None else store.resource_repo.resources
-        lines = []
-        for rid, score in hits:
-            res = resource_pool.get(rid)
-            if not res:
-                continue
-            caption = res.caption or f"Resource {res.url}"
-            lines.append(f"Resource: {caption}\nScore: {score:.3f}")
-        return "\n\n".join(lines).strip()
-
-    def _extract_judgement(self, raw: str) -> str:
-        if not raw:
-            return "MORE"
-        match = re.search(r"<judgement>(.*?)</judgement>", raw, re.IGNORECASE | re.DOTALL)
-        if match:
-            token = match.group(1).strip().upper()
-            if "ENOUGH" in token:
-                return "ENOUGH"
-            if "MORE" in token:
-                return "MORE"
-        upper = raw.strip().upper()
-        if "ENOUGH" in upper:
-            return "ENOUGH"
-        return "MORE"
-
-    async def _llm_based_retrieve(
-        self,
-        query: str,
-        top_k: int,
-        context_queries: list[dict[str, Any]] | None,
-        ctx: Context,
-        store: Database,
-        llm_client: Any | None = None,
-        where: Mapping[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """
-        LLM-based retrieval that uses language model to search and rank results
-        in a hierarchical manner, with query rewriting and judging at each tier.
-
-        Flow:
-        1. Search categories with LLM, judge + rewrite query
-        2. If needs more, search items from relevant categories, judge + rewrite
-        3. If needs more, search resources related to context
-        """
-        where_filters = self._normalize_where(where)
-        category_pool = store.memory_category_repo.list_categories(where_filters)
-        items_pool = store.memory_item_repo.list_items(where_filters)
-        relations = store.category_item_repo.list_relations(where_filters)
-        resource_pool = store.resource_repo.list_resources(where_filters)
-        current_query = query
-        client = llm_client or self._get_llm_client()
-        response: dict[str, Any] = {"resources": [], "items": [], "categories": [], "next_step_query": None}
-        content_sections: list[str] = []
-
-        # Tier 1: Search and rank categories
-        category_hits = await self._llm_rank_categories(
-            current_query,
-            top_k,
-            ctx,
-            store,
-            llm_client=client,
-            categories=category_pool,
-        )
-        if category_hits:
-            response["categories"] = category_hits
-            content_sections.append(self._format_llm_category_content(category_hits))
-
-            needs_more, current_query = await self._decide_if_retrieval_needed(
-                current_query,
-                context_queries,
-                retrieved_content="\n\n".join(content_sections),
-                llm_client=client,
-            )
-            response["next_step_query"] = current_query
-            if not needs_more:
-                return response
-
-        # Tier 2: Search memory items from relevant categories
-        relevant_category_ids = [cat["id"] for cat in category_hits]
-        item_hits = await self._llm_rank_items(
-            current_query,
-            top_k,
-            relevant_category_ids,
-            category_hits,
-            ctx,
-            store,
-            llm_client=client,
-            categories=category_pool,
-            items=items_pool,
-            relations=relations,
-        )
-        if item_hits:
-            response["items"] = item_hits
-            content_sections.append(self._format_llm_item_content(item_hits))
-
-            needs_more, current_query = await self._decide_if_retrieval_needed(
-                current_query,
-                context_queries,
-                retrieved_content="\n\n".join(content_sections),
-                llm_client=client,
-            )
-            response["next_step_query"] = current_query
-            if not needs_more:
-                return response
-
-        # Tier 3: Search resources related to the context
-        resource_hits = await self._llm_rank_resources(
-            current_query,
-            top_k,
-            category_hits,
-            item_hits,
-            ctx,
-            store,
-            llm_client=client,
-            items=items_pool,
-            resources=resource_pool,
-        )
-        if resource_hits:
-            response["resources"] = resource_hits
-            content_sections.append(self._format_llm_resource_content(resource_hits))
-
-        return response
 
     def _format_categories_for_llm(
         self,
@@ -1116,7 +892,9 @@ class RetrieveMixin:
         categories: Mapping[str, Any] | None = None,
     ) -> str:
         """Format categories for LLM consumption"""
-        categories_to_format = categories if categories is not None else store.memory_category_repo.categories
+        categories_to_format = (
+            categories if categories is not None else store.resource_repo.list_resources(lane="memory")
+        )
         if category_ids:
             categories_to_format = {cid: cat for cid, cat in categories_to_format.items() if cid in category_ids}
 
@@ -1126,7 +904,7 @@ class RetrieveMixin:
         lines = []
         for cid, cat in categories_to_format.items():
             lines.append(f"ID: {cid}")
-            lines.append(f"Name: {cat.name}")
+            lines.append(f"Name: {cat.title}")
             if cat.description:
                 lines.append(f"Description: {cat.description}")
             if cat.summary:
@@ -1143,16 +921,16 @@ class RetrieveMixin:
         relations: Sequence[Any] | None = None,
     ) -> str:
         """Format memory items for LLM consumption, optionally filtered by category"""
-        item_pool = items if items is not None else store.memory_item_repo.items
-        relation_pool = relations if relations is not None else store.category_item_repo.relations
+        item_pool = items if items is not None else store.entry_repo.list_entries(lane="memory")
+        relation_pool = relations if relations is not None else store.resource_entry_repo.relations
         items_to_format = []
         seen_item_ids = set()
 
         if category_ids:
             # Get items that belong to the specified categories
             for rel in relation_pool:
-                if rel.category_id in category_ids:
-                    item = item_pool.get(rel.item_id)
+                if rel.resource_id in category_ids:
+                    item = item_pool.get(rel.entry_id)
                     if item and item.id not in seen_item_ids:
                         items_to_format.append(item)
                         seen_item_ids.add(item.id)
@@ -1165,8 +943,8 @@ class RetrieveMixin:
         lines = []
         for item in items_to_format:
             lines.append(f"ID: {item.id}")
-            lines.append(f"Type: {item.memory_type}")
-            lines.append(f"Summary: {item.summary}")
+            lines.append(f"Type: {item.entry_kind}")
+            lines.append(f"Summary: {item.text}")
             lines.append("---")
 
         return "\n".join(lines)
@@ -1180,12 +958,12 @@ class RetrieveMixin:
     ) -> str:
         """Format resources for LLM consumption, optionally filtered by related items"""
         resource_pool = resources if resources is not None else store.resource_repo.resources
-        item_pool = items if items is not None else store.memory_item_repo.items
+        item_pool = items if items is not None else store.entry_repo.list_entries(lane="memory")
         resources_to_format = []
 
         if item_ids:
             # Get resources that are related to the specified items
-            resource_ids = {item_pool[iid].resource_id for iid in item_ids if iid in item_pool and iid is not None}
+            resource_ids = {item_pool[iid].source_id for iid in item_ids if iid in item_pool and iid is not None}
             resources_to_format = [
                 resource_pool[rid] for rid in resource_ids if rid in resource_pool and rid is not None
             ]
@@ -1200,8 +978,8 @@ class RetrieveMixin:
             lines.append(f"ID: {res.id}")
             lines.append(f"URL: {res.url}")
             lines.append(f"Modality: {res.modality}")
-            if res.caption:
-                lines.append(f"Caption: {res.caption}")
+            if res.summary:
+                lines.append(f"Caption: {res.summary}")
             lines.append("---")
 
         return "\n".join(lines)
@@ -1216,7 +994,7 @@ class RetrieveMixin:
         categories: Mapping[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Use LLM to rank categories based on query relevance"""
-        category_pool = categories if categories is not None else store.memory_category_repo.categories
+        category_pool = categories if categories is not None else store.resource_repo.list_resources(lane="memory")
         if not category_pool:
             return []
 
@@ -1249,7 +1027,7 @@ class RetrieveMixin:
             logger.debug("[LLM Rank Items] No category_ids provided")
             return []
 
-        item_pool = items if items is not None else store.memory_item_repo.items
+        item_pool = items if items is not None else store.entry_repo.list_entries(lane="memory")
         items_data = self._format_items_for_llm(store, category_ids, items=item_pool, relations=relations)
         if items_data == "No memory items available.":
             return []
@@ -1288,7 +1066,7 @@ class RetrieveMixin:
         if not item_ids:
             return []
 
-        item_pool = items if items is not None else store.memory_item_repo.items
+        item_pool = items if items is not None else store.entry_repo.list_entries(lane="memory")
         resource_pool = resources if resources is not None else store.resource_repo.resources
         resources_data = self._format_resources_for_llm(store, item_ids, items=item_pool, resources=resource_pool)
         if resources_data == "No resources available.":
@@ -1319,7 +1097,7 @@ class RetrieveMixin:
         self, raw_response: str, store: Database, categories: Mapping[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         """Parse LLM category ranking response"""
-        category_pool = categories if categories is not None else store.memory_category_repo.categories
+        category_pool = categories if categories is not None else store.resource_repo.list_resources(lane="memory")
         results = []
         try:
             json_blob = self._extract_json_blob(raw_response)
@@ -1343,7 +1121,7 @@ class RetrieveMixin:
         self, raw_response: str, store: Database, items: Mapping[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         """Parse LLM item ranking response"""
-        item_pool = items if items is not None else store.memory_item_repo.items
+        item_pool = items if items is not None else store.entry_repo.list_entries(lane="memory")
         results = []
         try:
             json_blob = self._extract_json_blob(raw_response)
@@ -1400,12 +1178,4 @@ class RetrieveMixin:
         lines = []
         for item in hits:
             lines.append(f"Memory Item ({item['memory_type']}): {item['summary']}")
-        return "\n\n".join(lines).strip()
-
-    def _format_llm_resource_content(self, hits: list[dict[str, Any]]) -> str:
-        """Format LLM-ranked resource content for judger"""
-        lines = []
-        for res in hits:
-            caption = res.get("caption", "") or f"Resource {res['url']}"
-            lines.append(f"Resource: {caption}")
         return "\n\n".join(lines).strip()

@@ -7,7 +7,7 @@ live server so it is exercised separately). They guard the Phase 0 fixes:
 - ``clear_*`` with a ``where`` scope mutates the shared state in place (no rebinding
   that orphans the ``DatabaseState`` reference).
 - the SQLite read path preserves ``extra`` (reinforcement / ref_id / tool metadata).
-- deleting an item / clearing memory leaves no orphan ``CategoryItem`` relations.
+- deleting an entry / clearing memory leaves no orphan ``ResourceEntry`` relations.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from memu.app.settings import (  # noqa: E402
     MetadataStoreConfig,
 )
 from memu.database.factory import build_database  # noqa: E402
+from memu.memory_fs.exporter import slugify  # noqa: E402
 
 
 def _make_inmemory():
@@ -51,124 +52,127 @@ def store(request, tmp_path):
         db.close()
 
 
-def _seed_item(store, *, summary: str, user_id: str, embedding=None):
+def _seed_entry(store, *, text: str, user_id: str, embedding=None):
     res = store.resource_repo.create_resource(
-        url=f"mem://{summary}",
+        lane="source",
+        url=f"mem://{text}",
         modality="document",
         local_path="",
-        caption=summary,
+        summary=text,
         embedding=None,
         user_data={"user_id": user_id},
     )
-    item = store.memory_item_repo.create_item(
-        resource_id=res.id,
-        memory_type="knowledge",
-        summary=summary,
+    entry = store.entry_repo.create_entry(
+        lane="memory",
+        source_id=res.id,
+        entry_kind="knowledge",
+        text=text,
         embedding=embedding or [0.1, 0.2, 0.3],
         user_data={"user_id": user_id},
     )
-    return res, item
+    return res, entry
+
+
+def _make_doc(store, *, title: str, user_id: str, description: str = "", embedding=None):
+    return store.resource_repo.get_or_create_doc(
+        lane="memory",
+        title=title,
+        description=description,
+        embedding=embedding or [0.1, 0.2, 0.3],
+        user_data={"user_id": user_id},
+        slug=slugify(title),
+    )
 
 
 def test_clear_items_with_scope_mutates_shared_state(store):
     """Clearing a scoped subset must not orphan the shared state reference."""
-    _seed_item(store, summary="a", user_id="alice")
-    _seed_item(store, summary="b", user_id="bob")
+    _seed_entry(store, text="a", user_id="alice")
+    _seed_entry(store, text="b", user_id="bob")
 
-    deleted = store.memory_item_repo.clear_items({"user_id": "alice"})
+    deleted = store.entry_repo.clear_entries({"user_id": "alice"})
     assert len(deleted) == 1
 
-    remaining = store.memory_item_repo.list_items()
-    summaries = {item.summary for item in remaining.values()}
-    assert summaries == {"b"}
+    remaining = store.entry_repo.list_entries()
+    texts = {entry.text for entry in remaining.values()}
+    assert texts == {"b"}
 
 
 def test_clear_categories_with_scope_mutates_shared_state(store):
-    store.memory_category_repo.get_or_create_category(
-        name="alpha", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
-    )
-    store.memory_category_repo.get_or_create_category(
-        name="beta", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "bob"}
-    )
+    _make_doc(store, title="alpha", user_id="alice")
+    _make_doc(store, title="beta", user_id="bob")
 
-    store.memory_category_repo.clear_categories({"user_id": "alice"})
-    remaining = store.memory_category_repo.list_categories()
-    names = {cat.name for cat in remaining.values()}
-    assert names == {"beta"}
+    store.resource_repo.clear_resources({"user_id": "alice"}, lane="memory")
+    remaining = store.resource_repo.list_resources(lane="memory")
+    titles = {res.title for res in remaining.values()}
+    assert titles == {"beta"}
 
 
 def test_unlink_item_removes_all_relations(store):
-    _res, item = _seed_item(store, summary="linked", user_id="alice")
-    cat1 = store.memory_category_repo.get_or_create_category(
-        name="c1", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
-    )
-    cat2 = store.memory_category_repo.get_or_create_category(
-        name="c2", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
-    )
-    store.category_item_repo.link_item_category(item.id, cat1.id, user_data={"user_id": "alice"})
-    store.category_item_repo.link_item_category(item.id, cat2.id, user_data={"user_id": "alice"})
-    assert len(store.category_item_repo.get_item_categories(item.id)) == 2
+    _res, entry = _seed_entry(store, text="linked", user_id="alice")
+    cat1 = _make_doc(store, title="c1", user_id="alice")
+    cat2 = _make_doc(store, title="c2", user_id="alice")
+    store.resource_entry_repo.link_entry_resource(entry.id, cat1.id, user_data={"user_id": "alice"})
+    store.resource_entry_repo.link_entry_resource(entry.id, cat2.id, user_data={"user_id": "alice"})
+    assert len(store.resource_entry_repo.get_entry_resources(entry.id)) == 2
 
-    removed = store.category_item_repo.unlink_item(item.id)
+    removed = store.resource_entry_repo.unlink_entry(entry.id)
     assert len(removed) == 2
-    assert store.category_item_repo.get_item_categories(item.id) == []
-    assert store.category_item_repo.list_relations() == []
+    assert store.resource_entry_repo.get_entry_resources(entry.id) == []
+    assert store.resource_entry_repo.list_relations() == []
 
 
 def test_delete_item_leaves_no_orphan_relations(store):
-    """The Phase 0 delete fix: unlink relations before deleting the item."""
-    _res, item = _seed_item(store, summary="doomed", user_id="alice")
-    cat = store.memory_category_repo.get_or_create_category(
-        name="c", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
-    )
-    store.category_item_repo.link_item_category(item.id, cat.id, user_data={"user_id": "alice"})
+    """The Phase 0 delete fix: unlink relations before deleting the entry."""
+    _res, entry = _seed_entry(store, text="doomed", user_id="alice")
+    cat = _make_doc(store, title="c", user_id="alice")
+    store.resource_entry_repo.link_entry_resource(entry.id, cat.id, user_data={"user_id": "alice"})
 
-    store.category_item_repo.unlink_item(item.id)
-    store.memory_item_repo.delete_item(item.id)
+    store.resource_entry_repo.unlink_entry(entry.id)
+    store.entry_repo.delete_entry(entry.id)
 
-    assert store.memory_item_repo.get_item(item.id) is None
-    # No relation should point at the deleted item.
-    assert all(rel.item_id != item.id for rel in store.category_item_repo.list_relations())
+    assert store.entry_repo.get_entry(entry.id) is None
+    # No relation should point at the deleted entry.
+    assert all(rel.entry_id != entry.id for rel in store.resource_entry_repo.list_relations())
 
 
 def test_clear_relations_with_scope(store):
-    _res, item = _seed_item(store, summary="r", user_id="alice")
-    cat = store.memory_category_repo.get_or_create_category(
-        name="c", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
-    )
-    store.category_item_repo.link_item_category(item.id, cat.id, user_data={"user_id": "alice"})
+    _res, entry = _seed_entry(store, text="r", user_id="alice")
+    cat = _make_doc(store, title="c", user_id="alice")
+    store.resource_entry_repo.link_entry_resource(entry.id, cat.id, user_data={"user_id": "alice"})
 
-    removed = store.category_item_repo.clear_relations({"user_id": "alice"})
+    removed = store.resource_entry_repo.clear_relations({"user_id": "alice"})
     assert len(removed) == 1
-    assert store.category_item_repo.list_relations({"user_id": "alice"}) == []
+    assert store.resource_entry_repo.list_relations({"user_id": "alice"}) == []
 
 
 def test_extra_round_trips_through_create_and_read(store):
     """``extra`` (tool metadata / ref_id / reinforcement) must survive a read."""
     res = store.resource_repo.create_resource(
+        lane="source",
         url="mem://tool",
         modality="document",
         local_path="",
-        caption="tool",
+        summary="tool",
         embedding=None,
         user_data={"user_id": "alice"},
     )
-    item = store.memory_item_repo.create_item(
-        resource_id=res.id,
-        memory_type="tool",
-        summary="tool memory",
+    entry = store.entry_repo.create_entry(
+        lane="memory",
+        source_id=res.id,
+        entry_kind="tool",
+        text="tool memory",
         embedding=[0.1, 0.2, 0.3],
         user_data={"user_id": "alice"},
         tool_record={"when_to_use": "always"},
     )
-    assert item.extra.get("when_to_use") == "always"
+    assert entry.extra.get("when_to_use") == "always"
 
-    fetched = store.memory_item_repo.get_item(item.id)
+    fetched = store.entry_repo.get_entry(entry.id)
     assert fetched is not None
     assert fetched.extra.get("when_to_use") == "always"
 
 
-def _reconcile(crud_self, store, *, item_id, new_cat_names, mapped_old_cat_ids, name_to_id):
+def _reconcile(crud_self, store, *, entry_id, new_cat_names, mapped_old_cat_ids, name_to_id):
     from types import SimpleNamespace
 
     from memu.app.crud import CRUDMixin
@@ -176,7 +180,7 @@ def _reconcile(crud_self, store, *, item_id, new_cat_names, mapped_old_cat_ids, 
     fake_self = SimpleNamespace(_map_category_names_to_ids=lambda names, ctx: [name_to_id[n] for n in names])
     CRUDMixin._reconcile_update_categories(
         fake_self,  # type: ignore[arg-type]
-        memory_id=item_id,
+        memory_id=entry_id,
         new_cat_names=new_cat_names,
         mapped_old_cat_ids=mapped_old_cat_ids,
         content_changed=False,
@@ -192,65 +196,57 @@ def _reconcile(crud_self, store, *, item_id, new_cat_names, mapped_old_cat_ids, 
 
 def test_update_with_none_categories_keeps_links(store):
     """P0 regression: omitting categories (None) must NOT drop existing links."""
-    _res, item = _seed_item(store, summary="keep", user_id="alice")
-    cat = store.memory_category_repo.get_or_create_category(
-        name="A", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
-    )
-    store.category_item_repo.link_item_category(item.id, cat.id, user_data={"user_id": "alice"})
+    _res, entry = _seed_entry(store, text="keep", user_id="alice")
+    cat = _make_doc(store, title="A", user_id="alice")
+    store.resource_entry_repo.link_entry_resource(entry.id, cat.id, user_data={"user_id": "alice"})
 
     _reconcile(
         None,
         store,
-        item_id=item.id,
+        entry_id=entry.id,
         new_cat_names=None,
         mapped_old_cat_ids=[cat.id],
         name_to_id={"A": cat.id},
     )
 
-    linked = {rel.category_id for rel in store.category_item_repo.get_item_categories(item.id)}
+    linked = {rel.resource_id for rel in store.resource_entry_repo.get_entry_resources(entry.id)}
     assert linked == {cat.id}
 
 
 def test_update_with_empty_categories_clears_links(store):
     """An explicit empty list clears links (distinct from omitted/None)."""
-    _res, item = _seed_item(store, summary="clear", user_id="alice")
-    cat = store.memory_category_repo.get_or_create_category(
-        name="A", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
-    )
-    store.category_item_repo.link_item_category(item.id, cat.id, user_data={"user_id": "alice"})
+    _res, entry = _seed_entry(store, text="clear", user_id="alice")
+    cat = _make_doc(store, title="A", user_id="alice")
+    store.resource_entry_repo.link_entry_resource(entry.id, cat.id, user_data={"user_id": "alice"})
 
     _reconcile(
         None,
         store,
-        item_id=item.id,
+        entry_id=entry.id,
         new_cat_names=[],
         mapped_old_cat_ids=[cat.id],
         name_to_id={"A": cat.id},
     )
 
-    assert store.category_item_repo.get_item_categories(item.id) == []
+    assert store.resource_entry_repo.get_entry_resources(entry.id) == []
 
 
 def test_update_with_new_categories_swaps_links(store):
-    _res, item = _seed_item(store, summary="swap", user_id="alice")
-    cat_a = store.memory_category_repo.get_or_create_category(
-        name="A", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
-    )
-    cat_b = store.memory_category_repo.get_or_create_category(
-        name="B", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
-    )
-    store.category_item_repo.link_item_category(item.id, cat_a.id, user_data={"user_id": "alice"})
+    _res, entry = _seed_entry(store, text="swap", user_id="alice")
+    cat_a = _make_doc(store, title="A", user_id="alice")
+    cat_b = _make_doc(store, title="B", user_id="alice")
+    store.resource_entry_repo.link_entry_resource(entry.id, cat_a.id, user_data={"user_id": "alice"})
 
     _reconcile(
         None,
         store,
-        item_id=item.id,
+        entry_id=entry.id,
         new_cat_names=["B"],
         mapped_old_cat_ids=[cat_a.id],
         name_to_id={"A": cat_a.id, "B": cat_b.id},
     )
 
-    linked = {rel.category_id for rel in store.category_item_repo.get_item_categories(item.id)}
+    linked = {rel.resource_id for rel in store.resource_entry_repo.get_entry_resources(entry.id)}
     assert linked == {cat_b.id}
 
 
@@ -284,8 +280,8 @@ def test_resolve_category_ids_creates_unknown_adaptively(store):
     )
     # "Programming"/"programming" collapse (case-insensitive); "Cooking" is distinct.
     assert len(ids) == 2
-    names = {c.name for c in store.memory_category_repo.list_categories().values()}
-    assert names == {"Programming", "Cooking"}
+    titles = {c.title for c in store.resource_repo.list_resources(lane="memory").values()}
+    assert titles == {"Programming", "Cooking"}
 
     # A subsequent call reuses the cached ids and creates nothing new.
     ids2 = asyncio.run(
@@ -298,40 +294,42 @@ def test_resolve_category_ids_creates_unknown_adaptively(store):
         )
     )
     assert ids2 == [ctx.category_name_to_id["programming"]]
-    assert len(store.memory_category_repo.list_categories()) == 2
+    assert len(store.resource_repo.list_resources(lane="memory")) == 2
 
 
 def test_sqlite_extra_survives_cache_miss(tmp_path):
     """A fresh SQLite store (cold cache) must reconstruct ``extra`` from the DB."""
     db, dsn = _make_sqlite(tmp_path)
     res = db.resource_repo.create_resource(
+        lane="source",
         url="mem://tool",
         modality="document",
         local_path="",
-        caption="tool",
+        summary="tool",
         embedding=None,
         user_data={"user_id": "alice"},
     )
-    item = db.memory_item_repo.create_item(
-        resource_id=res.id,
-        memory_type="tool",
-        summary="tool memory",
+    entry = db.entry_repo.create_entry(
+        lane="memory",
+        source_id=res.id,
+        entry_kind="tool",
+        text="tool memory",
         embedding=[0.1, 0.2, 0.3],
         user_data={"user_id": "alice"},
         tool_record={"when_to_use": "cold-read"},
     )
-    item_id = item.id
+    entry_id = entry.id
     db.close()
 
     # Re-open the same DB file: caches are empty, so reads hit the DB read path.
     config = DatabaseConfig(metadata_store=MetadataStoreConfig(provider="sqlite", dsn=dsn))
     db2 = build_database(config=config, user_model=DefaultUserModel)
     try:
-        fetched = db2.memory_item_repo.get_item(item_id)
+        fetched = db2.entry_repo.get_entry(entry_id)
         assert fetched is not None
         assert fetched.extra.get("when_to_use") == "cold-read"
 
-        listed = db2.memory_item_repo.list_items()
-        assert listed[item_id].extra.get("when_to_use") == "cold-read"
+        listed = db2.entry_repo.list_entries()
+        assert listed[entry_id].extra.get("when_to_use") == "cold-read"
     finally:
         db2.close()
