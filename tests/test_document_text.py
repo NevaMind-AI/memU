@@ -69,9 +69,7 @@ def test_docx_is_converted_to_markdown(tmp_path: pathlib.Path) -> None:
     assert "Revenue grew by 20 percent." in text
 
 
-def test_missing_markitdown_raises_actionable_error(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_missing_markitdown_raises_actionable_error(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     pdf = tmp_path / "doc.pdf"
     pdf.write_bytes(b"%PDF-1.4 fake")
     # Force the lazy ``import markitdown`` inside the helper to fail.
