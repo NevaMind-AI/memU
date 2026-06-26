@@ -8,14 +8,10 @@ implementation under this package; :mod:`memu.preprocess` wires them together.
 
 from __future__ import annotations
 
-import json
-import logging
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, ClassVar
-
-logger = logging.getLogger(__name__)
 
 # A preprocessed resource is a list of segments, each carrying optional text and
 # an optional short caption.
@@ -86,56 +82,3 @@ def parse_multimodal_response(raw: str, content_tag: str, caption_tag: str) -> t
         caption = first_sentence if len(first_sentence) <= 200 else first_sentence[:200]
 
     return content, caption
-
-
-def parse_conversation_segments(
-    raw: str, extract_json_blob: Callable[[str], str]
-) -> tuple[str | None, list[dict[str, int | str]] | None]:
-    """Parse a conversation preprocess response into (conversation_text, segments)."""
-    conversation = extract_tag_content(raw, "conversation")
-    segments = _extract_segments_with_fallback(raw, extract_json_blob)
-    return conversation, segments
-
-
-def _extract_segments_with_fallback(
-    raw: str, extract_json_blob: Callable[[str], str]
-) -> list[dict[str, int | str]] | None:
-    segments = _segments_from_json_payload(raw)
-    if segments is not None:
-        return segments
-    try:
-        blob = extract_json_blob(raw)
-    except Exception:
-        logger.exception("Failed to extract segments from conversation preprocess response")
-        return None
-    return _segments_from_json_payload(blob)
-
-
-def _segments_from_json_payload(payload: str) -> list[dict[str, int | str]] | None:
-    try:
-        parsed = json.loads(payload)
-    except (json.JSONDecodeError, TypeError):
-        return None
-    return _segments_from_parsed_data(parsed)
-
-
-def _segments_from_parsed_data(parsed: Any) -> list[dict[str, int | str]] | None:
-    if not isinstance(parsed, dict):
-        return None
-    segments_data = parsed.get("segments")
-    if not isinstance(segments_data, list):
-        return None
-    segments: list[dict[str, int | str]] = []
-    for seg in segments_data:
-        if isinstance(seg, dict) and "start" in seg and "end" in seg:
-            try:
-                segment: dict[str, int | str] = {
-                    "start": int(seg["start"]),
-                    "end": int(seg["end"]),
-                }
-                if "caption" in seg and isinstance(seg["caption"], str):
-                    segment["caption"] = seg["caption"]
-                segments.append(segment)
-            except (TypeError, ValueError):
-                continue
-    return segments or None

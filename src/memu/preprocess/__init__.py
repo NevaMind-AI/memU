@@ -15,7 +15,6 @@ from memu.preprocess.base import (
     PreprocessContext,
     Preprocessor,
     PreprocessResult,
-    parse_conversation_segments,
     parse_multimodal_response,
 )
 from memu.preprocess.conversation import ConversationPreprocessor
@@ -43,7 +42,6 @@ __all__ = [
     "PreprocessResult",
     "Preprocessor",
     "VideoPreprocessor",
-    "parse_conversation_segments",
     "parse_multimodal_response",
     "preprocess_resource",
 ]
