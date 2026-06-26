@@ -71,6 +71,8 @@ postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
 langgraph = ["langgraph>=0.0.10", "langchain-core>=0.1.0"]
 claude = ["claude-agent-sdk>=0.1.24"]
 lazyllm = ["lazyllm>=0.7.3"]
+# Rich document ingestion (PDF, Word, PowerPoint, Excel, ...) via MarkItDown.
+document = ["markitdown[docx,pptx,xlsx,xls,pdf]>=0.1.0"]
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
@@ -78,8 +80,8 @@ lazyllm = ["lazyllm>=0.7.3"]
 "Documentation" = "https://github.com/NevaMind-AI/MemU#readme"
 
 [tool.deptry.per_rule_ignores]
-# Optional dependencies used in examples/
-DEP002 = ["claude-agent-sdk"]
+# Optional dependencies used in examples/ or imported lazily behind extras.
+DEP002 = ["claude-agent-sdk", "markitdown"]
 
 [tool.mypy]
 files = ["src", "tests"]

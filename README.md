@@ -223,6 +223,9 @@ context = await service.retrieve(
 
 ```python
 await service.memorize(resource_url="examples/resources/docs/doc1.txt", modality="document")
+# Rich documents (PDF/Word/PowerPoint/Excel/HTML) are converted to Markdown via
+# MarkItDown — install the extra with: pip install 'memu-py[document]'
+await service.memorize(resource_url="reports/q3-summary.pdf", modality="document")
 await service.memorize(resource_url="examples/resources/images/image1.png", modality="image")
 # Audio is supported for your own .mp3/.wav/.m4a files.
 await service.memorize(resource_url="meeting-audio.mp3", modality="audio")

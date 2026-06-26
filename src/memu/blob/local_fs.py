@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import pathlib
 import shutil
 from urllib.parse import parse_qs, urlparse
 
 import httpx
+
+from memu.blob.document_text import extract_document_text
+
+# Modalities whose ingested text is read straight from the file as UTF-8.
+_PLAIN_TEXT_MODALITIES = frozenset({"conversation", "text"})
 
 
 class LocalFS:
@@ -61,9 +67,7 @@ class LocalFS:
             dst = self.base / p.name
             if str(p.resolve()) != str(dst.resolve()):
                 shutil.copyfile(p, dst)
-            text = None
-            if modality in ("conversation", "text", "document"):
-                text = dst.read_text(encoding="utf-8")
+            text = await self._read_text(dst, modality)
             return str(dst), text
 
         # HTTP - get clean filename
@@ -74,7 +78,20 @@ class LocalFS:
             r = await client.get(url)
             r.raise_for_status()
             dst.write_bytes(r.content)
-        text = None
-        if modality in ("conversation", "text", "document"):
-            text = r.text
+        text = await self._read_text(dst, modality)
         return str(dst), text
+
+    @staticmethod
+    async def _read_text(path: pathlib.Path, modality: str) -> str | None:
+        """Resolve the ingested text for a fetched file based on its modality.
+
+        - ``document``: extract via MarkItDown for rich formats (PDF/Office/...),
+          or read plain text directly; runs off-loop since extraction is blocking.
+        - ``conversation``/``text``: read the file as UTF-8.
+        - everything else (image/audio/video): no inline text.
+        """
+        if modality == "document":
+            return await asyncio.to_thread(extract_document_text, path)
+        if modality in _PLAIN_TEXT_MODALITIES:
+            return path.read_text(encoding="utf-8")
+        return None

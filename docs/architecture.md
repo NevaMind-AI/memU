@@ -83,7 +83,7 @@ LLM wrappers also extract best-effort usage metadata from raw provider responses
 
 `memorize(...)` executes the `memorize` pipeline:
 
-1. `ingest_resource`: fetch local/remote resource into `blob_config.resources_dir` via `LocalFS`
+1. `ingest_resource`: fetch local/remote resource into `blob_config.resources_dir` via `LocalFS`. For the `document` modality, rich formats (PDF, Word, PowerPoint, Excel, HTML, EPub) are converted to Markdown text via [MarkItDown](https://github.com/microsoft/markitdown) (`memu.blob.document_text`), while plain text (`.txt`/`.md`/...) is read directly. MarkItDown is an optional extra: `pip install 'memu-py[document]'`.
 2. `preprocess_multimodal`: modality-specific preprocessing for conversation/document/audio (text-oriented path) and image/video (vision-oriented path)
 3. `extract_items`: per-memory-type LLM extraction into structured entries
 4. `dedupe_merge`: placeholder stage (currently pass-through)
