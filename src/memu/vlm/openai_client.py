@@ -43,6 +43,8 @@ class OpenAIVLMClient(VLMClient):
         max_tokens: int | None = None,
         system_prompt: str | None = None,
     ) -> tuple[str, ChatCompletion]:
+        from openai import omit
+
         base64_image, mime_type = encode_image(image_path)
 
         messages: list[ChatCompletionMessageParam] = []
@@ -65,7 +67,9 @@ class OpenAIVLMClient(VLMClient):
             model=self.vlm_model,
             messages=messages,
             temperature=1,
-            max_tokens=max_tokens,
+            # GPT-5 models reject ``max_tokens`` (and ``max_tokens=None``); omit when
+            # unset, otherwise use ``max_completion_tokens`` (works for GPT-4o too).
+            max_completion_tokens=max_tokens if max_tokens is not None else omit,
         )
         content = response.choices[0].message.content
         logger.debug("OpenAI VLM vision response: %s", response)
