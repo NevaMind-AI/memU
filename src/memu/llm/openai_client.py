@@ -3,7 +3,7 @@ import logging
 from pathlib import Path
 from typing import Any, Literal
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, omit
 from openai.types.chat import (
     ChatCompletion,
     ChatCompletionContentPartImageParam,
@@ -56,7 +56,9 @@ class OpenAIClient:
             model=self.chat_model,
             messages=messages,
             temperature=temperature,
-            max_tokens=max_tokens,
+            # GPT-5 models reject ``max_tokens`` (and ``max_tokens=None``); omit when
+            # unset, otherwise use ``max_completion_tokens`` (works for GPT-4o too).
+            max_completion_tokens=max_tokens if max_tokens is not None else omit,
         )
         content = response.choices[0].message.content
         logger.debug("OpenAI chat response: %s", response)
@@ -79,7 +81,7 @@ class OpenAIClient:
             model=self.chat_model,
             messages=messages,
             temperature=1,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_tokens if max_tokens is not None else omit,
         )
         content = response.choices[0].message.content
         logger.debug("OpenAI summarize response: %s", response)
@@ -145,7 +147,7 @@ class OpenAIClient:
             model=self.chat_model,
             messages=messages,
             temperature=1,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_tokens if max_tokens is not None else omit,
         )
         content = response.choices[0].message.content
         logger.debug("OpenAI vision response: %s", response)

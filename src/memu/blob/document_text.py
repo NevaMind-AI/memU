@@ -56,10 +56,7 @@ def _convert_with_markitdown(path: pathlib.Path) -> str:
     try:
         from markitdown import MarkItDown
     except ImportError as exc:  # pragma: no cover - exercised via tests with monkeypatch
-        msg = (
-            f"Converting '{path.name}' requires MarkItDown. "
-            "Install it with: pip install 'memu-py[document]'"
-        )
+        msg = f"Converting '{path.name}' requires MarkItDown. Install it with: pip install 'memu-py[document]'"
         raise RuntimeError(msg) from exc
 
     # ``convert_local`` is the narrowest converter for trusted local files.
