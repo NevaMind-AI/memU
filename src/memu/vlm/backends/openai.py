@@ -47,3 +47,33 @@ class OpenAIVLMBackend(VLMBackend):
 
     def parse_vision_response(self, data: dict[str, Any]) -> str:
         return cast(str, data["choices"][0]["message"]["content"])
+
+    def build_video_payload(
+        self,
+        *,
+        prompt: str,
+        video_data_uri: str,
+        system_prompt: str | None,
+        vlm_model: str,
+        max_tokens: int | None,
+    ) -> dict[str, Any]:
+        messages: list[dict[str, Any]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+
+        messages.append({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "video_url", "video_url": {"url": video_data_uri}},
+            ],
+        })
+
+        payload: dict[str, Any] = {
+            "model": vlm_model,
+            "messages": messages,
+            "temperature": 0.2,
+        }
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        return payload

@@ -18,7 +18,10 @@ VLM_PROVIDER_DEFAULTS: dict[str, str] = {
     "minimax": "MiniMax-M3",
     "kimi": "kimi-k2.6",
     "doubao": "doubao-seed-2.0-pro",
-    "openrouter": "openai/gpt-5.4",
+    # OpenRouter natively understands whole videos via its ``video_url`` content
+    # type. MiniMax-M3 handles both images and video, tracks temporal changes
+    # across frames, and is region-available (unlike Google/Gemini on OpenRouter).
+    "openrouter": "minimax/minimax-m3",
 }
 
 
