@@ -337,6 +337,38 @@ class LLMClientWrapper:
             response_builder=_build_text_response_view,
         )
 
+    async def video(
+        self,
+        prompt: str,
+        video_path: str,
+        *,
+        max_tokens: int | None = None,
+        system_prompt: str | None = None,
+    ) -> Any:
+        metadata = {
+            "video_path": Path(video_path).name,
+            "video_bytes": _safe_file_size(video_path),
+            "system_prompt_chars": len(system_prompt or ""),
+            "max_tokens": max_tokens,
+        }
+        request_view = _build_text_request_view("video", prompt, metadata=metadata)
+
+        async def _call() -> Any:
+            return await self._client.video(
+                prompt,
+                video_path,
+                max_tokens=max_tokens,
+                system_prompt=system_prompt,
+            )
+
+        return await self._invoke(
+            kind="video",
+            call_fn=_call,
+            request_view=request_view,
+            model=self._chat_model,
+            response_builder=_build_text_response_view,
+        )
+
     async def embed(self, inputs: list[str]) -> Any:
         request_view = _build_embedding_request_view(inputs)
 

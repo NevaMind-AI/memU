@@ -16,6 +16,8 @@ from memu.app.service import MemoryService
 from memu.app.settings import LLMConfig, vlm_config_from_llm
 from memu.preprocess import preprocess_resource
 from memu.preprocess.base import PreprocessContext
+from memu.vlm.backends.openrouter import OpenRouterVLMBackend
+from memu.vlm.http_client import HTTPVLMClient
 
 
 class _RecordingVisionClient:
@@ -28,6 +30,24 @@ class _RecordingVisionClient:
     async def vision(self, prompt: str, image_path: str, *, system_prompt: str | None = None, **_: Any) -> str:
         self.vision_calls.append(image_path)
         return "<detailed_description>a cat</detailed_description><caption>cat</caption>"
+
+
+class _RecordingVideoClient:
+    """VLM client with native video support that records image/video calls."""
+
+    supports_video = True
+
+    def __init__(self) -> None:
+        self.video_calls: list[str] = []
+        self.vision_calls: list[str] = []
+
+    async def video(self, prompt: str, video_path: str, *, system_prompt: str | None = None, **_: Any) -> str:
+        self.video_calls.append(video_path)
+        return "<detailed_description>a dog playing fetch</detailed_description><caption>dog playing</caption>"
+
+    async def vision(self, prompt: str, image_path: str, *, system_prompt: str | None = None, **_: Any) -> str:
+        self.vision_calls.append(image_path)
+        return "<detailed_description>a frame</detailed_description><caption>frame</caption>"
 
 
 def _make_ctx(*, llm_client: Any, vlm_client: Any) -> PreprocessContext:
@@ -126,3 +146,74 @@ def test_service_falls_back_to_chat_client_when_vlm_profile_missing(monkeypatch:
     asyncio.run(svc._memorize_preprocess_multimodal(state, {}))
 
     assert captured["client"] == "CHAT_CLIENT"
+
+
+def test_vlm_config_from_llm_openrouter_uses_video_capable_model() -> None:
+    # An OpenRouter LLM profile (httpx transport) derives a VLM config that keeps
+    # the httpx backend and defaults to a video-capable model so native
+    # whole-video understanding works out of the box.
+    cfg = vlm_config_from_llm(LLMConfig(provider="openrouter", client_backend="httpx"))
+    assert cfg.provider == "openrouter"
+    assert cfg.client_backend == "httpx"
+    assert cfg.vlm_model == "minimax/minimax-m3"
+
+
+def test_openrouter_backend_supports_native_video() -> None:
+    backend = OpenRouterVLMBackend()
+    assert backend.supports_video is True
+
+    payload = backend.build_video_payload(
+        prompt="Describe this video.",
+        video_data_uri="data:video/mp4;base64,QUJD",
+        system_prompt=None,
+        vlm_model="minimax/minimax-m3",
+        max_tokens=None,
+    )
+    content = payload["messages"][0]["content"]
+    video_part = next(part for part in content if part["type"] == "video_url")
+    assert video_part["video_url"]["url"] == "data:video/mp4;base64,QUJD"
+
+
+def test_http_vlm_client_exposes_backend_video_capability() -> None:
+    # OpenRouter advertises native video; plain OpenAI-compatible does not.
+    openrouter = HTTPVLMClient(
+        base_url="https://openrouter.ai", api_key="k", vlm_model="minimax/minimax-m3", provider="openrouter"
+    )
+    assert openrouter.supports_video is True
+
+    openai = HTTPVLMClient(
+        base_url="https://api.openai.com/v1", api_key="k", vlm_model="gpt-5.4", provider="openai"
+    )
+    assert openai.supports_video is False
+
+
+def test_video_uses_native_video_when_supported() -> None:
+    # A video-capable client analyzes the whole video file directly; no frame
+    # extraction / image vision call happens.
+    client = _RecordingVideoClient()
+    ctx = _make_ctx(llm_client=client, vlm_client=client)
+    video_path = "/workspace/clip.mp4"
+
+    result = asyncio.run(
+        preprocess_resource(modality="video", local_path=video_path, text=None, ctx=ctx, llm_client=client)
+    )
+
+    assert client.video_calls == [video_path]
+    assert client.vision_calls == []
+    assert result[0]["text"] == "a dog playing fetch"
+    assert result[0]["caption"] == "dog playing"
+
+
+def test_video_without_native_support_skips_no_frame_fallback() -> None:
+    # A client without native video support must NOT degrade to middle-frame image
+    # analysis: the video is skipped (no description) and vision() is never called.
+    client = _RecordingVisionClient("vlm")
+    ctx = _make_ctx(llm_client=client, vlm_client=client)
+
+    result = asyncio.run(
+        preprocess_resource(modality="video", local_path="/workspace/clip.mp4", text=None, ctx=ctx, llm_client=client)
+    )
+
+    assert client.vision_calls == []
+    assert result[0]["text"] is None
+    assert result[0]["caption"] is None

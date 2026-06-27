@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import base64
 import logging
 import os
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -15,9 +17,13 @@ from memu.vlm.backends.kimi import KimiVLMBackend
 from memu.vlm.backends.minimax import MiniMaxVLMBackend
 from memu.vlm.backends.openai import OpenAIVLMBackend
 from memu.vlm.backends.openrouter import OpenRouterVLMBackend
-from memu.vlm.base import VLMClient, encode_image
+from memu.vlm.base import VLMClient, encode_image, video_mime_type
 
 logger = logging.getLogger(__name__)
+
+# Native video understanding processes far more data than a single image, so it
+# needs a more generous read timeout than the default image-vision call.
+_VIDEO_TIMEOUT_SECONDS = 240
 
 
 def _load_proxy() -> str | None:
@@ -59,6 +65,11 @@ class HTTPVLMClient(VLMClient):
         raw_vision_ep = overrides.get("vision") or overrides.get("chat") or self.backend.vision_endpoint
         # Strip leading "/" so httpx resolves it relative to base_url.
         self.vision_endpoint = raw_vision_ep.lstrip("/")
+        raw_video_ep = overrides.get("video") or overrides.get("chat") or self.backend.video_endpoint
+        self.video_endpoint = raw_video_ep.lstrip("/")
+        # Surface the backend's native-video capability so callers (e.g. the
+        # video preprocessor) can choose whole-video analysis over frame sampling.
+        self.supports_video = self.backend.supports_video
         self.timeout = timeout
         self.proxy = _load_proxy()
 
@@ -85,6 +96,40 @@ class HTTPVLMClient(VLMClient):
             data = resp.json()
         logger.debug("HTTP VLM vision response: %s", data)
         return self.backend.parse_vision_response(data), data
+
+    async def video(
+        self,
+        prompt: str,
+        video_path: str,
+        *,
+        max_tokens: int | None = None,
+        system_prompt: str | None = None,
+    ) -> tuple[str, dict[str, Any]]:
+        if not self.backend.supports_video:
+            msg = f"VLM provider '{self.provider}' does not support native video understanding."
+            raise NotImplementedError(msg)
+
+        data_uri = self._encode_video_data_uri(video_path)
+        payload = self.backend.build_video_payload(
+            prompt=prompt,
+            video_data_uri=data_uri,
+            system_prompt=system_prompt,
+            vlm_model=self.vlm_model,
+            max_tokens=max_tokens,
+        )
+        timeout = max(self.timeout, _VIDEO_TIMEOUT_SECONDS)
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=timeout, proxy=self.proxy) as client:
+            resp = await client.post(self.video_endpoint, json=payload, headers=self._headers())
+            resp.raise_for_status()
+            data = resp.json()
+        logger.debug("HTTP VLM video response: %s", data)
+        return self.backend.parse_video_response(data), data
+
+    @staticmethod
+    def _encode_video_data_uri(video_path: str) -> str:
+        raw = Path(video_path).read_bytes()
+        encoded = base64.b64encode(raw).decode("utf-8")
+        return f"data:{video_mime_type(video_path)};base64,{encoded}"
 
     def _headers(self) -> dict[str, str]:
         return self.backend.default_headers(self.api_key)

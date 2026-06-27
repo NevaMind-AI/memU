@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 
 class VLMBackend:
@@ -14,6 +14,13 @@ class VLMBackend:
 
     name: str = "base"
     vision_endpoint: str = "/chat/completions"
+    video_endpoint: str = "/chat/completions"
+
+    # Whether this provider can analyze a whole video file natively (frames +
+    # audio) via :meth:`build_video_payload`. Providers without native video
+    # understanding leave this ``False`` so callers fall back to frame-based
+    # image analysis instead.
+    supports_video: ClassVar[bool] = False
 
     def default_headers(self, api_key: str) -> dict[str, str]:
         """Auth/request headers for this provider.
@@ -37,3 +44,22 @@ class VLMBackend:
 
     def parse_vision_response(self, data: dict[str, Any]) -> str:
         raise NotImplementedError
+
+    def build_video_payload(
+        self,
+        *,
+        prompt: str,
+        video_data_uri: str,
+        system_prompt: str | None,
+        vlm_model: str,
+        max_tokens: int | None,
+    ) -> dict[str, Any]:
+        """Build the request payload for native whole-video understanding.
+
+        Only meaningful when :attr:`supports_video` is ``True``.
+        """
+        raise NotImplementedError
+
+    def parse_video_response(self, data: dict[str, Any]) -> str:
+        """Parse a native video response (defaults to the vision parser)."""
+        return self.parse_vision_response(data)
