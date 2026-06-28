@@ -22,7 +22,7 @@
 
 **Personal information memory for agents.** memU turns the data around a user — conversations, documents, code, images, audio, video, URLs, and tool traces — into an inspectable memory workspace. Agents can traverse that workspace before they act, instead of rereading everything or guessing from a cold prompt.
 
-Call `memorize()` on raw workspace data once. memU extracts what matters about the person, files it into folders and memory items, and keeps every memory tied to its source. Then call `retrieve()` to walk the workspace and return only the context the agent needs — faster, cheaper, and more accurate.
+Call `memorize()` on raw workspace data once. memU extracts what matters about the person, files it into folders and memory items, and keeps every memory tied to its source. It also **auto-extracts skills from tool traces and evolves them on every `memorize()`** — merging new lessons in instead of relearning. Then call `retrieve()` to walk the workspace and return only the context the agent needs — faster, cheaper, more accurate.
 
 > Personal AI gets expensive when every turn reloads the whole user history or workspace. memU compiles source data once, organizes personal information into a navigable tree of folders and files, and makes retrieval a traversal problem: jump to the right folder, rank the right files, pull only what the query needs. Lower latency, lower token cost, higher accuracy — **92.09% average accuracy** on the Locomo memory benchmark.
 
@@ -50,7 +50,7 @@ workspace/
 
 - **Index (`INDEX.md`)** — a map of the user's memory workspace: what exists, where it came from, and where to look first
 - **Memory (`MEMORY.md`)** — personal facts, preferences, goals, events, and decisions extracted from source data
-- **Skill (`skill/*/SKILL.md`)** — learned tool patterns, recurring workflows, and mistakes to avoid
+- **Skill (`skill/*/SKILL.md`)** — tool patterns and workflows, **auto-extracted from tool traces and refined on every `memorize()`** so the agent improves at recurring tasks
 
 Three things make it different from stuffing everything about a person into the prompt:
 
@@ -195,6 +195,7 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 | 🗂️ **Multimodal Ingestion** | Write conversations, documents, images, video, audio, URLs, logs, and local files into memory |
 | 📁 **Compiled Memory Workspace** | Persist the Index, Skill, and Memory layers — folders (categories), files (items), source artifacts, links, summaries, and embeddings |
 | 🧠 **Typed Memory Extraction** | Extract profile, event, knowledge, behavior, skill, and tool memories from raw sources |
+| 🛠️ **Self-Evolving Skills** | Auto-extract reusable tool patterns and workflows from tool traces, then merge and refine them on every `memorize()` instead of relearning |
 | 🧭 **Self-Organizing Folders** | Auto-build categories, links, summaries, and embeddings without manual tagging |
 | 🤖 **Agent-Ready Retrieval** | Read scoped, ranked context that can be injected into any agent workflow |
 | 🧱 **Pluggable Storage** | Use in-memory, SQLite, or Postgres backends with the same repository contracts |
