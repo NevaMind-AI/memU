@@ -4,7 +4,7 @@
 
 # memU
 
-### Every agent needs a workspace runtime
+### Personal memory your agent can traverse
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -20,36 +20,50 @@
 
 ---
 
-memU is a **workspace runtime** for AI agents.
+**Personal information memory for agents.** memU turns the data around a user — conversations, documents, code, images, audio, video, URLs, and tool traces — into an inspectable memory workspace. Agents can traverse that workspace before they act, instead of rereading everything or guessing from a cold prompt.
 
-Every agent needs a workspace runtime. memU compiles any workspace — chat logs, documents, code, images, audio, and tool traces — into three durable layers so agents can act with **context, continuity, and control**:
+Call `memorize()` on raw workspace data once. memU extracts what matters about the person, files it into folders and memory items, and keeps every memory tied to its source. Then call `retrieve()` to walk the workspace and return only the context the agent needs — faster, cheaper, and more accurate.
 
-- **Index** — a navigable map across everything the agent knows, so it knows where to look before it reads (`INDEX.md`)
-- **Skill** — learned skills and tool patterns: what worked, what to avoid, and how to repeat recurring tasks (`SKILL.md`)
-- **Memory** — the agent's living memory: who the user is, their preferences, goals, and the events extracted from every source (`MEMORY.md`)
+> Personal AI gets expensive when every turn reloads the whole user history or workspace. memU compiles source data once, organizes personal information into a navigable tree of folders and files, and makes retrieval a traversal problem: jump to the right folder, rank the right files, pull only what the query needs. Lower latency, lower token cost, higher accuracy — **92.09% average accuracy** on the Locomo memory benchmark.
+
+```python
+await service.memorize(resource_url="workspace/meeting-notes.md", modality="document")
+
+context = await service.retrieve(
+    queries=[{"role": "user", "content": {"text": "What should I know about this user's launch preferences?"}}],
+    where={"user_id": "123"},
+)
+```
+
+That's it. Instead of one giant prompt about a person or their workspace, your agent gets three durable layers it can traverse:
 
 ```txt
 workspace/
-├── INDEX.md              ← Index: map of everything — categories, files, and summaries
-├── MEMORY.md             ← Memory: profile, preferences, goals, and key events
+├── INDEX.md              ← Index: a map of everything — categories, files, and summaries
+├── MEMORY.md             ← Memory: profile, preferences, goals, facts, and key events
 └── skill/
     ├── {skill_name}/
-    │   └── SKILL.md       ← Skill: a learned skill or tool pattern
+    │   └── SKILL.md       ← Skill: a learned tool pattern, workflow, or mistake to avoid
     └── {another_skill}/
         └── SKILL.md
 ```
 
-memU compiles raw sources into this workspace once, then serves it back on demand — the agent `memorize()`s new sources into the layers and `retrieve()`s only the parts that matter:
+- **Index (`INDEX.md`)** — a map of the user's memory workspace: what exists, where it came from, and where to look first
+- **Memory (`MEMORY.md`)** — personal facts, preferences, goals, events, and decisions extracted from source data
+- **Skill (`skill/*/SKILL.md`)** — learned tool patterns, recurring workflows, and mistakes to avoid
 
-- **Context** — agents act on the right facts, preferences, and source material instead of a cold prompt.
-- **Continuity** — the workspace persists and self-organizes across sessions, sources, and tasks, so nothing has to be relearned.
-- **Control** — every layer is a structured, inspectable record that traces back to its source, so you can audit and edit what the agent knows.
+Three things make it different from stuffing everything about a person into the prompt:
+
+- **Faster traversal** — walk to the right folder and rank the right files instead of scanning the whole workspace every time.
+- **Lower cost** — retrieve compact, scoped memory instead of reinjecting long histories, documents, logs, and media-derived text into every prompt.
+- **Higher accuracy** — scope by user, task, or session, and trace every item back to the exact conversation, document, image, or log it came from.
+- **Yours to inspect** — a human-readable file tree you can audit, edit, scope, and route through your own storage (`inmemory`, `sqlite`, `postgres`) and LLM providers.
 
 ---
 
 ## 🔄 How It Works
 
-Think of it as two runtime operations: **compiling** raw sources into the workspace, and **serving** the right layers back to the agent.
+memU has two runtime moves: **write** raw sources into organized memory with `memorize()`, then **read** the right context back with `retrieve()`.
 
 ```
 WRITE — memorize()                                         READ — retrieve()
@@ -99,7 +113,7 @@ MemoryCategory                       ← folder: a topic with an evolving summar
 | `Resource` | **Source artifact** — the original file behind a memory, with caption/text | Trace context back to where it came from |
 | `CategoryItem` | **Link** — the edge that files an item under a folder | Navigate related memories without reprocessing the source |
 
-This gives agents a stable workspace runtime: compile raw sources once, then request scoped and ranked layers instead of rereading every source artifact.
+This gives agents a stable personal memory runtime: compile user workspace data once, then request scoped and ranked layers instead of rereading every source artifact.
 
 ---
 
@@ -179,7 +193,7 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 | Capability | Description |
 |------------|-------------|
 | 🗂️ **Multimodal Ingestion** | Write conversations, documents, images, video, audio, URLs, logs, and local files into memory |
-| 📁 **Compiled Workspace** | Persist the Index, Skill, and Memory layers — folders (categories), files (items), source artifacts, links, summaries, and embeddings |
+| 📁 **Compiled Memory Workspace** | Persist the Index, Skill, and Memory layers — folders (categories), files (items), source artifacts, links, summaries, and embeddings |
 | 🧠 **Typed Memory Extraction** | Extract profile, event, knowledge, behavior, skill, and tool memories from raw sources |
 | 🧭 **Self-Organizing Folders** | Auto-build categories, links, summaries, and embeddings without manual tagging |
 | 🤖 **Agent-Ready Retrieval** | Read scoped, ranked context that can be injected into any agent workflow |
@@ -190,8 +204,8 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 
 ## 🎯 Use Cases
 
-### 1. **Conversation Memory**
-*Turn chat logs into user preferences, goals, events, and relationship context.*
+### 1. **Personal Memory**
+*Turn chat logs and workspace notes into user preferences, goals, events, decisions, and relationship context.*
 
 ```python
 await service.memorize(
@@ -470,7 +484,7 @@ View detailed results: [memU-experiment](https://github.com/NevaMind-AI/memU-exp
 
 | Repository | Description |
 |------------|-------------|
-| **[memU](https://github.com/NevaMind-AI/memU)** | Core workspace runtime — ingestion, extraction, retrieval |
+| **[memU](https://github.com/NevaMind-AI/memU)** | Personal information memory runtime — workspace ingestion, extraction, retrieval |
 | **[memU-server](https://github.com/NevaMind-AI/memU-server)** | Backend with real-time sync and webhook triggers |
 | **[memU-ui](https://github.com/NevaMind-AI/memU-ui)** | Visual dashboard for browsing and monitoring memory |
 
