@@ -4,7 +4,7 @@
 
 # memU
 
-### Personal memory your agent can traverse
+### Your personal file-based memory
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -20,11 +20,8 @@
 
 ---
 
-**Personal information memory for agents.** memU turns the data around a user — conversations, documents, code, images, audio, video, URLs, and tool traces — into an inspectable memory workspace. Agents can traverse that workspace before they act, instead of rereading everything or guessing from a cold prompt.
+**Personal memory, stored as files.** memU turns the data around a user — conversations, documents, code, images, audio, video, URLs, and tool traces — into a tree of human-readable Markdown files your agent can open and traverse. No opaque vector blob, no giant prompt: just `INDEX.md`, `MEMORY.md`, and `SKILL.md` the agent navigates before it acts.
 
-Call `memorize()` on raw workspace data once. memU extracts what matters about the person, files it into folders and memory items, and keeps every memory tied to its source. It also **auto-extracts skills from tool traces and evolves them on every `memorize()`** — merging new lessons in instead of relearning. Then call `retrieve()` to walk the workspace and return only the context the agent needs — faster, cheaper, more accurate.
-
-> Personal AI gets expensive when every turn reloads the whole user history or workspace. memU compiles source data once, organizes personal information into a navigable tree of folders and files, and makes retrieval a traversal problem: jump to the right folder, rank the right files, pull only what the query needs. Lower latency, lower token cost, higher accuracy — **92.09% average accuracy** on the Locomo memory benchmark.
 
 ```python
 await service.memorize(resource_url="workspace/meeting-notes.md", modality="document")
@@ -50,7 +47,7 @@ workspace/
 
 - **Index (`INDEX.md`)** — a map of the user's memory workspace: what exists, where it came from, and where to look first
 - **Memory (`MEMORY.md`)** — personal facts, preferences, goals, events, and decisions extracted from source data
-- **Skill (`skill/*/SKILL.md`)** — tool patterns and workflows, **auto-extracted from tool traces and refined on every `memorize()`** so the agent improves at recurring tasks
+- **Skill (`SKILL.md`)** — **auto-extracted from tool traces and refined on every `memorize()`** so the agent improves at recurring tasks
 
 Three things make it different from stuffing everything about a person into the prompt:
 
@@ -59,124 +56,6 @@ Three things make it different from stuffing everything about a person into the 
 - **Higher accuracy** — scope by user, task, or session, and trace every item back to the exact conversation, document, image, or log it came from.
 - **Yours to inspect** — a human-readable file tree you can audit, edit, scope, and route through your own storage (`inmemory`, `sqlite`, `postgres`) and LLM providers.
 
----
-
-## 🔄 How It Works
-
-memU has two runtime moves: **write** raw sources into organized memory with `memorize()`, then **read** the right context back with `retrieve()`.
-
-```
-WRITE — memorize()                                         READ — retrieve()
-──────────────────────────────────────────────            ──────────────────────────────────────────────
-raw files        →  extract  →  files + folders            query  →  walk folders  →  ranked files
-─────────────       ─────────    ──────────────            ─────     ────────────     ─────────────
-chat logs        →  parse    →  profile / event items      user / task query
-documents / URLs →  facts    →  knowledge / skill items       │
-images / video   →  caption  →  resources + summaries         ├─ route + scope    → relevant folders (categories)
-audio            →  transcribe→ event / knowledge items       ├─ rank by relevance → matching files (items)
-tool logs        →  mine      → tool / skill items            └─ trace to source   → original resources
-```
-
-**Compiling the workspace (`memorize`)**
-
-1. **Ingest** — store each source as a `Resource` (the raw file) with its modality and source location
-2. **Preprocess** — parse text, caption images/video, transcribe audio, and normalize inputs
-3. **Extract** — turn raw content into typed `MemoryItem`s (the files): profile, event, knowledge, behavior, skill, or tool memories
-4. **Organize** — sort items into `MemoryCategory` folders, cross-link, embed, and summarize into a browsable tree
-5. **Persist** — write records, relations, embeddings, and folder summaries through the configured backend
-
-**Serving the workspace (`retrieve`)**
-
-6. **Retrieve** — navigate the folders and return only the files relevant to the current user, agent, session, or task
-
----
-
-## 🗂️ The Compiled Workspace
-
-memU compiles its primary output into a navigable workspace — Index, Skill, and Memory layers backed by the source artifacts behind them — persisted through repository contracts and returned as dictionaries from `memorize()` and `retrieve()`.
-
-```txt
-MemoryCategory                       ← folder: a topic with an evolving summary
-├── name, description, summary
-├── embedding
-└── MemoryItem[]                     ← files: typed, atomic memories
-    ├── memory_type: profile | event | knowledge | behavior | skill | tool
-    ├── summary, extra, happened_at, embedding
-    └── Resource                     ← source: the raw file this memory came from
-        └── url, modality, local_path, caption, embedding
-```
-
-| Record | File-System Role | Used By |
-|--------|------------------|---------|
-| `MemoryCategory` | **Folder** — groups related memories and keeps a topic-level summary | Load compact context for broad queries |
-| `MemoryItem` | **File** — a typed atomic memory with a summary and optional metadata | Inject precise facts, preferences, events, skills, and tool patterns |
-| `Resource` | **Source artifact** — the original file behind a memory, with caption/text | Trace context back to where it came from |
-| `CategoryItem` | **Link** — the edge that files an item under a folder | Navigate related memories without reprocessing the source |
-
-This gives agents a stable personal memory runtime: compile user workspace data once, then request scoped and ranked layers instead of rereading every source artifact.
-
----
-
-## 🧩 What memU Builds
-
-Every layer of the workspace is stored as a structured record:
-
-| Layer | What It Represents | Why Agents Use It |
-|-------|--------------------|-------------------|
-| **MemoryCategory** | Auto-generated folder: a topic with an evolving summary | Load high-level context before drilling into details |
-| **MemoryItem** | A file: atomic structured memory with a type and summary | Inject precise facts, preferences, events, skills, and tool patterns |
-| **Resource** | Source artifact behind a file: conversation, document, image, video, audio, URL, or file | Trace memory back to its source |
-| **CategoryItem** | The link that files an item under a folder | Navigate related memories without reprocessing the source |
-| **Embedding** | Vector index over folders, files, and sources | Retrieve relevant context with low latency |
-
-Example `memorize()` output:
-
-```json
-{
-  "resource": {
-    "id": "res_01",
-    "url": "files/launch-meeting.mp4",
-    "modality": "video",
-    "caption": "A product planning discussion about onboarding and launch risks."
-  },
-  "items": [
-    {
-      "id": "mem_01",
-      "memory_type": "event",
-      "summary": "The team decided to simplify onboarding before the next launch review."
-    },
-    {
-      "id": "mem_02",
-      "memory_type": "profile",
-      "summary": "The user prefers concise implementation plans with explicit verification steps."
-    },
-    {
-      "id": "mem_03",
-      "memory_type": "tool",
-      "summary": "Use repository-wide search before editing configuration files to avoid missing duplicated settings."
-    }
-  ],
-  "categories": [
-    {
-      "id": "cat_01",
-      "name": "product_goals",
-      "summary": "Current launch priorities, onboarding decisions, and unresolved risks."
-    }
-  ],
-  "relations": [
-    { "item_id": "mem_01", "category_id": "cat_01" }
-  ]
-}
-```
-
-Then an agent can call `retrieve()` to get a scoped, ranked context payload:
-
-```python
-context = await service.retrieve(
-    queries=[{"role": "user", "content": {"text": "What context matters for this launch task?"}}],
-    where={"user_id": "123"},
-)
-```
 
 ---
 
