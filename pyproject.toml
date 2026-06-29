@@ -4,7 +4,7 @@ version = "1.5.1"
 authors = [
     {name = "MemU Team", email = "contact@nevamind.ai"},
 ]
-description = "Personal memory for agents - fast memory retrieval, self-evolving skills, and lower cost."
+description = "Personal memory as files — fast retrieval, higher accuracy, lower cost."
 readme = "README.md"
 # license = {file = "LICENSE"}
 requires-python = ">=3.13"

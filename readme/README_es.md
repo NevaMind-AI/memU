@@ -4,7 +4,9 @@
 
 # memU
 
-### El sistema de archivos como memoria, la memoria moldea al agente
+### Memoria personal en archivos
+
+**Recuperación rápida · Mayor precisión · Menor costo**
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -20,17 +22,14 @@
 
 ---
 
-memU es un **sistema de archivos de memoria** para agentes de IA.
+memU compila conversaciones, documentos, código, imágenes, audio, video, URLs y trazas de herramientas en archivos Markdown legibles por humanos (`INDEX.md`, `MEMORY.md`, `SKILL.md`). El agente recorre el árbol y carga solo la memoria que necesita en el momento — sin escanear todo ni meter historiales largos en cada prompt:
 
-En lugar de aplastar todo lo que un agente aprende en un único prompt gigante o en un blob vectorial opaco, memU organiza la memoria como organizarías una computadora: como un árbol navegable de archivos Markdown legibles por humanos.
-
-- **`MEMORY.md`**: la memoria viva del agente: quién es el usuario, sus preferencias, objetivos y los eventos extraídos de cada fuente
-- **`SKILL.md`**: habilidades y patrones de herramientas aprendidos: qué funcionó, qué evitar y cómo repetir tareas recurrentes
-- **`INDEX.md`**: la tabla de contenidos: un mapa navegable de todos los archivos de memoria, para que el agente sepa dónde mirar antes de leer
-- **El agente lee y escribe estos archivos**: usa `memorize()` para escribir nuevas fuentes en ellos y `retrieve()` para leer, bajo demanda, solo las secciones que importan
+- **`INDEX.md`** — mapa de todo: categorías, archivos y resúmenes, para que el agente sepa dónde mirar primero
+- **`MEMORY.md`** — perfil, preferencias, objetivos, hechos y eventos clave extraídos de los datos fuente
+- **`SKILL.md`** — patrones de herramientas y flujos de trabajo reutilizables, extraídos automáticamente de trazas y refinados en cada `memorize()`
 
 ```txt
-memory/
+workspace/
 ├── INDEX.md              ← mapa de todo: categorías, archivos y resúmenes
 ├── MEMORY.md             ← perfil, preferencias, objetivos y eventos clave
 └── skill/
@@ -40,8 +39,12 @@ memory/
         └── SKILL.md
 ```
 
-**El sistema de archivos como memoria**: una superficie jerárquica y navegable donde cada memoria puede rastrearse hasta su fuente.
-**La memoria moldea al agente**: como esa superficie es estructurada y autoorganizada, deja de ser almacenamiento pasivo y se convierte en la capa que moldea cómo piensa y actúa el agente.
+Tres cosas lo diferencian de meter todo en el prompt:
+
+- **Recuperación rápida** — ir a la carpeta relevante y ordenar archivos en lugar de escanear todo cada vez.
+- **Mayor precisión** — acotar por usuario, tarea o sesión, y rastrear cada elemento hasta su fuente original.
+- **Menor costo** — recuperar contexto compacto y acotado en lugar de reinyectar historiales largos en cada prompt.
+- **Auditable** — un árbol de archivos legible por humanos que puedes revisar, editar y enrutar con tu propio almacenamiento y proveedores de LLM.
 
 ---
 

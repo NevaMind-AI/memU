@@ -4,9 +4,9 @@
 
 # memU
 
-### Your personal file-based memory
+### Personal memory, stored as files
 
-**memU helps agents find the right files across your personal workspace quickly, accurately, and at low cost.**
+**Fast retrieval. Higher accuracy. Lower cost.**
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -22,7 +22,7 @@
 
 ---
 
-**Personal memory, stored as files.** memU turns the data around a user — conversations, documents, code, images, audio, video, URLs, and tool traces — into a tree of human-readable Markdown files your agent can open and traverse. No opaque vector blob, no giant prompt: just `INDEX.md`, `MEMORY.md`, and `SKILL.md` the agent navigates before it acts.
+memU compiles conversations, documents, code, images, audio, video, URLs, and tool traces into human-readable Markdown files (`INDEX.md`, `MEMORY.md`, `SKILL.md`). Agents traverse the tree and load only what the moment needs — instead of rescanning everything or stuffing long histories into every prompt.
 
 
 ```python
@@ -47,15 +47,15 @@ workspace/
         └── SKILL.md
 ```
 
-- **Index (`INDEX.md`)** — a map of the user's memory workspace: what exists, where it came from, and where to look first
+- **Index (`INDEX.md`)** — a map of your memories: what exists, where it came from, and where to look first
 - **Memory (`MEMORY.md`)** — personal facts, preferences, goals, events, and decisions extracted from source data
 - **Skill (`SKILL.md`)** — **auto-extracted from tool traces and refined on every `memorize()`** so the agent improves at recurring tasks
 
-Three things make it different from stuffing everything about a person into the prompt:
+Three things make it different from stuffing everything into the prompt:
 
-- **Faster traversal** — walk to the right folder and rank the right files instead of scanning the whole workspace every time.
-- **Lower cost** — retrieve compact, scoped memory instead of reinjecting long histories, documents, logs, and media-derived text into every prompt.
+- **Fast retrieval** — walk to the right folder and rank the right files instead of scanning everything every time.
 - **Higher accuracy** — scope by user, task, or session, and trace every item back to the exact conversation, document, image, or log it came from.
+- **Lower cost** — retrieve compact, scoped context instead of reinjecting long histories, documents, logs, and media-derived text into every prompt.
 - **Yours to inspect** — a human-readable file tree you can audit, edit, scope, and route through your own storage (`inmemory`, `sqlite`, `postgres`) and LLM providers.
 
 
@@ -78,7 +78,7 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 | 🧠 **Typed Memory Extraction** | Extract profile, event, knowledge, behavior, skill, and tool memories from raw sources |
 | 🛠️ **Self-Evolving Skills** | Auto-extract reusable tool patterns and workflows from tool traces, then merge and refine them on every `memorize()` instead of relearning |
 | 🧭 **Self-Organizing Folders** | Auto-build categories, links, summaries, and embeddings without manual tagging |
-| 🤖 **Agent-Ready Retrieval** | Read scoped, ranked context that can be injected into any agent workflow |
+| 🤖 **Agent-Ready Retrieval** | Find the right files quickly — scoped, ranked context for any agent workflow |
 | 🧱 **Pluggable Storage** | Use in-memory, SQLite, or Postgres backends with the same repository contracts |
 | 🔀 **Profile-Based LLM Routing** | Route chat, embedding, vision, and transcription work through configurable LLM profiles |
 
@@ -366,7 +366,7 @@ View detailed results: [memU-experiment](https://github.com/NevaMind-AI/memU-exp
 
 | Repository | Description |
 |------------|-------------|
-| **[memU](https://github.com/NevaMind-AI/memU)** | Personal information memory runtime — workspace ingestion, extraction, retrieval |
+| **[memU](https://github.com/NevaMind-AI/memU)** | Personal memory as files — fast retrieval, higher accuracy, lower cost |
 | **[memU-server](https://github.com/NevaMind-AI/memU-server)** | Backend with real-time sync and webhook triggers |
 | **[memU-ui](https://github.com/NevaMind-AI/memU-ui)** | Visual dashboard for browsing and monitoring memory |
 

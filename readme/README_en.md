@@ -4,7 +4,9 @@
 
 # memU
 
-### File System as Memory, Memory Shapes the Agent
+### Personal memory, stored as files
+
+**Fast retrieval. Higher accuracy. Lower cost.**
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -20,17 +22,14 @@
 
 ---
 
-memU is a **memory file system** for AI agents.
+memU compiles conversations, documents, code, images, audio, video, URLs, and tool traces into human-readable Markdown files (`INDEX.md`, `MEMORY.md`, `SKILL.md`). Agents traverse the tree and load only what the moment needs — instead of rescanning everything or stuffing long histories into every prompt:
 
-Instead of flattening everything an agent learns into one giant prompt or an opaque vector blob, memU organizes memory the way you organize a computer — as a navigable tree of human-readable Markdown files:
-
-- **`MEMORY.md`** — the agent's living memory: who the user is, their preferences, goals, and the events extracted from every source
-- **`SKILL.md`** — learned skills and tool patterns: what worked, what to avoid, and how to repeat recurring tasks
-- **`INDEX.md`** — the table of contents: a navigable map across every memory file, so the agent knows where to look before it reads
-- **The agent reads and writes these files** — it `memorize()`s new sources into them and `retrieve()`s only the sections that matter on demand
+- **`INDEX.md`** — a map of everything: categories, files, and summaries, so the agent knows where to look first
+- **`MEMORY.md`** — profile, preferences, goals, facts, and key events extracted from source data
+- **`SKILL.md`** — learned tool patterns and workflows, auto-extracted from tool traces and refined on every `memorize()`
 
 ```txt
-memory/
+workspace/
 ├── INDEX.md              ← map of everything: categories, files, and summaries
 ├── MEMORY.md             ← profile, preferences, goals, and key events
 └── skill/
@@ -40,8 +39,12 @@ memory/
         └── SKILL.md
 ```
 
-**File system as memory**: a hierarchical, browsable surface where every memory traces back to its source.
-**Memory shapes the agent**: because that surface is structured and self-organizing, it stops being passive storage and becomes the layer that shapes how the agent thinks and acts.
+Three things make it different from stuffing everything into the prompt:
+
+- **Fast retrieval** — walk to the right folder and rank the right files instead of scanning everything every time.
+- **Higher accuracy** — scope by user, task, or session, and trace every item back to the exact source it came from.
+- **Lower cost** — retrieve compact, scoped context instead of reinjecting long histories into every prompt.
+- **Yours to inspect** — a human-readable file tree you can audit, edit, and route through your own storage and LLM providers.
 
 ---
 
