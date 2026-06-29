@@ -4,7 +4,9 @@
 
 # memU
 
-### Le système de fichiers comme mémoire, la mémoire façonne l'agent
+### Mémoire personnelle en fichiers
+
+**Récupération rapide · Plus grande précision · Coût réduit**
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -20,17 +22,14 @@
 
 ---
 
-memU est un **système de fichiers de mémoire** pour les agents d'IA.
+memU compile conversations, documents, code, images, audio, vidéo, URLs et traces d'outils en fichiers Markdown lisibles par l'humain (`INDEX.md`, `MEMORY.md`, `SKILL.md`). L'agent parcourt l'arborescence et ne charge que la mémoire utile au moment présent — sans tout scanner ni remplir chaque prompt d'historiques longs :
 
-Plutôt que d'aplatir tout ce qu'un agent apprend dans un unique prompt géant ou un blob vectoriel opaque, memU organise la mémoire comme vous organisez un ordinateur : sous la forme d'une arborescence navigable de fichiers Markdown lisibles par l'humain.
-
-- **`MEMORY.md`** : la mémoire vivante de l'agent : qui est l'utilisateur, ses préférences, ses objectifs et les événements extraits de chaque source
-- **`SKILL.md`** : les compétences et schémas d'outils appris : ce qui a fonctionné, ce qu'il faut éviter et comment reproduire les tâches récurrentes
-- **`INDEX.md`** : la table des matières : une carte navigable de tous les fichiers de mémoire, pour que l'agent sache où chercher avant de lire
-- **L'agent lit et écrit ces fichiers** : il utilise `memorize()` pour y écrire de nouvelles sources et `retrieve()` pour ne lire, à la demande, que les sections qui comptent
+- **`INDEX.md`** — carte de tout : catégories, fichiers et résumés, pour que l'agent sache où chercher en premier
+- **`MEMORY.md`** — profil, préférences, objectifs, faits et événements clés extraits des données sources
+- **`SKILL.md`** — schémas d'outils et workflows réutilisables, extraits automatiquement des traces et affinés à chaque `memorize()`
 
 ```txt
-memory/
+workspace/
 ├── INDEX.md              ← carte de tout : catégories, fichiers et résumés
 ├── MEMORY.md             ← profil, préférences, objectifs et événements clés
 └── skill/
@@ -40,8 +39,12 @@ memory/
         └── SKILL.md
 ```
 
-**Le système de fichiers comme mémoire** : une surface hiérarchique et navigable où chaque mémoire remonte jusqu'à sa source.
-**La mémoire façonne l'agent** : comme cette surface est structurée et auto-organisée, elle cesse d'être un stockage passif et devient la couche qui façonne la manière dont l'agent pense et agit.
+Trois éléments le distinguent de tout mettre dans le prompt :
+
+- **Récupération rapide** — aller au dossier pertinent et classer les fichiers au lieu de tout scanner à chaque fois.
+- **Plus grande précision** — cadrer par utilisateur, tâche ou session, et remonter chaque élément jusqu'à sa source exacte.
+- **Coût réduit** — récupérer un contexte compact et cadré au lieu de réinjecter de longs historiques dans chaque prompt.
+- **Auditable** — une arborescence lisible par l'humain que vous pouvez inspecter, modifier et router via votre propre stockage et vos fournisseurs LLM.
 
 ---
 
