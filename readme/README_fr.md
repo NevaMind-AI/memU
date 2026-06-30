@@ -68,8 +68,8 @@ tool logs        →  mine      → tool / skill items            └─ trace t
 
 1. **Ingérer (Ingest)** : stocke chaque source sous forme de `Resource` (le fichier brut) avec sa modalité et son emplacement d'origine
 2. **Prétraiter (Preprocess)** : analyse le texte, légende les images/vidéos, transcrit l'audio et normalise les entrées
-3. **Extraire (Extract)** : transforme le contenu brut en `MemoryItem`s typés (les fichiers) : mémoires de type profile, event, knowledge, behavior, skill ou tool
-4. **Organiser (Organize)** : range les éléments dans des dossiers `MemoryCategory`, les relie entre eux, les vectorise et les résume en une arborescence navigable
+3. **Extraire (Extract)** : transforme le contenu brut en enregistrements `RecallEntry` typés (les fichiers) : mémoires de type profile, event, knowledge, behavior, skill ou tool
+4. **Organiser (Organize)** : range les éléments dans des dossiers `RecallFile` (une catégorie de mémoire, ou une compétence), les relie entre eux, les vectorise et les résume en une arborescence navigable
 5. **Persister (Persist)** : écrit les enregistrements, relations, embeddings et résumés de dossier via le backend configuré
 
 **Lire depuis le système de fichiers (`retrieve`)**
@@ -83,10 +83,10 @@ tool logs        →  mine      → tool / skill items            └─ trace t
 La sortie principale de memU est une arborescence de mémoire navigable — dossiers, fichiers et les artefacts source qui se trouvent derrière — persistée via des contrats de dépôt et renvoyée sous forme de dictionnaires par `memorize()` et `retrieve()`.
 
 ```txt
-MemoryCategory                       ← dossier : un thème avec un résumé en évolution
-├── name, description, summary
+RecallFile                           ← dossier : un thème avec un résumé en évolution
+├── name, track (memory | skill), description, content
 ├── embedding
-└── MemoryItem[]                     ← fichiers : des mémoires atomiques et typées
+└── RecallEntry[]                    ← fichiers : des mémoires atomiques et typées
     ├── memory_type: profile | event | knowledge | behavior | skill | tool
     ├── summary, extra, happened_at, embedding
     └── Resource                     ← source : le fichier brut dont provient cette mémoire
@@ -95,10 +95,10 @@ MemoryCategory                       ← dossier : un thème avec un résumé en
 
 | Enregistrement | Rôle dans le système de fichiers | Utilisé pour |
 |--------|------------------|---------|
-| `MemoryCategory` | **Dossier** : regroupe les mémoires liées et tient un résumé au niveau du thème | Charger un contexte compact pour les requêtes larges |
-| `MemoryItem` | **Fichier** : mémoire atomique typée avec un résumé et des métadonnées optionnelles | Injecter des faits, préférences, événements, compétences et schémas d'outils précis |
+| `RecallFile` | **Dossier** : regroupe les mémoires liées (ou contient une compétence) et tient un résumé au niveau du thème ; un champ `track` le marque `memory` ou `skill` | Charger un contexte compact pour les requêtes larges |
+| `RecallEntry` | **Fichier** : mémoire atomique typée avec un résumé et des métadonnées optionnelles | Injecter des faits, préférences, événements, compétences et schémas d'outils précis |
 | `Resource` | **Artefact source** : le fichier d'origine derrière une mémoire, avec légende/texte | Remonter le contexte jusqu'à son origine |
-| `CategoryItem` | **Lien** : l'arête qui classe un élément sous un dossier | Naviguer entre les mémoires liées sans retraiter la source |
+| `RecallFileEntry` | **Lien** : l'arête qui classe un élément sous un dossier | Naviguer entre les mémoires liées sans retraiter la source |
 
 Cela donne aux agents un système de fichiers de mémoire stable : ils ingèrent les sources brutes une seule fois, puis demandent des fichiers délimités et classés plutôt que de relire chaque artefact source.
 
@@ -110,10 +110,10 @@ Chaque couche du système de fichiers est stockée sous forme d'enregistrement s
 
 | Couche | Ce qu'elle représente | Pourquoi les agents l'utilisent |
 |-------|--------------------|-------------------|
-| **MemoryCategory** | Dossier auto-généré : un thème avec un résumé en évolution | Charger un contexte de haut niveau avant de plonger dans les détails |
-| **MemoryItem** | Un fichier : mémoire structurée atomique avec un type et un résumé | Injecter des faits, préférences, événements, compétences et schémas d'outils précis |
+| **RecallFile** | Dossier auto-généré : un thème (ou une compétence) avec un résumé en évolution | Charger un contexte de haut niveau avant de plonger dans les détails |
+| **RecallEntry** | Un fichier : mémoire structurée atomique avec un type et un résumé | Injecter des faits, préférences, événements, compétences et schémas d'outils précis |
 | **Resource** | Artefact source derrière un fichier : conversation, document, image, vidéo, audio, URL ou fichier | Remonter la mémoire jusqu'à son origine |
-| **CategoryItem** | Le lien qui classe un élément sous un dossier | Naviguer entre les mémoires liées sans retraiter la source |
+| **RecallFileEntry** | Le lien qui classe un élément sous un dossier | Naviguer entre les mémoires liées sans retraiter la source |
 | **Embedding** | Index vectoriel couvrant dossiers, fichiers et sources | Récupérer le contexte pertinent avec une faible latence |
 
 Exemple de sortie de `memorize()` :

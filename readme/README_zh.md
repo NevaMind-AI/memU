@@ -68,8 +68,8 @@ tool logs        →  mine      → tool / skill items            └─ trace t
 
 1. **摄入（Ingest）** — 把每个来源作为一个 `Resource`（原始文件）存下，记录其模态与来源位置
 2. **预处理（Preprocess）** — 解析文本、为图片/视频生成描述、转写音频，并规范化输入
-3. **提取（Extract）** — 把原始内容转成带类型的 `MemoryItem`（文件）：profile、event、knowledge、behavior、skill 或 tool 记忆
-4. **组织（Organize）** — 把记忆项归入 `MemoryCategory` 文件夹，交叉关联、向量化，并汇总成可浏览的树
+3. **提取（Extract）** — 把原始内容转成带类型的 `RecallEntry` 记录（文件）：profile、event、knowledge、behavior、skill 或 tool 记忆
+4. **组织（Organize）** — 把记忆项归入 `RecallFile` 文件夹（一个记忆分类，或一个技能），交叉关联、向量化，并汇总成可浏览的树
 5. **持久化（Persist）** — 通过所配置的后端写入记录、关系、向量与文件夹摘要
 
 **从文件系统读取（`retrieve`）**
@@ -83,10 +83,10 @@ tool logs        →  mine      → tool / skill items            └─ trace t
 memU 的主要产出是一棵可浏览的记忆树——文件夹、文件，以及它们背后的来源素材——通过仓储契约持久化，并以字典形式从 `memorize()` 和 `retrieve()` 返回。
 
 ```txt
-MemoryCategory                       ← 文件夹：带演进式摘要的主题
-├── name, description, summary
+RecallFile                           ← 文件夹：带演进式摘要的主题
+├── name, track (memory | skill), description, content
 ├── embedding
-└── MemoryItem[]                     ← 文件：带类型的原子记忆
+└── RecallEntry[]                    ← 文件：带类型的原子记忆
     ├── memory_type: profile | event | knowledge | behavior | skill | tool
     ├── summary, extra, happened_at, embedding
     └── Resource                     ← 来源：这条记忆所来自的原始文件
@@ -95,10 +95,10 @@ MemoryCategory                       ← 文件夹：带演进式摘要的主题
 
 | 记录 | 文件系统角色 | 用途 |
 |--------|------------------|---------|
-| `MemoryCategory` | **文件夹** — 归集相关记忆并维护主题级摘要 | 为宽泛查询加载紧凑上下文 |
-| `MemoryItem` | **文件** — 带类型的原子记忆，含摘要与可选元数据 | 注入精确的事实、偏好、事件、技能与工具模式 |
+| `RecallFile` | **文件夹** — 归集相关记忆（或承载一个技能）并维护主题级摘要；`track` 字段标记为 `memory` 或 `skill` | 为宽泛查询加载紧凑上下文 |
+| `RecallEntry` | **文件** — 带类型的原子记忆，含摘要与可选元数据 | 注入精确的事实、偏好、事件、技能与工具模式 |
 | `Resource` | **来源素材** — 记忆背后的原始文件，附带描述/文本 | 把上下文追溯回它的来源 |
-| `CategoryItem` | **链接** — 把记忆项归档到文件夹下的边 | 在不重新处理来源的情况下导航相关记忆 |
+| `RecallFileEntry` | **链接** — 把记忆项归档到文件夹下的边 | 在不重新处理来源的情况下导航相关记忆 |
 
 这为智能体提供了一个稳定的记忆文件系统：原始来源只需摄入一次，之后便可请求限定范围、经过排序的文件，而无需重读每一份来源素材。
 
@@ -110,10 +110,10 @@ MemoryCategory                       ← 文件夹：带演进式摘要的主题
 
 | 层 | 代表什么 | 智能体为何使用 |
 |-------|--------------------|-------------------|
-| **MemoryCategory** | 自动生成的文件夹：带演进式摘要的主题 | 先加载高层上下文，再深入细节 |
-| **MemoryItem** | 文件：带类型与摘要的原子结构化记忆 | 注入精确的事实、偏好、事件、技能与工具模式 |
+| **RecallFile** | 自动生成的文件夹：带演进式摘要的主题（或一个技能） | 先加载高层上下文，再深入细节 |
+| **RecallEntry** | 文件：带类型与摘要的原子结构化记忆 | 注入精确的事实、偏好、事件、技能与工具模式 |
 | **Resource** | 文件背后的来源素材：对话、文档、图片、视频、音频、URL 或文件 | 把记忆追溯回其来源 |
-| **CategoryItem** | 把记忆项归档到文件夹下的链接 | 在不重新处理来源的情况下导航相关记忆 |
+| **RecallFileEntry** | 把记忆项归档到文件夹下的链接 | 在不重新处理来源的情况下导航相关记忆 |
 | **Embedding** | 覆盖文件夹、文件与来源的向量索引 | 以低延迟检索相关上下文 |
 
 `memorize()` 输出示例：
