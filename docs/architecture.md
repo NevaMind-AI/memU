@@ -144,6 +144,13 @@ that is query-time policy rather than search over stored vectors.)
 - `sqlite`: SQLModel persistence, embeddings stored as JSON text, brute-force cosine search
 - `postgres`: SQLModel persistence with pgvector support (when enabled), local fallback ranking when needed
 
+`database_config.vector_index` selects vector-search behavior:
+
+- `bruteforce`: local cosine search in the metadata backend
+- `pgvector`: Postgres-native vector search when the metadata store is `postgres`
+- `milvus`: external Milvus / Milvus Lite / Zilliz Cloud vector index for the `inmemory` metadata store
+- `none`: reserved for disabling external vector-index construction
+
 For Postgres, startup runs migration bootstrap and attempts `CREATE EXTENSION IF NOT EXISTS vector` in `ddl_mode="create"`.
 
 ### Scope model propagation

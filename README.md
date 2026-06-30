@@ -228,6 +228,15 @@ cd tests
 uv run python test_postgres.py
 ```
 
+**Run with Milvus Lite as an external vector index:**
+```bash
+uv sync --extra milvus
+export OPENAI_API_KEY=your_key
+uv run python examples/milvus_vector_index.py
+```
+
+The Milvus integration currently wires `vector_index.provider="milvus"` to the `inmemory` metadata store. Use `uri` to point the same configuration at Milvus Lite, a Milvus server, or Zilliz Cloud.
+
 ---
 
 ### Custom LLM and Embedding Providers

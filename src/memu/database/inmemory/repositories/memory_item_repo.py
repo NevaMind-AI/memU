@@ -10,14 +10,32 @@ from memu.database.inmemory.repositories.filter import matches_where
 from memu.database.inmemory.state import InMemoryState
 from memu.database.models import MemoryItem, MemoryType, compute_content_hash
 from memu.database.repositories.memory_item import MemoryItemRepo
+from memu.database.vector_index.interfaces import VectorIndex
 from memu.vector import cosine_topk, cosine_topk_salience
+
+_NON_FILTER_ITEM_FIELDS = frozenset({
+    "id",
+    "created_at",
+    "updated_at",
+    "summary",
+    "embedding",
+    "happened_at",
+    "extra",
+})
 
 
 class InMemoryMemoryItemRepository(MemoryItemRepo):
-    def __init__(self, *, state: InMemoryState, memory_item_model: type[MemoryItem]) -> None:
+    def __init__(
+        self,
+        *,
+        state: InMemoryState,
+        memory_item_model: type[MemoryItem],
+        vector_index: VectorIndex | None = None,
+    ) -> None:
         self._state = state
         self.memory_item_model = memory_item_model
         self.items: dict[str, MemoryItem] = self._state.items
+        self._vector_index = vector_index
 
     def list_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
         if not where:
@@ -54,10 +72,14 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         if not where:
             matches = self.items.copy()
             self.items.clear()
+            if self._vector_index is not None and matches:
+                self._vector_index.delete_many(matches.keys())
             return matches
         matches = {mid: item for mid, item in self.items.items() if matches_where(item, where)}
         for mid in matches:
             self.items.pop(mid, None)
+        if self._vector_index is not None and matches:
+            self._vector_index.delete_many(matches.keys())
         return matches
 
     def _find_by_hash(self, content_hash: str, user_data: dict[str, Any]) -> MemoryItem | None:
@@ -118,6 +140,7 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             **user_data,
         )
         self.items[mid] = it
+        self._sync_vector_index(it)
         return it
 
     def create_item_reinforce(
@@ -165,6 +188,7 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             **user_data,
         )
         self.items[mid] = it
+        self._sync_vector_index(it)
         return it
 
     def vector_search_items(
@@ -176,9 +200,8 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         ranking: str = "similarity",
         recency_decay_days: float = 30.0,
     ) -> list[tuple[str, float]]:
-        pool = self.list_items(where)
-
         if ranking == "salience":
+            pool = self.list_items(where)
             # Salience-aware ranking: similarity x reinforcement x recency
             # Read values from extra dict
             corpus = [
@@ -191,6 +214,11 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
                 for i in pool.values()
             ]
             return cosine_topk_salience(query_vec, corpus, k=top_k, recency_decay_days=recency_decay_days)
+
+        if self._vector_index is not None:
+            return self._vector_index.search(query_vec, top_k, where=where)
+
+        pool = self.list_items(where)
 
         # Default: pure cosine similarity (backward compatible)
         hits = cosine_topk(query_vec, [(i.id, i.embedding) for i in pool.values()], k=top_k)
@@ -220,6 +248,8 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
     def delete_item(self, item_id: str) -> None:
         if item_id in self.items:
             del self.items[item_id]
+            if self._vector_index is not None:
+                self._vector_index.delete(item_id)
 
     @override
     def update_item(
@@ -257,7 +287,26 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             item.extra = current_extra
 
         self.items[item_id] = item
+        self._sync_vector_index_after_update(item, embedding=embedding)
         return item
+
+    def _sync_vector_index_after_update(self, item: MemoryItem, *, embedding: list[float] | None) -> None:
+        if embedding is None:
+            return
+        self._sync_vector_index(item)
+
+    def _sync_vector_index(self, item: MemoryItem) -> None:
+        if self._vector_index is None or not item.embedding:
+            return
+        self._vector_index.upsert(item.id, item.embedding, scope=_extract_scope(item))
+
+
+def _extract_scope(item: MemoryItem) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in item.model_dump().items()
+        if key not in _NON_FILTER_ITEM_FIELDS and isinstance(value, (str, int, float, bool))
+    }
 
 
 __all__ = ["InMemoryMemoryItemRepository"]
