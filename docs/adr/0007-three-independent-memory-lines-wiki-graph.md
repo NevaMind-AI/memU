@@ -93,23 +93,25 @@ layers**, which map directly onto memU's existing records:
 | **L1** | item — an atomic extracted memory; the **graph node** | `RecallEntry` |
 | **L2** | category — grouped items with a summary | `RecallFile` |
 
-**The graph is an L1 concept.** Its nodes are *items* and its edges are **item ↔ item**
-relations. A resource (L0) and a category (L2) are **not** nodes — an item references them
-by attribute (`resource_path → L0`, `category_path → L2`), and those references are **not**
-graph edges. (This is the mem0 model: entity nodes, entity↔entity edges, plus source
-back-references.)
+**L1 connectivity is entity linking, not a traversable item graph.** Items are *not* joined
+by explicit `item ↔ item` edges. Instead, each item's salient entities are extracted into a
+**parallel entity layer**, and items relate *implicitly* through the entities they share;
+the relationship surfaces at **retrieval time as a ranking signal**, not as a structure to
+walk (see "Refinement: entity linking" below). A resource (L0) and a category (L2) are still
+**not** items — an item references them by attribute (`resource_path → L0`,
+`category_path → L2`).
 
 Each line materializes a different subset of the layers:
 
-| Line | L0 resource | L1 item + graph | L2 category |
+| Line | L0 resource | L1 item + entity links | L2 category |
 | --- | :--: | :--: | :--: |
-| **workspace** | ✓ | ✓ (item ↔ item) | — |
-| **memory** | ✓ | ✓ (item ↔ item) | ✓ |
+| **workspace** | ✓ | ✓ (entity-linked) | — |
+| **memory** | ✓ | ✓ (entity-linked) | ✓ |
 | **skill** | ✓ | — | ✓ (synthesized from L0) |
 
-- The **item↔item graph lives at L1**, so **workspace and memory have it; skill does not**
-  (skill has no items). That is precisely what "memory and workspace need a graph, skill
-  does not" means.
+- The **L1 layer (items + entity linking) lives in workspace and memory**; skill has no
+  items, so no entity layer. That is precisely what "memory and workspace are relational,
+  skill is plain retrieval" means.
 - **memory = workspace + an L2 grouping layer** (it files items into categories).
 - **skill = L0 → L2 directly**, skipping L1 — the ADR 0006 skill bypass, now intentional
   and explicit. Each skill category (L2) **retains its L0 source references**, which closes
@@ -118,10 +120,10 @@ Each line materializes a different subset of the layers:
 **Markdown output is per layer, not per node:**
 
 - `INDEX.md` (workspace) indexes the **L0 resources** (the file catalog); the L1 items live
-  only in the graph (reached by search/traverse), not as per-item markdown files.
+  only in the item store (reached by entity-aware search), not as per-item markdown files.
 - `MEMORY.md` / `SKILL.md` are the **L2** index over the per-category files.
-- So the three index files are **not** dumps of the graph — they index the resource (L0)
-  and category (L2) layers, which are distinct from the item (L1) graph.
+- So the three index files are **not** dumps of the item store — they index the resource
+  (L0) and category (L2) layers, which are distinct from the item (L1) layer.
 
 **Seam with preprocessing.** L0 is the preprocessing output (the per-resource / per-segment
 description). L1 item extraction is each line's ingest *treatment* (workspace + memory). L2
@@ -130,9 +132,43 @@ in the modality-aware preprocessor — its result is already a list of segments 
 **embedding unit is the item**, not a RAG chunk.
 
 This refinement supersedes the generic "graph wiki (document nodes)" wording earlier in
-this section: the graph nodes are **items (L1)**, **workspace stops at L1** (no L2), and
-**memory adds L2**. The only structure new to memU is the **L1 item↔item graph** — L0/L1/L2
-themselves already exist as `Resource` / `RecallEntry` / `RecallFile`.
+this section: the L1 nodes are **items**, **workspace stops at L1** (no L2), and **memory
+adds L2**. L0/L1/L2 themselves already exist as `Resource` / `RecallEntry` / `RecallFile`;
+the only structure new to memU is the **L1 entity layer** described next.
+
+### Refinement: entity linking, not a traversable item graph
+
+This **supersedes every "edges / backlinks / traversal / graph wiki" description earlier in
+this ADR.** The L1 connective structure is deliberately **not** an explicit, walkable
+`item ↔ item` graph. Instead:
+
+- **Extract.** During ingest, each item's salient entities (proper nouns, quoted phrases,
+  compound noun phrases) are extracted and kept in a **parallel entity store** beside the
+  item store. An item→entity index records which items mention which entities. There are
+  **no item↔item edges.**
+- **Link implicitly.** Items that share entities are related *through* that shared entity —
+  the relationship is the overlap, not a stored edge.
+- **Surface at retrieval, as ranking.** A query's entities are extracted and matched against
+  the entity store; items connected through shared entities receive a **ranking boost**,
+  fused with the vector-similarity score (and a keyword score where available) into one
+  combined rank. Connections are expressed through **retrieval ranking, not a traversable
+  structure** — there is no graph walk.
+
+Consequences:
+
+- **No edge maintenance.** Nothing creates, updates, or deletes `item ↔ item` edges; the
+  entity store is rebuildable from items, and relatedness is recomputed per query. This also
+  dissolves the "no cross-line edges" tax noted under Consequences below — relatedness is
+  just shared-entity overlap, computed at query time.
+- **Hybrid ranking, not traversal.** The read path "search + traverse" becomes "search +
+  entity-overlap boost": a single ranked query, not a multi-hop walk.
+- **Layer placement unchanged.** The entity layer attaches to **L1**, so it exists in
+  workspace and memory and **not** in skill.
+
+Concretely, `Edge` / `neighbors` / `backlinks` / `traverse` and the "Graph layer (edges,
+backlinks, traversal)" framing are **removed** from the design. The L1 store holds items +
+embeddings + an item→entity index, and exposes an **entity-aware ranked search** in place of
+graph traversal.
 
 ### Per-line ingest treatment (the only code that differs)
 
