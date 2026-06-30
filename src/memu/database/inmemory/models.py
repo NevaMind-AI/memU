@@ -3,9 +3,9 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 from memu.database.models import (
-    CategoryItem,
-    MemoryCategory,
-    MemoryItem,
+    RecallEntry,
+    RecallFile,
+    RecallFileEntry,
     Resource,
     merge_scope_model,
 )
@@ -15,15 +15,15 @@ class InMemoryResource(Resource):
     """Concrete in-memory resource model."""
 
 
-class InMemoryMemoryItem(MemoryItem):
+class InMemoryRecallEntry(RecallEntry):
     """Concrete in-memory memory item model."""
 
 
-class InMemoryMemoryCategory(MemoryCategory):
+class InMemoryRecallFile(RecallFile):
     """Concrete in-memory memory category model."""
 
 
-class InMemoryCategoryItem(CategoryItem):
+class InMemoryFileEntry(RecallFileEntry):
     """Concrete in-memory relation model."""
 
 
@@ -31,24 +31,24 @@ def build_inmemory_models(
     user_model: type[BaseModel],
 ) -> tuple[
     type[InMemoryResource],
-    type[InMemoryMemoryCategory],
-    type[InMemoryMemoryItem],
-    type[InMemoryCategoryItem],
+    type[InMemoryRecallFile],
+    type[InMemoryRecallEntry],
+    type[InMemoryFileEntry],
 ]:
     """
     Build scoped in-memory models that inherit from both the base interface and the user scope model.
     """
     resource_model = merge_scope_model(user_model, InMemoryResource, name_suffix="Resource")
-    memory_category_model = merge_scope_model(user_model, InMemoryMemoryCategory, name_suffix="MemoryCategory")
-    memory_item_model = merge_scope_model(user_model, InMemoryMemoryItem, name_suffix="MemoryItem")
-    category_item_model = merge_scope_model(user_model, InMemoryCategoryItem, name_suffix="CategoryItem")
-    return resource_model, memory_category_model, memory_item_model, category_item_model
+    recall_file_model = merge_scope_model(user_model, InMemoryRecallFile, name_suffix="RecallFile")
+    recall_entry_model = merge_scope_model(user_model, InMemoryRecallEntry, name_suffix="RecallEntry")
+    recall_file_entry_model = merge_scope_model(user_model, InMemoryFileEntry, name_suffix="RecallFileEntry")
+    return resource_model, recall_file_model, recall_entry_model, recall_file_entry_model
 
 
 __all__ = [
-    "InMemoryCategoryItem",
-    "InMemoryMemoryCategory",
-    "InMemoryMemoryItem",
+    "InMemoryFileEntry",
+    "InMemoryRecallEntry",
+    "InMemoryRecallFile",
     "InMemoryResource",
     "build_inmemory_models",
 ]

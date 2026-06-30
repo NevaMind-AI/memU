@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from memu.app.settings import CategoryConfig, CustomPrompt
 from memu.blob.folder import diff_folder, load_manifest, manifest_from_scan, save_manifest, scan_folder
-from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
+from memu.database.models import EntryType, RecallEntry, RecallFile, RecallFileEntry, Resource
 from memu.preprocess import PreprocessContext, preprocess_resource
 from memu.prompts.category_summary import (
     CUSTOM_PROMPT as CATEGORY_SUMMARY_CUSTOM_PROMPT,
@@ -145,8 +145,8 @@ class MemorizeMixin:
 
         # 2. (Re)memorize added and modified files; each file maps to one Resource.
         changed_resources: list[Resource] = []
-        items: list[dict[str, Any]] = []
-        categories: list[dict[str, Any]] = []
+        entries: list[dict[str, Any]] = []
+        files: list[dict[str, Any]] = []
         for scanned_file in [*diff.added, *diff.modified]:
             result = await self._memorize_one(
                 resource_url=scanned_file.abs_path,
@@ -156,11 +156,13 @@ class MemorizeMixin:
                 store=store,
             )
             changed_resources.extend(cast("list[Resource]", result.get("resources") or []))
+            # The inner single-file ``memorize`` keeps its legacy response keys
+            # (``items``/``categories``); translate them to the new vocabulary here.
             response = cast("dict[str, Any]", result.get("response") or {})
-            items.extend(response.get("items", []))
-            # Categories reflect the cumulative scoped state, so the latest wins.
+            entries.extend(response.get("items", []))
+            # Files reflect the cumulative scoped state, so the latest wins.
             if response.get("categories"):
-                categories = response["categories"]
+                files = response["categories"]
 
         # 3. Refresh the memory file tree (full rebuild when anything was removed).
         await self._update_memory_files(changed_resources, user_scope, force_full=diff.has_removals)
@@ -175,8 +177,8 @@ class MemorizeMixin:
             "deleted": list(diff.deleted),
             "resources": [self._model_dump_without_embeddings(r) for r in changed_resources],
             "removed_resources": [self._model_dump_without_embeddings(r) for r in removed_resources],
-            "items": items,
-            "categories": categories,
+            "entries": entries,
+            "files": files,
         }
 
     async def _memorize_one(
@@ -232,22 +234,22 @@ class MemorizeMixin:
             return []
         target_ids = {res.id for res in targets}
 
-        # Discarded item summaries per category, used to recompute summaries.
-        category_discards: dict[str, list[str]] = {}
-        for item in store.memory_item_repo.list_items(where=where).values():
-            if item.resource_id not in target_ids:
+        # Discarded entry summaries per file, used to recompute summaries.
+        file_discards: dict[str, list[str]] = {}
+        for entry in store.recall_entry_repo.list_items(where=where).values():
+            if entry.resource_id not in target_ids:
                 continue
-            for relation in store.category_item_repo.get_item_categories(item.id):
-                store.category_item_repo.unlink_item_category(item.id, relation.category_id)
-                category_discards.setdefault(relation.category_id, []).append(item.summary)
-            store.memory_item_repo.delete_item(item.id)
+            for relation in store.recall_file_entry_repo.get_item_categories(entry.id):
+                store.recall_file_entry_repo.unlink_item_category(entry.id, relation.category_id)
+                file_discards.setdefault(relation.category_id, []).append(entry.summary)
+            store.recall_entry_repo.delete_item(entry.id)
 
         for res in targets:
             store.resource_repo.delete_resource(res.id)
 
         updates: dict[str, tuple[str | None, str | None]] = {
             cid: ("\n".join(s for s in summaries if s and s.strip()), None)
-            for cid, summaries in category_discards.items()
+            for cid, summaries in file_discards.items()
             if any(s and s.strip() for s in summaries)
         }
         if updates:
@@ -299,9 +301,9 @@ class MemorizeMixin:
                 config={"chat_llm_profile": self.memorize_config.preprocess_llm_profile},
             ),
             WorkflowStep(
-                step_id="extract_items",
+                step_id="extract_entries",
                 role="extract",
-                handler=self._memorize_extract_items,
+                handler=self._memorize_extract_entries,
                 requires={
                     "preprocessed_resources",
                     "memory_types",
@@ -322,11 +324,18 @@ class MemorizeMixin:
                 capabilities=set(),
             ),
             WorkflowStep(
-                step_id="categorize_items",
+                step_id="categorize_entries",
                 role="categorize",
-                handler=self._memorize_categorize_items,
-                requires={"resource_plans", "ctx", "store", "local_path", "modality", "user"},
-                produces={"resources", "items", "relations", "category_updates"},
+                handler=self._memorize_categorize_entries,
+                requires={
+                    "resource_plans",
+                    "ctx",
+                    "store",
+                    "local_path",
+                    "modality",
+                    "user",
+                },
+                produces={"resources", "entries", "relations", "file_updates"},
                 capabilities={"db", "vector"},
                 config={"embed_llm_profile": "embedding"},
             ),
@@ -334,8 +343,8 @@ class MemorizeMixin:
                 step_id="persist_index",
                 role="persist",
                 handler=self._memorize_persist_and_index,
-                requires={"category_updates", "ctx", "store"},
-                produces={"categories"},
+                requires={"file_updates", "ctx", "store"},
+                produces={"files"},
                 capabilities={"db", "llm"},
                 config={"chat_llm_profile": self.memorize_config.category_update_llm_profile},
             ),
@@ -343,7 +352,7 @@ class MemorizeMixin:
                 step_id="build_response",
                 role="emit",
                 handler=self._memorize_build_response,
-                requires={"resources", "items", "relations", "ctx", "store", "category_ids"},
+                requires={"resources", "entries", "relations", "ctx", "store", "category_ids"},
                 produces={"response"},
                 capabilities=set(),
             ),
@@ -388,7 +397,7 @@ class MemorizeMixin:
         state["preprocessed_resources"] = preprocessed
         return state
 
-    async def _memorize_extract_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _memorize_extract_entries(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         llm_client = self._get_step_llm_client(step_context)
         preprocessed_resources = state.get("preprocessed_resources", [])
         resource_plans: list[dict[str, Any]] = []
@@ -423,16 +432,16 @@ class MemorizeMixin:
         state["resource_plans"] = state.get("resource_plans", [])
         return state
 
-    async def _memorize_categorize_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _memorize_categorize_entries(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         embed_client = self._get_step_embedding_client(step_context)
         ctx = state["ctx"]
         store = state["store"]
         modality = state["modality"]
         local_path = state["local_path"]
         resources: list[Resource] = []
-        items: list[MemoryItem] = []
-        relations: list[CategoryItem] = []
-        category_updates: dict[str, list[tuple[str, str]]] = {}
+        created_entries: list[RecallEntry] = []
+        relations: list[RecallFileEntry] = []
+        file_updates: dict[str, list[tuple[str, str]]] = {}
         user_scope = state.get("user", {})
 
         for plan in state.get("resource_plans", []):
@@ -447,43 +456,43 @@ class MemorizeMixin:
             )
             resources.append(res)
 
-            entries = plan.get("entries") or []
-            if not entries:
+            plan_entries = plan.get("entries") or []
+            if not plan_entries:
                 continue
 
-            mem_items, rels, cat_updates = await self._persist_memory_items(
+            mem_entries, rels, new_file_updates = await self._persist_recall_entries(
                 resource_id=res.id,
-                structured_entries=entries,
+                structured_entries=plan_entries,
                 ctx=ctx,
                 store=store,
                 embed_client=embed_client,
                 user=user_scope,
             )
-            items.extend(mem_items)
+            created_entries.extend(mem_entries)
             relations.extend(rels)
-            for cat_id, mems in cat_updates.items():
-                category_updates.setdefault(cat_id, []).extend(mems)
+            for file_id, entry_tuples in new_file_updates.items():
+                file_updates.setdefault(file_id, []).extend(entry_tuples)
 
         state.update({
             "resources": resources,
-            "items": items,
+            "entries": created_entries,
             "relations": relations,
-            "category_updates": category_updates,
+            "file_updates": file_updates,
         })
         return state
 
     async def _memorize_persist_and_index(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         llm_client = self._get_step_llm_client(step_context)
-        updated_summaries = await self._update_category_summaries(
-            state.get("category_updates", {}),
+        updated_summaries = await self._update_file_summaries(
+            state.get("file_updates", {}),
             ctx=state["ctx"],
             store=state["store"],
             llm_client=llm_client,
         )
         if self.memorize_config.enable_item_references:
-            await self._persist_item_references(
+            await self._persist_entry_references(
                 updated_summaries=updated_summaries,
-                category_updates=state.get("category_updates", {}),
+                file_updates=state.get("file_updates", {}),
                 store=state["store"],
             )
         return state
@@ -492,25 +501,25 @@ class MemorizeMixin:
         ctx = state["ctx"]
         store = state["store"]
         resources = [self._model_dump_without_embeddings(r) for r in state.get("resources", [])]
-        items = [self._model_dump_without_embeddings(item) for item in state.get("items", [])]
+        entries = [self._model_dump_without_embeddings(entry) for entry in state.get("entries", [])]
         relations = [rel.model_dump() for rel in state.get("relations", [])]
         category_ids = state.get("category_ids") or list(ctx.category_ids)
-        categories = [
-            self._model_dump_without_embeddings(store.memory_category_repo.categories[c]) for c in category_ids
-        ]
+        files = [self._model_dump_without_embeddings(store.recall_file_repo.categories[c]) for c in category_ids]
 
+        # Legacy response contract: ``memorize`` keeps emitting ``items``/``categories``
+        # keys for backward compatibility; the new vocabulary lives in the internal vars.
         if len(resources) == 1:
             response = {
                 "resource": resources[0],
-                "items": items,
-                "categories": categories,
+                "items": entries,
+                "categories": files,
                 "relations": relations,
             }
         else:
             response = {
                 "resources": resources,
-                "items": items,
-                "categories": categories,
+                "items": entries,
+                "categories": files,
                 "relations": relations,
             }
         state["response"] = response
@@ -576,9 +585,9 @@ class MemorizeMixin:
         #         res.updated_at = pendulum.now()
         return res
 
-    def _resolve_memory_types(self) -> list[MemoryType]:
+    def _resolve_memory_types(self) -> list[EntryType]:
         configured_types = self.memorize_config.memory_types or DEFAULT_MEMORY_TYPES
-        return [cast(MemoryType, mtype) for mtype in configured_types]
+        return [cast(EntryType, mtype) for mtype in configured_types]
 
     def _resolve_summary_prompt(self, modality: str, override: str | None) -> str | None:
         memo_settings = self.memorize_config
@@ -618,12 +627,12 @@ class MemorizeMixin:
         *,
         resource_url: str,
         modality: str,
-        memory_types: list[MemoryType],
+        memory_types: list[EntryType],
         text: str | None,
         categories_prompt_str: str,
         segments: list[dict[str, int | str]] | None = None,
         llm_client: Any | None = None,
-    ) -> list[tuple[MemoryType, str, list[str]]]:
+    ) -> list[tuple[EntryType, str, list[str]]]:
         if not memory_types:
             return []
 
@@ -651,11 +660,11 @@ class MemorizeMixin:
         *,
         resource_text: str,
         modality: str,
-        memory_types: list[MemoryType],
+        memory_types: list[EntryType],
         categories_prompt_str: str,
         segments: list[dict[str, int | str]] | None,
         llm_client: Any | None = None,
-    ) -> list[tuple[MemoryType, str, list[str]]]:
+    ) -> list[tuple[EntryType, str, list[str]]]:
         if modality == "conversation" and segments:
             segment_entries = await self._generate_entries_for_segments(
                 resource_text=resource_text,
@@ -678,11 +687,11 @@ class MemorizeMixin:
         *,
         resource_text: str,
         segments: list[dict[str, int | str]],
-        memory_types: list[MemoryType],
+        memory_types: list[EntryType],
         categories_prompt_str: str,
         llm_client: Any | None = None,
-    ) -> list[tuple[MemoryType, str, list[str]]]:
-        entries: list[tuple[MemoryType, str, list[str]]] = []
+    ) -> list[tuple[EntryType, str, list[str]]]:
+        entries: list[tuple[EntryType, str, list[str]]] = []
         lines = resource_text.split("\n")
         max_idx = len(lines) - 1
         for segment in segments:
@@ -704,10 +713,10 @@ class MemorizeMixin:
         self,
         *,
         resource_text: str,
-        memory_types: list[MemoryType],
+        memory_types: list[EntryType],
         categories_prompt_str: str,
         llm_client: Any | None = None,
-    ) -> list[tuple[MemoryType, str, list[str]]]:
+    ) -> list[tuple[EntryType, str, list[str]]]:
         if not memory_types:
             return []
         client = llm_client or self._get_llm_client()
@@ -726,9 +735,9 @@ class MemorizeMixin:
         return self._parse_structured_entries(memory_types, responses)
 
     def _parse_structured_entries(
-        self, memory_types: list[MemoryType], responses: Sequence[str]
-    ) -> list[tuple[MemoryType, str, list[str]]]:
-        entries: list[tuple[MemoryType, str, list[str]]] = []
+        self, memory_types: list[EntryType], responses: Sequence[str]
+    ) -> list[tuple[EntryType, str, list[str]]]:
+        entries: list[tuple[EntryType, str, list[str]]] = []
         for mtype, response in zip(memory_types, responses, strict=True):
             parsed = self._parse_memory_type_response_xml(response)
             # if not parsed:
@@ -756,45 +765,45 @@ class MemorizeMixin:
         return "\n".join(segment_lines) if segment_lines else None
 
     def _build_no_text_fallback(
-        self, memory_types: list[MemoryType], resource_url: str, modality: str
-    ) -> list[tuple[MemoryType, str, list[str]]]:
+        self, memory_types: list[EntryType], resource_url: str, modality: str
+    ) -> list[tuple[EntryType, str, list[str]]]:
         fallback = f"Resource {resource_url} ({modality}) stored. No text summary in v0."
         return [(mtype, f"{fallback} (memory type: {mtype}).", []) for mtype in memory_types]
 
     def _build_no_result_fallback(
-        self, memory_type: MemoryType, resource_url: str, modality: str
-    ) -> tuple[MemoryType, str, list[str]]:
+        self, memory_type: EntryType, resource_url: str, modality: str
+    ) -> tuple[EntryType, str, list[str]]:
         fallback = f"Resource {resource_url} ({modality}) stored. No structured memories generated."
         return memory_type, fallback, []
 
-    async def _persist_memory_items(
+    async def _persist_recall_entries(
         self,
         *,
         resource_id: str,
-        structured_entries: list[tuple[MemoryType, str, list[str]]],
+        structured_entries: list[tuple[EntryType, str, list[str]]],
         ctx: Context,
         store: Database,
         embed_client: Any | None = None,
         user: Mapping[str, Any] | None = None,
-    ) -> tuple[list[MemoryItem], list[CategoryItem], dict[str, list[tuple[str, str]]]]:
+    ) -> tuple[list[RecallEntry], list[RecallFileEntry], dict[str, list[tuple[str, str]]]]:
         """
-        Persist memory items and track category updates.
+        Persist recall entries and track per-file updates.
 
         Returns:
-            Tuple of (items, relations, category_updates)
-            where category_updates maps category_id -> list of (item_id, summary) tuples
+            Tuple of (entries, relations, file_updates)
+            where file_updates maps file_id -> list of (entry_id, summary) tuples
         """
         summary_payloads = [content for _, content, _ in structured_entries]
         client = embed_client or self._get_embedding_client()
-        item_embeddings = await client.embed(summary_payloads) if summary_payloads else []
-        items: list[MemoryItem] = []
-        rels: list[CategoryItem] = []
-        # Changed: now stores (item_id, summary) tuples for reference support
-        category_memory_updates: dict[str, list[tuple[str, str]]] = {}
+        entry_embeddings = await client.embed(summary_payloads) if summary_payloads else []
+        entries: list[RecallEntry] = []
+        rels: list[RecallFileEntry] = []
+        # Stores (entry_id, summary) tuples for reference support
+        file_entry_updates: dict[str, list[tuple[str, str]]] = {}
 
         reinforce = self.memorize_config.enable_item_reinforcement
-        for (memory_type, summary_text, cat_names), emb in zip(structured_entries, item_embeddings, strict=True):
-            item = store.memory_item_repo.create_item(
+        for (memory_type, summary_text, cat_names), emb in zip(structured_entries, entry_embeddings, strict=True):
+            entry = store.recall_entry_repo.create_item(
                 resource_id=resource_id,
                 memory_type=memory_type,
                 summary=summary_text,
@@ -802,17 +811,19 @@ class MemorizeMixin:
                 user_data=dict(user or {}),
                 reinforce=reinforce,
             )
-            items.append(item)
-            if reinforce and item.extra.get("reinforcement_count", 1) > 1:
-                # existing item
+            entries.append(entry)
+            if reinforce and entry.extra.get("reinforcement_count", 1) > 1:
+                # existing entry
                 continue
-            mapped_cat_ids = await self._resolve_category_ids(cat_names, ctx, store, user=user)
-            for cid in mapped_cat_ids:
-                rels.append(store.category_item_repo.link_item_category(item.id, cid, user_data=dict(user or {})))
-                # Store (item_id, summary) tuple for reference support
-                category_memory_updates.setdefault(cid, []).append((item.id, summary_text))
+            mapped_file_ids = await self._resolve_category_ids(cat_names, ctx, store, user=user)
+            for file_id in mapped_file_ids:
+                rels.append(
+                    store.recall_file_entry_repo.link_item_category(entry.id, file_id, user_data=dict(user or {}))
+                )
+                # Store (entry_id, summary) tuple for reference support
+                file_entry_updates.setdefault(file_id, []).append((entry.id, summary_text))
 
-        return items, rels, category_memory_updates
+        return entries, rels, file_entry_updates
 
     def _start_category_initialization(self, ctx: Context, store: Database) -> None:
         if ctx.categories_ready:
@@ -840,15 +851,15 @@ class MemorizeMixin:
     @staticmethod
     def _classify_categories(
         configs: list[CategoryConfig],
-        existing_by_name: dict[str, MemoryCategory],
+        existing_by_name: dict[str, RecallFile],
     ) -> tuple[
         list[tuple[int, CategoryConfig]],
-        list[tuple[int, CategoryConfig, MemoryCategory]],
-        dict[int, MemoryCategory],
+        list[tuple[int, CategoryConfig, RecallFile]],
+        dict[int, RecallFile],
     ]:
         to_create: list[tuple[int, CategoryConfig]] = []
-        to_update: list[tuple[int, CategoryConfig, MemoryCategory]] = []
-        ready: dict[int, MemoryCategory] = {}
+        to_update: list[tuple[int, CategoryConfig, RecallFile]] = []
+        ready: dict[int, RecallFile] = {}
         for i, cfg in enumerate(configs):
             name = cfg.name.strip() or "Untitled"
             description = cfg.description.strip()
@@ -871,8 +882,8 @@ class MemorizeMixin:
             return
 
         user_data = dict(user or {})
-        existing = store.memory_category_repo.list_categories(where=user_data or None)
-        existing_by_name: dict[str, MemoryCategory] = {c.name: c for c in existing.values()}
+        existing = store.recall_file_repo.list_categories(where=user_data or None)
+        existing_by_name: dict[str, RecallFile] = {c.name: c for c in existing.values()}
 
         to_create, to_update, ready = self._classify_categories(self.category_configs, existing_by_name)
 
@@ -887,19 +898,19 @@ class MemorizeMixin:
             for (i, _), vec in zip(needs_embed, vecs, strict=True):
                 embed_map[i] = vec
 
-        cats: dict[int, MemoryCategory] = dict(ready)
+        cats: dict[int, RecallFile] = dict(ready)
 
         for i, cfg in to_create:
             name = cfg.name.strip() or "Untitled"
             description = cfg.description.strip()
-            cat = store.memory_category_repo.get_or_create_category(
+            cat = store.recall_file_repo.get_or_create_category(
                 name=name, description=description, embedding=embed_map[i], user_data=user_data
             )
             cats[i] = cat
 
         for i, cfg, ex in to_update:
             description = cfg.description.strip()
-            cat = store.memory_category_repo.update_category(
+            cat = store.recall_file_repo.update_category(
                 category_id=ex.id, description=description, embedding=embed_map[i]
             )
             cats[i] = cat
@@ -977,7 +988,7 @@ class MemorizeMixin:
         if unknown:
             vecs = await self._get_embedding_client("embedding").embed(unknown)
             for name, vec in zip(unknown, vecs, strict=True):
-                cat = store.memory_category_repo.get_or_create_category(
+                cat = store.recall_file_repo.get_or_create_category(
                     name=name, description="", embedding=vec, user_data=user_data
                 )
                 ctx.category_name_to_id[name.lower()] = cat.id
@@ -1054,7 +1065,7 @@ class MemorizeMixin:
 
         return "\n".join(indexed_lines)
 
-    def _build_memory_type_prompt(self, *, memory_type: MemoryType, resource_text: str, categories_str: str) -> str:
+    def _build_memory_type_prompt(self, *, memory_type: EntryType, resource_text: str, categories_str: str) -> str:
         configured_prompt = self.memorize_config.memory_type_prompts.get(memory_type)
         if configured_prompt is None:
             template = MEMORY_TYPE_PROMPTS.get(memory_type)
@@ -1070,15 +1081,15 @@ class MemorizeMixin:
         safe_categories = self._escape_prompt_value(categories_str)
         return template.format(resource=safe_resource, categories_str=safe_categories)
 
-    def _build_item_ref_id(self, item_id: str) -> str:
-        return item_id.replace("-", "")[:6]
+    def _build_entry_ref_id(self, entry_id: str) -> str:
+        return entry_id.replace("-", "")[:6]
 
     def _extract_refs_from_summaries(self, summaries: dict[str, str]) -> set[str]:
         """
         Extract all [ref:xxx] references from summary texts.
 
         Args:
-            summaries: dict mapping category_id -> summary text
+            summaries: dict mapping file_id -> summary text
 
         Returns:
             Set of all referenced short IDs (the xxx part from [ref:xxx])
@@ -1090,20 +1101,20 @@ class MemorizeMixin:
             refs.update(extract_references(summary))
         return refs
 
-    async def _persist_item_references(
+    async def _persist_entry_references(
         self,
         *,
         updated_summaries: dict[str, str],
-        category_updates: dict[str, list[tuple[str, str]]],
+        file_updates: dict[str, list[tuple[str, str]]],
         store: Database,
     ) -> None:
         """
-        Persist ref_id to items that are referenced in category summaries.
+        Persist ref_id to entries that are referenced in file summaries.
 
         This function:
         1. Extracts all [ref:xxx] patterns from updated summaries
-        2. Builds a mapping of short_id -> full item_id for all items in category_updates
-        3. For items whose short_id appears in the references, updates their extra column
+        2. Builds a mapping of short_id -> full entry_id for all entries in file_updates
+        3. For entries whose short_id appears in the references, updates their extra column
            with {"ref_id": short_id}
         """
         # Extract all referenced short IDs from summaries
@@ -1111,34 +1122,34 @@ class MemorizeMixin:
         if not referenced_short_ids:
             return
 
-        # Build mapping of short_id -> full item_id for all items in category_updates
-        short_id_to_item_id: dict[str, str] = {}
-        for item_tuples in category_updates.values():
-            for item_id, _ in item_tuples:
-                short_id = self._build_item_ref_id(item_id)
-                short_id_to_item_id[short_id] = item_id
+        # Build mapping of short_id -> full entry_id for all entries in file_updates
+        short_id_to_entry_id: dict[str, str] = {}
+        for entry_tuples in file_updates.values():
+            for entry_id, _ in entry_tuples:
+                short_id = self._build_entry_ref_id(entry_id)
+                short_id_to_entry_id[short_id] = entry_id
 
-        # Update extra column for referenced items
+        # Update extra column for referenced entries
         for short_id in referenced_short_ids:
-            matched_item_id = short_id_to_item_id.get(short_id)
-            if matched_item_id:
-                store.memory_item_repo.update_item(
-                    item_id=matched_item_id,
+            matched_entry_id = short_id_to_entry_id.get(short_id)
+            if matched_entry_id:
+                store.recall_entry_repo.update_item(
+                    item_id=matched_entry_id,
                     extra={"ref_id": short_id},
                 )
 
-    def _build_category_summary_prompt(
+    def _build_file_summary_prompt(
         self,
         *,
-        category: MemoryCategory,
+        category: RecallFile,
         new_memories: list[str] | list[tuple[str, str]],
     ) -> str:
         """
-        Build the prompt for updating a category summary.
+        Build the prompt for updating a file summary.
 
         Args:
-            category: The category to update
-            new_memories: Either list of summary strings (legacy) or list of (item_id, summary) tuples (with refs)
+            category: The file (RecallFile) to update
+            new_memories: Either list of summary strings (legacy) or list of (entry_id, summary) tuples (with refs)
         """
         # Check if references are enabled and we have (id, summary) tuples
         enable_refs = getattr(self.memorize_config, "enable_item_references", False)
@@ -1152,9 +1163,9 @@ class MemorizeMixin:
             )
 
             tuple_memories = cast(list[tuple[str, str]], new_memories)
-            new_items_text = "\n".join(
-                f"- [{self._build_item_ref_id(item_id)}] {summary}"
-                for item_id, summary in tuple_memories
+            new_entries_text = "\n".join(
+                f"- [{self._build_entry_ref_id(entry_id)}] {summary}"
+                for entry_id, summary in tuple_memories
                 if summary.strip()
             )
         else:
@@ -1163,10 +1174,10 @@ class MemorizeMixin:
 
             if new_memories and isinstance(new_memories[0], tuple):
                 tuple_memories = cast(list[tuple[str, str]], new_memories)
-                new_items_text = "\n".join(f"- {summary}" for item_id, summary in tuple_memories if summary.strip())
+                new_entries_text = "\n".join(f"- {summary}" for _entry_id, summary in tuple_memories if summary.strip())
             else:
                 str_memories = cast(list[str], new_memories)
-                new_items_text = "\n".join(f"- {m}" for m in str_memories if m.strip())
+                new_entries_text = "\n".join(f"- {m}" for m in str_memories if m.strip())
 
         original = category.summary or ""
         category_config = self.category_config_map.get(category.name)
@@ -1185,11 +1196,11 @@ class MemorizeMixin:
         return prompt.format(
             category=self._escape_prompt_value(category.name),
             original_content=self._escape_prompt_value(original or ""),
-            new_memory_items_text=self._escape_prompt_value(new_items_text or "No new memory items."),
+            new_recall_entries_text=self._escape_prompt_value(new_entries_text or "No new entries."),
             target_length=target_length,
         )
 
-    async def _update_category_summaries(
+    async def _update_file_summaries(
         self,
         updates: dict[str, list[tuple[str, str]]] | dict[str, list[str]],
         ctx: Context,
@@ -1197,10 +1208,10 @@ class MemorizeMixin:
         llm_client: Any | None = None,
     ) -> dict[str, str]:
         """
-        Update category summaries based on new memory items.
+        Update file summaries based on new entries.
 
         Returns:
-            dict mapping category_id -> updated summary text
+            dict mapping file_id -> updated summary text
         """
         updated_summaries: dict[str, str] = {}
         if not updates:
@@ -1209,21 +1220,21 @@ class MemorizeMixin:
         target_ids: list[str] = []
         client = llm_client or self._get_llm_client()
         for cid, memories in updates.items():
-            cat = store.memory_category_repo.categories.get(cid)
+            cat = store.recall_file_repo.categories.get(cid)
             if not cat or not memories:
                 continue
-            prompt = self._build_category_summary_prompt(category=cat, new_memories=memories)
+            prompt = self._build_file_summary_prompt(category=cat, new_memories=memories)
             tasks.append(client.chat(prompt))
             target_ids.append(cid)
         if not tasks:
             return updated_summaries
         summaries = await asyncio.gather(*tasks)
         for cid, summary in zip(target_ids, summaries, strict=True):
-            cat = store.memory_category_repo.categories.get(cid)
+            cat = store.recall_file_repo.categories.get(cid)
             if not cat:
                 continue
             cleaned_summary = summary.replace("```markdown", "").replace("```", "").strip()
-            store.memory_category_repo.update_category(
+            store.recall_file_repo.update_category(
                 category_id=cid,
                 summary=cleaned_summary,
             )

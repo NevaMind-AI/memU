@@ -23,7 +23,7 @@ directory of payloads (``resource/`` / ``memory/`` / ``skill/``):
 - ``INDEX.md``  : an index of those raw files (name, modality, description, link
   into ``resource/``), so an agent knows which raw resources exist.
 - ``memory/``   : the living memory split one file per
-  :class:`~memu.database.models.MemoryCategory` (its description + summary).
+  :class:`~memu.database.models.RecallFile` (its description + summary).
 - ``MEMORY.md`` : an overall overview that links to each ``memory/<slug>.md`` file.
 - ``skill/**``  : reusable skills. When the caller supplies a synthesized
   ``slug -> body`` map (``synthesize=True``), the tree is rendered from it; when no
@@ -51,7 +51,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from memu.database.interfaces import Database
-    from memu.database.models import MemoryCategory, MemoryItem, Resource
+    from memu.database.models import RecallEntry, RecallFile, Resource
 
 MANIFEST_NAME = ".memufs_manifest.json"
 SKILL_DIRNAME = "skill"
@@ -168,7 +168,7 @@ class MemoryFileExporter:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         scope = dict(where) if where else None
 
-        categories = list(database.memory_category_repo.list_categories(where=scope).values())
+        categories = list(database.recall_file_repo.list_categories(where=scope).values())
         resources = list(database.resource_repo.list_resources(where=scope).values())
 
         # The shared trunk: one multimodal description per source file.
@@ -176,7 +176,7 @@ class MemoryFileExporter:
 
         # The skill bypass reads extracted skill-type items only when no synthesized
         # map is supplied; listing is cheap and avoided otherwise.
-        items = list(database.memory_item_repo.list_items(where=scope).values()) if skills is None else []
+        items = list(database.recall_entry_repo.list_items(where=scope).values()) if skills is None else []
 
         # resource/: copy the raw source bytes verbatim; ``links`` maps each
         # resource id to its relative path under resource/ for the INDEX.md links.
@@ -228,7 +228,7 @@ class MemoryFileExporter:
         return descriptions
 
     @staticmethod
-    def build_synthesis_descriptions(resources: list[Resource], items: list[MemoryItem]) -> list[FileDescription]:
+    def build_synthesis_descriptions(resources: list[Resource], items: list[RecallEntry]) -> list[FileDescription]:
         """Build synthesizer input from the structured store (extracted items).
 
         The synthesizer is fed the extracted memory items per source so that the
@@ -236,7 +236,7 @@ class MemoryFileExporter:
         lossy per-source caption. A source's caption is used only as a fallback when it
         has no extracted items yet (e.g. it failed extraction or has not been processed).
         """
-        items_by_resource: dict[str, list[MemoryItem]] = {}
+        items_by_resource: dict[str, list[RecallEntry]] = {}
         for item in items:
             if item.resource_id:
                 items_by_resource.setdefault(item.resource_id, []).append(item)
@@ -270,7 +270,7 @@ class MemoryFileExporter:
     def _skill_document(body: str) -> str:
         return f"{_GENERATED_NOTICE}\n\n{body.strip()}\n"
 
-    def _skill_bypass(self, items: list[MemoryItem]) -> dict[str, str]:
+    def _skill_bypass(self, items: list[RecallEntry]) -> dict[str, str]:
         """Deterministically break out skill-type memory items as a slug -> body map.
 
         The LLM-free fallback used when no synthesized skill map is supplied: each
@@ -350,7 +350,7 @@ class MemoryFileExporter:
         return f"# Memory\n\n{_GENERATED_NOTICE}\n\n{body}\n"
 
     @staticmethod
-    def _category_slugs(categories: list[MemoryCategory]) -> tuple[list[MemoryCategory], list[str]]:
+    def _category_slugs(categories: list[RecallFile]) -> tuple[list[RecallFile], list[str]]:
         """Order categories deterministically and assign a unique slug to each.
 
         Returns the ordered categories alongside a parallel list of slugs (used for
@@ -367,7 +367,7 @@ class MemoryFileExporter:
             slugs.append(base if count == 0 else f"{base}-{count + 1}")
         return ordered, slugs
 
-    def _category_document(self, category: MemoryCategory) -> str:
+    def _category_document(self, category: RecallFile) -> str:
         """A single ``memory/<slug>.md`` file: the category's description + summary."""
         description = self._inline((category.description or "").strip())
         summary = (category.summary or "").strip()
@@ -379,7 +379,7 @@ class MemoryFileExporter:
         lines.append("")
         return "\n".join(lines)
 
-    def _memory_index(self, ordered: list[MemoryCategory], slugs: list[str]) -> str:
+    def _memory_index(self, ordered: list[RecallFile], slugs: list[str]) -> str:
         """The deterministic ``MEMORY.md``: an overview linking to each category file."""
         lines = ["# Memory", "", _GENERATED_NOTICE, "", "## Overview", ""]
         if ordered:

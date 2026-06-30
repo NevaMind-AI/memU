@@ -5,18 +5,18 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
-from memu.database.models import MemoryItem, MemoryType, compute_content_hash
+from memu.database.models import EntryType, RecallEntry, compute_content_hash
 from memu.database.postgres.repositories.base import PostgresRepoBase
 from memu.database.postgres.session import SessionManager
 from memu.database.state import DatabaseState
 
 
-class PostgresMemoryItemRepo(PostgresRepoBase):
+class PostgresRecallEntryRepo(PostgresRepoBase):
     def __init__(
         self,
         *,
         state: DatabaseState,
-        memory_item_model: type[MemoryItem],
+        recall_entry_model: type[RecallEntry],
         sqla_models: Any,
         sessions: SessionManager,
         scope_fields: list[str],
@@ -25,28 +25,28 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         super().__init__(
             state=state, sqla_models=sqla_models, sessions=sessions, scope_fields=scope_fields, use_vector=use_vector
         )
-        self._memory_item_model = memory_item_model
-        self.items: dict[str, MemoryItem] = self._state.items
+        self._recall_entry_model = recall_entry_model
+        self.items: dict[str, RecallEntry] = self._state.items
 
-    def get_item(self, memory_id: str) -> MemoryItem | None:
+    def get_item(self, memory_id: str) -> RecallEntry | None:
         from sqlmodel import select
 
         with self._sessions.session() as session:
             row = session.scalar(
-                select(self._sqla_models.MemoryItem).where(self._sqla_models.MemoryItem.id == memory_id)
+                select(self._sqla_models.RecallEntry).where(self._sqla_models.RecallEntry.id == memory_id)
             )
             if row:
                 row.embedding = self._normalize_embedding(row.embedding)
                 return self._cache_item(row)
         return None
 
-    def list_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+    def list_items(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallEntry]:
         from sqlmodel import select
 
-        filters = self._build_filters(self._sqla_models.MemoryItem, where)
+        filters = self._build_filters(self._sqla_models.RecallEntry, where)
         with self._sessions.session() as session:
-            rows = session.scalars(select(self._sqla_models.MemoryItem).where(*filters)).all()
-            result: dict[str, MemoryItem] = {}
+            rows = session.scalars(select(self._sqla_models.RecallEntry).where(*filters)).all()
+            result: dict[str, RecallEntry] = {}
             for row in rows:
                 row.embedding = self._normalize_embedding(row.embedding)
                 item = self._cache_item(row)
@@ -55,7 +55,7 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
 
     def list_items_by_ref_ids(
         self, ref_ids: list[str], where: Mapping[str, Any] | None = None
-    ) -> dict[str, MemoryItem]:
+    ) -> dict[str, RecallEntry]:
         """List items by their ref_id in the extra column.
 
         Args:
@@ -63,36 +63,36 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
             where: Additional filter conditions.
 
         Returns:
-            Dict mapping item_id -> MemoryItem for items whose extra->>'ref_id' is in ref_ids.
+            Dict mapping item_id -> RecallEntry for items whose extra->>'ref_id' is in ref_ids.
         """
         if not ref_ids:
             return {}
 
         from sqlmodel import select
 
-        filters = self._build_filters(self._sqla_models.MemoryItem, where)
+        filters = self._build_filters(self._sqla_models.RecallEntry, where)
         # Add filter for extra->>'ref_id' IN ref_ids (only rows with ref_id key)
-        ref_id_col = self._sqla_models.MemoryItem.extra["ref_id"].astext
+        ref_id_col = self._sqla_models.RecallEntry.extra["ref_id"].astext
         filters.append(ref_id_col.isnot(None))
         filters.append(ref_id_col.in_(ref_ids))
 
         with self._sessions.session() as session:
-            rows = session.scalars(select(self._sqla_models.MemoryItem).where(*filters)).all()
-            result: dict[str, MemoryItem] = {}
+            rows = session.scalars(select(self._sqla_models.RecallEntry).where(*filters)).all()
+            result: dict[str, RecallEntry] = {}
             for row in rows:
                 row.embedding = self._normalize_embedding(row.embedding)
                 item = self._cache_item(row)
                 result[item.id] = item
         return result
 
-    def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+    def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallEntry]:
         from sqlmodel import delete, select
 
-        filters = self._build_filters(self._sqla_models.MemoryItem, where)
+        filters = self._build_filters(self._sqla_models.RecallEntry, where)
         with self._sessions.session() as session:
             # First get the objects to delete
-            rows = session.scalars(select(self._sqla_models.MemoryItem).where(*filters)).all()
-            deleted: dict[str, MemoryItem] = {}
+            rows = session.scalars(select(self._sqla_models.RecallEntry).where(*filters)).all()
+            deleted: dict[str, RecallEntry] = {}
             for row in rows:
                 row.embedding = self._normalize_embedding(row.embedding)
                 deleted[row.id] = row
@@ -101,7 +101,7 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
                 return {}
 
             # Delete from database
-            session.exec(delete(self._sqla_models.MemoryItem).where(*filters))
+            session.exec(delete(self._sqla_models.RecallEntry).where(*filters))
             session.commit()
 
             # Clean up cache
@@ -114,13 +114,13 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         self,
         *,
         resource_id: str | None = None,
-        memory_type: MemoryType,
+        memory_type: EntryType,
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
         reinforce: bool = False,
         tool_record: dict[str, Any] | None = None,
-    ) -> MemoryItem:
+    ) -> RecallEntry:
         if reinforce and memory_type != "tool":
             return self.create_item_reinforce(
                 resource_id=resource_id,
@@ -140,7 +140,7 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
             if tool_record.get("tool_calls") is not None:
                 extra["tool_calls"] = tool_record["tool_calls"]
 
-        item = self._memory_item_model(
+        item = self._recall_entry_model(
             resource_id=resource_id,
             memory_type=memory_type,
             summary=summary,
@@ -163,11 +163,11 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         self,
         *,
         resource_id: str | None = None,
-        memory_type: MemoryType,
+        memory_type: EntryType,
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
-    ) -> MemoryItem:
+    ) -> RecallEntry:
         from sqlmodel import select
 
         content_hash = compute_content_hash(summary, memory_type)
@@ -175,11 +175,11 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         with self._sessions.session() as session:
             # Check for existing item with same hash in same scope (deduplication)
             # Use extra->>'content_hash' for query performance
-            content_hash_col = self._sqla_models.MemoryItem.extra["content_hash"].astext
+            content_hash_col = self._sqla_models.RecallEntry.extra["content_hash"].astext
             filters = [content_hash_col == content_hash]
-            filters.extend(self._build_filters(self._sqla_models.MemoryItem, user_data))
+            filters.extend(self._build_filters(self._sqla_models.RecallEntry, user_data))
 
-            existing = session.scalar(select(self._sqla_models.MemoryItem).where(*filters))
+            existing = session.scalar(select(self._sqla_models.RecallEntry).where(*filters))
 
             if existing:
                 # Reinforce existing memory instead of creating duplicate
@@ -200,7 +200,7 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
             # Create new item with salience tracking in extra
             now = self._now()
 
-            item = self._memory_item_model(
+            item = self._recall_entry_model(
                 resource_id=resource_id,
                 memory_type=memory_type,
                 summary=summary,
@@ -226,18 +226,18 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         self,
         *,
         item_id: str,
-        memory_type: MemoryType | None = None,
+        memory_type: EntryType | None = None,
         summary: str | None = None,
         embedding: list[float] | None = None,
         extra: dict[str, Any] | None = None,
         tool_record: dict[str, Any] | None = None,
-    ) -> MemoryItem:
+    ) -> RecallEntry:
         from sqlmodel import select
 
         now = self._now()
         with self._sessions.session() as session:
             item = session.scalar(
-                select(self._sqla_models.MemoryItem).where(self._sqla_models.MemoryItem.id == item_id)
+                select(self._sqla_models.RecallEntry).where(self._sqla_models.RecallEntry.id == item_id)
             )
             if item is None:
                 msg = f"Item with id {item_id} not found"
@@ -274,7 +274,7 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         from sqlmodel import delete
 
         with self._sessions.session() as session:
-            session.exec(delete(self._sqla_models.MemoryItem).where(self._sqla_models.MemoryItem.id == item_id))
+            session.exec(delete(self._sqla_models.RecallEntry).where(self._sqla_models.RecallEntry.id == item_id))
             session.commit()
 
     def vector_search_items(
@@ -294,11 +294,11 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
 
         from sqlmodel import select
 
-        distance = self._sqla_models.MemoryItem.embedding.cosine_distance(query_vec)
-        filters = [self._sqla_models.MemoryItem.embedding.isnot(None)]
-        filters.extend(self._build_filters(self._sqla_models.MemoryItem, where))
+        distance = self._sqla_models.RecallEntry.embedding.cosine_distance(query_vec)
+        filters = [self._sqla_models.RecallEntry.embedding.isnot(None)]
+        filters.extend(self._build_filters(self._sqla_models.RecallEntry, where))
         stmt = (
-            select(self._sqla_models.MemoryItem.id, (1 - distance).label("score"))
+            select(self._sqla_models.RecallEntry.id, (1 - distance).label("score"))
             .where(*filters)
             .order_by(distance)
             .limit(top_k)
@@ -311,7 +311,7 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         from sqlmodel import select
 
         with self._sessions.session() as session:
-            rows = session.scalars(select(self._sqla_models.MemoryItem)).all()
+            rows = session.scalars(select(self._sqla_models.RecallEntry)).all()
             for row in rows:
                 row.embedding = self._normalize_embedding(row.embedding)
                 self._cache_item(row)
@@ -372,7 +372,7 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
 
         return similarity * reinforcement_factor * recency_factor
 
-    def _cache_item(self, item: MemoryItem) -> MemoryItem:
+    def _cache_item(self, item: RecallEntry) -> RecallEntry:
         self.items[item.id] = item
         return item
 
@@ -398,4 +398,4 @@ class PostgresMemoryItemRepo(PostgresRepoBase):
         return float(sum(x * y for x, y in zip(a, b, strict=True)) / denom)
 
 
-__all__ = ["PostgresMemoryItemRepo"]
+__all__ = ["PostgresRecallEntryRepo"]

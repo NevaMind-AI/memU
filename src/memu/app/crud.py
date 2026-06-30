@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, cast, get_args
 
 from pydantic import BaseModel
 
-from memu.database.models import MemoryCategory, MemoryType
+from memu.database.models import EntryType, RecallFile
 from memu.prompts.category_patch import CATEGORY_PATCH_PROMPT
 from memu.workflow.step import WorkflowState, WorkflowStep
 
@@ -35,7 +35,7 @@ class CRUDMixin:
         patch_config: PatchConfig
         _ensure_categories_ready: Callable[[Context, Database, Mapping[str, Any] | None], Awaitable[None]]
 
-    async def list_memory_items(
+    async def list_recall_entries(
         self,
         where: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -49,14 +49,14 @@ class CRUDMixin:
             "where": where_filters,
         }
 
-        result = await self._run_workflow("crud_list_memory_items", state)
+        result = await self._run_workflow("crud_list_recall_entries", state)
         response = cast(dict[str, Any] | None, result.get("response"))
         if response is None:
             msg = "List memory items workflow failed to produce a response"
             raise RuntimeError(msg)
         return response
 
-    async def list_memory_categories(
+    async def list_recall_files(
         self,
         where: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -69,7 +69,7 @@ class CRUDMixin:
             "store": store,
             "where": where_filters,
         }
-        result = await self._run_workflow("crud_list_memory_categories", state)
+        result = await self._run_workflow("crud_list_recall_files", state)
         response = cast(dict[str, Any] | None, result.get("response"))
         if response is None:
             msg = "List memory categories workflow failed to produce a response"
@@ -97,12 +97,12 @@ class CRUDMixin:
             raise RuntimeError(msg)
         return response
 
-    def _build_list_memory_items_workflow(self) -> list[WorkflowStep]:
+    def _build_list_recall_entries_workflow(self) -> list[WorkflowStep]:
         steps = [
             WorkflowStep(
-                step_id="list_memory_items",
+                step_id="list_recall_entries",
                 role="read_memories",
-                handler=self._crud_list_memory_items,
+                handler=self._crud_list_recall_entries,
                 requires={"ctx", "store", "where"},
                 produces={"items"},
                 capabilities={"db"},
@@ -126,12 +126,12 @@ class CRUDMixin:
             "where",
         }
 
-    def _build_list_memory_categories_workflow(self) -> list[WorkflowStep]:
+    def _build_list_recall_files_workflow(self) -> list[WorkflowStep]:
         steps = [
             WorkflowStep(
-                step_id="list_memory_categories",
+                step_id="list_recall_files",
                 role="read_categories",
-                handler=self._crud_list_memory_categories,
+                handler=self._crud_list_recall_files,
                 requires={"ctx", "store", "where"},
                 produces={"categories"},
                 capabilities={"db"},
@@ -158,17 +158,17 @@ class CRUDMixin:
                 capabilities={"db"},
             ),
             WorkflowStep(
-                step_id="clear_memory_categories",
+                step_id="clear_recall_files",
                 role="delete_memories",
-                handler=self._crud_clear_memory_categories,
+                handler=self._crud_clear_recall_files,
                 requires={"ctx", "store", "where"},
                 produces={"deleted_categories"},
                 capabilities={"db"},
             ),
             WorkflowStep(
-                step_id="clear_memory_items",
+                step_id="clear_recall_entries",
                 role="delete_memories",
-                handler=self._crud_clear_memory_items,
+                handler=self._crud_clear_recall_entries,
                 requires={"ctx", "store", "where"},
                 produces={"deleted_items"},
                 capabilities={"db"},
@@ -226,17 +226,17 @@ class CRUDMixin:
 
         return cleaned
 
-    def _crud_list_memory_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    def _crud_list_recall_entries(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
-        items = store.memory_item_repo.list_items(where_filters)
+        items = store.recall_entry_repo.list_items(where_filters)
         state["items"] = items
         return state
 
-    def _crud_list_memory_categories(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    def _crud_list_recall_files(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
-        categories = store.memory_category_repo.list_categories(where_filters)
+        categories = store.recall_file_repo.list_categories(where_filters)
         state["categories"] = categories
         return state
 
@@ -261,21 +261,21 @@ class CRUDMixin:
     def _crud_clear_memory_relations(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
-        deleted = store.category_item_repo.clear_relations(where_filters)
+        deleted = store.recall_file_entry_repo.clear_relations(where_filters)
         state["deleted_relations"] = deleted
         return state
 
-    def _crud_clear_memory_categories(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    def _crud_clear_recall_files(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
-        deleted = store.memory_category_repo.clear_categories(where_filters)
+        deleted = store.recall_file_repo.clear_categories(where_filters)
         state["deleted_categories"] = deleted
         return state
 
-    def _crud_clear_memory_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    def _crud_clear_recall_entries(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
-        deleted = store.memory_item_repo.clear_items(where_filters)
+        deleted = store.recall_entry_repo.clear_items(where_filters)
         state["deleted_items"] = deleted
         return state
 
@@ -300,17 +300,17 @@ class CRUDMixin:
         state["response"] = response
         return state
 
-    async def create_memory_item(
+    async def create_recall_entry(
         self,
         *,
-        memory_type: MemoryType,
+        memory_type: EntryType,
         memory_content: str,
-        memory_categories: list[str],
+        recall_files: list[str],
         user: dict[str, Any] | None = None,
         propagate: bool = True,
     ) -> dict[str, Any]:
-        if memory_type not in get_args(MemoryType):
-            msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}"
+        if memory_type not in get_args(EntryType):
+            msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(EntryType)}"
             raise ValueError(msg)
 
         ctx = self._get_context()
@@ -322,7 +322,7 @@ class CRUDMixin:
             "memory_payload": {
                 "type": memory_type,
                 "content": memory_content,
-                "categories": memory_categories,
+                "categories": recall_files,
             },
             "ctx": ctx,
             "store": store,
@@ -338,21 +338,21 @@ class CRUDMixin:
             raise RuntimeError(msg)
         return response
 
-    async def update_memory_item(
+    async def update_recall_entry(
         self,
         *,
         memory_id: str,
-        memory_type: MemoryType | None = None,
+        memory_type: EntryType | None = None,
         memory_content: str | None = None,
-        memory_categories: list[str] | None = None,
+        recall_files: list[str] | None = None,
         user: dict[str, Any] | None = None,
         propagate: bool = True,
     ) -> dict[str, Any]:
-        if all((memory_type is None, memory_content is None, memory_categories is None)):
+        if all((memory_type is None, memory_content is None, recall_files is None)):
             msg = "At least one of memory type, memory content, or memory categories is required for UPDATE operation"
             raise ValueError(msg)
-        if memory_type and memory_type not in get_args(MemoryType):
-            msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(MemoryType)}"
+        if memory_type and memory_type not in get_args(EntryType):
+            msg = f"Invalid memory type: '{memory_type}', must be one of {get_args(EntryType)}"
             raise ValueError(msg)
 
         ctx = self._get_context()
@@ -365,7 +365,7 @@ class CRUDMixin:
             "memory_payload": {
                 "type": memory_type,
                 "content": memory_content,
-                "categories": memory_categories,
+                "categories": recall_files,
             },
             "ctx": ctx,
             "store": store,
@@ -381,7 +381,7 @@ class CRUDMixin:
             raise RuntimeError(msg)
         return response
 
-    async def delete_memory_item(
+    async def delete_recall_entry(
         self,
         *,
         memory_id: str,
@@ -409,14 +409,14 @@ class CRUDMixin:
             raise RuntimeError(msg)
         return response
 
-    def _build_create_memory_item_workflow(self) -> list[WorkflowStep]:
+    def _build_create_recall_entry_workflow(self) -> list[WorkflowStep]:
         steps = [
             WorkflowStep(
-                step_id="create_memory_item",
+                step_id="create_recall_entry",
                 role="patch",
-                handler=self._patch_create_memory_item,
+                handler=self._patch_create_recall_entry,
                 requires={"memory_payload", "ctx", "store", "user"},
-                produces={"memory_item", "category_updates"},
+                produces={"recall_entry", "category_updates"},
                 capabilities={"db", "llm"},
                 config={"embed_llm_profile": "embedding"},
             ),
@@ -433,7 +433,7 @@ class CRUDMixin:
                 step_id="build_response",
                 role="emit",
                 handler=self._patch_build_response,
-                requires={"memory_item", "category_updates", "ctx", "store"},
+                requires={"recall_entry", "category_updates", "ctx", "store"},
                 produces={"response"},
                 capabilities=set(),
             ),
@@ -441,7 +441,7 @@ class CRUDMixin:
         return steps
 
     @staticmethod
-    def _list_create_memory_item_initial_keys() -> set[str]:
+    def _list_create_recall_entry_initial_keys() -> set[str]:
         return {
             "memory_payload",
             "ctx",
@@ -449,14 +449,14 @@ class CRUDMixin:
             "user",
         }
 
-    def _build_update_memory_item_workflow(self) -> list[WorkflowStep]:
+    def _build_update_recall_entry_workflow(self) -> list[WorkflowStep]:
         steps = [
             WorkflowStep(
-                step_id="update_memory_item",
+                step_id="update_recall_entry",
                 role="patch",
-                handler=self._patch_update_memory_item,
+                handler=self._patch_update_recall_entry,
                 requires={"memory_id", "memory_payload", "ctx", "store", "user"},
-                produces={"memory_item", "category_updates"},
+                produces={"recall_entry", "category_updates"},
                 capabilities={"db", "llm"},
                 config={"embed_llm_profile": "embedding"},
             ),
@@ -473,7 +473,7 @@ class CRUDMixin:
                 step_id="build_response",
                 role="emit",
                 handler=self._patch_build_response,
-                requires={"memory_item", "category_updates", "ctx", "store"},
+                requires={"recall_entry", "category_updates", "ctx", "store"},
                 produces={"response"},
                 capabilities=set(),
             ),
@@ -481,7 +481,7 @@ class CRUDMixin:
         return steps
 
     @staticmethod
-    def _list_update_memory_item_initial_keys() -> set[str]:
+    def _list_update_recall_entry_initial_keys() -> set[str]:
         return {
             "memory_id",
             "memory_payload",
@@ -490,14 +490,14 @@ class CRUDMixin:
             "user",
         }
 
-    def _build_delete_memory_item_workflow(self) -> list[WorkflowStep]:
+    def _build_delete_recall_entry_workflow(self) -> list[WorkflowStep]:
         steps = [
             WorkflowStep(
-                step_id="delete_memory_item",
+                step_id="delete_recall_entry",
                 role="patch",
-                handler=self._patch_delete_memory_item,
+                handler=self._patch_delete_recall_entry,
                 requires={"memory_id", "ctx", "store", "user"},
-                produces={"memory_item", "category_updates"},
+                produces={"recall_entry", "category_updates"},
                 capabilities={"db"},
             ),
             WorkflowStep(
@@ -513,7 +513,7 @@ class CRUDMixin:
                 step_id="build_response",
                 role="emit",
                 handler=self._patch_build_response,
-                requires={"memory_item", "category_updates", "ctx", "store"},
+                requires={"recall_entry", "category_updates", "ctx", "store"},
                 produces={"response"},
                 capabilities=set(),
             ),
@@ -521,7 +521,7 @@ class CRUDMixin:
         return steps
 
     @staticmethod
-    def _list_delete_memory_item_initial_keys() -> set[str]:
+    def _list_delete_recall_entry_initial_keys() -> set[str]:
         return {
             "memory_id",
             "ctx",
@@ -529,7 +529,7 @@ class CRUDMixin:
             "user",
         }
 
-    async def _patch_create_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _patch_create_recall_entry(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         memory_payload = state["memory_payload"]
         ctx = state["ctx"]
         store = state["store"]
@@ -540,7 +540,7 @@ class CRUDMixin:
         embed_payload = [memory_payload["content"]]
         content_embedding = (await self._get_step_embedding_client(step_context).embed(embed_payload))[0]
 
-        item = store.memory_item_repo.create_item(
+        item = store.recall_entry_repo.create_item(
             memory_type=memory_payload["type"],
             summary=memory_payload["content"],
             embedding=content_embedding,
@@ -549,17 +549,17 @@ class CRUDMixin:
         cat_names = memory_payload["categories"]
         mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
         for cid in mapped_cat_ids:
-            store.category_item_repo.link_item_category(item.id, cid, user_data=dict(user or {}))
+            store.recall_file_entry_repo.link_item_category(item.id, cid, user_data=dict(user or {}))
             if propagate:
                 category_memory_updates[cid] = (None, memory_payload["content"])
 
         state.update({
-            "memory_item": item,
+            "recall_entry": item,
             "category_updates": category_memory_updates,
         })
         return state
 
-    async def _patch_update_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _patch_update_recall_entry(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         memory_id = state["memory_id"]
         memory_payload = state["memory_payload"]
         ctx = state["ctx"]
@@ -568,12 +568,12 @@ class CRUDMixin:
         propagate = state["propagate"]
         category_memory_updates: dict[str, tuple[Any, Any]] = {}
 
-        item = store.memory_item_repo.get_item(memory_id)
+        item = store.recall_entry_repo.get_item(memory_id)
         if not item:
             msg = f"Memory item with id {memory_id} not found"
             raise ValueError(msg)
         old_content = item.summary
-        old_item_categories = store.category_item_repo.get_item_categories(memory_id)
+        old_item_categories = store.recall_file_entry_repo.get_item_categories(memory_id)
         mapped_old_cat_ids = [cat.category_id for cat in old_item_categories]
 
         if memory_payload["content"]:
@@ -583,7 +583,7 @@ class CRUDMixin:
             content_embedding = None
 
         if memory_payload["type"] or memory_payload["content"]:
-            item = store.memory_item_repo.update_item(
+            item = store.recall_entry_repo.update_item(
                 item_id=memory_id,
                 memory_type=memory_payload["type"],
                 summary=memory_payload["content"],
@@ -604,7 +604,7 @@ class CRUDMixin:
         )
 
         state.update({
-            "memory_item": item,
+            "recall_entry": item,
             "category_updates": category_memory_updates,
         })
         return state
@@ -638,38 +638,38 @@ class CRUDMixin:
         mapped_new_cat_ids = self._map_category_names_to_ids(new_cat_names, ctx)
         old_set, new_set = set(mapped_old_cat_ids), set(mapped_new_cat_ids)
         for cid in old_set - new_set:
-            store.category_item_repo.unlink_item_category(memory_id, cid)
+            store.recall_file_entry_repo.unlink_item_category(memory_id, cid)
             if propagate:
                 category_memory_updates[cid] = (old_content, None)
         for cid in new_set - old_set:
-            store.category_item_repo.link_item_category(memory_id, cid, user_data=dict(user or {}))
+            store.recall_file_entry_repo.link_item_category(memory_id, cid, user_data=dict(user or {}))
             if propagate:
                 category_memory_updates[cid] = (None, new_summary)
         if propagate and content_changed:
             for cid in old_set & new_set:
                 category_memory_updates[cid] = (old_content, new_summary)
 
-    async def _patch_delete_memory_item(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _patch_delete_recall_entry(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         memory_id = state["memory_id"]
         store = state["store"]
         propagate = state["propagate"]
         category_memory_updates: dict[str, tuple[Any, Any]] = {}
 
-        item = store.memory_item_repo.get_item(memory_id)
+        item = store.recall_entry_repo.get_item(memory_id)
         if not item:
             msg = f"Memory item with id {memory_id} not found"
             raise ValueError(msg)
-        item_categories = store.category_item_repo.get_item_categories(memory_id)
+        item_categories = store.recall_file_entry_repo.get_item_categories(memory_id)
         if propagate:
             for cat in item_categories:
                 category_memory_updates[cat.category_id] = (item.summary, None)
         # Remove the item's category relations first so deleting the item never
         # leaves orphan edges pointing at a non-existent item.
-        store.category_item_repo.unlink_item(memory_id)
-        store.memory_item_repo.delete_item(memory_id)
+        store.recall_file_entry_repo.unlink_item(memory_id)
+        store.recall_entry_repo.delete_item(memory_id)
 
         state.update({
-            "memory_item": item,
+            "recall_entry": item,
             "category_updates": category_memory_updates,
         })
         return state
@@ -686,13 +686,13 @@ class CRUDMixin:
 
     def _patch_build_response(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         store = state["store"]
-        item = self._model_dump_without_embeddings(state["memory_item"])
+        item = self._model_dump_without_embeddings(state["recall_entry"])
         category_updates_ids = list(state.get("category_updates", {}).keys())
         category_updates = [
-            self._model_dump_without_embeddings(store.memory_category_repo.categories[c]) for c in category_updates_ids
+            self._model_dump_without_embeddings(store.recall_file_repo.categories[c]) for c in category_updates_ids
         ]
         response = {
-            "memory_item": item,
+            "recall_entry": item,
             "category_updates": category_updates,
         }
         state["response"] = response
@@ -724,7 +724,7 @@ class CRUDMixin:
         target_ids: list[str] = []
         client = llm_client or self._get_llm_client()
         for cid, (content_before, content_after) in updates.items():
-            cat = store.memory_category_repo.categories.get(cid)
+            cat = store.recall_file_repo.categories.get(cid)
             if not cat or (not content_before and not content_after):
                 continue
             prompt = self._build_category_patch_prompt(
@@ -739,14 +739,14 @@ class CRUDMixin:
             need_update, summary = self._parse_category_patch_response(patch)
             if not need_update:
                 continue
-            cat = store.memory_category_repo.categories.get(cid)
-            store.memory_category_repo.update_category(
+            cat = store.recall_file_repo.categories.get(cid)
+            store.recall_file_repo.update_category(
                 category_id=cid,
                 summary=summary.strip(),
             )
 
     def _build_category_patch_prompt(
-        self, *, category: MemoryCategory, content_before: str | None, content_after: str | None
+        self, *, category: RecallFile, content_before: str | None, content_after: str | None
     ) -> str:
         if content_before and content_after:
             update_content = "\n".join([

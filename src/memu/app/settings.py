@@ -58,7 +58,7 @@ def complete_prompt_blocks(prompt: CustomPrompt, default_blocks: Mapping[str, in
     return prompt
 
 
-CompleteMemoryTypePrompt = AfterValidator(lambda v: complete_prompt_blocks(v, DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL))
+CompleteEntryTypePrompt = AfterValidator(lambda v: complete_prompt_blocks(v, DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL))
 
 
 CompleteCategoryPrompt = AfterValidator(lambda v: complete_prompt_blocks(v, DEFAULT_CATEGORY_SUMMARY_PROMPT_ORDINAL))
@@ -416,12 +416,12 @@ class MemorizeConfig(BaseModel):
         default_factory=_default_memory_types,
         description="Ordered list of memory types (profile/event/knowledge/behavior by default).",
     )
-    memory_type_prompts: dict[str, str | Annotated[CustomPrompt, CompleteMemoryTypePrompt]] = Field(
+    memory_type_prompts: dict[str, str | Annotated[CustomPrompt, CompleteEntryTypePrompt]] = Field(
         default_factory=_default_memory_type_prompts,
         description="User prompt overrides for each memory type extraction.",
     )
     memory_extract_llm_profile: str = Field(default="default", description="LLM profile for memory extract.")
-    memory_categories: list[CategoryConfig] = Field(
+    recall_files: list[CategoryConfig] = Field(
         default_factory=list,
         description=(
             "Optional seed categories. The kernel presets no taxonomy: categories are "

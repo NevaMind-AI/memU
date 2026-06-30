@@ -3,36 +3,36 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from memu.database.models import CategoryItem
+from memu.database.models import RecallFileEntry
 from memu.database.postgres.repositories.base import PostgresRepoBase
 from memu.database.postgres.session import SessionManager
-from memu.database.repositories.category_item import CategoryItemRepo
+from memu.database.repositories.recall_file_entry import RecallFileEntryRepo
 from memu.database.state import DatabaseState
 
 
-class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
+class PostgresRecallFileEntryRepo(PostgresRepoBase, RecallFileEntryRepo):
     def __init__(
         self,
         *,
         state: DatabaseState,
-        category_item_model: type[CategoryItem],
+        recall_file_entry_model: type[RecallFileEntry],
         sqla_models: Any,
         sessions: SessionManager,
         scope_fields: list[str],
     ) -> None:
         super().__init__(state=state, sqla_models=sqla_models, sessions=sessions, scope_fields=scope_fields)
-        self._category_item_model = category_item_model
-        self.relations: list[CategoryItem] = self._state.relations
+        self._recall_file_entry_model = recall_file_entry_model
+        self.relations: list[RecallFileEntry] = self._state.relations
 
-    def list_relations(self, where: Mapping[str, Any] | None = None) -> list[CategoryItem]:
+    def list_relations(self, where: Mapping[str, Any] | None = None) -> list[RecallFileEntry]:
         from sqlmodel import select
 
-        filters = self._build_filters(self._sqla_models.CategoryItem, where)
+        filters = self._build_filters(self._sqla_models.RecallFileEntry, where)
         with self._sessions.session() as session:
-            rows = session.scalars(select(self._sqla_models.CategoryItem).where(*filters)).all()
+            rows = session.scalars(select(self._sqla_models.RecallFileEntry).where(*filters)).all()
         return [self._cache_relation(row) for row in rows]
 
-    def link_item_category(self, item_id: str, cat_id: str, user_data: dict[str, Any]) -> CategoryItem:
+    def link_item_category(self, item_id: str, cat_id: str, user_data: dict[str, Any]) -> RecallFileEntry:
         from sqlmodel import select
 
         # Avoid duplicate inserts using local cache
@@ -41,7 +41,7 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
                 return rel
 
         now = self._now()
-        new_rel = self._category_item_model(
+        new_rel = self._recall_file_entry_model(
             item_id=item_id,
             category_id=cat_id,
             **user_data,
@@ -51,9 +51,9 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
 
         with self._sessions.session() as session:
             existing = session.scalar(
-                select(self._sqla_models.CategoryItem).where(
-                    self._sqla_models.CategoryItem.item_id == item_id,
-                    self._sqla_models.CategoryItem.category_id == cat_id,
+                select(self._sqla_models.RecallFileEntry).where(
+                    self._sqla_models.RecallFileEntry.item_id == item_id,
+                    self._sqla_models.RecallFileEntry.category_id == cat_id,
                 )
             )
             if existing:
@@ -70,16 +70,16 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
 
         with self._sessions.session() as session:
             session.exec(
-                delete(self._sqla_models.CategoryItem).where(
-                    self._sqla_models.CategoryItem.item_id == item_id,
-                    self._sqla_models.CategoryItem.category_id == cat_id,
+                delete(self._sqla_models.RecallFileEntry).where(
+                    self._sqla_models.RecallFileEntry.item_id == item_id,
+                    self._sqla_models.RecallFileEntry.category_id == cat_id,
                 )
             )
             session.commit()
         self.relations[:] = [r for r in self.relations if not (r.item_id == item_id and r.category_id == cat_id)]
 
-    def _row_to_record(self, row: Any) -> CategoryItem:
-        return CategoryItem(
+    def _row_to_record(self, row: Any) -> RecallFileEntry:
+        return RecallFileEntry(
             id=row.id,
             item_id=row.item_id,
             category_id=row.category_id,
@@ -88,42 +88,44 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
             **self._scope_kwargs_from(row),
         )
 
-    def unlink_item(self, item_id: str) -> list[CategoryItem]:
+    def unlink_item(self, item_id: str) -> list[RecallFileEntry]:
         from sqlmodel import delete, select
 
         with self._sessions.session() as session:
             rows = session.scalars(
-                select(self._sqla_models.CategoryItem).where(self._sqla_models.CategoryItem.item_id == item_id)
+                select(self._sqla_models.RecallFileEntry).where(self._sqla_models.RecallFileEntry.item_id == item_id)
             ).all()
             removed = [self._row_to_record(row) for row in rows]
             if removed:
                 session.exec(
-                    delete(self._sqla_models.CategoryItem).where(self._sqla_models.CategoryItem.item_id == item_id)
+                    delete(self._sqla_models.RecallFileEntry).where(
+                        self._sqla_models.RecallFileEntry.item_id == item_id
+                    )
                 )
                 session.commit()
         self.relations[:] = [r for r in self.relations if r.item_id != item_id]
         return removed
 
-    def clear_relations(self, where: Mapping[str, Any] | None = None) -> list[CategoryItem]:
+    def clear_relations(self, where: Mapping[str, Any] | None = None) -> list[RecallFileEntry]:
         from sqlmodel import delete, select
 
-        filters = self._build_filters(self._sqla_models.CategoryItem, where)
+        filters = self._build_filters(self._sqla_models.RecallFileEntry, where)
         with self._sessions.session() as session:
-            rows = session.scalars(select(self._sqla_models.CategoryItem).where(*filters)).all()
+            rows = session.scalars(select(self._sqla_models.RecallFileEntry).where(*filters)).all()
             removed = [self._row_to_record(row) for row in rows]
             if removed:
-                session.exec(delete(self._sqla_models.CategoryItem).where(*filters))
+                session.exec(delete(self._sqla_models.RecallFileEntry).where(*filters))
                 session.commit()
         removed_ids = {rel.id for rel in removed}
         self.relations[:] = [r for r in self.relations if r.id not in removed_ids]
         return removed
 
-    def get_item_categories(self, item_id: str) -> list[CategoryItem]:
+    def get_item_categories(self, item_id: str) -> list[RecallFileEntry]:
         from sqlmodel import select
 
         with self._sessions.session() as session:
             rows = session.scalars(
-                select(self._sqla_models.CategoryItem).where(self._sqla_models.CategoryItem.item_id == item_id)
+                select(self._sqla_models.RecallFileEntry).where(self._sqla_models.RecallFileEntry.item_id == item_id)
             ).all()
         return [self._cache_relation(row) for row in rows]
 
@@ -131,13 +133,13 @@ class PostgresCategoryItemRepo(PostgresRepoBase, CategoryItemRepo):
         from sqlmodel import select
 
         with self._sessions.session() as session:
-            rows = session.scalars(select(self._sqla_models.CategoryItem)).all()
+            rows = session.scalars(select(self._sqla_models.RecallFileEntry)).all()
             for row in rows:
                 self._cache_relation(row)
 
-    def _cache_relation(self, rel: CategoryItem) -> CategoryItem:
+    def _cache_relation(self, rel: RecallFileEntry) -> RecallFileEntry:
         self.relations.append(rel)
         return rel
 
 
-__all__ = ["PostgresCategoryItemRepo"]
+__all__ = ["PostgresRecallFileEntryRepo"]

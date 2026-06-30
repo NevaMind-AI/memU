@@ -7,7 +7,7 @@ live server so it is exercised separately). They guard the Phase 0 fixes:
 - ``clear_*`` with a ``where`` scope mutates the shared state in place (no rebinding
   that orphans the ``DatabaseState`` reference).
 - the SQLite read path preserves ``extra`` (reinforcement / ref_id / tool metadata).
-- deleting an item / clearing memory leaves no orphan ``CategoryItem`` relations.
+- deleting an item / clearing memory leaves no orphan ``RecallFileEntry`` relations.
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def _seed_item(store, *, summary: str, user_id: str, embedding=None):
         embedding=None,
         user_data={"user_id": user_id},
     )
-    item = store.memory_item_repo.create_item(
+    item = store.recall_entry_repo.create_item(
         resource_id=res.id,
         memory_type="knowledge",
         summary=summary,
@@ -75,72 +75,72 @@ def test_clear_items_with_scope_mutates_shared_state(store):
     _seed_item(store, summary="a", user_id="alice")
     _seed_item(store, summary="b", user_id="bob")
 
-    deleted = store.memory_item_repo.clear_items({"user_id": "alice"})
+    deleted = store.recall_entry_repo.clear_items({"user_id": "alice"})
     assert len(deleted) == 1
 
-    remaining = store.memory_item_repo.list_items()
+    remaining = store.recall_entry_repo.list_items()
     summaries = {item.summary for item in remaining.values()}
     assert summaries == {"b"}
 
 
 def test_clear_categories_with_scope_mutates_shared_state(store):
-    store.memory_category_repo.get_or_create_category(
+    store.recall_file_repo.get_or_create_category(
         name="alpha", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
     )
-    store.memory_category_repo.get_or_create_category(
+    store.recall_file_repo.get_or_create_category(
         name="beta", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "bob"}
     )
 
-    store.memory_category_repo.clear_categories({"user_id": "alice"})
-    remaining = store.memory_category_repo.list_categories()
+    store.recall_file_repo.clear_categories({"user_id": "alice"})
+    remaining = store.recall_file_repo.list_categories()
     names = {cat.name for cat in remaining.values()}
     assert names == {"beta"}
 
 
 def test_unlink_item_removes_all_relations(store):
     _res, item = _seed_item(store, summary="linked", user_id="alice")
-    cat1 = store.memory_category_repo.get_or_create_category(
+    cat1 = store.recall_file_repo.get_or_create_category(
         name="c1", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
     )
-    cat2 = store.memory_category_repo.get_or_create_category(
+    cat2 = store.recall_file_repo.get_or_create_category(
         name="c2", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
     )
-    store.category_item_repo.link_item_category(item.id, cat1.id, user_data={"user_id": "alice"})
-    store.category_item_repo.link_item_category(item.id, cat2.id, user_data={"user_id": "alice"})
-    assert len(store.category_item_repo.get_item_categories(item.id)) == 2
+    store.recall_file_entry_repo.link_item_category(item.id, cat1.id, user_data={"user_id": "alice"})
+    store.recall_file_entry_repo.link_item_category(item.id, cat2.id, user_data={"user_id": "alice"})
+    assert len(store.recall_file_entry_repo.get_item_categories(item.id)) == 2
 
-    removed = store.category_item_repo.unlink_item(item.id)
+    removed = store.recall_file_entry_repo.unlink_item(item.id)
     assert len(removed) == 2
-    assert store.category_item_repo.get_item_categories(item.id) == []
-    assert store.category_item_repo.list_relations() == []
+    assert store.recall_file_entry_repo.get_item_categories(item.id) == []
+    assert store.recall_file_entry_repo.list_relations() == []
 
 
 def test_delete_item_leaves_no_orphan_relations(store):
     """The Phase 0 delete fix: unlink relations before deleting the item."""
     _res, item = _seed_item(store, summary="doomed", user_id="alice")
-    cat = store.memory_category_repo.get_or_create_category(
+    cat = store.recall_file_repo.get_or_create_category(
         name="c", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
     )
-    store.category_item_repo.link_item_category(item.id, cat.id, user_data={"user_id": "alice"})
+    store.recall_file_entry_repo.link_item_category(item.id, cat.id, user_data={"user_id": "alice"})
 
-    store.category_item_repo.unlink_item(item.id)
-    store.memory_item_repo.delete_item(item.id)
+    store.recall_file_entry_repo.unlink_item(item.id)
+    store.recall_entry_repo.delete_item(item.id)
 
-    assert store.memory_item_repo.get_item(item.id) is None
+    assert store.recall_entry_repo.get_item(item.id) is None
     # No relation should point at the deleted item.
-    assert all(rel.item_id != item.id for rel in store.category_item_repo.list_relations())
+    assert all(rel.item_id != item.id for rel in store.recall_file_entry_repo.list_relations())
 
 
 def test_clear_relations_with_scope(store):
     _res, item = _seed_item(store, summary="r", user_id="alice")
-    cat = store.memory_category_repo.get_or_create_category(
+    cat = store.recall_file_repo.get_or_create_category(
         name="c", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
     )
-    store.category_item_repo.link_item_category(item.id, cat.id, user_data={"user_id": "alice"})
+    store.recall_file_entry_repo.link_item_category(item.id, cat.id, user_data={"user_id": "alice"})
 
-    removed = store.category_item_repo.clear_relations({"user_id": "alice"})
+    removed = store.recall_file_entry_repo.clear_relations({"user_id": "alice"})
     assert len(removed) == 1
-    assert store.category_item_repo.list_relations({"user_id": "alice"}) == []
+    assert store.recall_file_entry_repo.list_relations({"user_id": "alice"}) == []
 
 
 def test_extra_round_trips_through_create_and_read(store):
@@ -153,7 +153,7 @@ def test_extra_round_trips_through_create_and_read(store):
         embedding=None,
         user_data={"user_id": "alice"},
     )
-    item = store.memory_item_repo.create_item(
+    item = store.recall_entry_repo.create_item(
         resource_id=res.id,
         memory_type="tool",
         summary="tool memory",
@@ -163,7 +163,7 @@ def test_extra_round_trips_through_create_and_read(store):
     )
     assert item.extra.get("when_to_use") == "always"
 
-    fetched = store.memory_item_repo.get_item(item.id)
+    fetched = store.recall_entry_repo.get_item(item.id)
     assert fetched is not None
     assert fetched.extra.get("when_to_use") == "always"
 
@@ -193,10 +193,10 @@ def _reconcile(crud_self, store, *, item_id, new_cat_names, mapped_old_cat_ids, 
 def test_update_with_none_categories_keeps_links(store):
     """P0 regression: omitting categories (None) must NOT drop existing links."""
     _res, item = _seed_item(store, summary="keep", user_id="alice")
-    cat = store.memory_category_repo.get_or_create_category(
+    cat = store.recall_file_repo.get_or_create_category(
         name="A", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
     )
-    store.category_item_repo.link_item_category(item.id, cat.id, user_data={"user_id": "alice"})
+    store.recall_file_entry_repo.link_item_category(item.id, cat.id, user_data={"user_id": "alice"})
 
     _reconcile(
         None,
@@ -207,17 +207,17 @@ def test_update_with_none_categories_keeps_links(store):
         name_to_id={"A": cat.id},
     )
 
-    linked = {rel.category_id for rel in store.category_item_repo.get_item_categories(item.id)}
+    linked = {rel.category_id for rel in store.recall_file_entry_repo.get_item_categories(item.id)}
     assert linked == {cat.id}
 
 
 def test_update_with_empty_categories_clears_links(store):
     """An explicit empty list clears links (distinct from omitted/None)."""
     _res, item = _seed_item(store, summary="clear", user_id="alice")
-    cat = store.memory_category_repo.get_or_create_category(
+    cat = store.recall_file_repo.get_or_create_category(
         name="A", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
     )
-    store.category_item_repo.link_item_category(item.id, cat.id, user_data={"user_id": "alice"})
+    store.recall_file_entry_repo.link_item_category(item.id, cat.id, user_data={"user_id": "alice"})
 
     _reconcile(
         None,
@@ -228,18 +228,18 @@ def test_update_with_empty_categories_clears_links(store):
         name_to_id={"A": cat.id},
     )
 
-    assert store.category_item_repo.get_item_categories(item.id) == []
+    assert store.recall_file_entry_repo.get_item_categories(item.id) == []
 
 
 def test_update_with_new_categories_swaps_links(store):
     _res, item = _seed_item(store, summary="swap", user_id="alice")
-    cat_a = store.memory_category_repo.get_or_create_category(
+    cat_a = store.recall_file_repo.get_or_create_category(
         name="A", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
     )
-    cat_b = store.memory_category_repo.get_or_create_category(
+    cat_b = store.recall_file_repo.get_or_create_category(
         name="B", description="", embedding=[0.1, 0.2, 0.3], user_data={"user_id": "alice"}
     )
-    store.category_item_repo.link_item_category(item.id, cat_a.id, user_data={"user_id": "alice"})
+    store.recall_file_entry_repo.link_item_category(item.id, cat_a.id, user_data={"user_id": "alice"})
 
     _reconcile(
         None,
@@ -250,7 +250,7 @@ def test_update_with_new_categories_swaps_links(store):
         name_to_id={"A": cat_a.id, "B": cat_b.id},
     )
 
-    linked = {rel.category_id for rel in store.category_item_repo.get_item_categories(item.id)}
+    linked = {rel.category_id for rel in store.recall_file_entry_repo.get_item_categories(item.id)}
     assert linked == {cat_b.id}
 
 
@@ -284,7 +284,7 @@ def test_resolve_category_ids_creates_unknown_adaptively(store):
     )
     # "Programming"/"programming" collapse (case-insensitive); "Cooking" is distinct.
     assert len(ids) == 2
-    names = {c.name for c in store.memory_category_repo.list_categories().values()}
+    names = {c.name for c in store.recall_file_repo.list_categories().values()}
     assert names == {"Programming", "Cooking"}
 
     # A subsequent call reuses the cached ids and creates nothing new.
@@ -298,7 +298,7 @@ def test_resolve_category_ids_creates_unknown_adaptively(store):
         )
     )
     assert ids2 == [ctx.category_name_to_id["programming"]]
-    assert len(store.memory_category_repo.list_categories()) == 2
+    assert len(store.recall_file_repo.list_categories()) == 2
 
 
 def test_sqlite_extra_survives_cache_miss(tmp_path):
@@ -312,7 +312,7 @@ def test_sqlite_extra_survives_cache_miss(tmp_path):
         embedding=None,
         user_data={"user_id": "alice"},
     )
-    item = db.memory_item_repo.create_item(
+    item = db.recall_entry_repo.create_item(
         resource_id=res.id,
         memory_type="tool",
         summary="tool memory",
@@ -327,11 +327,11 @@ def test_sqlite_extra_survives_cache_miss(tmp_path):
     config = DatabaseConfig(metadata_store=MetadataStoreConfig(provider="sqlite", dsn=dsn))
     db2 = build_database(config=config, user_model=DefaultUserModel)
     try:
-        fetched = db2.memory_item_repo.get_item(item_id)
+        fetched = db2.recall_entry_repo.get_item(item_id)
         assert fetched is not None
         assert fetched.extra.get("when_to_use") == "cold-read"
 
-        listed = db2.memory_item_repo.list_items()
+        listed = db2.recall_entry_repo.list_items()
         assert listed[item_id].extra.get("when_to_use") == "cold-read"
     finally:
         db2.close()

@@ -1,6 +1,6 @@
-from memu.database.repositories.category_item import CategoryItemRepo
-from memu.database.repositories.memory_category import MemoryCategoryRepo
-from memu.database.repositories.memory_item import MemoryItemRepo
+from memu.database.repositories.recall_entry import RecallEntryRepo
+from memu.database.repositories.recall_file import RecallFileRepo
+from memu.database.repositories.recall_file_entry import RecallFileEntryRepo
 from memu.database.repositories.resource import ResourceRepo
 
-__all__ = ["CategoryItemRepo", "MemoryCategoryRepo", "MemoryItemRepo", "ResourceRepo"]
+__all__ = ["RecallEntryRepo", "RecallFileEntryRepo", "RecallFileRepo", "ResourceRepo"]

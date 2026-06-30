@@ -181,9 +181,7 @@ def test_http_vlm_client_exposes_backend_video_capability() -> None:
     )
     assert openrouter.supports_video is True
 
-    openai = HTTPVLMClient(
-        base_url="https://api.openai.com/v1", api_key="k", vlm_model="gpt-5.4", provider="openai"
-    )
+    openai = HTTPVLMClient(base_url="https://api.openai.com/v1", api_key="k", vlm_model="gpt-5.4", provider="openai")
     assert openai.supports_video is False
 
 

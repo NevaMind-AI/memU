@@ -33,21 +33,21 @@ def _seed(service: MemoryService, *, user: dict[str, str]) -> dict[str, str]:
         embedding=None,
         user_data=dict(user),
     )
-    category = store.memory_category_repo.get_or_create_category(
+    category = store.recall_file_repo.get_or_create_category(
         name="Preferences",
         description="User preferences, likes and dislikes",
         embedding=[0.1, 0.2],
         user_data=dict(user),
     )
-    store.memory_category_repo.update_category(category_id=category.id, summary="The user likes pour-over coffee.")
-    skill = store.memory_item_repo.create_item(
+    store.recall_file_repo.update_category(category_id=category.id, summary="The user likes pour-over coffee.")
+    skill = store.recall_entry_repo.create_item(
         resource_id=resource.id,
         memory_type="skill",
         summary=_SKILL_BODY,
         embedding=[0.1, 0.2],
         user_data=dict(user),
     )
-    store.category_item_repo.link_item_category(skill.id, category.id, user_data=dict(user))
+    store.recall_file_entry_repo.link_item_category(skill.id, category.id, user_data=dict(user))
     return {"category_id": category.id, "resource_id": resource.id, "skill_id": skill.id}
 
 
@@ -100,7 +100,7 @@ async def test_export_is_idempotent_until_data_changes(tmp_path: Path) -> None:
 
     # Changing only a folder summary rewrites that category's memory/<slug>.md but
     # not MEMORY.md (an overview of links) nor INDEX.md (a file TOC).
-    service.database.memory_category_repo.update_category(
+    service.database.recall_file_repo.update_category(
         category_id=ids["category_id"],
         summary="The user now prefers espresso.",
     )
@@ -119,7 +119,7 @@ async def test_export_removes_stale_skill_and_prunes_dirs(tmp_path: Path) -> Non
     assert (tmp_path / "skill" / "pour-over" / "SKILL.md").exists()
 
     # Dropping the skill-type item removes it from the bypass, so its doc goes stale.
-    service.database.memory_item_repo.clear_items(where={"user_id": "u1"})
+    service.database.recall_entry_repo.clear_items(where={"user_id": "u1"})
     result = await service.export_memory_files(user={"user_id": "u1"})
 
     assert "skill/pour-over/SKILL.md" in result["removed"]
@@ -129,7 +129,7 @@ async def test_export_removes_stale_skill_and_prunes_dirs(tmp_path: Path) -> Non
 async def test_export_respects_user_scope(tmp_path: Path) -> None:
     service = _build_service(tmp_path)
     _seed(service, user={"user_id": "u1"})
-    service.database.memory_category_repo.get_or_create_category(
+    service.database.recall_file_repo.get_or_create_category(
         name="Secret",
         description="Other user's folder",
         embedding=[0.3, 0.4],

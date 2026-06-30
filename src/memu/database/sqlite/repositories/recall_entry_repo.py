@@ -9,8 +9,8 @@ from typing import Any
 import pendulum
 from sqlmodel import delete, select
 
-from memu.database.models import MemoryItem, MemoryType, compute_content_hash
-from memu.database.repositories.memory_item import MemoryItemRepo
+from memu.database.models import EntryType, RecallEntry, compute_content_hash
+from memu.database.repositories.recall_entry import RecallEntryRepo
 from memu.database.sqlite.repositories.base import SQLiteRepoBase
 from memu.database.sqlite.schema import SQLiteSQLAModels
 from memu.database.sqlite.session import SQLiteSessionManager
@@ -20,14 +20,14 @@ from memu.vector import cosine_topk, cosine_topk_salience
 logger = logging.getLogger(__name__)
 
 
-class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
+class SQLiteRecallEntryRepo(SQLiteRepoBase, RecallEntryRepo):
     """SQLite implementation of memory item repository."""
 
     def __init__(
         self,
         *,
         state: DatabaseState,
-        memory_item_model: type[Any],
+        recall_entry_model: type[Any],
         sqla_models: SQLiteSQLAModels,
         sessions: SQLiteSessionManager,
         scope_fields: list[str],
@@ -36,7 +36,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
 
         Args:
             state: Shared database state for caching.
-            memory_item_model: SQLModel class for memory items.
+            recall_entry_model: SQLModel class for memory items.
             sqla_models: SQLAlchemy model container.
             sessions: Session manager for database connections.
             scope_fields: List of user scope field names.
@@ -47,30 +47,30 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             sessions=sessions,
             scope_fields=scope_fields,
         )
-        self._memory_item_model = memory_item_model
+        self._recall_entry_model = recall_entry_model
         self.items = self._state.items
 
-    def get_item(self, item_id: str) -> MemoryItem | None:
+    def get_item(self, item_id: str) -> RecallEntry | None:
         """Get a memory item by ID.
 
         Args:
             item_id: The item ID to look up.
 
         Returns:
-            MemoryItem if found, None otherwise.
+            RecallEntry if found, None otherwise.
         """
         # Check cache first
         if item_id in self.items:
             return self.items[item_id]
 
         with self._sessions.session() as session:
-            stmt = select(self._memory_item_model).where(self._memory_item_model.id == item_id)
+            stmt = select(self._recall_entry_model).where(self._recall_entry_model.id == item_id)
             row = session.exec(stmt).first()
 
         if row is None:
             return None
 
-        item = MemoryItem(
+        item = RecallEntry(
             id=row.id,
             resource_id=row.resource_id,
             memory_type=row.memory_type,
@@ -84,25 +84,25 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         self.items[row.id] = item
         return item
 
-    def list_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+    def list_items(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallEntry]:
         """List memory items matching the where clause.
 
         Args:
             where: Optional filter conditions.
 
         Returns:
-            Dictionary of item ID to MemoryItem mapping.
+            Dictionary of item ID to RecallEntry mapping.
         """
         with self._sessions.session() as session:
-            stmt = select(self._memory_item_model)
-            filters = self._build_filters(self._memory_item_model, where)
+            stmt = select(self._recall_entry_model)
+            filters = self._build_filters(self._recall_entry_model, where)
             if filters:
                 stmt = stmt.where(*filters)
             rows = session.exec(stmt).all()
 
-        result: dict[str, MemoryItem] = {}
+        result: dict[str, RecallEntry] = {}
         for row in rows:
-            item = MemoryItem(
+            item = RecallEntry(
                 id=row.id,
                 resource_id=row.resource_id,
                 memory_type=row.memory_type,
@@ -120,7 +120,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
 
     def list_items_by_ref_ids(
         self, ref_ids: list[str], where: Mapping[str, Any] | None = None
-    ) -> dict[str, MemoryItem]:
+    ) -> dict[str, RecallEntry]:
         """List items by their ref_id in the extra column.
 
         Args:
@@ -128,7 +128,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             where: Additional filter conditions.
 
         Returns:
-            Dict mapping item_id -> MemoryItem for items whose extra.ref_id is in ref_ids.
+            Dict mapping item_id -> RecallEntry for items whose extra.ref_id is in ref_ids.
         """
         if not ref_ids:
             return {}
@@ -136,19 +136,19 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         from sqlalchemy import func
 
         with self._sessions.session() as session:
-            stmt = select(self._memory_item_model)
-            filters = self._build_filters(self._memory_item_model, where)
+            stmt = select(self._recall_entry_model)
+            filters = self._build_filters(self._recall_entry_model, where)
             # Add filter for json_extract(extra, '$.ref_id') IN ref_ids (only rows with ref_id key)
-            ref_id_col = func.json_extract(self._memory_item_model.extra, "$.ref_id")
+            ref_id_col = func.json_extract(self._recall_entry_model.extra, "$.ref_id")
             filters.append(ref_id_col.isnot(None))
             filters.append(ref_id_col.in_(ref_ids))
             if filters:
                 stmt = stmt.where(*filters)
             rows = session.exec(stmt).all()
 
-        result: dict[str, MemoryItem] = {}
+        result: dict[str, RecallEntry] = {}
         for row in rows:
-            item = MemoryItem(
+            item = RecallEntry(
                 id=row.id,
                 resource_id=row.resource_id,
                 memory_type=row.memory_type,
@@ -164,26 +164,26 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
 
         return result
 
-    def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+    def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallEntry]:
         """Clear items matching the where clause.
 
         Args:
             where: Optional filter conditions.
 
         Returns:
-            Dictionary of deleted item ID to MemoryItem mapping.
+            Dictionary of deleted item ID to RecallEntry mapping.
         """
-        filters = self._build_filters(self._memory_item_model, where)
+        filters = self._build_filters(self._recall_entry_model, where)
         with self._sessions.session() as session:
             # First get the objects to delete
-            stmt = select(self._memory_item_model)
+            stmt = select(self._recall_entry_model)
             if filters:
                 stmt = stmt.where(*filters)
             rows = session.exec(stmt).all()
 
-            deleted: dict[str, MemoryItem] = {}
+            deleted: dict[str, RecallEntry] = {}
             for row in rows:
-                item = MemoryItem(
+                item = RecallEntry(
                     id=row.id,
                     resource_id=row.resource_id,
                     memory_type=row.memory_type,
@@ -200,7 +200,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
                 return {}
 
             # Delete from database
-            del_stmt = delete(self._memory_item_model)
+            del_stmt = delete(self._recall_entry_model)
             if filters:
                 del_stmt = del_stmt.where(*filters)
             session.exec(del_stmt)
@@ -216,13 +216,13 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         self,
         *,
         resource_id: str,
-        memory_type: MemoryType,
+        memory_type: EntryType,
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
         reinforce: bool = False,
         tool_record: dict[str, Any] | None = None,
-    ) -> MemoryItem:
+    ) -> RecallEntry:
         """Create a new memory item.
 
         Args:
@@ -235,7 +235,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             tool_record: Tool-related fields (when_to_use, metadata, tool_calls) to store in extra.
 
         Returns:
-            Created MemoryItem object.
+            Created RecallEntry object.
         """
         if reinforce and memory_type != "tool":
             return self.create_item_reinforce(
@@ -257,7 +257,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
                 extra["tool_calls"] = tool_record["tool_calls"]
 
         now = self._now()
-        row = self._memory_item_model(
+        row = self._recall_entry_model(
             resource_id=resource_id,
             memory_type=memory_type,
             summary=summary,
@@ -272,7 +272,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             session.commit()
             session.refresh(row)
 
-        item = MemoryItem(
+        item = RecallEntry(
             id=row.id,
             resource_id=row.resource_id,
             memory_type=row.memory_type,
@@ -290,11 +290,11 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         self,
         *,
         resource_id: str,
-        memory_type: MemoryType,
+        memory_type: EntryType,
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
-    ) -> MemoryItem:
+    ) -> RecallEntry:
         """Create or reinforce a memory item with deduplication.
 
         If an item with the same content hash exists in the same scope,
@@ -308,7 +308,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             user_data: User scope data.
 
         Returns:
-            Created or reinforced MemoryItem object.
+            Created or reinforced RecallEntry object.
         """
         from sqlalchemy import func
 
@@ -317,11 +317,11 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         with self._sessions.session() as session:
             # Check for existing item with same hash in same scope (deduplication)
             # Use json_extract(extra, '$.content_hash') for query
-            content_hash_col = func.json_extract(self._memory_item_model.extra, "$.content_hash")
+            content_hash_col = func.json_extract(self._recall_entry_model.extra, "$.content_hash")
             filters = [content_hash_col == content_hash]
-            filters.extend(self._build_filters(self._memory_item_model, user_data))
+            filters.extend(self._build_filters(self._recall_entry_model, user_data))
 
-            existing = session.exec(select(self._memory_item_model).where(*filters)).first()
+            existing = session.exec(select(self._recall_entry_model).where(*filters)).first()
 
             if existing:
                 # Reinforce existing memory instead of creating duplicate
@@ -337,7 +337,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
                 session.commit()
                 session.refresh(existing)
 
-                item = MemoryItem(
+                item = RecallEntry(
                     id=existing.id,
                     resource_id=existing.resource_id,
                     memory_type=existing.memory_type,
@@ -360,7 +360,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
                 "last_reinforced_at": now.isoformat(),
             })
 
-            row = self._memory_item_model(
+            row = self._recall_entry_model(
                 resource_id=resource_id,
                 memory_type=memory_type,
                 summary=summary,
@@ -375,7 +375,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             session.commit()
             session.refresh(row)
 
-        item = MemoryItem(
+        item = RecallEntry(
             id=row.id,
             resource_id=row.resource_id,
             memory_type=row.memory_type,
@@ -393,12 +393,12 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         self,
         *,
         item_id: str,
-        memory_type: MemoryType | None = None,
+        memory_type: EntryType | None = None,
         summary: str | None = None,
         embedding: list[float] | None = None,
         extra: dict[str, Any] | None = None,
         tool_record: dict[str, Any] | None = None,
-    ) -> MemoryItem:
+    ) -> RecallEntry:
         """Update an existing memory item.
 
         Args:
@@ -410,13 +410,13 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             tool_record: Tool-related fields (when_to_use, metadata, tool_calls) to merge into extra.
 
         Returns:
-            Updated MemoryItem object.
+            Updated RecallEntry object.
 
         Raises:
             KeyError: If item not found.
         """
         with self._sessions.session() as session:
-            stmt = select(self._memory_item_model).where(self._memory_item_model.id == item_id)
+            stmt = select(self._recall_entry_model).where(self._recall_entry_model.id == item_id)
             row = session.exec(stmt).first()
 
             if row is None:
@@ -448,7 +448,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             session.commit()
             session.refresh(row)
 
-        item = MemoryItem(
+        item = RecallEntry(
             id=row.id,
             resource_id=row.resource_id,
             memory_type=row.memory_type,
@@ -469,7 +469,7 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
             item_id: ID of item to delete.
         """
         with self._sessions.session() as session:
-            stmt = select(self._memory_item_model).where(self._memory_item_model.id == item_id)
+            stmt = select(self._recall_entry_model).where(self._recall_entry_model.id == item_id)
             row = session.exec(stmt).first()
             if row:
                 session.delete(row)
@@ -541,4 +541,4 @@ class SQLiteMemoryItemRepo(SQLiteRepoBase, MemoryItemRepo):
         self.list_items()
 
 
-__all__ = ["SQLiteMemoryItemRepo"]
+__all__ = ["SQLiteRecallEntryRepo"]

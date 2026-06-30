@@ -12,13 +12,13 @@ def build_inmemory_database(
     config: DatabaseConfig,
     user_model: type[BaseModel],
 ) -> InMemoryStore:
-    resource_model, memory_category_model, memory_item_model, category_item_model = build_inmemory_models(user_model)
+    resource_model, recall_file_model, recall_entry_model, recall_file_entry_model = build_inmemory_models(user_model)
     return InMemoryStore(
         scope_model=user_model,
         resource_model=resource_model,
-        memory_item_model=memory_item_model,
-        memory_category_model=memory_category_model,
-        category_item_model=category_item_model,
+        recall_entry_model=recall_entry_model,
+        recall_file_model=recall_file_model,
+        recall_file_entry_model=recall_file_entry_model,
     )
 
 

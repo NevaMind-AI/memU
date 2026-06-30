@@ -81,7 +81,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self.memory_files_config = self._validate_config(memory_files_config, MemoryFilesConfig)
 
         self.fs = LocalFS(self.blob_config.resources_dir)
-        self.category_configs: list[CategoryConfig] = list(self.memorize_config.memory_categories or [])
+        self.category_configs: list[CategoryConfig] = list(self.memorize_config.recall_files or [])
         self.category_config_map: dict[str, CategoryConfig] = {cfg.name: cfg for cfg in self.category_configs}
         self._category_prompt_str = self._format_categories_for_prompt(self.category_configs)
 
@@ -337,23 +337,23 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self._pipelines.register("retrieve_rag", rag_workflow, initial_state_keys=retrieve_initial_keys)
         llm_workflow = self._build_llm_retrieve_workflow()
         self._pipelines.register("retrieve_llm", llm_workflow, initial_state_keys=retrieve_initial_keys)
-        patch_create_workflow = self._build_create_memory_item_workflow()
-        patch_create_initial_keys = CRUDMixin._list_create_memory_item_initial_keys()
+        patch_create_workflow = self._build_create_recall_entry_workflow()
+        patch_create_initial_keys = CRUDMixin._list_create_recall_entry_initial_keys()
         self._pipelines.register("patch_create", patch_create_workflow, initial_state_keys=patch_create_initial_keys)
-        patch_update_workflow = self._build_update_memory_item_workflow()
-        patch_update_initial_keys = CRUDMixin._list_update_memory_item_initial_keys()
+        patch_update_workflow = self._build_update_recall_entry_workflow()
+        patch_update_initial_keys = CRUDMixin._list_update_recall_entry_initial_keys()
         self._pipelines.register("patch_update", patch_update_workflow, initial_state_keys=patch_update_initial_keys)
-        patch_delete_workflow = self._build_delete_memory_item_workflow()
-        patch_delete_initial_keys = CRUDMixin._list_delete_memory_item_initial_keys()
+        patch_delete_workflow = self._build_delete_recall_entry_workflow()
+        patch_delete_initial_keys = CRUDMixin._list_delete_recall_entry_initial_keys()
         self._pipelines.register("patch_delete", patch_delete_workflow, initial_state_keys=patch_delete_initial_keys)
-        crud_list_items_workflow = self._build_list_memory_items_workflow()
+        crud_list_items_workflow = self._build_list_recall_entries_workflow()
         crud_list_memories_initial_keys = CRUDMixin._list_list_memories_initial_keys()
         self._pipelines.register(
-            "crud_list_memory_items", crud_list_items_workflow, initial_state_keys=crud_list_memories_initial_keys
+            "crud_list_recall_entries", crud_list_items_workflow, initial_state_keys=crud_list_memories_initial_keys
         )
-        crud_list_categories_workflow = self._build_list_memory_categories_workflow()
+        crud_list_categories_workflow = self._build_list_recall_files_workflow()
         self._pipelines.register(
-            "crud_list_memory_categories",
+            "crud_list_recall_files",
             crud_list_categories_workflow,
             initial_state_keys=crud_list_memories_initial_keys,
         )

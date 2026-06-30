@@ -69,7 +69,7 @@ def test_synthesizer_helpers() -> None:
 
 def test_build_synthesis_descriptions_uses_structured_items() -> None:
     """Synthesis input is sourced from extracted items, with a caption fallback."""
-    from memu.database.models import MemoryItem, Resource
+    from memu.database.models import RecallEntry, Resource
 
     res_with_items = Resource(
         id="r1", url="docs/a.txt", modality="document", local_path="a.txt", caption="raw caption a"
@@ -78,8 +78,8 @@ def test_build_synthesis_descriptions_uses_structured_items() -> None:
         id="r2", url="docs/b.txt", modality="document", local_path="b.txt", caption="raw caption b"
     )
     items = [
-        MemoryItem(id="i1", resource_id="r1", memory_type="knowledge", summary="Alpha fact."),
-        MemoryItem(id="i2", resource_id="r1", memory_type="profile", summary="Beta trait."),
+        RecallEntry(id="i1", resource_id="r1", memory_type="knowledge", summary="Alpha fact."),
+        RecallEntry(id="i2", resource_id="r1", memory_type="profile", summary="Beta trait."),
     ]
 
     descriptions = MemoryFileExporter.build_synthesis_descriptions([res_with_items, res_without_items], items)

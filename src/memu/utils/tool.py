@@ -5,14 +5,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from memu.database.models import MemoryItem, ToolCallResult
+    from memu.database.models import RecallEntry, ToolCallResult
 
 
-def get_tool_calls(item: MemoryItem) -> list[dict[str, Any]]:
+def get_tool_calls(item: RecallEntry) -> list[dict[str, Any]]:
     """Get tool calls from a memory item's extra field.
 
     Args:
-        item: The MemoryItem to get tool calls from
+        item: The RecallEntry to get tool calls from
 
     Returns:
         List of tool call dicts, or empty list if none exist
@@ -21,11 +21,11 @@ def get_tool_calls(item: MemoryItem) -> list[dict[str, Any]]:
     return result
 
 
-def set_tool_calls(item: MemoryItem, tool_calls: list[dict[str, Any]]) -> None:
+def set_tool_calls(item: RecallEntry, tool_calls: list[dict[str, Any]]) -> None:
     """Set tool calls in a memory item's extra field.
 
     Args:
-        item: The MemoryItem to set tool calls on
+        item: The RecallEntry to set tool calls on
         tool_calls: The list of tool call dicts to set
     """
     if item.extra is None:
@@ -33,11 +33,11 @@ def set_tool_calls(item: MemoryItem, tool_calls: list[dict[str, Any]]) -> None:
     item.extra["tool_calls"] = tool_calls
 
 
-def add_tool_call(item: MemoryItem, tool_call: ToolCallResult) -> None:
+def add_tool_call(item: RecallEntry, tool_call: ToolCallResult) -> None:
     """Add a tool call result to a memory item (for tool type memories).
 
     Args:
-        item: The MemoryItem to add the tool call to (must be tool type)
+        item: The RecallEntry to add the tool call to (must be tool type)
         tool_call: The ToolCallResult to add
 
     Raises:
@@ -52,11 +52,11 @@ def add_tool_call(item: MemoryItem, tool_call: ToolCallResult) -> None:
     set_tool_calls(item, tool_calls)
 
 
-def get_tool_statistics(item: MemoryItem, recent_n: int = 20) -> dict[str, Any]:
+def get_tool_statistics(item: RecallEntry, recent_n: int = 20) -> dict[str, Any]:
     """Calculate statistics for the most recent N tool calls.
 
     Args:
-        item: The MemoryItem to calculate statistics for
+        item: The RecallEntry to calculate statistics for
         recent_n: Number of recent calls to analyze (default: 20)
 
     Returns:

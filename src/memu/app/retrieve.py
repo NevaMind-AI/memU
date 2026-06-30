@@ -56,8 +56,8 @@ class RetrieveMixin:
         context_queries_objs = queries[:-1] if len(queries) > 1 else []
 
         route_intention = self.retrieve_config.route_intention
-        retrieve_category = self.retrieve_config.category.enabled
-        retrieve_item = self.retrieve_config.item.enabled
+        retrieve_file = self.retrieve_config.category.enabled
+        retrieve_entry = self.retrieve_config.item.enabled
         retrieve_resource = self.retrieve_config.resource.enabled
         sufficiency_check = self.retrieve_config.sufficiency_check
 
@@ -69,8 +69,8 @@ class RetrieveMixin:
             "context_queries": context_queries_objs,
             "route_intention": route_intention,
             "skip_rewrite": len(queries) == 1,
-            "retrieve_category": retrieve_category,
-            "retrieve_item": retrieve_item,
+            "retrieve_file": retrieve_file,
+            "retrieve_entry": retrieve_entry,
             "retrieve_resource": retrieve_resource,
             "sufficiency_check": sufficiency_check,
             "ctx": ctx,
@@ -116,29 +116,29 @@ class RetrieveMixin:
                 config={"chat_llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
             ),
             WorkflowStep(
-                step_id="route_category",
-                role="route_category",
-                handler=self._rag_route_category,
-                requires={"retrieve_category", "needs_retrieval", "active_query", "ctx", "store", "where"},
-                produces={"category_hits", "category_summary_lookup", "query_vector"},
+                step_id="route_file",
+                role="route_file",
+                handler=self._rag_route_file,
+                requires={"retrieve_file", "needs_retrieval", "active_query", "ctx", "store", "where"},
+                produces={"file_hits", "file_summary_lookup", "query_vector"},
                 capabilities={"vector"},
                 config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
-                step_id="sufficiency_after_category",
+                step_id="sufficiency_after_file",
                 role="sufficiency_check",
-                handler=self._rag_category_sufficiency,
+                handler=self._rag_file_sufficiency,
                 requires={
-                    "retrieve_category",
+                    "retrieve_file",
                     "needs_retrieval",
                     "active_query",
                     "context_queries",
-                    "category_hits",
+                    "file_hits",
                     "ctx",
                     "store",
                     "where",
                 },
-                produces={"next_step_query", "proceed_to_items", "query_vector"},
+                produces={"next_step_query", "proceed_to_entries", "query_vector"},
                 capabilities={"llm"},
                 config={
                     "chat_llm_profile": self.retrieve_config.sufficiency_check_llm_profile,
@@ -146,31 +146,31 @@ class RetrieveMixin:
                 },
             ),
             WorkflowStep(
-                step_id="recall_items",
-                role="recall_items",
-                handler=self._rag_recall_items,
+                step_id="recall_entries",
+                role="recall_entries",
+                handler=self._rag_recall_entries,
                 requires={
                     "needs_retrieval",
-                    "proceed_to_items",
+                    "proceed_to_entries",
                     "ctx",
                     "store",
                     "where",
                     "active_query",
                     "query_vector",
                 },
-                produces={"item_hits", "query_vector"},
+                produces={"entry_hits", "query_vector"},
                 capabilities={"vector"},
                 config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
-                step_id="sufficiency_after_items",
+                step_id="sufficiency_after_entries",
                 role="sufficiency_check",
-                handler=self._rag_item_sufficiency,
+                handler=self._rag_entry_sufficiency,
                 requires={
                     "needs_retrieval",
                     "active_query",
                     "context_queries",
-                    "item_hits",
+                    "entry_hits",
                     "ctx",
                     "store",
                     "where",
@@ -217,8 +217,8 @@ class RetrieveMixin:
             "context_queries",
             "route_intention",
             "skip_rewrite",
-            "retrieve_category",
-            "retrieve_item",
+            "retrieve_file",
+            "retrieve_entry",
             "retrieve_resource",
             "sufficiency_check",
             "ctx",
@@ -233,7 +233,7 @@ class RetrieveMixin:
                 "rewritten_query": state["original_query"],
                 "active_query": state["original_query"],
                 "next_step_query": None,
-                "proceed_to_items": False,
+                "proceed_to_entries": False,
                 "proceed_to_resources": False,
             })
             return state
@@ -253,58 +253,58 @@ class RetrieveMixin:
             "rewritten_query": rewritten_query,
             "active_query": rewritten_query,
             "next_step_query": None,
-            "proceed_to_items": False,
+            "proceed_to_entries": False,
             "proceed_to_resources": False,
         })
         return state
 
-    async def _rag_route_category(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("retrieve_category") or not state.get("needs_retrieval"):
-            state["category_hits"] = []
-            state["category_summary_lookup"] = {}
+    async def _rag_route_file(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("retrieve_file") or not state.get("needs_retrieval"):
+            state["file_hits"] = []
+            state["file_summary_lookup"] = {}
             state["query_vector"] = None
             return state
 
         embed_client = self._get_step_embedding_client(step_context)
         store = state["store"]
         where_filters = state.get("where") or {}
-        category_pool = store.memory_category_repo.list_categories(where_filters)
+        file_pool = store.recall_file_repo.list_categories(where_filters)
         qvec = (await embed_client.embed([state["active_query"]]))[0]
-        hits, summary_lookup = await self._rank_categories_by_summary(
+        hits, summary_lookup = await self._rank_files_by_summary(
             qvec,
             self.retrieve_config.category.top_k,
             state["ctx"],
             store,
             embed_client=embed_client,
-            categories=category_pool,
+            categories=file_pool,
         )
         state.update({
             "query_vector": qvec,
-            "category_hits": hits,
-            "category_summary_lookup": summary_lookup,
-            "category_pool": category_pool,
+            "file_hits": hits,
+            "file_summary_lookup": summary_lookup,
+            "file_pool": file_pool,
         })
         return state
 
-    async def _rag_category_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _rag_file_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("needs_retrieval"):
-            state["proceed_to_items"] = False
+            state["proceed_to_entries"] = False
             return state
-        if not state.get("retrieve_category") or not state.get("sufficiency_check"):
-            state["proceed_to_items"] = True
+        if not state.get("retrieve_file") or not state.get("sufficiency_check"):
+            state["proceed_to_entries"] = True
             return state
 
         retrieved_content = ""
         store = state["store"]
         where_filters = state.get("where") or {}
-        category_pool = state.get("category_pool") or store.memory_category_repo.list_categories(where_filters)
-        hits = state.get("category_hits") or []
+        file_pool = state.get("file_pool") or store.recall_file_repo.list_categories(where_filters)
+        hits = state.get("file_hits") or []
         if hits:
-            retrieved_content = self._format_category_content(
+            retrieved_content = self._format_file_content(
                 hits,
-                state.get("category_summary_lookup", {}),
+                state.get("file_summary_lookup", {}),
                 store,
-                categories=category_pool,
+                categories=file_pool,
             )
 
         llm_client = self._get_step_llm_client(step_context)
@@ -316,72 +316,72 @@ class RetrieveMixin:
         )
         state["next_step_query"] = rewritten_query
         state["active_query"] = rewritten_query
-        state["proceed_to_items"] = needs_more
+        state["proceed_to_entries"] = needs_more
         if needs_more:
             embed_client = self._get_step_embedding_client(step_context)
             state["query_vector"] = (await embed_client.embed([state["active_query"]]))[0]
         return state
 
-    def _extract_referenced_item_ids(self, state: WorkflowState) -> set[str]:
-        """Extract item IDs from category summary references."""
+    def _extract_referenced_entry_ids(self, state: WorkflowState) -> set[str]:
+        """Extract entry IDs from file summary references."""
         from memu.utils.references import extract_references
 
-        category_hits = state.get("category_hits") or []
-        summary_lookup = state.get("category_summary_lookup", {})
-        category_pool = state.get("category_pool") or {}
-        referenced_item_ids: set[str] = set()
+        file_hits = state.get("file_hits") or []
+        summary_lookup = state.get("file_summary_lookup", {})
+        file_pool = state.get("file_pool") or {}
+        referenced_entry_ids: set[str] = set()
 
-        for cid, _score in category_hits:
+        for cid, _score in file_hits:
             # Get summary from lookup or category
             summary = summary_lookup.get(cid)
             if not summary:
-                cat = category_pool.get(cid)
+                cat = file_pool.get(cid)
                 if cat:
                     summary = cat.summary
             if summary:
                 refs = extract_references(summary)
-                referenced_item_ids.update(refs)
+                referenced_entry_ids.update(refs)
 
-        return referenced_item_ids
+        return referenced_entry_ids
 
-    async def _rag_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("retrieve_item") or not state.get("needs_retrieval") or not state.get("proceed_to_items"):
-            state["item_hits"] = []
+    async def _rag_recall_entries(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("retrieve_entry") or not state.get("needs_retrieval") or not state.get("proceed_to_entries"):
+            state["entry_hits"] = []
             return state
 
         store = state["store"]
         where_filters = state.get("where") or {}
-        items_pool = store.memory_item_repo.list_items(where_filters)
+        entries_pool = store.recall_entry_repo.list_items(where_filters)
         qvec = state.get("query_vector")
         if qvec is None:
             embed_client = self._get_step_embedding_client(step_context)
             qvec = (await embed_client.embed([state["active_query"]]))[0]
             state["query_vector"] = qvec
-        state["item_hits"] = store.memory_item_repo.vector_search_items(
+        state["entry_hits"] = store.recall_entry_repo.vector_search_items(
             qvec,
             self.retrieve_config.item.top_k,
             where=where_filters,
             ranking=self.retrieve_config.item.ranking,
             recency_decay_days=self.retrieve_config.item.recency_decay_days,
         )
-        state["item_pool"] = items_pool
+        state["entry_pool"] = entries_pool
         return state
 
-    async def _rag_item_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _rag_entry_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("needs_retrieval"):
             state["proceed_to_resources"] = False
             return state
-        if not state.get("retrieve_item") or not state.get("sufficiency_check"):
+        if not state.get("retrieve_entry") or not state.get("sufficiency_check"):
             state["proceed_to_resources"] = True
             return state
 
         store = state["store"]
         where_filters = state.get("where") or {}
-        items_pool = state.get("item_pool") or store.memory_item_repo.list_items(where_filters)
+        entries_pool = state.get("entry_pool") or store.recall_entry_repo.list_items(where_filters)
         retrieved_content = ""
-        hits = state.get("item_hits") or []
+        hits = state.get("entry_hits") or []
         if hits:
-            retrieved_content = self._format_item_content(hits, store, items=items_pool)
+            retrieved_content = self._format_entry_content(hits, store, items=entries_pool)
 
         llm_client = self._get_step_llm_client(step_context)
         needs_more, rewritten_query = await self._decide_if_retrieval_needed(
@@ -438,14 +438,14 @@ class RetrieveMixin:
         if state.get("needs_retrieval"):
             store = state["store"]
             where_filters = state.get("where") or {}
-            categories_pool = state.get("category_pool") or store.memory_category_repo.list_categories(where_filters)
-            items_pool = state.get("item_pool") or store.memory_item_repo.list_items(where_filters)
+            files_pool = state.get("file_pool") or store.recall_file_repo.list_categories(where_filters)
+            entries_pool = state.get("entry_pool") or store.recall_entry_repo.list_items(where_filters)
             resources_pool = state.get("resource_pool") or store.resource_repo.list_resources(where_filters)
             response["categories"] = self._materialize_hits(
-                state.get("category_hits", []),
-                categories_pool,
+                state.get("file_hits", []),
+                files_pool,
             )
-            response["items"] = self._materialize_hits(state.get("item_hits", []), items_pool)
+            response["items"] = self._materialize_hits(state.get("entry_hits", []), entries_pool)
             response["resources"] = self._materialize_hits(
                 state.get("resource_hits", []),
                 resources_pool,
@@ -465,45 +465,45 @@ class RetrieveMixin:
                 config={"llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
             ),
             WorkflowStep(
-                step_id="route_category",
-                role="route_category",
-                handler=self._llm_route_category,
+                step_id="route_file",
+                role="route_file",
+                handler=self._llm_route_file,
                 requires={"needs_retrieval", "active_query", "ctx", "store", "where"},
-                produces={"category_hits"},
+                produces={"file_hits"},
                 capabilities={"llm"},
                 config={"llm_profile": self.retrieve_config.llm_ranking_llm_profile},
             ),
             WorkflowStep(
-                step_id="sufficiency_after_category",
+                step_id="sufficiency_after_file",
                 role="sufficiency_check",
-                handler=self._llm_category_sufficiency,
-                requires={"needs_retrieval", "active_query", "context_queries", "category_hits"},
-                produces={"next_step_query", "proceed_to_items"},
+                handler=self._llm_file_sufficiency,
+                requires={"needs_retrieval", "active_query", "context_queries", "file_hits"},
+                produces={"next_step_query", "proceed_to_entries"},
                 capabilities={"llm"},
                 config={"llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
             ),
             WorkflowStep(
-                step_id="recall_items",
-                role="recall_items",
-                handler=self._llm_recall_items,
+                step_id="recall_entries",
+                role="recall_entries",
+                handler=self._llm_recall_entries,
                 requires={
                     "needs_retrieval",
-                    "proceed_to_items",
+                    "proceed_to_entries",
                     "ctx",
                     "store",
                     "where",
                     "active_query",
-                    "category_hits",
+                    "file_hits",
                 },
-                produces={"item_hits"},
+                produces={"entry_hits"},
                 capabilities={"llm"},
                 config={"llm_profile": self.retrieve_config.llm_ranking_llm_profile},
             ),
             WorkflowStep(
-                step_id="sufficiency_after_items",
+                step_id="sufficiency_after_entries",
                 role="sufficiency_check",
-                handler=self._llm_item_sufficiency,
-                requires={"needs_retrieval", "active_query", "context_queries", "item_hits"},
+                handler=self._llm_entry_sufficiency,
+                requires={"needs_retrieval", "active_query", "context_queries", "entry_hits"},
                 produces={"next_step_query", "proceed_to_resources"},
                 capabilities={"llm"},
                 config={"llm_profile": self.retrieve_config.sufficiency_check_llm_profile},
@@ -519,8 +519,8 @@ class RetrieveMixin:
                     "ctx",
                     "store",
                     "where",
-                    "item_hits",
-                    "category_hits",
+                    "entry_hits",
+                    "file_hits",
                 },
                 produces={"resource_hits"},
                 capabilities={"llm"},
@@ -544,7 +544,7 @@ class RetrieveMixin:
                 "rewritten_query": state["original_query"],
                 "active_query": state["original_query"],
                 "next_step_query": None,
-                "proceed_to_items": False,
+                "proceed_to_entries": False,
                 "proceed_to_resources": False,
             })
             return state
@@ -564,43 +564,43 @@ class RetrieveMixin:
             "rewritten_query": rewritten_query,
             "active_query": rewritten_query,
             "next_step_query": None,
-            "proceed_to_items": False,
+            "proceed_to_entries": False,
             "proceed_to_resources": False,
         })
         return state
 
-    async def _llm_route_category(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _llm_route_file(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("needs_retrieval"):
-            state["category_hits"] = []
+            state["file_hits"] = []
             return state
         llm_client = self._get_step_llm_client(step_context)
         store = state["store"]
         where_filters = state.get("where") or {}
-        category_pool = store.memory_category_repo.list_categories(where_filters)
-        hits = await self._llm_rank_categories(
+        file_pool = store.recall_file_repo.list_categories(where_filters)
+        hits = await self._llm_rank_files(
             state["active_query"],
             self.retrieve_config.category.top_k,
             state["ctx"],
             store,
             llm_client=llm_client,
-            categories=category_pool,
+            categories=file_pool,
         )
-        state["category_hits"] = hits
-        state["category_pool"] = category_pool
+        state["file_hits"] = hits
+        state["file_pool"] = file_pool
         return state
 
-    async def _llm_category_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _llm_file_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("needs_retrieval"):
-            state["proceed_to_items"] = False
+            state["proceed_to_entries"] = False
             return state
-        if not state.get("retrieve_category") or not state.get("sufficiency_check"):
-            state["proceed_to_items"] = True
+        if not state.get("retrieve_file") or not state.get("sufficiency_check"):
+            state["proceed_to_entries"] = True
             return state
 
         retrieved_content = ""
-        hits = state.get("category_hits") or []
+        hits = state.get("file_hits") or []
         if hits:
-            retrieved_content = self._format_llm_category_content(hits)
+            retrieved_content = self._format_llm_file_content(hits)
 
         llm_client = self._get_step_llm_client(step_context)
         needs_more, rewritten_query = await self._decide_if_retrieval_needed(
@@ -611,65 +611,65 @@ class RetrieveMixin:
         )
         state["next_step_query"] = rewritten_query
         state["active_query"] = rewritten_query
-        state["proceed_to_items"] = needs_more
+        state["proceed_to_entries"] = needs_more
         return state
 
-    async def _llm_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("needs_retrieval") or not state.get("proceed_to_items"):
-            state["item_hits"] = []
+    async def _llm_recall_entries(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        if not state.get("needs_retrieval") or not state.get("proceed_to_entries"):
+            state["entry_hits"] = []
             return state
 
         where_filters = state.get("where") or {}
-        category_hits = state.get("category_hits", [])
-        category_ids = [cat["id"] for cat in category_hits]
+        file_hits = state.get("file_hits", [])
+        category_ids = [cat["id"] for cat in file_hits]
         llm_client = self._get_step_llm_client(step_context)
         store = state["store"]
 
         use_refs = getattr(self.retrieve_config.item, "use_category_references", False)
         ref_ids: list[str] = []
-        if use_refs and category_hits:
+        if use_refs and file_hits:
             # Extract all ref_ids from category summaries
             from memu.utils.references import extract_references
 
-            for cat in category_hits:
+            for cat in file_hits:
                 summary = cat.get("summary") or ""
                 ref_ids.extend(extract_references(summary))
         if ref_ids:
             # Query items by ref_ids
-            items_pool = store.memory_item_repo.list_items_by_ref_ids(ref_ids, where_filters)
+            entries_pool = store.recall_entry_repo.list_items_by_ref_ids(ref_ids, where_filters)
         else:
-            items_pool = store.memory_item_repo.list_items(where_filters)
+            entries_pool = store.recall_entry_repo.list_items(where_filters)
 
-        relations = store.category_item_repo.list_relations(where_filters)
-        category_pool = state.get("category_pool") or store.memory_category_repo.list_categories(where_filters)
-        state["item_hits"] = await self._llm_rank_items(
+        relations = store.recall_file_entry_repo.list_relations(where_filters)
+        file_pool = state.get("file_pool") or store.recall_file_repo.list_categories(where_filters)
+        state["entry_hits"] = await self._llm_rank_entries(
             state["active_query"],
             self.retrieve_config.item.top_k,
             category_ids,
-            state.get("category_hits", []),
+            state.get("file_hits", []),
             state["ctx"],
             store,
             llm_client=llm_client,
-            categories=category_pool,
-            items=items_pool,
+            categories=file_pool,
+            items=entries_pool,
             relations=relations,
         )
-        state["item_pool"] = items_pool
+        state["entry_pool"] = entries_pool
         state["relation_pool"] = relations
         return state
 
-    async def _llm_item_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _llm_entry_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("needs_retrieval"):
             state["proceed_to_resources"] = False
             return state
-        if not state.get("retrieve_item") or not state.get("sufficiency_check"):
+        if not state.get("retrieve_entry") or not state.get("sufficiency_check"):
             state["proceed_to_resources"] = True
             return state
 
         retrieved_content = ""
-        hits = state.get("item_hits") or []
+        hits = state.get("entry_hits") or []
         if hits:
-            retrieved_content = self._format_llm_item_content(hits)
+            retrieved_content = self._format_llm_entry_content(hits)
 
         llm_client = self._get_step_llm_client(step_context)
         needs_more, rewritten_query = await self._decide_if_retrieval_needed(
@@ -692,16 +692,16 @@ class RetrieveMixin:
         store = state["store"]
         where_filters = state.get("where") or {}
         resource_pool = store.resource_repo.list_resources(where_filters)
-        items_pool = state.get("item_pool") or store.memory_item_repo.list_items(where_filters)
+        entries_pool = state.get("entry_pool") or store.recall_entry_repo.list_items(where_filters)
         state["resource_hits"] = await self._llm_rank_resources(
             state["active_query"],
             self.retrieve_config.resource.top_k,
-            state.get("category_hits", []),
-            state.get("item_hits", []),
+            state.get("file_hits", []),
+            state.get("entry_hits", []),
             state["ctx"],
             store,
             llm_client=llm_client,
-            items=items_pool,
+            items=entries_pool,
             resources=resource_pool,
         )
         state["resource_pool"] = resource_pool
@@ -718,13 +718,13 @@ class RetrieveMixin:
             "resources": [],
         }
         if state.get("needs_retrieval"):
-            response["categories"] = list(state.get("category_hits") or [])
-            response["items"] = list(state.get("item_hits") or [])
+            response["categories"] = list(state.get("file_hits") or [])
+            response["items"] = list(state.get("entry_hits") or [])
             response["resources"] = list(state.get("resource_hits") or [])
         state["response"] = response
         return state
 
-    async def _rank_categories_by_summary(
+    async def _rank_files_by_summary(
         self,
         query_vec: list[float],
         top_k: int,
@@ -733,8 +733,8 @@ class RetrieveMixin:
         embed_client: Any | None = None,
         categories: Mapping[str, Any] | None = None,
     ) -> tuple[list[tuple[str, float]], dict[str, str]]:
-        category_pool = categories if categories is not None else store.memory_category_repo.categories
-        entries = [(cid, cat.summary) for cid, cat in category_pool.items() if cat.summary]
+        file_pool = categories if categories is not None else store.recall_file_repo.categories
+        entries = [(cid, cat.summary) for cid, cat in file_pool.items() if cat.summary]
         if not entries:
             return [], {}
         summary_texts = [summary for _, summary in entries]
@@ -879,8 +879,8 @@ class RetrieveMixin:
     ) -> dict[str, Any]:
         """Embedding-based retrieval with query rewriting and judging at each tier"""
         where_filters = self._normalize_where(where)
-        category_pool = store.memory_category_repo.list_categories(where_filters)
-        items_pool = store.memory_item_repo.list_items(where_filters)
+        file_pool = store.recall_file_repo.list_categories(where_filters)
+        entries_pool = store.recall_entry_repo.list_items(where_filters)
         resource_pool = store.resource_repo.list_resources(where_filters)
         client = llm_client or self._get_llm_client()
         embed = embed_client or self._get_embedding_client()
@@ -890,19 +890,17 @@ class RetrieveMixin:
         content_sections: list[str] = []
 
         # Tier 1: Categories
-        cat_hits, summary_lookup = await self._rank_categories_by_summary(
+        cat_hits, summary_lookup = await self._rank_files_by_summary(
             qvec,
             top_k,
             ctx,
             store,
             embed_client=embed,
-            categories=category_pool,
+            categories=file_pool,
         )
         if cat_hits:
-            response["categories"] = self._materialize_hits(cat_hits, category_pool)
-            content_sections.append(
-                self._format_category_content(cat_hits, summary_lookup, store, categories=category_pool)
-            )
+            response["categories"] = self._materialize_hits(cat_hits, file_pool)
+            content_sections.append(self._format_file_content(cat_hits, summary_lookup, store, categories=file_pool))
 
             needs_more, current_query = await self._decide_if_retrieval_needed(
                 current_query,
@@ -917,10 +915,10 @@ class RetrieveMixin:
             qvec = (await embed.embed([current_query]))[0]
 
         # Tier 2: Items
-        item_hits = store.memory_item_repo.vector_search_items(qvec, top_k, where=where_filters)
-        if item_hits:
-            response["items"] = self._materialize_hits(item_hits, items_pool)
-            content_sections.append(self._format_item_content(item_hits, store, items=items_pool))
+        entry_hits = store.recall_entry_repo.vector_search_items(qvec, top_k, where=where_filters)
+        if entry_hits:
+            response["items"] = self._materialize_hits(entry_hits, entries_pool)
+            content_sections.append(self._format_entry_content(entry_hits, store, items=entries_pool))
 
             needs_more, current_query = await self._decide_if_retrieval_needed(
                 current_query,
@@ -954,30 +952,30 @@ class RetrieveMixin:
             out.append(data)
         return out
 
-    def _format_category_content(
+    def _format_file_content(
         self,
         hits: list[tuple[str, float]],
         summaries: dict[str, str],
         store: Database,
         categories: Mapping[str, Any] | None = None,
     ) -> str:
-        category_pool = categories if categories is not None else store.memory_category_repo.categories
+        file_pool = categories if categories is not None else store.recall_file_repo.categories
         lines = []
         for cid, score in hits:
-            cat = category_pool.get(cid)
+            cat = file_pool.get(cid)
             if not cat:
                 continue
             summary = summaries.get(cid) or cat.summary or ""
             lines.append(f"Category: {cat.name}\nSummary: {summary}\nScore: {score:.3f}")
         return "\n\n".join(lines).strip()
 
-    def _format_item_content(
+    def _format_entry_content(
         self, hits: list[tuple[str, float]], store: Database, items: Mapping[str, Any] | None = None
     ) -> str:
-        item_pool = items if items is not None else store.memory_item_repo.items
+        entry_pool = items if items is not None else store.recall_entry_repo.items
         lines = []
         for iid, score in hits:
-            item = item_pool.get(iid)
+            item = entry_pool.get(iid)
             if not item:
                 continue
             lines.append(f"Memory Item ({item.memory_type}): {item.summary}\nScore: {score:.3f}")
@@ -1031,9 +1029,9 @@ class RetrieveMixin:
         3. If needs more, search resources related to context
         """
         where_filters = self._normalize_where(where)
-        category_pool = store.memory_category_repo.list_categories(where_filters)
-        items_pool = store.memory_item_repo.list_items(where_filters)
-        relations = store.category_item_repo.list_relations(where_filters)
+        file_pool = store.recall_file_repo.list_categories(where_filters)
+        entries_pool = store.recall_entry_repo.list_items(where_filters)
+        relations = store.recall_file_entry_repo.list_relations(where_filters)
         resource_pool = store.resource_repo.list_resources(where_filters)
         current_query = query
         client = llm_client or self._get_llm_client()
@@ -1041,17 +1039,17 @@ class RetrieveMixin:
         content_sections: list[str] = []
 
         # Tier 1: Search and rank categories
-        category_hits = await self._llm_rank_categories(
+        file_hits = await self._llm_rank_files(
             current_query,
             top_k,
             ctx,
             store,
             llm_client=client,
-            categories=category_pool,
+            categories=file_pool,
         )
-        if category_hits:
-            response["categories"] = category_hits
-            content_sections.append(self._format_llm_category_content(category_hits))
+        if file_hits:
+            response["categories"] = file_hits
+            content_sections.append(self._format_llm_file_content(file_hits))
 
             needs_more, current_query = await self._decide_if_retrieval_needed(
                 current_query,
@@ -1064,22 +1062,22 @@ class RetrieveMixin:
                 return response
 
         # Tier 2: Search memory items from relevant categories
-        relevant_category_ids = [cat["id"] for cat in category_hits]
-        item_hits = await self._llm_rank_items(
+        relevant_file_ids = [cat["id"] for cat in file_hits]
+        entry_hits = await self._llm_rank_entries(
             current_query,
             top_k,
-            relevant_category_ids,
-            category_hits,
+            relevant_file_ids,
+            file_hits,
             ctx,
             store,
             llm_client=client,
-            categories=category_pool,
-            items=items_pool,
+            categories=file_pool,
+            items=entries_pool,
             relations=relations,
         )
-        if item_hits:
-            response["items"] = item_hits
-            content_sections.append(self._format_llm_item_content(item_hits))
+        if entry_hits:
+            response["items"] = entry_hits
+            content_sections.append(self._format_llm_entry_content(entry_hits))
 
             needs_more, current_query = await self._decide_if_retrieval_needed(
                 current_query,
@@ -1095,12 +1093,12 @@ class RetrieveMixin:
         resource_hits = await self._llm_rank_resources(
             current_query,
             top_k,
-            category_hits,
-            item_hits,
+            file_hits,
+            entry_hits,
             ctx,
             store,
             llm_client=client,
-            items=items_pool,
+            items=entries_pool,
             resources=resource_pool,
         )
         if resource_hits:
@@ -1109,14 +1107,14 @@ class RetrieveMixin:
 
         return response
 
-    def _format_categories_for_llm(
+    def _format_files_for_llm(
         self,
         store: Database,
         category_ids: list[str] | None = None,
         categories: Mapping[str, Any] | None = None,
     ) -> str:
         """Format categories for LLM consumption"""
-        categories_to_format = categories if categories is not None else store.memory_category_repo.categories
+        categories_to_format = categories if categories is not None else store.recall_file_repo.categories
         if category_ids:
             categories_to_format = {cid: cat for cid, cat in categories_to_format.items() if cid in category_ids}
 
@@ -1135,7 +1133,7 @@ class RetrieveMixin:
 
         return "\n".join(lines)
 
-    def _format_items_for_llm(
+    def _format_entries_for_llm(
         self,
         store: Database,
         category_ids: list[str] | None = None,
@@ -1143,8 +1141,8 @@ class RetrieveMixin:
         relations: Sequence[Any] | None = None,
     ) -> str:
         """Format memory items for LLM consumption, optionally filtered by category"""
-        item_pool = items if items is not None else store.memory_item_repo.items
-        relation_pool = relations if relations is not None else store.category_item_repo.relations
+        entry_pool = items if items is not None else store.recall_entry_repo.items
+        relation_pool = relations if relations is not None else store.recall_file_entry_repo.relations
         items_to_format = []
         seen_item_ids = set()
 
@@ -1152,12 +1150,12 @@ class RetrieveMixin:
             # Get items that belong to the specified categories
             for rel in relation_pool:
                 if rel.category_id in category_ids:
-                    item = item_pool.get(rel.item_id)
+                    item = entry_pool.get(rel.item_id)
                     if item and item.id not in seen_item_ids:
                         items_to_format.append(item)
                         seen_item_ids.add(item.id)
         else:
-            items_to_format = list(item_pool.values())
+            items_to_format = list(entry_pool.values())
 
         if not items_to_format:
             return "No memory items available."
@@ -1180,12 +1178,12 @@ class RetrieveMixin:
     ) -> str:
         """Format resources for LLM consumption, optionally filtered by related items"""
         resource_pool = resources if resources is not None else store.resource_repo.resources
-        item_pool = items if items is not None else store.memory_item_repo.items
+        entry_pool = items if items is not None else store.recall_entry_repo.items
         resources_to_format = []
 
         if item_ids:
             # Get resources that are related to the specified items
-            resource_ids = {item_pool[iid].resource_id for iid in item_ids if iid in item_pool and iid is not None}
+            resource_ids = {entry_pool[iid].resource_id for iid in item_ids if iid in entry_pool and iid is not None}
             resources_to_format = [
                 resource_pool[rid] for rid in resource_ids if rid in resource_pool and rid is not None
             ]
@@ -1206,7 +1204,7 @@ class RetrieveMixin:
 
         return "\n".join(lines)
 
-    async def _llm_rank_categories(
+    async def _llm_rank_files(
         self,
         query: str,
         top_k: int,
@@ -1216,11 +1214,11 @@ class RetrieveMixin:
         categories: Mapping[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Use LLM to rank categories based on query relevance"""
-        category_pool = categories if categories is not None else store.memory_category_repo.categories
-        if not category_pool:
+        file_pool = categories if categories is not None else store.recall_file_repo.categories
+        if not file_pool:
             return []
 
-        categories_data = self._format_categories_for_llm(store, categories=category_pool)
+        categories_data = self._format_files_for_llm(store, categories=file_pool)
         prompt = LLM_CATEGORY_RANKER_PROMPT.format(
             query=self._escape_prompt_value(query),
             top_k=top_k,
@@ -1229,14 +1227,14 @@ class RetrieveMixin:
 
         client = llm_client or self._get_llm_client()
         llm_response = await client.chat(prompt)
-        return self._parse_llm_category_response(llm_response, store, categories=category_pool)
+        return self._parse_llm_file_response(llm_response, store, categories=file_pool)
 
-    async def _llm_rank_items(
+    async def _llm_rank_entries(
         self,
         query: str,
         top_k: int,
         category_ids: list[str],
-        category_hits: list[dict[str, Any]],
+        file_hits: list[dict[str, Any]],
         ctx: Context,
         store: Database,
         llm_client: Any | None = None,
@@ -1249,14 +1247,14 @@ class RetrieveMixin:
             logger.debug("[LLM Rank Items] No category_ids provided")
             return []
 
-        item_pool = items if items is not None else store.memory_item_repo.items
-        items_data = self._format_items_for_llm(store, category_ids, items=item_pool, relations=relations)
+        entry_pool = items if items is not None else store.recall_entry_repo.items
+        items_data = self._format_entries_for_llm(store, category_ids, items=entry_pool, relations=relations)
         if items_data == "No memory items available.":
             return []
 
         # Format relevant categories for context
         relevant_categories_info = "\n".join([
-            f"- {cat['name']}: {cat.get('summary', cat.get('description', ''))}" for cat in category_hits
+            f"- {cat['name']}: {cat.get('summary', cat.get('description', ''))}" for cat in file_hits
         ])
 
         prompt = LLM_ITEM_RANKER_PROMPT.format(
@@ -1268,14 +1266,14 @@ class RetrieveMixin:
 
         client = llm_client or self._get_llm_client()
         llm_response = await client.chat(prompt)
-        return self._parse_llm_item_response(llm_response, store, items=item_pool)
+        return self._parse_llm_entry_response(llm_response, store, items=entry_pool)
 
     async def _llm_rank_resources(
         self,
         query: str,
         top_k: int,
-        category_hits: list[dict[str, Any]],
-        item_hits: list[dict[str, Any]],
+        file_hits: list[dict[str, Any]],
+        entry_hits: list[dict[str, Any]],
         ctx: Context,
         store: Database,
         llm_client: Any | None = None,
@@ -1284,24 +1282,24 @@ class RetrieveMixin:
     ) -> list[dict[str, Any]]:
         """Use LLM to rank resources related to the context"""
         # Get item IDs to filter resources
-        item_ids = [item["id"] for item in item_hits]
+        item_ids = [item["id"] for item in entry_hits]
         if not item_ids:
             return []
 
-        item_pool = items if items is not None else store.memory_item_repo.items
+        entry_pool = items if items is not None else store.recall_entry_repo.items
         resource_pool = resources if resources is not None else store.resource_repo.resources
-        resources_data = self._format_resources_for_llm(store, item_ids, items=item_pool, resources=resource_pool)
+        resources_data = self._format_resources_for_llm(store, item_ids, items=entry_pool, resources=resource_pool)
         if resources_data == "No resources available.":
             return []
 
         # Build context info
         context_parts = []
-        if category_hits:
+        if file_hits:
             context_parts.append("Relevant Categories:")
-            context_parts.extend([f"- {cat['name']}" for cat in category_hits])
-        if item_hits:
+            context_parts.extend([f"- {cat['name']}" for cat in file_hits])
+        if entry_hits:
             context_parts.append("\nRelevant Memory Items:")
-            context_parts.extend([f"- {item.get('summary', '')[:100]}..." for item in item_hits[:3]])
+            context_parts.extend([f"- {item.get('summary', '')[:100]}..." for item in entry_hits[:3]])
 
         context_info = "\n".join(context_parts)
         prompt = LLM_RESOURCE_RANKER_PROMPT.format(
@@ -1315,11 +1313,11 @@ class RetrieveMixin:
         llm_response = await client.chat(prompt)
         return self._parse_llm_resource_response(llm_response, store, resources=resource_pool)
 
-    def _parse_llm_category_response(
+    def _parse_llm_file_response(
         self, raw_response: str, store: Database, categories: Mapping[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         """Parse LLM category ranking response"""
-        category_pool = categories if categories is not None else store.memory_category_repo.categories
+        file_pool = categories if categories is not None else store.recall_file_repo.categories
         results = []
         try:
             json_blob = self._extract_json_blob(raw_response)
@@ -1330,7 +1328,7 @@ class RetrieveMixin:
                 # Return categories in the order provided by LLM (already sorted by relevance)
                 for cat_id in category_ids:
                     if isinstance(cat_id, str):
-                        cat = category_pool.get(cat_id)
+                        cat = file_pool.get(cat_id)
                         if cat:
                             cat_data = self._model_dump_without_embeddings(cat)
                             results.append(cat_data)
@@ -1339,11 +1337,11 @@ class RetrieveMixin:
 
         return results
 
-    def _parse_llm_item_response(
+    def _parse_llm_entry_response(
         self, raw_response: str, store: Database, items: Mapping[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         """Parse LLM item ranking response"""
-        item_pool = items if items is not None else store.memory_item_repo.items
+        entry_pool = items if items is not None else store.recall_entry_repo.items
         results = []
         try:
             json_blob = self._extract_json_blob(raw_response)
@@ -1354,7 +1352,7 @@ class RetrieveMixin:
                 # Return items in the order provided by LLM (already sorted by relevance)
                 for item_id in item_ids:
                     if isinstance(item_id, str):
-                        mem_item = item_pool.get(item_id)
+                        mem_item = entry_pool.get(item_id)
                         if mem_item:
                             item_data = self._model_dump_without_embeddings(mem_item)
                             results.append(item_data)
@@ -1387,7 +1385,7 @@ class RetrieveMixin:
 
         return results
 
-    def _format_llm_category_content(self, hits: list[dict[str, Any]]) -> str:
+    def _format_llm_file_content(self, hits: list[dict[str, Any]]) -> str:
         """Format LLM-ranked category content for judger"""
         lines = []
         for cat in hits:
@@ -1395,7 +1393,7 @@ class RetrieveMixin:
             lines.append(f"Category: {cat['name']}\nSummary: {summary}")
         return "\n\n".join(lines).strip()
 
-    def _format_llm_item_content(self, hits: list[dict[str, Any]]) -> str:
+    def _format_llm_entry_content(self, hits: list[dict[str, Any]]) -> str:
         """Format LLM-ranked item content for judger"""
         lines = []
         for item in hits:

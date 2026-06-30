@@ -8,25 +8,25 @@ import pendulum
 
 from memu.database.inmemory.repositories.filter import matches_where
 from memu.database.inmemory.state import InMemoryState
-from memu.database.models import MemoryItem, MemoryType, compute_content_hash
-from memu.database.repositories.memory_item import MemoryItemRepo
+from memu.database.models import EntryType, RecallEntry, compute_content_hash
+from memu.database.repositories.recall_entry import RecallEntryRepo
 from memu.vector import cosine_topk, cosine_topk_salience
 
 
-class InMemoryMemoryItemRepository(MemoryItemRepo):
-    def __init__(self, *, state: InMemoryState, memory_item_model: type[MemoryItem]) -> None:
+class InMemoryRecallEntryRepository(RecallEntryRepo):
+    def __init__(self, *, state: InMemoryState, recall_entry_model: type[RecallEntry]) -> None:
         self._state = state
-        self.memory_item_model = memory_item_model
-        self.items: dict[str, MemoryItem] = self._state.items
+        self.recall_entry_model = recall_entry_model
+        self.items: dict[str, RecallEntry] = self._state.items
 
-    def list_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+    def list_items(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallEntry]:
         if not where:
             return dict(self.items)
         return {mid: item for mid, item in self.items.items() if matches_where(item, where)}
 
     def list_items_by_ref_ids(
         self, ref_ids: list[str], where: Mapping[str, Any] | None = None
-    ) -> dict[str, MemoryItem]:
+    ) -> dict[str, RecallEntry]:
         """List items by their ref_id in the extra column.
 
         Args:
@@ -34,12 +34,12 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             where: Additional filter conditions.
 
         Returns:
-            Dict mapping item_id -> MemoryItem for items whose extra.ref_id is in ref_ids.
+            Dict mapping item_id -> RecallEntry for items whose extra.ref_id is in ref_ids.
         """
         if not ref_ids:
             return {}
         ref_id_set = set(ref_ids)
-        result: dict[str, MemoryItem] = {}
+        result: dict[str, RecallEntry] = {}
         for mid, item in self.items.items():
             # Check where filter first
             if where and not matches_where(item, where):
@@ -50,7 +50,7 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
                 result[mid] = item
         return result
 
-    def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryItem]:
+    def clear_items(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallEntry]:
         if not where:
             matches = self.items.copy()
             self.items.clear()
@@ -60,7 +60,7 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             self.items.pop(mid, None)
         return matches
 
-    def _find_by_hash(self, content_hash: str, user_data: dict[str, Any]) -> MemoryItem | None:
+    def _find_by_hash(self, content_hash: str, user_data: dict[str, Any]) -> RecallEntry | None:
         """
         Find existing item by content hash within the same user scope.
 
@@ -81,13 +81,13 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         self,
         *,
         resource_id: str,
-        memory_type: MemoryType,
+        memory_type: EntryType,
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
         reinforce: bool = False,
         tool_record: dict[str, Any] | None = None,
-    ) -> MemoryItem:
+    ) -> RecallEntry:
         if reinforce and memory_type != "tool":
             return self.create_item_reinforce(
                 resource_id=resource_id,
@@ -108,7 +108,7 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
                 extra["tool_calls"] = tool_record["tool_calls"]
 
         mid = str(uuid.uuid4())
-        it = self.memory_item_model(
+        it = self.recall_entry_model(
             id=mid,
             resource_id=resource_id,
             memory_type=memory_type,
@@ -124,12 +124,12 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         self,
         *,
         resource_id: str,
-        memory_type: MemoryType,
+        memory_type: EntryType,
         summary: str,
         embedding: list[float],
         user_data: dict[str, Any],
         reinforce: bool = False,
-    ) -> MemoryItem:
+    ) -> RecallEntry:
         content_hash = compute_content_hash(summary, memory_type)
 
         # Check for existing item with same hash in same scope (deduplication)
@@ -155,7 +155,7 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
             "reinforcement_count": 1,
             "last_reinforced_at": now.isoformat(),
         })
-        it = self.memory_item_model(
+        it = self.recall_entry_model(
             id=mid,
             resource_id=resource_id,
             memory_type=memory_type,
@@ -199,7 +199,7 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
     def load_existing(self) -> None:
         return None
 
-    def get_item(self, item_id: str) -> MemoryItem | None:
+    def get_item(self, item_id: str) -> RecallEntry | None:
         return self.items.get(item_id)
 
     @staticmethod
@@ -226,12 +226,12 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         self,
         *,
         item_id: str,
-        memory_type: MemoryType | None = None,
+        memory_type: EntryType | None = None,
         summary: str | None = None,
         embedding: list[float] | None = None,
         extra: dict[str, Any] | None = None,
         tool_record: dict[str, Any] | None = None,
-    ) -> MemoryItem:
+    ) -> RecallEntry:
         item = self.items.get(item_id)
         if item is None:
             msg = f"Item with id {item_id} not found"
@@ -260,4 +260,4 @@ class InMemoryMemoryItemRepository(MemoryItemRepo):
         return item
 
 
-__all__ = ["InMemoryMemoryItemRepository"]
+__all__ = ["InMemoryRecallEntryRepository"]
