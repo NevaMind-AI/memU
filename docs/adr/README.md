@@ -14,3 +14,4 @@
 - [0012: Cloud-Backed Memory Behind the Existing CLI](0012-cloud-backed-agentic-backend.md)
 - [0013: Self-Updating Instruction Templates — Server First, Last-Good Next, Embedded Last](0013-self-updating-instruction-templates.md)
 - [0015: The Bridging Run Must Not Mine Itself — Identity from the Host, Gate from the Launch](0015-bridging-must-not-mine-its-own-run.md)
+- [0016: External Vector Index Alongside Metadata Store](0016-external-vector-index.md)
