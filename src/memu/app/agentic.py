@@ -5,8 +5,6 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from memu.vector import cosine_topk
-
 if TYPE_CHECKING:
     from memu.app.settings import ProgressiveRetrieveConfig
     from memu.database.interfaces import Database
@@ -95,9 +93,9 @@ class AgenticMixin:
     ) -> tuple[list[tuple[str, float]], dict[str, Any]]:
         """Rank :class:`RecallFileSegment` slices by embedding similarity.
 
-        The segment repo has no vector search, so the stored segment embeddings
-        are ranked directly, optionally scoped to the configured tracks via the
-        denormalized ``track``.
+        Segment repositories own their vector-search strategy: local backends
+        use stored embeddings directly, while an external vector index can
+        serve the same repository contract.
         """
         if not enabled:
             return [], {}
@@ -107,10 +105,10 @@ class AgenticMixin:
         if tracks:
             segment_where["track__in"] = list(tracks)
         segment_pool = {seg.id: seg for seg in store.recall_file_segment_repo.list_segments(segment_where)}
-        segment_hits = cosine_topk(
+        segment_hits = store.recall_file_segment_repo.vector_search_segments(
             query_vector,
-            [(sid, seg.embedding) for sid, seg in segment_pool.items()],
-            k=self.progressive_retrieve_config.file.top_k,
+            self.progressive_retrieve_config.file.top_k,
+            where=segment_where,
         )
         return segment_hits, segment_pool
 

@@ -20,6 +20,7 @@ from memu.database.models import (
     Resource,
 )
 from memu.database.repositories import RecallFileRepo, ResourceRepo
+from memu.database.vector_index.interfaces import VectorIndex
 
 
 class InMemoryStore(Database):
@@ -32,6 +33,7 @@ class InMemoryStore(Database):
         recall_file_resource_model: type[Any] | None = None,
         recall_file_segment_model: type[Any] | None = None,
         state: InMemoryState | None = None,
+        vector_index: VectorIndex | None = None,
     ) -> None:
         self.scope_model = scope_model or BaseModel
         (
@@ -58,12 +60,14 @@ class InMemoryStore(Database):
         self.recall_file_repo: RecallFileRepo = InMemoryRecallFileRepository(
             state=self.state, recall_file_model=recall_file_model
         )
+        self._vector_index = vector_index
         self.recall_file_resource_repo = InMemoryFileResourceRepository(
             state=self.state, recall_file_resource_model=recall_file_resource_model
         )
         self.recall_file_segment_repo = InMemoryFileSegmentRepository(
-            state=self.state, recall_file_segment_model=recall_file_segment_model
+            state=self.state, recall_file_segment_model=recall_file_segment_model, vector_index=vector_index
         )
 
     def close(self) -> None:
-        return None
+        if self._vector_index is not None:
+            self._vector_index.close()

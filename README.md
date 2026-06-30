@@ -162,6 +162,24 @@ service = MemoryService(
 )
 ```
 
+Milvus can be used as an external vector index for the `inmemory` metadata store:
+
+```bash
+uv sync --extra milvus
+uv run python examples/milvus_vector_index.py
+```
+
+```python
+service = MemoryService(
+    database_config={
+        "metadata_store": {"provider": "inmemory"},
+        "vector_index": {"provider": "milvus", "uri": "./milvus.db"},
+    },
+)
+```
+
+The same `uri` field can point at Milvus Lite, a Milvus server, or Zilliz Cloud. See [docs/milvus.md](docs/milvus.md).
+
 ### Multi-tenancy
 
 Every record carries optional scope fields (`user_id`, `agent_id` by default). Pass `user=` on writes and `where=` on reads to partition one store:
