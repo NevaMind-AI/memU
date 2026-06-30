@@ -68,8 +68,8 @@ tool logs        →  mine      → tool / skill items            └─ trace t
 
 1. **Ingest** — store each source as a `Resource` (the raw file) with its modality and source location
 2. **Preprocess** — parse text, caption images/video, transcribe audio, and normalize inputs
-3. **Extract** — turn raw content into typed `MemoryItem`s (the files): profile, event, knowledge, behavior, skill, or tool memories
-4. **Organize** — sort items into `MemoryCategory` folders, cross-link, embed, and summarize into a browsable tree
+3. **Extract** — turn raw content into typed `RecallEntry` records (the files): profile, event, knowledge, behavior, skill, or tool memories
+4. **Organize** — sort entries into `RecallFile` folders (a memory category, or a skill), cross-link, embed, and summarize into a browsable tree
 5. **Persist** — write records, relations, embeddings, and folder summaries through the configured backend
 
 **Reading from the file system (`retrieve`)**
@@ -83,10 +83,10 @@ tool logs        →  mine      → tool / skill items            └─ trace t
 memU's primary output is a navigable memory tree — folders, files, and the source artifacts behind them — persisted through repository contracts and returned as dictionaries from `memorize()` and `retrieve()`.
 
 ```txt
-MemoryCategory                       ← folder: a topic with an evolving summary
-├── name, description, summary
+RecallFile                           ← folder: a topic with an evolving summary
+├── name, track (memory | skill), description, content
 ├── embedding
-└── MemoryItem[]                     ← files: typed, atomic memories
+└── RecallEntry[]                    ← files: typed, atomic memories
     ├── memory_type: profile | event | knowledge | behavior | skill | tool
     ├── summary, extra, happened_at, embedding
     └── Resource                     ← source: the raw file this memory came from
@@ -95,10 +95,10 @@ MemoryCategory                       ← folder: a topic with an evolving summar
 
 | Record | File-System Role | Used By |
 |--------|------------------|---------|
-| `MemoryCategory` | **Folder** — groups related memories and keeps a topic-level summary | Load compact context for broad queries |
-| `MemoryItem` | **File** — a typed atomic memory with a summary and optional metadata | Inject precise facts, preferences, events, skills, and tool patterns |
+| `RecallFile` | **Folder** — groups related memories (or holds a skill) and keeps a topic-level summary; a `track` field marks it `memory` or `skill` | Load compact context for broad queries |
+| `RecallEntry` | **File** — a typed atomic memory with a summary and optional metadata | Inject precise facts, preferences, events, skills, and tool patterns |
 | `Resource` | **Source artifact** — the original file behind a memory, with caption/text | Trace context back to where it came from |
-| `CategoryItem` | **Link** — the edge that files an item under a folder | Navigate related memories without reprocessing the source |
+| `RecallFileEntry` | **Link** — the edge that files an entry under a folder | Navigate related memories without reprocessing the source |
 
 This gives agents a stable file system for memory: ingest raw sources once, then request scoped and ranked files instead of rereading every source artifact.
 
@@ -110,10 +110,10 @@ Every layer of the file system is stored as a structured record:
 
 | Layer | What It Represents | Why Agents Use It |
 |-------|--------------------|-------------------|
-| **MemoryCategory** | Auto-generated folder: a topic with an evolving summary | Load high-level context before drilling into details |
-| **MemoryItem** | A file: atomic structured memory with a type and summary | Inject precise facts, preferences, events, skills, and tool patterns |
+| **RecallFile** | Auto-generated folder: a topic (or a skill) with an evolving summary | Load high-level context before drilling into details |
+| **RecallEntry** | A file: atomic structured memory with a type and summary | Inject precise facts, preferences, events, skills, and tool patterns |
 | **Resource** | Source artifact behind a file: conversation, document, image, video, audio, URL, or file | Trace memory back to its source |
-| **CategoryItem** | The link that files an item under a folder | Navigate related memories without reprocessing the source |
+| **RecallFileEntry** | The link that files an entry under a folder | Navigate related memories without reprocessing the source |
 | **Embedding** | Vector index over folders, files, and sources | Retrieve relevant context with low latency |
 
 Example `memorize()` output:

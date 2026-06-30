@@ -68,8 +68,8 @@ tool logs        →  mine      → tool / skill items            └─ trace t
 
 1. **Ingerir (Ingest)**: almacena cada fuente como un `Resource` (el archivo en bruto) con su modalidad y ubicación de origen
 2. **Preprocesar (Preprocess)**: analiza texto, genera descripciones de imágenes/video, transcribe audio y normaliza las entradas
-3. **Extraer (Extract)**: convierte el contenido en bruto en `MemoryItem`s tipados (los archivos): memorias de tipo profile, event, knowledge, behavior, skill o tool
-4. **Organizar (Organize)**: clasifica los elementos en carpetas `MemoryCategory`, los enlaza entre sí, los vectoriza y los resume en un árbol navegable
+3. **Extraer (Extract)**: convierte el contenido en bruto en registros `RecallEntry` tipados (los archivos): memorias de tipo profile, event, knowledge, behavior, skill o tool
+4. **Organizar (Organize)**: clasifica los elementos en carpetas `RecallFile` (una categoría de memoria, o una habilidad), los enlaza entre sí, los vectoriza y los resume en un árbol navegable
 5. **Persistir (Persist)**: escribe registros, relaciones, embeddings y resúmenes de carpeta a través del backend configurado
 
 **Leer del sistema de archivos (`retrieve`)**
@@ -83,10 +83,10 @@ tool logs        →  mine      → tool / skill items            └─ trace t
 La salida principal de memU es un árbol de memoria navegable —carpetas, archivos y los artefactos de origen detrás de ellos— persistido mediante contratos de repositorio y devuelto como diccionarios desde `memorize()` y `retrieve()`.
 
 ```txt
-MemoryCategory                       ← carpeta: un tema con un resumen en evolución
-├── name, description, summary
+RecallFile                           ← carpeta: un tema con un resumen en evolución
+├── name, track (memory | skill), description, content
 ├── embedding
-└── MemoryItem[]                     ← archivos: memorias atómicas y tipadas
+└── RecallEntry[]                    ← archivos: memorias atómicas y tipadas
     ├── memory_type: profile | event | knowledge | behavior | skill | tool
     ├── summary, extra, happened_at, embedding
     └── Resource                     ← fuente: el archivo en bruto del que proviene esta memoria
@@ -95,10 +95,10 @@ MemoryCategory                       ← carpeta: un tema con un resumen en evol
 
 | Registro | Rol en el sistema de archivos | Usado para |
 |--------|------------------|---------|
-| `MemoryCategory` | **Carpeta**: agrupa memorias relacionadas y mantiene un resumen a nivel de tema | Cargar contexto compacto para consultas amplias |
-| `MemoryItem` | **Archivo**: memoria atómica tipada con un resumen y metadatos opcionales | Inyectar hechos, preferencias, eventos, habilidades y patrones de herramientas precisos |
+| `RecallFile` | **Carpeta**: agrupa memorias relacionadas (o contiene una habilidad) y mantiene un resumen a nivel de tema; un campo `track` lo marca como `memory` o `skill` | Cargar contexto compacto para consultas amplias |
+| `RecallEntry` | **Archivo**: memoria atómica tipada con un resumen y metadatos opcionales | Inyectar hechos, preferencias, eventos, habilidades y patrones de herramientas precisos |
 | `Resource` | **Artefacto de origen**: el archivo original detrás de una memoria, con descripción/texto | Rastrear el contexto hasta su origen |
-| `CategoryItem` | **Enlace**: la arista que archiva un elemento bajo una carpeta | Navegar memorias relacionadas sin reprocesar la fuente |
+| `RecallFileEntry` | **Enlace**: la arista que archiva un elemento bajo una carpeta | Navegar memorias relacionadas sin reprocesar la fuente |
 
 Esto da a los agentes un sistema de archivos de memoria estable: ingieren las fuentes en bruto una sola vez y luego solicitan archivos delimitados y ordenados, en lugar de releer cada artefacto de origen.
 
@@ -110,10 +110,10 @@ Cada capa del sistema de archivos se almacena como un registro estructurado:
 
 | Capa | Qué representa | Por qué la usan los agentes |
 |-------|--------------------|-------------------|
-| **MemoryCategory** | Carpeta autogenerada: un tema con un resumen en evolución | Cargar contexto de alto nivel antes de profundizar en detalles |
-| **MemoryItem** | Un archivo: memoria estructurada atómica con un tipo y un resumen | Inyectar hechos, preferencias, eventos, habilidades y patrones de herramientas precisos |
+| **RecallFile** | Carpeta autogenerada: un tema (o una habilidad) con un resumen en evolución | Cargar contexto de alto nivel antes de profundizar en detalles |
+| **RecallEntry** | Un archivo: memoria estructurada atómica con un tipo y un resumen | Inyectar hechos, preferencias, eventos, habilidades y patrones de herramientas precisos |
 | **Resource** | Artefacto de origen detrás de un archivo: conversación, documento, imagen, video, audio, URL o archivo | Rastrear la memoria hasta su origen |
-| **CategoryItem** | El enlace que archiva un elemento bajo una carpeta | Navegar memorias relacionadas sin reprocesar la fuente |
+| **RecallFileEntry** | El enlace que archiva un elemento bajo una carpeta | Navegar memorias relacionadas sin reprocesar la fuente |
 | **Embedding** | Índice vectorial sobre carpetas, archivos y fuentes | Recuperar contexto relevante con baja latencia |
 
 Ejemplo de salida de `memorize()`:

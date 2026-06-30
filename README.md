@@ -38,13 +38,14 @@ That's it. Instead of one giant prompt about a person or their workspace, your a
 
 ```txt
 workspace/
-├── INDEX.md              ← Index: a map of everything — categories, files, and summaries
-├── MEMORY.md             ← Memory: profile, preferences, goals, facts, and key events
+├── INDEX.md              ← Index: a map of everything — raw sources and summaries
+├── MEMORY.md             ← Memory: an overview that links into memory/
+├── SKILL.md              ← Skill: an overview that links into skill/
+├── resource/             ← the raw source files, copied verbatim
+├── memory/
+│   └── <topic>.md        ← one memory file per topic: facts, preferences, goals, events
 └── skill/
-    ├── {skill_name}/
-    │   └── SKILL.md       ← Skill: a learned tool pattern, workflow, or mistake to avoid
-    └── {another_skill}/
-        └── SKILL.md
+    └── <name>.md         ← one skill file per learned pattern, workflow, or mistake to avoid
 ```
 
 - **Index (`INDEX.md`)** — a map of your memories: what exists, where it came from, and where to look first
