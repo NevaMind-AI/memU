@@ -137,9 +137,10 @@ class AgenticMixin:
 
         The ranking belongs to the repo (:meth:`RecallFileSegmentRepo.vector_search_segments`),
         which is what lets a backend with a native vector index answer from one
-        indexed query; backends without one inherit a brute-force scan of the
-        same scope. Either way the scope is optionally narrowed to the
-        configured tracks via the denormalized ``track``.
+        indexed query. This includes an external vector index when configured;
+        backends without one inherit a brute-force scan of the same scope.
+        Either way the scope is optionally narrowed to the configured tracks
+        via the denormalized ``track``.
 
         The returned pool holds only the hits — everything downstream
         (:meth:`_collect_files`, :meth:`_materialize_hits`) looks up hit ids and
