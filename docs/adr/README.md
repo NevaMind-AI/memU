@@ -5,3 +5,4 @@
 - [0003: Model User Scope as First-Class Fields on Memory Records](0003-user-scope-in-data-model.md)
 - [0004: Add Workspace Memorize Without Touching Single-File `memorize`](0004-workspace-memorize-and-memory-file-system.md)
 - [0005: Extract Embedding into a Dedicated Package, Fully Decoupled from Chat Clients](0005-dedicated-embedding-package.md)
+- [0006: External Vector Index Alongside Metadata Store](0006-external-vector-index.md)
