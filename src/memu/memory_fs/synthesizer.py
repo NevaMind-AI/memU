@@ -1,125 +1,107 @@
-"""LLM synthesis of MEMORY/SKILL artifacts from the shared description trunk.
+"""LLM synthesis of the MEMORY/SKILL overview documents.
 
-This is the optional, opt-in counterpart to the deterministic exporter: instead of
-rendering already-extracted database items/summaries, it feeds the per-source
-multimodal descriptions to an LLM and synthesizes the memory document and skill
-docs directly. ``INDEX.md`` stays deterministic and is handled by the exporter.
+This is the optional, opt-in counterpart to the deterministic exporter. It synthesizes
+the two root overview documents — ``MEMORY.md`` and ``SKILL.md`` — that sit above the
+per-file payloads:
+
+- ``MEMORY.md`` is synthesized from the per-source multimodal descriptions (the source
+  trunk), merged into the prior overview.
+- ``SKILL.md`` is synthesized from the bodies of the skill-track ``RecallFile``s (the
+  skill trunk), merged into the prior overview.
+
+The per-file payloads themselves (``memory/<slug>.md``, ``skill/<slug>.md``) and
+``INDEX.md`` stay deterministic and are handled by the exporter. Skills are generated
+and persisted inside the memorize workflow (ADR 0006); this layer only summarizes them.
 """
 
 from __future__ import annotations
 
-import asyncio
-import json
 import re
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from memu.memory_fs.exporter import slugify
 from memu.prompts.memory_fs import (
     DESCRIPTIONS_PLACEHOLDER,
     EXISTING_PLACEHOLDER,
     MEMORY_SYNTHESIS_PROMPT,
-    SKILL_SYNTHESIS_PROMPT,
+    SKILL_OVERVIEW_SYNTHESIS_PROMPT,
 )
 
 if TYPE_CHECKING:
+    from memu.database.models import RecallFile
     from memu.memory_fs.exporter import FileDescription
 
 ChatFn = Callable[[str], Awaitable[str]]
 
 
-@dataclass
-class SynthesisResult:
-    """Synthesized artifact payloads, ready to hand to the exporter."""
-
-    memory_body: str = ""
-    skills: dict[str, str] = field(default_factory=dict)
-
-
 class MemorySynthesizer:
-    """Synthesize MEMORY/SKILL content from multimodal descriptions via an LLM."""
+    """Synthesize the MEMORY/SKILL overview documents via an LLM."""
 
     def __init__(
         self,
         *,
         memory_prompt: str = MEMORY_SYNTHESIS_PROMPT,
-        skill_prompt: str = SKILL_SYNTHESIS_PROMPT,
+        skill_prompt: str = SKILL_OVERVIEW_SYNTHESIS_PROMPT,
     ) -> None:
         self._memory_prompt = memory_prompt
         self._skill_prompt = skill_prompt
 
-    async def synthesize(
+    async def synthesize_memory(
         self,
         descriptions: list[FileDescription],
         *,
         existing_memory: str = "",
-        existing_skills: dict[str, str] | None = None,
         chat: ChatFn,
-    ) -> SynthesisResult:
-        """Synthesize MEMORY + SKILL from the descriptions, merging into any existing
-        artifacts.
+    ) -> str:
+        """Synthesize the ``MEMORY.md`` body from the per-source descriptions.
 
-        Pass empty ``existing_*`` (the default) to build from scratch; pass the prior
-        artifacts to incrementally fold the (changed) descriptions into them. The two
-        LLM calls are independent and run concurrently.
+        Empty ``existing_memory`` builds from scratch; a populated value is merged into.
+        Returns the prior body unchanged when there is nothing to synthesize.
         """
-        existing_skills = existing_skills or {}
-        formatted = self._format(descriptions)
+        formatted = self._format_descriptions(descriptions)
         if not formatted:
-            return SynthesisResult(memory_body=existing_memory, skills=dict(existing_skills))
-
-        memory_body, skills = await asyncio.gather(
-            self._synthesize_memory_formatted(formatted, existing_memory=existing_memory, chat=chat),
-            self._synthesize_skills_formatted(formatted, existing_skills=existing_skills, chat=chat),
-        )
-        return SynthesisResult(memory_body=memory_body, skills=skills)
-
-    async def synthesize_skills(
-        self,
-        descriptions: list[FileDescription],
-        *,
-        existing_skills: dict[str, str] | None = None,
-        chat: ChatFn,
-    ) -> dict[str, str]:
-        """Synthesize only the skill bypass (decoupled from MEMORY.md).
-
-        The ``skill/`` tree is a sibling of ``MEMORY.md`` projected from the same
-        description trunk, so it can be (re)built independently of how MEMORY.md is
-        produced. As with :meth:`synthesize`, empty ``existing_skills`` builds from
-        scratch and a populated map merges the changed descriptions into it.
-        """
-        existing_skills = existing_skills or {}
-        formatted = self._format(descriptions)
-        if not formatted:
-            return dict(existing_skills)
-        return await self._synthesize_skills_formatted(formatted, existing_skills=existing_skills, chat=chat)
-
-    async def _synthesize_memory_formatted(self, formatted: str, *, existing_memory: str, chat: ChatFn) -> str:
+            return existing_memory
         prompt = self._memory_prompt.replace(EXISTING_PLACEHOLDER, existing_memory.strip() or "(empty)").replace(
             DESCRIPTIONS_PLACEHOLDER, formatted
         )
         return self._clean_markdown(await chat(prompt))
 
-    async def _synthesize_skills_formatted(
-        self, formatted: str, *, existing_skills: dict[str, str], chat: ChatFn
-    ) -> dict[str, str]:
-        prompt = self._skill_prompt.replace(
-            EXISTING_PLACEHOLDER, self._format_existing_skills(existing_skills) or "(none)"
-        ).replace(DESCRIPTIONS_PLACEHOLDER, formatted)
-        upserts = self._parse_skills(await chat(prompt))
-        return {**existing_skills, **upserts}
+    async def synthesize_skill_overview(
+        self,
+        skills: list[RecallFile],
+        *,
+        existing_skill: str = "",
+        chat: ChatFn,
+    ) -> str:
+        """Synthesize the ``SKILL.md`` overview from the skill-track files' bodies.
+
+        The skill files are the full accumulated library (the memorize workflow merges
+        per source), so the overview is regenerated from the whole set each time, merged
+        into any prior overview. Returns the prior overview unchanged when empty.
+        """
+        formatted = self._format_skills(skills)
+        if not formatted:
+            return existing_skill
+        prompt = self._skill_prompt.replace(EXISTING_PLACEHOLDER, existing_skill.strip() or "(empty)").replace(
+            DESCRIPTIONS_PLACEHOLDER, formatted
+        )
+        return self._clean_markdown(await chat(prompt))
 
     @staticmethod
-    def _format_existing_skills(skills: dict[str, str]) -> str:
-        return "\n\n".join(f"## {slug}\n{body}".strip() for slug, body in sorted(skills.items()))
-
-    @staticmethod
-    def _format(descriptions: list[FileDescription]) -> str:
+    def _format_descriptions(descriptions: list[FileDescription]) -> str:
         lines = [
             f"- [{desc.modality}] {desc.url}: {desc.description}" for desc in descriptions if desc.description.strip()
         ]
         return "\n".join(lines)
+
+    @staticmethod
+    def _format_skills(skills: list[RecallFile]) -> str:
+        blocks = [
+            f"## {skill.name}\n{(skill.content or '').strip()}".strip()
+            for skill in sorted(skills, key=lambda s: s.name)
+            if (skill.content or "").strip()
+        ]
+        return "\n\n".join(blocks)
 
     @staticmethod
     def _clean_markdown(raw: str) -> str:
@@ -129,45 +111,5 @@ class MemorySynthesizer:
             text = re.sub(r"\n```$", "", text).strip()
         return text
 
-    def _parse_skills(self, raw: str) -> dict[str, str]:
-        payload = self._extract_json_array(raw)
-        if payload is None:
-            return {}
-        try:
-            parsed = json.loads(payload)
-        except (json.JSONDecodeError, TypeError):
-            return {}
-        if not isinstance(parsed, list):
-            return {}
 
-        skills: dict[str, str] = {}
-        used: dict[str, int] = {}
-        for entry in parsed:
-            if not isinstance(entry, dict):
-                continue
-            name = entry.get("name")
-            body = entry.get("body")
-            if not isinstance(name, str) or not isinstance(body, str):
-                continue
-            body = body.strip()
-            if not body:
-                continue
-            base = slugify(name)
-            count = used.get(base, 0)
-            slug = base if count == 0 else f"{base}-{count + 1}"
-            used[base] = count + 1
-            skills[slug] = body
-        return skills
-
-    @staticmethod
-    def _extract_json_array(raw: str) -> str | None:
-        if not raw:
-            return None
-        start = raw.find("[")
-        end = raw.rfind("]")
-        if start == -1 or end == -1 or end <= start:
-            return None
-        return raw[start : end + 1]
-
-
-__all__ = ["ChatFn", "MemorySynthesizer", "SynthesisResult"]
+__all__ = ["ChatFn", "MemorySynthesizer"]

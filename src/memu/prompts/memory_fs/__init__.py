@@ -34,25 +34,24 @@ NEW source descriptions:
 __DESCRIPTIONS__
 """
 
-SKILL_SYNTHESIS_PROMPT = """You are maintaining an AI agent's skill library.
+SKILL_OVERVIEW_SYNTHESIS_PROMPT = """You are maintaining the overview page of an AI agent's skill library.
 
-Below are the EXISTING skills (name + body), followed by NEW source descriptions
-that were just added. From the descriptions, identify concrete, repeatable skills or
-tool usage patterns (what worked, how to repeat it, what to avoid). Ignore one-off
-facts, preferences, or trivia — those belong in the memory document, not here.
+Below is the CURRENT overview, followed by the full set of SKILLS currently in the
+library (name + body). Produce the updated overview document.
 
-Return ONLY a JSON array of skills to add or replace. Each element is an object:
-  {"name": "kebab-case-skill-name", "body": "Markdown body for this skill"}
-- To revise an existing skill, reuse its exact name and return the full new body.
-- To add a new skill, use a new name.
-- Only include skills actually affected by the new descriptions; untouched existing
-  skills are kept automatically.
-- If there are no genuine skills to add or change, return an empty array: []
+Requirements:
+- Write a concise overview of what the agent knows how to do: group related skills,
+  call out the most important ones, and orient a reader to the library. Do not paste
+  each skill's full body — the bodies live in their own files.
+- Output the FULL Markdown document only. Do not wrap it in code fences.
+- Use second-level headings (##) for groupings when there are enough skills to warrant
+  them. If there are no skills, output a short note that the library is empty.
+- Be concise and factual. Write in the same language as the skills.
 
-EXISTING skills:
+CURRENT overview:
 __EXISTING__
 
-NEW source descriptions:
+SKILLS in the library:
 __DESCRIPTIONS__
 """
 
@@ -83,5 +82,5 @@ __all__ = [
     "EXISTING_PLACEHOLDER",
     "MEMORY_SYNTHESIS_PROMPT",
     "SKILL_FILE_SYNTHESIS_PROMPT",
-    "SKILL_SYNTHESIS_PROMPT",
+    "SKILL_OVERVIEW_SYNTHESIS_PROMPT",
 ]
