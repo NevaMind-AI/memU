@@ -100,6 +100,8 @@ class MemorizeMixin:
             "store": store,
             "category_ids": list(ctx.category_ids),
             "user": user_scope,
+            # Legacy single-resource path: force only the provided categories.
+            "allow_new_categories": False,
         }
 
         result = await self._run_workflow("memorize", state)
@@ -206,6 +208,8 @@ class MemorizeMixin:
             "store": store,
             "category_ids": list(ctx.category_ids),
             "user": user_scope,
+            # Workspace sync path: let the extractor grow the taxonomy.
+            "allow_new_categories": True,
         }
         result = await self._run_workflow("memorize", state)
         if result.get("response") is None:
@@ -334,6 +338,7 @@ class MemorizeMixin:
                     "local_path",
                     "modality",
                     "user",
+                    "allow_new_categories",
                 },
                 produces={"resources", "entries", "relations", "file_updates"},
                 capabilities={"db", "vector"},
@@ -370,6 +375,7 @@ class MemorizeMixin:
             "store",
             "category_ids",
             "user",
+            "allow_new_categories",
         }
 
     async def _memorize_ingest_resource(self, state: WorkflowState, step_context: Any) -> WorkflowState:
@@ -443,6 +449,7 @@ class MemorizeMixin:
         relations: list[RecallFileEntry] = []
         file_updates: dict[str, list[tuple[str, str]]] = {}
         user_scope = state.get("user", {})
+        allow_new_categories = state.get("allow_new_categories", False)
 
         for plan in state.get("resource_plans", []):
             res = await self._create_resource_with_caption(
@@ -467,6 +474,7 @@ class MemorizeMixin:
                 store=store,
                 embed_client=embed_client,
                 user=user_scope,
+                allow_new_categories=allow_new_categories,
             )
             created_entries.extend(mem_entries)
             relations.extend(rels)
@@ -785,6 +793,7 @@ class MemorizeMixin:
         store: Database,
         embed_client: Any | None = None,
         user: Mapping[str, Any] | None = None,
+        allow_new_categories: bool = False,
     ) -> tuple[list[RecallEntry], list[RecallFileEntry], dict[str, list[tuple[str, str]]]]:
         """
         Persist recall entries and track per-file updates.
@@ -815,7 +824,9 @@ class MemorizeMixin:
             if reinforce and entry.extra.get("reinforcement_count", 1) > 1:
                 # existing entry
                 continue
-            mapped_file_ids = await self._resolve_category_ids(cat_names, ctx, store, user=user)
+            mapped_file_ids = await self._resolve_category_ids(
+                cat_names, ctx, store, user=user, allow_new=allow_new_categories
+            )
             for file_id in mapped_file_ids:
                 rels.append(
                     store.recall_file_entry_repo.link_item_category(entry.id, file_id, user_data=dict(user or {}))
@@ -971,13 +982,16 @@ class MemorizeMixin:
         store: Database,
         *,
         user: Mapping[str, Any] | None = None,
+        allow_new: bool = False,
     ) -> list[str]:
-        """Resolve extractor-proposed category names to ids, creating unknown ones.
+        """Resolve extractor-proposed category names to ids, optionally creating unknown ones.
 
-        Implements the open/adaptive taxonomy: the kernel presets no categories, so any
-        category name the extractor proposes is created on first sight and cached in the
-        context. (Embedding-similarity merging of near-duplicate categories is handled
-        later by consolidation; here we only do exact-name dedup.)
+        When ``allow_new`` is true this implements the open/adaptive taxonomy: any category
+        name the extractor proposes is created on first sight and cached in the context.
+        (Embedding-similarity merging of near-duplicate categories is handled later by
+        consolidation; here we only do exact-name dedup.) When false, only names matching an
+        existing category resolve and proposed-but-unknown names are dropped, so the caller is
+        confined to the provided taxonomy.
         """
         if not names:
             return []
@@ -985,7 +999,7 @@ class MemorizeMixin:
         resolved, unknown = self._partition_category_names(names, ctx)
         seen: set[str] = set(resolved)
 
-        if unknown:
+        if unknown and allow_new:
             vecs = await self._get_embedding_client("embedding").embed(unknown)
             for name, vec in zip(unknown, vecs, strict=True):
                 cat = store.recall_file_repo.get_or_create_category(

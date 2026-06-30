@@ -280,6 +280,7 @@ def test_resolve_category_ids_creates_unknown_adaptively(store):
             ctx,
             store,
             user={"user_id": "alice"},
+            allow_new=True,
         )
     )
     # "Programming"/"programming" collapse (case-insensitive); "Cooking" is distinct.
@@ -295,10 +296,48 @@ def test_resolve_category_ids_creates_unknown_adaptively(store):
             ctx,
             store,
             user={"user_id": "alice"},
+            allow_new=True,
         )
     )
     assert ids2 == [ctx.category_name_to_id["programming"]]
     assert len(store.recall_file_repo.list_categories()) == 2
+
+
+def test_resolve_category_ids_gated_drops_unknown(store):
+    """With ``allow_new`` false, proposed-but-unknown names are dropped, not created."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from memu.app.memorize import MemorizeMixin
+    from memu.app.service import Context
+
+    # Seed one existing category and register it in the context taxonomy.
+    existing = store.recall_file_repo.get_or_create_category(
+        name="Programming", description="", embedding=[1.0, 0.0, 0.0], user_data={"user_id": "alice"}
+    )
+    ctx = Context(categories_ready=True)
+    ctx.category_ids = [existing.id]
+    ctx.category_name_to_id = {"programming": existing.id}
+
+    fake_self = SimpleNamespace(
+        _get_embedding_client=lambda profile=None: _FakeEmbedClient(),
+        _partition_category_names=MemorizeMixin._partition_category_names,
+    )
+
+    ids = asyncio.run(
+        MemorizeMixin._resolve_category_ids(
+            fake_self,  # type: ignore[arg-type]
+            ["Programming", "Cooking"],  # "Cooking" is unknown to the provided taxonomy
+            ctx,
+            store,
+            user={"user_id": "alice"},
+            allow_new=False,
+        )
+    )
+    # Only the known "Programming" resolves; "Cooking" is dropped and never created.
+    assert ids == [existing.id]
+    names = {c.name for c in store.recall_file_repo.list_categories().values()}
+    assert names == {"Programming"}
 
 
 def test_sqlite_extra_survives_cache_miss(tmp_path):
