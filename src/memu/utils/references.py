@@ -135,7 +135,7 @@ def fetch_referenced_items(
 
     items = []
     for item_id in item_ids:
-        item = store.memory_item_repo.get_item(item_id)
+        item = store.recall_entry_repo.get_item(item_id)
         if item:
             items.append({
                 "id": item.id,

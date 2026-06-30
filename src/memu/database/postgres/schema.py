@@ -24,9 +24,9 @@ except ImportError as exc:
     raise ImportError(msg) from exc
 
 from memu.database.postgres.models import (
-    CategoryItemModel,
-    MemoryCategoryModel,
-    MemoryItemModel,
+    RecallEntryModel,
+    RecallFileEntryModel,
+    RecallFileModel,
     ResourceModel,
     build_table_model,
 )
@@ -36,9 +36,9 @@ from memu.database.postgres.models import (
 class SQLAModels:
     Base: type[Any]
     Resource: type[Any]
-    MemoryCategory: type[Any]
-    MemoryItem: type[Any]
-    CategoryItem: type[Any]
+    RecallFile: type[Any]
+    RecallEntry: type[Any]
+    RecallFileEntry: type[Any]
 
 
 _MODEL_CACHE: dict[type[Any], SQLAModels] = {}
@@ -67,21 +67,21 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
         tablename="resources",
         metadata=metadata_obj,
     )
-    memory_category_model = build_table_model(
+    recall_file_model = build_table_model(
         scope,
-        MemoryCategoryModel,
+        RecallFileModel,
         tablename="memory_categories",
         metadata=metadata_obj,
     )
-    memory_item_model = build_table_model(
+    recall_entry_model = build_table_model(
         scope,
-        MemoryItemModel,
+        RecallEntryModel,
         tablename="memory_items",
         metadata=metadata_obj,
     )
-    category_item_model = build_table_model(
+    recall_file_entry_model = build_table_model(
         scope,
-        CategoryItemModel,
+        RecallFileEntryModel,
         tablename="category_items",
         metadata=metadata_obj,
     )
@@ -93,9 +93,9 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
     models = SQLAModels(
         Base=Base,
         Resource=resource_model,
-        MemoryCategory=memory_category_model,
-        MemoryItem=memory_item_model,
-        CategoryItem=category_item_model,
+        RecallFile=recall_file_model,
+        RecallEntry=recall_entry_model,
+        RecallFileEntry=recall_file_entry_model,
     )
     _MODEL_CACHE[cache_key] = models
     return models

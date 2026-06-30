@@ -117,7 +117,7 @@ Original content:
 
 New memory items with IDs:
 <items>
-{new_memory_items_text}
+{new_recall_entries_text}
 </items>
 """
 

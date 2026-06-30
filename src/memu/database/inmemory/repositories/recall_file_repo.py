@@ -8,22 +8,22 @@ import pendulum
 
 from memu.database.inmemory.repositories.filter import matches_where
 from memu.database.inmemory.state import InMemoryState
-from memu.database.models import MemoryCategory
-from memu.database.repositories.memory_category import MemoryCategoryRepo as MemoryCategoryRepoProtocol
+from memu.database.models import RecallFile
+from memu.database.repositories.recall_file import RecallFileRepo as RecallFileRepoProtocol
 
 
-class InMemoryMemoryCategoryRepository(MemoryCategoryRepoProtocol):
-    def __init__(self, *, state: InMemoryState, memory_category_model: type[MemoryCategory]) -> None:
+class InMemoryRecallFileRepository(RecallFileRepoProtocol):
+    def __init__(self, *, state: InMemoryState, recall_file_model: type[RecallFile]) -> None:
         self._state = state
-        self.memory_category_model = memory_category_model
-        self.categories: dict[str, MemoryCategory] = self._state.categories
+        self.recall_file_model = recall_file_model
+        self.categories: dict[str, RecallFile] = self._state.categories
 
-    def list_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryCategory]:
+    def list_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
         if not where:
             return dict(self.categories)
         return {cid: cat for cid, cat in self.categories.items() if matches_where(cat, where)}
 
-    def clear_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, MemoryCategory]:
+    def clear_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
         if not where:
             matches = self.categories.copy()
             self.categories.clear()
@@ -34,10 +34,16 @@ class InMemoryMemoryCategoryRepository(MemoryCategoryRepoProtocol):
         return matches
 
     def get_or_create_category(
-        self, *, name: str, description: str, embedding: list[float], user_data: dict[str, Any]
-    ) -> MemoryCategory:
+        self,
+        *,
+        name: str,
+        description: str,
+        embedding: list[float],
+        user_data: dict[str, Any],
+        track: str = "memory",
+    ) -> RecallFile:
         for c in self.categories.values():
-            if c.name == name and all(getattr(c, k) == v for k, v in user_data.items()):
+            if c.name == name and c.track == track and all(getattr(c, k) == v for k, v in user_data.items()):
                 now = pendulum.now("UTC")
                 if c.embedding is None:
                     c.embedding = embedding
@@ -47,7 +53,9 @@ class InMemoryMemoryCategoryRepository(MemoryCategoryRepoProtocol):
                     c.updated_at = now
                 return c
         cid = str(uuid.uuid4())
-        cat = self.memory_category_model(id=cid, name=name, description=description, embedding=embedding, **user_data)
+        cat = self.recall_file_model(
+            id=cid, name=name, description=description, embedding=embedding, track=track, **user_data
+        )
         self.categories[cid] = cat
         return cat
 
@@ -58,8 +66,8 @@ class InMemoryMemoryCategoryRepository(MemoryCategoryRepoProtocol):
         name: str | None = None,
         description: str | None = None,
         embedding: list[float] | None = None,
-        summary: str | None = None,
-    ) -> MemoryCategory:
+        content: str | None = None,
+    ) -> RecallFile:
         cat = self.categories.get(category_id)
         if cat is None:
             msg = f"Category with id {category_id} not found"
@@ -71,8 +79,8 @@ class InMemoryMemoryCategoryRepository(MemoryCategoryRepoProtocol):
             cat.description = description
         if embedding is not None:
             cat.embedding = embedding
-        if summary is not None:
-            cat.summary = summary
+        if content is not None:
+            cat.content = content
 
         cat.updated_at = pendulum.now("UTC")
         return cat
@@ -81,6 +89,6 @@ class InMemoryMemoryCategoryRepository(MemoryCategoryRepoProtocol):
         return None
 
 
-MemoryCategoryRepo = InMemoryMemoryCategoryRepository
+RecallFileRepo = InMemoryRecallFileRepository
 
-__all__ = ["InMemoryMemoryCategoryRepository", "MemoryCategoryRepo"]
+__all__ = ["InMemoryRecallFileRepository", "RecallFileRepo"]

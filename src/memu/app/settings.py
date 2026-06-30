@@ -58,7 +58,7 @@ def complete_prompt_blocks(prompt: CustomPrompt, default_blocks: Mapping[str, in
     return prompt
 
 
-CompleteMemoryTypePrompt = AfterValidator(lambda v: complete_prompt_blocks(v, DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL))
+CompleteEntryTypePrompt = AfterValidator(lambda v: complete_prompt_blocks(v, DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL))
 
 
 CompleteCategoryPrompt = AfterValidator(lambda v: complete_prompt_blocks(v, DEFAULT_CATEGORY_SUMMARY_PROMPT_ORDINAL))
@@ -372,6 +372,34 @@ class RetrieveResourceConfig(BaseModel):
     top_k: int = Field(default=5, description="Total number of resources to retrieve.")
 
 
+class RetrieveFileConfig(BaseModel):
+    enabled: bool = Field(default=True, description="Whether to enable file retrieval.")
+    top_k: int = Field(default=5, description="Total number of files to retrieve.")
+    tracks: list[str] | None = Field(
+        default=None,
+        description="Optional file tracks (e.g. ['memory', 'skill']) to filter on. None means all tracks.",
+    )
+
+
+class RetrieveEntryConfig(BaseModel):
+    enabled: bool = Field(default=True, description="Whether to enable entry retrieval.")
+    top_k: int = Field(default=5, description="Total number of entries to retrieve.")
+
+
+class RetrieveWorkspaceConfig(BaseModel):
+    """Configure the simple embedding-only workspace retrieval (``retrieve_workspace``).
+
+    Unlike :class:`RetrieveConfig`, this drives a single-shot, LLM-free path that
+    embeds the query once and ranks each of the file/entry/resource layers by
+    vector similarity. No routing, sufficiency check, or summarization is involved.
+    """
+
+    method: Annotated[Literal["rag"], Normalize] = "rag"
+    file: RetrieveFileConfig = Field(default=RetrieveFileConfig())
+    entry: RetrieveEntryConfig = Field(default=RetrieveEntryConfig())
+    resource: RetrieveResourceConfig = Field(default=RetrieveResourceConfig())
+
+
 class RetrieveConfig(BaseModel):
     """Configure retrieval behavior for `MemoryUser.retrieve`.
 
@@ -416,12 +444,12 @@ class MemorizeConfig(BaseModel):
         default_factory=_default_memory_types,
         description="Ordered list of memory types (profile/event/knowledge/behavior by default).",
     )
-    memory_type_prompts: dict[str, str | Annotated[CustomPrompt, CompleteMemoryTypePrompt]] = Field(
+    memory_type_prompts: dict[str, str | Annotated[CustomPrompt, CompleteEntryTypePrompt]] = Field(
         default_factory=_default_memory_type_prompts,
         description="User prompt overrides for each memory type extraction.",
     )
     memory_extract_llm_profile: str = Field(default="default", description="LLM profile for memory extract.")
-    memory_categories: list[CategoryConfig] = Field(
+    recall_files: list[CategoryConfig] = Field(
         default_factory=list,
         description=(
             "Optional seed categories. The kernel presets no taxonomy: categories are "

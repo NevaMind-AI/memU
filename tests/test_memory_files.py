@@ -9,10 +9,9 @@ from memu.app import MemoryService
 from memu.memory_fs import MemoryFileExporter
 from memu.memory_fs.exporter import MANIFEST_NAME
 
-# With synthesize=False (the default) the whole tree is LLM-free: MEMORY.md is
-# rendered from category summaries and the skill/ tree from the deterministic
-# bypass over extracted skill-type memory items. This body seeds one such item.
-_SKILL_BODY = "---\nname: pour-over\n---\n# Pour-over brewing\nUse a 1:16 ratio."
+# With synthesize=False (the default) the whole tree is LLM-free: MEMORY.md/SKILL.md
+# are rendered as link indexes, and the memory/ and skill/ trees are rendered one file
+# per RecallFile of their track (ADR 0006).
 
 
 def _build_service(output_dir: Path) -> MemoryService:
@@ -33,21 +32,21 @@ def _seed(service: MemoryService, *, user: dict[str, str]) -> dict[str, str]:
         embedding=None,
         user_data=dict(user),
     )
-    category = store.memory_category_repo.get_or_create_category(
+    category = store.recall_file_repo.get_or_create_category(
         name="Preferences",
         description="User preferences, likes and dislikes",
         embedding=[0.1, 0.2],
         user_data=dict(user),
     )
-    store.memory_category_repo.update_category(category_id=category.id, summary="The user likes pour-over coffee.")
-    skill = store.memory_item_repo.create_item(
-        resource_id=resource.id,
-        memory_type="skill",
-        summary=_SKILL_BODY,
+    store.recall_file_repo.update_category(category_id=category.id, content="The user likes pour-over coffee.")
+    skill = store.recall_file_repo.get_or_create_category(
+        name="pour-over",
+        description="Pour-over brewing",
         embedding=[0.1, 0.2],
         user_data=dict(user),
+        track="skill",
     )
-    store.category_item_repo.link_item_category(skill.id, category.id, user_data=dict(user))
+    store.recall_file_repo.update_category(category_id=skill.id, content="# Pour-over brewing\nUse a 1:16 ratio.")
     return {"category_id": category.id, "resource_id": resource.id, "skill_id": skill.id}
 
 
@@ -62,7 +61,7 @@ async def test_export_writes_readme_layout(tmp_path: Path) -> None:
     assert "MEMORY.md" in result["written"]
     assert "SKILL.md" in result["written"]
     assert "memory/preferences.md" in result["written"]
-    assert "skill/pour-over/SKILL.md" in result["written"]
+    assert "skill/pour-over.md" in result["written"]
 
     # MEMORY.md is now an overview that links to each memory/<slug>.md file; the
     # category summary itself lives in memory/preferences.md.
@@ -78,11 +77,12 @@ async def test_export_writes_readme_layout(tmp_path: Path) -> None:
     assert "coffee.txt" in index_text
     assert "coffee preferences" in index_text
 
-    # The root SKILL.md indexes the synthesized skill/ tree.
+    # The root SKILL.md indexes the skill/ tree, mirroring MEMORY.md over memory/.
     skill_index = (tmp_path / "SKILL.md").read_text(encoding="utf-8")
-    assert "skill/pour-over/SKILL.md" in skill_index
+    assert "**pour-over**" in skill_index
+    assert "skill/pour-over.md" in skill_index
 
-    skill_text = (tmp_path / "skill" / "pour-over" / "SKILL.md").read_text(encoding="utf-8")
+    skill_text = (tmp_path / "skill" / "pour-over.md").read_text(encoding="utf-8")
     assert "Pour-over brewing" in skill_text
 
 
@@ -100,9 +100,9 @@ async def test_export_is_idempotent_until_data_changes(tmp_path: Path) -> None:
 
     # Changing only a folder summary rewrites that category's memory/<slug>.md but
     # not MEMORY.md (an overview of links) nor INDEX.md (a file TOC).
-    service.database.memory_category_repo.update_category(
+    service.database.recall_file_repo.update_category(
         category_id=ids["category_id"],
-        summary="The user now prefers espresso.",
+        content="The user now prefers espresso.",
     )
     third = await service.export_memory_files(user={"user_id": "u1"})
     assert third["changed"] is True
@@ -116,20 +116,20 @@ async def test_export_removes_stale_skill_and_prunes_dirs(tmp_path: Path) -> Non
     _seed(service, user={"user_id": "u1"})
 
     await service.export_memory_files(user={"user_id": "u1"})
-    assert (tmp_path / "skill" / "pour-over" / "SKILL.md").exists()
+    assert (tmp_path / "skill" / "pour-over.md").exists()
 
-    # Dropping the skill-type item removes it from the bypass, so its doc goes stale.
-    service.database.memory_item_repo.clear_items(where={"user_id": "u1"})
+    # Dropping the skill-track file removes its doc; the empty skill/ dir is pruned.
+    service.database.recall_file_repo.clear_categories(where={"user_id": "u1", "track": "skill"})
     result = await service.export_memory_files(user={"user_id": "u1"})
 
-    assert "skill/pour-over/SKILL.md" in result["removed"]
-    assert not (tmp_path / "skill" / "pour-over").exists()
+    assert "skill/pour-over.md" in result["removed"]
+    assert not (tmp_path / "skill").exists()
 
 
 async def test_export_respects_user_scope(tmp_path: Path) -> None:
     service = _build_service(tmp_path)
     _seed(service, user={"user_id": "u1"})
-    service.database.memory_category_repo.get_or_create_category(
+    service.database.recall_file_repo.get_or_create_category(
         name="Secret",
         description="Other user's folder",
         embedding=[0.3, 0.4],
@@ -150,13 +150,6 @@ async def test_export_disabled_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(RuntimeError, match="disabled"):
         await service.export_memory_files(user={"user_id": "u1"})
-
-
-def test_skill_name_from_frontmatter_and_fallbacks(tmp_path: Path) -> None:
-    exporter = MemoryFileExporter(str(tmp_path))
-    assert exporter._skill_name("---\nname: My Skill\n---\nbody", fallback="x") == "my-skill"
-    assert exporter._skill_name("# Heading Title\nbody", fallback="x") == "heading-title"
-    assert exporter._skill_name("plain text only", fallback="skill-abc123") == "skill-abc123"
 
 
 def test_exporter_manifest_roundtrip(tmp_path: Path) -> None:

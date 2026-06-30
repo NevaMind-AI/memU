@@ -50,37 +50,42 @@ class MemoryFilesBuilder:
         tree is (re)initialized from the full scoped store. ``make_client`` builds
         the LLM client used for synthesis from a profile name.
 
-        LLM work only happens when ``synthesize=True``: MEMORY.md and the skill/
-        tree are synthesized from the per-source descriptions. Otherwise both are
-        left as ``None`` so the exporter renders MEMORY.md deterministically from
-        category summaries and falls back to its rule-based skill bypass.
+        LLM work only happens when ``synthesize=True``: the root overview documents
+        MEMORY.md and SKILL.md are synthesized (MEMORY.md from the per-source
+        descriptions, SKILL.md from the skill-track files' bodies). Otherwise both are
+        left as ``None`` so the exporter renders each deterministically as a link index
+        over its per-file payloads. The ``memory/`` and ``skill/`` trees themselves are
+        always rendered deterministically from the DB (ADR 0006).
         """
         memory_body: str | None = None
-        skills: dict[str, str] | None = None
+        skill_body: str | None = None
 
         if self.config.synthesize:
-            # The shared description trunk is the just-changed sources for an
-            # incremental update, otherwise the full in-scope store.
+            # MEMORY.md trunk: the just-changed sources for an incremental update,
+            # otherwise the full in-scope store. SKILL.md is synthesized from the full
+            # skill set regardless (the workflow already merges skills per source).
             is_update = changed is not None and self.exporter.artifacts_exist()
             if is_update:
                 descriptions = MemoryFileExporter._build_descriptions(changed)  # type: ignore[arg-type]
             else:
                 resources = list(database.resource_repo.list_resources(where=where or None).values())
                 descriptions = MemoryFileExporter._build_descriptions(resources)
+            skill_files = list(
+                database.recall_file_repo.list_categories(where={**(where or {}), "track": "skill"}).values()
+            )
 
-            # An incremental update merges the changed descriptions into the prior
-            # artifacts; a full (re)initialization starts from empty existing state
-            # so stale entries are dropped (the exporter's manifest diff prunes any
-            # files no longer produced).
+            # An incremental update merges into the prior overviews; a full
+            # (re)initialization starts from empty existing state.
             existing = await asyncio.to_thread(self.exporter.read_existing) if is_update else ExistingArtifacts()
             client = make_client(self.config.synthesis_llm_profile)
-            synthesized = await self.synthesizer.synthesize(
-                descriptions,
-                existing_memory=existing.memory_body,
-                existing_skills=existing.skills,
-                chat=client.chat,
+            memory_body, skill_body = await asyncio.gather(
+                self.synthesizer.synthesize_memory(
+                    descriptions, existing_memory=existing.memory_body, chat=client.chat
+                ),
+                self.synthesizer.synthesize_skill_overview(
+                    skill_files, existing_skill=existing.skill_body, chat=client.chat
+                ),
             )
-            memory_body, skills = synthesized.memory_body, synthesized.skills
 
         async with self.lock:
             result: ExportResult = await asyncio.to_thread(
@@ -88,7 +93,7 @@ class MemoryFilesBuilder:
                 database,
                 where=where,
                 memory_body=memory_body,
-                skills=skills,
+                skill_body=skill_body,
             )
         return result.to_dict()
 

@@ -103,14 +103,14 @@ def _seed_resource_with_item(service: MemoryService, *, url: str, category_id: s
         embedding=None,
         user_data=dict(user),
     )
-    item = store.memory_item_repo.create_item(
+    item = store.recall_entry_repo.create_item(
         resource_id=res.id,
         memory_type="profile",
         summary=f"summary for {url}",
         embedding=[0.0],
         user_data=dict(user),
     )
-    store.category_item_repo.link_item_category(item.id, category_id, dict(user))
+    store.recall_file_entry_repo.link_item_category(item.id, category_id, dict(user))
     return res.id
 
 
@@ -138,9 +138,9 @@ async def test_cascade_delete_removes_resource_items_relations(monkeypatch) -> N
     assert keep_id in remaining
     assert drop_id not in remaining
     # The dropped resource's item and relation are gone; the kept one's survive.
-    items = store.memory_item_repo.list_items(where=user)
+    items = store.recall_entry_repo.list_items(where=user)
     assert all(it.resource_id == keep_id for it in items.values())
-    relations = store.category_item_repo.list_relations(where=user)
+    relations = store.recall_file_entry_repo.list_relations(where=user)
     assert len(relations) == 1
     # Discarded content was fed to the summary recompute as (before, None).
     assert patched and category_id in patched[0]
@@ -168,7 +168,7 @@ async def test_memorize_workspace_sync_add_modify_delete(tmp_path: Path, monkeyp
             embedding=None,
             user_data=dict(user_scope or {}),
         )
-        store.memory_item_repo.create_item(
+        store.recall_entry_repo.create_item(
             resource_id=res.id,
             memory_type="profile",
             summary=f"summary {resource_url}",
