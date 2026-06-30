@@ -82,6 +82,58 @@ Edge  (a [[wikilink]]):      from_node · to_node · type?      ← graph lines 
 set. The three lines have **separate stores** — there is no shared table and no `track`
 discriminator.
 
+### Layer model: L0 / L1 / L2 (refines the data model above)
+
+The generic "Node/Edge" sketch above is refined into three explicit **representation
+layers**, which map directly onto memU's existing records:
+
+| Layer | Meaning | Existing record |
+| --- | --- | --- |
+| **L0** | resource-file description (one per source) | `Resource` (+ caption) |
+| **L1** | item — an atomic extracted memory; the **graph node** | `RecallEntry` |
+| **L2** | category — grouped items with a summary | `RecallFile` |
+
+**The graph is an L1 concept.** Its nodes are *items* and its edges are **item ↔ item**
+relations. A resource (L0) and a category (L2) are **not** nodes — an item references them
+by attribute (`resource_path → L0`, `category_path → L2`), and those references are **not**
+graph edges. (This is the mem0 model: entity nodes, entity↔entity edges, plus source
+back-references.)
+
+Each line materializes a different subset of the layers:
+
+| Line | L0 resource | L1 item + graph | L2 category |
+| --- | :--: | :--: | :--: |
+| **workspace** | ✓ | ✓ (item ↔ item) | — |
+| **memory** | ✓ | ✓ (item ↔ item) | ✓ |
+| **skill** | ✓ | — | ✓ (synthesized from L0) |
+
+- The **item↔item graph lives at L1**, so **workspace and memory have it; skill does not**
+  (skill has no items). That is precisely what "memory and workspace need a graph, skill
+  does not" means.
+- **memory = workspace + an L2 grouping layer** (it files items into categories).
+- **skill = L0 → L2 directly**, skipping L1 — the ADR 0006 skill bypass, now intentional
+  and explicit. Each skill category (L2) **retains its L0 source references**, which closes
+  the skill provenance/deletion gap left open by ADR 0006.
+
+**Markdown output is per layer, not per node:**
+
+- `INDEX.md` (workspace) indexes the **L0 resources** (the file catalog); the L1 items live
+  only in the graph (reached by search/traverse), not as per-item markdown files.
+- `MEMORY.md` / `SKILL.md` are the **L2** index over the per-category files.
+- So the three index files are **not** dumps of the graph — they index the resource (L0)
+  and category (L2) layers, which are distinct from the item (L1) graph.
+
+**Seam with preprocessing.** L0 is the preprocessing output (the per-resource / per-segment
+description). L1 item extraction is each line's ingest *treatment* (workspace + memory). L2
+is memory's grouping / skill's synthesis. Segmentation (one document → many items) belongs
+in the modality-aware preprocessor — its result is already a list of segments — and the
+**embedding unit is the item**, not a RAG chunk.
+
+This refinement supersedes the generic "graph wiki (document nodes)" wording earlier in
+this section: the graph nodes are **items (L1)**, **workspace stops at L1** (no L2), and
+**memory adds L2**. The only structure new to memU is the **L1 item↔item graph** — L0/L1/L2
+themselves already exist as `Resource` / `RecallEntry` / `RecallFile`.
+
 ### Per-line ingest treatment (the only code that differs)
 
 - **workspace:** file → page kept whole; links are **structural** (imports / references /
