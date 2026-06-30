@@ -95,9 +95,12 @@ class RecallEntry(BaseRecord):
 
 class RecallFile(BaseRecord):
     name: str
+    # Which track this file belongs to: "memory" (a memory category) or "skill"
+    # (a synthesized skill). Defaults to "memory" so existing rows backfill correctly.
+    track: str = "memory"
     description: str
     embedding: list[float] | None = None
-    summary: str | None = None
+    content: str | None = None
 
 
 class RecallFileEntry(BaseRecord):

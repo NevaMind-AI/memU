@@ -69,12 +69,16 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
         description: str,
         embedding: list[float],
         user_data: dict[str, Any],
+        track: str = "memory",
     ) -> RecallFile:
         from sqlmodel import select
 
         now = self._now()
         with self._sessions.session() as session:
-            filters = [self._sqla_models.RecallFile.name == name]
+            filters = [
+                self._sqla_models.RecallFile.name == name,
+                self._sqla_models.RecallFile.track == track,
+            ]
             for key, value in user_data.items():
                 filters.append(getattr(self._sqla_models.RecallFile, key) == value)
             existing = session.scalar(select(self._sqla_models.RecallFile).where(*filters))
@@ -98,6 +102,7 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
                 name=name,
                 description=description,
                 embedding=self._prepare_embedding(embedding),
+                track=track,
                 created_at=now,
                 updated_at=now,
                 **user_data,
@@ -115,7 +120,7 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
         name: str | None = None,
         description: str | None = None,
         embedding: list[float] | None = None,
-        summary: str | None = None,
+        content: str | None = None,
     ) -> RecallFile:
         from sqlmodel import select
 
@@ -134,8 +139,8 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
                 cat.description = description
             if embedding is not None:
                 cat.embedding = self._prepare_embedding(embedding)
-            if summary is not None:
-                cat.summary = summary
+            if content is not None:
+                cat.content = content
 
             cat.updated_at = now
             session.add(cat)

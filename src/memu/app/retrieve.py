@@ -104,6 +104,22 @@ class RetrieveMixin:
 
         return cleaned
 
+    @staticmethod
+    def _memory_where(where_filters: Mapping[str, Any] | None) -> dict[str, Any]:
+        """Scope a category ``where`` filter to the memory track.
+
+        Retrieval ranks/recalls memory categories only; skill-track ``RecallFile``s
+        (ADR 0006) live in the same table and must be excluded.
+        """
+        return {**(where_filters or {}), "track": "memory"}
+
+    @staticmethod
+    def _memory_categories(store: Database) -> dict[str, Any]:
+        """The category cache filtered to the memory track (skills excluded)."""
+        return {
+            cid: c for cid, c in store.recall_file_repo.categories.items() if getattr(c, "track", "memory") == "memory"
+        }
+
     def _build_rag_retrieve_workflow(self) -> list[WorkflowStep]:
         steps = [
             WorkflowStep(
@@ -268,7 +284,7 @@ class RetrieveMixin:
         embed_client = self._get_step_embedding_client(step_context)
         store = state["store"]
         where_filters = state.get("where") or {}
-        file_pool = store.recall_file_repo.list_categories(where_filters)
+        file_pool = store.recall_file_repo.list_categories(self._memory_where(where_filters))
         qvec = (await embed_client.embed([state["active_query"]]))[0]
         hits, summary_lookup = await self._rank_files_by_summary(
             qvec,
@@ -297,7 +313,7 @@ class RetrieveMixin:
         retrieved_content = ""
         store = state["store"]
         where_filters = state.get("where") or {}
-        file_pool = state.get("file_pool") or store.recall_file_repo.list_categories(where_filters)
+        file_pool = state.get("file_pool") or store.recall_file_repo.list_categories(self._memory_where(where_filters))
         hits = state.get("file_hits") or []
         if hits:
             retrieved_content = self._format_file_content(
@@ -337,7 +353,7 @@ class RetrieveMixin:
             if not summary:
                 cat = file_pool.get(cid)
                 if cat:
-                    summary = cat.summary
+                    summary = cat.content
             if summary:
                 refs = extract_references(summary)
                 referenced_entry_ids.update(refs)
@@ -438,7 +454,9 @@ class RetrieveMixin:
         if state.get("needs_retrieval"):
             store = state["store"]
             where_filters = state.get("where") or {}
-            files_pool = state.get("file_pool") or store.recall_file_repo.list_categories(where_filters)
+            files_pool = state.get("file_pool") or store.recall_file_repo.list_categories(
+                self._memory_where(where_filters)
+            )
             entries_pool = state.get("entry_pool") or store.recall_entry_repo.list_items(where_filters)
             resources_pool = state.get("resource_pool") or store.resource_repo.list_resources(where_filters)
             response["categories"] = self._materialize_hits(
@@ -576,7 +594,7 @@ class RetrieveMixin:
         llm_client = self._get_step_llm_client(step_context)
         store = state["store"]
         where_filters = state.get("where") or {}
-        file_pool = store.recall_file_repo.list_categories(where_filters)
+        file_pool = store.recall_file_repo.list_categories(self._memory_where(where_filters))
         hits = await self._llm_rank_files(
             state["active_query"],
             self.retrieve_config.category.top_k,
@@ -641,7 +659,7 @@ class RetrieveMixin:
             entries_pool = store.recall_entry_repo.list_items(where_filters)
 
         relations = store.recall_file_entry_repo.list_relations(where_filters)
-        file_pool = state.get("file_pool") or store.recall_file_repo.list_categories(where_filters)
+        file_pool = state.get("file_pool") or store.recall_file_repo.list_categories(self._memory_where(where_filters))
         state["entry_hits"] = await self._llm_rank_entries(
             state["active_query"],
             self.retrieve_config.item.top_k,
@@ -733,8 +751,8 @@ class RetrieveMixin:
         embed_client: Any | None = None,
         categories: Mapping[str, Any] | None = None,
     ) -> tuple[list[tuple[str, float]], dict[str, str]]:
-        file_pool = categories if categories is not None else store.recall_file_repo.categories
-        entries = [(cid, cat.summary) for cid, cat in file_pool.items() if cat.summary]
+        file_pool = categories if categories is not None else self._memory_categories(store)
+        entries = [(cid, cat.content) for cid, cat in file_pool.items() if cat.content]
         if not entries:
             return [], {}
         summary_texts = [summary for _, summary in entries]
@@ -879,7 +897,7 @@ class RetrieveMixin:
     ) -> dict[str, Any]:
         """Embedding-based retrieval with query rewriting and judging at each tier"""
         where_filters = self._normalize_where(where)
-        file_pool = store.recall_file_repo.list_categories(where_filters)
+        file_pool = store.recall_file_repo.list_categories(self._memory_where(where_filters))
         entries_pool = store.recall_entry_repo.list_items(where_filters)
         resource_pool = store.resource_repo.list_resources(where_filters)
         client = llm_client or self._get_llm_client()
@@ -959,13 +977,13 @@ class RetrieveMixin:
         store: Database,
         categories: Mapping[str, Any] | None = None,
     ) -> str:
-        file_pool = categories if categories is not None else store.recall_file_repo.categories
+        file_pool = categories if categories is not None else self._memory_categories(store)
         lines = []
         for cid, score in hits:
             cat = file_pool.get(cid)
             if not cat:
                 continue
-            summary = summaries.get(cid) or cat.summary or ""
+            summary = summaries.get(cid) or cat.content or ""
             lines.append(f"Category: {cat.name}\nSummary: {summary}\nScore: {score:.3f}")
         return "\n\n".join(lines).strip()
 
@@ -1029,7 +1047,7 @@ class RetrieveMixin:
         3. If needs more, search resources related to context
         """
         where_filters = self._normalize_where(where)
-        file_pool = store.recall_file_repo.list_categories(where_filters)
+        file_pool = store.recall_file_repo.list_categories(self._memory_where(where_filters))
         entries_pool = store.recall_entry_repo.list_items(where_filters)
         relations = store.recall_file_entry_repo.list_relations(where_filters)
         resource_pool = store.resource_repo.list_resources(where_filters)
@@ -1114,7 +1132,7 @@ class RetrieveMixin:
         categories: Mapping[str, Any] | None = None,
     ) -> str:
         """Format categories for LLM consumption"""
-        categories_to_format = categories if categories is not None else store.recall_file_repo.categories
+        categories_to_format = categories if categories is not None else self._memory_categories(store)
         if category_ids:
             categories_to_format = {cid: cat for cid, cat in categories_to_format.items() if cid in category_ids}
 
@@ -1127,8 +1145,8 @@ class RetrieveMixin:
             lines.append(f"Name: {cat.name}")
             if cat.description:
                 lines.append(f"Description: {cat.description}")
-            if cat.summary:
-                lines.append(f"Summary: {cat.summary}")
+            if cat.content:
+                lines.append(f"Summary: {cat.content}")
             lines.append("---")
 
         return "\n".join(lines)
@@ -1214,7 +1232,7 @@ class RetrieveMixin:
         categories: Mapping[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Use LLM to rank categories based on query relevance"""
-        file_pool = categories if categories is not None else store.recall_file_repo.categories
+        file_pool = categories if categories is not None else self._memory_categories(store)
         if not file_pool:
             return []
 
@@ -1317,7 +1335,7 @@ class RetrieveMixin:
         self, raw_response: str, store: Database, categories: Mapping[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         """Parse LLM category ranking response"""
-        file_pool = categories if categories is not None else store.recall_file_repo.categories
+        file_pool = categories if categories is not None else self._memory_categories(store)
         results = []
         try:
             json_blob = self._extract_json_blob(raw_response)

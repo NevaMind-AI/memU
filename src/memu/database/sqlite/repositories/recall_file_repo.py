@@ -71,7 +71,8 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
                 name=row.name,
                 description=row.description,
                 embedding=self._normalize_embedding(row.embedding),
-                summary=row.summary,
+                content=row.content,
+                track=row.track,
                 created_at=row.created_at,
                 updated_at=row.updated_at,
                 **self._scope_kwargs_from(row),
@@ -105,7 +106,8 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
                     name=row.name,
                     description=row.description,
                     embedding=self._normalize_embedding(row.embedding),
-                    summary=row.summary,
+                    content=row.content,
+                    track=row.track,
                     created_at=row.created_at,
                     updated_at=row.updated_at,
                     **self._scope_kwargs_from(row),
@@ -129,21 +131,28 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
         return deleted
 
     def get_or_create_category(
-        self, *, name: str, description: str, embedding: list[float], user_data: dict[str, Any]
+        self,
+        *,
+        name: str,
+        description: str,
+        embedding: list[float],
+        user_data: dict[str, Any],
+        track: str = "memory",
     ) -> RecallFile:
-        """Get existing category by name or create a new one.
+        """Get existing category by (name, track, scope) or create a new one.
 
         Args:
             name: Category name.
             description: Category description.
             embedding: Embedding vector.
             user_data: User scope data.
+            track: Which track the file belongs to ("memory" or "skill").
 
         Returns:
             Existing or newly created RecallFile.
         """
-        # Check for existing category with same name and scope
-        where: dict[str, Any] = {"name": name, **user_data}
+        # Check for existing file with same name, track, and scope
+        where: dict[str, Any] = {"name": name, "track": track, **user_data}
         with self._sessions.session() as session:
             stmt = select(self._recall_file_model)
             filters = self._build_filters(self._recall_file_model, where)
@@ -157,7 +166,8 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
                     name=existing.name,
                     description=existing.description,
                     embedding=self._normalize_embedding(existing.embedding),
-                    summary=existing.summary,
+                    content=existing.content,
+                    track=existing.track,
                     created_at=existing.created_at,
                     updated_at=existing.updated_at,
                     **self._scope_kwargs_from(existing),
@@ -165,13 +175,14 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
                 self.categories[existing.id] = cat
                 return cat
 
-            # Create new category
+            # Create new file
             now = self._now()
             row = self._recall_file_model(
                 name=name,
                 description=description,
                 embedding=self._prepare_embedding(embedding),
-                summary=None,
+                content=None,
+                track=track,
                 created_at=now,
                 updated_at=now,
                 **user_data,
@@ -185,7 +196,8 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             name=row.name,
             description=row.description,
             embedding=embedding,
-            summary=None,
+            content=None,
+            track=track,
             created_at=row.created_at,
             updated_at=row.updated_at,
             **user_data,
@@ -200,7 +212,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
         name: str | None = None,
         description: str | None = None,
         embedding: list[float] | None = None,
-        summary: str | None = None,
+        content: str | None = None,
     ) -> RecallFile:
         """Update an existing category.
 
@@ -209,7 +221,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             name: New name (optional).
             description: New description (optional).
             embedding: New embedding vector (optional).
-            summary: New summary text (optional).
+            content: New content text (optional).
 
         Returns:
             Updated RecallFile object.
@@ -231,8 +243,8 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
                 row.description = description
             if embedding is not None:
                 row.embedding = self._prepare_embedding(embedding)
-            if summary is not None:
-                row.summary = summary
+            if content is not None:
+                row.content = content
             row.updated_at = self._now()
 
             session.add(row)
@@ -244,7 +256,8 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             name=row.name,
             description=row.description,
             embedding=self._normalize_embedding(row.embedding),
-            summary=row.summary,
+            content=row.content,
+            track=row.track,
             created_at=row.created_at,
             updated_at=row.updated_at,
             **self._scope_kwargs_from(row),

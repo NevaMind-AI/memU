@@ -54,6 +54,11 @@ class MemoryFilesBuilder:
         tree are synthesized from the per-source descriptions. Otherwise both are
         left as ``None`` so the exporter renders MEMORY.md deterministically from
         category summaries and falls back to its rule-based skill bypass.
+
+        Note (ADR 0006): the memorize workflow now also generates and persists
+        skill-track ``RecallFile``s. This export-side description-based skill
+        synthesis is left in place until the export mirror lands (the deferred
+        follow-up that renders skills from the DB and removes this path).
         """
         memory_body: str | None = None
         skills: dict[str, str] | None = None

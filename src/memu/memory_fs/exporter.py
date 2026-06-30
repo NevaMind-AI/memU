@@ -168,7 +168,10 @@ class MemoryFileExporter:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         scope = dict(where) if where else None
 
-        categories = list(database.recall_file_repo.list_categories(where=scope).values())
+        # The ``memory/`` tree renders memory-track files only; skill-track RecallFiles
+        # (ADR 0006) share the table and are excluded here.
+        memory_scope = {**(scope or {}), "track": "memory"}
+        categories = list(database.recall_file_repo.list_categories(where=memory_scope).values())
         resources = list(database.resource_repo.list_resources(where=scope).values())
 
         # The shared trunk: one multimodal description per source file.
@@ -370,7 +373,7 @@ class MemoryFileExporter:
     def _category_document(self, category: RecallFile) -> str:
         """A single ``memory/<slug>.md`` file: the category's description + summary."""
         description = self._inline((category.description or "").strip())
-        summary = (category.summary or "").strip()
+        summary = (category.content or "").strip()
         lines = [f"# {category.name}", "", _GENERATED_NOTICE, ""]
         if description:
             lines.append(f"_{description}_")

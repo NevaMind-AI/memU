@@ -34,10 +34,16 @@ class InMemoryRecallFileRepository(RecallFileRepoProtocol):
         return matches
 
     def get_or_create_category(
-        self, *, name: str, description: str, embedding: list[float], user_data: dict[str, Any]
+        self,
+        *,
+        name: str,
+        description: str,
+        embedding: list[float],
+        user_data: dict[str, Any],
+        track: str = "memory",
     ) -> RecallFile:
         for c in self.categories.values():
-            if c.name == name and all(getattr(c, k) == v for k, v in user_data.items()):
+            if c.name == name and c.track == track and all(getattr(c, k) == v for k, v in user_data.items()):
                 now = pendulum.now("UTC")
                 if c.embedding is None:
                     c.embedding = embedding
@@ -47,7 +53,9 @@ class InMemoryRecallFileRepository(RecallFileRepoProtocol):
                     c.updated_at = now
                 return c
         cid = str(uuid.uuid4())
-        cat = self.recall_file_model(id=cid, name=name, description=description, embedding=embedding, **user_data)
+        cat = self.recall_file_model(
+            id=cid, name=name, description=description, embedding=embedding, track=track, **user_data
+        )
         self.categories[cid] = cat
         return cat
 
@@ -58,7 +66,7 @@ class InMemoryRecallFileRepository(RecallFileRepoProtocol):
         name: str | None = None,
         description: str | None = None,
         embedding: list[float] | None = None,
-        summary: str | None = None,
+        content: str | None = None,
     ) -> RecallFile:
         cat = self.categories.get(category_id)
         if cat is None:
@@ -71,8 +79,8 @@ class InMemoryRecallFileRepository(RecallFileRepoProtocol):
             cat.description = description
         if embedding is not None:
             cat.embedding = embedding
-        if summary is not None:
-            cat.summary = summary
+        if content is not None:
+            cat.content = content
 
         cat.updated_at = pendulum.now("UTC")
         return cat

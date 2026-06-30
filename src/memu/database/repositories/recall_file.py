@@ -17,7 +17,13 @@ class RecallFileRepo(Protocol):
     def clear_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]: ...
 
     def get_or_create_category(
-        self, *, name: str, description: str, embedding: list[float], user_data: dict[str, Any]
+        self,
+        *,
+        name: str,
+        description: str,
+        embedding: list[float],
+        user_data: dict[str, Any],
+        track: str = "memory",
     ) -> RecallFile: ...
 
     def update_category(
@@ -27,7 +33,7 @@ class RecallFileRepo(Protocol):
         name: str | None = None,
         description: str | None = None,
         embedding: list[float] | None = None,
-        summary: str | None = None,
+        content: str | None = None,
     ) -> RecallFile: ...
 
     def load_existing(self) -> None: ...

@@ -23,6 +23,11 @@ from memu.prompts.category_summary import (
 from memu.prompts.category_summary import (
     PROMPT as CATEGORY_SUMMARY_PROMPT,
 )
+from memu.prompts.memory_fs import (
+    DESCRIPTIONS_PLACEHOLDER,
+    EXISTING_PLACEHOLDER,
+    SKILL_FILE_SYNTHESIS_PROMPT,
+)
 from memu.prompts.memory_type import (
     CUSTOM_PROMPTS as MEMORY_TYPE_CUSTOM_PROMPTS,
 )
@@ -211,7 +216,9 @@ class MemorizeMixin:
             # Workspace sync path: let the extractor grow the taxonomy.
             "allow_new_categories": True,
         }
-        result = await self._run_workflow("memorize", state)
+        # The workspace path runs its own workflow (memorize + per-file skill
+        # generation); single-file ``memorize`` stays untouched (ADR 0006).
+        result = await self._run_workflow("memorize_workspace", state)
         if result.get("response") is None:
             msg = "Memorize workflow failed to produce a response"
             raise RuntimeError(msg)
@@ -378,6 +385,30 @@ class MemorizeMixin:
             "allow_new_categories",
         }
 
+    def _build_memorize_workspace_workflow(self) -> list[WorkflowStep]:
+        """The workspace memorize pipeline: the memory steps plus skill generation.
+
+        Identical to :meth:`_build_memorize_workflow` but inserts a per-file
+        ``generate_skills`` step (ADR 0006) before the response is emitted. It runs
+        on the ``memorize_workspace`` path only, so single-file ``memorize`` is
+        unchanged. The skill step has no data dependency on the memory persist
+        output — it consumes ``preprocessed_resources`` — so it slots in after
+        persist purely for sequencing.
+        """
+        steps = self._build_memorize_workflow()
+        skill_step = WorkflowStep(
+            step_id="generate_skills",
+            role="generate_skills",
+            handler=self._memorize_generate_skills,
+            requires={"preprocessed_resources", "store", "user"},
+            produces={"skills"},
+            capabilities={"llm", "db", "vector"},
+            config={"chat_llm_profile": getattr(self.memory_files_config, "synthesis_llm_profile", "default")},
+        )
+        # Insert just before the terminal build_response step.
+        steps.insert(-1, skill_step)
+        return steps
+
     async def _memorize_ingest_resource(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         local_path, raw_text = await self.fs.fetch(state["resource_url"], state["modality"])
         state.update({"local_path": local_path, "raw_text": raw_text})
@@ -504,6 +535,94 @@ class MemorizeMixin:
                 store=state["store"],
             )
         return state
+
+    async def _memorize_generate_skills(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Generate/patch skill-track ``RecallFile``s from this file's content (ADR 0006).
+
+        Gated behind ``memory_files_config.synthesize``. Reads the preprocessed
+        content of the current source plus the existing skill-track files (so file
+        *N* sees skills created by files *1..N-1*), asks the LLM for skills to add or
+        revise, and persists each directly as a ``RecallFile(track="skill")`` —
+        embedding ``name + description`` and storing the body as ``content``, bypassing
+        the ``RecallEntry`` plane.
+        """
+        if not getattr(self.memory_files_config, "synthesize", False):
+            return state
+        content = self._format_skill_source_content(state.get("preprocessed_resources") or [])
+        if not content:
+            return state
+
+        store = state["store"]
+        user_scope = dict(state.get("user") or {})
+        llm_client = self._get_step_llm_client(step_context)
+        embed_client = self._get_step_embedding_client(step_context)
+
+        existing = store.recall_file_repo.list_categories(where={**user_scope, "track": "skill"})
+        existing_text = self._format_existing_skills(existing) or "(none)"
+        prompt = SKILL_FILE_SYNTHESIS_PROMPT.replace(EXISTING_PLACEHOLDER, existing_text).replace(
+            DESCRIPTIONS_PLACEHOLDER, self._escape_prompt_value(content)
+        )
+        parsed = self._parse_skill_files(await llm_client.chat(prompt))
+
+        persisted: list[RecallFile] = []
+        for name, description, body in parsed:
+            emb_text = f"{name}: {description}" if description else name
+            embedding = (await embed_client.embed([emb_text]))[0]
+            skill = store.recall_file_repo.get_or_create_category(
+                name=name,
+                description=description,
+                embedding=embedding,
+                user_data=user_scope,
+                track="skill",
+            )
+            persisted.append(store.recall_file_repo.update_category(category_id=skill.id, content=body))
+        state["skills"] = persisted
+        return state
+
+    @staticmethod
+    def _format_skill_source_content(preprocessed_resources: list[dict[str, Any]]) -> str:
+        """Flatten a source's preprocessed segments into a single text block."""
+        parts = [
+            " ".join((prep.get("text") or "").split())
+            for prep in preprocessed_resources
+            if (prep.get("text") or "").strip()
+        ]
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _format_existing_skills(existing: Mapping[str, RecallFile]) -> str:
+        """Render existing skill files as ``## name\\nbody`` blocks for the prompt."""
+        return "\n\n".join(
+            f"## {skill.name}\n{(skill.content or '').strip()}".strip()
+            for skill in sorted(existing.values(), key=lambda s: s.name)
+        )
+
+    def _parse_skill_files(self, raw: str) -> list[tuple[str, str, str]]:
+        """Parse the skill-synthesis JSON array into ``(name, description, body)`` tuples."""
+        if not raw:
+            return []
+        start = raw.find("[")
+        end = raw.rfind("]")
+        if start == -1 or end == -1 or end <= start:
+            return []
+        try:
+            parsed = json.loads(raw[start : end + 1])
+        except (json.JSONDecodeError, TypeError):
+            return []
+        if not isinstance(parsed, list):
+            return []
+        skills: list[tuple[str, str, str]] = []
+        for entry in parsed:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("name")
+            body = entry.get("body")
+            if not isinstance(name, str) or not name.strip() or not isinstance(body, str) or not body.strip():
+                continue
+            description = entry.get("description")
+            description = description.strip() if isinstance(description, str) else ""
+            skills.append((name.strip(), description, body.strip()))
+        return skills
 
     def _memorize_build_response(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         ctx = state["ctx"]
@@ -893,7 +1012,7 @@ class MemorizeMixin:
             return
 
         user_data = dict(user or {})
-        existing = store.recall_file_repo.list_categories(where=user_data or None)
+        existing = store.recall_file_repo.list_categories(where={**user_data, "track": "memory"})
         existing_by_name: dict[str, RecallFile] = {c.name: c for c in existing.values()}
 
         to_create, to_update, ready = self._classify_categories(self.category_configs, existing_by_name)
@@ -1193,7 +1312,7 @@ class MemorizeMixin:
                 str_memories = cast(list[str], new_memories)
                 new_entries_text = "\n".join(f"- {m}" for m in str_memories if m.strip())
 
-        original = category.summary or ""
+        original = category.content or ""
         category_config = self.category_config_map.get(category.name)
         configured_prompt = (
             category_config and category_config.summary_prompt
@@ -1250,7 +1369,7 @@ class MemorizeMixin:
             cleaned_summary = summary.replace("```markdown", "").replace("```", "").strip()
             store.recall_file_repo.update_category(
                 category_id=cid,
-                summary=cleaned_summary,
+                content=cleaned_summary,
             )
             updated_summaries[cid] = cleaned_summary
         return updated_summaries

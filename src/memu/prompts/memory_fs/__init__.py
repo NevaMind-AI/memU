@@ -56,9 +56,32 @@ NEW source descriptions:
 __DESCRIPTIONS__
 """
 
+SKILL_FILE_SYNTHESIS_PROMPT = """You are maintaining an AI agent's skill library.
+
+Below are the EXISTING skills (name + body), followed by the CONTENT of a single source
+the agent just processed. From the content, identify concrete, repeatable skills or tool
+usage patterns (what worked, how to repeat it, what to avoid). Ignore one-off facts,
+preferences, or trivia — those belong in the memory document, not here.
+
+Return ONLY a JSON array of skills to add or replace. Each element is an object:
+  {"name": "kebab-case-skill-name", "description": "one-line summary of the skill", "body": "Markdown body for this skill"}
+- To revise an existing skill, reuse its exact name and return the full new body.
+- To add a new skill, use a new name.
+- Only include skills actually affected by this content; untouched existing skills are
+  kept automatically.
+- If there are no genuine skills to add or change, return an empty array: []
+
+EXISTING skills:
+__EXISTING__
+
+NEW source content:
+__DESCRIPTIONS__
+"""
+
 __all__ = [
     "DESCRIPTIONS_PLACEHOLDER",
     "EXISTING_PLACEHOLDER",
     "MEMORY_SYNTHESIS_PROMPT",
+    "SKILL_FILE_SYNTHESIS_PROMPT",
     "SKILL_SYNTHESIS_PROMPT",
 ]

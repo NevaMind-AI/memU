@@ -332,6 +332,9 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         memo_workflow = self._build_memorize_workflow()
         memo_initial_keys = self._list_memorize_initial_keys()
         self._pipelines.register("memorize", memo_workflow, initial_state_keys=memo_initial_keys)
+        # Workspace memorize: memory steps + per-file skill generation (ADR 0006).
+        workspace_workflow = self._build_memorize_workspace_workflow()
+        self._pipelines.register("memorize_workspace", workspace_workflow, initial_state_keys=memo_initial_keys)
         rag_workflow = self._build_rag_retrieve_workflow()
         retrieve_initial_keys = self._list_retrieve_initial_keys()
         self._pipelines.register("retrieve_rag", rag_workflow, initial_state_keys=retrieve_initial_keys)

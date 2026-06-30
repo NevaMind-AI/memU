@@ -236,7 +236,8 @@ class CRUDMixin:
     def _crud_list_recall_files(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
-        categories = store.recall_file_repo.list_categories(where_filters)
+        # Lists memory-track files only; skill-track RecallFiles (ADR 0006) are excluded.
+        categories = store.recall_file_repo.list_categories({**where_filters, "track": "memory"})
         state["categories"] = categories
         return state
 
@@ -742,7 +743,7 @@ class CRUDMixin:
             cat = store.recall_file_repo.categories.get(cid)
             store.recall_file_repo.update_category(
                 category_id=cid,
-                summary=summary.strip(),
+                content=summary.strip(),
             )
 
     def _build_category_patch_prompt(
@@ -765,7 +766,7 @@ class CRUDMixin:
                 "This memory content is newly added:",
                 content_after,
             ])
-        original_content = category.summary or ""
+        original_content = category.content or ""
         prompt = CATEGORY_PATCH_PROMPT
         return prompt.format(
             category=self._escape_prompt_value(category.name),

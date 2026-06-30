@@ -64,7 +64,8 @@ class RecallFileModel(BaseModelMixin, RecallFile):
     name: str = Field(sa_column=Column(String, nullable=False, index=True))
     description: str = Field(sa_column=Column(Text, nullable=False))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
-    summary: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    content: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    track: str = Field(default="memory", sa_column=Column(String, nullable=False, server_default="memory"))
 
 
 class RecallFileEntryModel(BaseModelMixin, RecallFileEntry):
@@ -162,7 +163,7 @@ def build_scoped_models(
     """
     resource_model = build_table_model(user_model, ResourceModel, tablename="resources")
     recall_file_model = build_table_model(
-        user_model, RecallFileModel, tablename="memory_categories", unique_with_scope=["name"]
+        user_model, RecallFileModel, tablename="memory_categories", unique_with_scope=["name", "track"]
     )
     recall_entry_model = build_table_model(user_model, RecallEntryModel, tablename="memory_items")
     recall_file_entry_model = build_table_model(user_model, RecallFileEntryModel, tablename="category_items")

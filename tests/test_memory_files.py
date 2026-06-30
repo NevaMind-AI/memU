@@ -39,7 +39,7 @@ def _seed(service: MemoryService, *, user: dict[str, str]) -> dict[str, str]:
         embedding=[0.1, 0.2],
         user_data=dict(user),
     )
-    store.recall_file_repo.update_category(category_id=category.id, summary="The user likes pour-over coffee.")
+    store.recall_file_repo.update_category(category_id=category.id, content="The user likes pour-over coffee.")
     skill = store.recall_entry_repo.create_item(
         resource_id=resource.id,
         memory_type="skill",
@@ -102,7 +102,7 @@ async def test_export_is_idempotent_until_data_changes(tmp_path: Path) -> None:
     # not MEMORY.md (an overview of links) nor INDEX.md (a file TOC).
     service.database.recall_file_repo.update_category(
         category_id=ids["category_id"],
-        summary="The user now prefers espresso.",
+        content="The user now prefers espresso.",
     )
     third = await service.export_memory_files(user={"user_id": "u1"})
     assert third["changed"] is True
