@@ -23,6 +23,7 @@ from memu.app.settings import (
     MemorizeConfig,
     MemoryFilesConfig,
     RetrieveConfig,
+    RetrieveWorkspaceConfig,
     UserConfig,
     VLMConfig,
     embedding_config_from_llm,
@@ -65,6 +66,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         database_config: DatabaseConfig | dict[str, Any] | None = None,
         memorize_config: MemorizeConfig | dict[str, Any] | None = None,
         retrieve_config: RetrieveConfig | dict[str, Any] | None = None,
+        retrieve_workspace_config: RetrieveWorkspaceConfig | dict[str, Any] | None = None,
         workflow_runner: WorkflowRunner | str | None = None,
         user_config: UserConfig | dict[str, Any] | None = None,
         memory_files_config: MemoryFilesConfig | dict[str, Any] | None = None,
@@ -78,6 +80,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self.database_config = self._validate_config(database_config, DatabaseConfig)
         self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
+        self.retrieve_workspace_config = self._validate_config(retrieve_workspace_config, RetrieveWorkspaceConfig)
         self.memory_files_config = self._validate_config(memory_files_config, MemoryFilesConfig)
 
         self.fs = LocalFS(self.blob_config.resources_dir)
@@ -340,6 +343,13 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self._pipelines.register("retrieve_rag", rag_workflow, initial_state_keys=retrieve_initial_keys)
         llm_workflow = self._build_llm_retrieve_workflow()
         self._pipelines.register("retrieve_llm", llm_workflow, initial_state_keys=retrieve_initial_keys)
+        # Simple embedding-only workspace retrieval: file/entry/resource recall + response.
+        workspace_retrieve_workflow = self._build_retrieve_workspace_workflow()
+        self._pipelines.register(
+            "retrieve_workspace",
+            workspace_retrieve_workflow,
+            initial_state_keys=self._list_retrieve_workspace_initial_keys(),
+        )
         patch_create_workflow = self._build_create_recall_entry_workflow()
         patch_create_initial_keys = CRUDMixin._list_create_recall_entry_initial_keys()
         self._pipelines.register("patch_create", patch_create_workflow, initial_state_keys=patch_create_initial_keys)

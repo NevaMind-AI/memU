@@ -372,6 +372,34 @@ class RetrieveResourceConfig(BaseModel):
     top_k: int = Field(default=5, description="Total number of resources to retrieve.")
 
 
+class RetrieveFileConfig(BaseModel):
+    enabled: bool = Field(default=True, description="Whether to enable file retrieval.")
+    top_k: int = Field(default=5, description="Total number of files to retrieve.")
+    tracks: list[str] | None = Field(
+        default=None,
+        description="Optional file tracks (e.g. ['memory', 'skill']) to filter on. None means all tracks.",
+    )
+
+
+class RetrieveEntryConfig(BaseModel):
+    enabled: bool = Field(default=True, description="Whether to enable entry retrieval.")
+    top_k: int = Field(default=5, description="Total number of entries to retrieve.")
+
+
+class RetrieveWorkspaceConfig(BaseModel):
+    """Configure the simple embedding-only workspace retrieval (``retrieve_workspace``).
+
+    Unlike :class:`RetrieveConfig`, this drives a single-shot, LLM-free path that
+    embeds the query once and ranks each of the file/entry/resource layers by
+    vector similarity. No routing, sufficiency check, or summarization is involved.
+    """
+
+    method: Annotated[Literal["rag"], Normalize] = "rag"
+    file: RetrieveFileConfig = Field(default=RetrieveFileConfig())
+    entry: RetrieveEntryConfig = Field(default=RetrieveEntryConfig())
+    resource: RetrieveResourceConfig = Field(default=RetrieveResourceConfig())
+
+
 class RetrieveConfig(BaseModel):
     """Configure retrieval behavior for `MemoryUser.retrieve`.
 
