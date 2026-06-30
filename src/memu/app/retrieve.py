@@ -1522,12 +1522,13 @@ class RetrieveMixin:
 
     async def _ws_query_vector(self, state: WorkflowState, step_context: Any) -> list[float]:
         """Embed the query once and cache it on the state for reuse across steps."""
-        qvec = state.get("query_vector")
-        if qvec is None:
-            embed_client = self._get_step_embedding_client(step_context)
-            qvec = (await embed_client.embed([state["query"]]))[0]
-            state["query_vector"] = qvec
-        return qvec
+        cached = state.get("query_vector")
+        if cached is not None:
+            return cast(list[float], cached)
+        embed_client = self._get_step_embedding_client(step_context)
+        qvec = (await embed_client.embed([state["query"]]))[0]
+        state["query_vector"] = qvec
+        return cast(list[float], qvec)
 
     async def _ws_recall_files(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("retrieve_file"):
