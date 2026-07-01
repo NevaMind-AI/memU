@@ -1,4 +1,4 @@
-ADR 0007: Split Memorize/Retrieve into Three Independent Lines on a Layered Wiki-Graph Kernel
+ADR 0007: Split Memorize/Retrieve into Three Independent Lines on a Layered Kernel
 
 - Status: Proposed
 - Date: 2026-07-01
@@ -51,25 +51,23 @@ source, owning its own store and output, and sharing a **layered wiki-graph kern
 
 ### The three lines
 
-| Line | Source | Output index | Structure | Read |
+| Line | Source | Output index | Layers | Read |
 | --- | --- | --- | --- | --- |
-| **chat** | conversation logs | `MEMORY.md` | graph wiki (entity/fact nodes + relation edges) | embedding search + graph traversal |
-| **workspace** | workspace files | `INDEX.md` | graph wiki (document nodes + structural links) | embedding search + graph traversal |
-| **skill** | execution / tool traces | `SKILL.md` | flat library (skill pages + embeddings, **no edges**) | embedding search + rank |
+| **chat** | conversation logs | `MEMORY.md` | items (L1) + categories (L2) | hybrid: embedding + BM25 |
+| **workspace** | workspace files | `INDEX.md` | resources (L0) + items (L1) | hybrid: embedding + BM25 |
+| **skill** | execution / tool traces | `SKILL.md` | resources (L0) + skill categories (L2) | hybrid: embedding + BM25 |
 
-Each line keeps the established output-file name as its index/map; under it sits the
-line's own page set (and, for the graph lines, its link graph).
+Each line keeps the established output-file name as its index/map, over its own record stores.
 
-### Layered kernel (one implementation, three instances)
+> **Note.** This section's original "graph wiki / graph traversal" framing is **superseded**
+> by "Refinement: hybrid retrieval (embedding + BM25), no graph" below; there is no graph.
 
-- **Base layer — used by all three lines:** page/document store, embedding, vector
-  search, rank, markdown render, manifest diff.
-- **Graph layer — added by chat and workspace only:** wikilink edges, backlinks,
-  traversal, entity resolution, `INDEX`-as-map.
+### Shared kernel (one implementation, three instances)
 
-The skill line uses **only the Base layer**: its read path (embedding search + rank) is
-exactly the Base layer's semantic-search capability, minus edges and traversal — a layer
-not used, not a separate implementation.
+All three lines share one **in-process** kernel: record stores (resource / item / category),
+embedding, **hybrid search (cosine embedding + BM25 keyword)**, rank, markdown render, and
+manifest diff. There is **no graph layer** and no external database — see "Refinement: hybrid
+retrieval" below.
 
 ### Per-line data model (independent stores, no `track`)
 
@@ -93,25 +91,24 @@ layers**, which map directly onto memU's existing records:
 | **L1** | item — an atomic extracted memory; the **graph node** | `RecallEntry` |
 | **L2** | category — grouped items with a summary | `RecallFile` |
 
-**L1 connectivity is entity linking, not a traversable item graph.** Items are *not* joined
-by explicit `item ↔ item` edges. Instead, each item's salient entities are extracted into a
-**parallel entity layer**, and items relate *implicitly* through the entities they share;
-the relationship surfaces at **retrieval time as a ranking signal**, not as a structure to
-walk (see "Refinement: entity linking" below). A resource (L0) and a category (L2) are still
-**not** items — an item references them by attribute (`resource_path → L0`,
-`category_path → L2`).
+**L1 has no graph and no entity layer — retrieval is single-pass hybrid search.** Items are a
+flat set of embedded records: no `item ↔ item` edges, no entity index, no traversal, no
+multi-hop. A resource (L0) and a category (L2) are referenced by item attribute
+(`resource_path → L0`, `category_path → L2`). All three lines retrieve the same way — a
+single-pass **hybrid search: cosine embedding + BM25 keyword**, fused (see "Refinement:
+hybrid retrieval" below) — so **workspace and memory are structurally the same as skill on
+the read side**, differing only in what they search and what they return.
 
 Each line materializes a different subset of the layers:
 
-| Line | L0 resource | L1 item + entity links | L2 category |
+| Line | L0 resource | L1 item | L2 category |
 | --- | :--: | :--: | :--: |
-| **workspace** | ✓ | ✓ (entity-linked) | — |
-| **memory** | ✓ | ✓ (entity-linked) | ✓ |
+| **workspace** | ✓ | ✓ | — |
+| **memory** | ✓ | ✓ | ✓ |
 | **skill** | ✓ | — | ✓ (synthesized from L0) |
 
-- The **L1 layer (items + entity linking) lives in workspace and memory**; skill has no
-  items, so no entity layer. That is precisely what "memory and workspace are relational,
-  skill is plain retrieval" means.
+- **L1 items live in workspace and memory**; skill has none. Items are plain embedded
+  records — no entity layer, no graph.
 - **memory = workspace + an L2 grouping layer** (it files items into categories).
 - **skill = L0 → L2 directly**, skipping L1 — the ADR 0006 skill bypass, now intentional
   and explicit. Each skill category (L2) **retains its L0 source references**, which closes
@@ -120,7 +117,7 @@ Each line materializes a different subset of the layers:
 **Markdown output is per layer, not per node:**
 
 - `INDEX.md` (workspace) indexes the **L0 resources** (the file catalog); the L1 items live
-  only in the item store (reached by entity-aware search), not as per-item markdown files.
+  only in the item store (reached by hybrid search), not as per-item markdown files.
 - `MEMORY.md` / `SKILL.md` are the **L2** index over the per-category files.
 - So the three index files are **not** dumps of the item store — they index the resource
   (L0) and category (L2) layers, which are distinct from the item (L1) layer.
@@ -134,49 +131,45 @@ in the modality-aware preprocessor — its result is already a list of segments 
 This refinement supersedes the generic "graph wiki (document nodes)" wording earlier in
 this section: the L1 nodes are **items**, **workspace stops at L1** (no L2), and **memory
 adds L2**. L0/L1/L2 themselves already exist as `Resource` / `RecallEntry` / `RecallFile`;
-the only structure new to memU is the **L1 entity layer** described next.
+L1 items are plain embedded records (an embedding per `RecallEntry`) — nothing structurally
+new is added. See the retrieval refinement next.
 
-### Refinement: entity linking, not a traversable item graph
+### Refinement: hybrid retrieval (embedding + BM25), no graph
 
-This **supersedes every "edges / backlinks / traversal / graph wiki" description earlier in
-this ADR.** The L1 connective structure is deliberately **not** an explicit, walkable
-`item ↔ item` graph. Instead:
+This **supersedes every "graph / edges / backlinks / traversal / entity linking / GraphRAG /
+multi-hop" description earlier in this ADR.** L1 has **no connective structure**:
 
-- **Extract.** During ingest, each item's salient entities (proper nouns, quoted phrases,
-  compound noun phrases) are extracted and kept in a **parallel entity store** beside the
-  item store. An item→entity index records which items mention which entities. There are
-  **no item↔item edges.**
-- **Link implicitly.** Items that share entities are related *through* that shared entity —
-  the relationship is the overlap, not a stored edge.
-- **Surface at retrieval, as ranking.** A query's entities are extracted and matched against
-  the entity store; items connected through shared entities receive a **ranking boost**,
-  fused with the vector-similarity score (and a keyword score where available) into one
-  combined rank. Connections are expressed through **retrieval ranking, not a traversable
-  structure** — there is no graph walk.
+- **No graph.** No `item ↔ item` edges, no `neighbors` / `backlinks` / `traverse`.
+- **No entity layer / GraphRAG / multi-hop.** No parallel entity store, no item→entity index,
+  no entity-overlap ranking, no iterative expansion.
 
-Consequences:
+Retrieval is a **single pass, hybrid**: a cosine embedding score and a BM25 keyword score are
+each min-max normalized across candidates and fused into one rank. No iteration, no graph
+walk. All three lines retrieve this way, differing only in *what* they search and *what* they
+return:
 
-- **No edge maintenance.** Nothing creates, updates, or deletes `item ↔ item` edges; the
-  entity store is rebuildable from items, and relatedness is recomputed per query. This also
-  dissolves the "no cross-line edges" tax noted under Consequences below — relatedness is
-  just shared-entity overlap, computed at query time.
-- **Hybrid ranking, not traversal.** The read path "search + traverse" becomes "search +
-  entity-overlap boost": a single ranked query, not a multi-hop walk.
-- **Layer placement unchanged.** The entity layer attaches to **L1**, so it exists in
-  workspace and memory and **not** in skill.
+| Line | searches | returns |
+| --- | --- | --- |
+| **workspace** | L1 items | the **L0 resources** the top items belong to |
+| **memory** | L1 items | the **L2 categories (files)** the top items belong to |
+| **skill** | L2 categories | the matching **L2 categories** |
 
-Concretely, `Edge` / `neighbors` / `backlinks` / `traverse` and the "Graph layer (edges,
-backlinks, traversal)" framing are **removed** from the design. The L1 store holds items +
-embeddings + an item→entity index, and exposes an **entity-aware ranked search** in place of
-graph traversal.
+Rationale: without multi-hop traversal, an entity index is not a graph — it is only a ranking
+feature, and it did not justify graph machinery here. Hybrid (embedding + keyword) is a
+standard, cheap, single-pass retrieval covering both semantic and exact-term matches; a graph
+/ entity / multi-hop signal can be added later as an explicit, measured enhancement if a
+benchmark shows it helps.
+
+Concretely, `Edge` / `neighbors` / `backlinks` / `traverse`, any entity store / item→entity
+index, and any multi-hop loop are **not part of the design**. The stores hold records +
+embeddings and expose a single `search(query_vec, query_text, k)` that fuses cosine + BM25;
+workspace and memory roll the item hits up to their resource / category before returning.
 
 ### Per-line ingest treatment (the only code that differs)
 
-- **workspace:** file → page kept whole; links are **structural** (imports / references /
-  folder hierarchy), not LLM-inferred; embed. Minimal LLM.
-- **chat:** conversation → LLM extracts entities/facts → entity pages + relation edges;
-  embed.
-- **skill:** traces → LLM synthesizes reusable procedure pages; embed; **no edges**.
+- **workspace:** file → items (kept whole or structurally segmented); embed. Minimal/optional LLM.
+- **chat:** conversation → LLM extracts items (facts), optionally tagged with a category; embed.
+- **skill:** traces → LLM synthesizes L2 skill categories directly from L0; embed.
 
 ### Per-line read
 
