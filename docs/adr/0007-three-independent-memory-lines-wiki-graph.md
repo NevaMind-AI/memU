@@ -51,13 +51,13 @@ source, owning its own store and output, and sharing a **layered wiki-graph kern
 
 ### The three lines
 
-| Line | Source | Output index | Layers | Read |
+| Line | Source | Output index | L0 → L1 → L2 (raw → doc → item slices) | Read |
 | --- | --- | --- | --- | --- |
-| **chat** | conversation logs | `MEMORY.md` | items (L1) + categories (L2) | hybrid: embedding + BM25 |
-| **workspace** | workspace files | `INDEX.md` | resources (L0) + items (L1) | hybrid: embedding + BM25 |
-| **skill** | execution / tool traces | `SKILL.md` | resources (L0) + skill categories (L2) | hybrid: embedding + BM25 |
+| **chat** | conversation logs | `MEMORY.md` | raw chat → memory category → paragraph slices | hybrid: embedding + BM25 |
+| **workspace** | workspace files | `INDEX.md` | raw media → caption paragraph → caption slices | hybrid: embedding + BM25 |
+| **skill** | execution / tool traces | `SKILL.md` | raw logs → skill md → per-skill descriptions | hybrid: embedding + BM25 |
 
-Each line keeps the established output-file name as its index/map, over its own record stores.
+Each line keeps the established output-file name as its L1 index/map, over its own L0/L1/L2 stores.
 
 > **Note.** This section's original "graph wiki / graph traversal" framing is **superseded**
 > by "Refinement: hybrid retrieval (embedding + BM25), no graph" below; there is no graph.
@@ -82,57 +82,44 @@ discriminator.
 
 ### Layer model: L0 / L1 / L2 (refines the data model above)
 
-The generic "Node/Edge" sketch above is refined into three explicit **representation
-layers**, which map directly onto memU's existing records:
+The generic "Node/Edge" sketch above is refined into three **representation layers**. **Every
+line has all three.** The layers share a uniform *role* but hold line-specific artifacts, and
+each is **derived from the one below** (L0 → L1 → L2):
 
-| Layer | Meaning | Existing record |
-| --- | --- | --- |
-| **L0** | resource-file description (one per source) | `Resource` (+ caption) |
-| **L1** | item — an atomic extracted memory; the **graph node** | `RecallEntry` |
-| **L2** | category — grouped items with a summary | `RecallFile` |
+| Layer | Role (uniform) | chat | workspace | skill |
+| --- | --- | --- | --- | --- |
+| **L0** | raw source (`resource`) | raw chat corpus | raw multimodal data | raw agent-run logs |
+| **L1** | coarse document derived from L0 | the classified **memory category** file | the preprocessed **caption paragraph** | the **skill markdown** |
+| **L2** (**item**) | fine slices/extracts of L1 — the **embed/search unit** | slices of the category's paragraphs | slices of the caption paragraph | the **description** extracted per skill |
 
-**L1 has no graph and no entity layer — retrieval is single-pass hybrid search.** Items are a
-flat set of embedded records: no `item ↔ item` edges, no entity index, no traversal, no
-multi-hop. A resource (L0) and a category (L2) are referenced by item attribute
-(`resource_path → L0`, `category_path → L2`). All three lines retrieve the same way — a
-single-pass **hybrid search: cosine embedding + BM25 keyword**, fused (see "Refinement:
-hybrid retrieval" below) — so **workspace and memory are structurally the same as skill on
-the read side**, differing only in what they search and what they return.
+- **L1 ⊇ L2 in every line**: an *item* (L2) is a slice/extract of its L1 document. This
+  **inverts the earlier wording** ("L1 = atomic item, L2 = category"): now **L1 is the coarse
+  document and L2 is the fine item**, consistently across all three lines.
+- **Derivation** runs L0 → L1 → L2: preprocess the raw source into the L1 document, then
+  slice/extract it into L2 items.
+- Because the meanings are now per-line (and inverted from the old model), they **no longer map
+  1:1 onto `Resource`/`RecallEntry`/`RecallFile`**; each line's store holds a resource (L0), a
+  document (L1), and item slices (L2).
 
-Each line materializes a different subset of the layers:
+**Retrieval (hybrid, no graph, single pass).** The **L2 items are embedded**; a query runs
+one hybrid pass — cosine embedding + BM25 keyword, each min-max normalized and fused — over
+the L2 items, and the top items **roll up to their L1 document** (and its L0 resource) for the
+result. No `item ↔ item` edges, no entity index, no traversal, no multi-hop.
 
-| Line | L0 resource | L1 item | L2 category |
-| --- | :--: | :--: | :--: |
-| **workspace** | ✓ | ✓ | — |
-| **memory** | ✓ | ✓ | ✓ |
-| **skill** | ✓ | — | ✓ (synthesized from L0) |
+**Markdown output.** `MEMORY.md` / `SKILL.md` render the **L1** documents (memory categories /
+skills); `INDEX.md` indexes the **L0** resources. L2 items live only in the store as the
+embed/search units, not as separate files.
 
-- **L1 items live in workspace and memory**; skill has none. Items are plain embedded
-  records — no entity layer, no graph.
-- **memory = workspace + an L2 grouping layer** (it files items into categories).
-- **skill = L0 → L2 directly**, skipping L1 — the ADR 0006 skill bypass, now intentional
-  and explicit. Each skill category (L2) **retains its L0 source references**, which closes
-  the skill provenance/deletion gap left open by ADR 0006.
+**Seam with preprocessing.** Preprocessing is the **injected first step of every line's
+memorize pipeline** (`preprocess → …`): it takes a source *reference* and produces the **L1
+document** (e.g. caption paragraph / classified memory / skill md) from the raw L0 source;
+slicing/extracting that document into **L2 items** is the next step. Like the other treatments
+(embed, and the per-line slice/extract), `preprocess` is injected so lines stay testable; a
+real implementation wraps `memu.preprocess` (fetch via blob + modality decode + describe).
 
-**Markdown output is per layer, not per node:**
-
-- `INDEX.md` (workspace) indexes the **L0 resources** (the file catalog); the L1 items live
-  only in the item store (reached by hybrid search), not as per-item markdown files.
-- `MEMORY.md` / `SKILL.md` are the **L2** index over the per-category files.
-- So the three index files are **not** dumps of the item store — they index the resource
-  (L0) and category (L2) layers, which are distinct from the item (L1) layer.
-
-**Seam with preprocessing.** L0 is the preprocessing output (the per-resource / per-segment
-description). L1 item extraction is each line's ingest *treatment* (workspace + memory). L2
-is memory's grouping / skill's synthesis. Segmentation (one document → many items) belongs
-in the modality-aware preprocessor — its result is already a list of segments — and the
-**embedding unit is the item**, not a RAG chunk.
-
-This refinement supersedes the generic "graph wiki (document nodes)" wording earlier in
-this section: the L1 nodes are **items**, **workspace stops at L1** (no L2), and **memory
-adds L2**. L0/L1/L2 themselves already exist as `Resource` / `RecallEntry` / `RecallFile`;
-L1 items are plain embedded records (an embedding per `RecallEntry`) — nothing structurally
-new is added. See the retrieval refinement next.
+> **Divergence note.** This redefinition inverts L1/L2 and gives every line all three layers,
+> so it is **ahead of the current `memu.lines` code** (which still has L1 = atomic item, L2 =
+> grouping, workspace with no L2, skill with no L1). The code will be re-aligned to this model.
 
 ### Refinement: hybrid retrieval (embedding + BM25), no graph
 
@@ -148,11 +135,14 @@ each min-max normalized across candidates and fused into one rank. No iteration,
 walk. All three lines retrieve this way, differing only in *what* they search and *what* they
 return:
 
-| Line | searches | returns |
+All three lines retrieve the same way — embed the **L2 items**, one hybrid pass, roll up to
+the **L1 document**:
+
+| Line | embeds / searches (L2 items) | rolls up to / returns (L1) |
 | --- | --- | --- |
-| **workspace** | L1 items | the **L0 resources** the top items belong to |
-| **memory** | L1 items | the **L2 categories (files)** the top items belong to |
-| **skill** | L2 categories | the matching **L2 categories** |
+| **chat** | slices of the memory category's paragraphs | the memory category (file) |
+| **workspace** | slices of the caption paragraph | the caption paragraph (and its L0 resource) |
+| **skill** | descriptions extracted per skill | the skill markdown |
 
 Rationale: without multi-hop traversal, an entity index is not a graph — it is only a ranking
 feature, and it did not justify graph machinery here. Hybrid (embedding + keyword) is a
@@ -162,20 +152,16 @@ benchmark shows it helps.
 
 Concretely, `Edge` / `neighbors` / `backlinks` / `traverse`, any entity store / item→entity
 index, and any multi-hop loop are **not part of the design**. The stores hold records +
-embeddings and expose a single `search(query_vec, query_text, k)` that fuses cosine + BM25;
-workspace and memory roll the item hits up to their resource / category before returning.
+embeddings and expose a single `search(query_vec, query_text, k)` over the L2 items that fuses
+cosine + BM25; the hits then roll up to their L1 document before returning.
 
 ### Per-line ingest treatment (the only code that differs)
 
-- **workspace:** file → items (kept whole or structurally segmented); embed. Minimal/optional LLM.
-- **chat:** conversation → LLM extracts items (facts), optionally tagged with a category; embed.
-- **skill:** traces → LLM synthesizes L2 skill categories directly from L0; embed.
+Each line's ingest is `preprocess (raw L0 → L1 document)` → `slice/extract (L1 → L2 items)` → `embed`:
 
-### Per-line read
-
-- **chat / workspace:** embedding search finds entry pages; graph traversal walks
-  `[[links]]` / the `INDEX` map from there.
-- **skill:** embedding search + rank only.
+- **chat:** classify the conversation into a memory category (L1); slice its paragraphs into items (L2).
+- **workspace:** preprocess media into a caption paragraph (L1); slice it into items (L2).
+- **skill:** synthesize a skill markdown (L1) from the logs; extract a description per skill as the item (L2).
 
 ### Independent triggers
 
