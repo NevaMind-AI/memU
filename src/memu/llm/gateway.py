@@ -50,6 +50,18 @@ def _build_httpx_client(cfg: LLMConfig) -> Any:
     )
 
 
+def _build_litellm_client(cfg: LLMConfig) -> Any:
+    from memu.llm.litellm_sdk import LiteLLMSDKClient
+
+    return LiteLLMSDKClient(
+        chat_model=cfg.chat_model,
+        embed_model=cfg.embed_model,
+        api_key=cfg.api_key,
+        api_base=cfg.base_url if cfg.base_url != "http://localhost:4000" else None,
+        embed_batch_size=cfg.embed_batch_size,
+    )
+
+
 def _build_lazyllm_client(cfg: LLMConfig) -> Any:
     from memu.llm.lazyllm_client import LazyLLMClient
 
@@ -72,6 +84,7 @@ LLM_CLIENT_BUILDERS: dict[str, Callable[[LLMConfig], Any]] = {
     "sdk": _build_sdk_client,
     "anthropic": _build_anthropic_client,
     "httpx": _build_httpx_client,
+    "litellm": _build_litellm_client,
     "lazyllm_backend": _build_lazyllm_client,
 }
 
