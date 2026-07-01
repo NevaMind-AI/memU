@@ -7,29 +7,40 @@ from typing import Any, Literal, TypeVar
 
 from pydantic import BaseModel
 
+from memu.app.client_pool import ClientPool
 from memu.app.crud import CRUDMixin
 from memu.app.memorize import MemorizeMixin
+from memu.app.memory_files import MemoryFilesBuilder
 from memu.app.retrieve import RetrieveMixin
 from memu.app.settings import (
     BlobConfig,
     CategoryConfig,
     DatabaseConfig,
+    EmbeddingConfig,
+    EmbeddingProfilesConfig,
     LLMConfig,
     LLMProfilesConfig,
     MemorizeConfig,
+    MemoryFilesConfig,
     RetrieveConfig,
+    RetrieveWorkspaceConfig,
     UserConfig,
+    VLMConfig,
+    embedding_config_from_llm,
+    vlm_config_from_llm,
 )
 from memu.blob.local_fs import LocalFS
 from memu.database.factory import build_database
 from memu.database.interfaces import Database
-from memu.llm.http_client import HTTPLLMClient
+from memu.embedding.gateway import build_embedding_client
+from memu.llm.gateway import build_llm_client
 from memu.llm.wrapper import (
     LLMCallMetadata,
     LLMClientWrapper,
     LLMInterceptorHandle,
     LLMInterceptorRegistry,
 )
+from memu.vlm.gateway import build_vlm_client
 from memu.workflow.interceptor import WorkflowInterceptorHandle, WorkflowInterceptorRegistry
 from memu.workflow.pipeline import PipelineManager
 from memu.workflow.runner import WorkflowRunner, resolve_workflow_runner
@@ -55,8 +66,11 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         database_config: DatabaseConfig | dict[str, Any] | None = None,
         memorize_config: MemorizeConfig | dict[str, Any] | None = None,
         retrieve_config: RetrieveConfig | dict[str, Any] | None = None,
+        retrieve_workspace_config: RetrieveWorkspaceConfig | dict[str, Any] | None = None,
         workflow_runner: WorkflowRunner | str | None = None,
         user_config: UserConfig | dict[str, Any] | None = None,
+        memory_files_config: MemoryFilesConfig | dict[str, Any] | None = None,
+        embedding_profiles: EmbeddingProfilesConfig | dict[str, Any] | None = None,
     ):
         self.llm_profiles = self._validate_config(llm_profiles, LLMProfilesConfig)
         self.user_config = self._validate_config(user_config, UserConfig)
@@ -66,9 +80,11 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self.database_config = self._validate_config(database_config, DatabaseConfig)
         self.memorize_config = self._validate_config(memorize_config, MemorizeConfig)
         self.retrieve_config = self._validate_config(retrieve_config, RetrieveConfig)
+        self.retrieve_workspace_config = self._validate_config(retrieve_workspace_config, RetrieveWorkspaceConfig)
+        self.memory_files_config = self._validate_config(memory_files_config, MemoryFilesConfig)
 
         self.fs = LocalFS(self.blob_config.resources_dir)
-        self.category_configs: list[CategoryConfig] = list(self.memorize_config.memory_categories or [])
+        self.category_configs: list[CategoryConfig] = list(self.memorize_config.recall_files or [])
         self.category_config_map: dict[str, CategoryConfig] = {cfg.name: cfg for cfg in self.category_configs}
         self._category_prompt_str = self._format_categories_for_prompt(self.category_configs)
 
@@ -81,84 +97,52 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         # We need the concrete user scope (user_id: xxx) to initialize the categories
         # self._start_category_initialization(self._context, self.database)
 
-        # Initialize client caches (lazy creation on first use)
-        self._llm_clients: dict[str, Any] = {}
+        # VLM (vision-language) profiles are derived from the LLM profiles so
+        # image/video vision reuses the same provider/credentials with a stronger
+        # multimodal model (see ``vlm_config_from_llm``).
+        self.vlm_profiles: dict[str, VLMConfig] = {
+            name: vlm_config_from_llm(cfg) for name, cfg in self.llm_profiles.profiles.items()
+        }
+
+        # Embedding profiles: use explicit profiles when supplied (e.g. to point
+        # vectorization at a dedicated provider such as jina/voyage), otherwise
+        # derive them from the LLM profiles so existing configs keep working.
+        if embedding_profiles is None:
+            self.embedding_profiles: dict[str, EmbeddingConfig] = {
+                name: embedding_config_from_llm(cfg) for name, cfg in self.llm_profiles.profiles.items()
+            }
+        else:
+            self.embedding_profiles = self._validate_config(embedding_profiles, EmbeddingProfilesConfig).profiles
+
+        # Lazy client pools (one per capability), keyed by profile name. Each
+        # builds and caches a concrete client on first use, sharing the same
+        # get/cache/build bookkeeping instead of three hand-rolled caches.
+        self._llm_pool: ClientPool[LLMConfig, Any] = ClientPool(
+            profiles=self.llm_profiles.profiles, builder=build_llm_client, label="llm"
+        )
+        self._vlm_pool: ClientPool[VLMConfig, Any] = ClientPool(
+            profiles=self.vlm_profiles, builder=build_vlm_client, label="vlm"
+        )
+        self._embedding_pool: ClientPool[EmbeddingConfig, Any] = ClientPool(
+            profiles=self.embedding_profiles, builder=build_embedding_client, label="embedding"
+        )
         self._llm_interceptors = LLMInterceptorRegistry()
         self._workflow_interceptors = WorkflowInterceptorRegistry()
 
         self._workflow_runner = resolve_workflow_runner(workflow_runner)
+
+        # Optional markdown "memory file system" artifact layer (additive, read-only).
+        # The build/synthesis policy lives in MemoryFilesBuilder; the exporter and
+        # synthesizer are re-exposed as attributes for back-compat with callers/tests.
+        self._memory_files = MemoryFilesBuilder(config=self.memory_files_config)
+        self._memory_file_exporter = self._memory_files.exporter
+        self._memory_synthesizer = self._memory_files.synthesizer
 
         self._pipelines = PipelineManager(
             available_capabilities={"llm", "vector", "db", "io", "vision"},
             llm_profiles=set(self.llm_profiles.profiles.keys()),
         )
         self._register_pipelines()
-
-    def _init_llm_client(self, config: LLMConfig | None = None) -> Any:
-        """Initialize LLM client based on configuration."""
-        cfg = config or self.llm_config
-        backend = cfg.client_backend
-        if backend == "sdk":
-            from memu.llm.openai_sdk import OpenAISDKClient
-
-            return OpenAISDKClient(
-                base_url=cfg.base_url,
-                api_key=cfg.api_key,
-                chat_model=cfg.chat_model,
-                embed_model=cfg.embed_model,
-                embed_batch_size=cfg.embed_batch_size,
-            )
-        elif backend == "httpx":
-            return HTTPLLMClient(
-                base_url=cfg.base_url,
-                api_key=cfg.api_key,
-                chat_model=cfg.chat_model,
-                provider=cfg.provider,
-                endpoint_overrides=cfg.endpoint_overrides,
-                embed_model=cfg.embed_model,
-            )
-        elif backend == "litellm":
-            from memu.llm.litellm_sdk import LiteLLMSDKClient
-
-            return LiteLLMSDKClient(
-                chat_model=cfg.chat_model,
-                embed_model=cfg.embed_model,
-                api_key=cfg.api_key,
-                api_base=cfg.base_url if cfg.base_url != "http://localhost:4000" else None,
-                embed_batch_size=cfg.embed_batch_size,
-            )
-        elif backend == "lazyllm_backend":
-            from memu.llm.lazyllm_client import LazyLLMClient
-
-            return LazyLLMClient(
-                llm_source=cfg.lazyllm_source.llm_source or cfg.lazyllm_source.source,
-                vlm_source=cfg.lazyllm_source.vlm_source or cfg.lazyllm_source.source,
-                embed_source=cfg.lazyllm_source.embed_source or cfg.lazyllm_source.source,
-                stt_source=cfg.lazyllm_source.stt_source or cfg.lazyllm_source.source,
-                chat_model=cfg.chat_model,
-                embed_model=cfg.embed_model,
-                vlm_model=cfg.lazyllm_source.vlm_model,
-                stt_model=cfg.lazyllm_source.stt_model,
-            )
-        else:
-            msg = f"Unknown llm_client_backend '{cfg.client_backend}'"
-            raise ValueError(msg)
-
-    def _get_llm_base_client(self, profile: str | None = None) -> Any:
-        """
-        Lazily initialize and cache LLM clients per profile to avoid eager network setup.
-        """
-        name = profile or "default"
-        client = self._llm_clients.get(name)
-        if client is not None:
-            return client
-        cfg: LLMConfig | None = self.llm_profiles.profiles.get(name)
-        if cfg is None:
-            msg = f"Unknown llm profile '{name}'"
-            raise KeyError(msg)
-        client = self._init_llm_client(cfg)
-        self._llm_clients[name] = client
-        return client
 
     @staticmethod
     def _llm_call_metadata(profile: str, step_context: Mapping[str, Any] | None) -> LLMCallMetadata:
@@ -182,7 +166,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         profile: str | None = None,
         step_context: Mapping[str, Any] | None = None,
     ) -> Any:
-        cfg: LLMConfig | None = self.llm_profiles.profiles.get(profile or "default")
+        cfg = self._llm_pool.config(profile)
         provider = cfg.provider if cfg is not None else None
         metadata = self._llm_call_metadata(profile or "default", step_context)
         return LLMClientWrapper(
@@ -191,12 +175,37 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             metadata=metadata,
             provider=provider,
             chat_model=getattr(client, "chat_model", None),
-            embed_model=getattr(client, "embed_model", None),
         )
 
     def _get_llm_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
-        base_client = self._get_llm_base_client(profile)
+        base_client = self._llm_pool.get(profile)
         return self._wrap_llm_client(base_client, profile=profile, step_context=step_context)
+
+    def _get_vlm_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
+        base_client = self._vlm_pool.get(profile)
+        cfg = self._vlm_pool.config(profile)
+        provider = cfg.provider if cfg is not None else None
+        metadata = self._llm_call_metadata(profile or "default", step_context)
+        return LLMClientWrapper(
+            base_client,
+            registry=self._llm_interceptors,
+            metadata=metadata,
+            provider=provider,
+            chat_model=getattr(base_client, "vlm_model", None),
+        )
+
+    def _get_embedding_client(self, profile: str | None = None, step_context: Mapping[str, Any] | None = None) -> Any:
+        base_client = self._embedding_pool.get(profile)
+        cfg = self._embedding_pool.config(profile)
+        provider = cfg.provider if cfg is not None else None
+        metadata = self._llm_call_metadata(profile or "default", step_context)
+        return LLMClientWrapper(
+            base_client,
+            registry=self._llm_interceptors,
+            metadata=metadata,
+            provider=provider,
+            embed_model=getattr(base_client, "embed_model", None),
+        )
 
     @property
     def llm_client(self) -> Any:
@@ -233,7 +242,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
 
     def _get_step_embedding_client(self, step_context: Mapping[str, Any] | None) -> Any:
         profile = self._llm_profile_from_context(step_context, task="embedding") or "embedding"
-        return self._get_llm_client(profile, step_context=step_context)
+        return self._get_embedding_client(profile, step_context=step_context)
 
     def intercept_before_llm_call(
         self,
@@ -326,28 +335,38 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         memo_workflow = self._build_memorize_workflow()
         memo_initial_keys = self._list_memorize_initial_keys()
         self._pipelines.register("memorize", memo_workflow, initial_state_keys=memo_initial_keys)
+        # Workspace memorize: memory steps + per-file skill generation (ADR 0006).
+        workspace_workflow = self._build_memorize_workspace_workflow()
+        self._pipelines.register("memorize_workspace", workspace_workflow, initial_state_keys=memo_initial_keys)
         rag_workflow = self._build_rag_retrieve_workflow()
         retrieve_initial_keys = self._list_retrieve_initial_keys()
         self._pipelines.register("retrieve_rag", rag_workflow, initial_state_keys=retrieve_initial_keys)
         llm_workflow = self._build_llm_retrieve_workflow()
         self._pipelines.register("retrieve_llm", llm_workflow, initial_state_keys=retrieve_initial_keys)
-        patch_create_workflow = self._build_create_memory_item_workflow()
-        patch_create_initial_keys = CRUDMixin._list_create_memory_item_initial_keys()
+        # Simple embedding-only workspace retrieval: file/entry/resource recall + response.
+        workspace_retrieve_workflow = self._build_retrieve_workspace_workflow()
+        self._pipelines.register(
+            "retrieve_workspace",
+            workspace_retrieve_workflow,
+            initial_state_keys=self._list_retrieve_workspace_initial_keys(),
+        )
+        patch_create_workflow = self._build_create_recall_entry_workflow()
+        patch_create_initial_keys = CRUDMixin._list_create_recall_entry_initial_keys()
         self._pipelines.register("patch_create", patch_create_workflow, initial_state_keys=patch_create_initial_keys)
-        patch_update_workflow = self._build_update_memory_item_workflow()
-        patch_update_initial_keys = CRUDMixin._list_update_memory_item_initial_keys()
+        patch_update_workflow = self._build_update_recall_entry_workflow()
+        patch_update_initial_keys = CRUDMixin._list_update_recall_entry_initial_keys()
         self._pipelines.register("patch_update", patch_update_workflow, initial_state_keys=patch_update_initial_keys)
-        patch_delete_workflow = self._build_delete_memory_item_workflow()
-        patch_delete_initial_keys = CRUDMixin._list_delete_memory_item_initial_keys()
+        patch_delete_workflow = self._build_delete_recall_entry_workflow()
+        patch_delete_initial_keys = CRUDMixin._list_delete_recall_entry_initial_keys()
         self._pipelines.register("patch_delete", patch_delete_workflow, initial_state_keys=patch_delete_initial_keys)
-        crud_list_items_workflow = self._build_list_memory_items_workflow()
+        crud_list_items_workflow = self._build_list_recall_entries_workflow()
         crud_list_memories_initial_keys = CRUDMixin._list_list_memories_initial_keys()
         self._pipelines.register(
-            "crud_list_memory_items", crud_list_items_workflow, initial_state_keys=crud_list_memories_initial_keys
+            "crud_list_recall_entries", crud_list_items_workflow, initial_state_keys=crud_list_memories_initial_keys
         )
-        crud_list_categories_workflow = self._build_list_memory_categories_workflow()
+        crud_list_categories_workflow = self._build_list_recall_files_workflow()
         self._pipelines.register(
-            "crud_list_memory_categories",
+            "crud_list_recall_files",
             crud_list_categories_workflow,
             initial_state_keys=crud_list_memories_initial_keys,
         )
@@ -367,6 +386,41 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
             initial_state,
             runner_context,
             interceptor_registry=self._workflow_interceptors,
+        )
+
+    async def export_memory_files(self, *, user: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Render the (optionally scoped) memory store into browsable markdown files.
+
+        Read-only against the database; only artifacts whose rendered content
+        changed since the last export are rewritten (diff detection via a sidecar
+        manifest). Returns a summary of written/unchanged/removed relative paths.
+
+        Requires ``memory_files_config.enabled=True``.
+        """
+        if not self.memory_files_config.enabled:
+            msg = "Memory files are disabled; set memory_files_config.enabled=True to use export_memory_files()."
+            raise RuntimeError(msg)
+        where = self.user_model(**user).model_dump() if user is not None else None
+        # No changed set => full (re)initialization of the tree.
+        return await self._build_memory_files(where, changed=None)
+
+    async def _build_memory_files(
+        self,
+        where: dict[str, Any] | None,
+        *,
+        changed: list[Any] | None,
+    ) -> dict[str, Any]:
+        """Initialize or incrementally update the memory file tree.
+
+        Thin delegate to :class:`MemoryFilesBuilder`; ``changed`` is the list of
+        just-memorized ``Resource`` objects driving an incremental update (``None``
+        forces a full (re)initialization from the scoped store).
+        """
+        return await self._memory_files.build(
+            self.database,
+            where,
+            changed=changed,
+            make_client=self._get_llm_client,
         )
 
     @staticmethod

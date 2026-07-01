@@ -17,7 +17,7 @@ from sqlalchemy import ForeignKey, MetaData, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
-from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
+from memu.database.models import EntryType, RecallEntry, RecallFile, RecallFileEntry, Resource
 
 
 class TZDateTime(DateTime):
@@ -51,27 +51,28 @@ class ResourceModel(BaseModelMixin, Resource):
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
 
 
-class MemoryItemModel(BaseModelMixin, MemoryItem):
+class RecallEntryModel(BaseModelMixin, RecallEntry):
     resource_id: str | None = Field(sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), nullable=True))
-    memory_type: MemoryType = Field(sa_column=Column(String, nullable=False))
+    memory_type: EntryType = Field(sa_column=Column(String, nullable=False))
     summary: str = Field(sa_column=Column(Text, nullable=False))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
     happened_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
     extra: dict[str, Any] = Field(default={}, sa_column=Column(JSONB, nullable=True))
 
 
-class MemoryCategoryModel(BaseModelMixin, MemoryCategory):
+class RecallFileModel(BaseModelMixin, RecallFile):
     name: str = Field(sa_column=Column(String, nullable=False, index=True))
     description: str = Field(sa_column=Column(Text, nullable=False))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
-    summary: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    content: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    track: str = Field(default="memory", sa_column=Column(String, nullable=False, server_default="memory"))
 
 
-class CategoryItemModel(BaseModelMixin, CategoryItem):
+class RecallFileEntryModel(BaseModelMixin, RecallFileEntry):
     item_id: str = Field(sa_column=Column(ForeignKey("memory_items.id", ondelete="CASCADE"), nullable=False))
     category_id: str = Field(sa_column=Column(ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False))
 
-    __table_args__ = (Index("idx_category_items_unique", "item_id", "category_id", unique=True),)
+    __table_args__ = (Index("idx_recall_file_entries_unique", "item_id", "category_id", unique=True),)
 
 
 def _normalize_table_args(table_args: Any) -> tuple[list[Any], dict[str, Any]]:
@@ -161,19 +162,19 @@ def build_scoped_models(
     Build scoped SQLModel tables for each entity (resource, category, item, relation).
     """
     resource_model = build_table_model(user_model, ResourceModel, tablename="resources")
-    memory_category_model = build_table_model(
-        user_model, MemoryCategoryModel, tablename="memory_categories", unique_with_scope=["name"]
+    recall_file_model = build_table_model(
+        user_model, RecallFileModel, tablename="memory_categories", unique_with_scope=["name", "track"]
     )
-    memory_item_model = build_table_model(user_model, MemoryItemModel, tablename="memory_items")
-    category_item_model = build_table_model(user_model, CategoryItemModel, tablename="category_items")
-    return resource_model, memory_category_model, memory_item_model, category_item_model
+    recall_entry_model = build_table_model(user_model, RecallEntryModel, tablename="memory_items")
+    recall_file_entry_model = build_table_model(user_model, RecallFileEntryModel, tablename="category_items")
+    return resource_model, recall_file_model, recall_entry_model, recall_file_entry_model
 
 
 __all__ = [
     "BaseModelMixin",
-    "CategoryItemModel",
-    "MemoryCategoryModel",
-    "MemoryItemModel",
+    "RecallEntryModel",
+    "RecallFileEntryModel",
+    "RecallFileModel",
     "ResourceModel",
     "build_scoped_models",
     "build_table_model",

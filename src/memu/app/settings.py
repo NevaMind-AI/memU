@@ -58,7 +58,7 @@ def complete_prompt_blocks(prompt: CustomPrompt, default_blocks: Mapping[str, in
     return prompt
 
 
-CompleteMemoryTypePrompt = AfterValidator(lambda v: complete_prompt_blocks(v, DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL))
+CompleteEntryTypePrompt = AfterValidator(lambda v: complete_prompt_blocks(v, DEFAULT_MEMORY_CUSTOM_PROMPT_ORDINAL))
 
 
 CompleteCategoryPrompt = AfterValidator(lambda v: complete_prompt_blocks(v, DEFAULT_CATEGORY_SUMMARY_PROMPT_ORDINAL))
@@ -71,24 +71,6 @@ class CategoryConfig(BaseModel):
     summary_prompt: str | Annotated[CustomPrompt, CompleteCategoryPrompt] | None = None
 
 
-def _default_memory_categories() -> list[CategoryConfig]:
-    return [
-        CategoryConfig.model_validate(cat)
-        for cat in (
-            {"name": "personal_info", "description": "Personal information about the user"},
-            {"name": "preferences", "description": "User preferences, likes and dislikes"},
-            {"name": "relationships", "description": "Information about relationships with others"},
-            {"name": "activities", "description": "Activities, hobbies, and interests"},
-            {"name": "goals", "description": "Goals, aspirations, and objectives"},
-            {"name": "experiences", "description": "Past experiences and events"},
-            {"name": "knowledge", "description": "Knowledge, facts, and learned information"},
-            {"name": "opinions", "description": "Opinions, viewpoints, and perspectives"},
-            {"name": "habits", "description": "Habits, routines, and patterns"},
-            {"name": "work_life", "description": "Work-related information and professional life"},
-        )
-    ]
-
-
 class LazyLLMSource(BaseModel):
     source: str | None = Field(default=None, description="default source for lazyllm client backend")
     llm_source: str | None = Field(default=None, description="LLM source for lazyllm client backend")
@@ -99,6 +81,20 @@ class LazyLLMSource(BaseModel):
     stt_model: str = Field(default="qwen-audio-turbo", description="Speech-to-text model for lazyllm client backend")
 
 
+# Per-provider defaults: provider -> (base_url, api_key_env_or_value, chat_model).
+# Used by ``LLMConfig.set_provider_defaults`` to swap OpenAI defaults when a provider is selected.
+# Each provider defaults to its latest small/fast model (verified June 2026).
+_PROVIDER_DEFAULTS: dict[str, tuple[str, str, str]] = {
+    "grok": ("https://api.x.ai/v1", "XAI_API_KEY", "grok-4-1-fast"),
+    "claude": ("https://api.anthropic.com", "ANTHROPIC_API_KEY", "claude-haiku-4-5"),
+    "deepseek": ("https://api.deepseek.com/v1", "DEEPSEEK_API_KEY", "deepseek-v4-flash"),
+    "kimi": ("https://api.moonshot.cn/v1", "MOONSHOT_API_KEY", "kimi-k2.7-code-highspeed"),
+    "minimax": ("https://api.minimax.io/v1", "MINIMAX_API_KEY", "MiniMax-M3"),
+    "doubao": ("https://ark.cn-beijing.volces.com", "ARK_API_KEY", "doubao-seed-2.0-lite"),
+    "openrouter": ("https://openrouter.ai", "OPENROUTER_API_KEY", "openai/gpt-5.4-mini"),
+}
+
+
 class LLMConfig(BaseModel):
     provider: str = Field(
         default="openai",
@@ -106,35 +102,50 @@ class LLMConfig(BaseModel):
     )
     base_url: str = Field(default="https://api.openai.com/v1")
     api_key: str = Field(default="OPENAI_API_KEY")
-    chat_model: str = Field(default="gpt-4o-mini")
+    chat_model: str = Field(default="gpt-5.4-mini")
     client_backend: str = Field(
         default="sdk",
-        description="Which LLM client backend to use: 'httpx' (httpx), 'sdk' (official OpenAI), or 'lazyllm_backend' (for more LLM source like Qwen, Doubao, SIliconflow, etc.)",
+        description=(
+            "Which LLM client backend to use: 'sdk' (official OpenAI SDK), "
+            "'anthropic' (official Anthropic/Claude SDK), 'httpx' (raw HTTP, supports "
+            "all providers in memu.llm.backends), or 'lazyllm_backend' (Qwen, Doubao, "
+            "SiliconFlow, etc.)."
+        ),
     )
     lazyllm_source: LazyLLMSource = Field(default=LazyLLMSource())
     endpoint_overrides: dict[str, str] = Field(
         default_factory=dict,
         description="Optional overrides for HTTP endpoints (keys: 'chat'/'summary').",
     )
+    # Backward-compat bridge: embedding is owned by the dedicated
+    # ``memu.embedding`` clients (``EmbeddingConfig``/``embedding_profiles``). The
+    # LLM/chat clients no longer embed. These fields are only consumed by
+    # ``embedding_config_from_llm`` to derive an embedding profile from an LLM
+    # profile when no explicit ``embedding_profiles`` is supplied. Prefer setting
+    # ``embedding_profiles`` directly.
     embed_model: str = Field(
         default="text-embedding-3-small",
-        description="Default embedding model used for vectorization.",
+        description="Embedding model used to derive an embedding profile from this LLM profile (bridge only).",
     )
     embed_batch_size: int = Field(
         default=1,
-        description="Maximum batch size for embedding API calls (used by SDK client backends).",
+        description="Embedding batch size used to derive an embedding profile from this LLM profile (bridge only).",
     )
 
     @model_validator(mode="after")
     def set_provider_defaults(self) -> "LLMConfig":
-        if self.provider == "grok":
-            # If values match the OpenAI defaults, switch them to Grok defaults
+        # Per-provider defaults for the HTTP client backend. Each entry only
+        # overrides a field when it still holds the OpenAI default, so explicit
+        # user values are always preserved.
+        defaults = _PROVIDER_DEFAULTS.get(self.provider)
+        if defaults is not None:
+            base_url, api_key, chat_model = defaults
             if self.base_url == "https://api.openai.com/v1":
-                self.base_url = "https://api.x.ai/v1"
+                self.base_url = base_url
             if self.api_key == "OPENAI_API_KEY":
-                self.api_key = "XAI_API_KEY"
-            if self.chat_model == "gpt-4o-mini":
-                self.chat_model = "grok-2-latest"
+                self.api_key = api_key
+            if self.chat_model == "gpt-5.4-mini":
+                self.chat_model = chat_model
         elif self.provider == "litellm":
             if self.client_backend == "sdk":
                 self.client_backend = "litellm"
@@ -145,9 +156,198 @@ class LLMConfig(BaseModel):
         return self
 
 
+class VLMConfig(BaseModel):
+    """Configuration for a vision-language (multimodal) model client.
+
+    Sibling to :class:`LLMConfig` but scoped to the ``vision`` capability used by
+    image/video preprocessing. Defaults to each provider's latest VLM model (see
+    ``memu.vlm.VLM_PROVIDER_DEFAULTS``) instead of the small/fast chat default.
+    """
+
+    provider: str = Field(
+        default="openai",
+        description="Identifier for the VLM provider implementation (used by HTTP client backend).",
+    )
+    base_url: str = Field(default="https://api.openai.com/v1")
+    api_key: str = Field(default="OPENAI_API_KEY")
+    vlm_model: str = Field(default="gpt-5.4", description="Vision-language model used for image/video understanding.")
+    client_backend: str = Field(
+        default="sdk",
+        description=(
+            "Which VLM client backend to use: 'sdk' (official OpenAI SDK), "
+            "'anthropic' (official Anthropic/Claude SDK), or 'httpx' (raw HTTP, "
+            "supports all providers in memu.vlm.backends)."
+        ),
+    )
+    endpoint_overrides: dict[str, str] = Field(
+        default_factory=dict,
+        description="Optional overrides for HTTP endpoints (key: 'vision').",
+    )
+
+    @model_validator(mode="after")
+    def set_provider_defaults(self) -> "VLMConfig":
+        # base_url/api_key reuse the shared per-provider HTTP defaults; vlm_model
+        # comes from the VLM-specific defaults. Each field is only overridden
+        # while it still holds the OpenAI default, so explicit values survive.
+        from memu.vlm.defaults import default_vlm_model
+
+        defaults = _PROVIDER_DEFAULTS.get(self.provider)
+        if defaults is not None:
+            base_url, api_key, _chat_model = defaults
+            if self.base_url == "https://api.openai.com/v1":
+                self.base_url = base_url
+            if self.api_key == "OPENAI_API_KEY":
+                self.api_key = api_key
+        if self.vlm_model == "gpt-5.4":
+            resolved = default_vlm_model(self.provider)
+            if resolved is not None:
+                self.vlm_model = resolved
+        return self
+
+
+def vlm_config_from_llm(llm: "LLMConfig") -> "VLMConfig":
+    """Derive a :class:`VLMConfig` from an :class:`LLMConfig`.
+
+    Reuses the LLM provider/credentials/transport so vision steps work with zero
+    extra configuration, swapping only the model for the provider's latest VLM
+    (falling back to the LLM chat model when the provider has no known VLM).
+    """
+    from memu.vlm.defaults import default_vlm_model
+
+    # The anthropic SDK backend leaves ``provider`` at its generic default, so
+    # map it explicitly to resolve the right VLM model.
+    provider = "claude" if llm.client_backend == "anthropic" else llm.provider
+    vlm_model = default_vlm_model(provider) or llm.chat_model
+    return VLMConfig(
+        provider=provider,
+        base_url=llm.base_url,
+        api_key=llm.api_key,
+        vlm_model=vlm_model,
+        client_backend=llm.client_backend,
+        endpoint_overrides=dict(llm.endpoint_overrides),
+    )
+
+
+class EmbeddingConfig(BaseModel):
+    """Configuration for an embedding (vectorization) model client.
+
+    Sibling to :class:`LLMConfig`/:class:`VLMConfig` but scoped to the embedding
+    capability used by vector search. Defaults to OpenAI's
+    ``text-embedding-3-small``; embedding-only providers (Jina, Voyage) bring
+    their own ``base_url``/``api_key`` via provider defaults (see
+    ``memu.embedding.defaults``).
+    """
+
+    provider: str = Field(
+        default="openai",
+        description="Identifier for the embedding provider implementation (used by HTTP client backend).",
+    )
+    base_url: str = Field(default="https://api.openai.com/v1")
+    api_key: str = Field(default="OPENAI_API_KEY")
+    embed_model: str = Field(
+        default="text-embedding-3-small",
+        description="Embedding model used for vectorization.",
+    )
+    embed_batch_size: int = Field(
+        default=1,
+        description="Maximum batch size for embedding API calls (used by the SDK client backend).",
+    )
+    client_backend: str = Field(
+        default="sdk",
+        description=(
+            "Which embedding client backend to use: 'sdk' (official OpenAI SDK), "
+            "'httpx' (raw HTTP, supports all providers in memu.embedding.backends, "
+            "e.g. openai/jina/voyage/doubao/openrouter), or 'lazyllm_backend'."
+        ),
+    )
+    lazyllm_source: LazyLLMSource = Field(default=LazyLLMSource())
+    endpoint_overrides: dict[str, str] = Field(
+        default_factory=dict,
+        description="Optional overrides for HTTP endpoints (key: 'embeddings').",
+    )
+
+    @model_validator(mode="after")
+    def set_provider_defaults(self) -> "EmbeddingConfig":
+        from memu.embedding.defaults import EMBEDDING_PROVIDER_ENDPOINTS, default_embedding_model
+
+        # base_url/api_key: reuse the shared chat per-provider defaults when the
+        # provider is also a chat provider; otherwise fall back to the
+        # embedding-only endpoint table (Jina, Voyage). Each field is only
+        # overridden while it still holds the OpenAI default, so explicit values
+        # survive.
+        endpoint = _PROVIDER_DEFAULTS.get(self.provider)
+        base_url = endpoint[0] if endpoint is not None else None
+        api_key = endpoint[1] if endpoint is not None else None
+        if base_url is None:
+            embed_endpoint = EMBEDDING_PROVIDER_ENDPOINTS.get(self.provider)
+            if embed_endpoint is not None:
+                base_url, api_key = embed_endpoint
+        if base_url is not None and self.base_url == "https://api.openai.com/v1":
+            self.base_url = base_url
+        if api_key is not None and self.api_key == "OPENAI_API_KEY":
+            self.api_key = api_key
+        if self.embed_model == "text-embedding-3-small":
+            resolved = default_embedding_model(self.provider)
+            if resolved is not None:
+                self.embed_model = resolved
+        return self
+
+
+def embedding_config_from_llm(llm: "LLMConfig") -> "EmbeddingConfig":
+    """Derive an :class:`EmbeddingConfig` from an :class:`LLMConfig`.
+
+    Reuses the LLM provider/credentials/transport/embed model so vectorization
+    works with zero extra configuration when no dedicated embedding profile is
+    supplied. The ``anthropic`` transport has no embeddings API; the derived
+    config preserves that so the embedding gateway raises a clear error.
+    """
+    return EmbeddingConfig(
+        provider=llm.provider,
+        base_url=llm.base_url,
+        api_key=llm.api_key,
+        embed_model=llm.embed_model,
+        embed_batch_size=llm.embed_batch_size,
+        client_backend=llm.client_backend,
+        lazyllm_source=llm.lazyllm_source,
+        endpoint_overrides=dict(llm.endpoint_overrides),
+    )
+
+
 class BlobConfig(BaseModel):
     provider: str = Field(default="local")
     resources_dir: str = Field(default="./data/resources")
+
+
+class MemoryFilesConfig(BaseModel):
+    """Render structured memory into a browsable markdown "memory file system".
+
+    Purely additive and read-only against the store; disabled by default so it
+    never changes existing memorize/retrieve behavior. When enabled, the tree is
+    refreshed by ``memorize_workspace`` (and on demand via ``export_memory_files``).
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable rendering structured memory into browsable markdown files.",
+    )
+    output_dir: str = Field(
+        default="./data/memory",
+        description=(
+            "Directory where the memory markdown tree (the INDEX.md/MEMORY.md/SKILL.md root "
+            "indexes plus the resource/, memory/, and skill/ directories) is written."
+        ),
+    )
+    synthesize: bool = Field(
+        default=False,
+        description=(
+            "Synthesize MEMORY.md and skill docs from per-source descriptions via the LLM "
+            "instead of rendering already-extracted records. INDEX.md stays deterministic."
+        ),
+    )
+    synthesis_llm_profile: str = Field(
+        default="default",
+        description="LLM profile used when synthesize=True.",
+    )
 
 
 class RetrieveCategoryConfig(BaseModel):
@@ -177,6 +377,34 @@ class RetrieveItemConfig(BaseModel):
 class RetrieveResourceConfig(BaseModel):
     enabled: bool = Field(default=True, description="Whether to enable resource retrieval.")
     top_k: int = Field(default=5, description="Total number of resources to retrieve.")
+
+
+class RetrieveFileConfig(BaseModel):
+    enabled: bool = Field(default=True, description="Whether to enable file retrieval.")
+    top_k: int = Field(default=5, description="Total number of files to retrieve.")
+    tracks: list[str] | None = Field(
+        default=None,
+        description="Optional file tracks (e.g. ['memory', 'skill']) to filter on. None means all tracks.",
+    )
+
+
+class RetrieveEntryConfig(BaseModel):
+    enabled: bool = Field(default=True, description="Whether to enable entry retrieval.")
+    top_k: int = Field(default=5, description="Total number of entries to retrieve.")
+
+
+class RetrieveWorkspaceConfig(BaseModel):
+    """Configure the simple embedding-only workspace retrieval (``retrieve_workspace``).
+
+    Unlike :class:`RetrieveConfig`, this drives a single-shot, LLM-free path that
+    embeds the query once and ranks each of the file/entry/resource layers by
+    vector similarity. No routing, sufficiency check, or summarization is involved.
+    """
+
+    method: Annotated[Literal["rag"], Normalize] = "rag"
+    file: RetrieveFileConfig = Field(default=RetrieveFileConfig())
+    entry: RetrieveEntryConfig = Field(default=RetrieveEntryConfig())
+    resource: RetrieveResourceConfig = Field(default=RetrieveResourceConfig())
 
 
 class RetrieveConfig(BaseModel):
@@ -215,18 +443,26 @@ class MemorizeConfig(BaseModel):
         description="Optional mapping of modality -> preprocess system prompt.",
     )
     preprocess_llm_profile: str = Field(default="default", description="LLM profile for preprocess.")
+    vlm_profile: str = Field(
+        default="default",
+        description="LLM profile whose provider/credentials back the VLM client used for image/video vision.",
+    )
     memory_types: list[str] = Field(
         default_factory=_default_memory_types,
         description="Ordered list of memory types (profile/event/knowledge/behavior by default).",
     )
-    memory_type_prompts: dict[str, str | Annotated[CustomPrompt, CompleteMemoryTypePrompt]] = Field(
+    memory_type_prompts: dict[str, str | Annotated[CustomPrompt, CompleteEntryTypePrompt]] = Field(
         default_factory=_default_memory_type_prompts,
         description="User prompt overrides for each memory type extraction.",
     )
     memory_extract_llm_profile: str = Field(default="default", description="LLM profile for memory extract.")
-    memory_categories: list[CategoryConfig] = Field(
-        default_factory=_default_memory_categories,
-        description="Global memory category definitions embedded at service startup.",
+    recall_files: list[CategoryConfig] = Field(
+        default_factory=list,
+        description=(
+            "Optional seed categories. The kernel presets no taxonomy: categories are "
+            "discovered adaptively from ingested content. Provide seeds only to guide "
+            "(not constrain) the taxonomy; an empty list means fully open/adaptive."
+        ),
     )
     # default_category_summary_prompt: str | CustomPrompt = Field(
     default_category_summary_prompt: str | Annotated[CustomPrompt, CompleteCategoryPrompt] = Field(
@@ -301,6 +537,43 @@ class LLMProfilesConfig(RootModel[dict[Key, LLMConfig]]):
     @property
     def default(self) -> LLMConfig:
         return self.root.get("default", LLMConfig())
+
+
+class EmbeddingProfilesConfig(RootModel[dict[Key, EmbeddingConfig]]):
+    """Named embedding profiles, mirroring :class:`LLMProfilesConfig`.
+
+    When no explicit embedding profiles are supplied, the service derives them
+    from the LLM profiles (see ``embedding_config_from_llm``) so existing
+    configs keep vectorizing through the same provider/credentials.
+    """
+
+    root: dict[str, EmbeddingConfig] = Field(default_factory=lambda: {"default": EmbeddingConfig()})
+
+    def get(self, key: str, default: EmbeddingConfig | None = None) -> EmbeddingConfig | None:
+        return self.root.get(key, default)
+
+    @model_validator(mode="before")
+    @classmethod
+    def ensure_default(cls, data: Any) -> Any:
+        if data is None:
+            data = {}
+        elif isinstance(data, dict):
+            data = dict(data)
+        else:
+            return data
+        if "default" not in data:
+            data["default"] = EmbeddingConfig()
+        if "embedding" not in data:
+            data["embedding"] = data["default"]
+        return data
+
+    @property
+    def profiles(self) -> dict[str, EmbeddingConfig]:
+        return self.root
+
+    @property
+    def default(self) -> EmbeddingConfig:
+        return self.root.get("default", EmbeddingConfig())
 
 
 class MetadataStoreConfig(BaseModel):

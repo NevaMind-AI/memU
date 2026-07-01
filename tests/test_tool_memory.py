@@ -27,14 +27,14 @@ spec.loader.exec_module(models)
 rebuild_ns = {
     "Any": Any,
     "datetime": datetime,
-    "MemoryType": models.MemoryType,
+    "EntryType": models.EntryType,
     "ToolCallResult": models.ToolCallResult,
 }
 models.ToolCallResult.model_rebuild(_types_namespace=rebuild_ns)
-models.MemoryItem.model_rebuild(_types_namespace=rebuild_ns)
+models.RecallEntry.model_rebuild(_types_namespace=rebuild_ns)
 
-MemoryItem = models.MemoryItem
-MemoryType = models.MemoryType
+RecallEntry = models.RecallEntry
+EntryType = models.EntryType
 ToolCallResult = models.ToolCallResult
 
 # Import tool memory utility functions
@@ -124,19 +124,19 @@ class TestToolCallResult:
         assert result.call_hash != ""
 
 
-class TestMemoryItemToolType:
-    """Tests for MemoryItem with tool type."""
+class TestRecallEntryToolType:
+    """Tests for RecallEntry with tool type."""
 
     def test_tool_memory_type_literal(self):
-        """Test that 'tool' is a valid MemoryType."""
+        """Test that 'tool' is a valid EntryType."""
         from typing import get_args
 
-        valid_types = get_args(MemoryType)
+        valid_types = get_args(EntryType)
         assert "tool" in valid_types
 
     def test_create_tool_memory(self):
         """Test creating a tool type memory item with tool fields in extra."""
-        item = MemoryItem(
+        item = RecallEntry(
             resource_id=None,
             memory_type="tool",
             summary="file_reader tool usage for config files",
@@ -152,7 +152,7 @@ class TestMemoryItemToolType:
 
     def test_add_tool_call(self):
         """Test adding tool call results to a tool memory."""
-        item = MemoryItem(
+        item = RecallEntry(
             resource_id=None,
             memory_type="tool",
             summary="calculator tool usage",
@@ -176,7 +176,7 @@ class TestMemoryItemToolType:
 
     def test_add_tool_call_wrong_type(self):
         """Test that add_tool_call fails for non-tool memories."""
-        item = MemoryItem(
+        item = RecallEntry(
             resource_id=None,
             memory_type="profile",
             summary="User profile info",
@@ -193,7 +193,7 @@ class TestMemoryItemToolType:
 
     def test_get_tool_statistics_empty(self):
         """Test statistics for memory with no tool calls."""
-        item = MemoryItem(
+        item = RecallEntry(
             resource_id=None,
             memory_type="tool",
             summary="empty tool memory",
@@ -211,7 +211,7 @@ class TestMemoryItemToolType:
     def test_get_tool_statistics(self):
         """Test statistics calculation for tool calls."""
         # Tool calls are stored as dicts in extra
-        item = MemoryItem(
+        item = RecallEntry(
             resource_id=None,
             memory_type="tool",
             summary="calculator tool",
@@ -259,7 +259,7 @@ class TestMemoryItemToolType:
 
     def test_get_tool_statistics_recent_n(self):
         """Test statistics with recent_n limit."""
-        item = MemoryItem(
+        item = RecallEntry(
             resource_id=None,
             memory_type="tool",
             summary="tool with many calls",
@@ -280,12 +280,12 @@ class TestMemoryItemToolType:
         assert stats["success_rate"] == 1.0  # Both recent calls succeeded
 
 
-class TestMemoryItemNewFields:
+class TestRecallEntryNewFields:
     """Tests for tool-related fields stored in extra."""
 
     def test_when_to_use_field(self):
         """Test when_to_use field stored in extra for retrieval hints."""
-        item = MemoryItem(
+        item = RecallEntry(
             resource_id=None,
             memory_type="profile",
             summary="User prefers dark mode",
@@ -296,7 +296,7 @@ class TestMemoryItemNewFields:
 
     def test_metadata_field(self):
         """Test metadata field stored in extra for type-specific data."""
-        item = MemoryItem(
+        item = RecallEntry(
             resource_id=None,
             memory_type="event",
             summary="User attended conference",
@@ -316,7 +316,7 @@ class TestMemoryItemNewFields:
 
     def test_default_values(self):
         """Test that extra defaults to empty dict."""
-        item = MemoryItem(
+        item = RecallEntry(
             resource_id=None,
             memory_type="knowledge",
             summary="Python is a programming language",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import pathlib
@@ -13,12 +14,19 @@ import defusedxml.ElementTree as ET
 from pydantic import BaseModel
 
 from memu.app.settings import CategoryConfig, CustomPrompt
-from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, MemoryType, Resource
+from memu.blob.folder import diff_folder, load_manifest, manifest_from_scan, save_manifest, scan_folder
+from memu.database.models import EntryType, RecallEntry, RecallFile, RecallFileEntry, Resource
+from memu.preprocess import PreprocessContext, preprocess_resource
 from memu.prompts.category_summary import (
     CUSTOM_PROMPT as CATEGORY_SUMMARY_CUSTOM_PROMPT,
 )
 from memu.prompts.category_summary import (
     PROMPT as CATEGORY_SUMMARY_PROMPT,
+)
+from memu.prompts.memory_fs import (
+    DESCRIPTIONS_PLACEHOLDER,
+    EXISTING_PLACEHOLDER,
+    SKILL_FILE_SYNTHESIS_PROMPT,
 )
 from memu.prompts.memory_type import (
     CUSTOM_PROMPTS as MEMORY_TYPE_CUSTOM_PROMPTS,
@@ -30,16 +38,13 @@ from memu.prompts.memory_type import (
 from memu.prompts.memory_type import (
     PROMPTS as MEMORY_TYPE_PROMPTS,
 )
-from memu.prompts.preprocess import PROMPTS as PREPROCESS_PROMPTS
-from memu.utils.conversation import format_conversation_for_preprocess
-from memu.utils.video import VideoFrameExtractor
 from memu.workflow.step import WorkflowState, WorkflowStep
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from memu.app.service import Context
-    from memu.app.settings import MemorizeConfig
+    from memu.app.settings import MemorizeConfig, MemoryFilesConfig
     from memu.blob.local_fs import LocalFS
     from memu.database.interfaces import Database
 
@@ -56,11 +61,26 @@ class MemorizeMixin:
         _get_database: Callable[[], Database]
         _get_step_llm_client: Callable[[Mapping[str, Any] | None], Any]
         _get_step_embedding_client: Callable[[Mapping[str, Any] | None], Any]
+        _get_embedding_client: Callable[..., Any]
         _get_llm_client: Callable[..., Any]
+        _get_vlm_client: Callable[..., Any]
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
         _extract_json_blob: Callable[[str], str]
         _escape_prompt_value: Callable[[str], str]
         user_model: type[BaseModel]
+
+        # Memory file system export (provided by MemoryService).
+        memory_files_config: MemoryFilesConfig
+        _build_memory_files: Callable[..., Awaitable[dict[str, Any]]]
+
+        # Provided by CRUDMixin (composed onto MemoryService).
+        async def _patch_category_summaries(
+            self,
+            updates: dict[str, tuple[str | None, str | None]],
+            ctx: Context,
+            store: Database,
+            llm_client: Any | None = None,
+        ) -> None: ...
 
     async def memorize(
         self,
@@ -85,6 +105,8 @@ class MemorizeMixin:
             "store": store,
             "category_ids": list(ctx.category_ids),
             "user": user_scope,
+            # Legacy single-resource path: force only the provided categories.
+            "allow_new_categories": False,
         }
 
         result = await self._run_workflow("memorize", state)
@@ -93,6 +115,182 @@ class MemorizeMixin:
             msg = "Memorize workflow failed to produce a response"
             raise RuntimeError(msg)
         return response
+
+    async def memorize_workspace(
+        self,
+        *,
+        folder: str,
+        user: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Sync a folder of source files into memory by diffing an input manifest.
+
+        Scans ``folder`` recursively, infers each file's modality by extension
+        (unsupported extensions are skipped), and diffs against the sidecar
+        ``.memu_manifest.json`` to find added/modified/deleted files. Modified and
+        deleted files have their previously extracted memory cascade-deleted (with
+        affected category summaries recomputed); added and modified files are
+        (re)memorized by submitting each one through the single-file
+        :meth:`memorize` workflow. The manifest is then rewritten.
+
+        ``memorize`` itself is left untouched: this is purely an additive,
+        directory-oriented entry point built on top of it.
+        """
+        ctx = self._get_context()
+        store = self._get_database()
+        user_scope = self.user_model(**user).model_dump() if user is not None else None
+        await self._ensure_categories_ready(ctx, store, user_scope)
+
+        root = pathlib.Path(folder).resolve()
+        scanned = scan_folder(root)
+        manifest = load_manifest(root)
+        diff = diff_folder(scanned, manifest)
+
+        # 1. Cascade-delete memory for files that were modified or removed.
+        stale_urls = {sf.abs_path for sf in diff.modified}
+        stale_urls.update(str(root / rel) for rel in diff.deleted)
+        removed_resources = await self._cascade_delete_by_urls(stale_urls, ctx=ctx, store=store, user_scope=user_scope)
+
+        # 2. (Re)memorize added and modified files; each file maps to one Resource.
+        changed_resources: list[Resource] = []
+        entries: list[dict[str, Any]] = []
+        files: list[dict[str, Any]] = []
+        for scanned_file in [*diff.added, *diff.modified]:
+            result = await self._memorize_one(
+                resource_url=scanned_file.abs_path,
+                modality=scanned_file.modality,
+                user_scope=user_scope,
+                ctx=ctx,
+                store=store,
+            )
+            changed_resources.extend(cast("list[Resource]", result.get("resources") or []))
+            # The inner single-file ``memorize`` keeps its legacy response keys
+            # (``items``/``categories``); translate them to the new vocabulary here.
+            response = cast("dict[str, Any]", result.get("response") or {})
+            entries.extend(response.get("items", []))
+            # Files reflect the cumulative scoped state, so the latest wins.
+            if response.get("categories"):
+                files = response["categories"]
+
+        # 3. Refresh the memory file tree (full rebuild when anything was removed).
+        await self._update_memory_files(changed_resources, user_scope, force_full=diff.has_removals)
+
+        # 4. Persist the updated input manifest.
+        save_manifest(root, manifest_from_scan(scanned))
+
+        return {
+            "folder": str(root),
+            "added": [sf.rel_path for sf in diff.added],
+            "modified": [sf.rel_path for sf in diff.modified],
+            "deleted": list(diff.deleted),
+            "resources": [self._model_dump_without_embeddings(r) for r in changed_resources],
+            "removed_resources": [self._model_dump_without_embeddings(r) for r in removed_resources],
+            "entries": entries,
+            "files": files,
+        }
+
+    async def _memorize_one(
+        self,
+        *,
+        resource_url: str,
+        modality: str,
+        user_scope: dict[str, Any] | None,
+        ctx: Context,
+        store: Database,
+    ) -> WorkflowState:
+        """Run the memorize workflow for a single file (one file -> one Resource).
+
+        This mirrors :meth:`memorize` but returns the full workflow state (so the
+        workspace sync can collect the created resources) and takes an already
+        resolved ``user_scope``/``ctx``/``store`` to avoid re-resolving them per file.
+        """
+        memory_types = self._resolve_memory_types()
+        state: WorkflowState = {
+            "resource_url": resource_url,
+            "modality": modality,
+            "memory_types": memory_types,
+            "categories_prompt_str": self._category_prompt_str,
+            "ctx": ctx,
+            "store": store,
+            "category_ids": list(ctx.category_ids),
+            "user": user_scope,
+            # Workspace sync path: let the extractor grow the taxonomy.
+            "allow_new_categories": True,
+        }
+        # The workspace path runs its own workflow (memorize + per-file skill
+        # generation); single-file ``memorize`` stays untouched (ADR 0006).
+        result = await self._run_workflow("memorize_workspace", state)
+        if result.get("response") is None:
+            msg = "Memorize workflow failed to produce a response"
+            raise RuntimeError(msg)
+        return result
+
+    async def _cascade_delete_by_urls(
+        self,
+        urls: set[str],
+        *,
+        ctx: Context,
+        store: Database,
+        user_scope: dict[str, Any] | None,
+    ) -> list[Resource]:
+        """Delete resources (and their items/relations) whose url is in ``urls``.
+
+        Affected category summaries are recomputed so the structured memory stays
+        consistent after a source file is changed or removed.
+        """
+        if not urls:
+            return []
+        where = user_scope or None
+        targets = [res for res in store.resource_repo.list_resources(where=where).values() if res.url in urls]
+        if not targets:
+            return []
+        target_ids = {res.id for res in targets}
+
+        # Discarded entry summaries per file, used to recompute summaries.
+        file_discards: dict[str, list[str]] = {}
+        for entry in store.recall_entry_repo.list_items(where=where).values():
+            if entry.resource_id not in target_ids:
+                continue
+            for relation in store.recall_file_entry_repo.get_item_categories(entry.id):
+                store.recall_file_entry_repo.unlink_item_category(entry.id, relation.category_id)
+                file_discards.setdefault(relation.category_id, []).append(entry.summary)
+            store.recall_entry_repo.delete_item(entry.id)
+
+        for res in targets:
+            store.resource_repo.delete_resource(res.id)
+
+        updates: dict[str, tuple[str | None, str | None]] = {
+            cid: ("\n".join(s for s in summaries if s and s.strip()), None)
+            for cid, summaries in file_discards.items()
+            if any(s and s.strip() for s in summaries)
+        }
+        if updates:
+            await self._patch_category_summaries(updates, ctx=ctx, store=store, llm_client=self._get_llm_client())
+        return targets
+
+    async def _update_memory_files(
+        self,
+        changed_resources: list[Resource],
+        user_scope: dict[str, Any] | None,
+        *,
+        force_full: bool = False,
+    ) -> None:
+        """Refresh the memory file tree after a workspace sync (init or incremental).
+
+        Gated behind ``memory_files_config.enabled`` so a sync without the export
+        feature configured is a no-op. When any file was modified or deleted
+        (``force_full``), the tree is rebuilt from the full scoped store so stale
+        skills/entries do not linger; otherwise an incremental update merges the
+        just-created resources. Best-effort: the structured memory is already
+        persisted, so an export error must not fail the sync.
+        """
+        if not getattr(self.memory_files_config, "enabled", False):
+            return
+        if not changed_resources and not force_full:
+            return
+        try:
+            await self._build_memory_files(user_scope, changed=None if force_full else changed_resources)
+        except Exception:
+            logger.exception("Memory file export failed after workspace memorize")
 
     def _build_memorize_workflow(self) -> list[WorkflowStep]:
         steps = [
@@ -114,9 +312,9 @@ class MemorizeMixin:
                 config={"chat_llm_profile": self.memorize_config.preprocess_llm_profile},
             ),
             WorkflowStep(
-                step_id="extract_items",
+                step_id="extract_entries",
                 role="extract",
-                handler=self._memorize_extract_items,
+                handler=self._memorize_extract_entries,
                 requires={
                     "preprocessed_resources",
                     "memory_types",
@@ -137,11 +335,19 @@ class MemorizeMixin:
                 capabilities=set(),
             ),
             WorkflowStep(
-                step_id="categorize_items",
+                step_id="categorize_entries",
                 role="categorize",
-                handler=self._memorize_categorize_items,
-                requires={"resource_plans", "ctx", "store", "local_path", "modality", "user"},
-                produces={"resources", "items", "relations", "category_updates"},
+                handler=self._memorize_categorize_entries,
+                requires={
+                    "resource_plans",
+                    "ctx",
+                    "store",
+                    "local_path",
+                    "modality",
+                    "user",
+                    "allow_new_categories",
+                },
+                produces={"resources", "entries", "relations", "file_updates"},
                 capabilities={"db", "vector"},
                 config={"embed_llm_profile": "embedding"},
             ),
@@ -149,8 +355,8 @@ class MemorizeMixin:
                 step_id="persist_index",
                 role="persist",
                 handler=self._memorize_persist_and_index,
-                requires={"category_updates", "ctx", "store"},
-                produces={"categories"},
+                requires={"file_updates", "ctx", "store"},
+                produces={"files"},
                 capabilities={"db", "llm"},
                 config={"chat_llm_profile": self.memorize_config.category_update_llm_profile},
             ),
@@ -158,7 +364,7 @@ class MemorizeMixin:
                 step_id="build_response",
                 role="emit",
                 handler=self._memorize_build_response,
-                requires={"resources", "items", "relations", "ctx", "store", "category_ids"},
+                requires={"resources", "entries", "relations", "ctx", "store", "category_ids"},
                 produces={"response"},
                 capabilities=set(),
             ),
@@ -176,27 +382,59 @@ class MemorizeMixin:
             "store",
             "category_ids",
             "user",
+            "allow_new_categories",
         }
+
+    def _build_memorize_workspace_workflow(self) -> list[WorkflowStep]:
+        """The workspace memorize pipeline: the memory steps plus skill generation.
+
+        Identical to :meth:`_build_memorize_workflow` but inserts a per-file
+        ``generate_skills`` step (ADR 0006) before the response is emitted. It runs
+        on the ``memorize_workspace`` path only, so single-file ``memorize`` is
+        unchanged. The skill step has no data dependency on the memory persist
+        output — it consumes ``preprocessed_resources`` — so it slots in after
+        persist purely for sequencing.
+        """
+        steps = self._build_memorize_workflow()
+        skill_step = WorkflowStep(
+            step_id="generate_skills",
+            role="generate_skills",
+            handler=self._memorize_generate_skills,
+            requires={"preprocessed_resources", "store", "user"},
+            produces={"skills"},
+            capabilities={"llm", "db", "vector"},
+            config={"chat_llm_profile": getattr(self.memory_files_config, "synthesis_llm_profile", "default")},
+        )
+        # Insert just before the terminal build_response step.
+        steps.insert(-1, skill_step)
+        return steps
 
     async def _memorize_ingest_resource(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         local_path, raw_text = await self.fs.fetch(state["resource_url"], state["modality"])
         state.update({"local_path": local_path, "raw_text": raw_text})
         return state
 
+    # Modalities whose preprocessing analyzes media via the VLM (vision) client.
+    _VISION_MODALITIES = frozenset({"image", "video"})
+
     async def _memorize_preprocess_multimodal(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        llm_client = self._get_step_llm_client(step_context)
+        modality = state["modality"]
+        client = self._get_step_llm_client(step_context)
+        if modality in self._VISION_MODALITIES:
+            with contextlib.suppress(KeyError):
+                client = self._get_vlm_client(self.memorize_config.vlm_profile, step_context=step_context)
         preprocessed = await self._preprocess_resource_url(
             local_path=state["local_path"],
             text=state.get("raw_text"),
-            modality=state["modality"],
-            llm_client=llm_client,
+            modality=modality,
+            llm_client=client,
         )
         if not preprocessed:
             preprocessed = [{"text": state.get("raw_text"), "caption": None}]
         state["preprocessed_resources"] = preprocessed
         return state
 
-    async def _memorize_extract_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _memorize_extract_entries(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         llm_client = self._get_step_llm_client(step_context)
         preprocessed_resources = state.get("preprocessed_resources", [])
         resource_plans: list[dict[str, Any]] = []
@@ -231,17 +469,18 @@ class MemorizeMixin:
         state["resource_plans"] = state.get("resource_plans", [])
         return state
 
-    async def _memorize_categorize_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _memorize_categorize_entries(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         embed_client = self._get_step_embedding_client(step_context)
         ctx = state["ctx"]
         store = state["store"]
         modality = state["modality"]
         local_path = state["local_path"]
         resources: list[Resource] = []
-        items: list[MemoryItem] = []
-        relations: list[CategoryItem] = []
-        category_updates: dict[str, list[tuple[str, str]]] = {}
+        created_entries: list[RecallEntry] = []
+        relations: list[RecallFileEntry] = []
+        file_updates: dict[str, list[tuple[str, str]]] = {}
         user_scope = state.get("user", {})
+        allow_new_categories = state.get("allow_new_categories", False)
 
         for plan in state.get("resource_plans", []):
             res = await self._create_resource_with_caption(
@@ -255,70 +494,159 @@ class MemorizeMixin:
             )
             resources.append(res)
 
-            entries = plan.get("entries") or []
-            if not entries:
+            plan_entries = plan.get("entries") or []
+            if not plan_entries:
                 continue
 
-            mem_items, rels, cat_updates = await self._persist_memory_items(
+            mem_entries, rels, new_file_updates = await self._persist_recall_entries(
                 resource_id=res.id,
-                structured_entries=entries,
+                structured_entries=plan_entries,
                 ctx=ctx,
                 store=store,
                 embed_client=embed_client,
                 user=user_scope,
+                allow_new_categories=allow_new_categories,
             )
-            items.extend(mem_items)
+            created_entries.extend(mem_entries)
             relations.extend(rels)
-            for cat_id, mems in cat_updates.items():
-                category_updates.setdefault(cat_id, []).extend(mems)
+            for file_id, entry_tuples in new_file_updates.items():
+                file_updates.setdefault(file_id, []).extend(entry_tuples)
 
         state.update({
             "resources": resources,
-            "items": items,
+            "entries": created_entries,
             "relations": relations,
-            "category_updates": category_updates,
+            "file_updates": file_updates,
         })
         return state
 
     async def _memorize_persist_and_index(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         llm_client = self._get_step_llm_client(step_context)
-        updated_summaries = await self._update_category_summaries(
-            state.get("category_updates", {}),
+        updated_summaries = await self._update_file_summaries(
+            state.get("file_updates", {}),
             ctx=state["ctx"],
             store=state["store"],
             llm_client=llm_client,
         )
         if self.memorize_config.enable_item_references:
-            await self._persist_item_references(
+            await self._persist_entry_references(
                 updated_summaries=updated_summaries,
-                category_updates=state.get("category_updates", {}),
+                file_updates=state.get("file_updates", {}),
                 store=state["store"],
             )
         return state
+
+    async def _memorize_generate_skills(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Generate/patch skill-track ``RecallFile``s from this file's content (ADR 0006).
+
+        Gated behind ``memory_files_config.synthesize``. Reads the preprocessed
+        content of the current source plus the existing skill-track files (so file
+        *N* sees skills created by files *1..N-1*), asks the LLM for skills to add or
+        revise, and persists each directly as a ``RecallFile(track="skill")`` —
+        embedding ``name + description`` and storing the body as ``content``, bypassing
+        the ``RecallEntry`` plane.
+        """
+        if not getattr(self.memory_files_config, "synthesize", False):
+            return state
+        content = self._format_skill_source_content(state.get("preprocessed_resources") or [])
+        if not content:
+            return state
+
+        store = state["store"]
+        user_scope = dict(state.get("user") or {})
+        llm_client = self._get_step_llm_client(step_context)
+        embed_client = self._get_step_embedding_client(step_context)
+
+        existing = store.recall_file_repo.list_categories(where={**user_scope, "track": "skill"})
+        existing_text = self._format_existing_skills(existing) or "(none)"
+        prompt = SKILL_FILE_SYNTHESIS_PROMPT.replace(EXISTING_PLACEHOLDER, existing_text).replace(
+            DESCRIPTIONS_PLACEHOLDER, self._escape_prompt_value(content)
+        )
+        parsed = self._parse_skill_files(await llm_client.chat(prompt))
+
+        persisted: list[RecallFile] = []
+        for name, description, body in parsed:
+            emb_text = f"{name}: {description}" if description else name
+            embedding = (await embed_client.embed([emb_text]))[0]
+            skill = store.recall_file_repo.get_or_create_category(
+                name=name,
+                description=description,
+                embedding=embedding,
+                user_data=user_scope,
+                track="skill",
+            )
+            persisted.append(store.recall_file_repo.update_category(category_id=skill.id, content=body))
+        state["skills"] = persisted
+        return state
+
+    @staticmethod
+    def _format_skill_source_content(preprocessed_resources: list[dict[str, Any]]) -> str:
+        """Flatten a source's preprocessed segments into a single text block."""
+        parts = [
+            " ".join((prep.get("text") or "").split())
+            for prep in preprocessed_resources
+            if (prep.get("text") or "").strip()
+        ]
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _format_existing_skills(existing: Mapping[str, RecallFile]) -> str:
+        """Render existing skill files as ``## name\\nbody`` blocks for the prompt."""
+        return "\n\n".join(
+            f"## {skill.name}\n{(skill.content or '').strip()}".strip()
+            for skill in sorted(existing.values(), key=lambda s: s.name)
+        )
+
+    def _parse_skill_files(self, raw: str) -> list[tuple[str, str, str]]:
+        """Parse the skill-synthesis JSON array into ``(name, description, body)`` tuples."""
+        if not raw:
+            return []
+        start = raw.find("[")
+        end = raw.rfind("]")
+        if start == -1 or end == -1 or end <= start:
+            return []
+        try:
+            parsed = json.loads(raw[start : end + 1])
+        except (json.JSONDecodeError, TypeError):
+            return []
+        if not isinstance(parsed, list):
+            return []
+        skills: list[tuple[str, str, str]] = []
+        for entry in parsed:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("name")
+            body = entry.get("body")
+            if not isinstance(name, str) or not name.strip() or not isinstance(body, str) or not body.strip():
+                continue
+            description = entry.get("description")
+            description = description.strip() if isinstance(description, str) else ""
+            skills.append((name.strip(), description, body.strip()))
+        return skills
 
     def _memorize_build_response(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         ctx = state["ctx"]
         store = state["store"]
         resources = [self._model_dump_without_embeddings(r) for r in state.get("resources", [])]
-        items = [self._model_dump_without_embeddings(item) for item in state.get("items", [])]
+        entries = [self._model_dump_without_embeddings(entry) for entry in state.get("entries", [])]
         relations = [rel.model_dump() for rel in state.get("relations", [])]
         category_ids = state.get("category_ids") or list(ctx.category_ids)
-        categories = [
-            self._model_dump_without_embeddings(store.memory_category_repo.categories[c]) for c in category_ids
-        ]
+        files = [self._model_dump_without_embeddings(store.recall_file_repo.categories[c]) for c in category_ids]
 
+        # Legacy response contract: ``memorize`` keeps emitting ``items``/``categories``
+        # keys for backward compatibility; the new vocabulary lives in the internal vars.
         if len(resources) == 1:
             response = {
                 "resource": resources[0],
-                "items": items,
-                "categories": categories,
+                "items": entries,
+                "categories": files,
                 "relations": relations,
             }
         else:
             response = {
                 "resources": resources,
-                "items": items,
-                "categories": categories,
+                "items": entries,
+                "categories": files,
                 "relations": relations,
             }
         state["response"] = response
@@ -362,7 +690,7 @@ class MemorizeMixin:
     ) -> Resource:
         caption_text = caption.strip() if caption else None
         if caption_text:
-            client = embed_client or self._get_llm_client()
+            client = embed_client or self._get_embedding_client()
             caption_embedding = (await client.embed([caption_text]))[0]
         else:
             caption_embedding = None
@@ -384,9 +712,9 @@ class MemorizeMixin:
         #         res.updated_at = pendulum.now()
         return res
 
-    def _resolve_memory_types(self) -> list[MemoryType]:
+    def _resolve_memory_types(self) -> list[EntryType]:
         configured_types = self.memorize_config.memory_types or DEFAULT_MEMORY_TYPES
-        return [cast(MemoryType, mtype) for mtype in configured_types]
+        return [cast(EntryType, mtype) for mtype in configured_types]
 
     def _resolve_summary_prompt(self, modality: str, override: str | None) -> str | None:
         memo_settings = self.memorize_config
@@ -426,12 +754,12 @@ class MemorizeMixin:
         *,
         resource_url: str,
         modality: str,
-        memory_types: list[MemoryType],
+        memory_types: list[EntryType],
         text: str | None,
         categories_prompt_str: str,
         segments: list[dict[str, int | str]] | None = None,
         llm_client: Any | None = None,
-    ) -> list[tuple[MemoryType, str, list[str]]]:
+    ) -> list[tuple[EntryType, str, list[str]]]:
         if not memory_types:
             return []
 
@@ -459,11 +787,11 @@ class MemorizeMixin:
         *,
         resource_text: str,
         modality: str,
-        memory_types: list[MemoryType],
+        memory_types: list[EntryType],
         categories_prompt_str: str,
         segments: list[dict[str, int | str]] | None,
         llm_client: Any | None = None,
-    ) -> list[tuple[MemoryType, str, list[str]]]:
+    ) -> list[tuple[EntryType, str, list[str]]]:
         if modality == "conversation" and segments:
             segment_entries = await self._generate_entries_for_segments(
                 resource_text=resource_text,
@@ -486,11 +814,11 @@ class MemorizeMixin:
         *,
         resource_text: str,
         segments: list[dict[str, int | str]],
-        memory_types: list[MemoryType],
+        memory_types: list[EntryType],
         categories_prompt_str: str,
         llm_client: Any | None = None,
-    ) -> list[tuple[MemoryType, str, list[str]]]:
-        entries: list[tuple[MemoryType, str, list[str]]] = []
+    ) -> list[tuple[EntryType, str, list[str]]]:
+        entries: list[tuple[EntryType, str, list[str]]] = []
         lines = resource_text.split("\n")
         max_idx = len(lines) - 1
         for segment in segments:
@@ -512,10 +840,10 @@ class MemorizeMixin:
         self,
         *,
         resource_text: str,
-        memory_types: list[MemoryType],
+        memory_types: list[EntryType],
         categories_prompt_str: str,
         llm_client: Any | None = None,
-    ) -> list[tuple[MemoryType, str, list[str]]]:
+    ) -> list[tuple[EntryType, str, list[str]]]:
         if not memory_types:
             return []
         client = llm_client or self._get_llm_client()
@@ -534,9 +862,9 @@ class MemorizeMixin:
         return self._parse_structured_entries(memory_types, responses)
 
     def _parse_structured_entries(
-        self, memory_types: list[MemoryType], responses: Sequence[str]
-    ) -> list[tuple[MemoryType, str, list[str]]]:
-        entries: list[tuple[MemoryType, str, list[str]]] = []
+        self, memory_types: list[EntryType], responses: Sequence[str]
+    ) -> list[tuple[EntryType, str, list[str]]]:
+        entries: list[tuple[EntryType, str, list[str]]] = []
         for mtype, response in zip(memory_types, responses, strict=True):
             parsed = self._parse_memory_type_response_xml(response)
             # if not parsed:
@@ -564,45 +892,46 @@ class MemorizeMixin:
         return "\n".join(segment_lines) if segment_lines else None
 
     def _build_no_text_fallback(
-        self, memory_types: list[MemoryType], resource_url: str, modality: str
-    ) -> list[tuple[MemoryType, str, list[str]]]:
+        self, memory_types: list[EntryType], resource_url: str, modality: str
+    ) -> list[tuple[EntryType, str, list[str]]]:
         fallback = f"Resource {resource_url} ({modality}) stored. No text summary in v0."
         return [(mtype, f"{fallback} (memory type: {mtype}).", []) for mtype in memory_types]
 
     def _build_no_result_fallback(
-        self, memory_type: MemoryType, resource_url: str, modality: str
-    ) -> tuple[MemoryType, str, list[str]]:
+        self, memory_type: EntryType, resource_url: str, modality: str
+    ) -> tuple[EntryType, str, list[str]]:
         fallback = f"Resource {resource_url} ({modality}) stored. No structured memories generated."
         return memory_type, fallback, []
 
-    async def _persist_memory_items(
+    async def _persist_recall_entries(
         self,
         *,
         resource_id: str,
-        structured_entries: list[tuple[MemoryType, str, list[str]]],
+        structured_entries: list[tuple[EntryType, str, list[str]]],
         ctx: Context,
         store: Database,
         embed_client: Any | None = None,
         user: Mapping[str, Any] | None = None,
-    ) -> tuple[list[MemoryItem], list[CategoryItem], dict[str, list[tuple[str, str]]]]:
+        allow_new_categories: bool = False,
+    ) -> tuple[list[RecallEntry], list[RecallFileEntry], dict[str, list[tuple[str, str]]]]:
         """
-        Persist memory items and track category updates.
+        Persist recall entries and track per-file updates.
 
         Returns:
-            Tuple of (items, relations, category_updates)
-            where category_updates maps category_id -> list of (item_id, summary) tuples
+            Tuple of (entries, relations, file_updates)
+            where file_updates maps file_id -> list of (entry_id, summary) tuples
         """
         summary_payloads = [content for _, content, _ in structured_entries]
-        client = embed_client or self._get_llm_client()
-        item_embeddings = await client.embed(summary_payloads) if summary_payloads else []
-        items: list[MemoryItem] = []
-        rels: list[CategoryItem] = []
-        # Changed: now stores (item_id, summary) tuples for reference support
-        category_memory_updates: dict[str, list[tuple[str, str]]] = {}
+        client = embed_client or self._get_embedding_client()
+        entry_embeddings = await client.embed(summary_payloads) if summary_payloads else []
+        entries: list[RecallEntry] = []
+        rels: list[RecallFileEntry] = []
+        # Stores (entry_id, summary) tuples for reference support
+        file_entry_updates: dict[str, list[tuple[str, str]]] = {}
 
         reinforce = self.memorize_config.enable_item_reinforcement
-        for (memory_type, summary_text, cat_names), emb in zip(structured_entries, item_embeddings, strict=True):
-            item = store.memory_item_repo.create_item(
+        for (memory_type, summary_text, cat_names), emb in zip(structured_entries, entry_embeddings, strict=True):
+            entry = store.recall_entry_repo.create_item(
                 resource_id=resource_id,
                 memory_type=memory_type,
                 summary=summary_text,
@@ -610,17 +939,21 @@ class MemorizeMixin:
                 user_data=dict(user or {}),
                 reinforce=reinforce,
             )
-            items.append(item)
-            if reinforce and item.extra.get("reinforcement_count", 1) > 1:
-                # existing item
+            entries.append(entry)
+            if reinforce and entry.extra.get("reinforcement_count", 1) > 1:
+                # existing entry
                 continue
-            mapped_cat_ids = self._map_category_names_to_ids(cat_names, ctx)
-            for cid in mapped_cat_ids:
-                rels.append(store.category_item_repo.link_item_category(item.id, cid, user_data=dict(user or {})))
-                # Store (item_id, summary) tuple for reference support
-                category_memory_updates.setdefault(cid, []).append((item.id, summary_text))
+            mapped_file_ids = await self._resolve_category_ids(
+                cat_names, ctx, store, user=user, allow_new=allow_new_categories
+            )
+            for file_id in mapped_file_ids:
+                rels.append(
+                    store.recall_file_entry_repo.link_item_category(entry.id, file_id, user_data=dict(user or {}))
+                )
+                # Store (entry_id, summary) tuple for reference support
+                file_entry_updates.setdefault(file_id, []).append((entry.id, summary_text))
 
-        return items, rels, category_memory_updates
+        return entries, rels, file_entry_updates
 
     def _start_category_initialization(self, ctx: Context, store: Database) -> None:
         if ctx.categories_ready:
@@ -648,15 +981,15 @@ class MemorizeMixin:
     @staticmethod
     def _classify_categories(
         configs: list[CategoryConfig],
-        existing_by_name: dict[str, MemoryCategory],
+        existing_by_name: dict[str, RecallFile],
     ) -> tuple[
         list[tuple[int, CategoryConfig]],
-        list[tuple[int, CategoryConfig, MemoryCategory]],
-        dict[int, MemoryCategory],
+        list[tuple[int, CategoryConfig, RecallFile]],
+        dict[int, RecallFile],
     ]:
         to_create: list[tuple[int, CategoryConfig]] = []
-        to_update: list[tuple[int, CategoryConfig, MemoryCategory]] = []
-        ready: dict[int, MemoryCategory] = {}
+        to_update: list[tuple[int, CategoryConfig, RecallFile]] = []
+        ready: dict[int, RecallFile] = {}
         for i, cfg in enumerate(configs):
             name = cfg.name.strip() or "Untitled"
             description = cfg.description.strip()
@@ -679,8 +1012,8 @@ class MemorizeMixin:
             return
 
         user_data = dict(user or {})
-        existing = store.memory_category_repo.list_categories(where=user_data or None)
-        existing_by_name: dict[str, MemoryCategory] = {c.name: c for c in existing.values()}
+        existing = store.recall_file_repo.list_categories(where={**user_data, "track": "memory"})
+        existing_by_name: dict[str, RecallFile] = {c.name: c for c in existing.values()}
 
         to_create, to_update, ready = self._classify_categories(self.category_configs, existing_by_name)
 
@@ -691,23 +1024,23 @@ class MemorizeMixin:
         embed_map: dict[int, list[float]] = {}
         if needs_embed:
             texts = [self._category_embedding_text(cfg) for _, cfg in needs_embed]
-            vecs = await self._get_llm_client("embedding").embed(texts)
+            vecs = await self._get_embedding_client("embedding").embed(texts)
             for (i, _), vec in zip(needs_embed, vecs, strict=True):
                 embed_map[i] = vec
 
-        cats: dict[int, MemoryCategory] = dict(ready)
+        cats: dict[int, RecallFile] = dict(ready)
 
         for i, cfg in to_create:
             name = cfg.name.strip() or "Untitled"
             description = cfg.description.strip()
-            cat = store.memory_category_repo.get_or_create_category(
+            cat = store.recall_file_repo.get_or_create_category(
                 name=name, description=description, embedding=embed_map[i], user_data=user_data
             )
             cats[i] = cat
 
         for i, cfg, ex in to_update:
             description = cfg.description.strip()
-            cat = store.memory_category_repo.update_category(
+            cat = store.recall_file_repo.update_category(
                 category_id=ex.id, description=description, embedding=embed_map[i]
             )
             cats[i] = cat
@@ -740,256 +1073,105 @@ class MemorizeMixin:
                 seen.add(cid)
         return mapped
 
+    @staticmethod
+    def _partition_category_names(names: list[str], ctx: Context) -> tuple[list[str], list[str]]:
+        """Split proposed names into (known category ids, unknown names) with dedup."""
+        known_ids: list[str] = []
+        known_seen: set[str] = set()
+        unknown: list[str] = []
+        unknown_seen: set[str] = set()
+        for name in names:
+            key = name.strip().lower()
+            if not key:
+                continue
+            cid = ctx.category_name_to_id.get(key)
+            if cid is not None:
+                if cid not in known_seen:
+                    known_ids.append(cid)
+                    known_seen.add(cid)
+            elif key not in unknown_seen:
+                unknown.append(name.strip())
+                unknown_seen.add(key)
+        return known_ids, unknown
+
+    async def _resolve_category_ids(
+        self,
+        names: list[str],
+        ctx: Context,
+        store: Database,
+        *,
+        user: Mapping[str, Any] | None = None,
+        allow_new: bool = False,
+    ) -> list[str]:
+        """Resolve extractor-proposed category names to ids, optionally creating unknown ones.
+
+        When ``allow_new`` is true this implements the open/adaptive taxonomy: any category
+        name the extractor proposes is created on first sight and cached in the context.
+        (Embedding-similarity merging of near-duplicate categories is handled later by
+        consolidation; here we only do exact-name dedup.) When false, only names matching an
+        existing category resolve and proposed-but-unknown names are dropped, so the caller is
+        confined to the provided taxonomy.
+        """
+        if not names:
+            return []
+        user_data = dict(user or {})
+        resolved, unknown = self._partition_category_names(names, ctx)
+        seen: set[str] = set(resolved)
+
+        if unknown and allow_new:
+            vecs = await self._get_embedding_client("embedding").embed(unknown)
+            for name, vec in zip(unknown, vecs, strict=True):
+                cat = store.recall_file_repo.get_or_create_category(
+                    name=name, description="", embedding=vec, user_data=user_data
+                )
+                ctx.category_name_to_id[name.lower()] = cat.id
+                if cat.id not in ctx.category_ids:
+                    ctx.category_ids.append(cat.id)
+                if cat.id not in seen:
+                    resolved.append(cat.id)
+                    seen.add(cat.id)
+        return resolved
+
     async def _preprocess_resource_url(
         self, *, local_path: str, text: str | None, modality: str, llm_client: Any | None = None
     ) -> list[dict[str, str | None]]:
+        """Preprocess a resource by delegating to the per-format ``preprocess`` package.
+
+        Returns a list of preprocessed resources, each with 'text' and 'caption'.
         """
-        Preprocess resource based on modality.
-
-        General preprocessing dispatcher for all modalities:
-        - Text-based modalities (conversation, document): require text content
-        - Audio modality: transcribe audio file first, then process as text
-        - Media modalities (video, image): process media files directly
-
-        Args:
-            local_path: Local file path to the resource
-            text: Text content if available (for text-based modalities)
-            modality: Resource modality type
-
-        Returns:
-            List of preprocessed resources, each with 'text' and 'caption'
-        """
-        configured_prompt = self.memorize_config.multimodal_preprocess_prompts.get(modality)
-        if configured_prompt is None:
-            template = PREPROCESS_PROMPTS.get(modality)
-        elif isinstance(configured_prompt, str):
-            template = configured_prompt
-        else:
-            # No custom prompts configured for preprocssing for now,
-            # If the user decide to use their custom prompt, they must provide ALL prompt blocks.
-            template = self._resolve_custom_prompt(configured_prompt, {})
-
-        if not template:
-            return [{"text": text, "caption": None}]
-
-        if modality == "audio":
-            text = await self._prepare_audio_text(local_path, text, llm_client=llm_client)
-            if text is None:
-                return [{"text": None, "caption": None}]
-
-        if self._modality_requires_text(modality) and not text:
-            return [{"text": text, "caption": None}]
-
-        return await self._dispatch_preprocessor(
+        return await preprocess_resource(
             modality=modality,
             local_path=local_path,
             text=text,
-            template=template,
+            ctx=self._build_preprocess_context(),
             llm_client=llm_client,
         )
 
-    async def _prepare_audio_text(self, local_path: str, text: str | None, llm_client: Any | None = None) -> str | None:
-        """Ensure audio resources provide text either via transcription or file read."""
-        if text:
-            return text
-
-        audio_extensions = {".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"}
-        text_extensions = {".txt", ".text"}
-        file_ext = pathlib.Path(local_path).suffix.lower()
-
-        if file_ext in audio_extensions:
-            try:
-                logger.info(f"Transcribing audio file: {local_path}")
-                client = llm_client or self._get_llm_client()
-                transcribed = cast(str, await client.transcribe(local_path))
-                logger.info(f"Audio transcription completed: {len(transcribed)} characters")
-            except Exception:
-                logger.exception("Audio transcription failed for %s", local_path)
-                return None
-            else:
-                return transcribed
-
-        if file_ext in text_extensions:
-            path_obj = pathlib.Path(local_path)
-            try:
-                text_content = path_obj.read_text(encoding="utf-8")
-                logger.info(f"Read pre-transcribed text file: {len(text_content)} characters")
-            except Exception:
-                logger.exception("Failed to read text file %s", local_path)
-                return None
-            else:
-                return text_content
-
-        logger.warning(f"Unknown audio file type: {file_ext}, skipping transcription")
-        return None
-
-    def _modality_requires_text(self, modality: str) -> bool:
-        return modality in ("conversation", "document")
-
-    async def _dispatch_preprocessor(
-        self,
-        *,
-        modality: str,
-        local_path: str,
-        text: str | None,
-        template: str,
-        llm_client: Any | None = None,
-    ) -> list[dict[str, str | None]]:
-        if modality == "conversation" and text is not None:
-            return await self._preprocess_conversation(text, template, llm_client=llm_client)
-        if modality == "video":
-            return await self._preprocess_video(local_path, template, llm_client=llm_client)
-        if modality == "image":
-            return await self._preprocess_image(local_path, template, llm_client=llm_client)
-        if modality == "document" and text is not None:
-            return await self._preprocess_document(text, template, llm_client=llm_client)
-        if modality == "audio" and text is not None:
-            return await self._preprocess_audio(text, template, llm_client=llm_client)
-        return [{"text": text, "caption": None}]
-
-    async def _preprocess_conversation(
-        self, text: str, template: str, llm_client: Any | None = None
-    ) -> list[dict[str, str | None]]:
-        """Preprocess conversation data with segmentation, returns list of resources (one per segment)."""
-        preprocessed_text = format_conversation_for_preprocess(text)
-        prompt = template.format(conversation=self._escape_prompt_value(preprocessed_text))
-        client = llm_client or self._get_llm_client()
-        processed = await client.chat(prompt)
-        _conv, segments = self._parse_conversation_preprocess_with_segments(processed, preprocessed_text)
-
-        # Important: always use the original JSON-derived, indexed conversation text for downstream
-        # segmentation and memory extraction. The LLM may rewrite the conversation and drop fields
-        # like created_at, which would cause them to be lost.
-        conversation_text = preprocessed_text
-        # If no segments, return single resource
-        if not segments:
-            return [{"text": conversation_text, "caption": None}]
-
-        # Generate caption for each segment and return as separate resources
-        lines = conversation_text.split("\n")
-        max_idx = len(lines) - 1
-        resources: list[dict[str, str | None]] = []
-
-        for segment in segments:
-            start = int(segment.get("start", 0))
-            end = int(segment.get("end", max_idx))
-            start = max(0, min(start, max_idx))
-            end = max(0, min(end, max_idx))
-            segment_text = "\n".join(lines[start : end + 1])
-
-            if segment_text.strip():
-                caption = await self._summarize_segment(segment_text, llm_client=client)
-                resources.append({"text": segment_text, "caption": caption})
-        return resources if resources else [{"text": conversation_text, "caption": None}]
-
-    async def _summarize_segment(self, segment_text: str, llm_client: Any | None = None) -> str | None:
-        """Summarize a single conversation segment."""
-        system_prompt = (
-            "Summarize the given conversation segment in 1-2 concise sentences. "
-            "Focus on the main topic or theme discussed."
+    def _build_preprocess_context(self) -> PreprocessContext:
+        """Bundle the service dependencies the preprocessors need."""
+        return PreprocessContext(
+            get_llm_client=self._get_llm_client,
+            get_vlm_client=lambda: self._get_vlm_client(self.memorize_config.vlm_profile),
+            escape_prompt_value=self._escape_prompt_value,
+            extract_json_blob=self._extract_json_blob,
+            resolve_custom_prompt=self._resolve_custom_prompt,
+            multimodal_preprocess_prompts=self.memorize_config.multimodal_preprocess_prompts,
         )
-        try:
-            client = llm_client or self._get_llm_client()
-            response = await client.chat(segment_text, system_prompt=system_prompt)
-            return response.strip() if response else None
-        except Exception:
-            logger.exception("Failed to summarize segment")
-            return None
-
-    async def _preprocess_video(
-        self, local_path: str, template: str, llm_client: Any | None = None
-    ) -> list[dict[str, str | None]]:
-        """
-        Preprocess video data - extract description and caption using Vision API.
-
-        Extracts the middle frame from the video and analyzes it using Vision API.
-
-        Args:
-            local_path: Path to the video file
-            template: Prompt template for video analysis
-
-        Returns:
-            List with single resource containing text (description) and caption
-        """
-        try:
-            # Check if ffmpeg is available
-            if not VideoFrameExtractor.is_ffmpeg_available():
-                logger.warning("ffmpeg not available, cannot process video. Returning None.")
-                return [{"text": None, "caption": None}]
-
-            # Extract middle frame from video
-            logger.info(f"Extracting frame from video: {local_path}")
-            frame_path = VideoFrameExtractor.extract_middle_frame(local_path)
-
-            try:
-                # Call Vision API with extracted frame
-                logger.info(f"Analyzing video frame with Vision API: {frame_path}")
-                client = llm_client or self._get_llm_client()
-                processed = await client.vision(prompt=template, image_path=frame_path, system_prompt=None)
-                description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
-                return [{"text": description, "caption": caption}]
-            finally:
-                # Clean up temporary frame file
-                import pathlib
-
-                try:
-                    pathlib.Path(frame_path).unlink(missing_ok=True)
-                    logger.debug(f"Cleaned up temporary frame: {frame_path}")
-                except Exception as e:
-                    logger.warning(f"Failed to clean up frame {frame_path}: {e}")
-
-        except Exception as e:
-            logger.error(f"Video preprocessing failed: {e}", exc_info=True)
-            return [{"text": None, "caption": None}]
-
-    async def _preprocess_image(
-        self, local_path: str, template: str, llm_client: Any | None = None
-    ) -> list[dict[str, str | None]]:
-        """
-        Preprocess image data - extract description and caption using Vision API.
-
-        Args:
-            local_path: Path to the image file
-            template: Prompt template for image analysis
-
-        Returns:
-            List with single resource containing text (description) and caption
-        """
-        # Call Vision API with image
-        client = llm_client or self._get_llm_client()
-        processed = await client.vision(prompt=template, image_path=local_path, system_prompt=None)
-        description, caption = self._parse_multimodal_response(processed, "detailed_description", "caption")
-        return [{"text": description, "caption": caption}]
-
-    async def _preprocess_document(
-        self, text: str, template: str, llm_client: Any | None = None
-    ) -> list[dict[str, str | None]]:
-        """Preprocess document data - condense and extract caption"""
-        prompt = template.format(document_text=self._escape_prompt_value(text))
-        client = llm_client or self._get_llm_client()
-        processed = await client.chat(prompt)
-        processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
-        return [{"text": processed_content or text, "caption": caption}]
-
-    async def _preprocess_audio(
-        self, text: str, template: str, llm_client: Any | None = None
-    ) -> list[dict[str, str | None]]:
-        """Preprocess audio data - format transcription and extract caption"""
-        prompt = template.format(transcription=self._escape_prompt_value(text))
-        client = llm_client or self._get_llm_client()
-        processed = await client.chat(prompt)
-        processed_content, caption = self._parse_multimodal_response(processed, "processed_content", "caption")
-        return [{"text": processed_content or text, "caption": caption}]
 
     def _format_categories_for_prompt(self, categories: list[CategoryConfig]) -> str:
+        adaptive_hint = (
+            "Assign each memory item 1-3 concise, reusable category names (short noun "
+            "phrases). Reuse a listed category when one fits; otherwise propose a new "
+            "concise category name. Categories are created automatically."
+        )
         if not categories:
-            return "No categories provided."
+            return "No predefined categories yet.\n" + adaptive_hint
         lines = []
         for cat in categories:
             name = cat.name.strip() or "Untitled"
             desc = cat.description.strip()
             lines.append(f"- {name}: {desc}" if desc else f"- {name}")
-        return "\n".join(lines)
+        return "Existing categories (reuse when appropriate):\n" + "\n".join(lines) + "\n\n" + adaptive_hint
 
     def _add_conversation_indices(self, conversation: str) -> str:
         """
@@ -1016,7 +1198,7 @@ class MemorizeMixin:
 
         return "\n".join(indexed_lines)
 
-    def _build_memory_type_prompt(self, *, memory_type: MemoryType, resource_text: str, categories_str: str) -> str:
+    def _build_memory_type_prompt(self, *, memory_type: EntryType, resource_text: str, categories_str: str) -> str:
         configured_prompt = self.memorize_config.memory_type_prompts.get(memory_type)
         if configured_prompt is None:
             template = MEMORY_TYPE_PROMPTS.get(memory_type)
@@ -1032,15 +1214,15 @@ class MemorizeMixin:
         safe_categories = self._escape_prompt_value(categories_str)
         return template.format(resource=safe_resource, categories_str=safe_categories)
 
-    def _build_item_ref_id(self, item_id: str) -> str:
-        return item_id.replace("-", "")[:6]
+    def _build_entry_ref_id(self, entry_id: str) -> str:
+        return entry_id.replace("-", "")[:6]
 
     def _extract_refs_from_summaries(self, summaries: dict[str, str]) -> set[str]:
         """
         Extract all [ref:xxx] references from summary texts.
 
         Args:
-            summaries: dict mapping category_id -> summary text
+            summaries: dict mapping file_id -> summary text
 
         Returns:
             Set of all referenced short IDs (the xxx part from [ref:xxx])
@@ -1052,20 +1234,20 @@ class MemorizeMixin:
             refs.update(extract_references(summary))
         return refs
 
-    async def _persist_item_references(
+    async def _persist_entry_references(
         self,
         *,
         updated_summaries: dict[str, str],
-        category_updates: dict[str, list[tuple[str, str]]],
+        file_updates: dict[str, list[tuple[str, str]]],
         store: Database,
     ) -> None:
         """
-        Persist ref_id to items that are referenced in category summaries.
+        Persist ref_id to entries that are referenced in file summaries.
 
         This function:
         1. Extracts all [ref:xxx] patterns from updated summaries
-        2. Builds a mapping of short_id -> full item_id for all items in category_updates
-        3. For items whose short_id appears in the references, updates their extra column
+        2. Builds a mapping of short_id -> full entry_id for all entries in file_updates
+        3. For entries whose short_id appears in the references, updates their extra column
            with {"ref_id": short_id}
         """
         # Extract all referenced short IDs from summaries
@@ -1073,34 +1255,34 @@ class MemorizeMixin:
         if not referenced_short_ids:
             return
 
-        # Build mapping of short_id -> full item_id for all items in category_updates
-        short_id_to_item_id: dict[str, str] = {}
-        for item_tuples in category_updates.values():
-            for item_id, _ in item_tuples:
-                short_id = self._build_item_ref_id(item_id)
-                short_id_to_item_id[short_id] = item_id
+        # Build mapping of short_id -> full entry_id for all entries in file_updates
+        short_id_to_entry_id: dict[str, str] = {}
+        for entry_tuples in file_updates.values():
+            for entry_id, _ in entry_tuples:
+                short_id = self._build_entry_ref_id(entry_id)
+                short_id_to_entry_id[short_id] = entry_id
 
-        # Update extra column for referenced items
+        # Update extra column for referenced entries
         for short_id in referenced_short_ids:
-            matched_item_id = short_id_to_item_id.get(short_id)
-            if matched_item_id:
-                store.memory_item_repo.update_item(
-                    item_id=matched_item_id,
+            matched_entry_id = short_id_to_entry_id.get(short_id)
+            if matched_entry_id:
+                store.recall_entry_repo.update_item(
+                    item_id=matched_entry_id,
                     extra={"ref_id": short_id},
                 )
 
-    def _build_category_summary_prompt(
+    def _build_file_summary_prompt(
         self,
         *,
-        category: MemoryCategory,
+        category: RecallFile,
         new_memories: list[str] | list[tuple[str, str]],
     ) -> str:
         """
-        Build the prompt for updating a category summary.
+        Build the prompt for updating a file summary.
 
         Args:
-            category: The category to update
-            new_memories: Either list of summary strings (legacy) or list of (item_id, summary) tuples (with refs)
+            category: The file (RecallFile) to update
+            new_memories: Either list of summary strings (legacy) or list of (entry_id, summary) tuples (with refs)
         """
         # Check if references are enabled and we have (id, summary) tuples
         enable_refs = getattr(self.memorize_config, "enable_item_references", False)
@@ -1114,9 +1296,9 @@ class MemorizeMixin:
             )
 
             tuple_memories = cast(list[tuple[str, str]], new_memories)
-            new_items_text = "\n".join(
-                f"- [{self._build_item_ref_id(item_id)}] {summary}"
-                for item_id, summary in tuple_memories
+            new_entries_text = "\n".join(
+                f"- [{self._build_entry_ref_id(entry_id)}] {summary}"
+                for entry_id, summary in tuple_memories
                 if summary.strip()
             )
         else:
@@ -1125,12 +1307,12 @@ class MemorizeMixin:
 
             if new_memories and isinstance(new_memories[0], tuple):
                 tuple_memories = cast(list[tuple[str, str]], new_memories)
-                new_items_text = "\n".join(f"- {summary}" for item_id, summary in tuple_memories if summary.strip())
+                new_entries_text = "\n".join(f"- {summary}" for _entry_id, summary in tuple_memories if summary.strip())
             else:
                 str_memories = cast(list[str], new_memories)
-                new_items_text = "\n".join(f"- {m}" for m in str_memories if m.strip())
+                new_entries_text = "\n".join(f"- {m}" for m in str_memories if m.strip())
 
-        original = category.summary or ""
+        original = category.content or ""
         category_config = self.category_config_map.get(category.name)
         configured_prompt = (
             category_config and category_config.summary_prompt
@@ -1147,11 +1329,11 @@ class MemorizeMixin:
         return prompt.format(
             category=self._escape_prompt_value(category.name),
             original_content=self._escape_prompt_value(original or ""),
-            new_memory_items_text=self._escape_prompt_value(new_items_text or "No new memory items."),
+            new_recall_entries_text=self._escape_prompt_value(new_entries_text or "No new entries."),
             target_length=target_length,
         )
 
-    async def _update_category_summaries(
+    async def _update_file_summaries(
         self,
         updates: dict[str, list[tuple[str, str]]] | dict[str, list[str]],
         ctx: Context,
@@ -1159,10 +1341,10 @@ class MemorizeMixin:
         llm_client: Any | None = None,
     ) -> dict[str, str]:
         """
-        Update category summaries based on new memory items.
+        Update file summaries based on new entries.
 
         Returns:
-            dict mapping category_id -> updated summary text
+            dict mapping file_id -> updated summary text
         """
         updated_summaries: dict[str, str] = {}
         if not updates:
@@ -1171,23 +1353,23 @@ class MemorizeMixin:
         target_ids: list[str] = []
         client = llm_client or self._get_llm_client()
         for cid, memories in updates.items():
-            cat = store.memory_category_repo.categories.get(cid)
+            cat = store.recall_file_repo.categories.get(cid)
             if not cat or not memories:
                 continue
-            prompt = self._build_category_summary_prompt(category=cat, new_memories=memories)
+            prompt = self._build_file_summary_prompt(category=cat, new_memories=memories)
             tasks.append(client.chat(prompt))
             target_ids.append(cid)
         if not tasks:
             return updated_summaries
         summaries = await asyncio.gather(*tasks)
         for cid, summary in zip(target_ids, summaries, strict=True):
-            cat = store.memory_category_repo.categories.get(cid)
+            cat = store.recall_file_repo.categories.get(cid)
             if not cat:
                 continue
             cleaned_summary = summary.replace("```markdown", "").replace("```", "").strip()
-            store.memory_category_repo.update_category(
+            store.recall_file_repo.update_category(
                 category_id=cid,
-                summary=cleaned_summary,
+                content=cleaned_summary,
             )
             updated_summaries[cid] = cleaned_summary
         return updated_summaries
@@ -1196,84 +1378,6 @@ class MemorizeMixin:
         conversation = self._extract_tag_content(raw, "conversation")
         summary = self._extract_tag_content(raw, "summary")
         return conversation, summary
-
-    def _parse_multimodal_response(self, raw: str, content_tag: str, caption_tag: str) -> tuple[str | None, str | None]:
-        """
-        Parse multimodal preprocessing response (video, image, document, audio).
-        Extracts content and caption from XML-like tags.
-
-        Args:
-            raw: Raw LLM response
-            content_tag: Tag name for main content (e.g., "detailed_description", "processed_content")
-            caption_tag: Tag name for caption (typically "caption")
-
-        Returns:
-            Tuple of (content, caption)
-        """
-        content = self._extract_tag_content(raw, content_tag)
-        caption = self._extract_tag_content(raw, caption_tag)
-
-        # Fallback: if no tags found, try to use raw response as content
-        if not content:
-            content = raw.strip()
-
-        # Fallback for caption: use first sentence of content if no caption found
-        if not caption and content:
-            first_sentence = content.split(".")[0]
-            caption = first_sentence if len(first_sentence) <= 200 else first_sentence[:200]
-
-        return content, caption
-
-    def _parse_conversation_preprocess_with_segments(
-        self, raw: str, original_text: str
-    ) -> tuple[str | None, list[dict[str, int | str]] | None]:
-        """
-        Parse conversation preprocess response and extract segments.
-        Returns: (conversation_text, segments)
-        """
-        conversation = self._extract_tag_content(raw, "conversation")
-        segments = self._extract_segments_with_fallback(raw)
-        return conversation, segments
-
-    def _extract_segments_with_fallback(self, raw: str) -> list[dict[str, int | str]] | None:
-        segments = self._segments_from_json_payload(raw)
-        if segments is not None:
-            return segments
-        try:
-            blob = self._extract_json_blob(raw)
-        except Exception:
-            logging.exception("Failed to extract segments from conversation preprocess response")
-            return None
-        return self._segments_from_json_payload(blob)
-
-    def _segments_from_json_payload(self, payload: str) -> list[dict[str, int | str]] | None:
-        try:
-            parsed = json.loads(payload)
-        except (json.JSONDecodeError, TypeError):
-            return None
-        return self._segments_from_parsed_data(parsed)
-
-    @staticmethod
-    def _segments_from_parsed_data(parsed: Any) -> list[dict[str, int | str]] | None:
-        if not isinstance(parsed, dict):
-            return None
-        segments_data = parsed.get("segments")
-        if not isinstance(segments_data, list):
-            return None
-        segments: list[dict[str, int | str]] = []
-        for seg in segments_data:
-            if isinstance(seg, dict) and "start" in seg and "end" in seg:
-                try:
-                    segment: dict[str, int | str] = {
-                        "start": int(seg["start"]),
-                        "end": int(seg["end"]),
-                    }
-                    if "caption" in seg and isinstance(seg["caption"], str):
-                        segment["caption"] = seg["caption"]
-                    segments.append(segment)
-                except (TypeError, ValueError):
-                    continue
-        return segments or None
 
     @staticmethod
     def _extract_tag_content(raw: str, tag: str) -> str | None:

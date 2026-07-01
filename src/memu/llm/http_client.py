@@ -5,14 +5,18 @@ import logging
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import httpx
 
 from memu.llm.backends.base import LLMBackend
+from memu.llm.backends.claude import ClaudeLLMBackend
+from memu.llm.backends.deepseek import DeepSeekLLMBackend
 from memu.llm.backends.doubao import DoubaoLLMBackend
 from memu.llm.backends.grok import GrokBackend
+from memu.llm.backends.kimi import KimiLLMBackend
 from memu.llm.backends.litellm import LiteLLMBackend
+from memu.llm.backends.minimax import MiniMaxLLMBackend
 from memu.llm.backends.openai import OpenAILLMBackend
 from memu.llm.backends.openrouter import OpenRouterLLMBackend
 
@@ -21,66 +25,27 @@ def _load_proxy() -> str | None:
     return os.getenv("MEMU_HTTP_PROXY") or os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY") or None
 
 
-# Minimal embedding backend support (moved from embedding module)
-class _EmbeddingBackend:
-    name: str
-    embedding_endpoint: str
-
-    def build_embedding_payload(self, *, inputs: list[str], embed_model: str) -> dict[str, Any]:
-        raise NotImplementedError
-
-    def parse_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
-        raise NotImplementedError
-
-
-class _OpenAIEmbeddingBackend(_EmbeddingBackend):
-    name = "openai"
-    embedding_endpoint = "/embeddings"
-
-    def build_embedding_payload(self, *, inputs: list[str], embed_model: str) -> dict[str, Any]:
-        return {"model": embed_model, "input": inputs}
-
-    def parse_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
-        return [cast(list[float], d["embedding"]) for d in data["data"]]
-
-
-class _DoubaoEmbeddingBackend(_EmbeddingBackend):
-    name = "doubao"
-    embedding_endpoint = "/api/v3/embeddings"
-
-    def build_embedding_payload(self, *, inputs: list[str], embed_model: str) -> dict[str, Any]:
-        return {"model": embed_model, "input": inputs, "encoding_format": "float"}
-
-    def parse_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
-        return [cast(list[float], d["embedding"]) for d in data["data"]]
-
-
-class _OpenRouterEmbeddingBackend(_EmbeddingBackend):
-    """OpenRouter uses OpenAI-compatible embedding API."""
-
-    name = "openrouter"
-    embedding_endpoint = "/api/v1/embeddings"
-
-    def build_embedding_payload(self, *, inputs: list[str], embed_model: str) -> dict[str, Any]:
-        return {"model": embed_model, "input": inputs}
-
-    def parse_embedding_response(self, data: dict[str, Any]) -> list[list[float]]:
-        return [cast(list[float], d["embedding"]) for d in data["data"]]
-
-
 logger = logging.getLogger(__name__)
 
 LLM_BACKENDS: dict[str, Callable[[], LLMBackend]] = {
     OpenAILLMBackend.name: OpenAILLMBackend,
-    DoubaoLLMBackend.name: DoubaoLLMBackend,
+    ClaudeLLMBackend.name: ClaudeLLMBackend,
     GrokBackend.name: GrokBackend,
     LiteLLMBackend.name: LiteLLMBackend,
+    DeepSeekLLMBackend.name: DeepSeekLLMBackend,
+    KimiLLMBackend.name: KimiLLMBackend,
+    MiniMaxLLMBackend.name: MiniMaxLLMBackend,
+    DoubaoLLMBackend.name: DoubaoLLMBackend,
     OpenRouterLLMBackend.name: OpenRouterLLMBackend,
 }
 
 
 class HTTPLLMClient:
-    """HTTP client for LLM APIs (chat, vision, transcription) and embeddings."""
+    """HTTP client for LLM APIs (chat, vision, transcription).
+
+    Scoped to text capabilities; embedding is handled by the dedicated
+    :mod:`memu.embedding` clients.
+    """
 
     def __init__(
         self,
@@ -91,7 +56,6 @@ class HTTPLLMClient:
         provider: str = "openai",
         endpoint_overrides: dict[str, str] | None = None,
         timeout: int = 60,
-        embed_model: str | None = None,
     ):
         # Ensure base_url ends with "/" so httpx doesn't discard the path
         # component when joining with endpoint paths.
@@ -101,21 +65,12 @@ class HTTPLLMClient:
         self.chat_model = chat_model
         self.provider = provider.lower()
         self.backend = self._load_backend(self.provider)
-        self.embedding_backend = self._load_embedding_backend(self.provider)
         overrides = endpoint_overrides or {}
         raw_summary_ep = overrides.get("chat") or overrides.get("summary") or self.backend.summary_endpoint
-        raw_embedding_ep = (
-            overrides.get("embeddings")
-            or overrides.get("embedding")
-            or overrides.get("embed")
-            or self.embedding_backend.embedding_endpoint
-        )
         # Strip leading "/" from endpoints so httpx resolves them relative to
         # base_url instead of treating them as absolute paths.
         self.summary_endpoint = raw_summary_ep.lstrip("/")
-        self.embedding_endpoint = raw_embedding_ep.lstrip("/")
         self.timeout = timeout
-        self.embed_model = embed_model or chat_model
         self.proxy = _load_proxy()
 
     async def chat(
@@ -210,16 +165,6 @@ class HTTPLLMClient:
         logger.debug("HTTP LLM vision response: %s", data)
         return self.backend.parse_summary_response(data), data
 
-    async def embed(self, inputs: list[str]) -> tuple[list[list[float]], dict[str, Any]]:
-        """Create text embeddings using the provider-specific embedding API."""
-        payload = self.embedding_backend.build_embedding_payload(inputs=inputs, embed_model=self.embed_model)
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, proxy=self.proxy) as client:
-            resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers())
-            resp.raise_for_status()
-            data = resp.json()
-        logger.debug("HTTP embedding response: %s", data)
-        return self.embedding_backend.parse_embedding_response(data), data
-
     async def transcribe(
         self,
         audio_path: str,
@@ -279,25 +224,11 @@ class HTTPLLMClient:
             return result or "", raw_response
 
     def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.api_key}"}
+        return self.backend.default_headers(self.api_key)
 
     def _load_backend(self, provider: str) -> LLMBackend:
         factory = LLM_BACKENDS.get(provider)
         if not factory:
             msg = f"Unsupported LLM provider '{provider}'. Available: {', '.join(LLM_BACKENDS.keys())}"
-            raise ValueError(msg)
-        return factory()
-
-    def _load_embedding_backend(self, provider: str) -> _EmbeddingBackend:
-        backends: dict[str, type[_EmbeddingBackend]] = {
-            _OpenAIEmbeddingBackend.name: _OpenAIEmbeddingBackend,
-            _DoubaoEmbeddingBackend.name: _DoubaoEmbeddingBackend,
-            "grok": _OpenAIEmbeddingBackend,
-            "litellm": _OpenAIEmbeddingBackend,
-            _OpenRouterEmbeddingBackend.name: _OpenRouterEmbeddingBackend,
-        }
-        factory = backends.get(provider)
-        if not factory:
-            msg = f"Unsupported embedding provider '{provider}'. Available: {', '.join(backends.keys())}"
             raise ValueError(msg)
         return factory()

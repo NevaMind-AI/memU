@@ -129,7 +129,7 @@ async def test_openrouter_full_workflow():
 
     # Test 4: List memory items
     print("\n[OPENROUTER] Test 4: List memory items...")
-    items_result = await service.list_memory_items(where={"user_id": "openrouter_test_user"})
+    items_result = await service.list_recall_entries(where={"user_id": "openrouter_test_user"})
     items_list = items_result.get("items", [])
     print(f"  Listed {len(items_list)} memory items")
     output_data["list_items"] = items_result
@@ -137,7 +137,7 @@ async def test_openrouter_full_workflow():
 
     # Test 5: List memory categories
     print("\n[OPENROUTER] Test 5: List memory categories...")
-    cats_result = await service.list_memory_categories(where={"user_id": "openrouter_test_user"})
+    cats_result = await service.list_recall_files(where={"user_id": "openrouter_test_user"})
     cats_list = cats_result.get("categories", [])
     print(f"  Listed {len(cats_list)} categories")
     output_data["list_categories"] = cats_result

@@ -124,7 +124,7 @@ Original content:
 
 New memory items:
 <item>
-{new_memory_items_text}
+{new_recall_entries_text}
 </item>
 
 
@@ -273,7 +273,7 @@ Original content:
 
 New memory items:
 <item>
-{new_memory_items_text}
+{new_recall_entries_text}
 </item>
 """
 

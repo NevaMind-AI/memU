@@ -15,15 +15,18 @@ class OpenAILLMBackend(LLMBackend):
         self, *, text: str, system_prompt: str | None, chat_model: str, max_tokens: int | None
     ) -> dict[str, Any]:
         prompt = system_prompt or "Summarize the text in one short paragraph."
-        return {
+        payload: dict[str, Any] = {
             "model": chat_model,
             "messages": [
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": text},
             ],
             "temperature": 0.2,
-            "max_tokens": max_tokens,
         }
+        # Omit when unset: newer models reject ``max_tokens=None``.
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        return payload
 
     def parse_summary_response(self, data: dict[str, Any]) -> str:
         return cast(str, data["choices"][0]["message"]["content"])
@@ -56,9 +59,12 @@ class OpenAILLMBackend(LLMBackend):
             ],
         })
 
-        return {
+        payload: dict[str, Any] = {
             "model": chat_model,
             "messages": messages,
             "temperature": 0.2,
-            "max_tokens": max_tokens,
         }
+        # Omit when unset: newer models reject ``max_tokens=None``.
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        return payload

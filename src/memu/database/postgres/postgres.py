@@ -6,15 +6,15 @@ from typing import Any
 from pydantic import BaseModel
 
 from memu.database.interfaces import Database
-from memu.database.models import CategoryItem, MemoryCategory, MemoryItem, Resource
+from memu.database.models import RecallEntry, RecallFile, RecallFileEntry, Resource
 from memu.database.postgres.migration import DDLMode, run_migrations
-from memu.database.postgres.repositories.category_item_repo import PostgresCategoryItemRepo
-from memu.database.postgres.repositories.memory_category_repo import PostgresMemoryCategoryRepo
-from memu.database.postgres.repositories.memory_item_repo import PostgresMemoryItemRepo
+from memu.database.postgres.repositories.recall_entry_repo import PostgresRecallEntryRepo
+from memu.database.postgres.repositories.recall_file_entry_repo import PostgresRecallFileEntryRepo
+from memu.database.postgres.repositories.recall_file_repo import PostgresRecallFileRepo
 from memu.database.postgres.repositories.resource_repo import PostgresResourceRepo
 from memu.database.postgres.schema import SQLAModels, get_sqlalchemy_models, require_sqlalchemy
 from memu.database.postgres.session import SessionManager
-from memu.database.repositories import CategoryItemRepo, MemoryCategoryRepo, MemoryItemRepo, ResourceRepo
+from memu.database.repositories import RecallEntryRepo, RecallFileEntryRepo, RecallFileRepo, ResourceRepo
 from memu.database.state import DatabaseState
 
 logger = logging.getLogger(__name__)
@@ -22,13 +22,13 @@ logger = logging.getLogger(__name__)
 
 class PostgresStore(Database):
     resource_repo: ResourceRepo
-    memory_category_repo: MemoryCategoryRepo
-    memory_item_repo: MemoryItemRepo
-    category_item_repo: CategoryItemRepo
+    recall_file_repo: RecallFileRepo
+    recall_entry_repo: RecallEntryRepo
+    recall_file_entry_repo: RecallFileEntryRepo
     resources: dict[str, Resource]
-    items: dict[str, MemoryItem]
-    categories: dict[str, MemoryCategory]
-    relations: list[CategoryItem]
+    items: dict[str, RecallEntry]
+    categories: dict[str, RecallFile]
+    relations: list[RecallFileEntry]
 
     def __init__(
         self,
@@ -39,9 +39,9 @@ class PostgresStore(Database):
         scope_model: type[BaseModel] | None = None,
         base_model: type[BaseModel] | None = None,
         resource_model: type[Any] | None = None,
-        memory_category_model: type[Any] | None = None,
-        memory_item_model: type[Any] | None = None,
-        category_item_model: type[Any] | None = None,
+        recall_file_model: type[Any] | None = None,
+        recall_entry_model: type[Any] | None = None,
+        recall_file_entry_model: type[Any] | None = None,
         sqla_models: SQLAModels | None = None,
     ) -> None:
         require_sqlalchemy()
@@ -57,9 +57,9 @@ class PostgresStore(Database):
         run_migrations(dsn=self.dsn, scope_model=self._scope_model, ddl_mode=self.ddl_mode)
 
         resource_model = resource_model or self._sqla_models.Resource
-        memory_category_model = memory_category_model or self._sqla_models.MemoryCategory
-        memory_item_model = memory_item_model or self._sqla_models.MemoryItem
-        category_item_model = category_item_model or self._sqla_models.CategoryItem
+        recall_file_model = recall_file_model or self._sqla_models.RecallFile
+        recall_entry_model = recall_entry_model or self._sqla_models.RecallEntry
+        recall_file_entry_model = recall_file_entry_model or self._sqla_models.RecallFileEntry
 
         self.resource_repo = PostgresResourceRepo(
             state=self._state,
@@ -68,24 +68,24 @@ class PostgresStore(Database):
             sessions=self._sessions,
             scope_fields=self._scope_fields,
         )
-        self.memory_category_repo = PostgresMemoryCategoryRepo(
+        self.recall_file_repo = PostgresRecallFileRepo(
             state=self._state,
-            memory_category_model=memory_category_model,
+            recall_file_model=recall_file_model,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
             scope_fields=self._scope_fields,
         )
-        self.memory_item_repo = PostgresMemoryItemRepo(
+        self.recall_entry_repo = PostgresRecallEntryRepo(
             state=self._state,
-            memory_item_model=memory_item_model,
+            recall_entry_model=recall_entry_model,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
             scope_fields=self._scope_fields,
             use_vector=self._use_vector_type,
         )
-        self.category_item_repo = PostgresCategoryItemRepo(
+        self.recall_file_entry_repo = PostgresRecallFileEntryRepo(
             state=self._state,
-            category_item_model=category_item_model,
+            recall_file_entry_model=recall_file_entry_model,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
             scope_fields=self._scope_fields,
@@ -103,6 +103,6 @@ class PostgresStore(Database):
 
     def _load_existing(self) -> None:
         self.resource_repo.load_existing()
-        self.memory_category_repo.load_existing()
-        self.memory_item_repo.load_existing()
-        self.category_item_repo.load_existing()
+        self.recall_file_repo.load_existing()
+        self.recall_entry_repo.load_existing()
+        self.recall_file_entry_repo.load_existing()

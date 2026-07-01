@@ -9,7 +9,7 @@ from typing import Any, Literal
 import pendulum
 from pydantic import BaseModel, ConfigDict, Field
 
-MemoryType = Literal["profile", "event", "knowledge", "behavior", "skill", "tool"]
+EntryType = Literal["profile", "event", "knowledge", "behavior", "skill", "tool"]
 
 
 def compute_content_hash(summary: str, memory_type: str) -> str:
@@ -73,7 +73,7 @@ class Resource(BaseRecord):
     embedding: list[float] | None = None
 
 
-class MemoryItem(BaseRecord):
+class RecallEntry(BaseRecord):
     resource_id: str | None
     memory_type: str
     summary: str
@@ -93,14 +93,17 @@ class MemoryItem(BaseRecord):
     # - tool_calls: list[dict] - Tool call history for tool memories (serialized ToolCallResult)
 
 
-class MemoryCategory(BaseRecord):
+class RecallFile(BaseRecord):
     name: str
+    # Which track this file belongs to: "memory" (a memory category) or "skill"
+    # (a synthesized skill). Defaults to "memory" so existing rows backfill correctly.
+    track: str = "memory"
     description: str
     embedding: list[float] | None = None
-    summary: str | None = None
+    content: str | None = None
 
 
-class CategoryItem(BaseRecord):
+class RecallFileEntry(BaseRecord):
     item_id: str
     category_id: str
 
@@ -123,23 +126,23 @@ def merge_scope_model[TBaseRecord: BaseRecord](
 
 def build_scoped_models(
     user_model: type[BaseModel],
-) -> tuple[type[Resource], type[MemoryCategory], type[MemoryItem], type[CategoryItem]]:
+) -> tuple[type[Resource], type[RecallFile], type[RecallEntry], type[RecallFileEntry]]:
     """
     Build scoped interface models (Pydantic) that inherit from the base record models and user scope.
     """
     resource_model = merge_scope_model(user_model, Resource, name_suffix="Resource")
-    memory_category_model = merge_scope_model(user_model, MemoryCategory, name_suffix="MemoryCategory")
-    memory_item_model = merge_scope_model(user_model, MemoryItem, name_suffix="MemoryItem")
-    category_item_model = merge_scope_model(user_model, CategoryItem, name_suffix="CategoryItem")
-    return resource_model, memory_category_model, memory_item_model, category_item_model
+    recall_file_model = merge_scope_model(user_model, RecallFile, name_suffix="RecallFile")
+    recall_entry_model = merge_scope_model(user_model, RecallEntry, name_suffix="RecallEntry")
+    recall_file_entry_model = merge_scope_model(user_model, RecallFileEntry, name_suffix="RecallFileEntry")
+    return resource_model, recall_file_model, recall_entry_model, recall_file_entry_model
 
 
 __all__ = [
     "BaseRecord",
-    "CategoryItem",
-    "MemoryCategory",
-    "MemoryItem",
-    "MemoryType",
+    "EntryType",
+    "RecallEntry",
+    "RecallFile",
+    "RecallFileEntry",
     "Resource",
     "ToolCallResult",
     "build_scoped_models",

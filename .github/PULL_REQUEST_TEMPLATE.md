@@ -29,7 +29,7 @@ Please check what applies:
 
 ## ✅ PR Quality Checklist
 
-- [ ] PR title follows the conventional format (feat:, fix:, docs:)
+- [ ] PR title follows an allowed format (for example `feat:`, `fix:`, `docs:`, `memory base:`)
 - [ ] Changes are limited in scope and easy to review
 - [ ] Documentation updated where applicable
 - [ ] No breaking changes (or clearly documented)

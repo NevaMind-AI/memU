@@ -4,7 +4,9 @@
 
 # memU
 
-### Turn Raw Multimodal Data into Agent-Ready Structured Memory
+### Personal memory, stored as files
+
+**Fast retrieval. Higher accuracy. Lower cost.**
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -20,133 +22,43 @@
 
 ---
 
-memU is a **data-to-memory engine** for AI agents.
-It turns raw conversations, documents, images, audio, video, tool logs, and workspace files into an agent memory filesystem that agents can navigate, retrieve from, and use directly.
+memU compiles conversations, documents, code, images, audio, video, URLs, and tool traces into human-readable Markdown files (`INDEX.md`, `MEMORY.md`, `SKILL.md`). Agents traverse the tree and load only what the moment needs — instead of rescanning everything or stuffing long histories into every prompt.
 
-- **Raw in**: chats, docs, URLs, images, audio/video, logs, and local workspaces
-- **Structured out**: `index.md`, `memory.md`, `skill.md`, topic subdocs, typed memory items, relations, and embeddings
-- **Agent-ready**: read the compact Markdown entrypoints, drill into subfiles, or load ranked context in one call
-
----
-
-## 🔄 How It Works
-
-**Raw Multimodal Data → Agent Memory Filesystem → Agent Context**
-
-```
-Raw Input                    memU Pipeline                 Filesystem Output
-─────────────────────        ─────────────────────         ─────────────────────
-chat logs                →   parse + segment           →   memory/preferences.md
-documents / URLs         →   extract facts             →   index/api.md
-images / video           →   caption + describe        →   memory/visual_context.md
-audio                    →   transcribe + summarize    →   memory/events.md
-tool logs                →   mine usage patterns       →   skill/tool_usage.md
-workspace files          →   categorize + link         →   index/files.md
-```
-
-1. **Ingest** — store each source as a `Resource` with its modality and source location
-2. **Preprocess** — parse text, caption images/video, transcribe audio, and normalize inputs
-3. **Extract** — turn raw content into typed `MemoryItem`s such as profile, event, knowledge, behavior, skill, or tool memories
-4. **Organize** — categorize, cross-link, embed, and summarize memories into a browsable structure
-5. **Write** — emit compact Markdown entrypoints plus detailed subdocs under `index/`, `memory/`, and `skill/`
-6. **Retrieve** — return only the relevant context for the current user, agent, session, or task
-
----
-
-## 🗂️ Agent Memory Filesystem
-
-memU's primary output is a filesystem-like memory bundle for agents. The top-level files are compact entrypoints. The matching directories contain deeper subdocs that agents can open only when needed.
-
-```txt
-.memu/
-├── index.md
-├── memory.md
-├── skill.md
-├── index/
-│   ├── architecture.md
-│   ├── api.md
-│   └── files.md
-├── memory/
-│   ├── decisions.md
-│   ├── product_context.md
-│   └── open_questions.md
-└── skill/
-    ├── testing.md
-    ├── release.md
-    └── coding_style.md
-```
-
-| Entry | Role | Subdocs |
-|-------|------|---------|
-| `index.md` | The map of the workspace: what exists, where it lives, and how to navigate it | `index/` holds deeper maps for architecture, APIs, modules, examples, and files |
-| `memory.md` | The compact long-term context an agent should load first | `memory/` holds decisions, constraints, product context, bugs, roadmap, and open questions |
-| `skill.md` | The operating manual for how to work in this project | `skill/` holds repo-specific workflows for testing, release, migrations, coding style, and tool use |
-
-This gives agents a stable memory surface: they can start from three small files, then follow paths into focused Markdown documents instead of rereading the raw workspace every time.
-
----
-
-## 🧩 What memU Builds
-
-The Markdown filesystem is backed by structured memory records:
-
-| Layer | What It Represents | Why Agents Use It |
-|-------|--------------------|-------------------|
-| **Resource** | Original source artifact: conversation, document, image, video, audio, URL, or file | Trace memory back to its source |
-| **MemoryItem** | Atomic structured memory with a type and summary | Inject precise facts, preferences, events, skills, and tool patterns |
-| **MemoryCategory** | Auto-generated topic or folder with an evolving summary | Load high-level context before drilling into details |
-| **CategoryItem** | Relationship between items and categories | Navigate related memories without reprocessing the source |
-| **Embedding** | Vector representation for resources, items, and categories | Retrieve relevant context with low latency |
-
-Example `memorize()` output:
-
-```json
-{
-  "resource": {
-    "id": "res_01",
-    "url": "workspace/launch-meeting.mp4",
-    "modality": "video",
-    "caption": "A product planning discussion about onboarding and launch risks."
-  },
-  "items": [
-    {
-      "id": "mem_01",
-      "memory_type": "event",
-      "summary": "The team decided to simplify onboarding before the next launch review."
-    },
-    {
-      "id": "mem_02",
-      "memory_type": "profile",
-      "summary": "The user prefers concise implementation plans with explicit verification steps."
-    },
-    {
-      "id": "mem_03",
-      "memory_type": "tool",
-      "summary": "Use repository-wide search before editing configuration files to avoid missing duplicated settings."
-    }
-  ],
-  "categories": [
-    {
-      "id": "cat_01",
-      "name": "product_goals",
-      "summary": "Current launch priorities, onboarding decisions, and unresolved risks."
-    }
-  ],
-  "relations": [
-    { "item_id": "mem_01", "category_id": "cat_01" }
-  ]
-}
-```
-
-Then an agent can call `retrieve()` to get a scoped, ranked context payload:
 
 ```python
+await service.memorize(resource_url="workspace/meeting-notes.md", modality="document")
+
 context = await service.retrieve(
-    queries=[{"role": "user", "content": {"text": "What context matters for this launch task?"}}],
+    queries=[{"role": "user", "content": {"text": "What should I know about this user's launch preferences?"}}],
     where={"user_id": "123"},
-    method="rag",
 )
 ```
+
+That's it. Instead of one giant prompt about a person or their workspace, your agent gets three durable layers it can traverse:
+
+```txt
+workspace/
+├── INDEX.md              ← Index: a map of everything — raw sources and summaries
+├── MEMORY.md             ← Memory: an overview that links into memory/
+├── SKILL.md              ← Skill: an overview that links into skill/
+├── resource/             ← the raw source files, copied verbatim
+├── memory/
+│   └── <topic>.md        ← one memory file per topic: facts, preferences, goals, events
+└── skill/
+    └── <name>.md         ← one skill file per learned pattern, workflow, or mistake to avoid
+```
+
+- **Index (`INDEX.md`)** — a map of your memories: what exists, where it came from, and where to look first
+- **Memory (`MEMORY.md`)** — personal facts, preferences, goals, events, and decisions extracted from source data
+- **Skill (`SKILL.md`)** — **auto-extracted from tool traces and refined on every `memorize()`** so the agent improves at recurring tasks
+
+Three things make it different from stuffing everything into the prompt:
+
+- **Fast retrieval** — walk to the right folder and rank the right files instead of scanning everything every time.
+- **Higher accuracy** — scope by user, task, or session, and trace every item back to the exact conversation, document, image, or log it came from.
+- **Lower cost** — retrieve compact, scoped context instead of reinjecting long histories, documents, logs, and media-derived text into every prompt.
+- **Yours to inspect** — a human-readable file tree you can audit, edit, scope, and route through your own storage (`inmemory`, `sqlite`, `postgres`) and LLM providers.
+
 
 ---
 
@@ -162,11 +74,12 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 
 | Capability | Description |
 |------------|-------------|
-| 🗂️ **Multimodal Ingestion** | Ingest conversations, documents, images, video, audio, URLs, logs, and workspace files |
-| 📁 **Memory Filesystem** | Produce `index.md`, `memory.md`, `skill.md`, and focused subdocs under `index/`, `memory/`, and `skill/` |
+| 🗂️ **Multimodal Ingestion** | Write conversations, documents, images, video, audio, URLs, logs, and local files into memory |
+| 📁 **Compiled Memory Workspace** | Persist the Index, Skill, and Memory layers — folders (categories), files (items), source artifacts, links, summaries, and embeddings |
 | 🧠 **Typed Memory Extraction** | Extract profile, event, knowledge, behavior, skill, and tool memories from raw sources |
-| 🧭 **Automatic Organization** | Build categories, relations, summaries, and embeddings without manual tagging |
-| 🤖 **Agent-Ready Retrieval** | Return scoped, ranked context that can be injected into any agent workflow |
+| 🛠️ **Self-Evolving Skills** | Auto-extract reusable tool patterns and workflows from tool traces, then merge and refine them on every `memorize()` instead of relearning |
+| 🧭 **Self-Organizing Folders** | Auto-build categories, links, summaries, and embeddings without manual tagging |
+| 🤖 **Agent-Ready Retrieval** | Find the right files quickly — scoped, ranked context for any agent workflow |
 | 🧱 **Pluggable Storage** | Use in-memory, SQLite, or Postgres backends with the same repository contracts |
 | 🔀 **Profile-Based LLM Routing** | Route chat, embedding, vision, and transcription work through configurable LLM profiles |
 
@@ -174,12 +87,12 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 
 ## 🎯 Use Cases
 
-### 1. **Conversation Memory**
-*Turn chat logs into user preferences, goals, events, and relationship context.*
+### 1. **Personal Memory**
+*Turn chat logs and workspace notes into user preferences, goals, events, decisions, and relationship context.*
 
 ```python
 await service.memorize(
-    resource_url="conversations/user_123.json",
+    resource_url="examples/resources/conversations/conv1.json",
     modality="conversation",
     user={"user_id": "123"},
 )
@@ -206,8 +119,12 @@ context = await service.retrieve(
 *Extract searchable facts from documents, screenshots, images, videos, and audio notes.*
 
 ```python
-await service.memorize(resource_url="research-notes.pdf", modality="document")
-await service.memorize(resource_url="whiteboard.png", modality="image")
+await service.memorize(resource_url="examples/resources/docs/doc1.txt", modality="document")
+# Rich documents (PDF/Word/PowerPoint/Excel/HTML) are converted to Markdown via
+# MarkItDown — install the extra with: pip install 'memu-py[document]'
+await service.memorize(resource_url="reports/q3-summary.pdf", modality="document")
+await service.memorize(resource_url="examples/resources/images/image1.png", modality="image")
+# Audio is supported for your own .mp3/.wav/.m4a files.
 await service.memorize(resource_url="meeting-audio.mp3", modality="audio")
 
 context = await service.retrieve(
@@ -219,7 +136,7 @@ context = await service.retrieve(
 *Turn execution traces into tool memories that tell future agents when to use a tool and what mistakes to avoid.*
 
 ```python
-await service.memorize(resource_url="agent_run.log", modality="document")
+await service.memorize(resource_url="examples/resources/logs/log1.txt", modality="document")
 
 context = await service.retrieve(
     queries=[{"role": "user", "content": {"text": "Which tools worked for config editing?"}}],
@@ -230,15 +147,15 @@ context = await service.retrieve(
 
 ## 🗂️ Architecture
 
-memU's memory model is hierarchical enough for browsing and structured enough for direct retrieval:
+The compiled workspace is hierarchical enough for browsing and structured enough for direct retrieval:
 
 <img width="100%" alt="structure" src="assets/structure.png" />
 
 | Layer | Primary Role | Retrieval Role |
 |-------|--------------|----------------|
-| **Resource** | Preserve source artifacts and captions | Recall original context when item/category summaries are not enough |
-| **Item** | Store typed atomic memories | Load precise facts, events, preferences, skills, and tool patterns |
-| **Category** | Maintain topic-level summaries | Assemble compact context for broad queries |
+| **Category (folder)** | Maintain topic-level summaries | Assemble compact context for broad queries |
+| **Item (file)** | Store typed atomic memories | Load precise facts, events, preferences, skills, and tool patterns |
+| **Resource (source)** | Preserve source artifacts and captions | Recall original context when item/category summaries are not enough |
 
 See [docs/architecture.md](docs/architecture.md) for the runtime view of `MemoryService`, workflow pipelines, storage backends, and LLM routing.
 
@@ -272,29 +189,44 @@ For enterprise deployment: **info@nevamind.ai**
 ### Option 2: Self-Hosted
 
 #### Installation
+
+From a clone of this repository:
+
 ```bash
-pip install -e .
+uv sync
+# or, for the full development setup:
+make install
 ```
 
-> **Requirements**: Python 3.13+ and an OpenAI API key
+To install the published package instead:
 
-**Test with in-memory storage:**
+```bash
+pip install memu-py
+```
+
+> **Requirements**: Python 3.13+. The default examples use OpenAI, so set `OPENAI_API_KEY` or pass another provider through `llm_profiles`.
+
+**Run an in-memory smoke script:**
 ```bash
 export OPENAI_API_KEY=your_key
-cd tests && python test_inmemory.py
+cd tests
+uv run python test_inmemory.py
 ```
 
-**Test with PostgreSQL:**
+**Run with PostgreSQL + pgvector:**
 ```bash
+uv sync --extra postgres
 docker run -d --name memu-postgres \
   -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=your_password \
+  -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=memu \
   -p 5432:5432 \
   pgvector/pgvector:pg16
 
 export OPENAI_API_KEY=your_key
-cd tests && python test_postgres.py
+export POSTGRES_DSN=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/memu
+cd tests
+uv run python test_postgres.py
 ```
 
 ---
@@ -353,11 +285,11 @@ service = MemoryService(
 
 ```python
 result = await service.memorize(
-    resource_url="path/to/file.json",    # file path, URL, or directory
+    resource_url="path/to/file.json",    # local file path or HTTP URL
     modality="conversation",            # conversation | document | image | video | audio
     user={"user_id": "123"},            # optional: scope to a user or agent
 )
-# Returns immediately:
+# Returns after processing completes:
 # { "resource": {...}, "items": [...], "categories": [...], "relations": [...] }
 ```
 
@@ -372,19 +304,29 @@ result = await service.memorize(
 <img width="100%" alt="retrieve" src="assets/retrieve.png" />
 
 ```python
+# The retrieval strategy is set once on the service via retrieve_config:
+#   MemoryService(retrieve_config={"method": "rag"})   # vector-first recall
+#   MemoryService(retrieve_config={"method": "llm"})   # LLM-ranked recall
 result = await service.retrieve(
     queries=[{"role": "user", "content": {"text": "What are their preferences?"}}],
     where={"user_id": "123"},   # scope filter
-    method="rag"                # "rag" (fast) or "llm" (deep reasoning)
 )
 # Returns:
-# { "categories": [...], "items": [...], "resources": [...], "next_step_query": "..." }
+# {
+#   "needs_retrieval": true,
+#   "original_query": "...",
+#   "rewritten_query": "...",
+#   "next_step_query": "...",
+#   "categories": [...],
+#   "items": [...],
+#   "resources": [...]
+# }
 ```
 
-| Method | Speed | Cost | Best For |
-|--------|-------|------|----------|
-| `rag` | ⚡ ms | embedding only | real-time agent context |
-| `llm` | 🐢 seconds | LLM inference | deeper semantic ranking |
+| `retrieve_config.method` | Behavior | Cost | Best For |
+|--------------------------|----------|------|----------|
+| `rag` | Vector-first category/item/resource recall, with optional LLM routing and sufficiency checks enabled by default | Embeddings plus LLM calls unless `route_intention` and `sufficiency_check` are disabled | Fast scoped recall with controllable reasoning |
+| `llm` | LLM-ranked category/item/resource recall | LLM ranking at each tier | Deeper semantic ranking |
 
 ---
 
@@ -393,19 +335,19 @@ result = await service.retrieve(
 ### Always-Learning Assistant
 ```bash
 export OPENAI_API_KEY=your_key
-python examples/example_1_conversation_memory.py
+uv run python examples/example_1_conversation_memory.py
 ```
 Automatically extracts preferences, builds relationship models, and surfaces relevant context in future conversations.
 
 ### Self-Improving Agent
 ```bash
-python examples/example_2_skill_extraction.py
+uv run python examples/example_2_skill_extraction.py
 ```
 Monitors agent actions, identifies patterns in successes and failures, auto-generates skill guides from experience.
 
 ### Multimodal Context Builder
 ```bash
-python examples/example_3_multimodal_memory.py
+uv run python examples/example_3_multimodal_memory.py
 ```
 Cross-references text, images, and documents automatically into a unified memory layer.
 
@@ -425,7 +367,7 @@ View detailed results: [memU-experiment](https://github.com/NevaMind-AI/memU-exp
 
 | Repository | Description |
 |------------|-------------|
-| **[memU](https://github.com/NevaMind-AI/memU)** | Core data-to-memory engine — ingestion, extraction, retrieval |
+| **[memU](https://github.com/NevaMind-AI/memU)** | Personal memory as files — fast retrieval, higher accuracy, lower cost |
 | **[memU-server](https://github.com/NevaMind-AI/memU-server)** | Backend with real-time sync and webhook triggers |
 | **[memU-ui](https://github.com/NevaMind-AI/memU-ui)** | Visual dashboard for browsing and monitoring memory |
 

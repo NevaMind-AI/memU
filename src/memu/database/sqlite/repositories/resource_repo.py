@@ -14,6 +14,7 @@ from memu.database.sqlite.repositories.base import SQLiteRepoBase
 from memu.database.sqlite.schema import SQLiteSQLAModels
 from memu.database.sqlite.session import SQLiteSessionManager
 from memu.database.state import DatabaseState
+from memu.vector import cosine_topk
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
                 modality=row.modality,
                 local_path=row.local_path,
                 caption=row.caption,
-                embedding=self._normalize_embedding(row.embedding_json),
+                embedding=self._normalize_embedding(row.embedding),
                 created_at=row.created_at,
                 updated_at=row.updated_at,
                 **self._scope_kwargs_from(row),
@@ -111,7 +112,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
                     modality=row.modality,
                     local_path=row.local_path,
                     caption=row.caption,
-                    embedding=self._normalize_embedding(row.embedding_json),
+                    embedding=self._normalize_embedding(row.embedding),
                     created_at=row.created_at,
                     updated_at=row.updated_at,
                     **self._scope_kwargs_from(row),
@@ -133,6 +134,13 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
                 self.resources.pop(res_id, None)
 
         return deleted
+
+    def delete_resource(self, resource_id: str) -> None:
+        """Delete a single resource by id (used for cascade sync)."""
+        with self._sessions.session() as session:
+            session.exec(delete(self._resource_model).where(self._resource_model.id == resource_id))
+            session.commit()
+        self.resources.pop(resource_id, None)
 
     def create_resource(
         self,
@@ -163,7 +171,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
             modality=modality,
             local_path=local_path,
             caption=caption,
-            embedding_json=self._prepare_embedding(embedding),
+            embedding=self._prepare_embedding(embedding),
             created_at=now,
             updated_at=now,
             **user_data,
@@ -186,6 +194,21 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
         )
         self.resources[row.id] = res
         return res
+
+    def vector_search_resources(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+    ) -> list[tuple[str, float]]:
+        """Rank resources by brute-force cosine similarity.
+
+        SQLite has no native vector support, so this mirrors the item repo and
+        scores stored embeddings in Python.
+        """
+        pool = self.list_resources(where)
+        corpus = [(rid, res.embedding) for rid, res in pool.items() if res.embedding]
+        return cosine_topk(query_vec, corpus, k=top_k)
 
     def load_existing(self) -> None:
         """Load all existing resources from database into cache."""

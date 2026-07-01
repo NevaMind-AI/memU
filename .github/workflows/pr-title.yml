@@ -21,6 +21,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          headerPattern: '^([\w ]*)(?:\(([\w$.\-*/ ]*)\))?: (.*)$'
+          headerPatternCorrespondence: type, scope, subject
           types: |
             build
             chore
@@ -28,6 +30,7 @@ jobs:
             docs
             feat
             fix
+            memory base
             perf
             refactor
             revert

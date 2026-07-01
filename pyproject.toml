@@ -4,7 +4,7 @@ version = "1.5.1"
 authors = [
     {name = "MemU Team", email = "contact@nevamind.ai"},
 ]
-description = "AI Memory and Conversation Management Framework - Simple as mem0, Powerful as MemU"
+description = "Personal memory as files — fast retrieval, higher accuracy, lower cost."
 readme = "README.md"
 # license = {file = "LICENSE"}
 requires-python = ">=3.13"
@@ -16,8 +16,9 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.13",
 ]
-keywords = ["ai", "memory", "conversation", "llm", "chatbot", "agent"]
+keywords = ["agent", "agentic", "agent-harness", "harness", "loop-engineering", "context-engineering", "context-window", "memory", "personal-information", "workspace", "retrieval", "llm"]
 dependencies = [
+    "anthropic>=0.40.0",
     "defusedxml>=0.7.1",
     "httpx>=0.28.1",
     "numpy>=2.3.4",
@@ -71,6 +72,8 @@ langgraph = ["langgraph>=0.0.10", "langchain-core>=0.1.0"]
 claude = ["claude-agent-sdk>=0.1.24"]
 lazyllm = ["lazyllm>=0.7.3"]
 litellm = ["litellm>=1.80.0,<1.87.0"]
+# Rich document ingestion (PDF, Word, PowerPoint, Excel, ...) via MarkItDown.
+document = ["markitdown[docx,pptx,xlsx,xls,pdf]>=0.1.0"]
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
@@ -78,8 +81,8 @@ litellm = ["litellm>=1.80.0,<1.87.0"]
 "Documentation" = "https://github.com/NevaMind-AI/MemU#readme"
 
 [tool.deptry.per_rule_ignores]
-# Optional dependencies used in examples/
-DEP002 = ["claude-agent-sdk", "litellm"]
+# Optional dependencies used in examples/ or imported lazily behind extras.
+DEP002 = ["claude-agent-sdk", "litellm", "markitdown"]
 
 [tool.mypy]
 files = ["src", "tests"]
@@ -108,9 +111,8 @@ module = ["pgvector.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["memu.client.openai_wrapper"]
-disallow_untyped_defs = false
-warn_return_any = false
+module = ["markitdown", "markitdown.*"]
+ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py313"

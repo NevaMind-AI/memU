@@ -25,7 +25,7 @@ jobs:
 
       - name: Sync dependencies
         run: |
-          uv sync --frozen
+          uv sync --frozen --extra document
           uv run pre-commit install
 
       - name: Run style checks
