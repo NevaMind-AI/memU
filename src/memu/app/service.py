@@ -10,8 +10,10 @@ from pydantic import BaseModel
 from memu.app.client_pool import ClientPool
 from memu.app.crud import CRUDMixin
 from memu.app.memorize import MemorizeMixin
+from memu.app.memorize_workspace import MemorizeWorkspaceMixin
 from memu.app.memory_files import MemoryFilesBuilder
 from memu.app.retrieve import RetrieveMixin
+from memu.app.retrieve_workspace import RetrieveWorkspaceMixin
 from memu.app.settings import (
     BlobConfig,
     CategoryConfig,
@@ -57,7 +59,7 @@ class Context:
     category_init_task: asyncio.Task | None = None
 
 
-class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
+class MemoryService(MemorizeMixin, MemorizeWorkspaceMixin, RetrieveMixin, RetrieveWorkspaceMixin, CRUDMixin):
     def __init__(
         self,
         *,
