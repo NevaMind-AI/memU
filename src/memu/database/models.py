@@ -71,6 +71,9 @@ class Resource(BaseRecord):
     local_path: str
     caption: str | None = None
     embedding: list[float] | None = None
+    # Which workspace track this resource came from: "chat", "skill", or
+    # "workspace" (set by ``memorize_workspace``). None for legacy ``memorize``.
+    track: str | None = None
 
 
 class RecallEntry(BaseRecord):

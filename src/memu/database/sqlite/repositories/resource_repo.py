@@ -78,6 +78,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
                 local_path=row.local_path,
                 caption=row.caption,
                 embedding=self._normalize_embedding(row.embedding),
+                track=row.track,
                 created_at=row.created_at,
                 updated_at=row.updated_at,
                 **self._scope_kwargs_from(row),
@@ -113,6 +114,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
                     local_path=row.local_path,
                     caption=row.caption,
                     embedding=self._normalize_embedding(row.embedding),
+                    track=row.track,
                     created_at=row.created_at,
                     updated_at=row.updated_at,
                     **self._scope_kwargs_from(row),
@@ -151,6 +153,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
         caption: str | None,
         embedding: list[float] | None,
         user_data: dict[str, Any],
+        track: str | None = None,
     ) -> Resource:
         """Create a new resource record.
 
@@ -161,6 +164,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
             caption: Optional caption text.
             embedding: Optional embedding vector.
             user_data: User scope data.
+            track: Optional workspace track ("chat"/"skill"/"workspace").
 
         Returns:
             Created Resource object.
@@ -172,6 +176,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
             local_path=local_path,
             caption=caption,
             embedding=self._prepare_embedding(embedding),
+            track=track,
             created_at=now,
             updated_at=now,
             **user_data,
@@ -188,6 +193,7 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
             local_path=row.local_path,
             caption=row.caption,
             embedding=embedding,
+            track=row.track,
             created_at=row.created_at,
             updated_at=row.updated_at,
             **user_data,

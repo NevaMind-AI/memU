@@ -51,6 +51,7 @@ class SQLiteResourceModel(SQLiteBaseModelMixin, Resource):
     # Override inherited embedding field: SQLite has no native vector type, so store the
     # vector in a JSON column (a bare ``list`` annotation is not mappable by SQLModel).
     embedding: list[float] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    track: str | None = Field(default=None, sa_column=Column(String, nullable=True))
 
 
 class SQLiteRecallEntryModel(SQLiteBaseModelMixin, RecallEntry):

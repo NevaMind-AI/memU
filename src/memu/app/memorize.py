@@ -107,6 +107,8 @@ class MemorizeMixin:
             "user": user_scope,
             # Legacy single-resource path: force only the provided categories.
             "allow_new_categories": False,
+            # Legacy path does not classify by workspace track.
+            "resource_track": None,
         }
 
         result = await self._run_workflow("memorize", state)
@@ -161,6 +163,7 @@ class MemorizeMixin:
                 user_scope=user_scope,
                 ctx=ctx,
                 store=store,
+                track=self._classify_track(scanned_file.rel_path),
             )
             changed_resources.extend(cast("list[Resource]", result.get("resources") or []))
             # The inner single-file ``memorize`` keeps its legacy response keys
@@ -196,6 +199,7 @@ class MemorizeMixin:
         user_scope: dict[str, Any] | None,
         ctx: Context,
         store: Database,
+        track: str | None = None,
     ) -> WorkflowState:
         """Run the memorize workflow for a single file (one file -> one Resource).
 
@@ -215,6 +219,8 @@ class MemorizeMixin:
             "user": user_scope,
             # Workspace sync path: let the extractor grow the taxonomy.
             "allow_new_categories": True,
+            # Which workspace track this file belongs to (chat/skill/workspace).
+            "resource_track": track,
         }
         # The workspace path runs its own workflow (memorize + per-file skill
         # generation); single-file ``memorize`` stays untouched (ADR 0006).
@@ -223,6 +229,21 @@ class MemorizeMixin:
             msg = "Memorize workflow failed to produce a response"
             raise RuntimeError(msg)
         return result
+
+    @staticmethod
+    def _classify_track(rel_path: str) -> str:
+        """Classify a workspace file into a track by its top-level folder.
+
+        Files under ``chat/`` are the ``"chat"`` track, files under ``agent/`` are
+        the ``"skill"`` track, and everything else is the ``"workspace"`` track.
+        ``rel_path`` is the posix path relative to the scanned folder root.
+        """
+        top = rel_path.split("/", 1)[0]
+        if top == "chat":
+            return "chat"
+        if top == "agent":
+            return "skill"
+        return "workspace"
 
     async def _cascade_delete_by_urls(
         self,
@@ -346,6 +367,7 @@ class MemorizeMixin:
                     "modality",
                     "user",
                     "allow_new_categories",
+                    "resource_track",
                 },
                 produces={"resources", "entries", "relations", "file_updates"},
                 capabilities={"db", "vector"},
@@ -383,6 +405,7 @@ class MemorizeMixin:
             "category_ids",
             "user",
             "allow_new_categories",
+            "resource_track",
         }
 
     def _build_memorize_workspace_workflow(self) -> list[WorkflowStep]:
@@ -481,6 +504,7 @@ class MemorizeMixin:
         file_updates: dict[str, list[tuple[str, str]]] = {}
         user_scope = state.get("user", {})
         allow_new_categories = state.get("allow_new_categories", False)
+        track = state.get("resource_track")
 
         for plan in state.get("resource_plans", []):
             res = await self._create_resource_with_caption(
@@ -491,6 +515,7 @@ class MemorizeMixin:
                 store=store,
                 embed_client=embed_client,
                 user=user_scope,
+                track=track,
             )
             resources.append(res)
 
@@ -687,6 +712,7 @@ class MemorizeMixin:
         store: Database,
         embed_client: Any | None = None,
         user: Mapping[str, Any] | None = None,
+        track: str | None = None,
     ) -> Resource:
         caption_text = caption.strip() if caption else None
         if caption_text:
@@ -702,6 +728,7 @@ class MemorizeMixin:
             caption=caption_text,
             embedding=caption_embedding,
             user_data=dict(user or {}),
+            track=track,
         )
         # if caption:
         #     caption_text = caption.strip()

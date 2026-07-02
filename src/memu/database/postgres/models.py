@@ -49,6 +49,7 @@ class ResourceModel(BaseModelMixin, Resource):
     local_path: str = Field(sa_column=Column(String, nullable=False))
     caption: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
+    track: str | None = Field(default=None, sa_column=Column(String, nullable=True))
 
 
 class RecallEntryModel(BaseModelMixin, RecallEntry):

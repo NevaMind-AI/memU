@@ -81,6 +81,7 @@ class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
         caption: str | None,
         embedding: list[float] | None,
         user_data: dict[str, Any],
+        track: str | None = None,
     ) -> Resource:
         res = self._resource_model(
             url=url,
@@ -88,6 +89,7 @@ class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
             local_path=local_path,
             caption=caption,
             embedding=self._prepare_embedding(embedding),
+            track=track,
             **user_data,
             created_at=self._now(),
             updated_at=self._now(),
