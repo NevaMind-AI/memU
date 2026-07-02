@@ -19,7 +19,13 @@ class RecallFileSegmentRepo(Protocol):
         ...
 
     def create_segment(
-        self, *, recall_file_id: str, text: str, embedding: list[float] | None, user_data: dict[str, Any]
+        self,
+        *,
+        recall_file_id: str,
+        text: str,
+        embedding: list[float] | None,
+        user_data: dict[str, Any],
+        track: str = "memory",
     ) -> RecallFileSegment: ...
 
     def delete_segment(self, segment_id: str) -> None: ...

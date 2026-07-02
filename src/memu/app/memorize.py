@@ -758,7 +758,7 @@ class MemorizeMixin:
             vecs = await embed_client.embed(to_add)
             for text, vec in zip(to_add, vecs, strict=True):
                 store.recall_file_segment_repo.create_segment(
-                    recall_file_id=file.id, text=text, embedding=vec, user_data=dict(user_scope)
+                    recall_file_id=file.id, track=file_track, text=text, embedding=vec, user_data=dict(user_scope)
                 )
 
     async def _route_source_to_files(

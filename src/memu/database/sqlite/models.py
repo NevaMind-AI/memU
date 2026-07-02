@@ -109,6 +109,7 @@ class SQLiteRecallFileSegmentModel(SQLiteBaseModelMixin, RecallFileSegment):
     """SQLite file-segment model."""
 
     recall_file_id: str = Field(sa_column=Column(String, nullable=False, index=True))
+    track: str = Field(default="memory", sa_column=Column(String, nullable=False, server_default="memory"))
     text: str = Field(sa_column=Column(Text, nullable=False))
     # Override inherited embedding field: SQLite has no native vector type, so store the
     # vector in a JSON column (a bare ``list`` annotation is not mappable by SQLModel).

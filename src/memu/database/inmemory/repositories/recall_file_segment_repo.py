@@ -25,10 +25,21 @@ class InMemoryFileSegmentRepository(RecallFileSegmentRepo):
         return [seg for seg in self.segments if seg.recall_file_id == recall_file_id]
 
     def create_segment(
-        self, *, recall_file_id: str, text: str, embedding: list[float] | None, user_data: dict[str, Any]
+        self,
+        *,
+        recall_file_id: str,
+        text: str,
+        embedding: list[float] | None,
+        user_data: dict[str, Any],
+        track: str = "memory",
     ) -> RecallFileSegment:
         seg = self.recall_file_segment_model(
-            id=str(uuid.uuid4()), recall_file_id=recall_file_id, text=text, embedding=embedding, **user_data
+            id=str(uuid.uuid4()),
+            recall_file_id=recall_file_id,
+            track=track,
+            text=text,
+            embedding=embedding,
+            **user_data,
         )
         self.segments.append(seg)
         return seg

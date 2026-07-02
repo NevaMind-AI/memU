@@ -123,9 +123,15 @@ class RecallFileSegment(BaseRecord):
     its vector. Retrieval ranks segments and rolls the top hits up to their file via
     ``recall_file_id``. Segments carry no ordinal: how a file is sliced is track-specific
     and not necessarily sequential, so position would not be informative.
+
+    ``track`` mirrors the owning file's track ("memory"/"skill"), denormalized here so
+    retrieval can filter segments by track with a plain column predicate instead of a
+    join. It is immutable for a segment's lifetime (segments are drop-and-recreated when
+    a file is re-sliced), so it never drifts from the file.
     """
 
     recall_file_id: str
+    track: str = "memory"
     text: str
     embedding: list[float] | None = None
 

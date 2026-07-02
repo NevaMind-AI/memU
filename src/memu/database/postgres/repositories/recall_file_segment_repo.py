@@ -28,6 +28,7 @@ class PostgresRecallFileSegmentRepo(PostgresRepoBase, RecallFileSegmentRepo):
         return RecallFileSegment(
             id=row.id,
             recall_file_id=row.recall_file_id,
+            track=row.track,
             text=row.text,
             embedding=self._normalize_embedding(row.embedding),
             created_at=row.created_at,
@@ -52,11 +53,18 @@ class PostgresRecallFileSegmentRepo(PostgresRepoBase, RecallFileSegmentRepo):
         return self.list_segments({"recall_file_id": recall_file_id})
 
     def create_segment(
-        self, *, recall_file_id: str, text: str, embedding: list[float] | None, user_data: dict[str, Any]
+        self,
+        *,
+        recall_file_id: str,
+        text: str,
+        embedding: list[float] | None,
+        user_data: dict[str, Any],
+        track: str = "memory",
     ) -> RecallFileSegment:
         now = self._now()
         row = self._recall_file_segment_model(
             recall_file_id=recall_file_id,
+            track=track,
             text=text,
             embedding=self._prepare_embedding(embedding),
             created_at=now,

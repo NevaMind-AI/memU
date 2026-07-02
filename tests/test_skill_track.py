@@ -179,6 +179,8 @@ async def test_skill_track_creates_single_name_description_segment(tmp_path: Pat
     assert len(segments) == 1
     assert segments[0].text == "name: pour-over\ndescription: Brew pour-over coffee"
     assert segments[0].embedding == [0.1, 0.2, 0.3]
+    # Segment track mirrors the owning file's track (denormalized for filtering).
+    assert segments[0].track == "skill"
 
 
 async def test_memory_track_segments_are_lines_skipping_headings(tmp_path: Path) -> None:
@@ -196,6 +198,8 @@ async def test_memory_track_segments_are_lines_skipping_headings(tmp_path: Path)
 
     segments = store.recall_file_segment_repo.list_segments_for_file(file.id)
     assert [s.text for s in segments] == ["Likes strong coffee.", "Drinks it black."]
+    # Segment track mirrors the owning file's track (chat routes to the "memory" track).
+    assert all(s.track == "memory" for s in segments)
 
 
 async def test_memory_segments_drop_and_add_on_update(tmp_path: Path) -> None:

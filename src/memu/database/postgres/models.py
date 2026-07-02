@@ -95,6 +95,7 @@ class RecallFileSegmentModel(BaseModelMixin, RecallFileSegment):
     recall_file_id: str = Field(
         sa_column=Column(ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False, index=True)
     )
+    track: str = Field(default="memory", sa_column=Column(String, nullable=False, server_default="memory"))
     text: str = Field(sa_column=Column(Text, nullable=False))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
 
