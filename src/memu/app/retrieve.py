@@ -91,14 +91,23 @@ class RetrieveMixin:
         query: str,
         where: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Single-shot, LLM-free retrieval across the file/entry/resource layers.
+        """Single-shot, LLM-free retrieval over the segment/file/resource layers.
 
         Mirrors the relation between :meth:`memorize` and ``memorize_workspace``:
         a simpler entry point built on the same store and workflow machinery. The
-        query is embedded once and each enabled layer is ranked by vector
-        similarity — no intention routing, sufficiency checks, or summarization.
-        When ``file.tracks`` is set, the file layer is filtered on the ``track``
-        column. Returns ``files``, ``entries``, and ``resources``.
+        query is embedded once and used to rank two layers by vector similarity —
+        no intention routing, sufficiency checks, or summarization:
+
+        * ``segments``: :class:`RecallFileSegment` slices ranked by embedding,
+          ``file.top_k`` of them.
+        * ``files``: the :class:`RecallFile`\\ s pointed to by those segments — not
+          a ranked search, just a roll-up. Each file's score is the max score of
+          the segments that point to it.
+        * ``resources``: workspace-track resources ranked by embedding,
+          ``resource.top_k`` of them.
+
+        The entry layer is disabled here (its config is retained but ignored).
+        Returns ``segments``, ``files``, and ``resources``.
         """
         if not query or not query.strip():
             raise ValueError("empty_query")
@@ -111,7 +120,6 @@ class RetrieveMixin:
             "store": store,
             "where": where_filters,
             "retrieve_file": config.file.enabled,
-            "retrieve_entry": config.entry.enabled,
             "retrieve_resource": config.resource.enabled,
         }
 
@@ -1466,28 +1474,30 @@ class RetrieveMixin:
     def _build_retrieve_workspace_workflow(self) -> list[WorkflowStep]:
         """The simple embedding-only workspace retrieval pipeline.
 
-        Three recall steps (file/entry/resource) feeding a terminal response step,
-        with none of the routing/sufficiency machinery of ``retrieve_rag``. The
-        query vector is embedded by the first recall step and reused downstream.
+        A segment recall step ranks :class:`RecallFileSegment` slices by embedding;
+        a file roll-up step gathers the files those segments point to; a resource
+        recall step ranks workspace-track resources by embedding. A terminal step
+        assembles the response. None of the routing/sufficiency machinery of
+        ``retrieve_rag`` applies. The query vector is embedded by the first recall
+        step and reused downstream.
         """
         steps = [
             WorkflowStep(
-                step_id="recall_files",
-                role="recall_files",
-                handler=self._ws_recall_files,
+                step_id="recall_segments",
+                role="recall_segments",
+                handler=self._ws_recall_segments,
                 requires={"retrieve_file", "query", "store", "where"},
-                produces={"file_hits", "file_pool", "query_vector"},
+                produces={"segment_hits", "segment_pool", "query_vector"},
                 capabilities={"vector"},
                 config={"embed_llm_profile": "embedding"},
             ),
             WorkflowStep(
-                step_id="recall_entries",
-                role="recall_entries",
-                handler=self._ws_recall_entries,
-                requires={"retrieve_entry", "query", "store", "where", "query_vector"},
-                produces={"entry_hits", "entry_pool", "query_vector"},
-                capabilities={"vector"},
-                config={"embed_llm_profile": "embedding"},
+                step_id="collect_files",
+                role="collect_files",
+                handler=self._ws_collect_files,
+                requires={"retrieve_file", "segment_hits", "segment_pool", "store", "where"},
+                produces={"file_hits", "file_pool"},
+                capabilities=set(),
             ),
             WorkflowStep(
                 step_id="recall_resources",
@@ -1503,10 +1513,10 @@ class RetrieveMixin:
                 role="build_context",
                 handler=self._ws_build_response,
                 requires={
+                    "segment_hits",
+                    "segment_pool",
                     "file_hits",
                     "file_pool",
-                    "entry_hits",
-                    "entry_pool",
                     "resource_hits",
                     "resource_pool",
                 },
@@ -1518,7 +1528,7 @@ class RetrieveMixin:
 
     @staticmethod
     def _list_retrieve_workspace_initial_keys() -> set[str]:
-        return {"query", "store", "where", "retrieve_file", "retrieve_entry", "retrieve_resource"}
+        return {"query", "store", "where", "retrieve_file", "retrieve_resource"}
 
     async def _ws_query_vector(self, state: WorkflowState, step_context: Any) -> list[float]:
         """Embed the query once and cache it on the state for reuse across steps."""
@@ -1530,44 +1540,58 @@ class RetrieveMixin:
         state["query_vector"] = qvec
         return cast(list[float], qvec)
 
-    async def _ws_recall_files(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+    async def _ws_recall_segments(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("retrieve_file"):
-            state["file_hits"] = []
-            state["file_pool"] = {}
+            state["segment_hits"] = []
+            state["segment_pool"] = {}
             state.setdefault("query_vector", None)
             return state
 
         store = state["store"]
-        # The file repo has no vector search, so rank the stored file embeddings
-        # directly. Optionally scope to the requested tracks via the where filter.
-        file_where = dict(state.get("where") or {})
+        # The segment repo has no vector search, so rank the stored segment
+        # embeddings directly, mirroring how files used to be ranked. Optionally
+        # scope to the requested tracks via the denormalized segment ``track``.
+        segment_where = dict(state.get("where") or {})
         tracks = self.retrieve_workspace_config.file.tracks
         if tracks:
-            file_where["track__in"] = list(tracks)
-        file_pool = store.recall_file_repo.list_categories(file_where)
+            segment_where["track__in"] = list(tracks)
+        segment_pool = {seg.id: seg for seg in store.recall_file_segment_repo.list_segments(segment_where)}
         qvec = await self._ws_query_vector(state, step_context)
-        state["file_hits"] = cosine_topk(
+        state["segment_hits"] = cosine_topk(
             qvec,
-            [(fid, f.embedding) for fid, f in file_pool.items()],
+            [(sid, seg.embedding) for sid, seg in segment_pool.items()],
             k=self.retrieve_workspace_config.file.top_k,
         )
-        state["file_pool"] = file_pool
+        state["segment_pool"] = segment_pool
         return state
 
-    async def _ws_recall_entries(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("retrieve_entry"):
-            state["entry_hits"] = []
-            state["entry_pool"] = {}
-            return state
+    async def _ws_collect_files(self, state: WorkflowState, _: Any) -> WorkflowState:
+        """Roll the ranked segments up to their files (no ranked file search).
 
+        Every file pointed to by a top segment is returned; a file's score is the
+        max score across the segments that point to it.
+        """
+        segment_hits = state.get("segment_hits") or []
+        segment_pool = state.get("segment_pool") or {}
         store = state["store"]
         where_filters = state.get("where") or {}
-        entry_pool = store.recall_entry_repo.list_items(where_filters)
-        qvec = await self._ws_query_vector(state, step_context)
-        state["entry_hits"] = store.recall_entry_repo.vector_search_items(
-            qvec, self.retrieve_workspace_config.entry.top_k, where=where_filters
-        )
-        state["entry_pool"] = entry_pool
+        file_pool = store.recall_file_repo.list_categories(where_filters)
+
+        file_scores: dict[str, float] = {}
+        for seg_id, score in segment_hits:
+            seg = segment_pool.get(seg_id)
+            if seg is None:
+                continue
+            fid = seg.recall_file_id
+            if fid not in file_pool:
+                continue
+            score = float(score)
+            if fid not in file_scores or score > file_scores[fid]:
+                file_scores[fid] = score
+
+        # Preserve descending-score order so the response reads best-first.
+        state["file_hits"] = sorted(file_scores.items(), key=lambda kv: kv[1], reverse=True)
+        state["file_pool"] = file_pool
         return state
 
     async def _ws_recall_resources(self, state: WorkflowState, step_context: Any) -> WorkflowState:
@@ -1577,19 +1601,21 @@ class RetrieveMixin:
             return state
 
         store = state["store"]
-        where_filters = state.get("where") or {}
-        resource_pool = store.resource_repo.list_resources(where_filters)
+        # Workspace retrieval only surfaces resources ingested by
+        # ``memorize_workspace`` (track="workspace"); other tracks are excluded.
+        resource_where = {**(state.get("where") or {}), "track": "workspace"}
+        resource_pool = store.resource_repo.list_resources(resource_where)
         qvec = await self._ws_query_vector(state, step_context)
         state["resource_hits"] = store.resource_repo.vector_search_resources(
-            qvec, self.retrieve_workspace_config.resource.top_k, where=where_filters
+            qvec, self.retrieve_workspace_config.resource.top_k, where=resource_where
         )
         state["resource_pool"] = resource_pool
         return state
 
     def _ws_build_response(self, state: WorkflowState, _: Any) -> WorkflowState:
         state["response"] = {
+            "segments": self._materialize_hits(state.get("segment_hits", []), state.get("segment_pool", {})),
             "files": self._materialize_hits(state.get("file_hits", []), state.get("file_pool", {})),
-            "entries": self._materialize_hits(state.get("entry_hits", []), state.get("entry_pool", {})),
             "resources": self._materialize_hits(state.get("resource_hits", []), state.get("resource_pool", {})),
         }
         return state

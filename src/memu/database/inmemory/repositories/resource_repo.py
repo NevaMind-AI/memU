@@ -44,6 +44,7 @@ class InMemoryResourceRepository(ResourceRepoProtocol):
         caption: str | None,
         embedding: list[float] | None,
         user_data: dict[str, Any],
+        track: str | None = None,
     ) -> Resource:
         rid = str(uuid.uuid4())
         res = self.resource_model(
@@ -53,6 +54,7 @@ class InMemoryResourceRepository(ResourceRepoProtocol):
             local_path=local_path,
             caption=caption,
             embedding=embedding,
+            track=track,
             **user_data,
         )
         self.resources[rid] = res

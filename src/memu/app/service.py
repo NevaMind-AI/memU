@@ -343,7 +343,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self._pipelines.register("retrieve_rag", rag_workflow, initial_state_keys=retrieve_initial_keys)
         llm_workflow = self._build_llm_retrieve_workflow()
         self._pipelines.register("retrieve_llm", llm_workflow, initial_state_keys=retrieve_initial_keys)
-        # Simple embedding-only workspace retrieval: file/entry/resource recall + response.
+        # Simple embedding-only workspace retrieval: segment recall + file roll-up + resource recall.
         workspace_retrieve_workflow = self._build_retrieve_workspace_workflow()
         self._pipelines.register(
             "retrieve_workspace",

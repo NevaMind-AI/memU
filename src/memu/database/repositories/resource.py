@@ -27,6 +27,7 @@ class ResourceRepo(Protocol):
         caption: str | None,
         embedding: list[float] | None,
         user_data: dict[str, Any],
+        track: str | None = None,
     ) -> Resource: ...
 
     def vector_search_resources(
