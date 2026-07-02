@@ -106,7 +106,7 @@ async def test_skill_track_synthesizes_file_and_links_resource(tmp_path: Path) -
     links = store.recall_file_resource_repo.list_relations(where=user)
     assert len(links) == 1
     assert links[0].resource_id == res.id
-    assert links[0].category_id == skill.id
+    assert links[0].file_id == skill.id
 
 
 async def test_chat_track_routes_to_memory_track_file(tmp_path: Path) -> None:

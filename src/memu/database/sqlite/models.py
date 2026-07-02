@@ -100,9 +100,9 @@ class SQLiteRecallFileResourceModel(SQLiteBaseModelMixin, RecallFileResource):
     """SQLite category-resource relation model."""
 
     resource_id: str = Field(sa_column=Column(String, nullable=False))
-    category_id: str = Field(sa_column=Column(String, nullable=False))
+    file_id: str = Field(sa_column=Column(String, nullable=False))
 
-    __table_args__ = (Index("idx_sqlite_recall_file_resources_unique", "resource_id", "category_id", unique=True),)
+    __table_args__ = (Index("idx_sqlite_recall_file_resources_unique", "resource_id", "file_id", unique=True),)
 
 
 class SQLiteRecallFileSegmentModel(SQLiteBaseModelMixin, RecallFileSegment):

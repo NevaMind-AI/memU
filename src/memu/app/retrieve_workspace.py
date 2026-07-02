@@ -113,7 +113,7 @@ class RetrieveWorkspaceMixin:
                 role="collect_files",
                 handler=self._ws_collect_files,
                 requires={"retrieve_file", "segment_hits", "segment_pool", "store", "where"},
-                produces={"file_hits", "file_pool"},
+                produces={"file_hits", "file_pool", "file_resource_urls"},
                 capabilities=set(),
             ),
             WorkflowStep(
@@ -134,6 +134,7 @@ class RetrieveWorkspaceMixin:
                     "segment_pool",
                     "file_hits",
                     "file_pool",
+                    "file_resource_urls",
                     "resource_hits",
                     "resource_pool",
                 },
@@ -209,7 +210,29 @@ class RetrieveWorkspaceMixin:
         # Preserve descending-score order so the response reads best-first.
         state["file_hits"] = sorted(file_scores.items(), key=lambda kv: kv[1], reverse=True)
         state["file_pool"] = file_pool
+        state["file_resource_urls"] = self._ws_collect_file_resource_urls(store, where_filters, file_pool)
         return state
+
+    @staticmethod
+    def _ws_collect_file_resource_urls(
+        store: Database, where_filters: dict[str, Any], file_pool: dict[str, Any]
+    ) -> dict[str, list[str]]:
+        """Map each file id to the URLs of the resources linked to it.
+
+        Resolves the ``RecallFileResource`` link table (file -> resource) and the
+        resource records (resource -> url) within the current scope, surfacing url
+        strings only — the raw resource/link ids are not exposed to callers.
+        """
+        resources = store.resource_repo.list_resources(where_filters)
+        file_resource_urls: dict[str, list[str]] = {}
+        for rel in store.recall_file_resource_repo.list_relations(where_filters):
+            if rel.file_id not in file_pool:
+                continue
+            resource = resources.get(rel.resource_id)
+            if resource is None:
+                continue
+            file_resource_urls.setdefault(rel.file_id, []).append(resource.url)
+        return file_resource_urls
 
     async def _ws_recall_resources(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("retrieve_resource"):
@@ -230,9 +253,13 @@ class RetrieveWorkspaceMixin:
         return state
 
     def _ws_build_response(self, state: WorkflowState, _: Any) -> WorkflowState:
+        files = self._materialize_hits(state.get("file_hits", []), state.get("file_pool", {}))
+        file_resource_urls = state.get("file_resource_urls", {})
+        for file in files:
+            file["resource_urls"] = file_resource_urls.get(file["id"], [])
         state["response"] = {
             "segments": self._materialize_hits(state.get("segment_hits", []), state.get("segment_pool", {})),
-            "files": self._materialize_hits(state.get("file_hits", []), state.get("file_pool", {})),
+            "files": files,
             "resources": self._materialize_hits(state.get("resource_hits", []), state.get("resource_pool", {})),
         }
         return state

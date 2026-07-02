@@ -86,9 +86,9 @@ class RecallFileEntryModel(BaseModelMixin, RecallFileEntry):
 
 class RecallFileResourceModel(BaseModelMixin, RecallFileResource):
     resource_id: str = Field(sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), nullable=False))
-    category_id: str = Field(sa_column=Column(ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False))
+    file_id: str = Field(sa_column=Column(ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False))
 
-    __table_args__ = (Index("idx_recall_file_resources_unique", "resource_id", "category_id", unique=True),)
+    __table_args__ = (Index("idx_recall_file_resources_unique", "resource_id", "file_id", unique=True),)
 
 
 class RecallFileSegmentModel(BaseModelMixin, RecallFileSegment):

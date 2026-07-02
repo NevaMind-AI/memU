@@ -113,7 +113,7 @@ class RecallFileEntry(BaseRecord):
 
 class RecallFileResource(BaseRecord):
     resource_id: str
-    category_id: str
+    file_id: str
 
 
 class RecallFileSegment(BaseRecord):

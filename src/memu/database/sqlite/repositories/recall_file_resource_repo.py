@@ -69,7 +69,7 @@ class SQLiteRecallFileResourceRepo(SQLiteRepoBase, RecallFileResourceRepo):
             rel = RecallFileResource(
                 id=row.id,
                 resource_id=row.resource_id,
-                category_id=row.category_id,
+                file_id=row.file_id,
                 created_at=row.created_at,
                 updated_at=row.updated_at,
                 **self._scope_kwargs_from(row),
@@ -81,14 +81,12 @@ class SQLiteRecallFileResourceRepo(SQLiteRepoBase, RecallFileResourceRepo):
 
         return result
 
-    def link_resource_category(
-        self, resource_id: str, category_id: str, user_data: dict[str, Any]
-    ) -> RecallFileResource:
+    def link_resource_category(self, resource_id: str, file_id: str, user_data: dict[str, Any]) -> RecallFileResource:
         """Create a link between a resource and a category.
 
         Args:
             resource_id: Resource ID.
-            category_id: Category ID.
+            file_id: File ID.
             user_data: User scope data.
 
         Returns:
@@ -97,7 +95,7 @@ class SQLiteRecallFileResourceRepo(SQLiteRepoBase, RecallFileResourceRepo):
         # Check if relation already exists
         where: dict[str, Any] = {
             "resource_id": resource_id,
-            "category_id": category_id,
+            "file_id": file_id,
             **user_data,
         }
         with self._sessions.session() as session:
@@ -111,7 +109,7 @@ class SQLiteRecallFileResourceRepo(SQLiteRepoBase, RecallFileResourceRepo):
                 rel = RecallFileResource(
                     id=existing.id,
                     resource_id=existing.resource_id,
-                    category_id=existing.category_id,
+                    file_id=existing.file_id,
                     created_at=existing.created_at,
                     updated_at=existing.updated_at,
                     **self._scope_kwargs_from(existing),
@@ -122,7 +120,7 @@ class SQLiteRecallFileResourceRepo(SQLiteRepoBase, RecallFileResourceRepo):
             now = self._now()
             row = self._recall_file_resource_model(
                 resource_id=resource_id,
-                category_id=category_id,
+                file_id=file_id,
                 created_at=now,
                 updated_at=now,
                 **user_data,
@@ -134,7 +132,7 @@ class SQLiteRecallFileResourceRepo(SQLiteRepoBase, RecallFileResourceRepo):
         rel = RecallFileResource(
             id=row.id,
             resource_id=row.resource_id,
-            category_id=row.category_id,
+            file_id=row.file_id,
             created_at=row.created_at,
             updated_at=row.updated_at,
             **user_data,
@@ -142,17 +140,17 @@ class SQLiteRecallFileResourceRepo(SQLiteRepoBase, RecallFileResourceRepo):
         self.relations.append(rel)
         return rel
 
-    def unlink_resource_category(self, resource_id: str, category_id: str) -> None:
+    def unlink_resource_category(self, resource_id: str, file_id: str) -> None:
         """Remove a link between a resource and a category.
 
         Args:
             resource_id: Resource ID.
-            category_id: Category ID.
+            file_id: File ID.
         """
         with self._sessions.session() as session:
             stmt = select(self._recall_file_resource_model).where(
                 self._recall_file_resource_model.resource_id == resource_id,
-                self._recall_file_resource_model.category_id == category_id,
+                self._recall_file_resource_model.file_id == file_id,
             )
             row = session.exec(stmt).first()
             if row:
@@ -160,7 +158,7 @@ class SQLiteRecallFileResourceRepo(SQLiteRepoBase, RecallFileResourceRepo):
                 session.commit()
                 # Remove from cache
                 self.relations[:] = [
-                    r for r in self.relations if not (r.resource_id == resource_id and r.category_id == category_id)
+                    r for r in self.relations if not (r.resource_id == resource_id and r.file_id == file_id)
                 ]
 
     def unlink_resource(self, resource_id: str) -> list[RecallFileResource]:

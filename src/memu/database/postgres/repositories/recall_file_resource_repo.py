@@ -37,13 +37,13 @@ class PostgresRecallFileResourceRepo(PostgresRepoBase, RecallFileResourceRepo):
 
         # Avoid duplicate inserts using local cache
         for rel in self.relations:
-            if rel.resource_id == resource_id and rel.category_id == cat_id:
+            if rel.resource_id == resource_id and rel.file_id == cat_id:
                 return rel
 
         now = self._now()
         new_rel = self._recall_file_resource_model(
             resource_id=resource_id,
-            category_id=cat_id,
+            file_id=cat_id,
             **user_data,
             created_at=now,
             updated_at=now,
@@ -53,7 +53,7 @@ class PostgresRecallFileResourceRepo(PostgresRepoBase, RecallFileResourceRepo):
             existing = session.scalar(
                 select(self._sqla_models.RecallFileResource).where(
                     self._sqla_models.RecallFileResource.resource_id == resource_id,
-                    self._sqla_models.RecallFileResource.category_id == cat_id,
+                    self._sqla_models.RecallFileResource.file_id == cat_id,
                 )
             )
             if existing:
@@ -72,19 +72,17 @@ class PostgresRecallFileResourceRepo(PostgresRepoBase, RecallFileResourceRepo):
             session.exec(
                 delete(self._sqla_models.RecallFileResource).where(
                     self._sqla_models.RecallFileResource.resource_id == resource_id,
-                    self._sqla_models.RecallFileResource.category_id == cat_id,
+                    self._sqla_models.RecallFileResource.file_id == cat_id,
                 )
             )
             session.commit()
-        self.relations[:] = [
-            r for r in self.relations if not (r.resource_id == resource_id and r.category_id == cat_id)
-        ]
+        self.relations[:] = [r for r in self.relations if not (r.resource_id == resource_id and r.file_id == cat_id)]
 
     def _row_to_record(self, row: Any) -> RecallFileResource:
         return RecallFileResource(
             id=row.id,
             resource_id=row.resource_id,
-            category_id=row.category_id,
+            file_id=row.file_id,
             created_at=row.created_at,
             updated_at=row.updated_at,
             **self._scope_kwargs_from(row),

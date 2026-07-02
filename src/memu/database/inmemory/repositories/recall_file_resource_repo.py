@@ -24,10 +24,10 @@ class InMemoryFileResourceRepository(RecallFileResourceRepo):
     def link_resource_category(self, resource_id: str, cat_id: str, user_data: dict[str, Any]) -> RecallFileResource:
         _ = resource_id  # enforced by caller via existing state
         for rel in self.relations:
-            if rel.resource_id == resource_id and rel.category_id == cat_id:
+            if rel.resource_id == resource_id and rel.file_id == cat_id:
                 return rel
         rel = self.recall_file_resource_model(
-            id=str(uuid.uuid4()), resource_id=resource_id, category_id=cat_id, **user_data
+            id=str(uuid.uuid4()), resource_id=resource_id, file_id=cat_id, **user_data
         )
         self.relations.append(rel)
         return rel
@@ -45,7 +45,7 @@ class InMemoryFileResourceRepository(RecallFileResourceRepo):
         # this repo's view never diverge (rebinding self.relations would orphan the
         # shared state.resource_relations list).
         self.relations[:] = [
-            rel for rel in self.relations if not (rel.resource_id == resource_id and rel.category_id == cat_id)
+            rel for rel in self.relations if not (rel.resource_id == resource_id and rel.file_id == cat_id)
         ]
 
     def unlink_resource(self, resource_id: str) -> list[RecallFileResource]:
