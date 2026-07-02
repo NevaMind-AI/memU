@@ -6,6 +6,7 @@ from memu.database.models import (
     RecallEntry,
     RecallFile,
     RecallFileEntry,
+    RecallFileResource,
     Resource,
     merge_scope_model,
 )
@@ -27,6 +28,10 @@ class InMemoryFileEntry(RecallFileEntry):
     """Concrete in-memory relation model."""
 
 
+class InMemoryFileResource(RecallFileResource):
+    """Concrete in-memory resource-category relation model."""
+
+
 def build_inmemory_models(
     user_model: type[BaseModel],
 ) -> tuple[
@@ -34,6 +39,7 @@ def build_inmemory_models(
     type[InMemoryRecallFile],
     type[InMemoryRecallEntry],
     type[InMemoryFileEntry],
+    type[InMemoryFileResource],
 ]:
     """
     Build scoped in-memory models that inherit from both the base interface and the user scope model.
@@ -42,11 +48,19 @@ def build_inmemory_models(
     recall_file_model = merge_scope_model(user_model, InMemoryRecallFile, name_suffix="RecallFile")
     recall_entry_model = merge_scope_model(user_model, InMemoryRecallEntry, name_suffix="RecallEntry")
     recall_file_entry_model = merge_scope_model(user_model, InMemoryFileEntry, name_suffix="RecallFileEntry")
-    return resource_model, recall_file_model, recall_entry_model, recall_file_entry_model
+    recall_file_resource_model = merge_scope_model(user_model, InMemoryFileResource, name_suffix="RecallFileResource")
+    return (
+        resource_model,
+        recall_file_model,
+        recall_entry_model,
+        recall_file_entry_model,
+        recall_file_resource_model,
+    )
 
 
 __all__ = [
     "InMemoryFileEntry",
+    "InMemoryFileResource",
     "InMemoryRecallEntry",
     "InMemoryRecallFile",
     "InMemoryResource",

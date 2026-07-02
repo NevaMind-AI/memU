@@ -111,6 +111,11 @@ class RecallFileEntry(BaseRecord):
     category_id: str
 
 
+class RecallFileResource(BaseRecord):
+    resource_id: str
+    category_id: str
+
+
 def merge_scope_model[TBaseRecord: BaseRecord](
     user_model: type[BaseModel], core_model: type[TBaseRecord], *, name_suffix: str
 ) -> type[TBaseRecord]:
@@ -129,7 +134,7 @@ def merge_scope_model[TBaseRecord: BaseRecord](
 
 def build_scoped_models(
     user_model: type[BaseModel],
-) -> tuple[type[Resource], type[RecallFile], type[RecallEntry], type[RecallFileEntry]]:
+) -> tuple[type[Resource], type[RecallFile], type[RecallEntry], type[RecallFileEntry], type[RecallFileResource]]:
     """
     Build scoped interface models (Pydantic) that inherit from the base record models and user scope.
     """
@@ -137,7 +142,14 @@ def build_scoped_models(
     recall_file_model = merge_scope_model(user_model, RecallFile, name_suffix="RecallFile")
     recall_entry_model = merge_scope_model(user_model, RecallEntry, name_suffix="RecallEntry")
     recall_file_entry_model = merge_scope_model(user_model, RecallFileEntry, name_suffix="RecallFileEntry")
-    return resource_model, recall_file_model, recall_entry_model, recall_file_entry_model
+    recall_file_resource_model = merge_scope_model(user_model, RecallFileResource, name_suffix="RecallFileResource")
+    return (
+        resource_model,
+        recall_file_model,
+        recall_entry_model,
+        recall_file_entry_model,
+        recall_file_resource_model,
+    )
 
 
 __all__ = [
@@ -146,6 +158,7 @@ __all__ = [
     "RecallEntry",
     "RecallFile",
     "RecallFileEntry",
+    "RecallFileResource",
     "Resource",
     "ToolCallResult",
     "build_scoped_models",

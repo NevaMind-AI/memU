@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import JSON, MetaData, String, Text
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
-from memu.database.models import EntryType, RecallEntry, RecallFile, RecallFileEntry, Resource
+from memu.database.models import EntryType, RecallEntry, RecallFile, RecallFileEntry, RecallFileResource, Resource
 
 
 class TZDateTime(DateTime):
@@ -86,6 +86,15 @@ class SQLiteRecallFileEntryModel(SQLiteBaseModelMixin, RecallFileEntry):
     category_id: str = Field(sa_column=Column(String, nullable=False))
 
     __table_args__ = (Index("idx_sqlite_recall_file_entries_unique", "item_id", "category_id", unique=True),)
+
+
+class SQLiteRecallFileResourceModel(SQLiteBaseModelMixin, RecallFileResource):
+    """SQLite category-resource relation model."""
+
+    resource_id: str = Field(sa_column=Column(String, nullable=False))
+    category_id: str = Field(sa_column=Column(String, nullable=False))
+
+    __table_args__ = (Index("idx_sqlite_recall_file_resources_unique", "resource_id", "category_id", unique=True),)
 
 
 def _normalize_table_args(table_args: Any) -> tuple[list[Any], dict[str, Any]]:
@@ -176,6 +185,7 @@ __all__ = [
     "SQLiteRecallEntryModel",
     "SQLiteRecallFileEntryModel",
     "SQLiteRecallFileModel",
+    "SQLiteRecallFileResourceModel",
     "SQLiteResourceModel",
     "build_sqlite_table_model",
 ]

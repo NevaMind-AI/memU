@@ -5,8 +5,15 @@ from typing import Protocol, runtime_checkable
 from memu.database.models import RecallEntry as RecallEntryRecord
 from memu.database.models import RecallFile as RecallFileRecord
 from memu.database.models import RecallFileEntry as RecallFileEntryRecord
+from memu.database.models import RecallFileResource as RecallFileResourceRecord
 from memu.database.models import Resource as ResourceRecord
-from memu.database.repositories import RecallEntryRepo, RecallFileEntryRepo, RecallFileRepo, ResourceRepo
+from memu.database.repositories import (
+    RecallEntryRepo,
+    RecallFileEntryRepo,
+    RecallFileRepo,
+    RecallFileResourceRepo,
+    ResourceRepo,
+)
 
 
 @runtime_checkable
@@ -17,11 +24,13 @@ class Database(Protocol):
     recall_file_repo: RecallFileRepo
     recall_entry_repo: RecallEntryRepo
     recall_file_entry_repo: RecallFileEntryRepo
+    recall_file_resource_repo: RecallFileResourceRepo
 
     resources: dict[str, ResourceRecord]
     items: dict[str, RecallEntryRecord]
     categories: dict[str, RecallFileRecord]
     relations: list[RecallFileEntryRecord]
+    resource_relations: list[RecallFileResourceRecord]
 
     def close(self) -> None: ...
 
@@ -31,5 +40,6 @@ __all__ = [
     "RecallEntryRecord",
     "RecallFileEntryRecord",
     "RecallFileRecord",
+    "RecallFileResourceRecord",
     "ResourceRecord",
 ]

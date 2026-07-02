@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
+from memu.database.models import RecallFileResource
+from memu.database.postgres.repositories.base import PostgresRepoBase
+from memu.database.postgres.session import SessionManager
+from memu.database.repositories.recall_file_resource import RecallFileResourceRepo
+from memu.database.state import DatabaseState
+
+
+class PostgresRecallFileResourceRepo(PostgresRepoBase, RecallFileResourceRepo):
+    def __init__(
+        self,
+        *,
+        state: DatabaseState,
+        recall_file_resource_model: type[RecallFileResource],
+        sqla_models: Any,
+        sessions: SessionManager,
+        scope_fields: list[str],
+    ) -> None:
+        super().__init__(state=state, sqla_models=sqla_models, sessions=sessions, scope_fields=scope_fields)
+        self._recall_file_resource_model = recall_file_resource_model
+        self.relations: list[RecallFileResource] = self._state.resource_relations
+
+    def list_relations(self, where: Mapping[str, Any] | None = None) -> list[RecallFileResource]:
+        from sqlmodel import select
+
+        filters = self._build_filters(self._sqla_models.RecallFileResource, where)
+        with self._sessions.session() as session:
+            rows = session.scalars(select(self._sqla_models.RecallFileResource).where(*filters)).all()
+        return [self._cache_relation(row) for row in rows]
+
+    def link_resource_category(self, resource_id: str, cat_id: str, user_data: dict[str, Any]) -> RecallFileResource:
+        from sqlmodel import select
+
+        # Avoid duplicate inserts using local cache
+        for rel in self.relations:
+            if rel.resource_id == resource_id and rel.category_id == cat_id:
+                return rel
+
+        now = self._now()
+        new_rel = self._recall_file_resource_model(
+            resource_id=resource_id,
+            category_id=cat_id,
+            **user_data,
+            created_at=now,
+            updated_at=now,
+        )
+
+        with self._sessions.session() as session:
+            existing = session.scalar(
+                select(self._sqla_models.RecallFileResource).where(
+                    self._sqla_models.RecallFileResource.resource_id == resource_id,
+                    self._sqla_models.RecallFileResource.category_id == cat_id,
+                )
+            )
+            if existing:
+                return self._cache_relation(existing)
+
+            session.add(new_rel)
+            session.commit()
+            session.refresh(new_rel)
+
+        return self._cache_relation(new_rel)
+
+    def unlink_resource_category(self, resource_id: str, cat_id: str) -> None:
+        from sqlmodel import delete
+
+        with self._sessions.session() as session:
+            session.exec(
+                delete(self._sqla_models.RecallFileResource).where(
+                    self._sqla_models.RecallFileResource.resource_id == resource_id,
+                    self._sqla_models.RecallFileResource.category_id == cat_id,
+                )
+            )
+            session.commit()
+        self.relations[:] = [
+            r for r in self.relations if not (r.resource_id == resource_id and r.category_id == cat_id)
+        ]
+
+    def _row_to_record(self, row: Any) -> RecallFileResource:
+        return RecallFileResource(
+            id=row.id,
+            resource_id=row.resource_id,
+            category_id=row.category_id,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            **self._scope_kwargs_from(row),
+        )
+
+    def unlink_resource(self, resource_id: str) -> list[RecallFileResource]:
+        from sqlmodel import delete, select
+
+        with self._sessions.session() as session:
+            rows = session.scalars(
+                select(self._sqla_models.RecallFileResource).where(
+                    self._sqla_models.RecallFileResource.resource_id == resource_id
+                )
+            ).all()
+            removed = [self._row_to_record(row) for row in rows]
+            if removed:
+                session.exec(
+                    delete(self._sqla_models.RecallFileResource).where(
+                        self._sqla_models.RecallFileResource.resource_id == resource_id
+                    )
+                )
+                session.commit()
+        self.relations[:] = [r for r in self.relations if r.resource_id != resource_id]
+        return removed
+
+    def clear_relations(self, where: Mapping[str, Any] | None = None) -> list[RecallFileResource]:
+        from sqlmodel import delete, select
+
+        filters = self._build_filters(self._sqla_models.RecallFileResource, where)
+        with self._sessions.session() as session:
+            rows = session.scalars(select(self._sqla_models.RecallFileResource).where(*filters)).all()
+            removed = [self._row_to_record(row) for row in rows]
+            if removed:
+                session.exec(delete(self._sqla_models.RecallFileResource).where(*filters))
+                session.commit()
+        removed_ids = {rel.id for rel in removed}
+        self.relations[:] = [r for r in self.relations if r.id not in removed_ids]
+        return removed
+
+    def get_resource_categories(self, resource_id: str) -> list[RecallFileResource]:
+        from sqlmodel import select
+
+        with self._sessions.session() as session:
+            rows = session.scalars(
+                select(self._sqla_models.RecallFileResource).where(
+                    self._sqla_models.RecallFileResource.resource_id == resource_id
+                )
+            ).all()
+        return [self._cache_relation(row) for row in rows]
+
+    def load_existing(self) -> None:
+        from sqlmodel import select
+
+        with self._sessions.session() as session:
+            rows = session.scalars(select(self._sqla_models.RecallFileResource)).all()
+            for row in rows:
+                self._cache_relation(row)
+
+    def _cache_relation(self, rel: RecallFileResource) -> RecallFileResource:
+        self.relations.append(rel)
+        return rel
+
+
+__all__ = ["PostgresRecallFileResourceRepo"]

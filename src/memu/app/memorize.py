@@ -7,7 +7,7 @@ import logging
 import pathlib
 import re
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 from xml.etree.ElementTree import Element
 
 import defusedxml.ElementTree as ET
@@ -24,9 +24,12 @@ from memu.prompts.category_summary import (
     PROMPT as CATEGORY_SUMMARY_PROMPT,
 )
 from memu.prompts.memory_fs import (
-    DESCRIPTIONS_PLACEHOLDER,
+    CONTENT_PLACEHOLDER,
+    DESCRIPTION_PLACEHOLDER,
     EXISTING_PLACEHOLDER,
-    SKILL_FILE_SYNTHESIS_PROMPT,
+    NAME_PLACEHOLDER,
+    ROUTE_PROMPTS,
+    SYNTHESIS_PROMPTS,
 )
 from memu.prompts.memory_type import (
     CUSTOM_PROMPTS as MEMORY_TYPE_CUSTOM_PROMPTS,
@@ -266,7 +269,8 @@ class MemorizeMixin:
             return []
         target_ids = {res.id for res in targets}
 
-        # Discarded entry summaries per file, used to recompute summaries.
+        # Discarded entry summaries per file, used to recompute summaries. Only the
+        # legacy entry-plane path (single-file ``memorize``) populates these.
         file_discards: dict[str, list[str]] = {}
         for entry in store.recall_entry_repo.list_items(where=where).values():
             if entry.resource_id not in target_ids:
@@ -277,6 +281,11 @@ class MemorizeMixin:
             store.recall_entry_repo.delete_item(entry.id)
 
         for res in targets:
+            # Drop the resource -> file provenance links for the new synthesis path.
+            # NOTE (ADR 0007 phase 1 open issue): we do not rebuild the affected files
+            # from their remaining linked resources, so their content may go stale after
+            # a source change/delete. Tolerated for now.
+            store.recall_file_resource_repo.unlink_resource(res.id)
             store.resource_repo.delete_resource(res.id)
 
         updates: dict[str, tuple[str | None, str | None]] = {
@@ -409,28 +418,73 @@ class MemorizeMixin:
         }
 
     def _build_memorize_workspace_workflow(self) -> list[WorkflowStep]:
-        """The workspace memorize pipeline: the memory steps plus skill generation.
+        """The workspace memorize pipeline: direct resource -> file synthesis (ADR 0007 phase 1).
 
-        Identical to :meth:`_build_memorize_workflow` but inserts a per-file
-        ``generate_skills`` step (ADR 0006) before the response is emitted. It runs
-        on the ``memorize_workspace`` path only, so single-file ``memorize`` is
-        unchanged. The skill step has no data dependency on the memory persist
-        output — it consumes ``preprocessed_resources`` — so it slots in after
-        persist purely for sequencing.
+        Unlike single-file :meth:`memorize` (``resource -> entry -> file``), the
+        workspace path synthesizes files straight from the preprocessed source and
+        creates no ``RecallEntry``. After ``preprocess`` it:
+
+        - ``create_resource`` — one file maps to one :class:`Resource` (caption/embedding
+          for INDEX recall), for every track including ``workspace`` (resource-only).
+        - ``synthesize_files`` — for the ``chat`` and ``skill`` tracks only, route the
+          source to the files to update/create then synthesize each file's body, upserting
+          ``RecallFile`` and recording ``resource -> file`` provenance. ``workspace`` is a
+          no-op here. Retrieval over these files is deferred (ADR 0007 phase 2).
         """
-        steps = self._build_memorize_workflow()
-        skill_step = WorkflowStep(
-            step_id="generate_skills",
-            role="generate_skills",
-            handler=self._memorize_generate_skills,
-            requires={"preprocessed_resources", "store", "user"},
-            produces={"skills"},
-            capabilities={"llm", "db", "vector"},
-            config={"chat_llm_profile": getattr(self.memory_files_config, "synthesis_llm_profile", "default")},
-        )
-        # Insert just before the terminal build_response step.
-        steps.insert(-1, skill_step)
-        return steps
+        synthesis_profile = getattr(self.memory_files_config, "synthesis_llm_profile", "default")
+        return [
+            WorkflowStep(
+                step_id="ingest_resource",
+                role="ingest",
+                handler=self._memorize_ingest_resource,
+                requires={"resource_url", "modality"},
+                produces={"local_path", "raw_text"},
+                capabilities={"io"},
+            ),
+            WorkflowStep(
+                step_id="preprocess_multimodal",
+                role="preprocess",
+                handler=self._memorize_preprocess_multimodal,
+                requires={"local_path", "modality", "raw_text"},
+                produces={"preprocessed_resources"},
+                capabilities={"llm"},
+                config={"chat_llm_profile": self.memorize_config.preprocess_llm_profile},
+            ),
+            WorkflowStep(
+                step_id="create_resource",
+                role="persist",
+                handler=self._memorize_ws_create_resource,
+                requires={
+                    "preprocessed_resources",
+                    "modality",
+                    "local_path",
+                    "resource_url",
+                    "store",
+                    "user",
+                    "resource_track",
+                },
+                produces={"resources"},
+                capabilities={"db", "vector"},
+                config={"embed_llm_profile": "embedding"},
+            ),
+            WorkflowStep(
+                step_id="synthesize_files",
+                role="synthesize_files",
+                handler=self._memorize_ws_synthesize_files,
+                requires={"resources", "preprocessed_resources", "resource_track", "store", "user"},
+                produces={"files"},
+                capabilities={"llm", "db", "vector"},
+                config={"chat_llm_profile": synthesis_profile, "embed_llm_profile": "embedding"},
+            ),
+            WorkflowStep(
+                step_id="build_response",
+                role="emit",
+                handler=self._memorize_ws_build_response,
+                requires={"resources", "files"},
+                produces={"response"},
+                capabilities=set(),
+            ),
+        ]
 
     async def _memorize_ingest_resource(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         local_path, raw_text = await self.fs.fetch(state["resource_url"], state["modality"])
@@ -561,49 +615,6 @@ class MemorizeMixin:
             )
         return state
 
-    async def _memorize_generate_skills(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        """Generate/patch skill-track ``RecallFile``s from this file's content (ADR 0006).
-
-        Gated behind ``memory_files_config.synthesize``. Reads the preprocessed
-        content of the current source plus the existing skill-track files (so file
-        *N* sees skills created by files *1..N-1*), asks the LLM for skills to add or
-        revise, and persists each directly as a ``RecallFile(track="skill")`` —
-        embedding ``name + description`` and storing the body as ``content``, bypassing
-        the ``RecallEntry`` plane.
-        """
-        if not getattr(self.memory_files_config, "synthesize", False):
-            return state
-        content = self._format_skill_source_content(state.get("preprocessed_resources") or [])
-        if not content:
-            return state
-
-        store = state["store"]
-        user_scope = dict(state.get("user") or {})
-        llm_client = self._get_step_llm_client(step_context)
-        embed_client = self._get_step_embedding_client(step_context)
-
-        existing = store.recall_file_repo.list_categories(where={**user_scope, "track": "skill"})
-        existing_text = self._format_existing_skills(existing) or "(none)"
-        prompt = SKILL_FILE_SYNTHESIS_PROMPT.replace(EXISTING_PLACEHOLDER, existing_text).replace(
-            DESCRIPTIONS_PLACEHOLDER, self._escape_prompt_value(content)
-        )
-        parsed = self._parse_skill_files(await llm_client.chat(prompt))
-
-        persisted: list[RecallFile] = []
-        for name, description, body in parsed:
-            emb_text = f"{name}: {description}" if description else name
-            embedding = (await embed_client.embed([emb_text]))[0]
-            skill = store.recall_file_repo.get_or_create_category(
-                name=name,
-                description=description,
-                embedding=embedding,
-                user_data=user_scope,
-                track="skill",
-            )
-            persisted.append(store.recall_file_repo.update_category(category_id=skill.id, content=body))
-        state["skills"] = persisted
-        return state
-
     @staticmethod
     def _format_skill_source_content(preprocessed_resources: list[dict[str, Any]]) -> str:
         """Flatten a source's preprocessed segments into a single text block."""
@@ -614,16 +625,177 @@ class MemorizeMixin:
         ]
         return "\n\n".join(parts)
 
+    # --- Workspace resource -> file path (ADR 0007 phase 1) -------------------
+
+    # Maps a workspace ``resource_track`` to the ``RecallFile.track`` it synthesizes
+    # into. ``workspace`` has no entry (resource-only), so it is absent.
+    _TRACK_TO_FILE_TRACK: ClassVar[dict[str, str]] = {"chat": "memory", "skill": "skill"}
+
+    async def _memorize_ws_create_resource(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Create the single ``Resource`` for this file (one file -> one resource).
+
+        Runs for every track; the ``workspace`` track stops here (resource-only). The
+        caption is the joined per-segment captions, embedded for INDEX/resource recall.
+        """
+        embed_client = self._get_step_embedding_client(step_context)
+        store = state["store"]
+        preprocessed = state.get("preprocessed_resources") or []
+        captions = [(prep.get("caption") or "").strip() for prep in preprocessed]
+        caption = "\n\n".join(c for c in captions if c) or None
+        res = await self._create_resource_with_caption(
+            resource_url=state["resource_url"],
+            modality=state["modality"],
+            local_path=state["local_path"],
+            caption=caption,
+            store=store,
+            embed_client=embed_client,
+            user=state.get("user", {}),
+            track=state.get("resource_track"),
+        )
+        state["resources"] = [res]
+        return state
+
+    async def _memorize_ws_synthesize_files(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Synthesize this source into ``RecallFile``s for the chat/skill tracks.
+
+        Two steps: (a) route the source to the set of files to update/create given the
+        existing files' names+descriptions, and (b) synthesize each target file's body in
+        parallel. Persists each file and a ``resource -> file`` provenance link. The
+        ``workspace`` track (and any source with no content) is a no-op.
+        """
+        track = state.get("resource_track")
+        file_track = self._TRACK_TO_FILE_TRACK.get(track or "")
+        resources = state.get("resources") or []
+        content = self._format_skill_source_content(state.get("preprocessed_resources") or [])
+        if file_track is None or not resources or not content:
+            state["files"] = []
+            return state
+
+        store = state["store"]
+        user_scope = dict(state.get("user") or {})
+        llm_client = self._get_step_llm_client(step_context)
+        embed_client = self._get_step_embedding_client(step_context)
+        resource = resources[0]
+
+        existing = store.recall_file_repo.list_categories(where={**user_scope, "track": file_track})
+        ops = await self._route_source_to_files(
+            file_track=file_track, content=content, existing=existing, llm_client=llm_client
+        )
+        touched = await self._synthesize_file_ops(
+            ops=ops,
+            file_track=file_track,
+            content=content,
+            existing=existing,
+            resource=resource,
+            store=store,
+            user_scope=user_scope,
+            llm_client=llm_client,
+            embed_client=embed_client,
+        )
+        state["files"] = touched
+        return state
+
+    async def _route_source_to_files(
+        self,
+        *,
+        file_track: str,
+        content: str,
+        existing: Mapping[str, RecallFile],
+        llm_client: Any,
+    ) -> list[dict[str, str]]:
+        """Ask the model which existing files to update / what new files to create."""
+        existing_text = self._format_existing_files(existing) or "(none)"
+        prompt = (
+            ROUTE_PROMPTS[file_track]
+            .replace(EXISTING_PLACEHOLDER, existing_text)
+            .replace(CONTENT_PLACEHOLDER, self._escape_prompt_value(content))
+        )
+        return self._parse_file_ops(await llm_client.chat(prompt), existing)
+
+    async def _synthesize_file_ops(
+        self,
+        *,
+        ops: list[dict[str, str]],
+        file_track: str,
+        content: str,
+        existing: Mapping[str, RecallFile],
+        resource: Resource,
+        store: Database,
+        user_scope: dict[str, Any],
+        llm_client: Any,
+        embed_client: Any,
+    ) -> list[RecallFile]:
+        """Synthesize each routed file's body (in parallel) and persist file + link."""
+        existing_by_name = {f.name: f for f in existing.values()}
+        # Resolve ops to unique targets (dedup by name; last op's description wins).
+        targets: list[dict[str, Any]] = []
+        by_name: dict[str, dict[str, Any]] = {}
+        for op in ops:
+            name = op["name"]
+            ex = existing_by_name.get(name)
+            description = (op.get("description") or (ex.description if ex else "") or "").strip()
+            target = by_name.get(name)
+            if target is None:
+                target = {"name": name, "description": description, "existing": ex}
+                by_name[name] = target
+                targets.append(target)
+            elif description:
+                target["description"] = description
+        if not targets:
+            return []
+
+        prompts = [
+            SYNTHESIS_PROMPTS[file_track]
+            .replace(NAME_PLACEHOLDER, self._escape_prompt_value(t["name"]))
+            .replace(DESCRIPTION_PLACEHOLDER, self._escape_prompt_value(t["description"]))
+            .replace(
+                EXISTING_PLACEHOLDER, self._escape_prompt_value((t["existing"].content if t["existing"] else "") or "")
+            )
+            .replace(CONTENT_PLACEHOLDER, self._escape_prompt_value(content))
+            for t in targets
+        ]
+        bodies = await asyncio.gather(*[llm_client.chat(prompt) for prompt in prompts])
+
+        # Embed name+description for the files being created.
+        creates = [t for t in targets if t["existing"] is None]
+        create_vecs: dict[str, list[float]] = {}
+        if creates:
+            emb_texts = [f"{t['name']}: {t['description']}" if t["description"] else t["name"] for t in creates]
+            vecs = await embed_client.embed(emb_texts)
+            for t, vec in zip(creates, vecs, strict=True):
+                create_vecs[t["name"]] = vec
+
+        touched: list[RecallFile] = []
+        for target, body in zip(targets, bodies, strict=True):
+            cleaned = body.replace("```markdown", "").replace("```", "").strip()
+            file = target["existing"]
+            if file is None:
+                file = store.recall_file_repo.get_or_create_category(
+                    name=target["name"],
+                    description=target["description"],
+                    embedding=create_vecs[target["name"]],
+                    user_data=user_scope,
+                    track=file_track,
+                )
+            file = store.recall_file_repo.update_category(category_id=file.id, content=cleaned)
+            store.recall_file_resource_repo.link_resource_category(resource.id, file.id, user_data=dict(user_scope))
+            touched.append(file)
+        return touched
+
     @staticmethod
-    def _format_existing_skills(existing: Mapping[str, RecallFile]) -> str:
-        """Render existing skill files as ``## name\\nbody`` blocks for the prompt."""
-        return "\n\n".join(
-            f"## {skill.name}\n{(skill.content or '').strip()}".strip()
-            for skill in sorted(existing.values(), key=lambda s: s.name)
+    def _format_existing_files(existing: Mapping[str, RecallFile]) -> str:
+        """Render existing files as ``- name: description`` lines for the router prompt."""
+        return "\n".join(
+            f"- {f.name}: {f.description}" if f.description else f"- {f.name}"
+            for f in sorted(existing.values(), key=lambda f: f.name)
         )
 
-    def _parse_skill_files(self, raw: str) -> list[tuple[str, str, str]]:
-        """Parse the skill-synthesis JSON array into ``(name, description, body)`` tuples."""
+    def _parse_file_ops(self, raw: str, existing: Mapping[str, RecallFile]) -> list[dict[str, str]]:
+        """Parse the router's JSON array into validated ``{op, name, description}`` dicts.
+
+        ``update`` ops naming an unknown file are dropped (we never update a file that
+        does not exist); ``create``/``update`` are otherwise kept with a stripped name.
+        """
         if not raw:
             return []
         start = raw.find("[")
@@ -636,18 +808,35 @@ class MemorizeMixin:
             return []
         if not isinstance(parsed, list):
             return []
-        skills: list[tuple[str, str, str]] = []
+        existing_names = {f.name for f in existing.values()}
+        ops: list[dict[str, str]] = []
         for entry in parsed:
             if not isinstance(entry, dict):
                 continue
+            op = entry.get("op")
             name = entry.get("name")
-            body = entry.get("body")
-            if not isinstance(name, str) or not name.strip() or not isinstance(body, str) or not body.strip():
+            if op not in {"update", "create"} or not isinstance(name, str) or not name.strip():
+                continue
+            name = name.strip()
+            if op == "update" and name not in existing_names:
                 continue
             description = entry.get("description")
             description = description.strip() if isinstance(description, str) else ""
-            skills.append((name.strip(), description, body.strip()))
-        return skills
+            ops.append({"op": op, "name": name, "description": description})
+        return ops
+
+    def _memorize_ws_build_response(self, state: WorkflowState, step_context: Any) -> WorkflowState:
+        """Emit the workspace response (no entries; ``categories`` carries touched files)."""
+        resources = [self._model_dump_without_embeddings(r) for r in state.get("resources", [])]
+        files = [self._model_dump_without_embeddings(f) for f in state.get("files", [])]
+        # Keep the legacy response contract (``items``/``categories``); items is always
+        # empty on this path since the entry plane is gone.
+        base: dict[str, Any] = {"items": [], "categories": files, "relations": []}
+        if len(resources) == 1:
+            state["response"] = {"resource": resources[0], **base}
+        else:
+            state["response"] = {"resources": resources, **base}
+        return state
 
     def _memorize_build_response(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         ctx = state["ctx"]
