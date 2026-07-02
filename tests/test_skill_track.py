@@ -167,6 +167,66 @@ async def test_empty_source_is_noop(tmp_path: Path) -> None:
     assert store.recall_file_repo.list_categories(where={"user_id": "u1", "track": "skill"}) == {}
 
 
+async def test_skill_track_creates_single_name_description_segment(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    store = service.database
+    user = {"user_id": "u1"}
+
+    result = await _run_synthesize(service, _FakeClient(), track="skill", user=user)
+    skill = next(iter(result["files"]))
+
+    segments = store.recall_file_segment_repo.list_segments_for_file(skill.id)
+    assert len(segments) == 1
+    assert segments[0].text == "name: pour-over\ndescription: Brew pour-over coffee"
+    assert segments[0].embedding == [0.1, 0.2, 0.3]
+
+
+async def test_memory_track_segments_are_lines_skipping_headings(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    store = service.database
+    user = {"user_id": "u1"}
+
+    result = await _run_synthesize(
+        service,
+        _FakeClient(route=_MEMORY_ROUTE, body="## Preferences\nLikes strong coffee.\n\nDrinks it black."),
+        track="chat",
+        user=user,
+    )
+    file = next(iter(result["files"]))
+
+    segments = store.recall_file_segment_repo.list_segments_for_file(file.id)
+    assert [s.text for s in segments] == ["Likes strong coffee.", "Drinks it black."]
+
+
+async def test_memory_segments_drop_and_add_on_update(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    store = service.database
+    user = {"user_id": "u1"}
+
+    first = await _run_synthesize(
+        service,
+        _FakeClient(route=_MEMORY_ROUTE, body="## P\nline a\nline b"),
+        track="chat",
+        user=user,
+    )
+    file = next(iter(first["files"]))
+    before = {s.text: s.id for s in store.recall_file_segment_repo.list_segments_for_file(file.id)}
+    assert set(before) == {"line a", "line b"}
+
+    # An update changes only one line: "line b" -> "line c".
+    await _run_synthesize(
+        service,
+        _FakeClient(route='[{"op": "update", "name": "Preferences"}]', body="## P\nline a\nline c"),
+        track="chat",
+        user=user,
+    )
+    after = {s.text: s.id for s in store.recall_file_segment_repo.list_segments_for_file(file.id)}
+    assert set(after) == {"line a", "line c"}
+    # Unchanged line keeps its original segment (not re-embedded); changed line is fresh.
+    assert after["line a"] == before["line a"]
+    assert "line b" not in after
+
+
 async def test_update_op_for_unknown_file_is_dropped(tmp_path: Path) -> None:
     service = _service(tmp_path)
     store = service.database

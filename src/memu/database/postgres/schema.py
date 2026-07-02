@@ -28,6 +28,7 @@ from memu.database.postgres.models import (
     RecallFileEntryModel,
     RecallFileModel,
     RecallFileResourceModel,
+    RecallFileSegmentModel,
     ResourceModel,
     build_table_model,
 )
@@ -41,6 +42,7 @@ class SQLAModels:
     RecallEntry: type[Any]
     RecallFileEntry: type[Any]
     RecallFileResource: type[Any]
+    RecallFileSegment: type[Any]
 
 
 _MODEL_CACHE: dict[type[Any], SQLAModels] = {}
@@ -93,6 +95,12 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
         tablename="resource_categories",
         metadata=metadata_obj,
     )
+    recall_file_segment_model = build_table_model(
+        scope,
+        RecallFileSegmentModel,
+        tablename="file_segments",
+        metadata=metadata_obj,
+    )
 
     class Base(SQLModel):
         __abstract__ = True
@@ -105,6 +113,7 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
         RecallEntry=recall_entry_model,
         RecallFileEntry=recall_file_entry_model,
         RecallFileResource=recall_file_resource_model,
+        RecallFileSegment=recall_file_segment_model,
     )
     _MODEL_CACHE[cache_key] = models
     return models

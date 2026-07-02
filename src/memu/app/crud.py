@@ -269,6 +269,8 @@ class CRUDMixin:
     def _crud_clear_recall_files(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         where_filters = state.get("where") or {}
         store = state["store"]
+        # Segments hang off files (ADR 0007 L2); clear them alongside their categories.
+        store.recall_file_segment_repo.clear_segments(where_filters)
         deleted = store.recall_file_repo.clear_categories(where_filters)
         state["deleted_categories"] = deleted
         return state

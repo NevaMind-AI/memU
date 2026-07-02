@@ -18,6 +18,7 @@ def build_inmemory_database(
         recall_entry_model,
         recall_file_entry_model,
         recall_file_resource_model,
+        recall_file_segment_model,
     ) = build_inmemory_models(user_model)
     return InMemoryStore(
         scope_model=user_model,
@@ -26,6 +27,7 @@ def build_inmemory_database(
         recall_file_model=recall_file_model,
         recall_file_entry_model=recall_file_entry_model,
         recall_file_resource_model=recall_file_resource_model,
+        recall_file_segment_model=recall_file_segment_model,
     )
 
 

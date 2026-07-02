@@ -2,6 +2,7 @@ from memu.database.postgres.repositories.recall_entry_repo import PostgresRecall
 from memu.database.postgres.repositories.recall_file_entry_repo import PostgresRecallFileEntryRepo
 from memu.database.postgres.repositories.recall_file_repo import PostgresRecallFileRepo
 from memu.database.postgres.repositories.recall_file_resource_repo import PostgresRecallFileResourceRepo
+from memu.database.postgres.repositories.recall_file_segment_repo import PostgresRecallFileSegmentRepo
 from memu.database.postgres.repositories.resource_repo import PostgresResourceRepo
 
 __all__ = [
@@ -9,5 +10,6 @@ __all__ = [
     "PostgresRecallFileEntryRepo",
     "PostgresRecallFileRepo",
     "PostgresRecallFileResourceRepo",
+    "PostgresRecallFileSegmentRepo",
     "PostgresResourceRepo",
 ]

@@ -5,6 +5,7 @@ from memu.database.sqlite.repositories.recall_entry_repo import SQLiteRecallEntr
 from memu.database.sqlite.repositories.recall_file_entry_repo import SQLiteRecallFileEntryRepo
 from memu.database.sqlite.repositories.recall_file_repo import SQLiteRecallFileRepo
 from memu.database.sqlite.repositories.recall_file_resource_repo import SQLiteRecallFileResourceRepo
+from memu.database.sqlite.repositories.recall_file_segment_repo import SQLiteRecallFileSegmentRepo
 from memu.database.sqlite.repositories.resource_repo import SQLiteResourceRepo
 
 __all__ = [
@@ -12,6 +13,7 @@ __all__ = [
     "SQLiteRecallFileEntryRepo",
     "SQLiteRecallFileRepo",
     "SQLiteRecallFileResourceRepo",
+    "SQLiteRecallFileSegmentRepo",
     "SQLiteRepoBase",
     "SQLiteResourceRepo",
 ]

@@ -11,7 +11,15 @@ from pydantic import BaseModel
 from sqlalchemy import JSON, MetaData, String, Text
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
-from memu.database.models import EntryType, RecallEntry, RecallFile, RecallFileEntry, RecallFileResource, Resource
+from memu.database.models import (
+    EntryType,
+    RecallEntry,
+    RecallFile,
+    RecallFileEntry,
+    RecallFileResource,
+    RecallFileSegment,
+    Resource,
+)
 
 
 class TZDateTime(DateTime):
@@ -95,6 +103,16 @@ class SQLiteRecallFileResourceModel(SQLiteBaseModelMixin, RecallFileResource):
     category_id: str = Field(sa_column=Column(String, nullable=False))
 
     __table_args__ = (Index("idx_sqlite_recall_file_resources_unique", "resource_id", "category_id", unique=True),)
+
+
+class SQLiteRecallFileSegmentModel(SQLiteBaseModelMixin, RecallFileSegment):
+    """SQLite file-segment model."""
+
+    recall_file_id: str = Field(sa_column=Column(String, nullable=False, index=True))
+    text: str = Field(sa_column=Column(Text, nullable=False))
+    # Override inherited embedding field: SQLite has no native vector type, so store the
+    # vector in a JSON column (a bare ``list`` annotation is not mappable by SQLModel).
+    embedding: list[float] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 
 def _normalize_table_args(table_args: Any) -> tuple[list[Any], dict[str, Any]]:
@@ -186,6 +204,7 @@ __all__ = [
     "SQLiteRecallFileEntryModel",
     "SQLiteRecallFileModel",
     "SQLiteRecallFileResourceModel",
+    "SQLiteRecallFileSegmentModel",
     "SQLiteResourceModel",
     "build_sqlite_table_model",
 ]

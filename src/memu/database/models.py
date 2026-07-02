@@ -116,6 +116,20 @@ class RecallFileResource(BaseRecord):
     category_id: str
 
 
+class RecallFileSegment(BaseRecord):
+    """A searchable slice (L2 item) of a ``RecallFile`` (ADR 0007).
+
+    Each file has 1..n segments; ``text`` is the embed/search unit and ``embedding``
+    its vector. Retrieval ranks segments and rolls the top hits up to their file via
+    ``recall_file_id``. Segments carry no ordinal: how a file is sliced is track-specific
+    and not necessarily sequential, so position would not be informative.
+    """
+
+    recall_file_id: str
+    text: str
+    embedding: list[float] | None = None
+
+
 def merge_scope_model[TBaseRecord: BaseRecord](
     user_model: type[BaseModel], core_model: type[TBaseRecord], *, name_suffix: str
 ) -> type[TBaseRecord]:
@@ -134,7 +148,14 @@ def merge_scope_model[TBaseRecord: BaseRecord](
 
 def build_scoped_models(
     user_model: type[BaseModel],
-) -> tuple[type[Resource], type[RecallFile], type[RecallEntry], type[RecallFileEntry], type[RecallFileResource]]:
+) -> tuple[
+    type[Resource],
+    type[RecallFile],
+    type[RecallEntry],
+    type[RecallFileEntry],
+    type[RecallFileResource],
+    type[RecallFileSegment],
+]:
     """
     Build scoped interface models (Pydantic) that inherit from the base record models and user scope.
     """
@@ -143,12 +164,14 @@ def build_scoped_models(
     recall_entry_model = merge_scope_model(user_model, RecallEntry, name_suffix="RecallEntry")
     recall_file_entry_model = merge_scope_model(user_model, RecallFileEntry, name_suffix="RecallFileEntry")
     recall_file_resource_model = merge_scope_model(user_model, RecallFileResource, name_suffix="RecallFileResource")
+    recall_file_segment_model = merge_scope_model(user_model, RecallFileSegment, name_suffix="RecallFileSegment")
     return (
         resource_model,
         recall_file_model,
         recall_entry_model,
         recall_file_entry_model,
         recall_file_resource_model,
+        recall_file_segment_model,
     )
 
 
@@ -159,6 +182,7 @@ __all__ = [
     "RecallFile",
     "RecallFileEntry",
     "RecallFileResource",
+    "RecallFileSegment",
     "Resource",
     "ToolCallResult",
     "build_scoped_models",

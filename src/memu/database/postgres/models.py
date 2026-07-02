@@ -17,7 +17,15 @@ from sqlalchemy import ForeignKey, MetaData, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
-from memu.database.models import EntryType, RecallEntry, RecallFile, RecallFileEntry, RecallFileResource, Resource
+from memu.database.models import (
+    EntryType,
+    RecallEntry,
+    RecallFile,
+    RecallFileEntry,
+    RecallFileResource,
+    RecallFileSegment,
+    Resource,
+)
 
 
 class TZDateTime(DateTime):
@@ -81,6 +89,14 @@ class RecallFileResourceModel(BaseModelMixin, RecallFileResource):
     category_id: str = Field(sa_column=Column(ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False))
 
     __table_args__ = (Index("idx_recall_file_resources_unique", "resource_id", "category_id", unique=True),)
+
+
+class RecallFileSegmentModel(BaseModelMixin, RecallFileSegment):
+    recall_file_id: str = Field(
+        sa_column=Column(ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False, index=True)
+    )
+    text: str = Field(sa_column=Column(Text, nullable=False))
+    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
 
 
 def _normalize_table_args(table_args: Any) -> tuple[list[Any], dict[str, Any]]:
@@ -165,9 +181,9 @@ def build_table_model(
 
 def build_scoped_models(
     user_model: type[BaseModel],
-) -> tuple[type[SQLModel], type[SQLModel], type[SQLModel], type[SQLModel], type[SQLModel]]:
+) -> tuple[type[SQLModel], type[SQLModel], type[SQLModel], type[SQLModel], type[SQLModel], type[SQLModel]]:
     """
-    Build scoped SQLModel tables for each entity (resource, category, item, relation).
+    Build scoped SQLModel tables for each entity (resource, category, item, relation, segment).
     """
     resource_model = build_table_model(user_model, ResourceModel, tablename="resources")
     recall_file_model = build_table_model(
@@ -176,12 +192,14 @@ def build_scoped_models(
     recall_entry_model = build_table_model(user_model, RecallEntryModel, tablename="memory_items")
     recall_file_entry_model = build_table_model(user_model, RecallFileEntryModel, tablename="category_items")
     recall_file_resource_model = build_table_model(user_model, RecallFileResourceModel, tablename="resource_categories")
+    recall_file_segment_model = build_table_model(user_model, RecallFileSegmentModel, tablename="file_segments")
     return (
         resource_model,
         recall_file_model,
         recall_entry_model,
         recall_file_entry_model,
         recall_file_resource_model,
+        recall_file_segment_model,
     )
 
 
@@ -191,6 +209,7 @@ __all__ = [
     "RecallFileEntryModel",
     "RecallFileModel",
     "RecallFileResourceModel",
+    "RecallFileSegmentModel",
     "ResourceModel",
     "build_scoped_models",
     "build_table_model",

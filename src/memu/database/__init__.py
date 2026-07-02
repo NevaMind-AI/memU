@@ -7,6 +7,7 @@ from memu.database.interfaces import (
     RecallFileEntryRecord,
     RecallFileRecord,
     RecallFileResourceRecord,
+    RecallFileSegmentRecord,
     ResourceRecord,
 )
 from memu.database.repositories import (
@@ -14,6 +15,7 @@ from memu.database.repositories import (
     RecallFileEntryRepo,
     RecallFileRepo,
     RecallFileResourceRepo,
+    RecallFileSegmentRepo,
     ResourceRepo,
 )
 
@@ -27,6 +29,8 @@ __all__ = [
     "RecallFileRepo",
     "RecallFileResourceRecord",
     "RecallFileResourceRepo",
+    "RecallFileSegmentRecord",
+    "RecallFileSegmentRepo",
     "ResourceRecord",
     "ResourceRepo",
     "build_database",

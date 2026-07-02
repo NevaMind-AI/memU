@@ -692,8 +692,74 @@ class MemorizeMixin:
             llm_client=llm_client,
             embed_client=embed_client,
         )
+        await self._sync_file_segments(
+            files=touched,
+            file_track=file_track,
+            store=store,
+            user_scope=user_scope,
+            embed_client=embed_client,
+        )
         state["files"] = touched
         return state
+
+    @staticmethod
+    def _segment_texts_for_file(file: RecallFile, file_track: str) -> list[str]:
+        """Compute the searchable segment texts for a synthesized file (ADR 0007 L2 items).
+
+        The slicing rule is track-specific:
+
+        - ``skill``: a single ``name: ...\\ndescription: ...`` segment for the whole skill.
+        - ``memory``: one segment per content line, skipping blank lines and markdown
+          headings (lines starting with one or more ``#``).
+
+        Texts are stripped and de-duplicated while preserving order so a repeated line is
+        embedded only once.
+        """
+        if file_track == "skill":
+            return [f"name: {file.name}\ndescription: {file.description}"]
+
+        texts: list[str] = []
+        for line in (file.content or "").split("\n"):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            texts.append(stripped)
+        return list(dict.fromkeys(texts))
+
+    async def _sync_file_segments(
+        self,
+        *,
+        files: list[RecallFile],
+        file_track: str,
+        store: Database,
+        user_scope: dict[str, Any],
+        embed_client: Any,
+    ) -> None:
+        """Reconcile each file's stored segments with its freshly computed segment texts.
+
+        Diffs the new segment texts against the existing ones and does a drop-and-add on the
+        difference only: segments whose text disappeared are deleted, and only genuinely new
+        texts are embedded and inserted. Unchanged lines keep their existing embedding, so an
+        edit that touches a few lines does not re-embed the whole file.
+        """
+        for file in files:
+            new_texts = self._segment_texts_for_file(file, file_track)
+            existing = store.recall_file_segment_repo.list_segments_for_file(file.id)
+            existing_texts = {seg.text for seg in existing}
+            new_set = set(new_texts)
+
+            for seg in existing:
+                if seg.text not in new_set:
+                    store.recall_file_segment_repo.delete_segment(seg.id)
+
+            to_add = [text for text in new_texts if text not in existing_texts]
+            if not to_add:
+                continue
+            vecs = await embed_client.embed(to_add)
+            for text, vec in zip(to_add, vecs, strict=True):
+                store.recall_file_segment_repo.create_segment(
+                    recall_file_id=file.id, text=text, embedding=vec, user_data=dict(user_scope)
+                )
 
     async def _route_source_to_files(
         self,

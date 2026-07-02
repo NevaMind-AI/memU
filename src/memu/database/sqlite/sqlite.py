@@ -9,18 +9,27 @@ from pydantic import BaseModel
 from sqlmodel import SQLModel
 
 from memu.database.interfaces import Database
-from memu.database.models import RecallEntry, RecallFile, RecallFileEntry, RecallFileResource, Resource
+from memu.database.models import (
+    RecallEntry,
+    RecallFile,
+    RecallFileEntry,
+    RecallFileResource,
+    RecallFileSegment,
+    Resource,
+)
 from memu.database.repositories import (
     RecallEntryRepo,
     RecallFileEntryRepo,
     RecallFileRepo,
     RecallFileResourceRepo,
+    RecallFileSegmentRepo,
     ResourceRepo,
 )
 from memu.database.sqlite.repositories.recall_entry_repo import SQLiteRecallEntryRepo
 from memu.database.sqlite.repositories.recall_file_entry_repo import SQLiteRecallFileEntryRepo
 from memu.database.sqlite.repositories.recall_file_repo import SQLiteRecallFileRepo
 from memu.database.sqlite.repositories.recall_file_resource_repo import SQLiteRecallFileResourceRepo
+from memu.database.sqlite.repositories.recall_file_segment_repo import SQLiteRecallFileSegmentRepo
 from memu.database.sqlite.repositories.resource_repo import SQLiteResourceRepo
 from memu.database.sqlite.schema import SQLiteSQLAModels, get_sqlite_sqlalchemy_models
 from memu.database.sqlite.session import SQLiteSessionManager
@@ -52,11 +61,13 @@ class SQLiteStore(Database):
     recall_entry_repo: RecallEntryRepo
     recall_file_entry_repo: RecallFileEntryRepo
     recall_file_resource_repo: RecallFileResourceRepo
+    recall_file_segment_repo: RecallFileSegmentRepo
     resources: dict[str, Resource]
     items: dict[str, RecallEntry]
     categories: dict[str, RecallFile]
     relations: list[RecallFileEntry]
     resource_relations: list[RecallFileResource]
+    segments: list[RecallFileSegment]
 
     def __init__(
         self,
@@ -68,6 +79,7 @@ class SQLiteStore(Database):
         recall_entry_model: type[Any] | None = None,
         recall_file_entry_model: type[Any] | None = None,
         recall_file_resource_model: type[Any] | None = None,
+        recall_file_segment_model: type[Any] | None = None,
         sqla_models: SQLiteSQLAModels | None = None,
     ) -> None:
         """Initialize SQLite database store.
@@ -97,6 +109,7 @@ class SQLiteStore(Database):
         recall_entry_model = recall_entry_model or self._sqla_models.RecallEntry
         recall_file_entry_model = recall_file_entry_model or self._sqla_models.RecallFileEntry
         recall_file_resource_model = recall_file_resource_model or self._sqla_models.RecallFileResource
+        recall_file_segment_model = recall_file_segment_model or self._sqla_models.RecallFileSegment
 
         # Initialize repositories
         self.resource_repo = SQLiteResourceRepo(
@@ -134,6 +147,13 @@ class SQLiteStore(Database):
             sessions=self._sessions,
             scope_fields=self._scope_fields,
         )
+        self.recall_file_segment_repo = SQLiteRecallFileSegmentRepo(
+            state=self._state,
+            recall_file_segment_model=recall_file_segment_model,
+            sqla_models=self._sqla_models,
+            sessions=self._sessions,
+            scope_fields=self._scope_fields,
+        )
 
         # Set up cache references
         self.resources = self._state.resources
@@ -141,6 +161,7 @@ class SQLiteStore(Database):
         self.categories = self._state.categories
         self.relations = self._state.relations
         self.resource_relations = self._state.resource_relations
+        self.segments = self._state.segments
 
     def _create_tables(self) -> None:
         """Create SQLite tables if they don't exist."""
@@ -160,6 +181,7 @@ class SQLiteStore(Database):
         self.recall_entry_repo.load_existing()
         self.recall_file_entry_repo.load_existing()
         self.recall_file_resource_repo.load_existing()
+        self.recall_file_segment_repo.load_existing()
 
 
 __all__ = ["SQLiteStore"]

@@ -7,6 +7,7 @@ from memu.database.models import (
     RecallFile,
     RecallFileEntry,
     RecallFileResource,
+    RecallFileSegment,
     Resource,
     merge_scope_model,
 )
@@ -32,6 +33,10 @@ class InMemoryFileResource(RecallFileResource):
     """Concrete in-memory resource-category relation model."""
 
 
+class InMemoryFileSegment(RecallFileSegment):
+    """Concrete in-memory file-segment model."""
+
+
 def build_inmemory_models(
     user_model: type[BaseModel],
 ) -> tuple[
@@ -40,6 +45,7 @@ def build_inmemory_models(
     type[InMemoryRecallEntry],
     type[InMemoryFileEntry],
     type[InMemoryFileResource],
+    type[InMemoryFileSegment],
 ]:
     """
     Build scoped in-memory models that inherit from both the base interface and the user scope model.
@@ -49,18 +55,21 @@ def build_inmemory_models(
     recall_entry_model = merge_scope_model(user_model, InMemoryRecallEntry, name_suffix="RecallEntry")
     recall_file_entry_model = merge_scope_model(user_model, InMemoryFileEntry, name_suffix="RecallFileEntry")
     recall_file_resource_model = merge_scope_model(user_model, InMemoryFileResource, name_suffix="RecallFileResource")
+    recall_file_segment_model = merge_scope_model(user_model, InMemoryFileSegment, name_suffix="RecallFileSegment")
     return (
         resource_model,
         recall_file_model,
         recall_entry_model,
         recall_file_entry_model,
         recall_file_resource_model,
+        recall_file_segment_model,
     )
 
 
 __all__ = [
     "InMemoryFileEntry",
     "InMemoryFileResource",
+    "InMemoryFileSegment",
     "InMemoryRecallEntry",
     "InMemoryRecallFile",
     "InMemoryResource",
