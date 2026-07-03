@@ -78,22 +78,22 @@ class RecallFileModel(BaseModelMixin, RecallFile):
 
 
 class RecallFileEntryModel(BaseModelMixin, RecallFileEntry):
-    item_id: str = Field(sa_column=Column(ForeignKey("memory_items.id", ondelete="CASCADE"), nullable=False))
-    category_id: str = Field(sa_column=Column(ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False))
+    item_id: str = Field(sa_column=Column(ForeignKey("recall_entries.id", ondelete="CASCADE"), nullable=False))
+    category_id: str = Field(sa_column=Column(ForeignKey("recall_files.id", ondelete="CASCADE"), nullable=False))
 
     __table_args__ = (Index("idx_recall_file_entries_unique", "item_id", "category_id", unique=True),)
 
 
 class RecallFileResourceModel(BaseModelMixin, RecallFileResource):
     resource_id: str = Field(sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), nullable=False))
-    file_id: str = Field(sa_column=Column(ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False))
+    file_id: str = Field(sa_column=Column(ForeignKey("recall_files.id", ondelete="CASCADE"), nullable=False))
 
     __table_args__ = (Index("idx_recall_file_resources_unique", "resource_id", "file_id", unique=True),)
 
 
 class RecallFileSegmentModel(BaseModelMixin, RecallFileSegment):
     recall_file_id: str = Field(
-        sa_column=Column(ForeignKey("memory_categories.id", ondelete="CASCADE"), nullable=False, index=True)
+        sa_column=Column(ForeignKey("recall_files.id", ondelete="CASCADE"), nullable=False, index=True)
     )
     track: str = Field(default="memory", sa_column=Column(String, nullable=False, server_default="memory"))
     text: str = Field(sa_column=Column(Text, nullable=False))
@@ -188,12 +188,14 @@ def build_scoped_models(
     """
     resource_model = build_table_model(user_model, ResourceModel, tablename="resources")
     recall_file_model = build_table_model(
-        user_model, RecallFileModel, tablename="memory_categories", unique_with_scope=["name", "track"]
+        user_model, RecallFileModel, tablename="recall_files", unique_with_scope=["name"]
     )
-    recall_entry_model = build_table_model(user_model, RecallEntryModel, tablename="memory_items")
-    recall_file_entry_model = build_table_model(user_model, RecallFileEntryModel, tablename="category_items")
-    recall_file_resource_model = build_table_model(user_model, RecallFileResourceModel, tablename="resource_categories")
-    recall_file_segment_model = build_table_model(user_model, RecallFileSegmentModel, tablename="file_segments")
+    recall_entry_model = build_table_model(user_model, RecallEntryModel, tablename="recall_entries")
+    recall_file_entry_model = build_table_model(user_model, RecallFileEntryModel, tablename="recall_file_entries")
+    recall_file_resource_model = build_table_model(
+        user_model, RecallFileResourceModel, tablename="recall_file_resources"
+    )
+    recall_file_segment_model = build_table_model(user_model, RecallFileSegmentModel, tablename="recall_file_segments")
     return (
         resource_model,
         recall_file_model,
