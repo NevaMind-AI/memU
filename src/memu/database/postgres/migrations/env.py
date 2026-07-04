@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from logging.config import fileConfig
-from typing import Any
+from typing import Any, Literal
 
 from alembic import context
+from alembic.autogenerate.api import AutogenContext
+from alembic.runtime.environment import NameFilterParentNames, NameFilterType
 from sqlalchemy import MetaData, engine_from_config, pool
 
 from memu.database.postgres.schema import get_metadata
@@ -22,7 +24,7 @@ def get_target_metadata() -> MetaData | None:
 target_metadata: MetaData | None = get_target_metadata()
 
 
-def include_name(name: str | None, type_: str, parent_names: dict[str, str | None]) -> bool:
+def include_name(name: str | None, type_: NameFilterType, parent_names: NameFilterParentNames) -> bool:
     """Only manage tables declared in our metadata.
 
     Keeps autogenerate from emitting drops for unrelated tables when the
@@ -33,7 +35,7 @@ def include_name(name: str | None, type_: str, parent_names: dict[str, str | Non
     return True
 
 
-def render_item(type_: str, obj: Any, autogen_context: Any) -> str | bool:
+def render_item(type_: str, obj: Any, autogen_context: AutogenContext) -> str | Literal[False]:
     """Keep generated revisions self-contained (no app-model imports)."""
     if type_ == "type":
         module = obj.__class__.__module__
