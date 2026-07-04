@@ -253,7 +253,7 @@ async def test_memorize_workspace_exports_when_enabled(tmp_path: Path, monkeypat
     await service.memorize_workspace(folder=str(src_dir), user=user)
 
     # Export ran (scoped to the user) and produced the root index on disk.
-    assert exported == [user]
+    assert exported == [service.user_model(**user).model_dump()]
     assert (out_dir / "INDEX.md").exists()
 
 
