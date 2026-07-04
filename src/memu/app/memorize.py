@@ -14,7 +14,6 @@ import defusedxml.ElementTree as ET
 from pydantic import BaseModel
 
 from memu.app.settings import CategoryConfig, CustomPrompt
-from memu.blob.folder import diff_folder, load_manifest, manifest_from_scan, save_manifest, scan_folder
 from memu.database.models import EntryType, RecallEntry, RecallFile, RecallFileEntry, Resource
 from memu.preprocess import PreprocessContext, preprocess_resource
 from memu.prompts.category_summary import (
@@ -22,11 +21,6 @@ from memu.prompts.category_summary import (
 )
 from memu.prompts.category_summary import (
     PROMPT as CATEGORY_SUMMARY_PROMPT,
-)
-from memu.prompts.memory_fs import (
-    DESCRIPTIONS_PLACEHOLDER,
-    EXISTING_PLACEHOLDER,
-    SKILL_FILE_SYNTHESIS_PROMPT,
 )
 from memu.prompts.memory_type import (
     CUSTOM_PROMPTS as MEMORY_TYPE_CUSTOM_PROMPTS,
@@ -107,6 +101,8 @@ class MemorizeMixin:
             "user": user_scope,
             # Legacy single-resource path: force only the provided categories.
             "allow_new_categories": False,
+            # Legacy path does not classify by workspace track.
+            "resource_track": None,
         }
 
         result = await self._run_workflow("memorize", state)
@@ -115,182 +111,6 @@ class MemorizeMixin:
             msg = "Memorize workflow failed to produce a response"
             raise RuntimeError(msg)
         return response
-
-    async def memorize_workspace(
-        self,
-        *,
-        folder: str,
-        user: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Sync a folder of source files into memory by diffing an input manifest.
-
-        Scans ``folder`` recursively, infers each file's modality by extension
-        (unsupported extensions are skipped), and diffs against the sidecar
-        ``.memu_manifest.json`` to find added/modified/deleted files. Modified and
-        deleted files have their previously extracted memory cascade-deleted (with
-        affected category summaries recomputed); added and modified files are
-        (re)memorized by submitting each one through the single-file
-        :meth:`memorize` workflow. The manifest is then rewritten.
-
-        ``memorize`` itself is left untouched: this is purely an additive,
-        directory-oriented entry point built on top of it.
-        """
-        ctx = self._get_context()
-        store = self._get_database()
-        user_scope = self.user_model(**user).model_dump() if user is not None else None
-        await self._ensure_categories_ready(ctx, store, user_scope)
-
-        root = pathlib.Path(folder).resolve()
-        scanned = scan_folder(root)
-        manifest = load_manifest(root)
-        diff = diff_folder(scanned, manifest)
-
-        # 1. Cascade-delete memory for files that were modified or removed.
-        stale_urls = {sf.abs_path for sf in diff.modified}
-        stale_urls.update(str(root / rel) for rel in diff.deleted)
-        removed_resources = await self._cascade_delete_by_urls(stale_urls, ctx=ctx, store=store, user_scope=user_scope)
-
-        # 2. (Re)memorize added and modified files; each file maps to one Resource.
-        changed_resources: list[Resource] = []
-        entries: list[dict[str, Any]] = []
-        files: list[dict[str, Any]] = []
-        for scanned_file in [*diff.added, *diff.modified]:
-            result = await self._memorize_one(
-                resource_url=scanned_file.abs_path,
-                modality=scanned_file.modality,
-                user_scope=user_scope,
-                ctx=ctx,
-                store=store,
-            )
-            changed_resources.extend(cast("list[Resource]", result.get("resources") or []))
-            # The inner single-file ``memorize`` keeps its legacy response keys
-            # (``items``/``categories``); translate them to the new vocabulary here.
-            response = cast("dict[str, Any]", result.get("response") or {})
-            entries.extend(response.get("items", []))
-            # Files reflect the cumulative scoped state, so the latest wins.
-            if response.get("categories"):
-                files = response["categories"]
-
-        # 3. Refresh the memory file tree (full rebuild when anything was removed).
-        await self._update_memory_files(changed_resources, user_scope, force_full=diff.has_removals)
-
-        # 4. Persist the updated input manifest.
-        save_manifest(root, manifest_from_scan(scanned))
-
-        return {
-            "folder": str(root),
-            "added": [sf.rel_path for sf in diff.added],
-            "modified": [sf.rel_path for sf in diff.modified],
-            "deleted": list(diff.deleted),
-            "resources": [self._model_dump_without_embeddings(r) for r in changed_resources],
-            "removed_resources": [self._model_dump_without_embeddings(r) for r in removed_resources],
-            "entries": entries,
-            "files": files,
-        }
-
-    async def _memorize_one(
-        self,
-        *,
-        resource_url: str,
-        modality: str,
-        user_scope: dict[str, Any] | None,
-        ctx: Context,
-        store: Database,
-    ) -> WorkflowState:
-        """Run the memorize workflow for a single file (one file -> one Resource).
-
-        This mirrors :meth:`memorize` but returns the full workflow state (so the
-        workspace sync can collect the created resources) and takes an already
-        resolved ``user_scope``/``ctx``/``store`` to avoid re-resolving them per file.
-        """
-        memory_types = self._resolve_memory_types()
-        state: WorkflowState = {
-            "resource_url": resource_url,
-            "modality": modality,
-            "memory_types": memory_types,
-            "categories_prompt_str": self._category_prompt_str,
-            "ctx": ctx,
-            "store": store,
-            "category_ids": list(ctx.category_ids),
-            "user": user_scope,
-            # Workspace sync path: let the extractor grow the taxonomy.
-            "allow_new_categories": True,
-        }
-        # The workspace path runs its own workflow (memorize + per-file skill
-        # generation); single-file ``memorize`` stays untouched (ADR 0006).
-        result = await self._run_workflow("memorize_workspace", state)
-        if result.get("response") is None:
-            msg = "Memorize workflow failed to produce a response"
-            raise RuntimeError(msg)
-        return result
-
-    async def _cascade_delete_by_urls(
-        self,
-        urls: set[str],
-        *,
-        ctx: Context,
-        store: Database,
-        user_scope: dict[str, Any] | None,
-    ) -> list[Resource]:
-        """Delete resources (and their items/relations) whose url is in ``urls``.
-
-        Affected category summaries are recomputed so the structured memory stays
-        consistent after a source file is changed or removed.
-        """
-        if not urls:
-            return []
-        where = user_scope or None
-        targets = [res for res in store.resource_repo.list_resources(where=where).values() if res.url in urls]
-        if not targets:
-            return []
-        target_ids = {res.id for res in targets}
-
-        # Discarded entry summaries per file, used to recompute summaries.
-        file_discards: dict[str, list[str]] = {}
-        for entry in store.recall_entry_repo.list_items(where=where).values():
-            if entry.resource_id not in target_ids:
-                continue
-            for relation in store.recall_file_entry_repo.get_item_categories(entry.id):
-                store.recall_file_entry_repo.unlink_item_category(entry.id, relation.category_id)
-                file_discards.setdefault(relation.category_id, []).append(entry.summary)
-            store.recall_entry_repo.delete_item(entry.id)
-
-        for res in targets:
-            store.resource_repo.delete_resource(res.id)
-
-        updates: dict[str, tuple[str | None, str | None]] = {
-            cid: ("\n".join(s for s in summaries if s and s.strip()), None)
-            for cid, summaries in file_discards.items()
-            if any(s and s.strip() for s in summaries)
-        }
-        if updates:
-            await self._patch_category_summaries(updates, ctx=ctx, store=store, llm_client=self._get_llm_client())
-        return targets
-
-    async def _update_memory_files(
-        self,
-        changed_resources: list[Resource],
-        user_scope: dict[str, Any] | None,
-        *,
-        force_full: bool = False,
-    ) -> None:
-        """Refresh the memory file tree after a workspace sync (init or incremental).
-
-        Gated behind ``memory_files_config.enabled`` so a sync without the export
-        feature configured is a no-op. When any file was modified or deleted
-        (``force_full``), the tree is rebuilt from the full scoped store so stale
-        skills/entries do not linger; otherwise an incremental update merges the
-        just-created resources. Best-effort: the structured memory is already
-        persisted, so an export error must not fail the sync.
-        """
-        if not getattr(self.memory_files_config, "enabled", False):
-            return
-        if not changed_resources and not force_full:
-            return
-        try:
-            await self._build_memory_files(user_scope, changed=None if force_full else changed_resources)
-        except Exception:
-            logger.exception("Memory file export failed after workspace memorize")
 
     def _build_memorize_workflow(self) -> list[WorkflowStep]:
         steps = [
@@ -346,6 +166,7 @@ class MemorizeMixin:
                     "modality",
                     "user",
                     "allow_new_categories",
+                    "resource_track",
                 },
                 produces={"resources", "entries", "relations", "file_updates"},
                 capabilities={"db", "vector"},
@@ -383,31 +204,8 @@ class MemorizeMixin:
             "category_ids",
             "user",
             "allow_new_categories",
+            "resource_track",
         }
-
-    def _build_memorize_workspace_workflow(self) -> list[WorkflowStep]:
-        """The workspace memorize pipeline: the memory steps plus skill generation.
-
-        Identical to :meth:`_build_memorize_workflow` but inserts a per-file
-        ``generate_skills`` step (ADR 0006) before the response is emitted. It runs
-        on the ``memorize_workspace`` path only, so single-file ``memorize`` is
-        unchanged. The skill step has no data dependency on the memory persist
-        output — it consumes ``preprocessed_resources`` — so it slots in after
-        persist purely for sequencing.
-        """
-        steps = self._build_memorize_workflow()
-        skill_step = WorkflowStep(
-            step_id="generate_skills",
-            role="generate_skills",
-            handler=self._memorize_generate_skills,
-            requires={"preprocessed_resources", "store", "user"},
-            produces={"skills"},
-            capabilities={"llm", "db", "vector"},
-            config={"chat_llm_profile": getattr(self.memory_files_config, "synthesis_llm_profile", "default")},
-        )
-        # Insert just before the terminal build_response step.
-        steps.insert(-1, skill_step)
-        return steps
 
     async def _memorize_ingest_resource(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         local_path, raw_text = await self.fs.fetch(state["resource_url"], state["modality"])
@@ -481,6 +279,7 @@ class MemorizeMixin:
         file_updates: dict[str, list[tuple[str, str]]] = {}
         user_scope = state.get("user", {})
         allow_new_categories = state.get("allow_new_categories", False)
+        track = state.get("resource_track")
 
         for plan in state.get("resource_plans", []):
             res = await self._create_resource_with_caption(
@@ -491,6 +290,7 @@ class MemorizeMixin:
                 store=store,
                 embed_client=embed_client,
                 user=user_scope,
+                track=track,
             )
             resources.append(res)
 
@@ -535,94 +335,6 @@ class MemorizeMixin:
                 store=state["store"],
             )
         return state
-
-    async def _memorize_generate_skills(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        """Generate/patch skill-track ``RecallFile``s from this file's content (ADR 0006).
-
-        Gated behind ``memory_files_config.synthesize``. Reads the preprocessed
-        content of the current source plus the existing skill-track files (so file
-        *N* sees skills created by files *1..N-1*), asks the LLM for skills to add or
-        revise, and persists each directly as a ``RecallFile(track="skill")`` —
-        embedding ``name + description`` and storing the body as ``content``, bypassing
-        the ``RecallEntry`` plane.
-        """
-        if not getattr(self.memory_files_config, "synthesize", False):
-            return state
-        content = self._format_skill_source_content(state.get("preprocessed_resources") or [])
-        if not content:
-            return state
-
-        store = state["store"]
-        user_scope = dict(state.get("user") or {})
-        llm_client = self._get_step_llm_client(step_context)
-        embed_client = self._get_step_embedding_client(step_context)
-
-        existing = store.recall_file_repo.list_categories(where={**user_scope, "track": "skill"})
-        existing_text = self._format_existing_skills(existing) or "(none)"
-        prompt = SKILL_FILE_SYNTHESIS_PROMPT.replace(EXISTING_PLACEHOLDER, existing_text).replace(
-            DESCRIPTIONS_PLACEHOLDER, self._escape_prompt_value(content)
-        )
-        parsed = self._parse_skill_files(await llm_client.chat(prompt))
-
-        persisted: list[RecallFile] = []
-        for name, description, body in parsed:
-            emb_text = f"{name}: {description}" if description else name
-            embedding = (await embed_client.embed([emb_text]))[0]
-            skill = store.recall_file_repo.get_or_create_category(
-                name=name,
-                description=description,
-                embedding=embedding,
-                user_data=user_scope,
-                track="skill",
-            )
-            persisted.append(store.recall_file_repo.update_category(category_id=skill.id, content=body))
-        state["skills"] = persisted
-        return state
-
-    @staticmethod
-    def _format_skill_source_content(preprocessed_resources: list[dict[str, Any]]) -> str:
-        """Flatten a source's preprocessed segments into a single text block."""
-        parts = [
-            " ".join((prep.get("text") or "").split())
-            for prep in preprocessed_resources
-            if (prep.get("text") or "").strip()
-        ]
-        return "\n\n".join(parts)
-
-    @staticmethod
-    def _format_existing_skills(existing: Mapping[str, RecallFile]) -> str:
-        """Render existing skill files as ``## name\\nbody`` blocks for the prompt."""
-        return "\n\n".join(
-            f"## {skill.name}\n{(skill.content or '').strip()}".strip()
-            for skill in sorted(existing.values(), key=lambda s: s.name)
-        )
-
-    def _parse_skill_files(self, raw: str) -> list[tuple[str, str, str]]:
-        """Parse the skill-synthesis JSON array into ``(name, description, body)`` tuples."""
-        if not raw:
-            return []
-        start = raw.find("[")
-        end = raw.rfind("]")
-        if start == -1 or end == -1 or end <= start:
-            return []
-        try:
-            parsed = json.loads(raw[start : end + 1])
-        except (json.JSONDecodeError, TypeError):
-            return []
-        if not isinstance(parsed, list):
-            return []
-        skills: list[tuple[str, str, str]] = []
-        for entry in parsed:
-            if not isinstance(entry, dict):
-                continue
-            name = entry.get("name")
-            body = entry.get("body")
-            if not isinstance(name, str) or not name.strip() or not isinstance(body, str) or not body.strip():
-                continue
-            description = entry.get("description")
-            description = description.strip() if isinstance(description, str) else ""
-            skills.append((name.strip(), description, body.strip()))
-        return skills
 
     def _memorize_build_response(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         ctx = state["ctx"]
@@ -687,6 +399,7 @@ class MemorizeMixin:
         store: Database,
         embed_client: Any | None = None,
         user: Mapping[str, Any] | None = None,
+        track: str | None = None,
     ) -> Resource:
         caption_text = caption.strip() if caption else None
         if caption_text:
@@ -702,6 +415,7 @@ class MemorizeMixin:
             caption=caption_text,
             embedding=caption_embedding,
             user_data=dict(user or {}),
+            track=track,
         )
         # if caption:
         #     caption_text = caption.strip()

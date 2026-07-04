@@ -10,8 +10,10 @@ from pydantic import BaseModel
 from memu.app.client_pool import ClientPool
 from memu.app.crud import CRUDMixin
 from memu.app.memorize import MemorizeMixin
+from memu.app.memorize_workspace import MemorizeWorkspaceMixin
 from memu.app.memory_files import MemoryFilesBuilder
 from memu.app.retrieve import RetrieveMixin
+from memu.app.retrieve_workspace import RetrieveWorkspaceMixin
 from memu.app.settings import (
     BlobConfig,
     CategoryConfig,
@@ -57,7 +59,7 @@ class Context:
     category_init_task: asyncio.Task | None = None
 
 
-class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
+class MemoryService(MemorizeMixin, MemorizeWorkspaceMixin, RetrieveMixin, RetrieveWorkspaceMixin, CRUDMixin):
     def __init__(
         self,
         *,
@@ -343,7 +345,7 @@ class MemoryService(MemorizeMixin, RetrieveMixin, CRUDMixin):
         self._pipelines.register("retrieve_rag", rag_workflow, initial_state_keys=retrieve_initial_keys)
         llm_workflow = self._build_llm_retrieve_workflow()
         self._pipelines.register("retrieve_llm", llm_workflow, initial_state_keys=retrieve_initial_keys)
-        # Simple embedding-only workspace retrieval: file/entry/resource recall + response.
+        # Simple embedding-only workspace retrieval: segment recall + file roll-up + resource recall.
         workspace_retrieve_workflow = self._build_retrieve_workspace_workflow()
         self._pipelines.register(
             "retrieve_workspace",

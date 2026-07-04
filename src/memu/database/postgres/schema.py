@@ -23,13 +23,22 @@ except ImportError as exc:
     msg = "pgvector is required for Postgres vector support"
     raise ImportError(msg) from exc
 
+from memu.app.settings import DefaultUserModel
 from memu.database.postgres.models import (
     RecallEntryModel,
     RecallFileEntryModel,
     RecallFileModel,
+    RecallFileResourceModel,
+    RecallFileSegmentModel,
     ResourceModel,
     build_table_model,
 )
+
+# Default user scope for the committed Alembic baseline. ``DefaultUserModel``
+# (in ``memu.app.settings``) is the single source of truth for the built-in
+# scope columns (``user_id`` / ``agent_id``); this alias keeps the schema and
+# the migration generated against it in sync with the app default.
+DefaultScope = DefaultUserModel
 
 
 @dataclass
@@ -39,6 +48,8 @@ class SQLAModels:
     RecallFile: type[Any]
     RecallEntry: type[Any]
     RecallFileEntry: type[Any]
+    RecallFileResource: type[Any]
+    RecallFileSegment: type[Any]
 
 
 _MODEL_CACHE: dict[type[Any], SQLAModels] = {}
@@ -53,7 +64,7 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
     Build (and cache) SQLModel ORM models for Postgres storage.
     """
     require_sqlalchemy()
-    scope = scope_model or BaseModel
+    scope = scope_model or DefaultScope
     cache_key = scope
     cached = _MODEL_CACHE.get(cache_key)
     if cached:
@@ -70,19 +81,31 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
     recall_file_model = build_table_model(
         scope,
         RecallFileModel,
-        tablename="memory_categories",
+        tablename="recall_files",
         metadata=metadata_obj,
     )
     recall_entry_model = build_table_model(
         scope,
         RecallEntryModel,
-        tablename="memory_items",
+        tablename="recall_entries",
         metadata=metadata_obj,
     )
     recall_file_entry_model = build_table_model(
         scope,
         RecallFileEntryModel,
-        tablename="category_items",
+        tablename="recall_file_entries",
+        metadata=metadata_obj,
+    )
+    recall_file_resource_model = build_table_model(
+        scope,
+        RecallFileResourceModel,
+        tablename="recall_file_resources",
+        metadata=metadata_obj,
+    )
+    recall_file_segment_model = build_table_model(
+        scope,
+        RecallFileSegmentModel,
+        tablename="recall_file_segments",
         metadata=metadata_obj,
     )
 
@@ -96,6 +119,8 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
         RecallFile=recall_file_model,
         RecallEntry=recall_entry_model,
         RecallFileEntry=recall_file_entry_model,
+        RecallFileResource=recall_file_resource_model,
+        RecallFileSegment=recall_file_segment_model,
     )
     _MODEL_CACHE[cache_key] = models
     return models

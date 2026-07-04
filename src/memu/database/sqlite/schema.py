@@ -13,6 +13,8 @@ from memu.database.sqlite.models import (
     SQLiteRecallEntryModel,
     SQLiteRecallFileEntryModel,
     SQLiteRecallFileModel,
+    SQLiteRecallFileResourceModel,
+    SQLiteRecallFileSegmentModel,
     SQLiteResourceModel,
     build_sqlite_table_model,
 )
@@ -27,6 +29,8 @@ class SQLiteSQLAModels:
     RecallFile: type[Any]
     RecallEntry: type[Any]
     RecallFileEntry: type[Any]
+    RecallFileResource: type[Any]
+    RecallFileSegment: type[Any]
 
 
 _MODEL_CACHE: dict[type[Any], SQLiteSQLAModels] = {}
@@ -75,6 +79,18 @@ def get_sqlite_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) 
         tablename="memu_category_items",
         metadata=metadata_obj,
     )
+    recall_file_resource_model = build_sqlite_table_model(
+        scope,
+        SQLiteRecallFileResourceModel,
+        tablename="memu_resource_categories",
+        metadata=metadata_obj,
+    )
+    recall_file_segment_model = build_sqlite_table_model(
+        scope,
+        SQLiteRecallFileSegmentModel,
+        tablename="memu_file_segments",
+        metadata=metadata_obj,
+    )
 
     class SQLiteBase(SQLModel):
         __abstract__ = True
@@ -86,6 +102,8 @@ def get_sqlite_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) 
         RecallFile=recall_file_model,
         RecallEntry=recall_entry_model,
         RecallFileEntry=recall_file_entry_model,
+        RecallFileResource=recall_file_resource_model,
+        RecallFileSegment=recall_file_segment_model,
     )
     _MODEL_CACHE[cache_key] = models
     return models

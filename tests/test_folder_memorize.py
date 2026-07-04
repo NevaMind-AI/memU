@@ -159,7 +159,7 @@ async def test_memorize_workspace_sync_add_modify_delete(tmp_path: Path, monkeyp
     async def _noop_patch(updates, *, ctx, store, llm_client=None) -> None:
         return None
 
-    async def _fake_memorize_one(*, resource_url, modality, user_scope, ctx, store) -> dict[str, Any]:
+    async def _fake_memorize_one(*, resource_url, modality, user_scope, ctx, store, track=None) -> dict[str, Any]:
         res = store.resource_repo.create_resource(
             url=resource_url,
             modality=modality,
@@ -167,6 +167,7 @@ async def test_memorize_workspace_sync_add_modify_delete(tmp_path: Path, monkeyp
             caption="cap",
             embedding=None,
             user_data=dict(user_scope or {}),
+            track=track,
         )
         store.recall_entry_repo.create_item(
             resource_id=res.id,
@@ -225,7 +226,7 @@ async def test_memorize_workspace_exports_when_enabled(tmp_path: Path, monkeypat
     async def _noop_categories(*a, **k) -> None:
         return None
 
-    async def _fake_memorize_one(*, resource_url, modality, user_scope, ctx, store) -> dict[str, Any]:
+    async def _fake_memorize_one(*, resource_url, modality, user_scope, ctx, store, track=None) -> dict[str, Any]:
         res = store.resource_repo.create_resource(
             url=resource_url,
             modality=modality,
@@ -233,6 +234,7 @@ async def test_memorize_workspace_exports_when_enabled(tmp_path: Path, monkeypat
             caption="cap",
             embedding=None,
             user_data=dict(user_scope or {}),
+            track=track,
         )
         return {"resources": [res], "response": {"items": []}}
 
@@ -251,7 +253,7 @@ async def test_memorize_workspace_exports_when_enabled(tmp_path: Path, monkeypat
     await service.memorize_workspace(folder=str(src_dir), user=user)
 
     # Export ran (scoped to the user) and produced the root index on disk.
-    assert exported == [user]
+    assert exported == [service.user_model(**user).model_dump()]
     assert (out_dir / "INDEX.md").exists()
 
 
@@ -267,7 +269,7 @@ async def test_memorize_workspace_export_failure_does_not_fail_sync(tmp_path: Pa
     async def _noop_categories(*a, **k) -> None:
         return None
 
-    async def _fake_memorize_one(*, resource_url, modality, user_scope, ctx, store) -> dict[str, Any]:
+    async def _fake_memorize_one(*, resource_url, modality, user_scope, ctx, store, track=None) -> dict[str, Any]:
         res = store.resource_repo.create_resource(
             url=resource_url,
             modality=modality,
@@ -275,6 +277,7 @@ async def test_memorize_workspace_export_failure_does_not_fail_sync(tmp_path: Pa
             caption="cap",
             embedding=None,
             user_data=dict(user_scope or {}),
+            track=track,
         )
         return {"resources": [res], "response": {"items": []}}
 

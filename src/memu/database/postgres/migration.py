@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from typing import Any, Literal
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect
 
 try:  # Optional dependency for Postgres backend
     from alembic import command
@@ -39,50 +39,34 @@ def run_migrations(*, dsn: str, scope_model: type[Any], ddl_mode: DDLMode = "cre
     Args:
         dsn: Database connection string
         scope_model: User scope model for scoped tables
-        ddl_mode: "create" to create missing tables, "validate" to only check schema
+        ddl_mode: "create" to apply migrations up to head, "validate" to only check schema
+
+    Alembic is the source of truth for schema: "create" runs ``upgrade head``
+    rather than ``metadata.create_all`` so that a fresh database is built from
+    the committed revisions. The pgvector extension is enabled by the initial
+    revision, so no separate bootstrap step is required here.
     """
     from memu.database.postgres.schema import get_metadata
 
-    metadata = get_metadata(scope_model)
-    engine = create_engine(dsn)
-
     if ddl_mode == "create":
-        # Enable pgvector extension if needed (requires superuser or extension already installed)
-        with engine.connect() as conn:
-            try:
-                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-                conn.commit()
-                logger.info("pgvector extension enabled")
-            except Exception as e:
-                # Check if extension already exists
-                result = conn.execute(text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")).fetchone()
-                if result:
-                    logger.info("pgvector extension already installed")
-                else:
-                    msg = (
-                        "Failed to create pgvector extension. "
-                        "Please run 'CREATE EXTENSION vector;' as a superuser first."
-                    )
-                    raise RuntimeError(msg) from e
-
-        # Create all tables that don't exist
-        metadata.create_all(engine)
-        logger.info("Database tables created/verified")
+        cfg = make_alembic_config(dsn=dsn, scope_model=scope_model)
+        command.upgrade(cfg, "head")
+        logger.info("Database migrated to head")
     elif ddl_mode == "validate":
-        # Validate that all expected tables exist
-        inspector = inspect(engine)
-        existing_tables = set(inspector.get_table_names())
-        expected_tables = set(metadata.tables.keys())
-        missing_tables = expected_tables - existing_tables
+        metadata = get_metadata(scope_model)
+        engine = create_engine(dsn)
+        try:
+            inspector = inspect(engine)
+            existing_tables = set(inspector.get_table_names())
+            expected_tables = set(metadata.tables.keys())
+            missing_tables = expected_tables - existing_tables
 
-        if missing_tables:
-            msg = f"Database schema validation failed. Missing tables: {sorted(missing_tables)}"
-            raise RuntimeError(msg)
-        logger.info("Database schema validated successfully")
-
-    # Run any pending Alembic migrations
-    cfg = make_alembic_config(dsn=dsn, scope_model=scope_model)
-    command.upgrade(cfg, "head")
+            if missing_tables:
+                msg = f"Database schema validation failed. Missing tables: {sorted(missing_tables)}"
+                raise RuntimeError(msg)
+            logger.info("Database schema validated successfully")
+        finally:
+            engine.dispose()
 
 
 __all__ = ["DDLMode", "make_alembic_config", "run_migrations"]

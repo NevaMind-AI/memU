@@ -20,14 +20,13 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from memu.app.service import Context
-    from memu.app.settings import RetrieveConfig, RetrieveWorkspaceConfig
+    from memu.app.settings import RetrieveConfig
     from memu.database.interfaces import Database
 
 
 class RetrieveMixin:
     if TYPE_CHECKING:
         retrieve_config: RetrieveConfig
-        retrieve_workspace_config: RetrieveWorkspaceConfig
         _run_workflow: Callable[..., Awaitable[WorkflowState]]
         _get_context: Callable[[], Context]
         _get_database: Callable[[], Database]
@@ -83,42 +82,6 @@ class RetrieveMixin:
         response = cast(dict[str, Any] | None, result.get("response"))
         if response is None:
             msg = "Retrieve workflow failed to produce a response"
-            raise RuntimeError(msg)
-        return response
-
-    async def retrieve_workspace(
-        self,
-        query: str,
-        where: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Single-shot, LLM-free retrieval across the file/entry/resource layers.
-
-        Mirrors the relation between :meth:`memorize` and ``memorize_workspace``:
-        a simpler entry point built on the same store and workflow machinery. The
-        query is embedded once and each enabled layer is ranked by vector
-        similarity — no intention routing, sufficiency checks, or summarization.
-        When ``file.tracks`` is set, the file layer is filtered on the ``track``
-        column. Returns ``files``, ``entries``, and ``resources``.
-        """
-        if not query or not query.strip():
-            raise ValueError("empty_query")
-        store = self._get_database()
-        where_filters = self._normalize_where(where)
-        config = self.retrieve_workspace_config
-
-        state: WorkflowState = {
-            "query": query,
-            "store": store,
-            "where": where_filters,
-            "retrieve_file": config.file.enabled,
-            "retrieve_entry": config.entry.enabled,
-            "retrieve_resource": config.resource.enabled,
-        }
-
-        result = await self._run_workflow("retrieve_workspace", state)
-        response = cast(dict[str, Any] | None, result.get("response"))
-        if response is None:
-            msg = "Retrieve workspace workflow failed to produce a response"
             raise RuntimeError(msg)
         return response
 
@@ -1462,134 +1425,3 @@ class RetrieveMixin:
             caption = res.get("caption", "") or f"Resource {res['url']}"
             lines.append(f"Resource: {caption}")
         return "\n\n".join(lines).strip()
-
-    def _build_retrieve_workspace_workflow(self) -> list[WorkflowStep]:
-        """The simple embedding-only workspace retrieval pipeline.
-
-        Three recall steps (file/entry/resource) feeding a terminal response step,
-        with none of the routing/sufficiency machinery of ``retrieve_rag``. The
-        query vector is embedded by the first recall step and reused downstream.
-        """
-        steps = [
-            WorkflowStep(
-                step_id="recall_files",
-                role="recall_files",
-                handler=self._ws_recall_files,
-                requires={"retrieve_file", "query", "store", "where"},
-                produces={"file_hits", "file_pool", "query_vector"},
-                capabilities={"vector"},
-                config={"embed_llm_profile": "embedding"},
-            ),
-            WorkflowStep(
-                step_id="recall_entries",
-                role="recall_entries",
-                handler=self._ws_recall_entries,
-                requires={"retrieve_entry", "query", "store", "where", "query_vector"},
-                produces={"entry_hits", "entry_pool", "query_vector"},
-                capabilities={"vector"},
-                config={"embed_llm_profile": "embedding"},
-            ),
-            WorkflowStep(
-                step_id="recall_resources",
-                role="recall_resources",
-                handler=self._ws_recall_resources,
-                requires={"retrieve_resource", "query", "store", "where", "query_vector"},
-                produces={"resource_hits", "resource_pool", "query_vector"},
-                capabilities={"vector"},
-                config={"embed_llm_profile": "embedding"},
-            ),
-            WorkflowStep(
-                step_id="build_response",
-                role="build_context",
-                handler=self._ws_build_response,
-                requires={
-                    "file_hits",
-                    "file_pool",
-                    "entry_hits",
-                    "entry_pool",
-                    "resource_hits",
-                    "resource_pool",
-                },
-                produces={"response"},
-                capabilities=set(),
-            ),
-        ]
-        return steps
-
-    @staticmethod
-    def _list_retrieve_workspace_initial_keys() -> set[str]:
-        return {"query", "store", "where", "retrieve_file", "retrieve_entry", "retrieve_resource"}
-
-    async def _ws_query_vector(self, state: WorkflowState, step_context: Any) -> list[float]:
-        """Embed the query once and cache it on the state for reuse across steps."""
-        cached = state.get("query_vector")
-        if cached is not None:
-            return cast(list[float], cached)
-        embed_client = self._get_step_embedding_client(step_context)
-        qvec = (await embed_client.embed([state["query"]]))[0]
-        state["query_vector"] = qvec
-        return cast(list[float], qvec)
-
-    async def _ws_recall_files(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("retrieve_file"):
-            state["file_hits"] = []
-            state["file_pool"] = {}
-            state.setdefault("query_vector", None)
-            return state
-
-        store = state["store"]
-        # The file repo has no vector search, so rank the stored file embeddings
-        # directly. Optionally scope to the requested tracks via the where filter.
-        file_where = dict(state.get("where") or {})
-        tracks = self.retrieve_workspace_config.file.tracks
-        if tracks:
-            file_where["track__in"] = list(tracks)
-        file_pool = store.recall_file_repo.list_categories(file_where)
-        qvec = await self._ws_query_vector(state, step_context)
-        state["file_hits"] = cosine_topk(
-            qvec,
-            [(fid, f.embedding) for fid, f in file_pool.items()],
-            k=self.retrieve_workspace_config.file.top_k,
-        )
-        state["file_pool"] = file_pool
-        return state
-
-    async def _ws_recall_entries(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("retrieve_entry"):
-            state["entry_hits"] = []
-            state["entry_pool"] = {}
-            return state
-
-        store = state["store"]
-        where_filters = state.get("where") or {}
-        entry_pool = store.recall_entry_repo.list_items(where_filters)
-        qvec = await self._ws_query_vector(state, step_context)
-        state["entry_hits"] = store.recall_entry_repo.vector_search_items(
-            qvec, self.retrieve_workspace_config.entry.top_k, where=where_filters
-        )
-        state["entry_pool"] = entry_pool
-        return state
-
-    async def _ws_recall_resources(self, state: WorkflowState, step_context: Any) -> WorkflowState:
-        if not state.get("retrieve_resource"):
-            state["resource_hits"] = []
-            state["resource_pool"] = {}
-            return state
-
-        store = state["store"]
-        where_filters = state.get("where") or {}
-        resource_pool = store.resource_repo.list_resources(where_filters)
-        qvec = await self._ws_query_vector(state, step_context)
-        state["resource_hits"] = store.resource_repo.vector_search_resources(
-            qvec, self.retrieve_workspace_config.resource.top_k, where=where_filters
-        )
-        state["resource_pool"] = resource_pool
-        return state
-
-    def _ws_build_response(self, state: WorkflowState, _: Any) -> WorkflowState:
-        state["response"] = {
-            "files": self._materialize_hits(state.get("file_hits", []), state.get("file_pool", {})),
-            "entries": self._materialize_hits(state.get("entry_hits", []), state.get("entry_pool", {})),
-            "resources": self._materialize_hits(state.get("resource_hits", []), state.get("resource_pool", {})),
-        }
-        return state
