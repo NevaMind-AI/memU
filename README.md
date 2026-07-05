@@ -34,6 +34,13 @@ context = await service.retrieve(
 )
 ```
 
+Or straight from the terminal — no code:
+
+```bash
+npx memu-cli memorize-workspace ./workspace
+npx memu-cli retrieve "What should I know about this user's launch preferences?"
+```
+
 That's it. Instead of one giant prompt about a person or their workspace, your agent gets three durable layers it can traverse:
 
 ```txt
@@ -50,7 +57,9 @@ workspace/
 
 - **Index (`INDEX.md`)** — a map of your memories: what exists, where it came from, and where to look first
 - **Memory (`MEMORY.md`)** — personal facts, preferences, goals, events, and decisions extracted from source data
-- **Skill (`SKILL.md`)** — **auto-extracted from tool traces and refined on every `memorize()`** so the agent improves at recurring tasks
+- **Skill (`SKILL.md`)** — **auto-extracted from agent traces and refined on every workspace sync** so the agent improves at recurring tasks
+
+When you sync a folder with `memorize_workspace`, the top-level directory decides the treatment: files under `chat/` become memory, files under `agent/` become skills, and everything else is indexed as workspace context.
 
 Three things make it different from stuffing everything into the prompt:
 
@@ -79,9 +88,11 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 | 🧠 **Typed Memory Extraction** | Extract profile, event, knowledge, behavior, skill, and tool memories from raw sources |
 | 🛠️ **Self-Evolving Skills** | Auto-extract reusable tool patterns and workflows from tool traces, then merge and refine them on every `memorize()` instead of relearning |
 | 🧭 **Self-Organizing Folders** | Auto-build categories, links, summaries, and embeddings without manual tagging |
-| 🤖 **Agent-Ready Retrieval** | Find the right files quickly — scoped, ranked context for any agent workflow |
+| 🤖 **Agent-Ready Retrieval** | Two read paths: LLM-routed `retrieve()` for quality, LLM-free `retrieve_workspace()` for speed |
+| 🔄 **Incremental Workspace Sync** | `memorize_workspace()` diffs a folder against a manifest — only changed files are (re)processed, deletions cascade |
 | 🧱 **Pluggable Storage** | Use in-memory, SQLite, or Postgres backends with the same repository contracts |
 | 🔀 **Profile-Based LLM Routing** | Route chat, embedding, vision, and transcription work through configurable LLM profiles |
+| ⌨️ **CLI** | `memu` command (pip) and `npx memu-cli` (npm) — memorize and retrieve from the terminal or CI |
 
 ---
 
@@ -151,13 +162,36 @@ The compiled workspace is hierarchical enough for browsing and structured enough
 
 <img width="100%" alt="structure" src="assets/structure.png" />
 
-| Layer | Primary Role | Retrieval Role |
-|-------|--------------|----------------|
-| **Category (folder)** | Maintain topic-level summaries | Assemble compact context for broad queries |
-| **Item (file)** | Store typed atomic memories | Load precise facts, events, preferences, skills, and tool patterns |
-| **Resource (source)** | Preserve source artifacts and captions | Recall original context when item/category summaries are not enough |
+Memory is stored in three representation layers; retrieval searches the finest layer and rolls up:
 
-See [docs/architecture.md](docs/architecture.md) for the runtime view of `MemoryService`, workflow pipelines, storage backends, and LLM routing.
+| Layer | What it holds | Retrieval Role |
+|-------|---------------|----------------|
+| **File** (`RecallFile`) | A synthesized memory topic or skill document | The unit returned to the agent — hit segments roll up to their file |
+| **Segment** | Fine slices of a file (paragraph lines, skill descriptions) | The embedded search unit — queries rank segments first |
+| **Resource** | The raw source artifact with its caption | Recall original context when synthesized summaries are not enough |
+
+Two read paths share this store: `retrieve()` adds LLM intention routing, query rewriting, and sufficiency checks on top; `retrieve_workspace()` embeds the query once and ranks segments/resources directly with zero LLM calls.
+
+See [docs/architecture.md](docs/architecture.md) for the runtime view of `MemoryService`, workflow pipelines, storage backends, and LLM routing, and [docs/adr/](docs/adr/README.md) for the decision records behind the layered design.
+
+---
+
+## 🧰 Agent Skills
+
+The repo ships [Agent Skills](https://docs.claude.com/en/docs/agents-and-tools/agent-skills) that let Claude Code (and any skills-compatible agent) call the workspace pair directly — the agent decides when to memorize and when to recall:
+
+| Skill | Wraps | Triggers on |
+|-------|-------|-------------|
+| [`memu-memorize`](.claude/skills/memu-memorize/SKILL.md) | `memu memorize-workspace` / `memu memorize` | "remember this", "sync this folder into memory", finishing work worth persisting |
+| [`memu-retrieve`](.claude/skills/memu-retrieve/SKILL.md) | `memu retrieve-workspace` (falls back to `memu retrieve`) | "what do we know about…", starting a task with likely prior context |
+
+They work out of the box inside this repo. To use them in your own project, copy the skill folders into that project's `.claude/skills/` (or `~/.claude/skills/` to enable them everywhere):
+
+```bash
+cp -r .claude/skills/memu-memorize .claude/skills/memu-retrieve /path/to/your-project/.claude/skills/
+```
+
+Both skills locate the CLI automatically (`memu`, `uvx --from memu-py memu`, or `npx memu-cli`) and share state through the project-local `./data/memu.sqlite3`, so what one session memorizes the next can retrieve. For LangGraph agents, see the [LangGraph integration](docs/langgraph_integration.md) instead.
 
 ---
 
@@ -201,10 +235,28 @@ make install
 To install the published package instead:
 
 ```bash
-pip install memu-py
+pip install memu-py        # library + `memu` CLI
+# or from the JS ecosystem (thin launcher over memu-py, uses uvx/pipx automatically):
+npx memu-cli --help
 ```
 
 > **Requirements**: Python 3.13+. The default examples use OpenAI, so set `OPENAI_API_KEY` or pass another provider through `llm_profiles`.
+
+#### Command line
+
+The `memu` command wraps the same service the library exposes. State persists in a local SQLite database (`./data/memu.sqlite3` by default), so memorize in one invocation and retrieve in the next:
+
+```bash
+export OPENAI_API_KEY=your_key
+
+memu memorize notes/meeting.md                  # single file; modality inferred from extension
+memu memorize-workspace ./workspace             # diff-sync a folder (alias: memu sync)
+memu retrieve "launch preferences?"                      # LLM-routed retrieval
+memu retrieve-workspace "deploy checklist"      # LLM-free embedding retrieval (alias: memu search)
+memu export                                     # rebuild the INDEX.md/MEMORY.md/SKILL.md tree
+```
+
+Every flag has a `MEMU_*` environment variable (`--provider`/`MEMU_LLM_PROVIDER`, `--model`/`MEMU_CHAT_MODEL`, `--db`/`MEMU_DB`, ...) — run `memu <command> --help` for the full list. `--db` accepts a SQLite path, a `postgres://` DSN, or `:memory:`.
 
 **Run an in-memory smoke script:**
 ```bash
@@ -234,9 +286,9 @@ uv run python test_postgres.py
 ### Custom LLM and Embedding Providers
 
 ```python
-from memu import MemUService
+from memu import MemoryService
 
-service = MemUService(
+service = MemoryService(
     llm_profiles={
         "default": {
             "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -299,6 +351,24 @@ result = await service.memorize(
 
 ---
 
+### `memorize_workspace()` — Sync a Folder
+
+```python
+result = await service.memorize_workspace(
+    folder="./workspace",              # scanned recursively; modality inferred per file
+    user={"user_id": "123"},           # optional scope
+)
+# Returns the diff plus what changed:
+# { "added": [...], "modified": [...], "deleted": [...],
+#   "resources": [...], "entries": [...], "files": [...] }
+```
+
+- Diffs the folder against a sidecar `.memu_manifest.json` — only added/modified files are processed, memory from deleted files is cascade-removed
+- Routes by top-level directory: `chat/` → memory files, `agent/` → skill files, everything else → indexed workspace context
+- Rebuilds the markdown memory tree (`INDEX.md` / `MEMORY.md` / `SKILL.md`) when `memory_files_config.enabled=True`
+
+---
+
 ### `retrieve()` — Load Agent Context
 
 <img width="100%" alt="retrieve" src="assets/retrieve.png" />
@@ -327,6 +397,23 @@ result = await service.retrieve(
 |--------------------------|----------|------|----------|
 | `rag` | Vector-first category/item/resource recall, with optional LLM routing and sufficiency checks enabled by default | Embeddings plus LLM calls unless `route_intention` and `sufficiency_check` are disabled | Fast scoped recall with controllable reasoning |
 | `llm` | LLM-ranked category/item/resource recall | LLM ranking at each tier | Deeper semantic ranking |
+
+---
+
+### `retrieve_workspace()` — Fast, LLM-Free Retrieval
+
+```python
+result = await service.retrieve_workspace(
+    "deploy checklist",
+    where={"user_id": "123"},
+)
+# Returns:
+# { "segments": [...],    # embedded slices ranked by similarity
+#   "files": [...],       # the memory/skill files those segments roll up to
+#   "resources": [...] }  # workspace resources ranked by similarity
+```
+
+The single-shot counterpart to `retrieve()`: the query is embedded once and ranked by vector similarity — no intention routing, no query rewriting, no sufficiency checks, zero LLM calls. Use it for high-frequency lookups where latency and cost matter more than deep reasoning.
 
 ---
 

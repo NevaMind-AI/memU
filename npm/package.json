@@ -1,0 +1,33 @@
+{
+  "name": "memu-cli",
+  "version": "1.5.1",
+  "description": "CLI for memU \u2014 personal memory as files. Thin launcher for the Python package memu-py.",
+  "bin": {
+    "memu": "bin/memu.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "memu",
+    "memory",
+    "agent",
+    "context-engineering",
+    "retrieval",
+    "llm",
+    "cli"
+  ],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NevaMind-AI/MemU.git",
+    "directory": "npm"
+  },
+  "homepage": "https://github.com/NevaMind-AI/MemU#readme",
+  "bugs": {
+    "url": "https://github.com/NevaMind-AI/MemU/issues"
+  }
+}
