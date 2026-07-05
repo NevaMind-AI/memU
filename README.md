@@ -22,6 +22,8 @@
 
 ---
 
+> 🤖 **Agents**: read [`.claude/skills/memu/SKILL.md`](.claude/skills/memu/SKILL.md) and you can `memorize-workspace` and `retrieve-workspace` right away.
+
 memU compiles conversations, documents, code, images, audio, video, URLs, and tool traces into human-readable Markdown files (`INDEX.md`, `MEMORY.md`, `SKILL.md`). Agents traverse the tree and load only what the moment needs — instead of rescanning everything or stuffing long histories into every prompt.
 
 
@@ -178,20 +180,18 @@ See [docs/architecture.md](docs/architecture.md) for the runtime view of `Memory
 
 ## 🧰 Agent Skills
 
-The repo ships [Agent Skills](https://docs.claude.com/en/docs/agents-and-tools/agent-skills) that let Claude Code (and any skills-compatible agent) call the workspace pair directly — the agent decides when to memorize and when to recall:
+The repo ships one [Agent Skill](https://docs.claude.com/en/docs/agents-and-tools/agent-skills) — [`.claude/skills/memu/SKILL.md`](.claude/skills/memu/SKILL.md) — that gives Claude Code (and any skills-compatible agent) the workspace pair. The agent decides when to use each direction:
 
-| Skill | Wraps | Triggers on |
-|-------|-------|-------------|
-| [`memu-memorize`](.claude/skills/memu-memorize/SKILL.md) | `memu memorize-workspace` / `memu memorize` | "remember this", "sync this folder into memory", finishing work worth persisting |
-| [`memu-retrieve`](.claude/skills/memu-retrieve/SKILL.md) | `memu retrieve-workspace` (falls back to `memu retrieve`) | "what do we know about…", starting a task with likely prior context |
+- **memorize** (`memu memorize-workspace` / `memu memorize`) — "remember this", "sync this folder into memory", finishing work worth persisting
+- **retrieve** (`memu retrieve-workspace`, falling back to `memu retrieve`) — "what do we know about…", starting a task with likely prior context
 
-They work out of the box inside this repo. To use them in your own project, copy the skill folders into that project's `.claude/skills/` (or `~/.claude/skills/` to enable them everywhere):
+It works out of the box inside this repo. To use it in your own project, copy the skill folder into that project's `.claude/skills/` (or `~/.claude/skills/` to enable it everywhere):
 
 ```bash
-cp -r .claude/skills/memu-memorize .claude/skills/memu-retrieve /path/to/your-project/.claude/skills/
+cp -r .claude/skills/memu /path/to/your-project/.claude/skills/
 ```
 
-Both skills locate the CLI automatically (`memu`, `uvx --from memu-py memu`, or `npx memu-cli`) and share state through the project-local `./data/memu.sqlite3`, so what one session memorizes the next can retrieve. For LangGraph agents, see the [LangGraph integration](docs/langgraph_integration.md) instead.
+The skill locates the CLI automatically (`memu`, `uvx --from memu-py memu`, or `npx memu-cli`) and keeps state in the project-local `./data/memu.sqlite3`, so what one session memorizes the next can retrieve. For LangGraph agents, see the [LangGraph integration](docs/langgraph_integration.md) instead.
 
 ---
 
