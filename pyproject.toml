@@ -74,6 +74,9 @@ lazyllm = ["lazyllm>=0.7.3"]
 # Rich document ingestion (PDF, Word, PowerPoint, Excel, ...) via MarkItDown.
 document = ["markitdown[docx,pptx,xlsx,xls,pdf]>=0.1.0"]
 
+[project.scripts]
+memu = "memu.cli:main"
+
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
 "Bug Tracker" = "https://github.com/NevaMind-AI/MemU/issues"
