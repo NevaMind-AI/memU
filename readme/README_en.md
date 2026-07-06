@@ -22,6 +22,9 @@
 
 ---
 
+> [!WARNING]
+> 🚧 **Under heavy construction** — memU is undergoing a major rework. APIs, CLI commands, and docs may change without notice. Things are expected to stabilize around **July 15, 2026**.
+
 memU compiles conversations, documents, code, images, audio, video, URLs, and tool traces into human-readable Markdown files (`INDEX.md`, `MEMORY.md`, `SKILL.md`). Agents traverse the tree and load only what the moment needs — instead of rescanning everything or stuffing long histories into every prompt:
 
 - **`INDEX.md`** — a map of everything: categories, files, and summaries, so the agent knows where to look first

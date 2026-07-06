@@ -22,6 +22,9 @@
 
 ---
 
+> [!WARNING]
+> 🚧 **En plena reconstrucción** — memU está en pleno rediseño; las APIs, los comandos de la CLI y la documentación pueden cambiar sin previo aviso. Se espera que se estabilice alrededor del **15 de julio de 2026**.
+
 memU compila conversaciones, documentos, código, imágenes, audio, video, URLs y trazas de herramientas en archivos Markdown legibles por humanos (`INDEX.md`, `MEMORY.md`, `SKILL.md`). El agente recorre el árbol y carga solo la memoria que necesita en el momento — sin escanear todo ni meter historiales largos en cada prompt:
 
 - **`INDEX.md`** — mapa de todo: categorías, archivos y resúmenes, para que el agente sepa dónde mirar primero

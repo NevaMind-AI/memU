@@ -1,5 +1,7 @@
 # memu-cli
 
+> 🚧 **Under heavy construction** — memU is undergoing a major rework; commands and flags may change. Expected to stabilize around **July 15, 2026**.
+
 CLI for [memU](https://github.com/NevaMind-AI/MemU) — personal memory as files: fast retrieval, higher accuracy, lower cost.
 
 This package is a thin launcher. The engine is the Python package [`memu-py`](https://pypi.org/project/memu-py/) (Python ≥ 3.13); the shim delegates to `uvx`, `pipx run`, or an installed `python3 -m memu`, in that order. Install [uv](https://docs.astral.sh/uv/) for the smoothest zero-setup experience.
