@@ -37,7 +37,7 @@ Or straight from the terminal — no code:
 
 ```bash
 npx memu-cli memorize-workspace ./workspace
-npx memu-cli retrieve "What should I know about this user's launch preferences?"
+npx memu-cli retrieve-workspace "What should I know about this user's launch preferences?"
 ```
 
 That's it. Instead of one giant prompt about a person or their workspace, your agent gets three durable layers it can traverse:
@@ -166,8 +166,8 @@ See [docs/architecture.md](docs/architecture.md) for the runtime view of `Memory
 
 The repo ships one [Agent Skill](https://docs.claude.com/en/docs/agents-and-tools/agent-skills) — [`.claude/skills/memu/SKILL.md`](.claude/skills/memu/SKILL.md) — that gives Claude Code (and any skills-compatible agent) the workspace pair. The agent decides when to use each direction:
 
-- **memorize** (`memu memorize-workspace` / `memu memorize`) — "remember this", "sync this folder into memory", finishing work worth persisting
-- **retrieve** (`memu retrieve-workspace`, falling back to `memu retrieve`) — "what do we know about…", starting a task with likely prior context
+- **memorize** (`memu memorize-workspace`) — "remember this", "sync this folder into memory", finishing work worth persisting
+- **retrieve** (`memu retrieve-workspace`) — "what do we know about…", starting a task with likely prior context
 
 It works out of the box inside this repo. To use it in your own project, copy the skill folder into that project's `.claude/skills/` (or `~/.claude/skills/` to enable it everywhere):
 
@@ -316,7 +316,7 @@ service = MemoryService(
 
 ## 📖 Core APIs
 
-The primary pair is `memorize_workspace()` / `retrieve_workspace()` — folder in, ranked context out. The single-file `memorize()` and LLM-routed `retrieve()` are the legacy pair: still supported, but new integrations should start with the workspace pair.
+The primary pair is `memorize_workspace()` / `retrieve_workspace()` — folder in, ranked context out. The single-file `memorize()` and LLM-routed `retrieve()` are the legacy pair, kept for existing integrations — new code should use the workspace pair.
 
 ### `memorize_workspace()` — Sync a Folder
 
@@ -395,7 +395,7 @@ result = await service.retrieve(
 # }
 ```
 
-The deep path: takes multi-turn conversation context, decides whether to retrieve at all, rewrites the query, ranks per layer, and checks sufficiency. Reach for it when `retrieve_workspace()` misses and the question needs reasoning over scattered memories.
+The legacy deep path: takes multi-turn conversation context, decides whether to retrieve at all, rewrites the query, ranks per layer, and checks sufficiency. Kept for existing integrations only — new code should use `retrieve_workspace()`.
 
 | `retrieve_config.method` | Behavior | Cost | Best For |
 |--------------------------|----------|------|----------|
