@@ -90,7 +90,7 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 | 🧠 **Typed Memory Extraction** | Extract profile, event, knowledge, behavior, skill, and tool memories from raw sources |
 | 🛠️ **Self-Evolving Skills** | Auto-extract reusable tool patterns and workflows from agent traces, then merge and refine them on every workspace sync instead of relearning |
 | 🧭 **Self-Organizing Folders** | Auto-build categories, links, summaries, and embeddings without manual tagging |
-| 🤖 **Agent-Ready Retrieval** | LLM-free `retrieve_workspace()` as the primary read path, with LLM-routed `retrieve()` as the legacy deep path |
+| 🤖 **Agent-Ready Retrieval** | LLM-free `retrieve_workspace()` ranks memory segments, files, and source resources directly |
 | 🔄 **Incremental Workspace Sync** | `memorize_workspace()` diffs a folder against a manifest — only changed files are (re)processed, deletions cascade |
 | 🧱 **Pluggable Storage** | Use in-memory, SQLite, or Postgres backends with the same repository contracts |
 | 🔀 **Profile-Based LLM Routing** | Route chat, embedding, vision, and transcription work through configurable LLM profiles |
@@ -100,7 +100,7 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 
 ## 🎯 Use Cases
 
-Every use case is the same loop: drop sources into a folder, sync it with `memorize_workspace()`, then ask with `retrieve_workspace()`. The sync is incremental (only changed files are reprocessed), and the top-level directory decides the treatment — `chat/` → memory topics, `agent/` → skills, everything else → indexed context. The single-file `memorize()` and LLM-routed `retrieve()` remain available as the legacy path (see [Core APIs](#-core-apis)).
+Every use case is the same loop: drop sources into a folder, sync it with `memorize_workspace()`, then ask with `retrieve_workspace()`. The sync is incremental (only changed files are reprocessed), and the top-level directory decides the treatment — `chat/` → memory topics, `agent/` → skills, everything else → indexed context.
 
 ### 1. **Personal Memory**
 *Turn chat logs into user preferences, goals, events, decisions, and relationship context.*
@@ -147,11 +147,12 @@ context = await service.retrieve_workspace("Which tools worked for config editin
 
 ## 🗂️ Architecture
 
-The compiled workspace is hierarchical enough for browsing and structured enough for direct retrieval:
+The compiled workspace is easiest to read as two directions:
 
-<img width="100%" alt="structure" src="assets/structure.png" />
+- `memorize_workspace()` writes a folder into durable memory files, skill files, resource records, segments, links, and embeddings.
+- `retrieve_workspace()` reads those layers directly, ranking segments first and rolling results up to the files and resources an agent should load.
 
-Memory is stored in three representation layers; retrieval searches the finest layer and rolls up:
+Memory is stored in three representation layers:
 
 | Layer | What it holds | Retrieval Role |
 |-------|---------------|----------------|
@@ -159,7 +160,7 @@ Memory is stored in three representation layers; retrieval searches the finest l
 | **Segment** | Fine slices of a file (paragraph lines, skill descriptions) | The embedded search unit — queries rank segments first |
 | **Resource** | The raw source artifact with its caption | Recall original context when synthesized summaries are not enough |
 
-Two read paths share this store: `retrieve()` adds LLM intention routing, query rewriting, and sufficiency checks on top; `retrieve_workspace()` embeds the query once and ranks segments/resources directly with zero LLM calls.
+`retrieve_workspace()` embeds the query once, ranks segments and resources by similarity, and returns compact context with zero chat-LLM calls.
 
 See [docs/architecture.md](docs/architecture.md) for the runtime view of `MemoryService`, workflow pipelines, storage backends, and LLM routing, and [docs/adr/](docs/adr/README.md) for the decision records behind the layered design.
 
@@ -239,9 +240,6 @@ export OPENAI_API_KEY=your_key
 memu memorize-workspace ./workspace             # diff-sync a folder (alias: memu sync)
 memu retrieve-workspace "deploy checklist"      # LLM-free embedding retrieval (alias: memu search)
 memu export                                     # rebuild the INDEX.md/MEMORY.md/SKILL.md tree
-
-memu memorize notes/meeting.md                  # legacy: single file, modality inferred from extension
-memu retrieve "launch preferences?"             # legacy: LLM-routed retrieval
 ```
 
 Every flag has a `MEMU_*` environment variable (`--provider`/`MEMU_LLM_PROVIDER`, `--model`/`MEMU_CHAT_MODEL`, `--db`/`MEMU_DB`, ...) — run `memu <command> --help` for the full list. `--db` accepts a SQLite path, a `postgres://` DSN, or `:memory:`.
@@ -319,11 +317,11 @@ service = MemoryService(
 
 ## 📖 Core APIs
 
-The primary pair is `memorize_workspace()` / `retrieve_workspace()` — folder in, ranked context out. The single-file `memorize()` and LLM-routed `retrieve()` are the legacy pair, kept for existing integrations — new code should use the workspace pair.
+The primary API pair is `memorize_workspace()` / `retrieve_workspace()` — folder in, ranked context out.
 
 ### `memorize_workspace()` — Sync a Folder
 
-<img width="100%" alt="memorize" src="assets/memorize.png" />
+<img width="100%" alt="memorize_workspace" src="assets/memorize.png" />
 
 ```python
 result = await service.memorize_workspace(
@@ -343,6 +341,8 @@ result = await service.memorize_workspace(
 
 ### `retrieve_workspace()` — Fast, LLM-Free Retrieval
 
+<img width="100%" alt="retrieve_workspace" src="assets/retrieve.png" />
+
 ```python
 result = await service.retrieve_workspace(
     "deploy checklist",
@@ -355,55 +355,6 @@ result = await service.retrieve_workspace(
 ```
 
 The query is embedded once and ranked by vector similarity — no intention routing, no query rewriting, no sufficiency checks, zero LLM calls. Use it for high-frequency lookups where latency and cost matter more than deep reasoning.
-
----
-
-### `memorize()` — Structure a Single Source *(legacy)*
-
-```python
-result = await service.memorize(
-    resource_url="path/to/file.json",    # local file path or HTTP URL
-    modality="conversation",            # conversation | document | image | video | audio
-    user={"user_id": "123"},            # optional: scope to a user or agent
-)
-# Returns after processing completes:
-# { "resource": {...}, "items": [...], "categories": [...], "relations": [...] }
-```
-
-The original push-style entry point: one resource per call, extracted into typed memory items and categorized without manual tagging. No change detection or deletion handling — that is what `memorize_workspace()` adds.
-
----
-
-### `retrieve()` — LLM-Routed Retrieval *(legacy)*
-
-<img width="100%" alt="retrieve" src="assets/retrieve.png" />
-
-```python
-# The retrieval strategy is set once on the service via retrieve_config:
-#   MemoryService(retrieve_config={"method": "rag"})   # vector-first recall
-#   MemoryService(retrieve_config={"method": "llm"})   # LLM-ranked recall
-result = await service.retrieve(
-    queries=[{"role": "user", "content": {"text": "What are their preferences?"}}],
-    where={"user_id": "123"},   # scope filter
-)
-# Returns:
-# {
-#   "needs_retrieval": true,
-#   "original_query": "...",
-#   "rewritten_query": "...",
-#   "next_step_query": "...",
-#   "categories": [...],
-#   "items": [...],
-#   "resources": [...]
-# }
-```
-
-The legacy deep path: takes multi-turn conversation context, decides whether to retrieve at all, rewrites the query, ranks per layer, and checks sufficiency. Kept for existing integrations only — new code should use `retrieve_workspace()`.
-
-| `retrieve_config.method` | Behavior | Cost | Best For |
-|--------------------------|----------|------|----------|
-| `rag` | Vector-first category/item/resource recall, with optional LLM routing and sufficiency checks enabled by default | Embeddings plus LLM calls unless `route_intention` and `sufficiency_check` are disabled | Fast scoped recall with controllable reasoning |
-| `llm` | LLM-ranked category/item/resource recall | LLM ranking at each tier | Deeper semantic ranking |
 
 ---
 
