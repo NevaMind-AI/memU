@@ -37,7 +37,7 @@ Or straight from the terminal — no code:
 
 ```bash
 npx memu-cli memorize-workspace ./workspace
-npx memu-cli retrieve "What should I know about this user's launch preferences?"
+npx memu-cli retrieve-workspace "What should I know about this user's launch preferences?"
 ```
 
 That's it. Instead of one giant prompt about a person or their workspace, your agent gets three durable layers it can traverse:
