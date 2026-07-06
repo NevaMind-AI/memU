@@ -9,20 +9,18 @@ This package is a thin launcher. The engine is the Python package [`memu-py`](ht
 ```bash
 export OPENAI_API_KEY=sk-...
 
-# memorize a single file (modality inferred from the extension)
-npx memu-cli memorize notes/meeting.md
-
 # diff-sync a workspace folder (chat/ -> memory, agent/ -> skills, other -> index)
 npx memu-cli memorize-workspace ./workspace
-
-# LLM-routed retrieval (heavy, high quality)
-npx memu-cli retrieve "What are this user's launch preferences?"
 
 # single-shot embedding retrieval (LLM-free, fast)
 npx memu-cli retrieve-workspace "deploy checklist"
 
 # rebuild the INDEX.md / MEMORY.md / SKILL.md markdown tree
 npx memu-cli export
+
+# legacy pair: memorize a single file / LLM-routed retrieval
+npx memu-cli memorize notes/meeting.md
+npx memu-cli retrieve "What are this user's launch preferences?"
 ```
 
 State persists in a local SQLite database (`./data/memu.sqlite3` by default), so memorize in one invocation and retrieve in the next. Run `npx memu-cli --help` or see the [main README](https://github.com/NevaMind-AI/MemU#readme) for all flags and `MEMU_*` environment variables.

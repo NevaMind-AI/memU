@@ -28,12 +28,9 @@ memU compiles conversations, documents, code, images, audio, video, URLs, and to
 
 
 ```python
-await service.memorize(resource_url="workspace/meeting-notes.md", modality="document")
+await service.memorize_workspace(folder="./workspace")
 
-context = await service.retrieve(
-    queries=[{"role": "user", "content": {"text": "What should I know about this user's launch preferences?"}}],
-    where={"user_id": "123"},
-)
+context = await service.retrieve_workspace("What should I know about this user's launch preferences?")
 ```
 
 Or straight from the terminal — no code:
@@ -88,9 +85,9 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 | 🗂️ **Multimodal Ingestion** | Write conversations, documents, images, video, audio, URLs, logs, and local files into memory |
 | 📁 **Compiled Memory Workspace** | Persist the Index, Skill, and Memory layers — folders (categories), files (items), source artifacts, links, summaries, and embeddings |
 | 🧠 **Typed Memory Extraction** | Extract profile, event, knowledge, behavior, skill, and tool memories from raw sources |
-| 🛠️ **Self-Evolving Skills** | Auto-extract reusable tool patterns and workflows from tool traces, then merge and refine them on every `memorize()` instead of relearning |
+| 🛠️ **Self-Evolving Skills** | Auto-extract reusable tool patterns and workflows from agent traces, then merge and refine them on every workspace sync instead of relearning |
 | 🧭 **Self-Organizing Folders** | Auto-build categories, links, summaries, and embeddings without manual tagging |
-| 🤖 **Agent-Ready Retrieval** | Two read paths: LLM-routed `retrieve()` for quality, LLM-free `retrieve_workspace()` for speed |
+| 🤖 **Agent-Ready Retrieval** | LLM-free `retrieve_workspace()` as the primary read path, with LLM-routed `retrieve()` as the legacy deep path |
 | 🔄 **Incremental Workspace Sync** | `memorize_workspace()` diffs a folder against a manifest — only changed files are (re)processed, deletions cascade |
 | 🧱 **Pluggable Storage** | Use in-memory, SQLite, or Postgres backends with the same repository contracts |
 | 🔀 **Profile-Based LLM Routing** | Route chat, embedding, vision, and transcription work through configurable LLM profiles |
@@ -100,60 +97,47 @@ If you find memU useful or interesting, a GitHub Star ⭐️ would be greatly ap
 
 ## 🎯 Use Cases
 
+Every use case is the same loop: drop sources into a folder, sync it with `memorize_workspace()`, then ask with `retrieve_workspace()`. The sync is incremental (only changed files are reprocessed), and the top-level directory decides the treatment — `chat/` → memory topics, `agent/` → skills, everything else → indexed context. The single-file `memorize()` and LLM-routed `retrieve()` remain available as the legacy path (see [Core APIs](#-core-apis)).
+
 ### 1. **Personal Memory**
-*Turn chat logs and workspace notes into user preferences, goals, events, decisions, and relationship context.*
+*Turn chat logs into user preferences, goals, events, decisions, and relationship context.*
 
 ```python
-await service.memorize(
-    resource_url="examples/resources/conversations/conv1.json",
-    modality="conversation",
-    user={"user_id": "123"},
-)
+# workspace/chat/*.json — conversation logs become memory topic files
+await service.memorize_workspace(folder="./workspace")
 
-context = await service.retrieve(
-    queries=[{"role": "user", "content": {"text": "What should I remember about this user?"}}],
-    where={"user_id": "123"},
-)
+context = await service.retrieve_workspace("What should I remember about this user?")
 ```
 
 ### 2. **Workspace Context for Coding Agents**
 *Convert docs, PR notes, logs, and design decisions into reusable project memory.*
 
 ```python
-await service.memorize(resource_url="docs/architecture.md", modality="document")
-await service.memorize(resource_url="examples/resources/logs/log1.txt", modality="document")
+# docs, notes, and logs anywhere in the folder are captioned and indexed
+await service.memorize_workspace(folder="./workspace")
 
-context = await service.retrieve(
-    queries=[{"role": "user", "content": {"text": "How should I structure this module?"}}],
-)
+context = await service.retrieve_workspace("How should I structure this module?")
 ```
 
 ### 3. **Multimodal Knowledge Layer**
 *Extract searchable facts from documents, screenshots, images, videos, and audio notes.*
 
 ```python
-await service.memorize(resource_url="examples/resources/docs/doc1.txt", modality="document")
-# Rich documents (PDF/Word/PowerPoint/Excel/HTML) are converted to Markdown via
-# MarkItDown — install the extra with: pip install 'memu-py[document]'
-await service.memorize(resource_url="reports/q3-summary.pdf", modality="document")
-await service.memorize(resource_url="examples/resources/images/image1.png", modality="image")
-# Audio is supported for your own .mp3/.wav/.m4a files.
-await service.memorize(resource_url="meeting-audio.mp3", modality="audio")
+# modality is inferred per file: .pdf/.docx/.pptx/.xlsx/.html (via MarkItDown —
+# pip install 'memu-py[document]'), .png/.jpg, .mp3/.wav, .mp4/.mov, ...
+await service.memorize_workspace(folder="./workspace")
 
-context = await service.retrieve(
-    queries=[{"role": "user", "content": {"text": "What matters for the next research plan?"}}],
-)
+context = await service.retrieve_workspace("What matters for the next research plan?")
 ```
 
 ### 4. **Tool and Agent Learning**
-*Turn execution traces into tool memories that tell future agents when to use a tool and what mistakes to avoid.*
+*Turn execution traces into skills that tell future agents what worked and what to avoid.*
 
 ```python
-await service.memorize(resource_url="examples/resources/logs/log1.txt", modality="document")
+# workspace/agent/*.txt — execution traces are distilled into skill files
+await service.memorize_workspace(folder="./workspace")
 
-context = await service.retrieve(
-    queries=[{"role": "user", "content": {"text": "Which tools worked for config editing?"}}],
-)
+context = await service.retrieve_workspace("Which tools worked for config editing?")
 ```
 
 ---
@@ -249,11 +233,12 @@ The `memu` command wraps the same service the library exposes. State persists in
 ```bash
 export OPENAI_API_KEY=your_key
 
-memu memorize notes/meeting.md                  # single file; modality inferred from extension
 memu memorize-workspace ./workspace             # diff-sync a folder (alias: memu sync)
-memu retrieve "launch preferences?"                      # LLM-routed retrieval
 memu retrieve-workspace "deploy checklist"      # LLM-free embedding retrieval (alias: memu search)
 memu export                                     # rebuild the INDEX.md/MEMORY.md/SKILL.md tree
+
+memu memorize notes/meeting.md                  # legacy: single file, modality inferred from extension
+memu retrieve "launch preferences?"             # legacy: LLM-routed retrieval
 ```
 
 Every flag has a `MEMU_*` environment variable (`--provider`/`MEMU_LLM_PROVIDER`, `--model`/`MEMU_CHAT_MODEL`, `--db`/`MEMU_DB`, ...) — run `memu <command> --help` for the full list. `--db` accepts a SQLite path, a `postgres://` DSN, or `:memory:`.
@@ -331,27 +316,11 @@ service = MemoryService(
 
 ## 📖 Core APIs
 
-### `memorize()` — Structure Raw Data
-
-<img width="100%" alt="memorize" src="assets/memorize.png" />
-
-```python
-result = await service.memorize(
-    resource_url="path/to/file.json",    # local file path or HTTP URL
-    modality="conversation",            # conversation | document | image | video | audio
-    user={"user_id": "123"},            # optional: scope to a user or agent
-)
-# Returns after processing completes:
-# { "resource": {...}, "items": [...], "categories": [...], "relations": [...] }
-```
-
-- Converts raw input into typed memory items
-- Categorizes and embeds items without manual tagging
-- Preserves source resources and item-category relations
-
----
+The primary pair is `memorize_workspace()` / `retrieve_workspace()` — folder in, ranked context out. The single-file `memorize()` and LLM-routed `retrieve()` are the legacy pair: still supported, but new integrations should start with the workspace pair.
 
 ### `memorize_workspace()` — Sync a Folder
+
+<img width="100%" alt="memorize" src="assets/memorize.png" />
 
 ```python
 result = await service.memorize_workspace(
@@ -369,7 +338,40 @@ result = await service.memorize_workspace(
 
 ---
 
-### `retrieve()` — Load Agent Context
+### `retrieve_workspace()` — Fast, LLM-Free Retrieval
+
+```python
+result = await service.retrieve_workspace(
+    "deploy checklist",
+    where={"user_id": "123"},
+)
+# Returns:
+# { "segments": [...],    # embedded slices ranked by similarity
+#   "files": [...],       # the memory/skill files those segments roll up to
+#   "resources": [...] }  # workspace resources ranked by similarity
+```
+
+The query is embedded once and ranked by vector similarity — no intention routing, no query rewriting, no sufficiency checks, zero LLM calls. Use it for high-frequency lookups where latency and cost matter more than deep reasoning.
+
+---
+
+### `memorize()` — Structure a Single Source *(legacy)*
+
+```python
+result = await service.memorize(
+    resource_url="path/to/file.json",    # local file path or HTTP URL
+    modality="conversation",            # conversation | document | image | video | audio
+    user={"user_id": "123"},            # optional: scope to a user or agent
+)
+# Returns after processing completes:
+# { "resource": {...}, "items": [...], "categories": [...], "relations": [...] }
+```
+
+The original push-style entry point: one resource per call, extracted into typed memory items and categorized without manual tagging. No change detection or deletion handling — that is what `memorize_workspace()` adds.
+
+---
+
+### `retrieve()` — LLM-Routed Retrieval *(legacy)*
 
 <img width="100%" alt="retrieve" src="assets/retrieve.png" />
 
@@ -393,27 +395,12 @@ result = await service.retrieve(
 # }
 ```
 
+The deep path: takes multi-turn conversation context, decides whether to retrieve at all, rewrites the query, ranks per layer, and checks sufficiency. Reach for it when `retrieve_workspace()` misses and the question needs reasoning over scattered memories.
+
 | `retrieve_config.method` | Behavior | Cost | Best For |
 |--------------------------|----------|------|----------|
 | `rag` | Vector-first category/item/resource recall, with optional LLM routing and sufficiency checks enabled by default | Embeddings plus LLM calls unless `route_intention` and `sufficiency_check` are disabled | Fast scoped recall with controllable reasoning |
 | `llm` | LLM-ranked category/item/resource recall | LLM ranking at each tier | Deeper semantic ranking |
-
----
-
-### `retrieve_workspace()` — Fast, LLM-Free Retrieval
-
-```python
-result = await service.retrieve_workspace(
-    "deploy checklist",
-    where={"user_id": "123"},
-)
-# Returns:
-# { "segments": [...],    # embedded slices ranked by similarity
-#   "files": [...],       # the memory/skill files those segments roll up to
-#   "resources": [...] }  # workspace resources ranked by similarity
-```
-
-The single-shot counterpart to `retrieve()`: the query is embedded once and ranked by vector similarity — no intention routing, no query rewriting, no sufficiency checks, zero LLM calls. Use it for high-frequency lookups where latency and cost matter more than deep reasoning.
 
 ---
 
