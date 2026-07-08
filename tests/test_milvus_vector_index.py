@@ -10,7 +10,12 @@ from pydantic import BaseModel
 from memu.app import MemoryService
 from memu.app.settings import DatabaseConfig
 from memu.database.factory import build_database
-from memu.database.vector_index.milvus import MilvusVectorIndex, _build_filter_expr, _format_scalar
+from memu.database.vector_index.milvus import (
+    MilvusVectorIndex,
+    _build_filter_expr,
+    _cosine_distance_to_similarity,
+    _format_scalar,
+)
 
 
 class _UserScope(BaseModel):
@@ -59,6 +64,12 @@ def test_milvus_filter_expression_rejects_unsafe_inputs() -> None:
     assert _build_filter_expr({"user_id": {"nested": "u1"}}) is None
 
 
+def test_milvus_cosine_distance_is_converted_to_similarity() -> None:
+    assert _cosine_distance_to_similarity(0.0) == pytest.approx(1.0)
+    assert _cosine_distance_to_similarity(1.0) == pytest.approx(0.0)
+    assert _cosine_distance_to_similarity(2.0) == pytest.approx(-1.0)
+
+
 def test_milvus_requires_inmemory_metadata_store() -> None:
     config = DatabaseConfig.model_validate({
         "metadata_store": {"provider": "sqlite", "dsn": "sqlite:///memu.db"},
@@ -80,6 +91,7 @@ def test_milvus_vector_index_upsert_and_search(tmp_path: Path) -> None:
         assert top_id == "a"
         assert top_score > 0.99
         assert len(hits) == 2
+        assert hits[1][1] == pytest.approx(0.0, abs=1e-6)
     finally:
         index.close()
 

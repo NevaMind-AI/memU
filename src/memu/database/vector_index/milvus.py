@@ -4,6 +4,7 @@ import logging
 import math
 import re
 from collections.abc import Iterable, Mapping
+from importlib.metadata import PackageNotFoundError, version
 from threading import Lock
 from typing import Any
 
@@ -86,6 +87,38 @@ def _build_filter_expr(where: Mapping[str, Any] | None) -> str | None:
     return " and ".join(parts)
 
 
+def _cosine_distance_to_similarity(distance: Any) -> float:
+    """Convert Milvus COSINE distance to memU's higher-is-better similarity score."""
+    if distance is None:
+        return 0.0
+    try:
+        value = float(distance)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(value):
+        return 0.0
+    return 1.0 - value
+
+
+def _coerce_score(score: Any) -> float:
+    if score is None:
+        return 0.0
+    try:
+        value = float(score)
+    except (TypeError, ValueError):
+        return 0.0
+    return value if math.isfinite(value) else 0.0
+
+
+def _uses_milvus_lite_cosine_distance(uri: str) -> bool:
+    if "://" in uri:
+        return False
+    try:
+        return version("milvus-lite") in {"3.0", "3.0.0"}
+    except PackageNotFoundError:
+        return False
+
+
 class MilvusVectorIndex(VectorIndex):
     """Milvus implementation of the VectorIndex protocol.
 
@@ -122,6 +155,7 @@ class MilvusVectorIndex(VectorIndex):
         self._collection_name = collection_name
         self._dim = dim
         self._consistency_level = consistency_level
+        self._cosine_distance_scores = _uses_milvus_lite_cosine_distance(uri)
         client_kwargs: dict[str, Any] = {"uri": uri}
         if token:
             client_kwargs["token"] = token
@@ -292,7 +326,6 @@ class MilvusVectorIndex(VectorIndex):
         scored: list[tuple[str, float]] = []
         for hit in hits:
             # MilvusClient returns hits as dicts with ``id`` and ``distance`` keys.
-            # For COSINE, distance is cosine similarity (higher = better).
             if isinstance(hit, dict):
                 entity = hit.get("entity") or {}
                 hit_id = hit.get("id") or (entity.get(_ID_FIELD) if isinstance(entity, dict) else None)
@@ -301,7 +334,10 @@ class MilvusVectorIndex(VectorIndex):
             raw_score = hit.get("distance") if isinstance(hit, dict) else getattr(hit, "distance", 0.0)
             if hit_id is None:
                 continue
-            scored.append((str(hit_id), float(raw_score if raw_score is not None else 0.0)))
+            score = (
+                _cosine_distance_to_similarity(raw_score) if self._cosine_distance_scores else _coerce_score(raw_score)
+            )
+            scored.append((str(hit_id), score))
         return scored
 
     def close(self) -> None:
