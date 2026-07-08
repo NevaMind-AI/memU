@@ -146,6 +146,13 @@ class LLMConfig(BaseModel):
                 self.api_key = api_key
             if self.chat_model == "gpt-5.4-mini":
                 self.chat_model = chat_model
+        elif self.provider == "litellm":
+            if self.client_backend == "sdk":
+                self.client_backend = "litellm"
+            if self.base_url == "https://api.openai.com/v1":
+                self.base_url = "http://localhost:4000"
+            if self.api_key == "OPENAI_API_KEY":
+                self.api_key = "LITELLM_API_KEY"
         return self
 
 

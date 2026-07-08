@@ -71,6 +71,7 @@ postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
 langgraph = ["langgraph>=0.0.10", "langchain-core>=0.1.0"]
 claude = ["claude-agent-sdk>=0.1.24"]
 lazyllm = ["lazyllm>=0.7.3"]
+litellm = ["litellm>=1.80.0,<1.87.0"]
 # Rich document ingestion (PDF, Word, PowerPoint, Excel, ...) via MarkItDown.
 document = ["markitdown[docx,pptx,xlsx,xls,pdf]>=0.1.0"]
 
@@ -84,7 +85,7 @@ memu = "memu.cli:main"
 
 [tool.deptry.per_rule_ignores]
 # Optional dependencies used in examples/ or imported lazily behind extras.
-DEP002 = ["claude-agent-sdk", "markitdown"]
+DEP002 = ["claude-agent-sdk", "litellm", "markitdown"]
 
 [tool.mypy]
 files = ["src", "tests"]

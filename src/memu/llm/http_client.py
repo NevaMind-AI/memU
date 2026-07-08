@@ -15,6 +15,7 @@ from memu.llm.backends.deepseek import DeepSeekLLMBackend
 from memu.llm.backends.doubao import DoubaoLLMBackend
 from memu.llm.backends.grok import GrokBackend
 from memu.llm.backends.kimi import KimiLLMBackend
+from memu.llm.backends.litellm import LiteLLMBackend
 from memu.llm.backends.minimax import MiniMaxLLMBackend
 from memu.llm.backends.openai import OpenAILLMBackend
 from memu.llm.backends.openrouter import OpenRouterLLMBackend
@@ -30,6 +31,7 @@ LLM_BACKENDS: dict[str, Callable[[], LLMBackend]] = {
     OpenAILLMBackend.name: OpenAILLMBackend,
     ClaudeLLMBackend.name: ClaudeLLMBackend,
     GrokBackend.name: GrokBackend,
+    LiteLLMBackend.name: LiteLLMBackend,
     DeepSeekLLMBackend.name: DeepSeekLLMBackend,
     KimiLLMBackend.name: KimiLLMBackend,
     MiniMaxLLMBackend.name: MiniMaxLLMBackend,
