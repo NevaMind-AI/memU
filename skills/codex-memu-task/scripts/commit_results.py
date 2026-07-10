@@ -37,11 +37,7 @@ async def main() -> None:
     resources = read_resources(base_dir / OUTPUT_RESOURCE_FILE)
 
     service = MemoryService()  # fill in config if needed
-    # TODO: the submit entry on MemoryService is not ready yet. Once it lands,
-    # hand it `recall_files` and `resources` here, e.g.:
-    #   await service.submit_updates(recall_files=recall_files, resources=resources)
-    _ = service
-    print(f"{len(recall_files)} recall file(s), {len(resources)} resource(s) ready to submit")
+    await service.commit_results(recall_files=recall_files, resource=resources)
 
 
 if __name__ == "__main__":
