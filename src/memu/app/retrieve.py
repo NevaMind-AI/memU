@@ -322,14 +322,15 @@ class RetrieveMixin:
             state["query_vector"] = (await embed_client.embed([state["active_query"]]))[0]
         return state
 
-    def _extract_referenced_item_ids(self, state: WorkflowState) -> set[str]:
+    def _extract_referenced_item_ids(self, state: WorkflowState) -> list[str]:
         """Extract item IDs from category summary references."""
         from memu.utils.references import extract_references
 
         category_hits = state.get("category_hits") or []
         summary_lookup = state.get("category_summary_lookup", {})
         category_pool = state.get("category_pool") or {}
-        referenced_item_ids: set[str] = set()
+        referenced_item_ids: list[str] = []
+        seen: set[str] = set()
 
         for cid, _score in category_hits:
             # Get summary from lookup or category
@@ -340,9 +341,34 @@ class RetrieveMixin:
                     summary = cat.summary
             if summary:
                 refs = extract_references(summary)
-                referenced_item_ids.update(refs)
+                for ref_id in refs:
+                    if ref_id in seen:
+                        continue
+                    referenced_item_ids.append(ref_id)
+                    seen.add(ref_id)
 
         return referenced_item_ids
+
+    @staticmethod
+    def _merge_item_hits(
+        reference_hits: Sequence[tuple[str, float]],
+        vector_hits: Sequence[tuple[str, float]],
+        top_k: int,
+    ) -> list[tuple[str, float]]:
+        """Merge reference-followed hits with vector hits, preserving first occurrence."""
+        if top_k <= 0:
+            return []
+
+        merged: list[tuple[str, float]] = []
+        seen: set[str] = set()
+        for item_id, score in [*reference_hits, *vector_hits]:
+            if item_id in seen:
+                continue
+            merged.append((item_id, score))
+            seen.add(item_id)
+            if len(merged) >= top_k:
+                break
+        return merged
 
     async def _rag_recall_items(self, state: WorkflowState, step_context: Any) -> WorkflowState:
         if not state.get("retrieve_item") or not state.get("needs_retrieval") or not state.get("proceed_to_items"):
@@ -351,20 +377,45 @@ class RetrieveMixin:
 
         store = state["store"]
         where_filters = state.get("where") or {}
-        items_pool = store.memory_item_repo.list_items(where_filters)
         qvec = state.get("query_vector")
         if qvec is None:
             embed_client = self._get_step_embedding_client(step_context)
             qvec = (await embed_client.embed([state["active_query"]]))[0]
             state["query_vector"] = qvec
-        state["item_hits"] = store.memory_item_repo.vector_search_items(
+
+        vector_hits = store.memory_item_repo.vector_search_items(
             qvec,
             self.retrieve_config.item.top_k,
             where=where_filters,
             ranking=self.retrieve_config.item.ranking,
             recency_decay_days=self.retrieve_config.item.recency_decay_days,
         )
-        state["item_pool"] = items_pool
+        item_pool = {
+            item_id: item
+            for item_id in (item_id for item_id, _score in vector_hits)
+            if (item := store.memory_item_repo.get_item(item_id)) is not None
+        }
+
+        reference_hits: list[tuple[str, float]] = []
+        if getattr(self.retrieve_config.item, "use_category_references", False):
+            ref_ids = self._extract_referenced_item_ids(state)
+            referenced_items = store.memory_item_repo.list_items_by_ref_ids(ref_ids, where_filters)
+            item_pool.update(referenced_items)
+            ref_order = {ref_id: index for index, ref_id in enumerate(ref_ids)}
+            ordered_referenced_items = sorted(
+                referenced_items.items(),
+                key=lambda pair: ref_order.get(ref_id, len(ref_order))
+                if isinstance(ref_id := (pair[1].extra or {}).get("ref_id"), str)
+                else len(ref_order),
+            )
+            reference_hits = [(item_id, 1.0) for item_id, _item in ordered_referenced_items]
+
+        state["item_hits"] = self._merge_item_hits(
+            reference_hits,
+            vector_hits,
+            self.retrieve_config.item.top_k,
+        )
+        state["item_pool"] = item_pool
         return state
 
     async def _rag_item_sufficiency(self, state: WorkflowState, step_context: Any) -> WorkflowState:
