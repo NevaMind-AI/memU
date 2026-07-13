@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
 from memu.blob.folder import infer_modality
+from memu.vector import cosine_topk
 
 if TYPE_CHECKING:
     from memu.app.service import Context
+    from memu.app.settings import RetrieveWorkspaceConfig
     from memu.database.interfaces import Database
     from memu.database.models import RecallFile, Resource
 
@@ -21,6 +23,7 @@ class AgenticMixin:
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
         _ensure_categories_ready: Callable[[Context, Database, Mapping[str, Any] | None], Awaitable[None]]
         _get_embedding_client: Callable[..., Any]
+        retrieve_workspace_config: RetrieveWorkspaceConfig
         user_model: type[BaseModel]
 
     async def list_all_recall_files(
@@ -38,6 +41,178 @@ class AgenticMixin:
         categories = store.recall_file_repo.list_categories(where_filters)
         categories_list = [self._model_dump_without_embeddings(category) for category in categories.values()]
         return {"categories": categories_list}
+
+    async def progressive_retrieve(
+        self,
+        query: str,
+        where: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Single-shot, LLM-free retrieval over the segment/file/resource layers.
+
+        This mirrors :meth:`RetrieveWorkspaceMixin.retrieve_workspace` but runs no
+        workflow — the four stages are executed sequentially in-line, the same way
+        :meth:`commit_results` inverts ``memorize_workspace``. The query is embedded
+        once and used to rank two layers by vector similarity; no intention routing,
+        sufficiency checks, or summarization:
+
+        * ``segments``: :class:`RecallFileSegment` slices ranked by embedding,
+          ``file.top_k`` of them.
+        * ``files``: the :class:`RecallFile`\\ s pointed to by those segments — not
+          a ranked search, just a roll-up. Each file's score is the max score of
+          the segments that point to it.
+        * ``resources``: workspace-track resources ranked by embedding,
+          ``resource.top_k`` of them.
+
+        Returns ``segments``, ``files``, and ``resources``.
+        """
+        if not query or not query.strip():
+            raise ValueError("empty_query")
+        store = self._get_database()
+        where_filters = self._normalize_where(where)
+        config = self.retrieve_workspace_config
+        embed_client = self._get_embedding_client("embedding")
+        query_vector = (await embed_client.embed([query]))[0]
+
+        segment_hits, segment_pool = self._recall_segments(
+            store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.file.enabled
+        )
+        file_hits, file_pool, file_resource_urls = self._collect_files(
+            store=store, where_filters=where_filters, segment_hits=segment_hits, segment_pool=segment_pool
+        )
+        resource_hits, resource_pool = self._recall_resources(
+            store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.resource.enabled
+        )
+
+        files = self._materialize_hits(file_hits, file_pool)
+        for file in files:
+            file["resource_urls"] = file_resource_urls.get(file["id"], [])
+        return {
+            "segments": self._materialize_hits(segment_hits, segment_pool),
+            "files": files,
+            "resources": self._materialize_hits(resource_hits, resource_pool),
+        }
+
+    def _recall_segments(
+        self,
+        *,
+        store: Database,
+        where_filters: dict[str, Any],
+        query_vector: list[float],
+        enabled: bool,
+    ) -> tuple[list[tuple[str, float]], dict[str, Any]]:
+        """Rank :class:`RecallFileSegment` slices by embedding similarity.
+
+        Mirrors :meth:`RetrieveWorkspaceMixin._ws_recall_segments`. The segment repo
+        has no vector search, so the stored segment embeddings are ranked directly,
+        optionally scoped to the configured tracks via the denormalized ``track``.
+        """
+        if not enabled:
+            return [], {}
+
+        segment_where = dict(where_filters)
+        tracks = self.retrieve_workspace_config.file.tracks
+        if tracks:
+            segment_where["track__in"] = list(tracks)
+        segment_pool = {seg.id: seg for seg in store.recall_file_segment_repo.list_segments(segment_where)}
+        segment_hits = cosine_topk(
+            query_vector,
+            [(sid, seg.embedding) for sid, seg in segment_pool.items()],
+            k=self.retrieve_workspace_config.file.top_k,
+        )
+        return segment_hits, segment_pool
+
+    def _collect_files(
+        self,
+        *,
+        store: Database,
+        where_filters: dict[str, Any],
+        segment_hits: list[tuple[str, float]],
+        segment_pool: dict[str, Any],
+    ) -> tuple[list[tuple[str, float]], dict[str, Any], dict[str, list[str]]]:
+        """Roll the ranked segments up to their files (no ranked file search).
+
+        Mirrors :meth:`RetrieveWorkspaceMixin._ws_collect_files`. Every file pointed
+        to by a top segment is returned; a file's score is the max score across the
+        segments that point to it.
+        """
+        file_pool = store.recall_file_repo.list_categories(where_filters)
+
+        file_scores: dict[str, float] = {}
+        for seg_id, score in segment_hits:
+            seg = segment_pool.get(seg_id)
+            if seg is None:
+                continue
+            fid = seg.recall_file_id
+            if fid not in file_pool:
+                continue
+            score = float(score)
+            if fid not in file_scores or score > file_scores[fid]:
+                file_scores[fid] = score
+
+        # Preserve descending-score order so the response reads best-first.
+        file_hits = sorted(file_scores.items(), key=lambda kv: kv[1], reverse=True)
+        file_resource_urls = self._collect_file_resource_urls(store, where_filters, file_pool)
+        return file_hits, file_pool, file_resource_urls
+
+    @staticmethod
+    def _collect_file_resource_urls(
+        store: Database, where_filters: dict[str, Any], file_pool: dict[str, Any]
+    ) -> dict[str, list[str]]:
+        """Map each file id to the URLs of the resources linked to it.
+
+        Mirrors :meth:`RetrieveWorkspaceMixin._ws_collect_file_resource_urls`. Resolves
+        the ``RecallFileResource`` link table (file -> resource) and the resource
+        records (resource -> url) within the current scope, surfacing url strings only.
+        """
+        resources = store.resource_repo.list_resources(where_filters)
+        file_resource_urls: dict[str, list[str]] = {}
+        for rel in store.recall_file_resource_repo.list_relations(where_filters):
+            if rel.file_id not in file_pool:
+                continue
+            resource = resources.get(rel.resource_id)
+            if resource is None:
+                continue
+            file_resource_urls.setdefault(rel.file_id, []).append(resource.url)
+        return file_resource_urls
+
+    def _recall_resources(
+        self,
+        *,
+        store: Database,
+        where_filters: dict[str, Any],
+        query_vector: list[float],
+        enabled: bool,
+    ) -> tuple[list[tuple[str, float]], dict[str, Any]]:
+        """Rank workspace-track resources by embedding similarity.
+
+        Mirrors :meth:`RetrieveWorkspaceMixin._ws_recall_resources`. Only resources
+        ingested by ``memorize_workspace`` (``track="workspace"``) are surfaced; other
+        tracks are excluded.
+        """
+        if not enabled:
+            return [], {}
+
+        resource_where = {**where_filters, "track": "workspace"}
+        resource_pool = store.resource_repo.list_resources(resource_where)
+        resource_hits = store.resource_repo.vector_search_resources(
+            query_vector, self.retrieve_workspace_config.resource.top_k, where=resource_where
+        )
+        return resource_hits, resource_pool
+
+    def _materialize_hits(self, hits: Sequence[tuple[str, float]], pool: dict[str, Any]) -> list[dict[str, Any]]:
+        """Expand ``(id, score)`` hits into scored, embedding-free dicts.
+
+        Mirrors :meth:`RetrieveWorkspaceMixin._materialize_hits`.
+        """
+        out = []
+        for _id, score in hits:
+            obj = pool.get(_id)
+            if not obj:
+                continue
+            data = self._model_dump_without_embeddings(obj)
+            data["score"] = float(score)
+            out.append(data)
+        return out
 
     async def commit_results(
         self,
