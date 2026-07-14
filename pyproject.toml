@@ -76,6 +76,9 @@ document = ["markitdown[docx,pptx,xlsx,xls,pdf]>=0.1.0"]
 
 [project.scripts]
 memu = "memu.cli:main"
+# Host adapters get their own binary rather than a subcommand: `memu` is the
+# algorithm surface, these are sidecars to a desktop agent (ADR 0008/0009).
+memu-codex = "memu.hosts.codex.cli:main"
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"

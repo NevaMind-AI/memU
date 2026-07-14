@@ -225,7 +225,7 @@ class AgenticMixin:
 
         This mirrors the persistence half of :meth:`MemorizeWorkspaceMixin.memorize_workspace`
         but takes items that were already preprocessed/synthesized off-service (see
-        ``skills/scripts/commit_results.py``), so it runs no ingest/preprocess/LLM steps and
+        :mod:`memu.hosts.bridging.pipeline`), so it runs no ingest/preprocess/LLM steps and
         no workflow — just create-or-update straight into storage:
 
         - ``resource`` — a list of ``{path, description}`` records. Each is a

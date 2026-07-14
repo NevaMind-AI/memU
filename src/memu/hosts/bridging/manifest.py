@@ -1,10 +1,12 @@
-"""Shared helper — snapshot the tracked dirs by content hash, diff them later.
+"""Snapshot the mirrored recall files by content hash, diff them later.
 
-Step 1 records a sha256 of every file under the tracked dirs; the collector
-(step 3) re-hashes and diffs against that snapshot to learn which files the
-agent created or modified. Content hashing (not mtime, not the agent's own
-report) means a rewrite with identical bytes is correctly seen as unchanged.
+Prepare records a sha256 of every mirrored file; commit re-hashes and diffs
+against that snapshot to learn which files the agent actually created or
+modified. Hashing content (not mtime, and not the agent's own account of what it
+did) means a rewrite with identical bytes is correctly seen as unchanged.
 """
+
+from __future__ import annotations
 
 import hashlib
 import json
@@ -17,7 +19,7 @@ def _hash_file(path: Path) -> str:
 
 
 def _iter_tracked(base_dir: Path, subdirs: list[str]) -> Iterator[tuple[str, Path]]:
-    """Yield (relative-posix key, path) for every file under each subdir."""
+    """Yield ``(relative-posix key, path)`` for every file under each subdir."""
     for subdir in subdirs:
         root = base_dir / subdir
         if not root.is_dir():
@@ -28,7 +30,7 @@ def _iter_tracked(base_dir: Path, subdirs: list[str]) -> Iterator[tuple[str, Pat
 
 
 def snapshot_tracked(base_dir: Path, subdirs: list[str], manifest_path: Path) -> None:
-    """Record {relative-path: sha256} for the tracked files as they stand now."""
+    """Record ``{relative-path: sha256}`` for the tracked files as they stand now."""
     manifest = {key: _hash_file(path) for key, path in _iter_tracked(base_dir, subdirs)}
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
@@ -37,9 +39,9 @@ def snapshot_tracked(base_dir: Path, subdirs: list[str], manifest_path: Path) ->
 def diff_tracked(base_dir: Path, subdirs: list[str], manifest_path: Path) -> list[Path]:
     """Files created or content-changed since the snapshot, in stable order.
 
-    Deletions are intentionally not returned — a file present in the manifest
-    but gone from disk is dropped silently. Surface those separately if/when the
-    submit API grows a removal path.
+    Deletions are intentionally not returned — a file in the manifest but gone
+    from disk is dropped silently. Surface those separately if/when the submit
+    API grows a removal path.
     """
     baseline = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
 

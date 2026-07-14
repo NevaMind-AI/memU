@@ -1,11 +1,19 @@
-"""Step 3 — turn each prepared session into a self-evolve job-instruction file."""
+"""Turn each prepared transcript into a self-evolve job-instruction file.
+
+The middle step of the pipeline is not a script — it is real agent work (reading
+transcripts, making judgement calls, writing markdown). These templates are how
+prepare hands that work over: each emitted job is self-contained and already
+carries the concrete paths it needs, so the agent does no path reasoning.
+"""
+
+from __future__ import annotations
 
 from pathlib import Path
 
-# Job-instruction templates. Both share the same shape (read input -> read what
-# exists -> decide -> write), differing only in what they mine for. `{input_path}`
-# is the session file to learn from; `{track_dir}` is where existing files of that
-# kind live and where new/patched files are written.
+# Both templates share the same shape — read input, read what exists, decide,
+# write — differing only in what they mine for. `{input_path}` is the transcript
+# to learn from; `{track_dir}` is where existing files of that kind live and
+# where new/patched ones are written.
 MEMORY_JOB_TEMPLATE = """\
 You are the **self-evolve** pass for an agent's workspace. Your job is to mine
 what the agent recently *did* in one session into durable, reusable **user
@@ -145,13 +153,13 @@ def prepare_instruction_jobs(
     resource_log: Path,
     num_sessions: int,
 ) -> None:
-    """Write per-session job-instruction files under job_dir.
+    """Write per-session job-instruction files under ``job_dir``.
 
-    For each of the `num_sessions` sessions prepared in session_dir, write two
-    instruction files by filling the templates with concrete paths: a user-memory
-    job (mining <idx>.jsonl) and a skill job (mining <idx>_full.jsonl). Memory
-    jobs are numbered first (1..N), skill jobs after them (N+1..2N). Skill jobs
-    also log any files the session touched to `resource_log`.
+    For each of the ``num_sessions`` transcripts, fill the templates with
+    concrete paths: a user-memory job (mining ``<idx>.jsonl``) and a skill job
+    (mining ``<idx>_full.jsonl``). Memory jobs are numbered first (1..N), skill
+    jobs after them (N+1..2N) — ordering is load-bearing, since the skill jobs
+    are what populate ``resource_log`` for the resource job that comes last.
     """
     job_dir.mkdir(parents=True, exist_ok=True)
     for stale in job_dir.glob("*.txt"):
