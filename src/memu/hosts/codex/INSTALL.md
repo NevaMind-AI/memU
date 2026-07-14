@@ -4,17 +4,16 @@
 > to install memU"). Work top to bottom. Each part ends with a **verify** gate —
 > do not proceed until the current one passes.
 >
-> Parts marked ⚠️ depend on Codex's own configuration surface, which you must
-> confirm against its docs before writing. Everything on the memU side is a
-> `PATH` command; you should never need to write an absolute path to a script.
+> Everything on the memU side is a `PATH` command; you should never need to write
+> an absolute path to a script.
 
 Installing memU on Codex is three parts:
 
 1. **Install memU** — a Python package, and the store + provider it writes to.
 2. **Register the bridging task** — the scheduled job that turns recent Codex
    sessions into durable memory (the *record* seam).
-3. **Install the retrieval hook** — a UserPromptSubmit hook that tells you to pull
-   relevant memory before each turn (the *inject* seam).
+3. **Patch `~/.codex/AGENTS.md`** — a standing instruction that tells you to pull
+   relevant memory before you answer (the *inject* seam).
 
 Parts 2 and 3 must share one store and one embedding space, or a query is
 compared against vectors written elsewhere and retrieval silently returns
@@ -134,50 +133,57 @@ back to the user.
 
 ---
 
-## Part 3 — Install the retrieval (inject) hook
+## Part 3 — Patch `~/.codex/AGENTS.md` with the retrieval instruction
 
-The *inject* seam: a **UserPromptSubmit** hook that, before you answer a prompt,
-injects one instruction telling you to retrieve relevant memory first. You then
-run the retrieval yourself and factor the results into your answer.
+The *inject* seam: a standing instruction in Codex's **global AGENTS.md** telling
+you to pull relevant memory before you answer. Codex loads `~/.codex/AGENTS.md`
+into every session, so the instruction is simply always there — no hook, no
+wrapper, no per-turn process. You run the retrieval yourself and factor the
+results into your answer.
 
-⚠️ Check Codex's hooks reference for the exact config file and schema before
-writing anything: <https://learn.chatgpt.com/docs/hooks#userpromptsubmit>. The
-block below is the *intent*; the syntax is whatever those docs specify.
-
-### 3.1 The injected instruction
-
-One line, added to the turn:
+**Do not hand-write the instruction.** memU owns the text and installs it for you:
 
 ```
-Before answering, run `memu-codex retrieve "<query>"` — where <query> is the
-user's request, reworded into a clearer query or focused keywords when that
-retrieves better (you need not pass their raw words verbatim). Use any relevant
-results as context. If it returns nothing, proceed normally.
+memu-codex install-instruction
 ```
 
-Notes:
+That is the whole step. It writes memU's block into `~/.codex/AGENTS.md`, creating
+the file if it does not exist, and prints the diff of what it changed.
 
-- It points at **`memu-codex retrieve`**, a `PATH` command, never a script path.
-  This is the LLM-free single-shot retrieval: it embeds the query once and ranks
-  memory, skills, and resources. It prints JSON.
-- Do **not** point the hook at `memu retrieve`. That is the LLM-routed path —
-  high quality, but it costs an LLM call on every single turn, which is not what
-  a prompt hook should do.
-- It **fails open**: an empty store or a miss returns empty lists and the turn
-  proceeds as normal.
+Three properties worth knowing, because they are what make it safe to just run:
 
-### 3.2 Register the hook
+- **It appends; it never overwrites.** `~/.codex/AGENTS.md` is the *user's* global
+  instruction file and may already hold rules that have nothing to do with memU.
+  Everything already in there survives, and the previous contents are backed up to
+  `~/.codex/AGENTS.md.bak` before anything is written.
+- **It is idempotent.** memU's text goes inside a marked block. Re-running replaces
+  that block in place rather than appending a second copy, so running it twice is
+  harmless — and so a later memU release can *improve* the instruction and have the
+  upgrade actually reach users who already installed it. A copy pasted in by hand
+  could never be upgraded.
+- **It shows its work.** `--dry-run` prints the diff and writes nothing; `--print`
+  prints just the block. If the user wants to see what lands in their file before it
+  lands, that is how.
 
-Add a `UserPromptSubmit` hook to Codex's hook configuration that emits the
-instruction above. Follow the linked docs for the exact file and shape;
-conceptually it is one hook entry that outputs that string on the
-`UserPromptSubmit` event.
+If you want to read the instruction itself, run `memu-codex install-instruction
+--print`. In short: it tells you to run `memu-codex retrieve "<query>"` before
+answering — the LLM-free single-shot retrieval, not the LLM-routed `memu retrieve`,
+which would cost an LLM call on every turn — and it explains how to read the
+`segments`/`files`/`resources` layers that come back.
 
 ### ✅ Verify Part 3
 
-Start a normal Codex prompt and confirm the instruction reaches you in-context
-(i.e. you are told to run `memu-codex retrieve …`). Run that command once by hand
-and confirm it returns without error against the Part 1 store:
+Read the file back:
+
+```
+cat ~/.codex/AGENTS.md
+```
+
+The memU block must appear exactly once, and anything the user had in there
+beforehand must still be intact.
+
+Then confirm the command the instruction names actually works against the Part 1
+store:
 
 ```
 memu-codex retrieve "smoke test"
@@ -185,6 +191,10 @@ memu-codex retrieve "smoke test"
 
 Empty result lists are fine — you are testing that the read path works, not that
 the store has content yet.
+
+Finally, note that a *fresh* Codex session is what picks up the new AGENTS.md. The
+session you are installing from already loaded the old one, so do not be surprised
+that the instruction is not in your own context yet.
 
 ---
 
@@ -194,7 +204,8 @@ Report back to the user:
 
 - the store (`MEMU_DB`) and provider now in use;
 - the scheduled task's name and cron, in words (e.g. "daily at 00:00 local");
-- that the UserPromptSubmit retrieval hook is installed.
+- that the retrieval instruction is now in `~/.codex/AGENTS.md`, and that it takes
+  effect in their next Codex session.
 
 Record (Part 2) and inject (Part 3) both read `~/.memu/config.env`, so they
 provably share the store you configured in Part 1 — what the task learns tonight

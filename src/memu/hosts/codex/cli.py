@@ -11,12 +11,13 @@ a command survives the reinstalls and directory moves that a baked-in
 ``<VENV_PYTHON> /abs/path/to/script.py`` pair does not (ADR 0009).
 
 Usage:
-    memu-codex retrieve "<query>"  # the inject seam — what the prompt hook runs
-    memu-codex prepare             # slice new sessions into job files
-    memu-codex verify-resources    # filter the touched-file log (run by a job)
-    memu-codex commit              # submit what the agent produced back to memU
-    memu-codex doctor              # check config + store before relying on them
-    memu-codex docs install        # print the agent-facing install guide
+    memu-codex retrieve "<query>"    # the inject seam — what the agent runs each turn
+    memu-codex install-instruction   # the inject seam — patch ~/.codex/AGENTS.md to run it
+    memu-codex prepare               # slice new sessions into job files
+    memu-codex verify-resources      # filter the touched-file log (run by a job)
+    memu-codex commit                # submit what the agent produced back to memU
+    memu-codex doctor                # check config + store before relying on them
+    memu-codex docs install          # print the agent-facing install guide
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ from collections.abc import Callable, Coroutine
 from importlib.resources import files
 from typing import Any
 
-from memu.hosts import retrieval
+from memu.hosts import instruction, retrieval
 from memu.hosts.bridging import Layout, commit, prepare
 from memu.hosts.bridging.pipeline import MAX_JOBS
 from memu.hosts.bridging.resources import verify_resource_log
@@ -39,6 +40,10 @@ HOST = "codex"
 
 VERIFY_COMMAND = "memu-codex verify-resources"
 """What the resource job tells the agent to run. A command, never a path."""
+
+AGENTS_MD = "~/.codex/AGENTS.md"
+"""Codex's global instruction file — loaded into every session, so the inject seam
+lands here. The path is the only part of that seam that is Codex-specific."""
 
 DOCS = {"install": "INSTALL.md", "task": "BRIDGING_TASK.md"}
 
@@ -115,8 +120,11 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--base-dir", default="~/.memu", help="memU working directory (default: ~/.memu)")
         return p
 
-    # The inject seam. Shared across hosts, so it is registered, not redefined.
+    # Both halves of the inject seam: what the agent runs, and what tells it to.
+    # Shared across hosts, so they are registered, not redefined — only the file
+    # the instruction lands in is ours to name.
     retrieval.register(sub)
+    instruction.register(sub, path=AGENTS_MD)
 
     p = with_base(sub.add_parser("prepare", help="Slice new Codex sessions into self-evolve job files"))
     p.add_argument("--session-dir", default=SESSION_DIR, help=f"Codex session log (default: {SESSION_DIR})")

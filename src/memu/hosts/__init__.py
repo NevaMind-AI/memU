@@ -12,10 +12,12 @@ Each host binds two seams (ADR 0008):
 - **record** — a scheduled *bridging* task that mines the host's session log into
   durable memory. Its pipeline lives in :mod:`memu.hosts.bridging` and is shared
   by every host.
-- **inject** — a prompt hook telling the agent to retrieve before it answers. It
-  targets the ``memu`` CLI, so there is no host-specific code for it at all.
+- **inject** — a standing instruction telling the agent to retrieve before it
+  answers, plus the retrieval it names. Both halves are host-agnostic and live in
+  :mod:`memu.hosts.instruction` and :mod:`memu.hosts.retrieval`; a host supplies
+  only the path to its global instruction file (Codex: ``~/.codex/AGENTS.md``).
 
 Adding a host means implementing :class:`memu.hosts.base.TranscriptSource` (where
-its sessions live, how its records are shaped) plus a thin CLI. It must not mean
-copying the pipeline.
+its sessions live, how its records are shaped) plus a thin CLI that registers the
+two shared seams. It must not mean copying the pipeline — or the instruction text.
 """
