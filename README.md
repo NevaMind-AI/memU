@@ -177,26 +177,17 @@ Flags: `--db`, `--provider`, `--embed-model`, `--base-url`, `--api-key`, `--json
 - **record** — a scheduled bridging task slices new session logs into self-contained job files; the agent itself distills them into memory/skill Markdown; `commit` submits whatever the agent left on disk back through `commit_results`.
 - **inject** — a standing instruction in the host's global instruction file (`~/.codex/AGENTS.md`) tells the agent to run `memu-codex retrieve` (→ `progressive_retrieve`) before answering.
 
-Setup, end to end:
+**Installation is agent-driven.** The install guide is written for the agent, not for you — install the package, then hand the guide to your agent and let it do the rest (configure the store, register the scheduled bridging task, patch the instruction file — each step ends with a verify gate):
 
 ```bash
-pip install memu-py                  # puts memu + memu-codex on PATH
-memu-codex docs install              # the full agent-facing install guide
-
-# 1. configure once — ~/.memu/config.env (absolute paths; scheduled tasks have no cwd)
-#      MEMU_DB=/Users/you/.memu/memu.sqlite3
-#      MEMU_EMBED_PROVIDER=openai
-#      MEMU_API_KEY=<key or env-var name>
-memu-codex doctor                    # prove config + store + retrieval all resolve
-
-# 2. inject seam — patch ~/.codex/AGENTS.md (idempotent, upgrade-safe)
-memu-codex install-instruction
-
-# 3. record seam — run on a schedule
-memu-codex prepare                   # slice new sessions into job files
-#   ...the agent works through the jobs...
-memu-codex commit                    # submit produced memory/skills back into memU
+pip install memu-py    # puts memu + memu-codex on PATH
 ```
+
+Then tell your agent:
+
+> Run `memu-codex docs install`, read the guide it prints, and follow it to install memU.
+
+Afterwards `memu-codex doctor` proves the whole loop resolves: config, store, and a live retrieval.
 
 Adding another host means implementing one `TranscriptSource` (where its session logs live, how its records are shaped) plus a thin CLI — the pipeline and instruction text are shared.
 
