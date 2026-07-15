@@ -1,10 +1,9 @@
 """Per-provider default embedding models and endpoints.
 
-Maps a provider identifier to its latest general-purpose text embedding model,
-used by :class:`memu.app.settings.EmbeddingConfig` to pick a sensible default.
-Embedding-only providers (Jina, Voyage) also need their own base URL / API key
-env, since they are absent from the shared chat ``_PROVIDER_DEFAULTS`` table.
-Verified via provider docs, June 2026.
+The single source of provider knowledge for the embedding capability: every
+provider listed here has a real backend under :mod:`memu.embedding.backends`.
+:class:`memu.app.settings.EmbeddingConfig` consults these tables to fill in
+sensible defaults. Verified via provider docs, June 2026.
 """
 
 from __future__ import annotations
@@ -17,11 +16,13 @@ EMBEDDING_PROVIDER_DEFAULTS: dict[str, str] = {
     "openrouter": "openai/text-embedding-3-small",
 }
 
-# base_url + API key env for embedding-only providers (not chat providers, so
-# they are not in ``memu.app.settings._PROVIDER_DEFAULTS``).
+# base_url + API key env per provider. OpenAI is absent because its endpoint is
+# the field default on ``EmbeddingConfig`` itself.
 EMBEDDING_PROVIDER_ENDPOINTS: dict[str, tuple[str, str]] = {
     "jina": ("https://api.jina.ai/v1", "JINA_API_KEY"),
     "voyage": ("https://api.voyageai.com/v1", "VOYAGE_API_KEY"),
+    "doubao": ("https://ark.cn-beijing.volces.com", "ARK_API_KEY"),
+    "openrouter": ("https://openrouter.ai", "OPENROUTER_API_KEY"),
 }
 
 
