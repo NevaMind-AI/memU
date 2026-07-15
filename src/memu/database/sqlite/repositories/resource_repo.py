@@ -74,7 +74,6 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
             res = Resource(
                 id=row.id,
                 url=row.url,
-                modality=row.modality,
                 local_path=row.local_path,
                 caption=row.caption,
                 embedding=self._normalize_embedding(row.embedding),
@@ -110,7 +109,6 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
                 res = Resource(
                     id=row.id,
                     url=row.url,
-                    modality=row.modality,
                     local_path=row.local_path,
                     caption=row.caption,
                     embedding=self._normalize_embedding(row.embedding),
@@ -148,7 +146,6 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
         self,
         *,
         url: str,
-        modality: str,
         local_path: str,
         caption: str | None,
         embedding: list[float] | None,
@@ -159,7 +156,6 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
 
         Args:
             url: Resource URL.
-            modality: Resource modality type.
             local_path: Local file path.
             caption: Optional caption text.
             embedding: Optional embedding vector.
@@ -172,7 +168,6 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
         now = self._now()
         row = self._resource_model(
             url=url,
-            modality=modality,
             local_path=local_path,
             caption=caption,
             embedding=self._prepare_embedding(embedding),
@@ -189,7 +184,6 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
         res = Resource(
             id=row.id,
             url=row.url,
-            modality=row.modality,
             local_path=row.local_path,
             caption=row.caption,
             embedding=embedding,

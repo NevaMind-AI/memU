@@ -33,9 +33,6 @@ from typing import Any
 CONFIG_ENV = "~/.memu/config.env"
 """Where install persists the collected values. Override with ``MEMU_CONFIG_ENV``."""
 
-DEFAULT_RESOURCES_DIR = "~/.memu/resources"
-DEFAULT_MEMORY_DIR = "~/.memu/memory"
-
 
 class ConfigError(RuntimeError):
     """Required ``MEMU_*`` configuration is absent or unusable."""
@@ -100,16 +97,21 @@ def database_config(db: str) -> dict[str, Any]:
     return {"metadata_store": {"provider": "sqlite", "dsn": f"sqlite:///{path}"}}
 
 
-def llm_profile() -> dict[str, Any]:
-    """The ``default`` LLM profile — provider plus any overrides that are set."""
+def embedding_profile() -> dict[str, Any]:
+    """The ``default`` embedding profile — provider plus any overrides that are set.
+
+    ``MEMU_LLM_PROVIDER``/``MEMU_API_KEY`` keep their historical names so existing
+    ``~/.memu/config.env`` files stay valid; the provider now backs the embedding
+    client, the only model call left in the service.
+    """
     profile: dict[str, Any] = {"provider": env("MEMU_LLM_PROVIDER", "openai")}
-    for key, var in (("chat_model", "MEMU_CHAT_MODEL"), ("base_url", "MEMU_BASE_URL"), ("api_key", "MEMU_API_KEY")):
+    for key, var in (("embed_model", "MEMU_EMBED_MODEL"), ("base_url", "MEMU_BASE_URL"), ("api_key", "MEMU_API_KEY")):
         if value := env(var):
             profile[key] = value
     return profile
 
 
-def build_service_from_env(*, memory_files: bool = False) -> Any:
+def build_service_from_env() -> Any:
     """Construct a :class:`MemoryService` purely from ``MEMU_*`` config.
 
     The flagless counterpart to the CLI's ``_build_service``: host adapters and
@@ -120,12 +122,6 @@ def build_service_from_env(*, memory_files: bool = False) -> Any:
     from memu.app import MemoryService
 
     return MemoryService(
-        llm_profiles={"default": llm_profile()},
+        embedding_profiles={"default": embedding_profile()},
         database_config=database_config(require("MEMU_DB")),
-        blob_config={"resources_dir": os.path.expanduser(env("MEMU_RESOURCES_DIR", DEFAULT_RESOURCES_DIR) or "")},
-        memory_files_config={
-            "enabled": memory_files,
-            "output_dir": os.path.expanduser(env("MEMU_MEMORY_DIR", DEFAULT_MEMORY_DIR) or ""),
-            "synthesize": env("MEMU_SYNTHESIZE", "") == "1",
-        },
     )

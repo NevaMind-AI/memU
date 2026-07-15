@@ -1,7 +1,8 @@
 """CLI surface tests: argument parsing, config mapping, and error paths.
 
-These never construct a MemoryService (no network, no LLM); they exercise the
-pure argv -> config layer and the pre-service validation in the handlers.
+These never construct a MemoryService (no network, no embedding calls); they
+exercise the pure argv -> config layer and the pre-service validation in the
+handlers.
 """
 
 from __future__ import annotations
@@ -17,13 +18,10 @@ from memu.env import database_config
 def test_parser_covers_all_entry_points() -> None:
     parser = build_parser()
     for argv in (
-        ["memorize", "notes.md"],
-        ["memorize-workspace", "./ws"],
-        ["sync", "./ws"],
         ["retrieve", "query"],
-        ["retrieve-workspace", "query"],
         ["search", "query"],
-        ["export"],
+        ["list-files"],
+        ["commit", "payload.json"],
     ):
         args = parser.parse_args(argv)
         assert callable(args.handler)
@@ -48,18 +46,6 @@ def test_database_config_dispatch(tmp_path: pathlib.Path) -> None:
     assert url["metadata_store"]["dsn"] == "sqlite:////Users/x/.memu/memu.sqlite3"
 
 
-def test_memorize_missing_file_exits_2(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["memorize", "/definitely/not/a/file.md"]) == 2
+def test_commit_missing_payload_exits_2(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["commit", "/definitely/not/a/payload.json"]) == 2
     assert "no such file" in capsys.readouterr().err
-
-
-def test_memorize_unknown_extension_exits_2(tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
-    target = tmp_path / "data.xyz"
-    target.write_text("hello")
-    assert main(["memorize", str(target)]) == 2
-    assert "cannot infer modality" in capsys.readouterr().err
-
-
-def test_memorize_workspace_missing_folder_exits_2(capsys: pytest.CaptureFixture[str]) -> None:
-    assert main(["memorize-workspace", "/definitely/not/a/folder"]) == 2
-    assert "no such folder" in capsys.readouterr().err

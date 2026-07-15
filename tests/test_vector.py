@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
-from memu.database.inmemory.vector import cosine_topk, cosine_topk_salience
+from memu.database.inmemory.vector import cosine_topk
 
 
 def _corpus() -> list[tuple[str, list[float]]]:
@@ -19,10 +17,3 @@ def test_cosine_topk_nonpositive_k_returns_empty() -> None:
 def test_cosine_topk_orders_by_similarity() -> None:
     results = cosine_topk([1.0, 0.0], _corpus(), k=2)
     assert [memory_id for memory_id, _ in results] == ["a", "c"]
-
-
-def test_cosine_topk_salience_nonpositive_k_returns_empty() -> None:
-    now = datetime.now(UTC)
-    corpus = [("a", [1.0, 0.0], 1, now), ("b", [0.0, 1.0], 1, now)]
-    assert cosine_topk_salience([1.0, 0.0], corpus, k=0) == []
-    assert cosine_topk_salience([1.0, 0.0], corpus, k=-1) == []

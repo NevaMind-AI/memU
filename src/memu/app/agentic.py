@@ -1,40 +1,35 @@
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from memu.blob.folder import infer_modality
 from memu.vector import cosine_topk
 
 if TYPE_CHECKING:
-    from memu.app.service import Context
-    from memu.app.settings import RetrieveWorkspaceConfig
+    from memu.app.settings import ProgressiveRetrieveConfig
     from memu.database.interfaces import Database
     from memu.database.models import RecallFile, Resource
 
 
 class AgenticMixin:
     if TYPE_CHECKING:
-        _get_context: Callable[[], Context]
         _get_database: Callable[[], Database]
         _normalize_where: Callable[[Mapping[str, Any] | None], dict[str, Any]]
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
-        _ensure_categories_ready: Callable[[Context, Database, Mapping[str, Any] | None], Awaitable[None]]
         _get_embedding_client: Callable[..., Any]
-        retrieve_workspace_config: RetrieveWorkspaceConfig
+        progressive_retrieve_config: ProgressiveRetrieveConfig
         user_model: type[BaseModel]
 
     async def list_all_recall_files(
         self,
         where: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """List RecallFiles across every track without workflow orchestration.
+        """List RecallFiles across every track.
 
-        Unlike :meth:`CRUDMixin.list_recall_files`, this does not force the
-        ``track="memory"`` filter (ADR 0006), so skill-track files are included,
-        and it queries the repository directly instead of running a workflow.
+        No ``track`` filter is forced (ADR 0006), so skill-track files are
+        included alongside memory-track ones; the repository is queried directly.
         """
         store = self._get_database()
         where_filters = self._normalize_where(where)
@@ -49,10 +44,8 @@ class AgenticMixin:
     ) -> dict[str, Any]:
         """Single-shot, LLM-free retrieval over the segment/file/resource layers.
 
-        This mirrors :meth:`RetrieveWorkspaceMixin.retrieve_workspace` but runs no
-        workflow — the four stages are executed sequentially in-line, the same way
-        :meth:`commit_results` inverts ``memorize_workspace``. The query is embedded
-        once and used to rank two layers by vector similarity; no intention routing,
+        The stages run sequentially in-line: the query is embedded once and used
+        to rank two layers by vector similarity; no intention routing,
         sufficiency checks, or summarization:
 
         * ``segments``: :class:`RecallFileSegment` slices ranked by embedding,
@@ -69,7 +62,7 @@ class AgenticMixin:
             raise ValueError("empty_query")
         store = self._get_database()
         where_filters = self._normalize_where(where)
-        config = self.retrieve_workspace_config
+        config = self.progressive_retrieve_config
         embed_client = self._get_embedding_client("embedding")
         query_vector = (await embed_client.embed([query]))[0]
 
@@ -102,22 +95,22 @@ class AgenticMixin:
     ) -> tuple[list[tuple[str, float]], dict[str, Any]]:
         """Rank :class:`RecallFileSegment` slices by embedding similarity.
 
-        Mirrors :meth:`RetrieveWorkspaceMixin._ws_recall_segments`. The segment repo
-        has no vector search, so the stored segment embeddings are ranked directly,
-        optionally scoped to the configured tracks via the denormalized ``track``.
+        The segment repo has no vector search, so the stored segment embeddings
+        are ranked directly, optionally scoped to the configured tracks via the
+        denormalized ``track``.
         """
         if not enabled:
             return [], {}
 
         segment_where = dict(where_filters)
-        tracks = self.retrieve_workspace_config.file.tracks
+        tracks = self.progressive_retrieve_config.file.tracks
         if tracks:
             segment_where["track__in"] = list(tracks)
         segment_pool = {seg.id: seg for seg in store.recall_file_segment_repo.list_segments(segment_where)}
         segment_hits = cosine_topk(
             query_vector,
             [(sid, seg.embedding) for sid, seg in segment_pool.items()],
-            k=self.retrieve_workspace_config.file.top_k,
+            k=self.progressive_retrieve_config.file.top_k,
         )
         return segment_hits, segment_pool
 
@@ -131,9 +124,8 @@ class AgenticMixin:
     ) -> tuple[list[tuple[str, float]], dict[str, Any], dict[str, list[str]]]:
         """Roll the ranked segments up to their files (no ranked file search).
 
-        Mirrors :meth:`RetrieveWorkspaceMixin._ws_collect_files`. Every file pointed
-        to by a top segment is returned; a file's score is the max score across the
-        segments that point to it.
+        Every file pointed to by a top segment is returned; a file's score is the
+        max score across the segments that point to it.
         """
         file_pool = store.recall_file_repo.list_categories(where_filters)
 
@@ -160,9 +152,9 @@ class AgenticMixin:
     ) -> dict[str, list[str]]:
         """Map each file id to the URLs of the resources linked to it.
 
-        Mirrors :meth:`RetrieveWorkspaceMixin._ws_collect_file_resource_urls`. Resolves
-        the ``RecallFileResource`` link table (file -> resource) and the resource
-        records (resource -> url) within the current scope, surfacing url strings only.
+        Resolves the ``RecallFileResource`` link table (file -> resource) and the
+        resource records (resource -> url) within the current scope, surfacing url
+        strings only.
         """
         resources = store.resource_repo.list_resources(where_filters)
         file_resource_urls: dict[str, list[str]] = {}
@@ -185,9 +177,8 @@ class AgenticMixin:
     ) -> tuple[list[tuple[str, float]], dict[str, Any]]:
         """Rank workspace-track resources by embedding similarity.
 
-        Mirrors :meth:`RetrieveWorkspaceMixin._ws_recall_resources`. Only resources
-        ingested by ``memorize_workspace`` (``track="workspace"``) are surfaced; other
-        tracks are excluded.
+        Only ``track="workspace"`` resources (the kind :meth:`commit_results`
+        writes) are surfaced; other tracks are excluded.
         """
         if not enabled:
             return [], {}
@@ -195,15 +186,12 @@ class AgenticMixin:
         resource_where = {**where_filters, "track": "workspace"}
         resource_pool = store.resource_repo.list_resources(resource_where)
         resource_hits = store.resource_repo.vector_search_resources(
-            query_vector, self.retrieve_workspace_config.resource.top_k, where=resource_where
+            query_vector, self.progressive_retrieve_config.resource.top_k, where=resource_where
         )
         return resource_hits, resource_pool
 
     def _materialize_hits(self, hits: Sequence[tuple[str, float]], pool: dict[str, Any]) -> list[dict[str, Any]]:
-        """Expand ``(id, score)`` hits into scored, embedding-free dicts.
-
-        Mirrors :meth:`RetrieveWorkspaceMixin._materialize_hits`.
-        """
+        """Expand ``(id, score)`` hits into scored, embedding-free dicts."""
         out = []
         for _id, score in hits:
             obj = pool.get(_id)
@@ -223,10 +211,9 @@ class AgenticMixin:
     ) -> dict[str, Any]:
         """Persist externally-prepared resources and recall files into the store.
 
-        This mirrors the persistence half of :meth:`MemorizeWorkspaceMixin.memorize_workspace`
-        but takes items that were already preprocessed/synthesized off-service (see
-        :mod:`memu.hosts.bridging.pipeline`), so it runs no ingest/preprocess/LLM steps and
-        no workflow — just create-or-update straight into storage:
+        Takes items that were already preprocessed/synthesized off-service (see
+        :mod:`memu.hosts.bridging.pipeline`), so it runs no ingest/preprocess/LLM
+        steps — just create-or-update straight into storage:
 
         - ``resource`` — a list of ``{path, description}`` records. Each is a
           :class:`Resource` keyed by ``url`` (``= path``); the description becomes the
@@ -262,8 +249,7 @@ class AgenticMixin:
 
         ``ResourceRepo`` has no in-place update, so an "update" is a delete-then-create:
         any existing resource sharing this url (and its file provenance links) is dropped
-        before the fresh record is created. Mirrors
-        :meth:`MemorizeWorkspaceMixin._create_resource_with_caption`.
+        before the fresh record is created.
         """
         where = user_scope or None
         committed: list[Resource] = []
@@ -282,11 +268,13 @@ class AgenticMixin:
             caption_embedding = (await embed_client.embed([caption]))[0] if caption else None
             res = store.resource_repo.create_resource(
                 url=url,
-                modality=infer_modality(url) or "document",
                 local_path=url,
                 caption=caption,
                 embedding=caption_embedding,
                 user_data=dict(user_scope or {}),
+                # progressive_retrieve's resource layer filters on track="workspace";
+                # commit is now the only resource writer, so tag it accordingly.
+                track="workspace",
             )
             committed.append(res)
         return committed
@@ -303,8 +291,7 @@ class AgenticMixin:
 
         Keyed by ``name`` within the record's ``track`` (``memory``/``skill``). New files embed
         their ``name: description`` for file-level recall; existing files keep their embedding
-        and only take the new content. Segments are then reconciled per track. Mirrors the
-        persist path of :meth:`MemorizeWorkspaceMixin._synthesize_file_ops`.
+        and only take the new content. Segments are then reconciled per track.
         """
         user_data = dict(user_scope or {})
         committed: list[RecallFile] = []
@@ -343,8 +330,6 @@ class AgenticMixin:
     def _commit_segment_texts_for_file(file: RecallFile, file_track: str) -> list[str]:
         """Compute a file's searchable segment texts (ADR 0007 L2 items), track-specific.
 
-        Mirrors :meth:`MemorizeWorkspaceMixin._segment_texts_for_file`:
-
         - ``skill``: a single ``name: ...\\ndescription: ...`` segment for the whole skill.
         - ``memory``: one segment per content line, skipping blank lines and markdown
           headings, de-duplicated while preserving order.
@@ -373,7 +358,7 @@ class AgenticMixin:
 
         Drop-and-add on the difference only: segments whose text disappeared are deleted and
         only genuinely new texts are embedded and inserted, so unchanged lines keep their
-        embedding. Mirrors :meth:`MemorizeWorkspaceMixin._sync_file_segments` (single file).
+        embedding.
         """
         new_texts = self._commit_segment_texts_for_file(file, file_track)
         existing = store.recall_file_segment_repo.list_segments_for_file(file.id)

@@ -1,8 +1,6 @@
 # memu-cli
 
-CLI for [memU](https://github.com/NevaMind-AI/MemU) — personal memory as files. Compile conversations, documents, and agent traces into a Markdown memory tree (`INDEX.md` / `MEMORY.md` / `SKILL.md`), then retrieve compact, ranked context instead of restuffing every prompt.
-
-> 🚧 memU is under active rework; the workspace pair below is the primary surface, other commands and flags may still change.
+CLI for [memU](https://github.com/NevaMind-AI/MemU) — personal memory as files. Persist agent-prepared memory and skill documents, then retrieve compact, ranked context instead of restuffing every prompt. Embedding-only: no LLM call happens inside memU.
 
 ## Quick start
 
@@ -18,27 +16,25 @@ Then:
 ```bash
 export OPENAI_API_KEY=sk-...
 
-# diff-sync a workspace folder into memory
-# (chat/ -> memory topics, agent/ -> skills, everything else -> indexed context)
-npx memu-cli memorize-workspace ./workspace
+# persist prepared memory: {"recall_files": [...], "resource": [...]}
+npx memu-cli commit results.json
+
+# list every stored memory/skill file
+npx memu-cli list-files
 
 # single-shot embedding retrieval — LLM-free, fast
-npx memu-cli retrieve-workspace "deploy checklist"
-
-# rebuild the INDEX.md / MEMORY.md / SKILL.md markdown tree
-npx memu-cli export
+npx memu-cli retrieve "deploy checklist"
 ```
 
-State persists in a local SQLite database (`./data/memu.sqlite3` by default), so memorize in one invocation and retrieve in the next. Every flag has a `MEMU_*` environment variable (`--provider`/`MEMU_LLM_PROVIDER`, `--model`/`MEMU_CHAT_MODEL`, `--db`/`MEMU_DB`, ...) — run `npx memu-cli <command> --help` for the full list.
+State persists in a local SQLite database (`./data/memu.sqlite3` by default), so commit in one invocation and retrieve in the next. Every flag has a `MEMU_*` environment variable (`--provider`/`MEMU_LLM_PROVIDER`, `--embed-model`/`MEMU_EMBED_MODEL`, `--db`/`MEMU_DB`, ...) — run `npx memu-cli <command> --help` for the full list.
 
 ## Commands
 
 | Command | Alias | What it does |
 |---|---|---|
-| `memorize-workspace <folder>` | `sync` | Diff-sync a folder into memory; only changed files are reprocessed |
-| `retrieve-workspace <query>` | `search` | Rank memory segments, files, and resources by embedding similarity — zero LLM calls |
-| `export` | | Rebuild the markdown memory tree from the store |
-| `memorize <file>` / `retrieve <query>` | | Legacy single-file pair — LLM-routed, heavier; prefer the workspace pair |
+| `retrieve <query>` | `search` | Rank memory segments, files, and resources by embedding similarity — zero LLM calls |
+| `list-files` | | List every recall file across the memory and skill tracks |
+| `commit <payload.json>` | | Persist externally-prepared recall files and resources (`-` reads stdin) |
 
 ## How it works
 
@@ -49,7 +45,7 @@ This npm package is a thin launcher (a few kB, no dependencies). The engine is t
 3. `pipx run --spec memu-cli memu` — no install needed, cached by pipx
 4. `python3 -m memu` — requires `pip install memu-cli`
 
-Using Python already? Skip npm entirely: `uvx --from memu-cli memu --help`, or `pip install memu-cli`. For the library API (`MemoryService`, LangGraph integration, Postgres backends), use [`memu-py`](https://pypi.org/project/memu-py/) — but install only one of the two in a given environment; they ship the same `memu` module.
+Using Python already? Skip npm entirely: `uvx --from memu-cli memu --help`, or `pip install memu-cli`. For the library API (`MemoryService`, Postgres backends), use [`memu-py`](https://pypi.org/project/memu-py/) — but install only one of the two in a given environment; they ship the same `memu` module.
 
 See the [main README](https://github.com/NevaMind-AI/MemU#readme) for the memory model, library API, and self-hosting options.
 

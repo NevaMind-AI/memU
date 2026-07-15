@@ -143,14 +143,14 @@ postgres_db = build_postgres_database(config=postgres_config, user_model=UserSco
 for res_id, resource in sqlite_db.resources.items():
     postgres_db.resource_repo.create_resource(
         url=resource.url,
-        modality=resource.modality,
         local_path=resource.local_path,
         caption=resource.caption,
         embedding=resource.embedding,
         user_data={"user_id": getattr(resource, "user_id", None)},
+        track=resource.track,
     )
 
-# Similar for categories, items, and relations...
+# Similar for recall files, segments, and relations...
 ```
 
 ## Performance Considerations
@@ -172,7 +172,6 @@ from memu.app import MemoryService
 async def main():
     # Initialize with SQLite
     service = MemoryService(
-        llm_profiles={"default": {"api_key": "your-api-key"}},
         database_config={
             "metadata_store": {
                 "provider": "sqlite",
@@ -181,24 +180,25 @@ async def main():
         },
     )
 
-    # Memorize a conversation
-    result = await service.memorize(
-        resource_url="conversation.json",
-        modality="conversation",
+    # Commit prepared memory
+    await service.commit_results(
+        recall_files=[
+            {
+                "name": "Preferences",
+                "track": "memory",
+                "description": "what alice likes",
+                "content": "# Preferences\n- prefers dark roast coffee",
+            }
+        ],
         user={"user_id": "alice"},
     )
-    print(f"Created {len(result['categories'])} categories")
 
     # Retrieve relevant memories
-    memories = await service.retrieve(
-        queries=[
-            {"role": "user", "content": {"text": "What are my preferences?"}}
-        ],
-        where={"user_id": "alice"},
+    context = await service.progressive_retrieve(
+        "What are my preferences?", where={"user_id": "alice"}
     )
-
-    for item in memories.get("items", []):
-        print(f"- {item['summary']}")
+    for segment in context["segments"]:
+        print(f"- {segment['text']} ({segment['score']:.2f})")
 
 asyncio.run(main())
 ```

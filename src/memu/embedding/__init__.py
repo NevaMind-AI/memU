@@ -1,7 +1,6 @@
 """Embedding (vectorization) clients.
 
-Sibling package to :mod:`memu.llm` and :mod:`memu.vlm`, scoped to the embedding
-capability used by vector search. It mirrors their package layout:
+Scoped to the embedding capability used by vector search:
 
 - ``backends/``: per-provider embedding request/response shapes (HTTP transport).
 - ``http_client``/``openai_sdk``: transport clients.

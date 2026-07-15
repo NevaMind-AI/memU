@@ -76,7 +76,6 @@ class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
         self,
         *,
         url: str,
-        modality: str,
         local_path: str,
         caption: str | None,
         embedding: list[float] | None,
@@ -85,7 +84,6 @@ class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
     ) -> Resource:
         res = self._resource_model(
             url=url,
-            modality=modality,
             local_path=local_path,
             caption=caption,
             embedding=self._prepare_embedding(embedding),

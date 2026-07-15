@@ -18,8 +18,6 @@ classifiers = [
 ]
 keywords = ["agent", "agentic", "agent-harness", "harness", "loop-engineering", "context-engineering", "context-window", "memory", "personal-information", "workspace", "retrieval", "llm"]
 dependencies = [
-    "anthropic>=0.40.0",
-    "defusedxml>=0.7.1",
     "httpx>=0.28.1",
     "numpy>=2.3.4",
     "openai>=2.8.0",
@@ -27,7 +25,6 @@ dependencies = [
     "sqlmodel>=0.0.27",
     "alembic>=1.14.0",
     "pendulum>=3.1.0",
-    "langchain-core>=1.2.7",
 ]
 
 [build-system]
@@ -41,17 +38,8 @@ python-source = "src"
 
 [dependency-groups]
 dev = [
-    {include-group = "docs"},
     {include-group = "lint"},
     {include-group = "test"},
-    "langchain-openai>=1.1.7",
-    "langgraph>=1.0.6",
-]
-docs = [
-    "mkdocs>=1.6.1",
-    "mkdocs-material>=9.6.23",
-    "mkdocstrings>=0.30.1",
-    "mkdocstrings-python>=1.18.2",
 ]
 lint = [
     "deptry>=0.23.1",
@@ -68,11 +56,6 @@ test = [
 
 [project.optional-dependencies]
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
-langgraph = ["langgraph>=0.0.10", "langchain-core>=0.1.0"]
-claude = ["claude-agent-sdk>=0.1.24"]
-lazyllm = ["lazyllm>=0.7.3"]
-# Rich document ingestion (PDF, Word, PowerPoint, Excel, ...) via MarkItDown.
-document = ["markitdown[docx,pptx,xlsx,xls,pdf]>=0.1.0"]
 
 [project.scripts]
 memu = "memu.cli:main"
@@ -84,10 +67,6 @@ memu-codex = "memu.hosts.codex.cli:main"
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
 "Bug Tracker" = "https://github.com/NevaMind-AI/MemU/issues"
 "Documentation" = "https://github.com/NevaMind-AI/MemU#readme"
-
-[tool.deptry.per_rule_ignores]
-# Optional dependencies used in examples/ or imported lazily behind extras.
-DEP002 = ["claude-agent-sdk", "markitdown"]
 
 [tool.mypy]
 files = ["src", "tests"]
@@ -108,15 +87,7 @@ warn_unused_ignores = false
 disable_error_code = ["attr-defined", "call-arg"]
 
 [[tool.mypy.overrides]]
-module = ["lazyllm.*"]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
 module = ["pgvector.*"]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = ["markitdown", "markitdown.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
@@ -166,7 +137,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
-"examples/*" = ["E402", "TRY003", "B904", "S104", "TRY300", "SIM108"]
 
 [tool.ruff.format]
 preview = true

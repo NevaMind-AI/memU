@@ -8,7 +8,7 @@ class EmbeddingBackend:
 
     Each provider lives in its own module under :mod:`memu.embedding.backends`
     and customizes the request endpoint, payload shape, response parsing and
-    (when needed) the auth headers. Mirrors :class:`memu.llm.backends.base.LLMBackend`.
+    (when needed) the auth headers.
     """
 
     name: str = "base"

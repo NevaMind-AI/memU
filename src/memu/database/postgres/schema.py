@@ -25,8 +25,6 @@ except ImportError as exc:
 
 from memu.app.settings import DefaultUserModel
 from memu.database.postgres.models import (
-    RecallEntryModel,
-    RecallFileEntryModel,
     RecallFileModel,
     RecallFileResourceModel,
     RecallFileSegmentModel,
@@ -46,8 +44,6 @@ class SQLAModels:
     Base: type[Any]
     Resource: type[Any]
     RecallFile: type[Any]
-    RecallEntry: type[Any]
-    RecallFileEntry: type[Any]
     RecallFileResource: type[Any]
     RecallFileSegment: type[Any]
 
@@ -84,18 +80,6 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
         tablename="recall_files",
         metadata=metadata_obj,
     )
-    recall_entry_model = build_table_model(
-        scope,
-        RecallEntryModel,
-        tablename="recall_entries",
-        metadata=metadata_obj,
-    )
-    recall_file_entry_model = build_table_model(
-        scope,
-        RecallFileEntryModel,
-        tablename="recall_file_entries",
-        metadata=metadata_obj,
-    )
     recall_file_resource_model = build_table_model(
         scope,
         RecallFileResourceModel,
@@ -117,8 +101,6 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
         Base=Base,
         Resource=resource_model,
         RecallFile=recall_file_model,
-        RecallEntry=recall_entry_model,
-        RecallFileEntry=recall_file_entry_model,
         RecallFileResource=recall_file_resource_model,
         RecallFileSegment=recall_file_segment_model,
     )

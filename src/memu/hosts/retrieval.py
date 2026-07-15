@@ -8,12 +8,10 @@ query against the same store. So it lives here once, and each host CLI registers
 it under its own binary (``memu-codex retrieve``, and whatever comes next),
 because that binary is what the host's hook can reliably invoke.
 
-This wraps :meth:`AgenticMixin.progressive_retrieve` rather than
-``retrieve_workspace``. Both are LLM-free, embed the query once, rank the same
-three layers, and return the same shape; ``progressive_retrieve`` runs those
-stages inline instead of through the workflow engine. Neither does intention
-routing, sufficiency checks, or summarization — that is ``memu retrieve``, which
-is LLM-routed and far too heavy to put on a per-turn hook.
+This wraps :meth:`AgenticMixin.progressive_retrieve`: LLM-free, the query is
+embedded once, and the segment/file/resource layers come back ranked. No
+intention routing, sufficiency checks, or summarization — cheap enough to run
+on a per-turn hook.
 """
 
 from __future__ import annotations
