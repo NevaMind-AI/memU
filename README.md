@@ -22,6 +22,12 @@
 
 memU is a 500-line memory system for AI agents. Agents write what's worth keeping as Markdown; memU stores it, embeds it, and retrieves ranked context in a single call — embeddings are the only model calls it makes. The entire memory logic lives in [`agentic.py`](src/memu/app/agentic.py) + [`service.py`](src/memu/app/service.py); everything else is pluggable storage and embedding transport.
 
+**Installation is agent-driven.** The guides are written for the agent, not for you. One message is the whole setup — tell your agent:
+
+> Read https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md and follow it to install memU.
+
+It works for Codex, Claude Code, Cursor, OpenClaw, Hermes — and any other agent, via detection. Details in [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
+
 ## Quick start
 
 ```python
@@ -115,11 +121,7 @@ For agents without a dedicated binary, `memu-agent detect` probes the machine an
 
 All hosts share one store and one embedding space via `~/.memu/config.env` — what one host's sessions taught memU, another host retrieves.
 
-**Installation is agent-driven.** The guides are written for the agent, not for you. One message is the whole setup — tell your agent:
-
-> Read https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md and follow it to install memU.
-
-[SKILL.md](SKILL.md) is the routing skill: it has the agent install the package, identify which host it is (falling back to `memu-agent detect` for anything without a dedicated adapter), print that host's packaged install guide (`<binary> docs install`), and follow it — configure the store, register the scheduled bridging task, patch the instruction file, each step behind a verify gate — then report which seams (memorization / retrieval) are now active.
+Installation is the one-message setup at the top of this README. [SKILL.md](SKILL.md) is the routing skill it hands your agent: install the package, identify which host you are (falling back to `memu-agent detect` for anything without a dedicated adapter), print that host's packaged install guide (`<binary> docs install`), and follow it — configure the store, register the scheduled bridging task, patch the instruction file, each step behind a verify gate — then report which seams (memorization / retrieval) are now active.
 
 Afterwards `<binary> doctor` proves the whole loop resolves: config, store, and a live retrieval.
 
