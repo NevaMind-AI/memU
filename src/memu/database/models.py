@@ -17,7 +17,6 @@ class BaseRecord(BaseModel):
 
 class Resource(BaseRecord):
     url: str
-    modality: str
     local_path: str
     caption: str | None = None
     embedding: list[float] | None = None

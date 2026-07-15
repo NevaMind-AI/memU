@@ -22,7 +22,6 @@ class ResourceRepo(Protocol):
         self,
         *,
         url: str,
-        modality: str,
         local_path: str,
         caption: str | None,
         embedding: list[float] | None,

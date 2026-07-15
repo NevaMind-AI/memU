@@ -39,7 +39,6 @@ class InMemoryResourceRepository(ResourceRepoProtocol):
         self,
         *,
         url: str,
-        modality: str,
         local_path: str,
         caption: str | None,
         embedding: list[float] | None,
@@ -50,7 +49,6 @@ class InMemoryResourceRepository(ResourceRepoProtocol):
         res = self.resource_model(
             id=rid,
             url=url,
-            modality=modality,
             local_path=local_path,
             caption=caption,
             embedding=embedding,

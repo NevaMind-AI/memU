@@ -48,7 +48,6 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("url", sa.String(), nullable=False),
-        sa.Column("modality", sa.String(), nullable=False),
         sa.Column("local_path", sa.String(), nullable=False),
         sa.Column("caption", sa.Text(), nullable=True),
         sa.Column("embedding", pgvector.sqlalchemy.VECTOR(), nullable=True),

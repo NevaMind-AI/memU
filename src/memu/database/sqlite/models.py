@@ -50,7 +50,6 @@ class SQLiteResourceModel(SQLiteBaseModelMixin, Resource):
     """SQLite resource model."""
 
     url: str = Field(sa_column=Column(String, nullable=False))
-    modality: str = Field(sa_column=Column(String, nullable=False))
     local_path: str = Field(sa_column=Column(String, nullable=False))
     caption: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     # Override inherited embedding field: SQLite has no native vector type, so store the

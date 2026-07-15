@@ -143,14 +143,14 @@ postgres_db = build_postgres_database(config=postgres_config, user_model=UserSco
 for res_id, resource in sqlite_db.resources.items():
     postgres_db.resource_repo.create_resource(
         url=resource.url,
-        modality=resource.modality,
         local_path=resource.local_path,
         caption=resource.caption,
         embedding=resource.embedding,
         user_data={"user_id": getattr(resource, "user_id", None)},
+        track=resource.track,
     )
 
-# Similar for categories, items, and relations...
+# Similar for recall files, segments, and relations...
 ```
 
 ## Performance Considerations
