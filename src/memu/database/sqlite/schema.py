@@ -10,8 +10,6 @@ from sqlalchemy import MetaData
 from sqlmodel import SQLModel
 
 from memu.database.sqlite.models import (
-    SQLiteRecallEntryModel,
-    SQLiteRecallFileEntryModel,
     SQLiteRecallFileModel,
     SQLiteRecallFileResourceModel,
     SQLiteRecallFileSegmentModel,
@@ -27,8 +25,6 @@ class SQLiteSQLAModels:
     Base: type[Any]
     Resource: type[Any]
     RecallFile: type[Any]
-    RecallEntry: type[Any]
-    RecallFileEntry: type[Any]
     RecallFileResource: type[Any]
     RecallFileSegment: type[Any]
 
@@ -67,18 +63,6 @@ def get_sqlite_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) 
         tablename="memu_memory_categories",
         metadata=metadata_obj,
     )
-    recall_entry_model = build_sqlite_table_model(
-        scope,
-        SQLiteRecallEntryModel,
-        tablename="memu_memory_items",
-        metadata=metadata_obj,
-    )
-    recall_file_entry_model = build_sqlite_table_model(
-        scope,
-        SQLiteRecallFileEntryModel,
-        tablename="memu_category_items",
-        metadata=metadata_obj,
-    )
     recall_file_resource_model = build_sqlite_table_model(
         scope,
         SQLiteRecallFileResourceModel,
@@ -100,8 +84,6 @@ def get_sqlite_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) 
         Base=SQLiteBase,
         Resource=resource_model,
         RecallFile=recall_file_model,
-        RecallEntry=recall_entry_model,
-        RecallFileEntry=recall_file_entry_model,
         RecallFileResource=recall_file_resource_model,
         RecallFileSegment=recall_file_segment_model,
     )

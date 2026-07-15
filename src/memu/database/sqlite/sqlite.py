@@ -10,23 +10,17 @@ from sqlmodel import SQLModel
 
 from memu.database.interfaces import Database
 from memu.database.models import (
-    RecallEntry,
     RecallFile,
-    RecallFileEntry,
     RecallFileResource,
     RecallFileSegment,
     Resource,
 )
 from memu.database.repositories import (
-    RecallEntryRepo,
-    RecallFileEntryRepo,
     RecallFileRepo,
     RecallFileResourceRepo,
     RecallFileSegmentRepo,
     ResourceRepo,
 )
-from memu.database.sqlite.repositories.recall_entry_repo import SQLiteRecallEntryRepo
-from memu.database.sqlite.repositories.recall_file_entry_repo import SQLiteRecallFileEntryRepo
 from memu.database.sqlite.repositories.recall_file_repo import SQLiteRecallFileRepo
 from memu.database.sqlite.repositories.recall_file_resource_repo import SQLiteRecallFileResourceRepo
 from memu.database.sqlite.repositories.recall_file_segment_repo import SQLiteRecallFileSegmentRepo
@@ -48,24 +42,16 @@ class SQLiteStore(Database):
     Attributes:
         resource_repo: Repository for resource records.
         recall_file_repo: Repository for memory categories.
-        recall_entry_repo: Repository for memory items.
-        recall_file_entry_repo: Repository for category-item relations.
         resources: Dict cache of resource records.
-        items: Dict cache of memory item records.
         categories: Dict cache of memory category records.
-        relations: List cache of category-item relations.
     """
 
     resource_repo: ResourceRepo
     recall_file_repo: RecallFileRepo
-    recall_entry_repo: RecallEntryRepo
-    recall_file_entry_repo: RecallFileEntryRepo
     recall_file_resource_repo: RecallFileResourceRepo
     recall_file_segment_repo: RecallFileSegmentRepo
     resources: dict[str, Resource]
-    items: dict[str, RecallEntry]
     categories: dict[str, RecallFile]
-    relations: list[RecallFileEntry]
     resource_relations: list[RecallFileResource]
     segments: list[RecallFileSegment]
 
@@ -76,8 +62,6 @@ class SQLiteStore(Database):
         scope_model: type[BaseModel] | None = None,
         resource_model: type[Any] | None = None,
         recall_file_model: type[Any] | None = None,
-        recall_entry_model: type[Any] | None = None,
-        recall_file_entry_model: type[Any] | None = None,
         recall_file_resource_model: type[Any] | None = None,
         recall_file_segment_model: type[Any] | None = None,
         sqla_models: SQLiteSQLAModels | None = None,
@@ -89,8 +73,6 @@ class SQLiteStore(Database):
             scope_model: Pydantic model defining user scope fields.
             resource_model: Optional custom resource model.
             recall_file_model: Optional custom memory category model.
-            recall_entry_model: Optional custom memory item model.
-            recall_file_entry_model: Optional custom category-item model.
             sqla_models: Pre-built SQLAlchemy models container.
         """
         self.dsn = dsn
@@ -106,8 +88,6 @@ class SQLiteStore(Database):
         # Use provided models or defaults from sqla_models
         resource_model = resource_model or self._sqla_models.Resource
         recall_file_model = recall_file_model or self._sqla_models.RecallFile
-        recall_entry_model = recall_entry_model or self._sqla_models.RecallEntry
-        recall_file_entry_model = recall_file_entry_model or self._sqla_models.RecallFileEntry
         recall_file_resource_model = recall_file_resource_model or self._sqla_models.RecallFileResource
         recall_file_segment_model = recall_file_segment_model or self._sqla_models.RecallFileSegment
 
@@ -122,20 +102,6 @@ class SQLiteStore(Database):
         self.recall_file_repo = SQLiteRecallFileRepo(
             state=self._state,
             recall_file_model=recall_file_model,
-            sqla_models=self._sqla_models,
-            sessions=self._sessions,
-            scope_fields=self._scope_fields,
-        )
-        self.recall_entry_repo = SQLiteRecallEntryRepo(
-            state=self._state,
-            recall_entry_model=recall_entry_model,
-            sqla_models=self._sqla_models,
-            sessions=self._sessions,
-            scope_fields=self._scope_fields,
-        )
-        self.recall_file_entry_repo = SQLiteRecallFileEntryRepo(
-            state=self._state,
-            recall_file_entry_model=recall_file_entry_model,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
             scope_fields=self._scope_fields,
@@ -157,9 +123,7 @@ class SQLiteStore(Database):
 
         # Set up cache references
         self.resources = self._state.resources
-        self.items = self._state.items
         self.categories = self._state.categories
-        self.relations = self._state.relations
         self.resource_relations = self._state.resource_relations
         self.segments = self._state.segments
 
@@ -178,8 +142,6 @@ class SQLiteStore(Database):
         """Load all existing data from database into cache."""
         self.resource_repo.load_existing()
         self.recall_file_repo.load_existing()
-        self.recall_entry_repo.load_existing()
-        self.recall_file_entry_repo.load_existing()
         self.recall_file_resource_repo.load_existing()
         self.recall_file_segment_repo.load_existing()
 

@@ -7,16 +7,12 @@ from pydantic import BaseModel
 
 from memu.database.interfaces import Database
 from memu.database.models import (
-    RecallEntry,
     RecallFile,
-    RecallFileEntry,
     RecallFileResource,
     RecallFileSegment,
     Resource,
 )
 from memu.database.postgres.migration import DDLMode, run_migrations
-from memu.database.postgres.repositories.recall_entry_repo import PostgresRecallEntryRepo
-from memu.database.postgres.repositories.recall_file_entry_repo import PostgresRecallFileEntryRepo
 from memu.database.postgres.repositories.recall_file_repo import PostgresRecallFileRepo
 from memu.database.postgres.repositories.recall_file_resource_repo import PostgresRecallFileResourceRepo
 from memu.database.postgres.repositories.recall_file_segment_repo import PostgresRecallFileSegmentRepo
@@ -24,8 +20,6 @@ from memu.database.postgres.repositories.resource_repo import PostgresResourceRe
 from memu.database.postgres.schema import SQLAModels, get_sqlalchemy_models, require_sqlalchemy
 from memu.database.postgres.session import SessionManager
 from memu.database.repositories import (
-    RecallEntryRepo,
-    RecallFileEntryRepo,
     RecallFileRepo,
     RecallFileResourceRepo,
     RecallFileSegmentRepo,
@@ -39,14 +33,10 @@ logger = logging.getLogger(__name__)
 class PostgresStore(Database):
     resource_repo: ResourceRepo
     recall_file_repo: RecallFileRepo
-    recall_entry_repo: RecallEntryRepo
-    recall_file_entry_repo: RecallFileEntryRepo
     recall_file_resource_repo: RecallFileResourceRepo
     recall_file_segment_repo: RecallFileSegmentRepo
     resources: dict[str, Resource]
-    items: dict[str, RecallEntry]
     categories: dict[str, RecallFile]
-    relations: list[RecallFileEntry]
     resource_relations: list[RecallFileResource]
     segments: list[RecallFileSegment]
 
@@ -60,8 +50,6 @@ class PostgresStore(Database):
         base_model: type[BaseModel] | None = None,
         resource_model: type[Any] | None = None,
         recall_file_model: type[Any] | None = None,
-        recall_entry_model: type[Any] | None = None,
-        recall_file_entry_model: type[Any] | None = None,
         recall_file_resource_model: type[Any] | None = None,
         recall_file_segment_model: type[Any] | None = None,
         sqla_models: SQLAModels | None = None,
@@ -80,8 +68,6 @@ class PostgresStore(Database):
 
         resource_model = resource_model or self._sqla_models.Resource
         recall_file_model = recall_file_model or self._sqla_models.RecallFile
-        recall_entry_model = recall_entry_model or self._sqla_models.RecallEntry
-        recall_file_entry_model = recall_file_entry_model or self._sqla_models.RecallFileEntry
         recall_file_resource_model = recall_file_resource_model or self._sqla_models.RecallFileResource
         recall_file_segment_model = recall_file_segment_model or self._sqla_models.RecallFileSegment
 
@@ -95,21 +81,6 @@ class PostgresStore(Database):
         self.recall_file_repo = PostgresRecallFileRepo(
             state=self._state,
             recall_file_model=recall_file_model,
-            sqla_models=self._sqla_models,
-            sessions=self._sessions,
-            scope_fields=self._scope_fields,
-        )
-        self.recall_entry_repo = PostgresRecallEntryRepo(
-            state=self._state,
-            recall_entry_model=recall_entry_model,
-            sqla_models=self._sqla_models,
-            sessions=self._sessions,
-            scope_fields=self._scope_fields,
-            use_vector=self._use_vector_type,
-        )
-        self.recall_file_entry_repo = PostgresRecallFileEntryRepo(
-            state=self._state,
-            recall_file_entry_model=recall_file_entry_model,
             sqla_models=self._sqla_models,
             sessions=self._sessions,
             scope_fields=self._scope_fields,
@@ -130,9 +101,7 @@ class PostgresStore(Database):
         )
 
         self.resources = self._state.resources
-        self.items = self._state.items
         self.categories = self._state.categories
-        self.relations = self._state.relations
         self.resource_relations = self._state.resource_relations
         self.segments = self._state.segments
 
@@ -144,7 +113,5 @@ class PostgresStore(Database):
     def _load_existing(self) -> None:
         self.resource_repo.load_existing()
         self.recall_file_repo.load_existing()
-        self.recall_entry_repo.load_existing()
-        self.recall_file_entry_repo.load_existing()
         self.recall_file_resource_repo.load_existing()
         self.recall_file_segment_repo.load_existing()

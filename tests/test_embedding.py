@@ -1,14 +1,13 @@
 """Unit tests for the standalone ``memu.embedding`` package.
 
-These pin the embedding module's contract that mirrors ``memu.llm``/``memu.vlm``:
+These pin the embedding module's contract:
 
 - per-provider backends (openai/jina/voyage/openrouter/doubao) build the right
   payload/endpoint and parse the ``data[].embedding`` response shape.
 - the HTTP client falls back to an OpenAI-compatible backend for unknown
   providers and returns ``(vectors, raw_response)``.
-- the gateway dispatches on ``client_backend`` and raises clearly for anthropic.
-- ``EmbeddingConfig`` resolves per-provider base_url/api_key/model defaults, and
-  ``embedding_config_from_llm`` derives a config from an LLM profile.
+- the gateway dispatches on ``client_backend``.
+- ``EmbeddingConfig`` resolves per-provider base_url/api_key/model defaults.
 """
 
 from __future__ import annotations
@@ -22,7 +21,7 @@ if str(src_path) not in sys.path:
 
 import pytest  # noqa: E402
 
-from memu.app.settings import EmbeddingConfig, LLMConfig, embedding_config_from_llm  # noqa: E402
+from memu.app.settings import EmbeddingConfig  # noqa: E402
 from memu.embedding.backends import (  # noqa: E402
     JinaEmbeddingBackend,
     OpenAIEmbeddingBackend,
@@ -116,10 +115,7 @@ def test_gateway_builds_sdk_and_httpx_clients():
     assert isinstance(httpx_client.backend, JinaEmbeddingBackend)
 
 
-def test_gateway_rejects_anthropic_and_unknown_backends():
-    with pytest.raises(ValueError, match="Anthropic does not provide"):
-        build_embedding_client(EmbeddingConfig(client_backend="anthropic"))
-
+def test_gateway_rejects_unknown_backends():
     with pytest.raises(ValueError, match="Unknown embedding client_backend"):
         build_embedding_client(EmbeddingConfig(client_backend="nope"))
 
@@ -140,31 +136,3 @@ def test_embedding_config_provider_defaults():
     assert explicit.base_url == "https://proxy/v1"
     assert explicit.api_key == "real"
     assert explicit.embed_model == "custom"
-
-
-def test_chat_clients_no_longer_expose_embed():
-    """Embedding is fully decoupled: text/chat clients must not carry embed()."""
-    from memu.llm.anthropic_client import AnthropicClient
-    from memu.llm.http_client import HTTPLLMClient
-    from memu.llm.openai_client import OpenAIClient
-
-    assert not hasattr(OpenAIClient, "embed")
-    assert not hasattr(HTTPLLMClient, "embed")
-    assert not hasattr(AnthropicClient, "embed")
-    # The HTTP chat client no longer wires an embedding backend either.
-    assert not hasattr(HTTPLLMClient, "_load_embedding_backend")
-
-
-def test_embedding_config_from_llm_carries_transport_and_model():
-    llm = LLMConfig(
-        provider="openrouter",
-        client_backend="httpx",
-        api_key="rk",
-        embed_model="openai/text-embedding-3-large",
-    )
-    emb = embedding_config_from_llm(llm)
-    assert emb.provider == "openrouter"
-    assert emb.client_backend == "httpx"
-    assert emb.api_key == "rk"
-    assert emb.embed_model == "openai/text-embedding-3-large"
-    assert emb.base_url == llm.base_url

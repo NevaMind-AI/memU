@@ -172,7 +172,6 @@ from memu.app import MemoryService
 async def main():
     # Initialize with SQLite
     service = MemoryService(
-        llm_profiles={"default": {"api_key": "your-api-key"}},
         database_config={
             "metadata_store": {
                 "provider": "sqlite",
@@ -181,24 +180,25 @@ async def main():
         },
     )
 
-    # Memorize a conversation
-    result = await service.memorize(
-        resource_url="conversation.json",
-        modality="conversation",
+    # Commit prepared memory
+    await service.commit_results(
+        recall_files=[
+            {
+                "name": "Preferences",
+                "track": "memory",
+                "description": "what alice likes",
+                "content": "# Preferences\n- prefers dark roast coffee",
+            }
+        ],
         user={"user_id": "alice"},
     )
-    print(f"Created {len(result['categories'])} categories")
 
     # Retrieve relevant memories
-    memories = await service.retrieve(
-        queries=[
-            {"role": "user", "content": {"text": "What are my preferences?"}}
-        ],
-        where={"user_id": "alice"},
+    context = await service.progressive_retrieve(
+        "What are my preferences?", where={"user_id": "alice"}
     )
-
-    for item in memories.get("items", []):
-        print(f"- {item['summary']}")
+    for segment in context["segments"]:
+        print(f"- {segment['text']} ({segment['score']:.2f})")
 
 asyncio.run(main())
 ```

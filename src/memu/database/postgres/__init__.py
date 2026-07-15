@@ -27,8 +27,6 @@ def build_postgres_database(
         scope_model=user_model,
         resource_model=sqla_models.Resource,
         recall_file_model=sqla_models.RecallFile,
-        recall_entry_model=sqla_models.RecallEntry,
-        recall_file_entry_model=sqla_models.RecallFileEntry,
         sqla_models=sqla_models,
     )
 
