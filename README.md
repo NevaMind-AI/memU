@@ -111,60 +111,6 @@ Segments are reconciled on every commit: lines that disappeared are deleted, onl
 
 There is no intention routing, sufficiency checking, or summarization — one embedding call in, ranked context out.
 
-## API
-
-### `commit_results(*, recall_files=None, resource=None, user=None)`
-
-Create-or-update, straight into storage:
-
-- Each `recall_files` item is `{"name", "track", "description", "content"}`. Files are **keyed by `name` within their `track`** — committing an existing name replaces that file's content (and reconciles its segments); a new name creates the file and embeds its `name: description` for file-level recall.
-- Each `resource` item is `{"path", "description"}`. Resources are **keyed by `path`** — an existing resource at the same path is replaced, and the description becomes the embedded caption.
-- `user` scopes every written record, e.g. `user={"user_id": "alice"}`.
-
-Returns the committed records (embeddings stripped).
-
-### `list_all_recall_files(where=None)`
-
-Lists every recall file across both tracks — use it before inventing new file names, so revisions land on existing files instead of creating near-duplicates. `where` filters by user scope.
-
-### `progressive_retrieve(query, where=None)`
-
-The three ranked layers described above. Raises `ValueError("empty_query")` on a blank query. Tune it via `progressive_retrieve_config`:
-
-```python
-service = MemoryService(
-    progressive_retrieve_config={
-        "file": {"top_k": 10, "tracks": ["memory"]},   # segment layer: how many, which tracks
-        "resource": {"enabled": False},                 # resource layer: off entirely
-    },
-)
-```
-
-## CLI
-
-Every command reads the same `MEMU_*` config as the library, so the CLI composes like the API:
-
-| Command | Alias | What it does |
-|---|---|---|
-| `memu retrieve <query>` | `search` | Ranked segments/files/resources as JSON |
-| `memu list-files` | | Every recall file across both tracks (`--json` for raw) |
-| `memu commit <payload.json>` | | Persist a prepared payload (`-` reads stdin) |
-
-The commit payload mirrors the API:
-
-```json
-{
-  "recall_files": [
-    {"name": "Profile", "track": "memory", "description": "who the user is", "content": "# Profile\n- ..."}
-  ],
-  "resource": [
-    {"path": "/abs/path/notes.md", "description": "meeting notes"}
-  ]
-}
-```
-
-Flags: `--db`, `--provider`, `--embed-model`, `--base-url`, `--api-key`, `--json` — each with a `MEMU_*` env fallback (see Configuration).
-
 ## Host adapter: memory for desktop coding agents
 
 `memu-codex` runs memU as a sidecar to Codex-style agents (ADR 0008/0009). It binds two seams:
