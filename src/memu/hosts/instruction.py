@@ -2,20 +2,22 @@
 
 :mod:`memu.hosts.retrieval` is what *runs* when the agent retrieves. This is what
 makes it run: one paragraph, patched into the host's global instruction file
-(Codex's ``~/.codex/AGENTS.md``, and whatever the next host calls its own), which
-that host loads into every session. No hook, no wrapper, no per-turn process.
+(Codex's ``~/.codex/AGENTS.md``, Claude Code's ``~/.claude/CLAUDE.md``, and
+whatever the next host calls its own), which that host loads into every session.
+No hook, no wrapper, no per-turn process.
 
 It lives here for the same reason retrieval does (ADR 0008): the text does not
-differ per host — only the file it lands in does. So the string is owned once,
-and each host CLI registers the command against its own path.
+differ per host — only the file it lands in and the binary it names do. So the
+string is owned once as a template, and each host CLI registers the command
+against its own path and its own binary.
 
 Owning it in code rather than in the install guide is deliberate. A payload
 transcribed out of a Markdown fence by an agent is a payload that gets
 paraphrased, and one pasted into a user's file is one that can never be upgraded:
-when :data:`INSTRUCTION` improves in a later release, the copy already sitting in
-someone's AGENTS.md is inert. Hence :func:`install` writes a *managed block*
-between markers — re-running replaces it in place, so an upgrade is a re-run.
-Everything outside the markers is the user's and is never touched.
+when :data:`INSTRUCTION_TEMPLATE` improves in a later release, the copy already
+sitting in someone's AGENTS.md is inert. Hence :func:`install` writes a *managed
+block* between markers — re-running replaces it in place, so an upgrade is a
+re-run. Everything outside the markers is the user's and is never touched.
 """
 
 from __future__ import annotations
@@ -27,13 +29,13 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-BEGIN = "<!-- memu:begin — managed block, do not edit (memu-codex install-instruction) -->"
+BEGIN_TEMPLATE = "<!-- memu:begin — managed block, do not edit ({binary} install-instruction) -->"
 END = "<!-- memu:end -->"
 
-INSTRUCTION = """\
+INSTRUCTION_TEMPLATE = """\
 ## memU — retrieve before answering
 
-Before answering, run `memu-codex retrieve "<query>"` — where <query> is the
+Before answering, run `{binary} retrieve "<query>"` — where <query> is the
 user's request, reworded into a clearer query or focused keywords when that
 retrieves better (you need not pass their raw words verbatim). Use any relevant
 results as context. If it returns nothing, proceed normally.
@@ -48,7 +50,7 @@ from the summary, and open the raw file only when you need what it leaves out.
 """
 """What the agent is told, every turn, before it answers.
 
-It names ``memu-codex retrieve`` — a ``PATH`` command, never a script path, and
+It names ``<binary> retrieve`` — a ``PATH`` command, never a script path, and
 the LLM-free single-shot retrieval. It fails open, hence "proceed normally" — an
 empty store returns empty lists and the turn goes on.
 
@@ -59,18 +61,30 @@ document that slice came from, a resource is a file on disk. Without the legend
 the reader has to guess which layer to trust, and opens raw files it did not need.
 """
 
-_BLOCK = re.compile(
-    rf"^{re.escape(BEGIN)}\n.*?^{re.escape(END)}\n?",
-    re.DOTALL | re.MULTILINE,
-)
+
+def begin(binary: str) -> str:
+    """The opening marker, naming the host binary that manages the block."""
+    return BEGIN_TEMPLATE.format(binary=binary)
 
 
-def block() -> str:
+def instruction(binary: str) -> str:
+    """The instruction text, telling the agent to run this host's ``retrieve``."""
+    return INSTRUCTION_TEMPLATE.format(binary=binary)
+
+
+def block(binary: str) -> str:
     """The managed block exactly as it is written to disk, markers included."""
-    return f"{BEGIN}\n{INSTRUCTION}{END}\n"
+    return f"{begin(binary)}\n{instruction(binary)}{END}\n"
 
 
-def patch(current: str) -> str:
+def _block_re(binary: str) -> re.Pattern[str]:
+    return re.compile(
+        rf"^{re.escape(begin(binary))}\n.*?^{re.escape(END)}\n?",
+        re.DOTALL | re.MULTILINE,
+    )
+
+
+def patch(current: str, binary: str) -> str:
     """Return ``current`` with the managed block installed — replaced, or appended.
 
     Pure, so the interesting half of :func:`install` is testable without a
@@ -78,15 +92,16 @@ def patch(current: str) -> str:
     a second call replaces the first call's block rather than stacking another
     copy, and text outside them survives untouched.
     """
-    if _BLOCK.search(current):
-        return _BLOCK.sub(lambda _: block(), current, count=1)
+    pattern = _block_re(binary)
+    if pattern.search(current):
+        return pattern.sub(lambda _: block(binary), current, count=1)
     if current and not current.endswith("\n"):
         current += "\n"
     separator = "\n" if current else ""
-    return f"{current}{separator}{block()}"
+    return f"{current}{separator}{block(binary)}"
 
 
-def install(path: Path, *, dry_run: bool = False) -> tuple[bool, str]:
+def install(path: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, str]:
     """Install the managed block into ``path``. Returns ``(changed, diff)``.
 
     Creates the file (and its parent) if absent, and backs up any existing content
@@ -95,7 +110,7 @@ def install(path: Path, *, dry_run: bool = False) -> tuple[bool, str]:
     """
     path = path.expanduser()
     current = path.read_text(encoding="utf-8") if path.is_file() else ""
-    updated = patch(current)
+    updated = patch(current, binary)
     diff = "".join(
         difflib.unified_diff(
             current.splitlines(keepends=True),
@@ -117,10 +132,10 @@ def install(path: Path, *, dry_run: bool = False) -> tuple[bool, str]:
 def _cmd_install_instruction(args: argparse.Namespace) -> int:
     path = Path(args.path)
     if args.print_only:
-        print(block(), end="")
+        print(block(args.binary), end="")
         return 0
 
-    changed, diff = install(path, dry_run=args.dry_run)
+    changed, diff = install(path, args.binary, dry_run=args.dry_run)
     if not diff:
         print(f"{path}: already up to date")
         return 0
@@ -136,8 +151,12 @@ async def _cmd_install_instruction_async(args: argparse.Namespace) -> int:
     return _cmd_install_instruction(args)
 
 
-def register(sub: Any, *, path: str) -> None:
-    """Add ``install-instruction`` to a host CLI, bound to that host's ``path``."""
+def register(sub: Any, *, path: str, binary: str) -> None:
+    """Add ``install-instruction`` to a host CLI, bound to that host's ``path``.
+
+    ``binary`` is the host adapter's own command name (``memu-codex``, …) — it is
+    what the installed instruction tells the agent to run.
+    """
     parser = sub.add_parser(
         "install-instruction",
         help="Patch the host's global instruction file so the agent retrieves before answering",
@@ -145,4 +164,4 @@ def register(sub: Any, *, path: str) -> None:
     parser.add_argument("--path", default=path, help=f"Instruction file to patch (default: {path})")
     parser.add_argument("--dry-run", action="store_true", help="Show the diff without writing")
     parser.add_argument("--print", dest="print_only", action="store_true", help="Print the managed block and exit")
-    parser.set_defaults(handler=_cmd_install_instruction_async)
+    parser.set_defaults(handler=_cmd_install_instruction_async, binary=binary)

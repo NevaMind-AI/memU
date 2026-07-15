@@ -1,0 +1,211 @@
+"""One command surface, many host binaries.
+
+Every host adapter exposes the same verbs — ``retrieve``, ``install-instruction``,
+``prepare``, ``commit``, ``verify-resources``, ``doctor``, ``docs`` — because the
+pipeline behind them is host-agnostic (ADR 0008/0009). What differs per host is
+data, not code: the binary's name, where the session log lives, which file the
+standing instruction lands in, and the packaged guides. So the parser is built
+once here from a :class:`HostSpec`, and each host's ``cli.py`` shrinks to that
+declaration plus a ``main``.
+
+Working state is per host. Codex predates this module and keeps its original
+``~/.memu`` working tree; every later host defaults to ``~/.memu/hosts/<host>``,
+so two hosts' bridging runs never race over one ``jobs/`` directory (the open
+issue ADR 0009 required settling before a second host shipped — see ADR 0010).
+The durable store is shared regardless: every host reads ``~/.memu/config.env``,
+which is the point — what one host's sessions taught memU, another host retrieves.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import os
+import sys
+from collections.abc import Callable, Coroutine
+from dataclasses import dataclass, field
+from importlib.resources import files
+from typing import Any
+
+from memu.hosts import instruction, retrieval
+from memu.hosts.base import TranscriptSource
+from memu.hosts.bridging import Layout, commit, prepare
+from memu.hosts.bridging.pipeline import MAX_JOBS
+from memu.hosts.bridging.resources import verify_resource_log
+
+DOCS = {"install": "INSTALL.md", "task": "BRIDGING_TASK.md"}
+
+
+@dataclass(frozen=True)
+class HostSpec:
+    """Everything host-specific about a host adapter's CLI — data, not code."""
+
+    host: str
+    """Short host id (``codex``). Names the binary and scopes the working tree."""
+
+    display: str
+    """Human name used in help text (``Codex``)."""
+
+    package: str
+    """Dotted package holding the host's ``INSTALL.md`` / ``BRIDGING_TASK.md``."""
+
+    source_factory: Callable[[str], TranscriptSource]
+    """Builds the host's :class:`TranscriptSource` from the ``--session-dir`` value."""
+
+    session_dir: str
+    """Default location of the host's session log (dir, or file for SQLite hosts)."""
+
+    session_help: str
+    """What the session log is, for ``--session-dir``'s help text."""
+
+    instruction_path: str
+    """The host's global instruction file — where the inject seam lands."""
+
+    base_dir: str = ""
+    """memU working tree. Empty means the per-host default ``~/.memu/hosts/<host>``;
+    Codex overrides this with the pre-multi-host ``~/.memu`` it has always used."""
+
+    extra_flags: dict[str, str] = field(default_factory=dict)
+    """Reserved for host-specific flags; unused today."""
+
+    @property
+    def binary(self) -> str:
+        return f"memu-{self.host}"
+
+    @property
+    def verify_command(self) -> str:
+        """What the resource job tells the agent to run. A command, never a path."""
+        return f"{self.binary} verify-resources"
+
+    @property
+    def default_base_dir(self) -> str:
+        return self.base_dir or f"~/.memu/hosts/{self.host}"
+
+
+def _layout(spec: HostSpec, args: argparse.Namespace) -> Layout:
+    return Layout.default(host=spec.host, base=args.base_dir)
+
+
+async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
+    source = spec.source_factory(args.session_dir)
+    if not source.exists():
+        print(f"error: no {spec.display} session log at {source.root()}", file=sys.stderr)
+        return 2
+
+    layout = _layout(spec, args)
+    num_sessions = await prepare(source, layout, verify_command=spec.verify_command, max_jobs=args.max_jobs)
+    num_jobs = 2 * num_sessions + 1
+    print(f"prepared {num_sessions} session(s) -> {num_jobs} job(s) in {layout.jobs}")
+    if num_sessions == 0:
+        print("no new session turns since the last run; nothing to mine")
+    return 0
+
+
+async def _cmd_commit(spec: HostSpec, args: argparse.Namespace) -> int:
+    result = await commit(_layout(spec, args))
+    recall_files = result.get("recall_files", [])
+    resources = result.get("resources", [])
+    if not recall_files and not resources:
+        print("nothing to commit")
+        return 0
+    print(f"committed {len(recall_files)} recall file(s) and {len(resources)} resource(s)")
+    for recall_file in recall_files:
+        print(f"  - {recall_file.get('track')}/{recall_file.get('name')}")
+    return 0
+
+
+async def _cmd_verify_resources(spec: HostSpec, args: argparse.Namespace) -> int:
+    layout = _layout(spec, args)
+    kept = verify_resource_log(layout.resource_log, layout.resources)
+    print(f"{kept} resource(s) written to {layout.resources}")
+    return 0
+
+
+async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
+    """Prove config resolves and the store answers — the install guide's verify gate.
+
+    Deliberately exercises the same call the inject hook will, so a green doctor
+    means the hook's retrieval works, not merely that some store opened.
+    """
+    from memu.env import CONFIG_ENV, embedding_provider, env
+
+    result = await retrieval.retrieve("smoke test")
+    found = sum(len(result.get(layer, [])) for layer in ("segments", "files", "resources"))
+    print(f"config    {os.path.expanduser(CONFIG_ENV)}")
+    print(f"store     {env('MEMU_DB')}")
+    print(f"provider  {embedding_provider()}")
+    print(f"retrieval ok ({found} hit(s) for a smoke-test query; 0 is fine on a new store)")
+    return 0
+
+
+async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
+    print((files(spec.package) / DOCS[args.doc]).read_text(encoding="utf-8"))
+    return 0
+
+
+def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog=spec.binary,
+        description=f"memU's {spec.display} host adapter — the scheduled bridging task and its install guide.",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    def with_base(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
+        p.add_argument(
+            "--base-dir",
+            default=spec.default_base_dir,
+            help=f"memU working directory (default: {spec.default_base_dir})",
+        )
+        return p
+
+    def bind(handler: Callable[[HostSpec, argparse.Namespace], Coroutine[Any, Any, int]]) -> Any:
+        async def bound(args: argparse.Namespace) -> int:
+            return await handler(spec, args)
+
+        return bound
+
+    # Both halves of the inject seam: what the agent runs, and what tells it to.
+    # Shared across hosts, so they are registered, not redefined — only the file
+    # the instruction lands in and the binary it names are ours to fill in.
+    retrieval.register(sub)
+    instruction.register(sub, path=spec.instruction_path, binary=spec.binary)
+
+    p = with_base(sub.add_parser("prepare", help=f"Slice new {spec.display} sessions into self-evolve job files"))
+    p.add_argument(
+        "--session-dir",
+        default=spec.session_dir,
+        help=f"{spec.session_help} (default: {spec.session_dir})",
+    )
+    p.add_argument("--max-jobs", type=int, default=MAX_JOBS, help=f"Sessions per run (default: {MAX_JOBS})")
+    p.set_defaults(handler=bind(_cmd_prepare))
+
+    p = with_base(sub.add_parser("commit", help="Submit what the self-evolve jobs produced back into memU"))
+    p.set_defaults(handler=bind(_cmd_commit))
+
+    p = with_base(
+        sub.add_parser("verify-resources", help="Filter the touched-file log into the describe-me resource file")
+    )
+    p.set_defaults(handler=bind(_cmd_verify_resources))
+
+    p = sub.add_parser("doctor", help="Verify MEMU_* config resolves and the store is reachable")
+    p.set_defaults(handler=bind(_cmd_doctor))
+
+    p = sub.add_parser("docs", help="Print a packaged agent-facing guide")
+    p.add_argument("doc", choices=sorted(DOCS), help="install: the setup guide; task: the bridging-task procedure")
+    p.set_defaults(handler=bind(_cmd_docs))
+
+    return parser
+
+
+def run(spec: HostSpec, argv: list[str] | None = None) -> int:
+    args = build_parser(spec).parse_args(argv)
+    handler: Callable[[argparse.Namespace], Coroutine[Any, Any, int]] = args.handler
+    try:
+        return asyncio.run(handler(args))
+    except KeyboardInterrupt:
+        return 130
+    except Exception as exc:
+        if os.environ.get("MEMU_DEBUG") == "1":
+            raise
+        print(f"error: {exc} (set MEMU_DEBUG=1 for a traceback)", file=sys.stderr)
+        return 1
