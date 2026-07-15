@@ -30,7 +30,7 @@ Python.
 ### 1.1 Install
 
 ```
-pip install memu-py
+pip install memu-cli
 ```
 
 This puts two commands on `PATH`:

@@ -38,14 +38,14 @@ State persists in a local SQLite database (`./data/memu.sqlite3` by default), so
 
 ## How it works
 
-This npm package is a thin launcher (a few kB, no dependencies). The engine is the PyPI package [`memu-cli`](https://pypi.org/project/memu-cli/) — the CLI release channel of [`memu-py`](https://pypi.org/project/memu-py/), same module, versioned independently, with prebuilt wheels for Linux (x86_64/aarch64), macOS (Intel/Apple Silicon), and Windows. The shim finds a runner and delegates, in order:
+This npm package is a thin launcher (a few kB, no dependencies). The engine is the PyPI package [`memu-cli`](https://pypi.org/project/memu-cli/) — the memU engine itself, with prebuilt wheels for Linux (x86_64/aarch64), macOS (Intel/Apple Silicon), and Windows. The shim finds a runner and delegates, in order:
 
 1. `$MEMU_PYTHON -m memu` — explicit interpreter override
 2. `uvx --from memu-cli memu` — no install needed, cached by uv (recommended)
 3. `pipx run --spec memu-cli memu` — no install needed, cached by pipx
 4. `python3 -m memu` — requires `pip install memu-cli`
 
-Using Python already? Skip npm entirely: `uvx --from memu-cli memu --help`, or `pip install memu-cli`. For the library API (`MemoryService`, Postgres backends), use [`memu-py`](https://pypi.org/project/memu-py/) — but install only one of the two in a given environment; they ship the same `memu` module.
+Using Python already? Skip npm entirely: `uvx --from memu-cli memu --help`, or `pip install memu-cli`. The same package carries the library API (`MemoryService`, Postgres backends) — one install covers CLI, host adapters, and library use.
 
 See the [main README](https://github.com/NevaMind-AI/MemU#readme) for the memory model, library API, and self-hosting options.
 
