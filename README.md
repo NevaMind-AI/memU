@@ -258,18 +258,6 @@ class TeamScope(BaseModel):
 service = MemoryService(user_config={"model": TeamScope})
 ```
 
-## FAQ
-
-**Where do the LLM calls happen?** In your agent, before `commit_results` and after `progressive_retrieve`. memU itself only calls the embedding API — indexing on write, one query embedding on read.
-
-**How do I revise a memory?** Re-commit the same `name` within the same `track` with new content. Check `list-files` first so revisions land on existing files instead of creating near-duplicates.
-
-**How large can the store get?** Segment ranking is brute-force cosine on sqlite/inmemory — comfortable to roughly 100k segments. Beyond that, use the Postgres backend with pgvector.
-
-**`memu-py` vs `memu-cli`?** Same `memu` module, two release channels: `memu-py` is the library train, `memu-cli` the CLI train consumed by the npm launcher. Install exactly one per environment.
-
-**What happened to `memorize` / `retrieve_workspace`?** Removed in the agentic-only refactor ([#485](https://github.com/NevaMind-AI/memU/pull/485)): the in-service LLM pipelines (multimodal preprocessing, workflow engine, LLM-routed retrieval) are gone in favor of the three-operation surface above.
-
 ## Development
 
 ```bash
