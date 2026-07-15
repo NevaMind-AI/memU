@@ -4,7 +4,12 @@
 
 CLI for [memU](https://github.com/NevaMind-AI/MemU) — personal memory as files: fast retrieval, higher accuracy, lower cost.
 
-This package is a thin launcher. The engine is the Python package [`memu-py`](https://pypi.org/project/memu-py/) (Python ≥ 3.13); the shim delegates to `uvx`, `pipx run`, or an installed `python3 -m memu`, in that order. Install [uv](https://docs.astral.sh/uv/) for the smoothest zero-setup experience.
+This package is a thin launcher. The engine is the PyPI package [`memu-cli`](https://pypi.org/project/memu-cli/) (the CLI release channel of [`memu-py`](https://pypi.org/project/memu-py/), Python ≥ 3.13); the shim delegates to `uvx`, `pipx run`, or an installed `python3 -m memu`, in that order. Install [uv](https://docs.astral.sh/uv/) for the smoothest zero-setup experience — `uvx` fetches both a Python 3.13 runtime and the engine automatically, no preinstalled Python required:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh   # macOS / Linux
+# or on Windows: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
 ## Usage
 
