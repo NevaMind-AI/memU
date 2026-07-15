@@ -55,12 +55,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # No $ anchors: Windows runners check out with CRLF line endings,
+      # where a trailing \r sits between the closing quote and the newline.
       - name: Rename distribution to memu-cli
         shell: bash
         run: |
-          perl -pi -e 's/^name = "memu-py"$/name = "memu-cli"/' pyproject.toml
-          perl -pi -e 's/^version = ".*"$/version = "${{ inputs.version }}"/ if $. < 10' pyproject.toml
-          perl -pi -e 's/^description = ".*"$/description = "CLI distribution channel for memU (same engine as memu-py). Personal memory as files."/' pyproject.toml
+          perl -pi -e 's/^name = "memu-py"/name = "memu-cli"/' pyproject.toml
+          perl -pi -e 's/^version = "[^"]*"/version = "${{ inputs.version }}"/ if $. < 10' pyproject.toml
+          perl -pi -e 's/^description = "[^"]*"/description = "CLI distribution channel for memU (same engine as memu-py). Personal memory as files."/' pyproject.toml
+          grep -q '^name = "memu-cli"' pyproject.toml || { echo "::error::rename to memu-cli did not apply"; exit 1; }
           grep -E '^(name|version|description) = ' pyproject.toml | head -3
 
       - name: Install uv
@@ -108,9 +111,10 @@ jobs:
       - name: Rename distribution to memu-cli
         shell: bash
         run: |
-          perl -pi -e 's/^name = "memu-py"$/name = "memu-cli"/' pyproject.toml
-          perl -pi -e 's/^version = ".*"$/version = "${{ inputs.version }}"/ if $. < 10' pyproject.toml
-          perl -pi -e 's/^description = ".*"$/description = "CLI distribution channel for memU (same engine as memu-py). Personal memory as files."/' pyproject.toml
+          perl -pi -e 's/^name = "memu-py"/name = "memu-cli"/' pyproject.toml
+          perl -pi -e 's/^version = "[^"]*"/version = "${{ inputs.version }}"/ if $. < 10' pyproject.toml
+          perl -pi -e 's/^description = "[^"]*"/description = "CLI distribution channel for memU (same engine as memu-py). Personal memory as files."/' pyproject.toml
+          grep -q '^name = "memu-cli"' pyproject.toml || { echo "::error::rename to memu-cli did not apply"; exit 1; }
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
