@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from memu.blob.folder import infer_modality
 from memu.vector import cosine_topk
 
 if TYPE_CHECKING:
@@ -269,7 +268,6 @@ class AgenticMixin:
             caption_embedding = (await embed_client.embed([caption]))[0] if caption else None
             res = store.resource_repo.create_resource(
                 url=url,
-                modality=infer_modality(url) or "document",
                 local_path=url,
                 caption=caption,
                 embedding=caption_embedding,
