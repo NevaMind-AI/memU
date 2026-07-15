@@ -1,6 +1,6 @@
 {
   "name": "memu-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "CLI for memU \u2014 personal memory as files. Thin launcher for the PyPI package memu-cli.",
   "bin": {
     "memu": "bin/memu.js"
