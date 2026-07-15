@@ -60,8 +60,12 @@ postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
 [project.scripts]
 memu = "memu.cli:main"
 # Host adapters get their own binary rather than a subcommand: `memu` is the
-# algorithm surface, these are sidecars to a desktop agent (ADR 0008/0009).
+# algorithm surface, these are sidecars to a desktop agent (ADR 0008/0009/0010).
 memu-codex = "memu.hosts.codex.cli:main"
+memu-claude-code = "memu.hosts.claude_code.cli:main"
+memu-cursor = "memu.hosts.cursor.cli:main"
+memu-openclaw = "memu.hosts.openclaw.cli:main"
+memu-hermes = "memu.hosts.hermes.cli:main"
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"

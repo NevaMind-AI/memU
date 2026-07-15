@@ -58,6 +58,14 @@ class TranscriptSource(ABC):
     def classify(self, record: str) -> RecordKind:
         """Bucket one raw record. This *is* the host's log schema — the real seam."""
 
+    def exists(self) -> bool:
+        """Whether the host has a session log here at all — the prepare gate.
+
+        Directory-shaped hosts get this for free; a host whose log is a single
+        file (Hermes's SQLite store) overrides it to check that file.
+        """
+        return self.root().is_dir()
+
     def discover(self) -> list[Path]:
         """Session files under :meth:`root`, most-recently-modified first.
 

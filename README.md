@@ -95,26 +95,36 @@ Segments are reconciled on every commit: lines that disappeared are deleted, onl
 
 There is no intention routing, sufficiency checking, or summarization — one embedding call in, ranked context out.
 
-## Host adapter: memory for desktop coding agents
+## Host adapters: memory for desktop coding agents
 
-`memu-codex` runs memU as a sidecar to Codex-style agents (ADR 0008/0009). It binds two seams:
+memU runs as a sidecar to a desktop agent (ADR 0008/0009/0010), one binary per host. Each binds two seams:
 
 - **record** — a scheduled bridging task slices new session logs into self-contained job files; the agent itself distills them into memory/skill Markdown; `commit` submits whatever the agent left on disk back through `commit_results`.
-- **inject** — a standing instruction in the host's global instruction file (`~/.codex/AGENTS.md`) tells the agent to run `memu-codex retrieve` (→ `progressive_retrieve`) before answering.
+- **inject** — a standing instruction in the host's instruction file tells the agent to run `<binary> retrieve` (→ `progressive_retrieve`) before answering.
+
+| Host | Binary | Session log it mines | Instruction file it patches |
+| --- | --- | --- | --- |
+| Codex | `memu-codex` | `~/.codex/sessions/**/*.jsonl` | `~/.codex/AGENTS.md` |
+| Claude Code | `memu-claude-code` | `~/.claude/projects/<project>/<session>.jsonl` | `~/.claude/CLAUDE.md` |
+| Cursor (Agent/CLI) | `memu-cursor` | `~/.cursor/projects/<project>/agent-transcripts/**.jsonl` | `./AGENTS.md` (per project) |
+| OpenClaw | `memu-openclaw` | `~/.openclaw/agents/<agentId>/sessions/*.jsonl` | `~/.openclaw/workspace/AGENTS.md` |
+| Hermes Agent | `memu-hermes` | `~/.hermes/state.db` (SQLite, read-only) | `~/.hermes/SOUL.md` |
+
+All hosts share one store and one embedding space via `~/.memu/config.env` — what one host's sessions taught memU, another host retrieves.
 
 **Installation is agent-driven.** The install guide is written for the agent, not for you — install the package, then hand the guide to your agent and let it do the rest (configure the store, register the scheduled bridging task, patch the instruction file — each step ends with a verify gate):
 
 ```bash
-pip install memu-cli    # puts memu + memu-codex on PATH
+pip install memu-cli    # puts memu + the host binaries on PATH
 ```
 
-Then tell your agent:
+Then tell your agent (swap in your host's binary):
 
 > Run `memu-codex docs install`, read the guide it prints, and follow it to install memU.
 
-Afterwards `memu-codex doctor` proves the whole loop resolves: config, store, and a live retrieval.
+Afterwards `<binary> doctor` proves the whole loop resolves: config, store, and a live retrieval.
 
-Adding another host means implementing one `TranscriptSource` (where its session logs live, how its records are shaped) plus a thin CLI — the pipeline and instruction text are shared.
+Adding another host means implementing one `TranscriptSource` (where its session logs live, how its records are shaped) plus a `HostSpec`-sized CLI — the pipeline, verbs, and instruction text are shared (ADR 0010).
 
 ## Installation
 
