@@ -115,15 +115,11 @@ For agents without a dedicated binary, `memu-agent detect` probes the machine an
 
 All hosts share one store and one embedding space via `~/.memu/config.env` — what one host's sessions taught memU, another host retrieves.
 
-**Installation is agent-driven.** The install guide is written for the agent, not for you — install the package, then hand the guide to your agent and let it do the rest (configure the store, register the scheduled bridging task, patch the instruction file — each step ends with a verify gate):
+**Installation is agent-driven.** The guides are written for the agent, not for you. One message is the whole setup — tell your agent:
 
-```bash
-pip install memu-cli    # puts memu + the host binaries on PATH
-```
+> Read https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md and follow it to install memU.
 
-Then tell your agent (swap in your host's binary):
-
-> Run `memu-codex docs install`, read the guide it prints, and follow it to install memU.
+[SKILL.md](SKILL.md) is the routing skill: it has the agent install the package, identify which host it is (falling back to `memu-agent detect` for anything without a dedicated adapter), print that host's packaged install guide (`<binary> docs install`), and follow it — configure the store, register the scheduled bridging task, patch the instruction file, each step behind a verify gate — then report which seams (memorization / retrieval) are now active.
 
 Afterwards `<binary> doctor` proves the whole loop resolves: config, store, and a live retrieval.
 
