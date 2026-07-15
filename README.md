@@ -6,7 +6,7 @@
 
 ### Personal memory, stored as files
 
-**Fast retrieval. Higher accuracy. Lower cost.**
+**Across Agents. Fast retrieval. Lower cost.**
 
 [![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
