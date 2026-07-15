@@ -65,7 +65,7 @@ context = await service.progressive_retrieve("What should I know about this user
 Or straight from the terminal — no code:
 
 ```bash
-export OPENAI_API_KEY=sk-...
+export OPENAI_API_KEY=sk-...    # embedding API key — the only model calls memU makes
 
 npx memu-cli commit results.json     # {"recall_files": [...], "resource": [...]}
 npx memu-cli list-files
@@ -185,7 +185,7 @@ memu-codex docs install              # the full agent-facing install guide
 
 # 1. configure once — ~/.memu/config.env (absolute paths; scheduled tasks have no cwd)
 #      MEMU_DB=/Users/you/.memu/memu.sqlite3
-#      MEMU_LLM_PROVIDER=openai
+#      MEMU_EMBED_PROVIDER=openai
 #      MEMU_API_KEY=<key or env-var name>
 memu-codex doctor                    # prove config + store + retrieval all resolve
 
@@ -217,7 +217,7 @@ Values resolve in order: process env → `~/.memu/config.env` → default. Every
 | Setting | Env var | Default |
 |---|---|---|
 | Store | `MEMU_DB` | `./data/memu.sqlite3` (CLI); **required** for host adapters |
-| Embedding provider | `MEMU_LLM_PROVIDER` | `openai` (also: `jina`, `voyage`, `doubao`, `openrouter`) |
+| Embedding provider | `MEMU_EMBED_PROVIDER` | `openai` (also: `jina`, `voyage`, `doubao`, `openrouter`); legacy `MEMU_LLM_PROVIDER` still read |
 | API key | `MEMU_API_KEY` | the provider's env var, e.g. `OPENAI_API_KEY` |
 | Embedding model | `MEMU_EMBED_MODEL` | the provider's default |
 | Base URL | `MEMU_BASE_URL` | the provider's default |
