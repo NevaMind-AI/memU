@@ -62,7 +62,9 @@ class ClaudeCodeTranscriptSource(TranscriptSource):
             # are harness-injected context wearing the user role.
             return RecordKind.OTHER if entry.get("isMeta") else RecordKind.MESSAGE
 
-        kinds = {block.get("type") for block in content if isinstance(block, dict)} if isinstance(content, list) else set()
+        kinds = (
+            {block.get("type") for block in content if isinstance(block, dict)} if isinstance(content, list) else set()
+        )
         if "text" in kinds:
             return RecordKind.OTHER if entry.get("isMeta") else RecordKind.MESSAGE
         if kinds & {"tool_use", "tool_result"}:
