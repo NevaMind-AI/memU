@@ -26,7 +26,7 @@ npx memu-cli list-files
 npx memu-cli retrieve "deploy checklist"
 ```
 
-State persists in a local SQLite database (`./data/memu.sqlite3` by default), so commit in one invocation and retrieve in the next. Every flag has a `MEMU_*` environment variable (`--provider`/`MEMU_LLM_PROVIDER`, `--embed-model`/`MEMU_EMBED_MODEL`, `--db`/`MEMU_DB`, ...) — run `npx memu-cli <command> --help` for the full list.
+State persists in a local SQLite database (`./data/memu.sqlite3` by default), so commit in one invocation and retrieve in the next. Every flag has a `MEMU_*` environment variable (`--provider`/`MEMU_EMBED_PROVIDER`, `--embed-model`/`MEMU_EMBED_MODEL`, `--db`/`MEMU_DB`, ...) — run `npx memu-cli <command> --help` for the full list.
 
 ## Commands
 

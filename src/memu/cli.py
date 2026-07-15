@@ -26,7 +26,7 @@ import sys
 from collections.abc import Callable, Coroutine
 from typing import Any
 
-from memu.env import database_config, env
+from memu.env import database_config, embedding_provider, env
 
 
 def _env(name: str, default: str) -> str:
@@ -39,8 +39,8 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     group = parser.add_argument_group("service options (env var in parens)")
     group.add_argument(
         "--provider",
-        default=_env("MEMU_LLM_PROVIDER", "openai"),
-        help="Embedding provider id, e.g. openai, jina, voyage (MEMU_LLM_PROVIDER)",
+        default=embedding_provider(),
+        help="Embedding provider id, e.g. openai, jina, voyage (MEMU_EMBED_PROVIDER)",
     )
     group.add_argument(
         "--embed-model",

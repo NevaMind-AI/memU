@@ -97,14 +97,17 @@ def database_config(db: str) -> dict[str, Any]:
     return {"metadata_store": {"provider": "sqlite", "dsn": f"sqlite:///{path}"}}
 
 
-def embedding_profile() -> dict[str, Any]:
-    """The ``default`` embedding profile — provider plus any overrides that are set.
+def embedding_provider() -> str:
+    """The embedding provider id. There is no LLM in memU — this names the only
+    model capability left, so ``MEMU_EMBED_PROVIDER`` is the primary variable;
+    ``MEMU_LLM_PROVIDER`` is read as a fallback so existing ``~/.memu/config.env``
+    files keep working."""
+    return env("MEMU_EMBED_PROVIDER") or env("MEMU_LLM_PROVIDER") or "openai"
 
-    ``MEMU_LLM_PROVIDER``/``MEMU_API_KEY`` keep their historical names so existing
-    ``~/.memu/config.env`` files stay valid; the provider now backs the embedding
-    client, the only model call left in the service.
-    """
-    profile: dict[str, Any] = {"provider": env("MEMU_LLM_PROVIDER", "openai")}
+
+def embedding_profile() -> dict[str, Any]:
+    """The ``default`` embedding profile — provider plus any overrides that are set."""
+    profile: dict[str, Any] = {"provider": embedding_provider()}
     for key, var in (("embed_model", "MEMU_EMBED_MODEL"), ("base_url", "MEMU_BASE_URL"), ("api_key", "MEMU_API_KEY")):
         if value := env(var):
             profile[key] = value

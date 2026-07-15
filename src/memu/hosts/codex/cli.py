@@ -93,13 +93,13 @@ async def _cmd_doctor(args: argparse.Namespace) -> int:
     Deliberately exercises the same call the inject hook will, so a green doctor
     means the hook's retrieval works, not merely that some store opened.
     """
-    from memu.env import CONFIG_ENV, env
+    from memu.env import CONFIG_ENV, embedding_provider, env
 
     result = await retrieval.retrieve("smoke test")
     found = sum(len(result.get(layer, [])) for layer in ("segments", "files", "resources"))
     print(f"config    {os.path.expanduser(CONFIG_ENV)}")
     print(f"store     {env('MEMU_DB')}")
-    print(f"provider  {env('MEMU_LLM_PROVIDER', 'openai')}")
+    print(f"provider  {embedding_provider()}")
     print(f"retrieval ok ({found} hit(s) for a smoke-test query; 0 is fine on a new store)")
     return 0
 

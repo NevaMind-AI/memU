@@ -61,14 +61,14 @@ Collect from the user (or reuse values they already have):
 | Setting | Env var | Example |
 | --- | --- | --- |
 | Database | `MEMU_DB` | `~/.memu/memu.sqlite3`, or a `postgres://…` DSN |
-| Provider | `MEMU_LLM_PROVIDER` | `openai`, `anthropic`, … |
+| Embedding provider | `MEMU_EMBED_PROVIDER` | `openai`, `jina`, `voyage`, … |
 | API key | `MEMU_API_KEY` | the key, or the name of an env var holding it |
 
 Write them to **`~/.memu/config.env`**, which every memU command loads:
 
 ```
 MEMU_DB=/Users/<you>/.memu/memu.sqlite3
-MEMU_LLM_PROVIDER=openai
+MEMU_EMBED_PROVIDER=openai
 MEMU_API_KEY=<key or env-var name>
 ```
 
