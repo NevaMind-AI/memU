@@ -10,3 +10,4 @@
 - [0008: Trajectory as the Source — Zero-Code Hooks over a Programmatic API](0008-two-integration-surfaces-hooks-and-api.md)
 - [0009: Packaging the Codex Integration — pip, a CLI Seam, and One Config Loader](0009-codex-packaging-cli-and-config.md)
 - [0010: Multi-Host Adapters — Claude Code, Cursor, OpenClaw, and Hermes](0010-multi-host-adapters.md)
+- [0011: A Generic Host Adapter — Detect First, Then Bind What Works](0011-generic-host-adapter.md)

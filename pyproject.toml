@@ -66,6 +66,10 @@ memu-claude-code = "memu.hosts.claude_code.cli:main"
 memu-cursor = "memu.hosts.cursor.cli:main"
 memu-openclaw = "memu.hosts.openclaw.cli:main"
 memu-hermes = "memu.hosts.hermes.cli:main"
+# The generic adapter: any agent without a dedicated binary. `memu-agent
+# detect` finds the session log and instruction file, then reports which of
+# the two seams (memorization / retrieval) work for that agent.
+memu-agent = "memu.hosts.generic.cli:main"
 
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"

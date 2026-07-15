@@ -68,6 +68,10 @@ class HostSpec:
     extra_flags: dict[str, str] = field(default_factory=dict)
     """Reserved for host-specific flags; unused today."""
 
+    register_extra: Callable[[Any], None] | None = None
+    """Optional hook adding host-specific subcommands (the generic adapter's
+    ``detect``). Called with the subparsers object after the shared verbs."""
+
     @property
     def binary(self) -> str:
         return f"memu-{self.host}"
@@ -171,10 +175,13 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     instruction.register(sub, path=spec.instruction_path, binary=spec.binary)
 
     p = with_base(sub.add_parser("prepare", help=f"Slice new {spec.display} sessions into self-evolve job files"))
+    # A host with no universal session location (the generic adapter) leaves
+    # session_dir empty, which makes the flag mandatory instead of defaulted.
     p.add_argument(
         "--session-dir",
-        default=spec.session_dir,
-        help=f"{spec.session_help} (default: {spec.session_dir})",
+        default=spec.session_dir or None,
+        required=not spec.session_dir,
+        help=f"{spec.session_help}" + (f" (default: {spec.session_dir})" if spec.session_dir else ""),
     )
     p.add_argument("--max-jobs", type=int, default=MAX_JOBS, help=f"Sessions per run (default: {MAX_JOBS})")
     p.set_defaults(handler=bind(_cmd_prepare))
@@ -193,6 +200,9 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     p = sub.add_parser("docs", help="Print a packaged agent-facing guide")
     p.add_argument("doc", choices=sorted(DOCS), help="install: the setup guide; task: the bridging-task procedure")
     p.set_defaults(handler=bind(_cmd_docs))
+
+    if spec.register_extra is not None:
+        spec.register_extra(sub)
 
     return parser
 
