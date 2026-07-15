@@ -8,7 +8,7 @@
 
 **Across Agents. Fast retrieval. Lower cost.**
 
-[![PyPI version](https://badge.fury.io/py/memu-py.svg)](https://badge.fury.io/py/memu-py)
+[![PyPI version](https://badge.fury.io/py/memu-cli.svg)](https://badge.fury.io/py/memu-cli)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Chat-5865F2?logo=discord&logoColor=white)](https://discord.com/invite/hQZntfGsbJ)
@@ -71,23 +71,7 @@ State persists in a local SQLite database (`./data/memu.sqlite3` by default), so
 
 ## How it works
 
-```mermaid
-flowchart LR
-    subgraph agent["Your agent"]
-        distill["read sessions & files,\ndistill into Markdown"]
-    end
-
-    subgraph memu["MemoryService (embedding-only)"]
-        commit["commit_results"]
-        store[("recall files\n+ segments\n+ resources")]
-        retrieve["progressive_retrieve"]
-        list["list_all_recall_files"]
-    end
-
-    distill -->|"recall_files + resources"| commit --> store
-    store --> retrieve -->|"ranked segments / files / resources"| agent
-    store --> list
-```
+![memU memory system architecture](assets/structure-v2.png)
 
 ### The data model
 
@@ -121,7 +105,7 @@ There is no intention routing, sufficiency checking, or summarization — one em
 **Installation is agent-driven.** The install guide is written for the agent, not for you — install the package, then hand the guide to your agent and let it do the rest (configure the store, register the scheduled bridging task, patch the instruction file — each step ends with a verify gate):
 
 ```bash
-pip install memu-py    # puts memu + memu-codex on PATH
+pip install memu-cli    # puts memu + memu-codex on PATH
 ```
 
 Then tell your agent:
@@ -135,12 +119,10 @@ Adding another host means implementing one `TranscriptSource` (where its session
 ## Installation
 
 ```bash
-pip install memu-py          # library + memu + memu-codex CLIs
+pip install memu-cli         # library + memu + memu-codex CLIs
 npx memu-cli --help          # CLI via npm launcher (engine: PyPI package memu-cli)
 uvx --from memu-cli memu     # CLI via uv, no install
 ```
-
-Install only one of `memu-py` / `memu-cli` in a given environment — they ship the same `memu` module.
 
 ## Configuration
 
@@ -160,7 +142,7 @@ Values resolve in order: process env → `~/.memu/config.env` → default. Every
 |---|---|---|---|
 | `inmemory` | — | brute-force cosine | tests, throwaway sessions |
 | `sqlite` | `sqlite:///path.sqlite3` | brute-force cosine | local/default, single writer |
-| `postgres` | `postgresql://...` | pgvector | concurrent access, large stores (`pip install "memu-py[postgres]"`) |
+| `postgres` | `postgresql://...` | pgvector | concurrent access, large stores (`pip install "memu-cli[postgres]"`) |
 
 ```python
 service = MemoryService(
