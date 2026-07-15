@@ -120,6 +120,9 @@ jobs:
           path: dist/*.tar.gz
           if-no-files-found: error
 
+  # Release artifacts go to the GitHub release only. PyPI publishing happens
+  # exclusively through publish-memu-cli.yml (the `memu-cli` distribution,
+  # versioned independently of this release train).
   publish:
     name: publish release artifacts
     runs-on: ubuntu-latest
@@ -128,9 +131,7 @@ jobs:
       - build-wheels
       - build-sdist
     if: ${{ needs.release-please.outputs.releases_created == 'true' && needs.release-please.outputs.tag_name != '' }}
-    environment: pypi
     permissions:
-      id-token: write
       contents: write
     steps:
       - name: Download wheel artifacts
@@ -153,8 +154,3 @@ jobs:
           file: dist/*
           tag: ${{ needs.release-please.outputs.tag_name }}
           file_glob: true
-
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/

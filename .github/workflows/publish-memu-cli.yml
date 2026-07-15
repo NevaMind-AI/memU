@@ -1,10 +1,9 @@
-# Publishes the engine snapshot to PyPI under the distribution name `memu-cli`.
+# Publishes the engine to PyPI as `memu-cli` — the one and only distribution.
 #
-# `memu-cli` is the CLI release channel: it ships the same `memu` module and
-# entry points as `memu-py`, but versions independently of the release-please
-# train so the npm launcher and docs can point at a stable install target.
-# The rename happens at build time only — pyproject.toml in the repo always
-# says `memu-py`.
+# `memu-cli` versions independently of the release-please train (which still
+# cuts GitHub releases and the changelog), so the npm launcher and docs can
+# point at a stable install target; the version is set at build time from the
+# workflow input.
 #
 # First-time setup: add a trusted publisher on PyPI for project `memu-cli`
 # (workflow: publish-memu-cli.yml, environment: pypi).
@@ -13,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "memu-cli version to publish (independent of memu-py, e.g. 0.1.1)"
+        description: "memu-cli version to publish (e.g. 0.2.1)"
         required: true
         type: string
 
@@ -57,14 +56,12 @@ jobs:
 
       # No $ anchors: Windows runners check out with CRLF line endings,
       # where a trailing \r sits between the closing quote and the newline.
-      - name: Rename distribution to memu-cli
+      - name: Set memu-cli version
         shell: bash
         run: |
-          perl -pi -e 's/^name = "memu-py"/name = "memu-cli"/' pyproject.toml
           perl -pi -e 's/^version = "[^"]*"/version = "${{ inputs.version }}"/ if $. < 10' pyproject.toml
-          perl -pi -e 's/^description = "[^"]*"/description = "CLI distribution channel for memU (same engine as memu-py). Personal memory as files."/' pyproject.toml
-          grep -q '^name = "memu-cli"' pyproject.toml || { echo "::error::rename to memu-cli did not apply"; exit 1; }
-          grep -E '^(name|version|description) = ' pyproject.toml | head -3
+          grep -q '^name = "memu-cli"' pyproject.toml || { echo "::error::pyproject is not memu-cli"; exit 1; }
+          grep -E '^(name|version) = ' pyproject.toml | head -2
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -108,13 +105,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Rename distribution to memu-cli
+      - name: Set memu-cli version
         shell: bash
         run: |
-          perl -pi -e 's/^name = "memu-py"/name = "memu-cli"/' pyproject.toml
           perl -pi -e 's/^version = "[^"]*"/version = "${{ inputs.version }}"/ if $. < 10' pyproject.toml
-          perl -pi -e 's/^description = "[^"]*"/description = "CLI distribution channel for memU (same engine as memu-py). Personal memory as files."/' pyproject.toml
-          grep -q '^name = "memu-cli"' pyproject.toml || { echo "::error::rename to memu-cli did not apply"; exit 1; }
+          grep -q '^name = "memu-cli"' pyproject.toml || { echo "::error::pyproject is not memu-cli"; exit 1; }
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7

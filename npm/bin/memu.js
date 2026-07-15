@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-// memu-cli: thin launcher for the PyPI package `memu-cli` (the CLI release
-// channel of the memU engine; same module as memu-py, versioned independently).
+// memu-cli: thin launcher for the PyPI package `memu-cli` (the memU engine).
 //
 // The memU engine is Python (>= 3.13). This shim finds a runner and delegates,
 // in order of preference:

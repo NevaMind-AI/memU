@@ -404,7 +404,7 @@ wheels = [
 ]
 
 [[package]]
-name = "memu-py"
+name = "memu-cli"
 version = "1.5.1"
 source = { editable = "." }
 dependencies = [

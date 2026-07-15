@@ -48,7 +48,7 @@ silently returns nothing.
 
 ### 1. Distribute via pip; do not ship a parallel npm package
 
-memU is installed as a Python package (`pip install memu-py`), exposing two console entrypoints:
+memU is installed as a Python package (`pip install memu-cli`), exposing two console entrypoints:
 `memu` (the library's own surface) and `memu-codex` (the host adapter — see Decision 2). No npm
 package is built for this integration.
 
