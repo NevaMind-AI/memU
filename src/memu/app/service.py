@@ -7,6 +7,7 @@ from typing import Any, Literal, TypeVar
 
 from pydantic import BaseModel
 
+from memu.app.agentic import AgenticMixin
 from memu.app.client_pool import ClientPool
 from memu.app.crud import CRUDMixin
 from memu.app.memorize import MemorizeMixin
@@ -59,7 +60,9 @@ class Context:
     category_init_task: asyncio.Task | None = None
 
 
-class MemoryService(MemorizeMixin, MemorizeWorkspaceMixin, RetrieveMixin, RetrieveWorkspaceMixin, CRUDMixin):
+class MemoryService(
+    MemorizeMixin, MemorizeWorkspaceMixin, RetrieveMixin, RetrieveWorkspaceMixin, CRUDMixin, AgenticMixin
+):
     def __init__(
         self,
         *,

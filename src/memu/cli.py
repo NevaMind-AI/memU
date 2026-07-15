@@ -29,12 +29,15 @@ from collections.abc import Callable, Coroutine
 from typing import Any
 
 from memu.blob.folder import EXT_MODALITY, infer_modality
+from memu.env import database_config, env
 
 MODALITIES = ("conversation", "document", "image", "video", "audio")
 
 
 def _env(name: str, default: str) -> str:
-    return os.environ.get(name, default)
+    # Falls through to ~/.memu/config.env before the default, so the CLI and the
+    # host adapters resolve the same store — see memu.env.
+    return env(name, default) or default
 
 
 def _add_common_options(parser: argparse.ArgumentParser) -> None:
@@ -46,17 +49,17 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     )
     group.add_argument(
         "--model",
-        default=os.environ.get("MEMU_CHAT_MODEL"),
+        default=env("MEMU_CHAT_MODEL"),
         help="Chat model override; defaults to the provider's default (MEMU_CHAT_MODEL)",
     )
     group.add_argument(
         "--base-url",
-        default=os.environ.get("MEMU_BASE_URL"),
+        default=env("MEMU_BASE_URL"),
         help="API base URL override (MEMU_BASE_URL)",
     )
     group.add_argument(
         "--api-key",
-        default=os.environ.get("MEMU_API_KEY"),
+        default=env("MEMU_API_KEY"),
         help="API key value or env-var name; defaults to the provider's env var, e.g. OPENAI_API_KEY (MEMU_API_KEY)",
     )
     group.add_argument(
@@ -83,16 +86,6 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="Print the raw JSON response")
 
 
-def _database_config(db: str) -> dict[str, Any]:
-    if db in (":memory:", "inmemory"):
-        return {"metadata_store": {"provider": "inmemory"}}
-    if db.startswith(("postgres://", "postgresql://")):
-        return {"metadata_store": {"provider": "postgres", "dsn": db}}
-    path = pathlib.Path(db).expanduser()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return {"metadata_store": {"provider": "sqlite", "dsn": f"sqlite:///{path}"}}
-
-
 def _build_service(args: argparse.Namespace, *, memory_files: bool) -> Any:
     # Imported lazily so `memu --help` stays fast and dependency errors surface
     # only when a command actually runs.
@@ -107,7 +100,7 @@ def _build_service(args: argparse.Namespace, *, memory_files: bool) -> Any:
         llm["api_key"] = args.api_key
     return MemoryService(
         llm_profiles={"default": llm},
-        database_config=_database_config(args.db),
+        database_config=database_config(args.db),
         blob_config={"resources_dir": args.resources_dir},
         memory_files_config={
             "enabled": memory_files,
