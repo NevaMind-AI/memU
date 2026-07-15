@@ -20,12 +20,7 @@
 
 ---
 
-memU is an **embedding-only memory store for AI agents**. Modern agents are already excellent readers and writers — they don't need a second LLM pipeline re-summarizing their context behind their back. So memU splits the work:
-
-- **Your agent** does the thinking: it reads sessions and files, decides what is worth keeping, and distills it into Markdown.
-- **memU** does the persistence: it stores those documents, embeds them for search, and hands back compact, ranked context on demand.
-
-No LLM call happens inside the service — the only model calls are embeddings. That makes every operation single-shot, cheap, and fast enough to run on a per-turn hook.
+memU gives AI agents persistent memory. Agents write what's worth keeping as Markdown; memU stores it, embeds it, and retrieves ranked context in a single call — embeddings are the only model calls it makes.
 
 ## Quick start
 
