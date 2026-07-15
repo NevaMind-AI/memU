@@ -12,21 +12,6 @@ def normalize_value(v: str) -> str:
 Normalize = BeforeValidator(normalize_value)
 
 
-# Per-provider defaults: provider -> (base_url, api_key_env_or_value).
-# Used by ``EmbeddingConfig.set_provider_defaults`` to swap OpenAI defaults when a
-# chat-capable provider is selected; embedding-only providers (jina, voyage) come
-# from ``memu.embedding.defaults`` instead.
-_PROVIDER_DEFAULTS: dict[str, tuple[str, str]] = {
-    "grok": ("https://api.x.ai/v1", "XAI_API_KEY"),
-    "claude": ("https://api.anthropic.com", "ANTHROPIC_API_KEY"),
-    "deepseek": ("https://api.deepseek.com/v1", "DEEPSEEK_API_KEY"),
-    "kimi": ("https://api.moonshot.cn/v1", "MOONSHOT_API_KEY"),
-    "minimax": ("https://api.minimax.io/v1", "MINIMAX_API_KEY"),
-    "doubao": ("https://ark.cn-beijing.volces.com", "ARK_API_KEY"),
-    "openrouter": ("https://openrouter.ai", "OPENROUTER_API_KEY"),
-}
-
-
 class EmbeddingConfig(BaseModel):
     """Configuration for an embedding (vectorization) model client.
 
@@ -64,24 +49,17 @@ class EmbeddingConfig(BaseModel):
 
     @model_validator(mode="after")
     def set_provider_defaults(self) -> "EmbeddingConfig":
+        # Each field is only overridden while it still holds the OpenAI default,
+        # so explicit values survive.
         from memu.embedding.defaults import EMBEDDING_PROVIDER_ENDPOINTS, default_embedding_model
 
-        # base_url/api_key: reuse the shared chat per-provider defaults when the
-        # provider is also a chat provider; otherwise fall back to the
-        # embedding-only endpoint table (Jina, Voyage). Each field is only
-        # overridden while it still holds the OpenAI default, so explicit values
-        # survive.
-        endpoint = _PROVIDER_DEFAULTS.get(self.provider)
-        base_url = endpoint[0] if endpoint is not None else None
-        api_key = endpoint[1] if endpoint is not None else None
-        if base_url is None:
-            embed_endpoint = EMBEDDING_PROVIDER_ENDPOINTS.get(self.provider)
-            if embed_endpoint is not None:
-                base_url, api_key = embed_endpoint
-        if base_url is not None and self.base_url == "https://api.openai.com/v1":
-            self.base_url = base_url
-        if api_key is not None and self.api_key == "OPENAI_API_KEY":
-            self.api_key = api_key
+        endpoint = EMBEDDING_PROVIDER_ENDPOINTS.get(self.provider)
+        if endpoint is not None:
+            base_url, api_key = endpoint
+            if self.base_url == "https://api.openai.com/v1":
+                self.base_url = base_url
+            if self.api_key == "OPENAI_API_KEY":
+                self.api_key = api_key
         if self.embed_model == "text-embedding-3-small":
             resolved = default_embedding_model(self.provider)
             if resolved is not None:
