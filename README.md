@@ -20,7 +20,7 @@
 
 ---
 
-memU gives AI agents persistent memory. Agents write what's worth keeping as Markdown; memU stores it, embeds it, and retrieves ranked context in a single call — embeddings are the only model calls it makes.
+memU is a 500-line memory system for AI agents. Agents write what's worth keeping as Markdown; memU stores it, embeds it, and retrieves ranked context in a single call — embeddings are the only model calls it makes. The entire memory logic lives in [`agentic.py`](src/memu/app/agentic.py) + [`service.py`](src/memu/app/service.py); everything else is pluggable storage and embedding transport.
 
 ## Quick start
 
