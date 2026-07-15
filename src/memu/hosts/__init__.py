@@ -1,11 +1,8 @@
 """Host adapters — memU as a sidecar to a desktop coding agent.
 
-Distinct from :mod:`memu.integrations`, which holds *framework bindings* that a
-user's own code imports in-process (LangGraph, …). A host adapter is the other
-shape: memU runs *beside* an agent app, reads the session log that app writes,
-and is driven by that app's scheduled tasks and hooks through its own console
-script (``memu-codex``). Different consumer, different lifecycle, different
-namespace.
+memU runs *beside* an agent app, reads the session log that app writes, and is
+driven by that app's scheduled tasks and hooks through its own console script
+(``memu-codex``).
 
 Each host binds two seams (ADR 0008):
 

@@ -35,7 +35,7 @@ pip install memu-py
 
 This puts two commands on `PATH`:
 
-- **`memu`** — memU itself (memorize, retrieve, export, …). The library's own
+- **`memu`** — memU itself (commit, list-files, retrieve). The library's own
   surface; this guide does not use it directly.
 - **`memu-codex`** — the Codex adapter. Both Part 2 (record) and Part 3 (inject)
   go through it.

@@ -14,14 +14,10 @@ except ImportError as exc:
 
 from pydantic import BaseModel
 from sqlalchemy import ForeignKey, MetaData, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
 from memu.database.models import (
-    EntryType,
-    RecallEntry,
     RecallFile,
-    RecallFileEntry,
     RecallFileResource,
     RecallFileSegment,
     Resource,
@@ -60,28 +56,12 @@ class ResourceModel(BaseModelMixin, Resource):
     track: str | None = Field(default=None, sa_column=Column(String, nullable=True))
 
 
-class RecallEntryModel(BaseModelMixin, RecallEntry):
-    resource_id: str | None = Field(sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), nullable=True))
-    memory_type: EntryType = Field(sa_column=Column(String, nullable=False))
-    summary: str = Field(sa_column=Column(Text, nullable=False))
-    embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
-    happened_at: datetime | None = Field(default=None, sa_column=Column(DateTime, nullable=True))
-    extra: dict[str, Any] = Field(default={}, sa_column=Column(JSONB, nullable=True))
-
-
 class RecallFileModel(BaseModelMixin, RecallFile):
     name: str = Field(sa_column=Column(String, nullable=False, index=True))
     description: str = Field(sa_column=Column(Text, nullable=False))
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
     content: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     track: str = Field(default="memory", sa_column=Column(String, nullable=False, server_default="memory"))
-
-
-class RecallFileEntryModel(BaseModelMixin, RecallFileEntry):
-    item_id: str = Field(sa_column=Column(ForeignKey("recall_entries.id", ondelete="CASCADE"), nullable=False))
-    category_id: str = Field(sa_column=Column(ForeignKey("recall_files.id", ondelete="CASCADE"), nullable=False))
-
-    __table_args__ = (Index("idx_recall_file_entries_unique", "item_id", "category_id", unique=True),)
 
 
 class RecallFileResourceModel(BaseModelMixin, RecallFileResource):
@@ -182,16 +162,14 @@ def build_table_model(
 
 def build_scoped_models(
     user_model: type[BaseModel],
-) -> tuple[type[SQLModel], type[SQLModel], type[SQLModel], type[SQLModel], type[SQLModel], type[SQLModel]]:
+) -> tuple[type[SQLModel], type[SQLModel], type[SQLModel], type[SQLModel]]:
     """
-    Build scoped SQLModel tables for each entity (resource, category, item, relation, segment).
+    Build scoped SQLModel tables for each entity (resource, category, relation, segment).
     """
     resource_model = build_table_model(user_model, ResourceModel, tablename="resources")
     recall_file_model = build_table_model(
         user_model, RecallFileModel, tablename="recall_files", unique_with_scope=["name"]
     )
-    recall_entry_model = build_table_model(user_model, RecallEntryModel, tablename="recall_entries")
-    recall_file_entry_model = build_table_model(user_model, RecallFileEntryModel, tablename="recall_file_entries")
     recall_file_resource_model = build_table_model(
         user_model, RecallFileResourceModel, tablename="recall_file_resources"
     )
@@ -199,8 +177,6 @@ def build_scoped_models(
     return (
         resource_model,
         recall_file_model,
-        recall_entry_model,
-        recall_file_entry_model,
         recall_file_resource_model,
         recall_file_segment_model,
     )
@@ -208,8 +184,6 @@ def build_scoped_models(
 
 __all__ = [
     "BaseModelMixin",
-    "RecallEntryModel",
-    "RecallFileEntryModel",
     "RecallFileModel",
     "RecallFileResourceModel",
     "RecallFileSegmentModel",

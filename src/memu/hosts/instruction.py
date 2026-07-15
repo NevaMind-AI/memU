@@ -49,9 +49,8 @@ from the summary, and open the raw file only when you need what it leaves out.
 """What the agent is told, every turn, before it answers.
 
 It names ``memu-codex retrieve`` — a ``PATH`` command, never a script path, and
-the LLM-free single-shot retrieval. Not ``memu retrieve``: that one is LLM-routed,
-higher quality, and far too heavy to pay for on every turn. It fails open, hence
-"proceed normally" — an empty store returns empty lists and the turn goes on.
+the LLM-free single-shot retrieval. It fails open, hence "proceed normally" — an
+empty store returns empty lists and the turn goes on.
 
 The second paragraph is a legend for the JSON. ``retrieve`` prints raw
 ``segments``/``files``/``resources`` with nothing to explain them, and the layers
