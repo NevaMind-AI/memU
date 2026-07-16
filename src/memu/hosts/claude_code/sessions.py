@@ -23,17 +23,19 @@ SESSION_DIR = "~/.claude/projects"
 
 
 class ClaudeCodeTranscriptSource(TranscriptSource):
-    """Claude Code writes one JSON object per line, one content block per record.
+    """Claude Code writes one JSON object per line, usually one content block per record.
 
     A record whose ``type`` is ``user`` or ``assistant`` wraps an API-shaped
-    ``message``; its single content block says what the record is. ``text`` (or a
-    plain-string user message) is a conversation turn; ``tool_use`` and
-    ``tool_result`` are the tool record and its output — Claude Code logs the
-    result as a *user*-typed record, so the role alone cannot classify. Everything
-    else — ``thinking`` blocks, meta-injected user records (``isMeta``), and the
-    non-message types (``queue-operation``, ``attachment``, ``system``,
-    ``pr-link``, ``last-prompt``, ``summary``) — is noise the mining jobs should
-    never see.
+    ``message``; its content blocks say what the record is. Most records carry a
+    single block, but multi-block records occur in real logs (``text`` alongside
+    the ``tool_use`` calls it narrates, ``thinking`` alongside ``tool_use``) — a
+    ``text`` block wins. ``text`` (or a plain-string user message) is a
+    conversation turn; ``tool_use`` and ``tool_result`` are the tool record and
+    its output — Claude Code logs the result as a *user*-typed record, so the
+    role alone cannot classify. Everything else — ``thinking`` blocks,
+    meta-injected user records (``isMeta``), and the non-message types
+    (``queue-operation``, ``attachment``, ``system``, ``pr-link``,
+    ``last-prompt``, ``summary``) — is noise the mining jobs should never see.
     """
 
     name: ClassVar[str] = "claude-code"
