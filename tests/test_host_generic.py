@@ -78,10 +78,11 @@ def _agent_dir(tmp_path: pathlib.Path, *, sessions: bool, instructions: bool) ->
         log = root / "sessions" / "abc.jsonl"
         log.parent.mkdir()
         log.write_text(
-            _line({"role": "user", "content": "hello"}) + "\n" + _line({"role": "assistant", "content": "hi"}) + "\n"
+            _line({"role": "user", "content": "hello"}) + "\n" + _line({"role": "assistant", "content": "hi"}) + "\n",
+            encoding="utf-8",
         )
     if instructions:
-        (root / "AGENTS.md").write_text("# rules\n")
+        (root / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
     return root
 
 
@@ -106,8 +107,8 @@ def test_detect_falls_back_to_retrieval_when_no_sessions(tmp_path: pathlib.Path)
 def test_detect_flags_unrecognized_jsonl_and_sqlite(tmp_path: pathlib.Path) -> None:
     root = tmp_path / ".weird"
     root.mkdir()
-    (root / "metrics.jsonl").write_text('{"event":"boot","ms":12}\n')
-    (root / "state.db").write_text("not really sqlite")
+    (root / "metrics.jsonl").write_text('{"event":"boot","ms":12}\n', encoding="utf-8")
+    (root / "state.db").write_text("not really sqlite", encoding="utf-8")
 
     result = probe(root)
     assert not result.memorization and result.session_files
@@ -118,14 +119,14 @@ def test_detect_flags_unrecognized_jsonl_and_sqlite(tmp_path: pathlib.Path) -> N
 def test_detect_points_dedicated_hosts_at_their_binary(tmp_path: pathlib.Path) -> None:
     root = tmp_path / ".codex"
     root.mkdir()
-    (root / "AGENTS.md").write_text("# rules\n")
+    (root / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
     assert "memu-codex" in render(probe(root))
 
 
 def test_scan_home_finds_only_plausible_agents(tmp_path: pathlib.Path) -> None:
     _agent_dir(tmp_path, sessions=True, instructions=True)
     (tmp_path / ".empty").mkdir()
-    (tmp_path / ".dotfile").write_text("not a dir")
+    (tmp_path / ".dotfile").write_text("not a dir", encoding="utf-8")
 
     results = scan_home(tmp_path)
     assert [result.path.name for result in results] == [".someagent"]

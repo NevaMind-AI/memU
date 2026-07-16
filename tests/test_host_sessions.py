@@ -105,10 +105,10 @@ def test_cursor_discovers_only_agent_transcripts(tmp_path: pathlib.Path) -> None
     """The project dirs also hold canvases and terminal logs — those must not be mined."""
     transcript = tmp_path / "Users-a-proj" / "agent-transcripts" / "abc" / "abc.jsonl"
     transcript.parent.mkdir(parents=True)
-    transcript.write_text('{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}\n')
+    transcript.write_text('{"role":"user","message":{"content":[{"type":"text","text":"hi"}]}}\n', encoding="utf-8")
     stray = tmp_path / "Users-a-proj" / "terminals" / "log.jsonl"
     stray.parent.mkdir(parents=True)
-    stray.write_text("{}\n")
+    stray.write_text("{}\n", encoding="utf-8")
 
     assert CursorTranscriptSource(tmp_path).discover() == [transcript]
 
