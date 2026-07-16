@@ -64,6 +64,42 @@ def test_claude_code_classify_tool_records() -> None:
     assert source.classify(_line(tool_result)) is RecordKind.TOOL
 
 
+def test_claude_code_classify_multi_block_records() -> None:
+    """Real logs carry multi-block records; a ``text`` block wins (see the class
+    docstring). Pinned so a refactor that inspects only ``content[0]`` — which
+    would pass every single-block fixture above — fails here instead of silently
+    losing records: ``thinking`` precedes ``tool_use`` inside real records, so
+    first-block logic would bucket them OTHER and the tool call would vanish
+    from the skill transcript. Cursor's narrated_tool test cannot catch this;
+    each host has its own classify.
+    """
+    source = ClaudeCodeTranscriptSource()
+    narrated_tool = {
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "Running the build."},
+                {"type": "tool_use", "name": "Bash", "input": {"command": "make"}},
+            ],
+        },
+    }
+    thinking_then_tool = {
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": "hmm"},
+                {"type": "tool_use", "name": "Bash", "input": {}},
+            ],
+        },
+    }
+    # Prose sharing a record with the tool calls it narrates stays conversation.
+    assert source.classify(_line(narrated_tool)) is RecordKind.MESSAGE
+    # No prose: the tool call must survive as TOOL even with thinking in front.
+    assert source.classify(_line(thinking_then_tool)) is RecordKind.TOOL
+
+
 def test_claude_code_drops_noise() -> None:
     source = ClaudeCodeTranscriptSource()
     thinking = {
