@@ -15,11 +15,16 @@ from memu.app import MemoryService
 
 
 class FakeEmbeddingClient:
-    """Deterministic embeddings: similar strings share a prefix dimension."""
+    """Deterministic embeddings: similar strings share a prefix dimension.
+
+    Returns ``(vectors, raw_response)`` like every real client
+    (:class:`memu.embedding.base.EmbeddingClient`) — a fake returning a bare
+    list is exactly what let the tuple-consumption bug (#499) through.
+    """
 
     embed_model = "fake"
 
-    async def embed(self, inputs: list[str]) -> list[list[float]]:
+    async def embed(self, inputs: list[str]) -> tuple[list[list[float]], None]:
         vectors = []
         for text in inputs:
             lowered = text.lower()
@@ -29,7 +34,7 @@ class FakeEmbeddingClient:
                 1.0 if "notes" in lowered else 0.0,
                 float(len(lowered) % 5) / 10.0,
             ])
-        return vectors
+        return vectors, None
 
 
 def make_service(database_config: dict[str, Any]) -> MemoryService:

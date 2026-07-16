@@ -13,6 +13,19 @@ if TYPE_CHECKING:
     from memu.database.models import RecallFile, Resource
 
 
+async def _embed_one(embed_client: Any, text: str) -> list[float]:
+    """One text in, one vector out.
+
+    ``embed`` returns ``(vectors, raw_response)`` — the raw response carries
+    provider usage metadata (see :class:`memu.embedding.base.EmbeddingClient`).
+    Every call site here wants just the vector; indexing the tuple with ``[0]``
+    would hand back the whole vectors list instead.
+    """
+    vectors: list[list[float]]
+    vectors, _ = await embed_client.embed([text])
+    return vectors[0]
+
+
 class AgenticMixin:
     if TYPE_CHECKING:
         _get_database: Callable[[], Database]
@@ -64,7 +77,7 @@ class AgenticMixin:
         where_filters = self._normalize_where(where)
         config = self.progressive_retrieve_config
         embed_client = self._get_embedding_client("embedding")
-        query_vector = (await embed_client.embed([query]))[0]
+        query_vector = await _embed_one(embed_client, query)
 
         segment_hits, segment_pool = self._recall_segments(
             store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.file.enabled
@@ -265,7 +278,7 @@ class AgenticMixin:
                 store.recall_file_resource_repo.unlink_resource(res.id)
                 store.resource_repo.delete_resource(res.id)
 
-            caption_embedding = (await embed_client.embed([caption]))[0] if caption else None
+            caption_embedding = await _embed_one(embed_client, caption) if caption else None
             res = store.resource_repo.create_resource(
                 url=url,
                 local_path=url,
@@ -307,7 +320,7 @@ class AgenticMixin:
             file = {f.name: f for f in existing.values()}.get(name)
             if file is None:
                 emb_text = f"{name}: {description}" if description else name
-                embedding = (await embed_client.embed([emb_text]))[0]
+                embedding = await _embed_one(embed_client, emb_text)
                 file = store.recall_file_repo.get_or_create_category(
                     name=name,
                     description=description,
@@ -372,7 +385,7 @@ class AgenticMixin:
         to_add = [text for text in new_texts if text not in existing_texts]
         if not to_add:
             return
-        vecs = await embed_client.embed(to_add)
+        vecs, _ = await embed_client.embed(to_add)
         for text, vec in zip(to_add, vecs, strict=True):
             store.recall_file_segment_repo.create_segment(
                 recall_file_id=file.id, track=file_track, text=text, embedding=vec, user_data=dict(user_scope)
