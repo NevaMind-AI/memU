@@ -66,7 +66,10 @@ class HermesTranscriptSource(TranscriptSource):
     def _connect(self) -> sqlite3.Connection:
         # Read-only: the bridging task must never take Hermes's write lock —
         # the gateway and live CLI sessions share this database in WAL mode.
-        return sqlite3.connect(f"file:{self._db}?mode=ro", uri=True)
+        # The path is percent-encoded into a proper file: URI — pasted in raw,
+        # a '%' in the path would decode and a '#' would truncate it, silently
+        # taking ?mode=ro (and the read-only guarantee) with it.
+        return sqlite3.connect(f"{self._db.resolve().as_uri()}?mode=ro", uri=True)
 
     def discover(self) -> list[Path]:
         """Sessions with messages, most-recently-active first, as virtual paths.

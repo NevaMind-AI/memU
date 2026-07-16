@@ -239,3 +239,17 @@ def test_hermes_missing_db_is_empty_not_an_error(tmp_path: pathlib.Path) -> None
     source = HermesTranscriptSource(tmp_path / "state.db")
     assert not source.exists()
     assert source.discover() == []
+
+
+def test_hermes_opens_paths_with_uri_special_characters(tmp_path: pathlib.Path) -> None:
+    """Pasted raw into a file: URI, '%' would percent-decode and '#' would
+    truncate the path — silently taking ?mode=ro with it. So the URI is escaped."""
+    import pytest
+
+    weird = tmp_path / "pct %41 #frag"
+    weird.mkdir()
+    source = HermesTranscriptSource(_hermes_db(weird))
+
+    assert [source.key(path) for path in source.discover()] == ["new", "old"]
+    with pytest.raises(sqlite3.OperationalError, match="readonly"):
+        source._connect().execute("INSERT INTO messages (session_id, role, timestamp) VALUES ('x', 'user', 1)")
