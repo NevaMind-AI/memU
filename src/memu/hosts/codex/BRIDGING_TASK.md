@@ -109,6 +109,12 @@ are new Codex sessions since the last run.
 - **Idempotent and incremental.** `prepare` tracks a per-session line cursor in
   `~/.memu/.session_manifest.codex.json`, so each run only processes turns it
   hasn't seen. A run with no new session activity correctly does nothing.
+- **Bounded per run.** Each run mines at most `--max-jobs` sessions (default
+  10), newest first; sessions beyond the cap are skipped, not queued — memU
+  starts accumulating memory when installed and does not retroactively mine a
+  backlog. A skipped session is only picked up later if it gains new turns, so
+  if more than 10 sessions regularly change between runs, schedule the task
+  more frequently or raise `--max-jobs`.
 - **Ordering is load-bearing.** Memory jobs are numbered before skill jobs, and
   the resource-describe job is last — later jobs depend on files earlier ones
   write (the skill jobs are what populate the touched-file log the resource job

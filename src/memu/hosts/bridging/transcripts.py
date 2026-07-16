@@ -47,6 +47,12 @@ def prepare_transcripts(
     with new lines are written oldest-first as ``<idx>.jsonl`` (conversation) and
     ``<idx>_full.jsonl`` (conversation plus tool calls), with ``idx`` from 1.
 
+    Sessions beyond ``max_jobs`` are deliberately shed, not queued: installing
+    memU marks the start of memory accumulation, and no run — the first one
+    especially — should carry an unbounded backlog. A shed session is mined
+    later only if it gains new turns; that lifts it above the early stop, which
+    otherwise ends the scan before reaching it. Intentional; settled in #500.
+
     Returns the number of sessions written. Zero is the correct, common outcome
     on a quiet day.
     """

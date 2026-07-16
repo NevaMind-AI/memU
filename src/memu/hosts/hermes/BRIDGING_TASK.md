@@ -73,6 +73,12 @@ the last run.
   cursor in `~/.memu/hosts/hermes/.session_manifest.hermes.json`, keyed by
   session id — messages are append-only per session, so the count-cursor is
   exactly the line cursor the other hosts use.
+- **Bounded per run.** Each run mines at most `--max-jobs` sessions (default
+  10), newest first; sessions beyond the cap are skipped, not queued — memU
+  starts accumulating memory when installed and does not retroactively mine a
+  backlog. A skipped session is only picked up later if it gains new messages,
+  so if more than 10 sessions regularly change between runs, schedule the task
+  more frequently or raise `--max-jobs`.
 - **Ordering is load-bearing.** Memory jobs before skill jobs, the
   resource-describe job last. Always ascending numeric order.
 - **The working tree is host-scoped.** Everything under `~/.memu/hosts/hermes/`

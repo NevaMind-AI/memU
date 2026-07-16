@@ -74,6 +74,12 @@ work to do once there are new Claude Code sessions since the last run.
 - **Idempotent and incremental.** `prepare` tracks a per-session line cursor in
   `~/.memu/hosts/claude-code/.session_manifest.claude-code.json`, so each run
   only processes turns it hasn't seen.
+- **Bounded per run.** Each run mines at most `--max-jobs` sessions (default
+  10), newest first; sessions beyond the cap are skipped, not queued — memU
+  starts accumulating memory when installed and does not retroactively mine a
+  backlog. A skipped session is only picked up later if it gains new turns, so
+  if more than 10 sessions regularly change between runs, schedule the task
+  more frequently or raise `--max-jobs`.
 - **Ordering is load-bearing.** Memory jobs are numbered before skill jobs, and
   the resource-describe job is last. Always process in ascending numeric order.
 - **The working tree is host-scoped.** Everything under

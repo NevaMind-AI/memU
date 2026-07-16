@@ -183,7 +183,12 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
         required=not spec.session_dir,
         help=f"{spec.session_help}" + (f" (default: {spec.session_dir})" if spec.session_dir else ""),
     )
-    p.add_argument("--max-jobs", type=int, default=MAX_JOBS, help=f"Sessions per run (default: {MAX_JOBS})")
+    p.add_argument(
+        "--max-jobs",
+        type=int,
+        default=MAX_JOBS,
+        help=f"Sessions per run (default: {MAX_JOBS}); sessions beyond the cap are skipped, not queued",
+    )
     p.set_defaults(handler=bind(_cmd_prepare))
 
     p = with_base(sub.add_parser("commit", help="Submit what the self-evolve jobs produced back into memU"))
