@@ -21,6 +21,7 @@ async def _embed_one(embed_client: Any, text: str) -> list[float]:
     Every call site here wants just the vector; indexing the tuple with ``[0]``
     would hand back the whole vectors list instead.
     """
+    vectors: list[list[float]]
     vectors, _ = await embed_client.embed([text])
     return vectors[0]
 
