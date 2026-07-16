@@ -20,44 +20,44 @@ def test_creates_file_when_absent(tmp_path: pathlib.Path) -> None:
     path = tmp_path / "nested" / "AGENTS.md"
     changed, _ = instruction.install(path, BINARY)
     assert changed
-    assert instruction.instruction(BINARY) in path.read_text()
+    assert instruction.instruction(BINARY) in path.read_text(encoding="utf-8")
 
 
 def test_preserves_existing_content(tmp_path: pathlib.Path) -> None:
     path = tmp_path / "AGENTS.md"
-    path.write_text("# My rules\n\nAlways use tabs.\n")
+    path.write_text("# My rules\n\nAlways use tabs.\n", encoding="utf-8")
     instruction.install(path, BINARY)
 
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     assert "Always use tabs." in text
     assert instruction.instruction(BINARY) in text
     # The user's content is backed up before we touch it.
-    assert (tmp_path / "AGENTS.md.bak").read_text() == "# My rules\n\nAlways use tabs.\n"
+    assert (tmp_path / "AGENTS.md.bak").read_text(encoding="utf-8") == "# My rules\n\nAlways use tabs.\n"
 
 
 def test_install_is_idempotent(tmp_path: pathlib.Path) -> None:
     path = tmp_path / "AGENTS.md"
-    path.write_text("# My rules\n")
+    path.write_text("# My rules\n", encoding="utf-8")
 
     instruction.install(path, BINARY)
-    first = path.read_text()
+    first = path.read_text(encoding="utf-8")
     changed, diff = instruction.install(path, BINARY)
 
     assert not changed and not diff, "a re-run must be a no-op, not a second copy"
-    assert path.read_text() == first
+    assert path.read_text(encoding="utf-8") == first
     assert first.count(instruction.begin(BINARY)) == 1
 
 
 def test_upgrade_replaces_in_place(monkeypatch, tmp_path: pathlib.Path) -> None:
     """The whole reason the block is marker-fenced: a later memU can update it."""
     path = tmp_path / "AGENTS.md"
-    path.write_text("# My rules\n")
+    path.write_text("# My rules\n", encoding="utf-8")
     instruction.install(path, BINARY)
 
     monkeypatch.setattr(instruction, "INSTRUCTION_TEMPLATE", "## memU\n\nNew and improved.\n")
     changed, _ = instruction.install(path, BINARY)
 
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     assert changed
     assert "New and improved." in text
     assert "retrieve before answering" not in text, "the old block must be gone, not duplicated"
@@ -71,7 +71,7 @@ def test_each_host_manages_its_own_block(tmp_path: pathlib.Path) -> None:
     instruction.install(path, "memu-codex")
     instruction.install(path, "memu-claude-code")
 
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     assert text.count(instruction.begin("memu-codex")) == 1
     assert text.count(instruction.begin("memu-claude-code")) == 1
     assert "memu-codex retrieve" in text
@@ -84,13 +84,13 @@ def test_patch_survives_a_file_with_no_trailing_newline() -> None:
 
 def test_dry_run_writes_nothing(tmp_path: pathlib.Path) -> None:
     path = tmp_path / "AGENTS.md"
-    path.write_text("# My rules\n")
+    path.write_text("# My rules\n", encoding="utf-8")
 
     changed, diff = instruction.install(path, BINARY, dry_run=True)
 
     assert not changed
     assert diff, "a dry run still reports what it would do"
-    assert path.read_text() == "# My rules\n"
+    assert path.read_text(encoding="utf-8") == "# My rules\n"
     assert not (tmp_path / "AGENTS.md.bak").exists()
 
 
