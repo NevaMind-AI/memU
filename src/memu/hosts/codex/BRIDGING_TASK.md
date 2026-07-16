@@ -112,9 +112,10 @@ are new Codex sessions since the last run.
 - **Bounded per run.** Each run mines at most `--max-jobs` sessions (default
   10), newest first; sessions beyond the cap are skipped, not queued — memU
   starts accumulating memory when installed and does not retroactively mine a
-  backlog. A skipped session is only picked up later if it gains new turns, so
-  if more than 10 sessions regularly change between runs, schedule the task
-  more frequently or raise `--max-jobs`.
+  backlog. A skipped session is only picked up later if it gains new turns — a
+  later run does not return for it even when it has spare capacity — so if
+  more than 10 sessions regularly change between runs, schedule the task more
+  frequently or raise `--max-jobs`.
 - **Ordering is load-bearing.** Memory jobs are numbered before skill jobs, and
   the resource-describe job is last — later jobs depend on files earlier ones
   write (the skill jobs are what populate the touched-file log the resource job

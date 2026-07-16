@@ -101,9 +101,10 @@ last run.
 - **Bounded per run.** Each run mines at most `--max-jobs` sessions (default
   10), newest first; sessions beyond the cap are skipped, not queued — memU
   starts accumulating memory when installed and does not retroactively mine a
-  backlog. A skipped session is only picked up later if it gains new turns, so
-  if more than 10 sessions regularly change between runs, schedule the task
-  more frequently or raise `--max-jobs`.
+  backlog. A skipped session is only picked up later if it gains new turns — a
+  later run does not return for it even when it has spare capacity — so if
+  more than 10 sessions regularly change between runs, schedule the task more
+  frequently or raise `--max-jobs`.
 - **Several generic agents on one machine** must not share a working tree: add
   `--base-dir ~/.memu/hosts/<name>` to both `prepare` and `commit` in each
   task's prompt.
