@@ -41,6 +41,10 @@ AGENTS_MD = "~/.codex/AGENTS.md"
 """Codex's global instruction file — loaded into every session, so the inject seam
 lands here. The path is the only part of that seam that is Codex-specific."""
 
+SKILLS_DIR = "~/.codex/skills"
+"""Codex's skills directory. Because it exists, the AGENTS.md block is a pointer
+and the retrieval procedure itself is installed here as a skill."""
+
 SPEC = HostSpec(
     host=HOST,
     display="Codex",
@@ -49,6 +53,7 @@ SPEC = HostSpec(
     session_dir=SESSION_DIR,
     session_help="Codex session log",
     instruction_path=AGENTS_MD,
+    skills_dir=SKILLS_DIR,
     # Codex shipped before per-host working trees; its ~/.memu layout is a
     # compatibility contract with already-scheduled bridging prompts (ADR 0010).
     base_dir="~/.memu",

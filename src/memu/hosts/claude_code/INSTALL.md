@@ -157,24 +157,35 @@ simply always there — no hook, no wrapper, no per-turn process.
 memu-claude-code install-instruction
 ```
 
-It writes memU's block into `~/.claude/CLAUDE.md`, creating the file if it does
-not exist, and prints the diff. It appends rather than overwrites (existing
-content is backed up to `~/.claude/CLAUDE.md.bak`), and it is idempotent: the
-text sits in a marked block that a re-run — or a later memU release — replaces in
-place. `--dry-run` shows the diff without writing; `--print` prints just the
-block.
+One command, two files, because Claude Code has skills:
+
+- `~/.claude/skills/memu-retrieve/SKILL.md` — the procedure: the `retrieve`
+  command to run and how to read the layers that come back. This directory is
+  memU's own, so a re-run overwrites it whole.
+- `~/.claude/CLAUDE.md` — two sentences telling you to use that skill before
+  answering. The detail stays out of here on purpose: this file is in context on
+  every turn, whether or not the turn touches memory; the skill is loaded only
+  when you act on it.
+
+It creates either file if absent and prints the diff of both. `CLAUDE.md` is the
+*user's*, so it appends rather than overwrites (previous content is backed up to
+`~/.claude/CLAUDE.md.bak`), and memU's text sits in a marked block that a re-run —
+or a later memU release — replaces in place. `--dry-run` shows the diffs without
+writing; `--print` prints what would be installed.
 
 ### ✅ Verify Part 3
 
 ```
 cat ~/.claude/CLAUDE.md
+cat ~/.claude/skills/memu-retrieve/SKILL.md
 memu-claude-code retrieve "smoke test"
 ```
 
-The memU block must appear exactly once, anything the user had there must be
-intact, and `retrieve` must exit cleanly (empty result lists are fine). A *fresh*
-Claude Code session is what picks up the new CLAUDE.md — do not be surprised that
-the instruction is not in your own context yet.
+The memU block must appear exactly once and name the `memu-retrieve` skill, that
+skill must exist, anything the user had in `CLAUDE.md` must be intact, and
+`retrieve` must exit cleanly (empty result lists are fine). A *fresh* Claude Code
+session is what picks up the new CLAUDE.md and skill — do not be surprised that
+neither is in your own context yet.
 
 ---
 
@@ -182,6 +193,5 @@ the instruction is not in your own context yet.
 
 Report back to the user: the store (`MEMU_DB`) and provider in use; the scheduled
 job and its schedule in words; and that the retrieval instruction is now in
-`~/.claude/CLAUDE.md`, taking effect in their next session. Record and inject
-both read `~/.memu/config.env`, so they provably share one store — what the task
-learns tonight is what retrieval finds tomorrow.
+`~/.claude/CLAUDE.md`, pointing at the `memu-retrieve` skill and taking effect in
+their next session. Record and inject both read `~/.memu/config.env`, so they provably share one store — what the task learns tonight is what retrieval finds tomorrow.
