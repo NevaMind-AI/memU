@@ -12,6 +12,7 @@ Usage:
     memu-cursor commit                # submit what the agent produced back to memU
     memu-cursor doctor                # check config + store before relying on them
     memu-cursor docs install          # print the agent-facing install guide
+    memu-cursor docs uninstall        # print the agent-facing removal guide
 """
 
 from __future__ import annotations

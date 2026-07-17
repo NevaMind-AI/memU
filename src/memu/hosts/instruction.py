@@ -101,6 +101,25 @@ def patch(current: str, binary: str) -> str:
     return f"{current}{separator}{block(binary)}"
 
 
+def strip(current: str, binary: str) -> str:
+    """Return ``current`` with the managed block removed — the inverse of :func:`patch`.
+
+    Pure, for the same reason :func:`patch` is. Only the marker-fenced block is
+    memU's to take back; everything outside it is the user's and survives
+    verbatim. Removing the block also takes back the blank-line separator
+    :func:`patch` added, so an install/remove round-trip restores the file
+    byte-for-byte.
+    """
+    pattern = _block_re(binary)
+    if not pattern.search(current):
+        return current
+    stripped = pattern.sub("", current, count=1)
+    stripped = re.sub(r"\n{3,}", "\n\n", stripped)
+    if not stripped.strip():
+        return ""
+    return stripped.rstrip("\n") + "\n"
+
+
 def install(path: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, str]:
     """Install the managed block into ``path``. Returns ``(changed, diff)``.
 
@@ -129,6 +148,36 @@ def install(path: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, st
     return True, diff
 
 
+def remove(path: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, str]:
+    """Remove the managed block from ``path``. Returns ``(changed, diff)``.
+
+    The uninstall-side mirror of :func:`install`, with the same safety
+    properties: only the marked block goes, the user's content stays, and the
+    previous contents are backed up to ``<path>.bak`` before the rewrite. A
+    missing file — or one with no managed block — is already the desired end
+    state, so both are clean no-ops rather than errors.
+    """
+    path = path.expanduser()
+    if not path.is_file():
+        return False, ""
+    current = path.read_text(encoding="utf-8")
+    updated = strip(current, binary)
+    diff = "".join(
+        difflib.unified_diff(
+            current.splitlines(keepends=True),
+            updated.splitlines(keepends=True),
+            fromfile=str(path),
+            tofile=str(path),
+        )
+    )
+    if updated == current or dry_run:
+        return False, diff
+
+    shutil.copyfile(path, path.with_suffix(path.suffix + ".bak"))
+    path.write_text(updated, encoding="utf-8")
+    return True, diff
+
+
 def _cmd_install_instruction(args: argparse.Namespace) -> int:
     path = Path(args.path)
     if args.print_only:
@@ -146,9 +195,27 @@ def _cmd_install_instruction(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_remove_instruction(args: argparse.Namespace) -> int:
+    path = Path(args.path)
+    changed, diff = remove(path, args.binary, dry_run=args.dry_run)
+    if not diff:
+        print(f"{path}: no managed block to remove")
+        return 0
+    if args.dry_run:
+        print(f"{path}: would change\n\n{diff}", end="")
+        return 0
+    print(f"{path}: {'updated' if changed else 'unchanged'}\n\n{diff}", end="")
+    return 0
+
+
 async def _cmd_install_instruction_async(args: argparse.Namespace) -> int:
     """The host CLIs dispatch coroutines; this command needs no I/O loop of its own."""
     return _cmd_install_instruction(args)
+
+
+async def _cmd_remove_instruction_async(args: argparse.Namespace) -> int:
+    """The host CLIs dispatch coroutines; this command needs no I/O loop of its own."""
+    return _cmd_remove_instruction(args)
 
 
 def register(sub: Any, *, path: str, binary: str) -> None:
@@ -165,3 +232,11 @@ def register(sub: Any, *, path: str, binary: str) -> None:
     parser.add_argument("--dry-run", action="store_true", help="Show the diff without writing")
     parser.add_argument("--print", dest="print_only", action="store_true", help="Print the managed block and exit")
     parser.set_defaults(handler=_cmd_install_instruction_async, binary=binary)
+
+    remover = sub.add_parser(
+        "remove-instruction",
+        help="Remove memU's managed block from the host's global instruction file (the uninstall mirror)",
+    )
+    remover.add_argument("--path", default=path, help=f"Instruction file to unpatch (default: {path})")
+    remover.add_argument("--dry-run", action="store_true", help="Show the diff without writing")
+    remover.set_defaults(handler=_cmd_remove_instruction_async, binary=binary)

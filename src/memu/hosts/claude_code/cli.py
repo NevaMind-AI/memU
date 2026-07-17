@@ -12,6 +12,7 @@ Usage:
     memu-claude-code commit                # submit what the agent produced back to memU
     memu-claude-code doctor                # check config + store before relying on them
     memu-claude-code docs install          # print the agent-facing install guide
+    memu-claude-code docs uninstall        # print the agent-facing removal guide
 """
 
 from __future__ import annotations

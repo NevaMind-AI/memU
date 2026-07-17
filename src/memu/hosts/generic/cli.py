@@ -18,6 +18,7 @@ Usage:
     memu-agent commit                       # submit what the agent produced back to memU
     memu-agent doctor                       # check config + store before relying on them
     memu-agent docs install                 # print the agent-facing install guide
+    memu-agent docs uninstall               # print the agent-facing removal guide
 """
 
 from __future__ import annotations
