@@ -21,6 +21,7 @@ Usage:
     memu-codex commit                # submit what the agent produced back to memU
     memu-codex doctor                # check config + store before relying on them
     memu-codex docs install          # print the agent-facing install guide
+    memu-codex docs uninstall        # print the agent-facing removal guide
 """
 
 from __future__ import annotations

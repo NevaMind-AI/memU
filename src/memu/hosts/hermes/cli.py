@@ -13,6 +13,7 @@ Usage:
     memu-hermes commit                # submit what the agent produced back to memU
     memu-hermes doctor                # check config + store before relying on them
     memu-hermes docs install          # print the agent-facing install guide
+    memu-hermes docs uninstall        # print the agent-facing removal guide
 """
 
 from __future__ import annotations

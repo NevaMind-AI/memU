@@ -12,6 +12,7 @@ Usage:
     memu-openclaw commit                # submit what the agent produced back to memU
     memu-openclaw doctor                # check config + store before relying on them
     memu-openclaw docs install          # print the agent-facing install guide
+    memu-openclaw docs uninstall        # print the agent-facing removal guide
 """
 
 from __future__ import annotations

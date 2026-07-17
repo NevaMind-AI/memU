@@ -1,6 +1,6 @@
 ---
 name: install-memu
-description: Install memU for whatever agent you are — identify your host, print its packaged install guide, and follow it to wire both seams (record and inject). Use when the user asks to install, set up, or integrate memU.
+description: Install or uninstall memU for whatever agent you are — identify your host, print its packaged guide, and follow it to wire (or unwire) both seams (record and inject). Use when the user asks to install, set up, integrate, remove, or uninstall memU.
 ---
 
 # Install memU
@@ -76,3 +76,21 @@ Two rules that hold for every host:
   the instruction file patched). For `memu-agent`, the detect report decides
   this; a retrieval-only integration is a valid outcome to report, not a
   failure to hide.
+
+## Uninstall
+
+Same routing, in reverse. If the user asked to **uninstall** memU instead:
+identify your binary exactly as in Step 2, then print and follow its removal
+guide —
+
+```
+<your-binary> docs uninstall
+```
+
+It unregisters the bridging task, removes the instruction block
+(`<your-binary> remove-instruction` — never hand-edit it out), then applies
+the defaults: the user's memory — the shared store and `~/.memu/config.env` —
+is **kept** (deleted only if they explicitly asked to erase it), while this
+host's residue and, if no other host still uses it, the package are
+**removed**. Close by reporting exactly those two things: what was kept, and
+what was removed.

@@ -1,7 +1,8 @@
 """One command surface, many host binaries.
 
 Every host adapter exposes the same verbs — ``retrieve``, ``install-instruction``,
-``prepare``, ``commit``, ``verify-resources``, ``doctor``, ``docs`` — because the
+``remove-instruction``, ``prepare``, ``commit``, ``verify-resources``, ``doctor``,
+``docs`` — because the
 pipeline behind them is host-agnostic (ADR 0008/0009). What differs per host is
 data, not code: the binary's name, where the session log lives, which file the
 standing instruction lands in, and the packaged guides. So the parser is built
@@ -33,7 +34,7 @@ from memu.hosts.bridging import Layout, commit, prepare
 from memu.hosts.bridging.pipeline import MAX_JOBS
 from memu.hosts.bridging.resources import verify_resource_log
 
-DOCS = {"install": "INSTALL.md", "task": "BRIDGING_TASK.md"}
+DOCS = {"install": "INSTALL.md", "task": "BRIDGING_TASK.md", "uninstall": "UNINSTALL.md"}
 
 
 @dataclass(frozen=True)
@@ -198,7 +199,11 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     p.set_defaults(handler=bind(_cmd_doctor))
 
     p = sub.add_parser("docs", help="Print a packaged agent-facing guide")
-    p.add_argument("doc", choices=sorted(DOCS), help="install: the setup guide; task: the bridging-task procedure")
+    p.add_argument(
+        "doc",
+        choices=sorted(DOCS),
+        help="install: the setup guide; task: the bridging-task procedure; uninstall: the removal guide",
+    )
     p.set_defaults(handler=bind(_cmd_docs))
 
     if spec.register_extra is not None:
