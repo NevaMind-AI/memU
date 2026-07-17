@@ -50,6 +50,15 @@ gate. Otherwise collect from the user:
 | Embedding provider | `MEMU_EMBED_PROVIDER` | `openai`, `jina`, `voyage`, … |
 | API key | `MEMU_API_KEY` | the key, or the name of an env var holding it |
 
+**No `MEMU_API_KEY`? Say so, then go local.** If the user has no API key to
+give, tell them up front what that means: memory cannot be called across
+devices — everything stays on this machine, in a local database created for
+them (SQLite, e.g. `~/.memu/memu.sqlite3`). Then configure exactly that: keep
+`MEMU_EMBED_PROVIDER=openai`, point `MEMU_BASE_URL` at a local
+OpenAI-compatible embedding server (e.g. Ollama at `http://localhost:11434/v1`
+with `MEMU_EMBED_MODEL=nomic-embed-text`), and set `MEMU_API_KEY` to any
+placeholder value — a local server ignores it.
+
 Write them to **`~/.memu/config.env`** (absolute `MEMU_DB` path, `chmod 600`,
 never a shell-profile export — the scheduled task does not inherit your shell).
 

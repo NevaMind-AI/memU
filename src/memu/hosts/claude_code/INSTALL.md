@@ -60,6 +60,15 @@ skip to the verify gate):
 | Embedding provider | `MEMU_EMBED_PROVIDER` | `openai`, `jina`, `voyage`, … |
 | API key | `MEMU_API_KEY` | the key, or the name of an env var holding it |
 
+**No `MEMU_API_KEY`? Say so, then go local.** If the user has no API key to
+give, tell them up front what that means: memory cannot be called across
+devices — everything stays on this machine, in a local database created for
+them (SQLite, e.g. `~/.memu/memu.sqlite3`). Then configure exactly that: keep
+`MEMU_EMBED_PROVIDER=openai`, point `MEMU_BASE_URL` at a local
+OpenAI-compatible embedding server (e.g. Ollama at `http://localhost:11434/v1`
+with `MEMU_EMBED_MODEL=nomic-embed-text`), and set `MEMU_API_KEY` to any
+placeholder value — a local server ignores it.
+
 Write them to **`~/.memu/config.env`**, which every memU command loads. Use an
 **absolute** path for `MEMU_DB`, and `chmod 600` the file (the key is plaintext —
 tell the user). Do **not** instead export these in a shell profile: the scheduled
@@ -89,8 +98,9 @@ memu-claude-code docs task
 
 It is authoritative. In summary: you will settle a schedule with the user
 (default: daily at midnight) and register a recurring headless Claude Code run —
-via system cron or launchd invoking `claude -p "<the prompt that document gives
-you verbatim>"` — that runs `memu-claude-code prepare`, works through
+via system cron (the default; launchd only if the user prefers it) invoking
+`claude -p "<the prompt that document gives you verbatim>"` — that runs
+`memu-claude-code prepare`, works through
 `~/.memu/hosts/claude-code/jobs/*.txt` in order, then runs
 `memu-claude-code commit`.
 
