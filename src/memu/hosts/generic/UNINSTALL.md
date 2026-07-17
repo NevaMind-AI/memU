@@ -11,8 +11,8 @@ Uninstalling is the install run in reverse, and it is three parts:
 2. **Unpatch the instruction file** — remove the standing retrieval
    instruction from wherever `memu-agent install-instruction` put it (the
    *inject* seam).
-3. **Decide about the data and the package** — the store is the user's
-   accumulated memory; deleting it is their call, never yours.
+3. **Apply the data-and-package defaults** — the user's memory is kept, the
+   tooling is removed — and close by reporting both.
 
 A retrieval-only integration (detect found no recognizable session log, so no
 bridging task was ever registered) simply has no Part 1 — skip to Part 2.
@@ -31,7 +31,8 @@ scheduler if it has one, otherwise a system cron entry — and delete **that
 entry only**. Its prompt is recognizable: the three-step block running
 `memu-agent prepare --session-dir …`, the job files, then `memu-agent commit`.
 Everything else in the scheduler is the user's and stays; for cron:
-`crontab -l | grep -v 'memU bridging pipeline' | crontab -`.
+`crontab -l | grep -v 'memU bridging pipeline' | crontab -`. If nothing at all
+remains, `crontab -r` removes the now-empty crontab cleanly.
 
 ### ✅ Verify Part 1
 
@@ -64,29 +65,35 @@ the user's own content is intact.
 
 ---
 
-## Part 3 — The data, the config, and the package (ask first)
+## Part 3 — The data, the config, and the package (defaults, then report)
 
-Everything in this part is **opt-in: ask the user, then act.** The safe
-default is to keep data.
+No questions to ask here. Apply the defaults below, and make sure the final
+report tells the user plainly what they got: **memory kept, tooling removed.**
+Only one thing overrides a default: the user's own explicit words.
 
-- **This host's working tree** — `~/.memu/hosts/agent/` (or the `--base-dir`
-  chosen at install time, for a named generic agent) holds only run-scoped
-  state (job files, session cursors, mirrors). Safe to delete once Parts 1–2
-  are done. The agent's own session log belongs to the agent — memU only ever
+- **Keep the store and `~/.memu/config.env`.** Always. The store *is* the
+  user's accumulated memory, and it survives an uninstall by design —
+  reinstalling later picks it right back up. Delete it only if the user
+  explicitly asked to erase their memory as part of this uninstall, and warn
+  first, in plain words, that it is irreversible.
+- **Remove this host's residue.** `~/.memu/hosts/agent/` (or the `--base-dir`
+  chosen at install time, for a named generic agent); and each patched
+  instruction file **if** Part 2 left it empty (it held only memU's block, so
+  the install created it) — a file with the user's own content stays, of
+  course. The agent's own session log belongs to the agent — memU only ever
   read it; leave it alone.
-- **The store and `~/.memu/config.env`** — shared by every host adapter on
-  the machine. Delete only if the user says so **and** no other host adapter
-  is still integrated. Warn first, in plain words: the store *is* their
-  accumulated memory, and deleting it is irreversible.
-- **The package** — once no host on this machine uses memU any more:
-  `pip uninstall memu-cli` (or `pipx uninstall memu-cli` — match how it was
-  installed).
+- **Uninstall the package** — `pip uninstall memu-cli` (or `pipx uninstall
+  memu-cli` — match how it was installed) — **unless** another host adapter is
+  still integrated on this machine (another host's instruction file still
+  carries a memU block, or its bridging task still exists). Then the package
+  stays, and the report says which host is still using it.
 
 ### ✅ Done
 
-Report to the user exactly what was removed and what was deliberately kept:
-the schedule (gone, or never existed for a retrieval-only integration), the
-instruction (removed from which files), the store (kept where, or deleted),
-the package (kept or uninstalled). If the store was kept, say so explicitly:
-reinstalling later picks it right back up — memory survives an uninstall by
-design.
+Close the report with the two things the user needs to hear, in this order:
+
+1. **What was kept:** their memory — the store at `MEMU_DB` and
+   `~/.memu/config.env` — untouched. A later reinstall picks it up as is.
+2. **What was removed:** the bridging schedule, the retrieval instruction,
+   this host's working state, and (unless another host still needs it) the
+   `memu-cli` package.

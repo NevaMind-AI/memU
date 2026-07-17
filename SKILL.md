@@ -88,7 +88,9 @@ guide —
 ```
 
 It unregisters the bridging task, removes the instruction block
-(`<your-binary> remove-instruction` — never hand-edit it out), and — only with
-the user's explicit say-so — deals with the data and the package. The store may
-be shared with other agents on the machine and *is* the user's accumulated
-memory: keeping it is the default, deleting it is their call.
+(`<your-binary> remove-instruction` — never hand-edit it out), then applies
+the defaults: the user's memory — the shared store and `~/.memu/config.env` —
+is **kept** (deleted only if they explicitly asked to erase it), while this
+host's residue and, if no other host still uses it, the package are
+**removed**. Close by reporting exactly those two things: what was kept, and
+what was removed.
