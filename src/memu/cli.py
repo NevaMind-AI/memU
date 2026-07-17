@@ -167,6 +167,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Piped stdio on Windows falls back to the ANSI code page (gbk, cp1252, …),
+    # which cannot encode retrieved memory content printed raw (ensure_ascii=False)
+    # — and agents read every command through a pipe. Force UTF-8; on UTF-8 stdio
+    # it's a no-op.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)
     handler: Callable[[argparse.Namespace], Coroutine[Any, Any, int]] = args.handler
     try:
