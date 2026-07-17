@@ -18,14 +18,42 @@ SESSION_DIR = "~/.codex/sessions"
 _MESSAGE_ROLES = ("user", "assistant")
 _TOOL_TYPES = ("function_call", "function_call_output")
 
+# Harness-injected context is logged as ordinary user messages with no
+# isMeta-style flag; the leading marker is the only thing that distinguishes it
+# from typing. The layout drifts across versions — 0.80.0 writes AGENTS.md and
+# environment_context as standalone records, 0.124.x packs both into one
+# record's items — so the check is per item, not per record.
+_INJECTED_PREFIXES = (
+    "<environment_context>",
+    "<turn_aborted>",
+    "# AGENTS.md instructions for",
+)
+
+
+def _injected(payload: dict) -> bool:
+    """True when every content item is harness-injected context, none typing."""
+    if payload.get("role") != "user":
+        return False
+    content = payload.get("content")
+    if not isinstance(content, list):
+        return False
+    texts = [item.get("text", "") for item in content if isinstance(item, dict)]
+    return bool(texts) and all(text.lstrip().startswith(_INJECTED_PREFIXES) for text in texts)
+
 
 class CodexTranscriptSource(TranscriptSource):
     """Codex writes one JSON object per line, each wrapping a ``payload``.
 
     A payload is a conversation turn when its ``type`` is ``message`` and its
-    ``role`` is user or assistant, and a tool record when its ``type`` is a
-    function call or a function-call output. Everything else — session metadata,
-    reasoning traces — is noise the mining jobs should never see.
+    ``role`` is user or assistant — unless it is harness context wearing the
+    user role: Codex logs ``<environment_context>`` dumps, ``<turn_aborted>``
+    markers, and AGENTS.md instructions as ordinary user messages, so a user
+    record whose every content item opens with a known injection marker is
+    dropped (any item of real prose keeps the record; an unknown future marker
+    leaks rather than costing a real message). A payload is a tool record when
+    its ``type`` is a function call or a function-call output. Everything else —
+    session metadata, reasoning traces — is noise the mining jobs should never
+    see.
     """
 
     name: ClassVar[str] = "codex"
@@ -46,7 +74,7 @@ class CodexTranscriptSource(TranscriptSource):
 
         kind = payload.get("type")
         if kind == "message" and payload.get("role") in _MESSAGE_ROLES:
-            return RecordKind.MESSAGE
+            return RecordKind.OTHER if _injected(payload) else RecordKind.MESSAGE
         if kind in _TOOL_TYPES:
             return RecordKind.TOOL
         return RecordKind.OTHER

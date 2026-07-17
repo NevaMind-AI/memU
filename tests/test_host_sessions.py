@@ -34,6 +34,51 @@ def test_codex_classify() -> None:
     assert source.classify(_line({"payload": {"type": "reasoning"}})) is RecordKind.OTHER
 
 
+def _codex_user(*texts: str) -> str:
+    content = [{"type": "input_text", "text": text} for text in texts]
+    return _line({"type": "response_item", "payload": {"type": "message", "role": "user", "content": content}})
+
+
+def test_codex_classify_drops_injected_user_records() -> None:
+    """Codex has no isMeta flag: environment context, abort markers, and
+    AGENTS.md dumps are logged as ordinary user messages, distinguishable from
+    typing only by their leading marker. The layout drifts across versions —
+    0.80.0 writes standalone records, 0.124.x packs AGENTS.md and
+    environment_context into one record's items — so all four shapes observed
+    in real logs are pinned here (#510). Role-only classify would feed every
+    one of them to the mining jobs as something the user said.
+    """
+    source = CodexTranscriptSource()
+    env = _codex_user("<environment_context>\n  <cwd>D:\\proj</cwd>\n</environment_context>")
+    agents_md = _codex_user("# AGENTS.md instructions for D:\\proj\n\n<INSTRUCTIONS>reply in haiku</INSTRUCTIONS>")
+    aborted = _codex_user("<turn_aborted>\nThe user interrupted the previous turn on purpose.\n</turn_aborted>")
+    packed = _codex_user("# AGENTS.md instructions for D:\\proj", "<environment_context>\n</environment_context>")
+    assert source.classify(env) is RecordKind.OTHER
+    assert source.classify(agents_md) is RecordKind.OTHER
+    assert source.classify(aborted) is RecordKind.OTHER
+    assert source.classify(packed) is RecordKind.OTHER
+
+
+def test_codex_injected_filter_never_costs_a_real_message() -> None:
+    """The filter fails open: one item of real prose keeps the record, markers
+    mid-text don't count, and assistant records are never inspected."""
+    source = CodexTranscriptSource()
+    assistant = {
+        "type": "response_item",
+        "payload": {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "<environment_context> is injected by the harness."}],
+        },
+    }
+    assert source.classify(_codex_user("fix the bug")) is RecordKind.MESSAGE
+    assert (
+        source.classify(_codex_user("fix the bug", "<environment_context></environment_context>")) is RecordKind.MESSAGE
+    )
+    assert source.classify(_codex_user("what does <environment_context> mean?")) is RecordKind.MESSAGE
+    assert source.classify(_line(assistant)) is RecordKind.MESSAGE
+
+
 # ── Claude Code ────────────────────────────────────────────────────────────────
 
 
