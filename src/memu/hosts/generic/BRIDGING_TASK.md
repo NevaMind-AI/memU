@@ -51,8 +51,8 @@ creating.
 
 ## Step 2 — register the scheduled run
 
-Use the agent's own scheduler if it has one; otherwise a system cron entry
-invoking the agent headless. The recurring prompt, with `<SESSION_DIR>` filled
+Default to a system cron entry invoking the agent headless; use the agent's
+own scheduler instead only if the user prefers it. The recurring prompt, with `<SESSION_DIR>` filled
 in, **verbatim**:
 
 ```

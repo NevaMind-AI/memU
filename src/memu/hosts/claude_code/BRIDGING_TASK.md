@@ -53,8 +53,9 @@ day at midnight**, cron `0 0 * * *` (local time). Confirm before creating.
 
 ## Step 2 — register the scheduled run
 
-Create a system cron entry (or launchd job on macOS, if the user prefers) that
-runs Claude Code headless with the pipeline prompt:
+Create a system cron entry — the default, macOS included (use launchd only if
+the user explicitly asks for it) — that runs Claude Code headless with the
+pipeline prompt:
 
 ```
 0 0 * * * claude -p 'Run the memU bridging pipeline. Do the three steps strictly in order; do not skip a step even if the previous one looks like it produced nothing.  1. PREPARE. Run this exact command with bash:  memu-claude-code prepare  — it regenerates ~/.memu/hosts/claude-code/jobs/. If the command exits non-zero, stop and report the error.  2. SELF-EVOLVE. List ~/.memu/hosts/claude-code/jobs/*.txt and process them in ascending numeric order (1.txt, then 2.txt, …). The count changes every run — always glob and sort. If there are no job files, skip to step 3. For each job file: read it and follow its instructions to the letter. Each job is self-contained and already carries the concrete paths it needs. Emitting no files for a job is a valid outcome; do not invent content.  3. COMMIT. Run this exact command with bash:  memu-claude-code commit  — it commits whatever the jobs created or changed. If it exits non-zero, report the error.  Finish with a one-line summary: how many jobs ran and what was committed.'
