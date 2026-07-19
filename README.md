@@ -1,4 +1,4 @@
-![MemU Banner](assets/banner.png)
+![memU Banner](assets/banner.png)
 
 <div align="center">
 
@@ -6,7 +6,7 @@
 
 ### Personal memory, stored as files
 
-**Across Agents. Fast retrieval. Lower cost.**
+**Across Sessions. Across Agents. Across Devices.**
 
 [![PyPI version](https://badge.fury.io/py/memu-cli.svg)](https://badge.fury.io/py/memu-cli)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
