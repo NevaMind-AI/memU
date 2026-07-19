@@ -1,11 +1,11 @@
 import logging
+import os
 from typing import cast
 
-import httpx
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, DefaultAsyncHttpxClient
 from openai.types import CreateEmbeddingResponse
 
-from memu.embedding.http_client import is_loopback_url
+from memu.embedding.http_client import proxy_bypass_mounts
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +20,14 @@ class OpenAIEmbeddingSDKClient:
         self.batch_size = batch_size
         # The SDK's default transport trusts env proxies; a loopback target
         # (local Ollama & co.) must bypass them — the proxy is on another host,
-        # where "localhost" no longer means the caller.
-        http_client = httpx.AsyncClient(trust_env=False) if is_loopback_url(self.base_url) else None
+        # where "localhost" no longer means the caller. Unmounting the target
+        # host (rather than trust_env=False) keeps SSL_CERT_FILE/.netrc
+        # working, and DefaultAsyncHttpxClient (rather than a bare httpx
+        # client) keeps the SDK's own timeouts, limits, and lifecycle. An
+        # explicit MEMU_HTTP_PROXY states intent about memU's own traffic and
+        # opts back into the default behavior.
+        mounts = None if os.getenv("MEMU_HTTP_PROXY") else proxy_bypass_mounts(self.base_url)
+        http_client = DefaultAsyncHttpxClient(mounts=mounts) if mounts else None
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url, http_client=http_client)
 
     async def embed(self, inputs: list[str]) -> tuple[list[list[float]], CreateEmbeddingResponse | None]:

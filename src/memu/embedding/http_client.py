@@ -35,10 +35,32 @@ def is_loopback_url(url: str) -> bool:
         return False
 
 
-def _load_proxy(base_url: str) -> str | None:
-    if is_loopback_url(base_url):
+def proxy_bypass_mounts(url: str) -> dict[str, httpx.AsyncBaseTransport | None] | None:
+    """httpx ``mounts`` that exempt a loopback target from env proxies, else ``None``.
+
+    httpx gives scheme-specific env-proxy mounts (``HTTP_PROXY`` mounts on
+    ``http://``) priority over a generic ``all://`` unmount, so the bypass must
+    be *host*-specific — more specific than any env mount. Unmounting (rather
+    than ``trust_env=False``) keeps the rest of the environment —
+    ``SSL_CERT_FILE``, ``.netrc``, the user's own ``NO_PROXY`` — working.
+    """
+    if not is_loopback_url(url):
         return None
-    return os.getenv("MEMU_HTTP_PROXY") or os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY") or None
+    host = urllib.parse.urlsplit(url).hostname or ""
+    if ":" in host:  # IPv6 literal needs its brackets back
+        host = f"[{host}]"
+    return {f"all://{host}": None}
+
+
+def _load_proxy(base_url: str) -> str | None:
+    explicit = os.getenv("MEMU_HTTP_PROXY") or None
+    if is_loopback_url(base_url):
+        # Ambient proxies (HTTP_PROXY, HTTPS_PROXY) are aimed at the network at
+        # large, never at the machine itself. An explicit MEMU_HTTP_PROXY is
+        # different — it states intent about memU's own traffic (e.g. capturing
+        # it with a local debugging proxy) — so it still wins.
+        return explicit
+    return explicit or os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY") or None
 
 
 logger = logging.getLogger(__name__)
@@ -86,9 +108,11 @@ class HTTPEmbeddingClient:
         self.embedding_endpoint = raw_embedding_ep.lstrip("/")
         self.timeout = timeout
         self.proxy = _load_proxy(self.base_url)
-        # httpx falls back to env proxies (HTTP_PROXY, ...) even when proxy=None,
-        # so a loopback target must also opt out of the environment.
-        self.trust_env = not is_loopback_url(self.base_url)
+        # httpx falls back to env proxies even when proxy=None, so a loopback
+        # target explicitly unmounts them (host-specifically — see
+        # proxy_bypass_mounts). An explicit MEMU_HTTP_PROXY means self.proxy is
+        # set and no bypass applies.
+        self.mounts = proxy_bypass_mounts(self.base_url) if self.proxy is None else None
 
     async def embed(self, inputs: list[str]) -> tuple[list[list[float]], dict[str, Any]]:
         """
@@ -104,7 +128,7 @@ class HTTPEmbeddingClient:
         """
         payload = self.backend.build_embedding_payload(inputs=inputs, embed_model=self.embed_model)
         async with httpx.AsyncClient(
-            base_url=self.base_url, timeout=self.timeout, proxy=self.proxy, trust_env=self.trust_env
+            base_url=self.base_url, timeout=self.timeout, proxy=self.proxy, mounts=self.mounts
         ) as client:
             resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
@@ -168,7 +192,7 @@ class HTTPEmbeddingClient:
 
         endpoint = self.backend.multimodal_embedding_endpoint.lstrip("/")
         async with httpx.AsyncClient(
-            base_url=self.base_url, timeout=self.timeout, proxy=self.proxy, trust_env=self.trust_env
+            base_url=self.base_url, timeout=self.timeout, proxy=self.proxy, mounts=self.mounts
         ) as client:
             resp = await client.post(endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
