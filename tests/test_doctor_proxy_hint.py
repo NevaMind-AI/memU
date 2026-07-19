@@ -110,3 +110,60 @@ async def test_doctor_failure_without_proxies_has_no_hint(
     err = capsys.readouterr().err
     assert "error: 502" in err
     assert "hint:" not in err
+
+
+async def test_config_error_gets_no_proxy_hint_even_with_proxies(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A missing MEMU_DB has nothing to do with proxies — on a VPN machine
+    (proxies always detected) the hint must not fire on every failure."""
+    from memu.env import ConfigError
+
+    monkeypatch.setenv("MEMU_BASE_URL", LOOPBACK)
+    monkeypatch.setenv("HTTP_PROXY", PROXY)
+    monkeypatch.delenv("MEMU_DEBUG", raising=False)
+
+    async def boom(query: str) -> dict:
+        raise ConfigError("MEMU_DB")
+
+    monkeypatch.setattr(retrieval, "retrieve", boom)
+
+    assert await _cmd_doctor(SPEC, argparse.Namespace()) == 1
+    assert "hint:" not in capsys.readouterr().err
+
+
+async def test_auth_error_gets_no_proxy_hint(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("MEMU_BASE_URL", LOOPBACK)
+    monkeypatch.setenv("HTTP_PROXY", PROXY)
+    monkeypatch.delenv("MEMU_DEBUG", raising=False)
+
+    async def boom(query: str) -> dict:
+        raise RuntimeError("401")
+
+    monkeypatch.setattr(retrieval, "retrieve", boom)
+
+    assert await _cmd_doctor(SPEC, argparse.Namespace()) == 1
+    assert "hint:" not in capsys.readouterr().err
+
+
+async def test_wrapped_transport_error_still_hints(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The interesting error is usually wrapped by the SDK — the gate must
+    walk the cause chain, not just look at the outermost message."""
+    monkeypatch.setenv("MEMU_BASE_URL", LOOPBACK)
+    monkeypatch.setenv("HTTP_PROXY", PROXY)
+    monkeypatch.delenv("MEMU_DEBUG", raising=False)
+
+    class ConnectError(Exception):
+        pass
+
+    async def boom(query: str) -> dict:
+        raise RuntimeError("failed") from ConnectError()
+
+    monkeypatch.setattr(retrieval, "retrieve", boom)
+
+    assert await _cmd_doctor(SPEC, argparse.Namespace()) == 1
+    assert "hint:" in capsys.readouterr().err

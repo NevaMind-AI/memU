@@ -127,6 +127,35 @@ async def _cmd_verify_resources(spec: HostSpec, args: argparse.Namespace) -> int
     return 0
 
 
+_TRANSPORT_SMELLS = ("502", "503", "504", "timeout", "timed out", "connect", "unreachable", "proxy")
+
+
+def _smells_like_transport(exc: BaseException) -> bool:
+    """Gate the proxy hint on transport-shaped failures only.
+
+    A missing ``MEMU_DB`` or a 401 from a placeholder key has nothing to do
+    with proxies — a hint there would be exactly the misdirection it exists to
+    prevent, and on a machine with a VPN-managed system proxy (where proxies
+    are *always* detected) it would fire on every failure. Walks the cause
+    chain because the interesting error (``ConnectError``, a 502 status) is
+    usually wrapped by the SDK before doctor sees it.
+    """
+    from memu.env import ConfigError
+
+    seen: list[BaseException] = []
+    current: BaseException | None = exc
+    while current is not None and current not in seen:
+        seen.append(current)
+        current = current.__cause__ or current.__context__
+    if any(isinstance(e, ConfigError) for e in seen):
+        return False
+    for e in seen:
+        text = f"{type(e).__name__} {e}".lower()
+        if any(smell in text for smell in _TRANSPORT_SMELLS):
+            return True
+    return False
+
+
 def _proxy_hint(base_url: str) -> str | None:
     """One diagnostic line for a failed doctor that smells like proxy trouble.
 
@@ -178,9 +207,10 @@ async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
         if os.environ.get("MEMU_DEBUG") == "1":
             raise
         print(f"error: {exc} (set MEMU_DEBUG=1 for a traceback)", file=sys.stderr)
-        hint = _proxy_hint(env("MEMU_BASE_URL", "") or "")
-        if hint:
-            print(hint, file=sys.stderr)
+        if _smells_like_transport(exc):
+            hint = _proxy_hint(env("MEMU_BASE_URL", "") or "")
+            if hint:
+                print(hint, file=sys.stderr)
         return 1
     found = sum(len(result.get(layer, [])) for layer in ("segments", "files", "resources"))
     print(f"config    {os.path.expanduser(CONFIG_ENV)}")
