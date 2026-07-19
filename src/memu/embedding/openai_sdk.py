@@ -1,8 +1,11 @@
 import logging
 from typing import cast
 
+import httpx
 from openai import AsyncOpenAI
 from openai.types import CreateEmbeddingResponse
+
+from memu.embedding.http_client import is_loopback_url
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +18,11 @@ class OpenAIEmbeddingSDKClient:
         self.api_key = api_key or ""
         self.embed_model = embed_model
         self.batch_size = batch_size
-        self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
+        # The SDK's default transport trusts env proxies; a loopback target
+        # (local Ollama & co.) must bypass them — the proxy is on another host,
+        # where "localhost" no longer means the caller.
+        http_client = httpx.AsyncClient(trust_env=False) if is_loopback_url(self.base_url) else None
+        self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url, http_client=http_client)
 
     async def embed(self, inputs: list[str]) -> tuple[list[list[float]], CreateEmbeddingResponse | None]:
         """

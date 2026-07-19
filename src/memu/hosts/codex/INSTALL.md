@@ -73,6 +73,14 @@ OpenAI-compatible embedding server (e.g. Ollama at `http://localhost:11434/v1`
 with `MEMU_EMBED_MODEL=nomic-embed-text`), and set `MEMU_API_KEY` to any
 placeholder value — a local server ignores it.
 
+**Going local behind Codex's network proxy: nothing to ask.** Codex routes
+shell traffic through its proxy, which cannot reach *your* `localhost` — the
+symptom is `doctor` failing with a 502 against a local embedding server.
+Current memU bypasses proxies for loopback URLs automatically; if you see that
+502 on an older release, set `NO_PROXY=localhost,127.0.0.1` for the commands
+that call memU. Either way this is a mechanical requirement with exactly one
+right answer — apply it and move on; do not ask the user.
+
 Write them to **`~/.memu/config.env`**, which every memU command loads:
 
 ```

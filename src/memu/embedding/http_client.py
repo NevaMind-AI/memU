@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
+import urllib.parse
 from collections.abc import Callable
 from typing import Any, Literal
 
@@ -15,7 +17,27 @@ from memu.embedding.backends.openrouter import OpenRouterEmbeddingBackend
 from memu.embedding.backends.voyage import VoyageEmbeddingBackend
 
 
-def _load_proxy() -> str | None:
+def is_loopback_url(url: str) -> bool:
+    """True when ``url`` targets the local machine (``localhost``, ``127.x``, ``::1``).
+
+    A request to the machine itself must never be routed through a proxy: the
+    proxy sits on another host, where "localhost" means the proxy, not the
+    caller. Sandboxed hosts that force all traffic through a proxy (Codex's
+    sandbox, corporate CI) would otherwise turn every local-embedding-server
+    call into a 502 unless the user hand-writes a ``NO_PROXY`` exemption.
+    """
+    host = urllib.parse.urlsplit(url).hostname or ""
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _load_proxy(base_url: str) -> str | None:
+    if is_loopback_url(base_url):
+        return None
     return os.getenv("MEMU_HTTP_PROXY") or os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY") or None
 
 
@@ -63,7 +85,10 @@ class HTTPEmbeddingClient:
         # Strip leading "/" so httpx resolves relative to base_url
         self.embedding_endpoint = raw_embedding_ep.lstrip("/")
         self.timeout = timeout
-        self.proxy = _load_proxy()
+        self.proxy = _load_proxy(self.base_url)
+        # httpx falls back to env proxies (HTTP_PROXY, ...) even when proxy=None,
+        # so a loopback target must also opt out of the environment.
+        self.trust_env = not is_loopback_url(self.base_url)
 
     async def embed(self, inputs: list[str]) -> tuple[list[list[float]], dict[str, Any]]:
         """
@@ -78,7 +103,9 @@ class HTTPEmbeddingClient:
             track token consumption.
         """
         payload = self.backend.build_embedding_payload(inputs=inputs, embed_model=self.embed_model)
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, proxy=self.proxy) as client:
+        async with httpx.AsyncClient(
+            base_url=self.base_url, timeout=self.timeout, proxy=self.proxy, trust_env=self.trust_env
+        ) as client:
             resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
             data = resp.json()
@@ -140,7 +167,9 @@ class HTTPEmbeddingClient:
         )
 
         endpoint = self.backend.multimodal_embedding_endpoint.lstrip("/")
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout, proxy=self.proxy) as client:
+        async with httpx.AsyncClient(
+            base_url=self.base_url, timeout=self.timeout, proxy=self.proxy, trust_env=self.trust_env
+        ) as client:
             resp = await client.post(endpoint, json=payload, headers=self._headers())
             resp.raise_for_status()
             data = resp.json()
