@@ -18,6 +18,7 @@ from memu.hosts.codex.sessions import CodexTranscriptSource
 from memu.hosts.cursor.sessions import CursorTranscriptSource
 from memu.hosts.hermes.sessions import HermesTranscriptSource
 from memu.hosts.openclaw.sessions import OpenClawTranscriptSource
+from memu.hosts.workbuddy.sessions import WorkBuddyTranscriptSource
 
 
 def _line(entry: dict) -> str:
@@ -298,3 +299,86 @@ def test_hermes_opens_paths_with_uri_special_characters(tmp_path: pathlib.Path) 
     assert [source.key(path) for path in source.discover()] == ["new", "old"]
     with pytest.raises(sqlite3.OperationalError, match="readonly"):
         source._connect().execute("INSERT INTO messages (session_id, role, timestamp) VALUES ('x', 'user', 1)")
+
+
+# ── WorkBuddy ────────────────────────────────────────────────────────────────
+
+
+def test_workbuddy_classify_conversation_turns() -> None:
+    source = WorkBuddyTranscriptSource()
+    user = {
+        "type": "message",
+        "role": "user",
+        "content": [{"type": "input_text", "text": "fix the bug"}],
+    }
+    assistant = {
+        "type": "message",
+        "role": "assistant",
+        "content": [{"type": "output_text", "text": "On it."}],
+    }
+    assert source.classify(_line(user)) is RecordKind.MESSAGE
+    assert source.classify(_line(assistant)) is RecordKind.MESSAGE
+
+
+def test_workbuddy_classify_tool_records() -> None:
+    """WorkBuddy logs tool calls and results as standalone records — the same
+    pattern Codex uses, unlike Claude Code / Cursor which nest them in message
+    content blocks."""
+    source = WorkBuddyTranscriptSource()
+    function_call = {
+        "type": "function_call",
+        "name": "Bash",
+        "callId": "chatcmpl-tool-abc123",
+        "arguments": '{"command": "ls"}',
+    }
+    function_call_result = {
+        "type": "function_call_result",
+        "name": "Bash",
+        "callId": "chatcmpl-tool-abc123",
+        "status": "completed",
+        "output": {"type": "text", "text": "file1.txt\nfile2.txt"},
+    }
+    assert source.classify(_line(function_call)) is RecordKind.TOOL
+    assert source.classify(_line(function_call_result)) is RecordKind.TOOL
+
+
+def test_workbuddy_drops_noise() -> None:
+    source = WorkBuddyTranscriptSource()
+    reasoning = {
+        "type": "reasoning",
+        "rawContent": [{"type": "reasoning_text", "text": "thinking..."}],
+    }
+    snapshot = {"type": "file-history-snapshot", "snapshot": {}}
+    title = {"type": "ai-title", "aiTitle": "test session"}
+    assert source.classify(_line(reasoning)) is RecordKind.OTHER
+    assert source.classify(_line(snapshot)) is RecordKind.OTHER
+    assert source.classify(_line(title)) is RecordKind.OTHER
+    assert source.classify("not json") is RecordKind.OTHER
+
+
+def test_workbuddy_timestamp_accepts_epoch_millis() -> None:
+    source = WorkBuddyTranscriptSource()
+    millis = {"type": "message", "role": "user", "timestamp": 1784435392565}
+    iso = {"type": "message", "role": "user", "timestamp": "2026-07-19T04:29:52.565000+00:00"}
+    assert source.timestamp(_line(millis)) == "2026-07-19T04:29:52.565000+00:00"
+    assert source.timestamp(_line(iso)) == "2026-07-19T04:29:52.565000+00:00"
+    assert source.timestamp(_line({"type": "reasoning"})) is None
+
+
+def test_workbuddy_discover(tmp_path: pathlib.Path) -> None:
+    """WorkBuddy keeps one directory per escaped cwd, one JSONL per session."""
+    project = tmp_path / "d-Users-proj"
+    project.mkdir()
+    session = project / "abc-123.jsonl"
+    session.write_text(
+        '{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}\n',
+        encoding="utf-8",
+    )
+    stray = tmp_path / "app" / "sessions.json"
+    stray.parent.mkdir()
+    stray.write_text("{}\n", encoding="utf-8")
+
+    source = WorkBuddyTranscriptSource(tmp_path)
+    assert source.exists()
+    assert source.discover() == [session]
+    assert source.key(session) == "d-Users-proj/abc-123.jsonl"
