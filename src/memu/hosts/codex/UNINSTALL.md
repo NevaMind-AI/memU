@@ -68,11 +68,19 @@ Only one thing overrides a default: the user's own explicit words.
   reinstalling later picks it right back up. Delete it only if the user
   explicitly asked to erase their memory as part of this uninstall, and warn
   first, in plain words, that it is irreversible.
+- **The session cursor lives and dies with the store.** The `.session_manifest*` files
+  directly under `~/.memu/`
+  records which session turns have already been mined *into that store*. Store
+  kept (the default)? Keep the cursor — deleting it loses no memory, but the
+  next install re-mines every old session for nothing. Store deleted at the
+  user's request? Delete the cursor with it — a surviving cursor over an empty
+  store marks history as already mined, and it would never be mined again.
 - **Remove this host's residue.** Codex predates the per-host layout, so its
   run-scoped state sits directly under `~/.memu/`: the `jobs/`, `memory/`,
-  `skill/`, and `resources/` directories and the `.session_manifest*` cursor
-  files. **Never** sweep `~/.memu/` wholesale to get them — `config.env` and
-  the store file live there too. Also `~/.codex/AGENTS.md` itself **if** Part 2
+  `skill/`, and `resources/` directories — but **not** the `.session_manifest*`
+  cursor files (see above). **Never** sweep `~/.memu/` wholesale to get them —
+  `config.env`, the store file, and the cursor live there too. Also
+  `~/.codex/AGENTS.md` itself **if** Part 2
   left it empty (it held only memU's block, so the install created it) — a
   file with the user's own content stays, of course.
 - **Uninstall the package** — `pip uninstall memu-cli` (or `pipx uninstall
@@ -85,8 +93,9 @@ Only one thing overrides a default: the user's own explicit words.
 
 Close the report with the two things the user needs to hear, in this order:
 
-1. **What was kept:** their memory — the store at `MEMU_DB` and
-   `~/.memu/config.env` — untouched. A later reinstall picks it up as is.
+1. **What was kept:** their memory — the store at `MEMU_DB`,
+   `~/.memu/config.env`, and the session cursor — untouched. A later reinstall
+   picks it up as is and resumes mining right where it left off.
 2. **What was removed:** the bridging schedule, the retrieval instruction,
    this host's working state, and (unless another host still needs it) the
    `memu-cli` package.
