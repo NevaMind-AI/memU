@@ -76,7 +76,8 @@ placeholder value — a local server ignores it.
 **Shell proxies: nothing to ask.** If `doctor` fails with a **502** against a
 local embedding server, a proxy is hijacking localhost traffic. The proxy may
 come from the shell's `HTTP_PROXY` — or from the OS's system-wide settings
-(macOS: System Settings → Network → Proxies), which `env | grep -i proxy`
+(macOS: System Settings → Network → Proxies — a VPN
+client typically turns this on), which `env | grep -i proxy`
 will not show. Current memU bypasses proxies for loopback URLs automatically; on an
 older release, set `NO_PROXY=localhost,127.0.0.1` for the commands that call
 memU. A local server reached through a **non-loopback** address
