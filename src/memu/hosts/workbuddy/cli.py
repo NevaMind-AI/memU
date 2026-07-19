@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import sys
 
-from memu.hosts.workbuddy.sessions import SESSION_DIR, WorkBuddyTranscriptSource
 from memu.hosts.host_cli import HostSpec, run
+from memu.hosts.workbuddy.sessions import SESSION_DIR, WorkBuddyTranscriptSource
 
 HOST = "workbuddy"
 
