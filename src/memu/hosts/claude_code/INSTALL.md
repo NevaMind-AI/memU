@@ -97,7 +97,7 @@ memu-claude-code docs task
 ```
 
 It is authoritative. In summary: you will settle a schedule with the user
-(default: daily at midnight) and register a recurring headless Claude Code run —
+(default: every hour) and register a recurring headless Claude Code run —
 via system cron (the default; launchd only if the user prefers it) invoking
 `claude -p "<the prompt that document gives you verbatim>"` — that runs
 `memu-claude-code prepare`, works through

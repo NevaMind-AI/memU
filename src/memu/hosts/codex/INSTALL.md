@@ -119,7 +119,7 @@ memu-codex docs task
 ```
 
 It is authoritative. In summary, you will settle a cron schedule with the user
-(default: daily at midnight, `0 0 * * *`) and create a Codex scheduled task whose
+(default: every hour, `0 * * * *`) and create a Codex scheduled task whose
 recurring prompt is the three-step block that document gives you verbatim —
 `memu-codex prepare`, then the agent works through `~/.memu/jobs/*.txt` in order,
 then `memu-codex commit`.
@@ -212,7 +212,7 @@ that the instruction is not in your own context yet.
 Report back to the user:
 
 - the store (`MEMU_DB`) and provider now in use;
-- the scheduled task's name and cron, in words (e.g. "daily at 00:00 local");
+- the scheduled task's name and cron, in words (e.g. "hourly at :00 local");
 - that the retrieval instruction is now in `~/.codex/AGENTS.md`, and that it takes
   effect in their next Codex session.
 

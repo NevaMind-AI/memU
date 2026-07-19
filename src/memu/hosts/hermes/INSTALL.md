@@ -83,7 +83,7 @@ reinvent this** — follow the packaged procedure:
 memu-hermes docs task
 ```
 
-In summary: settle a schedule with the user (default: daily at midnight) and
+In summary: settle a schedule with the user (default: every hour) and
 register a recurring headless Hermes run — via system cron invoking `hermes`
 non-interactively with the prompt that document gives you verbatim — that runs
 `memu-hermes prepare`, works through `~/.memu/hosts/hermes/jobs/*.txt` in order,

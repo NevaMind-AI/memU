@@ -1,6 +1,6 @@
 ---
 name: create-memu-bridging-task
-description: Register a scheduled job that bridges the agent's recent Cursor agent sessions into durable memU memory, skills, and resources. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every day at midnight).
+description: Register a scheduled job that bridges the agent's recent Cursor agent sessions into durable memU memory, skills, and resources. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task (Cursor)
@@ -46,7 +46,7 @@ run's prompt must instruct the agent to do it, not shell out to a script.
 ## Step 1 — settle the schedule
 
 Ask the user for a schedule if the request doesn't include one. **Default: every
-day at midnight**, cron `0 0 * * *` (local time). Confirm before creating.
+hour**, cron `0 * * * *` (local time). Confirm before creating.
 
 ## Step 2 — register the scheduled run
 
@@ -54,7 +54,7 @@ Create a system cron entry — the default, macOS included (use launchd only if
 the user explicitly asks for it) — running:
 
 ```
-0 0 * * * cursor-agent -p 'Run the memU bridging pipeline. Do the three steps strictly in order; do not skip a step even if the previous one looks like it produced nothing.  1. PREPARE. Run this exact command with bash:  memu-cursor prepare  — it regenerates ~/.memu/hosts/cursor/jobs/. If the command exits non-zero, stop and report the error.  2. SELF-EVOLVE. List ~/.memu/hosts/cursor/jobs/*.txt and process them in ascending numeric order (1.txt, then 2.txt, …). The count changes every run — always glob and sort. If there are no job files, skip to step 3. For each job file: read it and follow its instructions to the letter. Each job is self-contained and already carries the concrete paths it needs. Emitting no files for a job is a valid outcome; do not invent content.  3. COMMIT. Run this exact command with bash:  memu-cursor commit  — it commits whatever the jobs created or changed. If it exits non-zero, report the error.  Finish with a one-line summary: how many jobs ran and what was committed.'
+0 * * * * cursor-agent -p 'Run the memU bridging pipeline. Do the three steps strictly in order; do not skip a step even if the previous one looks like it produced nothing.  1. PREPARE. Run this exact command with bash:  memu-cursor prepare  — it regenerates ~/.memu/hosts/cursor/jobs/. If the command exits non-zero, stop and report the error.  2. SELF-EVOLVE. List ~/.memu/hosts/cursor/jobs/*.txt and process them in ascending numeric order (1.txt, then 2.txt, …). The count changes every run — always glob and sort. If there are no job files, skip to step 3. For each job file: read it and follow its instructions to the letter. Each job is self-contained and already carries the concrete paths it needs. Emitting no files for a job is a valid outcome; do not invent content.  3. COMMIT. Run this exact command with bash:  memu-cursor commit  — it commits whatever the jobs created or changed. If it exits non-zero, report the error.  Finish with a one-line summary: how many jobs ran and what was committed.'
 ```
 
 The prompt block is fixed; only the cron expression is the user's choice. Nothing

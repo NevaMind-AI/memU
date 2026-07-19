@@ -1,6 +1,6 @@
 ---
 name: create-memu-bridging-task
-description: Create a Codex scheduled task that bridges the agent's recent Codex sessions into durable memU memory, skills, and resources. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every day at midnight).
+description: Create a Codex scheduled task that bridges the agent's recent Codex sessions into durable memU memory, skills, and resources. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task
@@ -58,7 +58,7 @@ nothing in the task prompt is specific to this machine's directory layout.
 ## Step 1 — settle the schedule
 
 Ask the user for a schedule if the request doesn't include one. **Default: every
-day at midnight**, cron `0 0 * * *` (local time). Confirm the cron expression
+hour**, cron `0 * * * *` (local time). Confirm the cron expression
 before creating the task.
 
 ## Step 2 — create the scheduled task
@@ -100,8 +100,8 @@ that there was nothing to commit).
 
 ## Step 3 — confirm
 
-Report back to the user: the task name and the cron schedule in words (e.g. "daily
-at 00:00 local time"). Mention that the first run only has work to do once there
+Report back to the user: the task name and the cron schedule in words (e.g. "hourly
+at :00 local time"). Mention that the first run only has work to do once there
 are new Codex sessions since the last run.
 
 ## Notes
