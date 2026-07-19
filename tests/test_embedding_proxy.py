@@ -115,11 +115,16 @@ def test_sdk_client_bypasses_ambient_proxy_for_loopback(monkeypatch: pytest.Monk
     remote = OpenAIEmbeddingSDKClient(base_url="https://api.openai.com/v1", api_key="x", embed_model="m")
     assert _resolved_transport(remote, "https://api.openai.com/v1/embeddings") is not remote.client._client._transport
 
+
+def test_sdk_client_honors_memu_proxy_on_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The escape hatch must work with no ambient proxies to hide behind —
+    asserting it alongside HTTP_PROXY would be a false green (the transport
+    would be non-default because of the ambient proxy, not MEMU_HTTP_PROXY)."""
     monkeypatch.setenv("MEMU_HTTP_PROXY", PROXY)
     opted_in = OpenAIEmbeddingSDKClient(base_url="http://localhost:11434/v1", api_key="x", embed_model="m")
     assert (
         _resolved_transport(opted_in, "http://localhost:11434/v1/embeddings") is not opted_in.client._client._transport
-    ), "explicit MEMU_HTTP_PROXY opts back into the proxied default"
+    ), "MEMU_HTTP_PROXY alone must actually reach the SDK transport"
 
 
 async def test_embed_reaches_local_server_despite_dead_env_proxy(monkeypatch: pytest.MonkeyPatch) -> None:

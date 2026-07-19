@@ -24,10 +24,16 @@ class OpenAIEmbeddingSDKClient:
         # host (rather than trust_env=False) keeps SSL_CERT_FILE/.netrc
         # working, and DefaultAsyncHttpxClient (rather than a bare httpx
         # client) keeps the SDK's own timeouts, limits, and lifecycle. An
-        # explicit MEMU_HTTP_PROXY states intent about memU's own traffic and
-        # opts back into the default behavior.
-        mounts = None if os.getenv("MEMU_HTTP_PROXY") else proxy_bypass_mounts(self.base_url)
-        http_client = DefaultAsyncHttpxClient(mounts=mounts) if mounts else None
+        # explicit MEMU_HTTP_PROXY states intent about memU's own traffic, so
+        # it is wired into the transport for real — the same semantics as
+        # HTTPEmbeddingClient — and beats both the bypass and ambient proxies.
+        explicit_proxy = os.getenv("MEMU_HTTP_PROXY") or None
+        http_client: DefaultAsyncHttpxClient | None
+        if explicit_proxy:
+            http_client = DefaultAsyncHttpxClient(proxy=explicit_proxy)
+        else:
+            mounts = proxy_bypass_mounts(self.base_url)
+            http_client = DefaultAsyncHttpxClient(mounts=mounts) if mounts else None
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url, http_client=http_client)
 
     async def embed(self, inputs: list[str]) -> tuple[list[list[float]], CreateEmbeddingResponse | None]:
