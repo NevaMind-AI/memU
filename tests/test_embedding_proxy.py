@@ -127,10 +127,9 @@ def test_sdk_client_honors_memu_proxy_on_its_own(monkeypatch: pytest.MonkeyPatch
     ), "MEMU_HTTP_PROXY alone must actually reach the SDK transport"
 
 
-async def test_embed_reaches_local_server_despite_dead_env_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Behavioral proof: with HTTP_PROXY pointing at a dead address, a request
-    to a real local server succeeds only if the proxy was bypassed."""
-    body = json.dumps({"data": [{"embedding": [1.0, 2.0]}], "usage": {"total_tokens": 1}}).encode()
+async def _json_server(payload: dict) -> tuple[asyncio.Server, int]:
+    """A real local HTTP server that answers any request with ``payload``."""
+    body = json.dumps(payload).encode()
     response = (
         b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: "
         + str(len(body)).encode()
@@ -150,7 +149,13 @@ async def test_embed_reaches_local_server_despite_dead_env_proxy(monkeypatch: py
         writer.close()
 
     server = await asyncio.start_server(handle, "127.0.0.1", 0)
-    port = server.sockets[0].getsockname()[1]
+    return server, server.sockets[0].getsockname()[1]
+
+
+async def test_embed_reaches_local_server_despite_dead_env_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Behavioral proof: with HTTP_PROXY pointing at a dead address, a request
+    to a real local server succeeds only if the proxy was bypassed."""
+    server, port = await _json_server({"data": [{"embedding": [1.0, 2.0]}], "usage": {"total_tokens": 1}})
     monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")  # nothing listens there
 
     try:
@@ -162,3 +167,26 @@ async def test_embed_reaches_local_server_despite_dead_env_proxy(monkeypatch: py
 
     assert vectors == [[1.0, 2.0]]
     assert raw["usage"]["total_tokens"] == 1
+
+
+async def test_sdk_embed_reaches_local_server_despite_dead_env_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The same behavioral proof for the SDK path. Its other assertions resolve
+    transports through httpx internals; this one rests only on observable
+    behavior, so it survives httpx refactors."""
+    server, port = await _json_server({
+        "object": "list",
+        "data": [{"object": "embedding", "index": 0, "embedding": [3.0, 4.0]}],
+        "model": "m",
+        "usage": {"prompt_tokens": 1, "total_tokens": 1},
+    })
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")  # nothing listens there
+
+    try:
+        client = OpenAIEmbeddingSDKClient(base_url=f"http://127.0.0.1:{port}/v1", api_key="x", embed_model="m")
+        vectors, response = await client.embed(["hi"])
+    finally:
+        server.close()
+        await server.wait_closed()
+
+    assert vectors == [[3.0, 4.0]]
+    assert response is not None and response.usage.total_tokens == 1
