@@ -58,6 +58,16 @@ OpenAI-compatible embedding server (e.g. Ollama at `http://localhost:11434/v1`
 with `MEMU_EMBED_MODEL=nomic-embed-text`), and set `MEMU_API_KEY` to any
 placeholder value — a local server ignores it.
 
+**Shell proxies: nothing to ask.** If `doctor` fails with a **502** against a
+local embedding server, the shell's `HTTP_PROXY` is hijacking localhost
+traffic. Current memU bypasses proxies for loopback URLs automatically; on an
+older release, set `NO_PROXY=localhost,127.0.0.1` for the commands that call
+memU. A local server reached through a **non-loopback** address
+(`host.docker.internal`, a LAN IP, a WSL or VM host address) needs the
+`NO_PROXY` exemption on every release, with that address in the list. This is
+a mechanical requirement with exactly one right answer — apply it and move on;
+do not ask the user.
+
 Write them to **`~/.memu/config.env`** (absolute `MEMU_DB` path, `chmod 600`,
 never a shell-profile export — the scheduled task does not inherit your shell).
 
