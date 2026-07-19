@@ -75,7 +75,11 @@ placeholder value — a local server ignores it.
 
 **Going local behind Codex's network proxy: nothing to ask.** Codex routes
 shell traffic through its proxy, which cannot reach *your* `localhost` — the
-symptom is `doctor` failing with a 502 against a local embedding server.
+symptom is `doctor` failing with a 502 against a local embedding server. (The
+same 502 can come from the user's own shell `HTTP_PROXY`, or from the OS's
+system-wide proxy — macOS: System Settings → Network → Proxies, typically turned on by a VPN
+client — which
+`env | grep -i proxy` will not show.)
 Current memU bypasses proxies for loopback URLs automatically; if you see that
 502 on an older release, set `NO_PROXY=localhost,127.0.0.1` for the commands
 that call memU. The automatic bypass covers **loopback URLs only** — a local
