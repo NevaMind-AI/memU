@@ -1,6 +1,6 @@
 ---
 name: create-memu-bridging-task
-description: Register a scheduled job that bridges an agent's recent sessions into durable memU memory, skills, and resources via the generic memu-agent adapter. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every day at midnight).
+description: Register a scheduled job that bridges an agent's recent sessions into durable memU memory, skills, and resources via the generic memu-agent adapter. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task (generic `memu-agent`)
@@ -46,7 +46,7 @@ run's prompt must instruct the agent to do it, not shell out to a script.
 ## Step 1 — settle the schedule
 
 Ask the user for a schedule if the request doesn't include one. **Default:
-every day at midnight**, cron `0 0 * * *` (local time). Confirm before
+every hour**, cron `0 * * * *` (local time). Confirm before
 creating.
 
 ## Step 2 — register the scheduled run

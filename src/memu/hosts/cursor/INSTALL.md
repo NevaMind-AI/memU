@@ -82,7 +82,7 @@ resources. **Do not reinvent this** — follow the packaged procedure:
 memu-cursor docs task
 ```
 
-In summary: settle a schedule with the user (default: daily at midnight) and
+In summary: settle a schedule with the user (default: every hour) and
 register a cron entry that runs `cursor-agent -p "<the prompt that document gives
 you verbatim>"` — the prompt runs `memu-cursor prepare`, works through
 `~/.memu/hosts/cursor/jobs/*.txt` in order, then `memu-cursor commit`. Nothing in

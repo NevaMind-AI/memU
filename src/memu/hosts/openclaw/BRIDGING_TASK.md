@@ -1,6 +1,6 @@
 ---
 name: create-memu-bridging-task
-description: Create an OpenClaw cron job that bridges the agent's recent OpenClaw sessions into durable memU memory, skills, and resources. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every day at midnight).
+description: Create an OpenClaw cron job that bridges the agent's recent OpenClaw sessions into durable memU memory, skills, and resources. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task (OpenClaw)
@@ -46,7 +46,7 @@ prompt must instruct the agent to do it, not shell out to a script.
 ## Step 1 — settle the schedule
 
 Ask the user for a schedule if the request doesn't include one. **Default: every
-day at midnight**, cron `0 0 * * *` (local time). Confirm before creating.
+hour**, cron `0 * * * *` (local time). Confirm before creating.
 
 ## Step 2 — create the cron job
 
@@ -90,7 +90,7 @@ is machine-specific — the pipeline is invoked through `PATH` commands.
 
 ## Step 3 — confirm
 
-Report back: the cron job's name and the schedule in words (e.g. "daily at 00:00
+Report back: the cron job's name and the schedule in words (e.g. "hourly at :00
 local time"). Mention that the first run only has work to do once there are new
 OpenClaw sessions since the last run.
 

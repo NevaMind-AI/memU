@@ -96,7 +96,7 @@ the packaged procedure:
 memu-agent docs task
 ```
 
-In summary: settle a schedule with the user (default: daily at midnight) and
+In summary: settle a schedule with the user (default: every hour) and
 register a recurring run — the agent's own scheduler if it has one, system cron
 otherwise — whose prompt runs
 `memu-agent prepare --session-dir <detected dir>`, works through

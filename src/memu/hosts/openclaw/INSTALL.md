@@ -83,7 +83,7 @@ resources. **Do not reinvent this** — follow the packaged procedure:
 memu-openclaw docs task
 ```
 
-In summary: settle a schedule with the user (default: daily at midnight) and
+In summary: settle a schedule with the user (default: every hour) and
 create an **OpenClaw cron job** — OpenClaw schedules agent runs natively — whose
 recurring prompt is the block that document gives you verbatim: it runs
 `memu-openclaw prepare`, works through `~/.memu/hosts/openclaw/jobs/*.txt` in
