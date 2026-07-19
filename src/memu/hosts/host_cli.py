@@ -23,6 +23,7 @@ import argparse
 import asyncio
 import os
 import sys
+import urllib.request
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from importlib.resources import files
@@ -126,6 +127,72 @@ async def _cmd_verify_resources(spec: HostSpec, args: argparse.Namespace) -> int
     return 0
 
 
+_TRANSPORT_SMELLS = ("502", "503", "504", "timeout", "timed out", "connect", "unreachable", "proxy")
+
+
+def _smells_like_transport(exc: BaseException) -> bool:
+    """Gate the proxy hint on transport-shaped failures only.
+
+    A missing ``MEMU_DB`` or a 401 from a placeholder key has nothing to do
+    with proxies — a hint there would be exactly the misdirection it exists to
+    prevent, and on a machine with a VPN-managed system proxy (where proxies
+    are *always* detected) it would fire on every failure. Walks the cause
+    chain because the interesting error (``ConnectError``, a 502 status) is
+    usually wrapped by the SDK before doctor sees it.
+    """
+    from memu.env import ConfigError
+
+    seen: list[BaseException] = []
+    current: BaseException | None = exc
+    while current is not None and current not in seen:
+        seen.append(current)
+        current = current.__cause__ or current.__context__
+    if any(isinstance(e, ConfigError) for e in seen):
+        return False
+    for e in seen:
+        text = f"{type(e).__name__} {e}".lower()
+        if any(smell in text for smell in _TRANSPORT_SMELLS):
+            return True
+    return False
+
+
+def _proxy_hint(base_url: str) -> str | None:
+    """One diagnostic line for a failed doctor that smells like proxy trouble.
+
+    The facts that took a live install minutes of tool calls to assemble — the
+    target is loopback, the call failed, a proxy is configured (possibly only
+    in the OS's system-wide settings, invisible to ``env``) — are all free to
+    check right here. So check them and say what they imply, instead of
+    leaving the next agent to re-derive the same conclusion from a bare 502.
+    """
+    proxies = urllib.request.getproxies()
+    if not proxies:
+        return None
+    from memu.embedding.http_client import is_loopback_url
+
+    listing = ", ".join(sorted(set(proxies.values())))
+    env_configured = any(k.lower().endswith("_proxy") for k in os.environ)
+    source = "the shell environment" if env_configured else "the OS's system-wide settings (invisible to `env`)"
+
+    if not is_loopback_url(base_url):
+        return (
+            f"hint: requests to this target go through a proxy ({listing}, from {source}). If the target "
+            "is actually this machine reached through a non-loopback address (host.docker.internal, a LAN "
+            "IP, a WSL/VM host address), the proxy cannot reach it — add that address to NO_PROXY."
+        )
+    if os.environ.get("MEMU_HTTP_PROXY"):
+        return (
+            "hint: the embedding target is this machine, and your explicit MEMU_HTTP_PROXY routes memU's "
+            "traffic through a proxy anyway. If that proxy cannot reach your localhost, unset MEMU_HTTP_PROXY."
+        )
+    return (
+        f"hint: the embedding target is this machine and a proxy is configured ({listing}, from {source}). "
+        "This memU bypasses proxies for loopback targets, so the proxy is likely not the cause — check the "
+        f"embedding server itself (is it running? does `curl {base_url}` answer?). On older memU releases "
+        "the proxy *would* hijack this call; there, set NO_PROXY=localhost,127.0.0.1."
+    )
+
+
 async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
     """Prove config resolves and the store answers — the install guide's verify gate.
 
@@ -134,7 +201,17 @@ async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
     """
     from memu.env import CONFIG_ENV, embedding_provider, env
 
-    result = await retrieval.retrieve("smoke test")
+    try:
+        result = await retrieval.retrieve("smoke test")
+    except Exception as exc:
+        if os.environ.get("MEMU_DEBUG") == "1":
+            raise
+        print(f"error: {exc} (set MEMU_DEBUG=1 for a traceback)", file=sys.stderr)
+        if _smells_like_transport(exc):
+            hint = _proxy_hint(env("MEMU_BASE_URL", "") or "")
+            if hint:
+                print(hint, file=sys.stderr)
+        return 1
     found = sum(len(result.get(layer, [])) for layer in ("segments", "files", "resources"))
     print(f"config    {os.path.expanduser(CONFIG_ENV)}")
     print(f"store     {env('MEMU_DB')}")
