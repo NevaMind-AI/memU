@@ -86,6 +86,17 @@ do not ask the user.
 Write them to **`~/.memu/config.env`** (absolute `MEMU_DB` path, `chmod 600`,
 never a shell-profile export — a scheduled task does not inherit your shell).
 
+**The existing config fails doctor? Repair the connection, never the
+identity.** If `~/.memu/config.env` predates this install and `doctor` fails,
+diagnose the transport first — is the embedding server running, is a proxy in
+the way — before touching the file. A minimal connection-level edit (say,
+`localhost` → `127.0.0.1`) is acceptable: back the file up first, and tell the
+user what changed and why. Never change `MEMU_DB`, `MEMU_EMBED_PROVIDER`, or
+`MEMU_EMBED_MODEL` on an existing store — those three bind the embedding
+space, and "fixing" them silently splits the user's memory (old vectors become
+unreachable until everything is re-embedded). If one of them looks wrong, stop
+and ask the user.
+
 ### ✅ Verify Part 1
 
 ```
@@ -118,12 +129,17 @@ otherwise — whose prompt runs
 
 ### ✅ Verify Part 2
 
-```
-memu-agent prepare --session-dir <detected dir>
-```
+Confirm the scheduled entry exists. Then run the **first bridging cycle to
+completion, now** — you are the very agent the scheduled prompt addresses, so
+follow it yourself: run `memu-agent prepare --session-dir <detected dir>`, work through every job file under
+`~/.memu/hosts/agent/jobs/` in ascending numeric order, then run `memu-agent commit`. Zero prepared
+sessions is fine and correct (nothing to process; commit reports nothing).
 
-It should report how many sessions it prepared (zero is fine and correct when
-nothing is new).
+Do **not** stop after `prepare`: it advances the session cursor before anything
+reaches the store, and the next scheduled run's own `prepare` deletes
+unprocessed job files — a cycle left half-done here silently loses every
+session it covered. Finishing it closes that window, and the user leaves the
+install with their first memories already retrievable.
 
 ---
 

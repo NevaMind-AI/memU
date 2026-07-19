@@ -104,6 +104,17 @@ working directory, and the scheduled task has no reliable working directory.
 The API key sits in plaintext in this file. Tell the user, and set the
 permissions: `chmod 600 ~/.memu/config.env`.
 
+**The existing config fails doctor? Repair the connection, never the
+identity.** If `~/.memu/config.env` predates this install and `doctor` fails,
+diagnose the transport first — is the embedding server running, is a proxy in
+the way — before touching the file. A minimal connection-level edit (say,
+`localhost` → `127.0.0.1`) is acceptable: back the file up first, and tell the
+user what changed and why. Never change `MEMU_DB`, `MEMU_EMBED_PROVIDER`, or
+`MEMU_EMBED_MODEL` on an existing store — those three bind the embedding
+space, and "fixing" them silently splits the user's memory (old vectors become
+unreachable until everything is re-embedded). If one of them looks wrong, stop
+and ask the user.
+
 ### ✅ Verify Part 1
 
 ```
@@ -141,16 +152,18 @@ absolute path into it, you are doing it wrong.
 
 ### ✅ Verify Part 2
 
-Confirm the scheduled task exists with the expected name and cron. Then dry-run
-the first step by hand:
+Confirm the scheduled task exists with the expected name and cron. Then run the **first bridging cycle to
+completion, now** — you are the very agent the scheduled prompt addresses, so
+follow it yourself: run `memu-codex prepare`, work through every job file under
+`~/.memu/jobs/` in ascending numeric order, then run `memu-codex commit`. Zero prepared
+sessions is fine and correct (nothing to process; commit reports nothing).
 
-```
-memu-codex prepare
-```
-
-It should report how many sessions it prepared (zero, if there is nothing new
-since the cursor — that is fine and correct). Report the task name and schedule
-back to the user.
+Do **not** stop after `prepare`: it advances the session cursor before anything
+reaches the store, and the next scheduled run's own `prepare` deletes
+unprocessed job files — a cycle left half-done here silently loses every
+session it covered. Finishing it closes that window, and the user leaves the
+install with their first memories already retrievable.
+Report the task name and schedule back to the user.
 
 ---
 

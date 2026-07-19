@@ -72,6 +72,17 @@ do not ask the user.
 Write them to **`~/.memu/config.env`** (absolute `MEMU_DB` path, `chmod 600`,
 never a shell-profile export — the scheduled task does not inherit your shell).
 
+**The existing config fails doctor? Repair the connection, never the
+identity.** If `~/.memu/config.env` predates this install and `doctor` fails,
+diagnose the transport first — is the embedding server running, is a proxy in
+the way — before touching the file. A minimal connection-level edit (say,
+`localhost` → `127.0.0.1`) is acceptable: back the file up first, and tell the
+user what changed and why. Never change `MEMU_DB`, `MEMU_EMBED_PROVIDER`, or
+`MEMU_EMBED_MODEL` on an existing store — those three bind the embedding
+space, and "fixing" them silently splits the user's memory (old vectors become
+unreachable until everything is re-embedded). If one of them looks wrong, stop
+and ask the user.
+
 ### ✅ Verify Part 1
 
 ```
@@ -101,9 +112,17 @@ order, then `memu-openclaw commit`. Nothing in it is machine-specific.
 
 ### ✅ Verify Part 2
 
-Confirm the cron job exists with the expected schedule, then dry-run:
-`memu-openclaw prepare` (zero prepared sessions is fine and correct when nothing
-is new).
+Confirm the cron job exists with the expected schedule. Then run the **first bridging cycle to
+completion, now** — you are the very agent the scheduled prompt addresses, so
+follow it yourself: run `memu-openclaw prepare`, work through every job file under
+`~/.memu/hosts/openclaw/jobs/` in ascending numeric order, then run `memu-openclaw commit`. Zero prepared
+sessions is fine and correct (nothing to process; commit reports nothing).
+
+Do **not** stop after `prepare`: it advances the session cursor before anything
+reaches the store, and the next scheduled run's own `prepare` deletes
+unprocessed job files — a cycle left half-done here silently loses every
+session it covered. Finishing it closes that window, and the user leaves the
+install with their first memories already retrievable.
 
 ---
 
