@@ -24,6 +24,12 @@ pip uninstall -y memu-cli
 **Tell the user what you removed** — the name and version, or "no previous
 install found" — so they know their old version is gone before you continue.
 
+This removes only the memU **package** (the binaries). The store and
+`~/.memu/config.env` live under `~/.memu/` and are **not** touched, so the
+user's memories and settings carry straight over — Step 4 reuses the existing
+`config.env` instead of asking again. (If this newer build needs a config value
+the old file lacks, Step 4's `doctor` gate names exactly what to add.)
+
 ## Step 2 — install from git, persistently
 
 The install **must persist on `PATH`**: the scheduled bridging task will call
