@@ -9,7 +9,7 @@ description: Install the latest development build of memU-cli from git (main HEA
 > latest memU"). Do the install yourself — the user should not run commands by
 > hand. This installs memU-cli from **git `main` (the latest source)**, not the
 > published PyPI release. For a normal install, use the PyPI path in
-> [SKILL.md](../SKILL.md) instead.
+> [SKILL.md](SKILL.md) instead.
 
 memU-cli has two install sources. This doc is the second one:
 
@@ -18,7 +18,7 @@ memU-cli has two install sources. This doc is the second one:
 | Source | published `memu-cli` on PyPI | git `main` |
 | You get | the last published version | everything merged, incl. unreleased fixes |
 | Stability | released | development — may change under you |
-| Use when | normal setup ([SKILL.md](../SKILL.md)) | you need a merged-but-unpublished fix |
+| Use when | normal setup ([SKILL.md](SKILL.md)) | you need a merged-but-unpublished fix |
 
 ## Step 1 — install from git, persistently
 
@@ -69,7 +69,7 @@ scheduled task depends on the same resolution.
 ## Step 3 — continue the normal setup
 
 You now have the latest binaries on `PATH`. Continue with the standard install
-from **Step 2 of [SKILL.md](../SKILL.md)** — identify your host binary, run
+from **Step 2 of [SKILL.md](SKILL.md)** — identify your host binary, run
 `<binary> docs install`, and follow that guide (configure the store, register
 the bridging task, patch the instruction file, each behind its verify gate).
 **Skip SKILL.md's Step 1** — you have already installed, and reinstalling from
