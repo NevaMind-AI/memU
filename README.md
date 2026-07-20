@@ -135,6 +135,9 @@ npx memu-cli --help          # CLI via npm launcher (engine: PyPI package memu-c
 uvx --from memu-cli memu     # CLI via uv, no install
 ```
 
+Want the latest unreleased code (a merged-but-unpublished fix)? Point your agent
+at [INSTALL-LATEST.md](INSTALL-LATEST.md) — it installs from git `main` instead.
+
 ## Configuration
 
 Values resolve in order: process env → `~/.memu/config.env` → default. Every CLI flag has a matching variable:
