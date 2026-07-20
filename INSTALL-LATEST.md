@@ -49,6 +49,10 @@ Requirement: `git` on `PATH`. Then take the first option that fits the machine:
 
 To pin an exact commit instead of the moving `main`, append `@<sha>` to the URL.
 
+The installer prints the exact commit it resolved — with uv, a line like
+`Building memu-cli @ git+…@<sha>`. Note that SHA; you confirm it to the user at
+the end.
+
 ## Step 3 — verify it resolves
 
 From a **fresh** shell (not the one that ran the installer, whose `PATH` may be
@@ -65,10 +69,20 @@ scheduled task depends on the same resolution.
 
 ## Step 4 — set up memU
 
-You now have the latest binaries. Identify your host binary — `memu-codex`,
-`memu-claude-code`, `memu-cursor`, `memu-openclaw`, `memu-hermes`,
-`memu-workbuddy`, or `memu-agent` for anything else (run `memu-agent detect` if
-unsure) — then print its packaged guide and follow it to the letter:
+You now have the latest binaries. Identify **which agent you are** and use its
+binary — memU has seven host adapters:
+
+| You are | Your binary |
+| --- | --- |
+| Codex | `memu-codex` |
+| Claude Code | `memu-claude-code` |
+| Cursor | `memu-cursor` |
+| OpenClaw | `memu-openclaw` |
+| Hermes | `memu-hermes` |
+| WorkBuddy | `memu-workbuddy` |
+| anything else | `memu-agent` — run `memu-agent detect` if unsure |
+
+Then print your host's packaged guide and follow it to the letter:
 
 ```
 memu-<your-host> docs install
@@ -76,4 +90,6 @@ memu-<your-host> docs install
 
 It walks you through configuring the store in `~/.memu/config.env`, registering
 the scheduled bridging task, and patching your instruction file, each behind a
-verify gate. When done, report which seams (memorization / retrieval) are active.
+verify gate. When done, report to the user **which seams (memorization /
+retrieval) are now active, and the exact commit you installed** (the SHA from
+Step 2) — so they can confirm which HEAD is on the machine.
