@@ -48,14 +48,27 @@ class Layout:
 
     @property
     def session_manifest(self) -> Path:
-        """Per-session line cursor. Scoped by host: two hosts' session keys are
+        """Per-session line cursor — the *promoted* one, advanced only by a
+        successful ``commit``. Scoped by host: two hosts' session keys are
         unrelated, and sharing one cursor file would let each hide the other's
         new turns."""
         return self.base / f".session_manifest.{self.host}.json"
 
     @property
+    def session_manifest_pending(self) -> Path:
+        """The cursor as ``prepare`` staged it, promoted by ``commit``.
+
+        Two files because the two moments differ: prepare knows what it *saw*,
+        only commit knows what survived into the store. Promoting on commit is
+        what makes a bare ``prepare`` harmless and a run that dies mid-pipeline
+        recoverable instead of silently lossy (#518)."""
+        return self.session_manifest.with_name(self.session_manifest.name + ".pending")
+
+    @property
     def memory_manifest(self) -> Path:
-        """Content hashes of the mirrored recall files, as of prepare."""
+        """Content hashes of the tracked files as of the last successful
+        ``commit`` (bootstrapped by the first ``prepare`` from the
+        store-derived mirror)."""
         return self.base / ".memory_manifest.json"
 
     @property
