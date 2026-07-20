@@ -26,7 +26,7 @@ memU is a 500-line memory system for AI agents. Agents write what's worth keepin
 
 > Read https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md and follow it to install memU.
 
-It works for Codex, Claude Code, Cursor, OpenClaw, Hermes — and any other agent, via detection. Details in [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
+It works for Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy — and any other agent, via detection. Details in [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
 
 ## Quick start
 
