@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+from collections.abc import Iterator
 
 import pytest
 
@@ -22,7 +23,7 @@ PROXY = "http://proxy.corp:8080"
 
 
 @pytest.fixture()
-def config_file(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> pathlib.Path:
+def config_file(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> Iterator[pathlib.Path]:
     for key in list(os.environ):
         if key.lower().endswith("_proxy") or key.lower() == "no_proxy":
             monkeypatch.delenv(key, raising=False)

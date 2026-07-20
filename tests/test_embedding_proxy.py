@@ -17,6 +17,7 @@ import asyncio
 import json
 import os
 import pathlib
+from collections.abc import Iterator
 
 import httpx
 import pytest
@@ -29,7 +30,7 @@ PROXY = "http://proxy.corp:8080"
 
 
 @pytest.fixture(autouse=True)
-def _clean_proxy_env(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+def _clean_proxy_env(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> Iterator[None]:
     """The developer's own shell may carry proxy settings (corporate machines
     usually do), and their real ``config.env`` may carry passthrough keys;
     these tests must depend on neither."""
