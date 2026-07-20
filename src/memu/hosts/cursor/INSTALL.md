@@ -111,17 +111,8 @@ it is machine-specific.
 
 ### ✅ Verify Part 2
 
-Confirm the cron entry exists. Then run the **first bridging cycle to
-completion, now** — you are the very agent the scheduled prompt addresses, so
-follow it yourself: run `memu-cursor prepare`, work through every job file under
-`~/.memu/hosts/cursor/jobs/` in ascending numeric order, then run `memu-cursor commit`. Zero prepared
-sessions is fine and correct (nothing to process; commit reports nothing).
-
-Do **not** stop after `prepare`: it advances the session cursor before anything
-reaches the store, and the next scheduled run's own `prepare` deletes
-unprocessed job files — a cycle left half-done here silently loses every
-session it covered. Finishing it closes that window, and the user leaves the
-install with their first memories already retrievable.
+Confirm the cron entry exists, then dry-run: `memu-cursor prepare` (zero prepared
+sessions is fine and correct when nothing is new).
 
 ---
 

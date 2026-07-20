@@ -112,17 +112,9 @@ order, then `memu-openclaw commit`. Nothing in it is machine-specific.
 
 ### ✅ Verify Part 2
 
-Confirm the cron job exists with the expected schedule. Then run the **first bridging cycle to
-completion, now** — you are the very agent the scheduled prompt addresses, so
-follow it yourself: run `memu-openclaw prepare`, work through every job file under
-`~/.memu/hosts/openclaw/jobs/` in ascending numeric order, then run `memu-openclaw commit`. Zero prepared
-sessions is fine and correct (nothing to process; commit reports nothing).
-
-Do **not** stop after `prepare`: it advances the session cursor before anything
-reaches the store, and the next scheduled run's own `prepare` deletes
-unprocessed job files — a cycle left half-done here silently loses every
-session it covered. Finishing it closes that window, and the user leaves the
-install with their first memories already retrievable.
+Confirm the cron job exists with the expected schedule, then dry-run:
+`memu-openclaw prepare` (zero prepared sessions is fine and correct when nothing
+is new).
 
 ---
 

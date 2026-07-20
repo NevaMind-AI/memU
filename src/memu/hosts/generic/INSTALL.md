@@ -129,17 +129,12 @@ otherwise — whose prompt runs
 
 ### ✅ Verify Part 2
 
-Confirm the scheduled entry exists. Then run the **first bridging cycle to
-completion, now** — you are the very agent the scheduled prompt addresses, so
-follow it yourself: run `memu-agent prepare --session-dir <detected dir>`, work through every job file under
-`~/.memu/hosts/agent/jobs/` in ascending numeric order, then run `memu-agent commit`. Zero prepared
-sessions is fine and correct (nothing to process; commit reports nothing).
+```
+memu-agent prepare --session-dir <detected dir>
+```
 
-Do **not** stop after `prepare`: it advances the session cursor before anything
-reaches the store, and the next scheduled run's own `prepare` deletes
-unprocessed job files — a cycle left half-done here silently loses every
-session it covered. Finishing it closes that window, and the user leaves the
-install with their first memories already retrievable.
+It should report how many sessions it prepared (zero is fine and correct when
+nothing is new).
 
 ---
 

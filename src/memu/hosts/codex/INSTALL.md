@@ -152,18 +152,16 @@ absolute path into it, you are doing it wrong.
 
 ### ✅ Verify Part 2
 
-Confirm the scheduled task exists with the expected name and cron. Then run the **first bridging cycle to
-completion, now** — you are the very agent the scheduled prompt addresses, so
-follow it yourself: run `memu-codex prepare`, work through every job file under
-`~/.memu/jobs/` in ascending numeric order, then run `memu-codex commit`. Zero prepared
-sessions is fine and correct (nothing to process; commit reports nothing).
+Confirm the scheduled task exists with the expected name and cron. Then dry-run
+the first step by hand:
 
-Do **not** stop after `prepare`: it advances the session cursor before anything
-reaches the store, and the next scheduled run's own `prepare` deletes
-unprocessed job files — a cycle left half-done here silently loses every
-session it covered. Finishing it closes that window, and the user leaves the
-install with their first memories already retrievable.
-Report the task name and schedule back to the user.
+```
+memu-codex prepare
+```
+
+It should report how many sessions it prepared (zero, if there is nothing new
+since the cursor — that is fine and correct). Report the task name and schedule
+back to the user.
 
 ---
 

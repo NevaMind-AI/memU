@@ -58,7 +58,7 @@ the user explicitly asks for it) — that runs Claude Code headless with the
 pipeline prompt:
 
 ```
-0 * * * * claude -p 'Run the memU bridging pipeline. Do the three steps strictly in order; do not skip a step even if the previous one looks like it produced nothing.  1. PREPARE. Run this exact command with bash:  memu-claude-code prepare  — it regenerates ~/.memu/hosts/claude-code/jobs/. If the command exits non-zero, stop and report the error.  2. SELF-EVOLVE. List ~/.memu/hosts/claude-code/jobs/*.txt and process them in ascending numeric order (1.txt, then 2.txt, …). The count changes every run — always glob and sort. If there are no job files, skip to step 3. For each job file: read it and follow its instructions to the letter. Each job is self-contained and already carries the concrete paths it needs. Emitting no files for a job is a valid outcome; do not invent content.  3. COMMIT. Run this exact command with bash:  memu-claude-code commit  — it commits whatever the jobs created or changed. If it exits non-zero, report the error.  Finish with a one-line summary: how many jobs ran and what was committed.'
+0 * * * * claude -p 'Run the memU bridging pipeline. Do the four steps strictly in order; do not skip a step even if the previous one looks like it produced nothing.  1. LEFTOVERS. If ~/.memu/hosts/claude-code/jobs/ already contains job files, they are unfinished work from an earlier run (a crash, or the install itself) — process them exactly as step 3 describes, then run:  memu-claude-code commit  — and only then continue.  2. PREPARE. Run this exact command with bash:  memu-claude-code prepare  — it regenerates ~/.memu/hosts/claude-code/jobs/. If the command exits non-zero, stop and report the error.  3. SELF-EVOLVE. List ~/.memu/hosts/claude-code/jobs/*.txt and process them in ascending numeric order (1.txt, then 2.txt, …). The count changes every run — always glob and sort. If there are no job files, skip to step 4. For each job file: read it and follow its instructions to the letter. Each job is self-contained and already carries the concrete paths it needs. Emitting no files for a job is a valid outcome; do not invent content.  4. COMMIT. Run this exact command with bash:  memu-claude-code commit  — it commits whatever the jobs created or changed. If it exits non-zero, report the error.  Finish with a one-line summary: how many jobs ran (leftovers included) and what was committed.'
 ```
 
 The prompt block is fixed; only the cron expression is the user's choice. Nothing
@@ -72,6 +72,12 @@ work to do once there are new Claude Code sessions since the last run.
 
 ## Notes
 
+- **Leftovers run before prepare.** Job files already on disk when the run
+  starts are unfinished work — a run that died mid-pipeline, or the install's
+  own verify. `prepare` deletes unprocessed job files, and the cursor already
+  marks their sessions as seen, so anything skipped at that moment would never
+  be minable again; draining leftovers first turns a half-done cycle into
+  bounded re-work instead of silent loss.
 - **Idempotent and incremental.** `prepare` tracks a per-session line cursor in
   `~/.memu/hosts/claude-code/.session_manifest.claude-code.json`, so each run
   only processes turns it hasn't seen.
