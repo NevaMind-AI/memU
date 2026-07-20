@@ -44,9 +44,25 @@ class ConfigError(RuntimeError):
         )
 
 
+_ENV_PASSTHROUGH = ("NO_PROXY", "no_proxy")
+"""Non-``MEMU_*`` keys that ``config.env`` carries into the process environment.
+
+The guides call the file "the carrier" — a scheduled task has no interactive
+shell to inherit from — and a proxy exemption is exactly the kind of
+machine-local fact that must reach the HTTP stack, which reads ``NO_PROXY``
+from the environment and knows nothing of memU's config. Narrow allowlist on
+purpose; ``setdefault`` only, so a value already in the environment wins."""
+
+
 @cache
 def _file_values() -> dict[str, str]:
-    """Parse the dotenv. Cached: entrypoint processes are short-lived."""
+    """Parse the dotenv. Cached: entrypoint processes are short-lived.
+
+    Side effect, once per process: keys in :data:`_ENV_PASSTHROUGH` found in
+    the file are exported to ``os.environ`` (without overriding existing
+    values), so ``NO_PROXY`` written next to the ``MEMU_*`` settings actually
+    reaches httpx.
+    """
     path = Path(os.path.expanduser(os.environ.get("MEMU_CONFIG_ENV", CONFIG_ENV)))
     if not path.is_file():
         return {}
@@ -59,6 +75,9 @@ def _file_values() -> dict[str, str]:
         key, sep, value = line.partition("=")
         if sep:
             values[key.strip()] = value.strip().strip("\"'")
+    for key in _ENV_PASSTHROUGH:
+        if key in values:
+            os.environ.setdefault(key, values[key])
     return values
 
 

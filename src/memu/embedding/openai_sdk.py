@@ -1,11 +1,11 @@
 import logging
-import os
 from typing import cast
 
 from openai import AsyncOpenAI, DefaultAsyncHttpxClient
 from openai.types import CreateEmbeddingResponse
 
 from memu.embedding.http_client import proxy_bypass_mounts
+from memu.env import env as memu_env
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class OpenAIEmbeddingSDKClient:
         # explicit MEMU_HTTP_PROXY states intent about memU's own traffic, so
         # it is wired into the transport for real — the same semantics as
         # HTTPEmbeddingClient — and beats both the bypass and ambient proxies.
-        explicit_proxy = os.getenv("MEMU_HTTP_PROXY") or None
+        explicit_proxy = memu_env("MEMU_HTTP_PROXY") or None
         http_client: DefaultAsyncHttpxClient | None
         if explicit_proxy:
             http_client = DefaultAsyncHttpxClient(proxy=explicit_proxy)
