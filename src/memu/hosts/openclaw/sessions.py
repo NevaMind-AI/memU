@@ -7,7 +7,9 @@ One transcript per session, named by session id (Telegram topic sessions add a
 ``-topic-<threadId>`` suffix), grouped per agent under the OpenClaw state dir
 (``~/.openclaw`` by default; the host honors ``OPENCLAW_STATE_DIR``, in which
 case pass ``--session-dir``). The mutable ``sessions.json`` index sitting next to
-the transcripts is not JSONL and is naturally skipped by discovery. Newer
+the transcripts is not JSONL and is naturally skipped by discovery; the
+``*.trajectory.jsonl`` and ``*.checkpoint.*.jsonl`` sidecars *are* JSONL and are
+skipped by name — trace events and replayed turns, not new conversation. Newer
 OpenClaw builds can keep transcripts in SQLite instead (a ``sqlite:`` session
 target); those are out of this adapter's reach — it reads the JSONL default.
 """
@@ -25,6 +27,13 @@ from memu.hosts.base import RecordKind, TranscriptSource
 SESSION_DIR = "~/.openclaw/agents"
 
 _MESSAGE_ROLES = ("user", "assistant")
+
+# Sidecar files sharing the sessions directory. Trajectory files hold trace
+# events — every record classifies OTHER, so scanning them fills prepare's
+# max_jobs slots with empty transcripts (they touch on every turn, so
+# newest-first keeps them on top). Checkpoint files re-emit turns the main
+# session transcript already has, so the same conversation is mined twice.
+_SIDECAR_MARKERS = (".trajectory.", ".checkpoint.")
 
 
 class OpenClawTranscriptSource(TranscriptSource):
@@ -46,6 +55,13 @@ class OpenClawTranscriptSource(TranscriptSource):
 
     def root(self) -> Path:
         return self._root
+
+    def discover(self) -> list[Path]:
+        """Main session transcripts only — the trajectory and checkpoint sidecars
+        sharing the directory trace or replay what the session file already says.
+        Filtering is by name and fails open: an unknown future sidecar kind keeps
+        being scanned rather than risking a missed session."""
+        return [path for path in super().discover() if not any(marker in path.name for marker in _SIDECAR_MARKERS)]
 
     def classify(self, record: str) -> RecordKind:
         try:

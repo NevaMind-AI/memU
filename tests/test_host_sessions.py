@@ -220,6 +220,24 @@ def test_openclaw_timestamp_accepts_iso_and_epoch_millis() -> None:
     assert source.timestamp(_line(millis)) == "2025-07-15T00:00:00+00:00"
 
 
+def test_openclaw_discovers_only_main_session_transcripts(tmp_path: pathlib.Path) -> None:
+    """Trajectory sidecars hold trace events (all-OTHER: an empty transcript
+    that still occupies a prepare slot and still spawns mining jobs); checkpoint
+    sidecars re-emit turns the session file already has (the same conversation
+    mined twice). On the surveyed live host, 51 of 60 discovered files were
+    sidecars and 46 of 69 user-role messages were checkpoint duplicates."""
+    sessions = tmp_path / "main" / "sessions"
+    sessions.mkdir(parents=True)
+    session = sessions / "a83c9e20-072d-4708-902a-47c596b14d55.jsonl"
+    session.write_text('{"type":"message"}\n', encoding="utf-8")
+    trajectory = sessions / "a83c9e20-072d-4708-902a-47c596b14d55.trajectory.jsonl"
+    trajectory.write_text("{}\n", encoding="utf-8")
+    checkpoint = sessions / "c22ca449-d54c-4dd0-89ee-17cbf7af90f0.checkpoint.20d27d05.jsonl"
+    checkpoint.write_text("{}\n", encoding="utf-8")
+
+    assert OpenClawTranscriptSource(tmp_path).discover() == [session]
+
+
 # ── Hermes ─────────────────────────────────────────────────────────────────────
 
 
