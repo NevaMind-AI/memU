@@ -115,6 +115,7 @@ memU runs as a sidecar to a desktop agent (ADR 0008/0009/0010), one binary per h
 | Cursor (Agent/CLI) | `memu-cursor` | `~/.cursor/projects/<project>/agent-transcripts/**.jsonl` | `./AGENTS.md` (per project) |
 | OpenClaw | `memu-openclaw` | `~/.openclaw/agents/<agentId>/sessions/*.jsonl` | `~/.openclaw/workspace/AGENTS.md` |
 | Hermes Agent | `memu-hermes` | `~/.hermes/state.db` (SQLite, read-only) | `~/.hermes/SOUL.md` |
+| WorkBuddy | `memu-workbuddy` | `~/.workbuddy/projects/<project>/<session>.jsonl` | `~/.workbuddy/MEMORY.md` |
 | **any other agent** | `memu-agent` | found by `memu-agent detect` (JSONL dialect sniffed) | found by `detect` (AGENTS.md / CLAUDE.md / SOUL.md / …) |
 
 For agents without a dedicated binary, `memu-agent detect` probes the machine and reports per agent whether **memorization** works (a recognizable session log exists) and whether **retrieval** works (an instruction file exists to patch) — then the same verbs run against what it found.
@@ -189,6 +190,16 @@ service = MemoryService(user_config={"model": TeamScope})
 make install     # uv sync + pre-commit hooks
 make test        # pytest with coverage
 make check       # lock check, pre-commit, mypy, deptry
+```
+
+### Run an unreleased build
+
+To pick up a merged-but-unpublished fix before it reaches PyPI, install
+straight from git — no clone needed:
+
+```bash
+uv tool install "git+https://github.com/NevaMind-AI/memU"         # latest main, all binaries on PATH
+uvx --from "git+https://github.com/NevaMind-AI/memU" memu --help  # latest main, no install
 ```
 
 Architecture decisions live in [`docs/adr/`](docs/adr/) — notably tracked workspace memorization (ADR 0006), the segment/file/resource retrieval lines (ADR 0007), and the host-adapter seams (ADR 0008/0009).
