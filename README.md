@@ -192,16 +192,6 @@ make test        # pytest with coverage
 make check       # lock check, pre-commit, mypy, deptry
 ```
 
-### Run an unreleased build
-
-To pick up a merged-but-unpublished fix before it reaches PyPI, install
-straight from git — no clone needed:
-
-```bash
-uv tool install "git+https://github.com/NevaMind-AI/memU"         # latest main, all binaries on PATH
-uvx --from "git+https://github.com/NevaMind-AI/memU" memu --help  # latest main, no install
-```
-
 Architecture decisions live in [`docs/adr/`](docs/adr/) — notably tracked workspace memorization (ADR 0006), the segment/file/resource retrieval lines (ADR 0007), and the host-adapter seams (ADR 0008/0009).
 
 ## License
