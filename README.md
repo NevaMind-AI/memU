@@ -26,7 +26,7 @@ memU is a 500-line memory system for AI agents. Agents write what's worth keepin
 
 > Read https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md and follow it to install memU.
 
-It works for Codex, Claude Code, Cursor, OpenClaw, Hermes — and any other agent, via detection. Details in [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
+It works for Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy — and any other agent, via detection. Details in [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
 
 Want to follow the latest development instead? Install from the newest source (git `main`) — tell your agent:
 
@@ -119,6 +119,7 @@ memU runs as a sidecar to a desktop agent (ADR 0008/0009/0010), one binary per h
 | Cursor (Agent/CLI) | `memu-cursor` | `~/.cursor/projects/<project>/agent-transcripts/**.jsonl` | `./AGENTS.md` (per project) |
 | OpenClaw | `memu-openclaw` | `~/.openclaw/agents/<agentId>/sessions/*.jsonl` | `~/.openclaw/workspace/AGENTS.md` |
 | Hermes Agent | `memu-hermes` | `~/.hermes/state.db` (SQLite, read-only) | `~/.hermes/SOUL.md` |
+| WorkBuddy | `memu-workbuddy` | `~/.workbuddy/projects/<project>/<session>.jsonl` | `~/.workbuddy/MEMORY.md` |
 | **any other agent** | `memu-agent` | found by `memu-agent detect` (JSONL dialect sniffed) | found by `detect` (AGENTS.md / CLAUDE.md / SOUL.md / …) |
 
 For agents without a dedicated binary, `memu-agent detect` probes the machine and reports per agent whether **memorization** works (a recognizable session log exists) and whether **retrieval** works (an instruction file exists to patch) — then the same verbs run against what it found.

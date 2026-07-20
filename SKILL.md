@@ -41,6 +41,7 @@ executing this skill):
 | Cursor (Agent/CLI) | `memu-cursor` |
 | OpenClaw | `memu-openclaw` |
 | Hermes Agent | `memu-hermes` |
+| WorkBuddy | `memu-workbuddy` |
 | anything else | `memu-agent` |
 
 Unsure, or not in the table? You are `memu-agent`. Run:
