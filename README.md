@@ -28,6 +28,10 @@ memU is a 500-line memory system for AI agents. Agents write what's worth keepin
 
 It works for Codex, Claude Code, Cursor, OpenClaw, Hermes — and any other agent, via detection. Details in [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
 
+Want to follow the latest development instead? Install from the newest source (git `main`) — tell your agent:
+
+> Read https://raw.githubusercontent.com/NevaMind-AI/MemU/main/INSTALL-LATEST.md and follow it to install the latest memU.
+
 ## Quick start
 
 ```python
@@ -134,9 +138,6 @@ pip install memu-cli         # library + memu + memu-codex CLIs
 npx memu-cli --help          # CLI via npm launcher (engine: PyPI package memu-cli)
 uvx --from memu-cli memu     # CLI via uv, no install
 ```
-
-Want the latest unreleased code (a merged-but-unpublished fix)? Point your agent
-at [INSTALL-LATEST.md](INSTALL-LATEST.md) — it installs from git `main` instead.
 
 ## Configuration
 
