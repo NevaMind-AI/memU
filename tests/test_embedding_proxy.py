@@ -16,10 +16,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import pathlib
+from collections.abc import Iterator
 
 import httpx
 import pytest
 
+from memu import env as menv
 from memu.embedding.http_client import HTTPEmbeddingClient, _load_proxy, is_loopback_url, proxy_bypass_mounts
 from memu.embedding.openai_sdk import OpenAIEmbeddingSDKClient
 
@@ -27,12 +30,17 @@ PROXY = "http://proxy.corp:8080"
 
 
 @pytest.fixture(autouse=True)
-def _clean_proxy_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def _clean_proxy_env(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> Iterator[None]:
     """The developer's own shell may carry proxy settings (corporate machines
-    usually do); these tests must not depend on them."""
+    usually do), and their real ``config.env`` may carry passthrough keys;
+    these tests must depend on neither."""
     for key in list(os.environ):
         if key.lower().endswith("_proxy") or key.lower() == "no_proxy":
             monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("MEMU_CONFIG_ENV", str(tmp_path / "empty.env"))
+    menv.reload()
+    yield
+    menv.reload()
 
 
 @pytest.mark.parametrize(

@@ -53,7 +53,9 @@ def proxy_bypass_mounts(url: str) -> dict[str, httpx.AsyncBaseTransport | None] 
 
 
 def _load_proxy(base_url: str) -> str | None:
-    explicit = os.getenv("MEMU_HTTP_PROXY") or None
+    from memu.env import env as memu_env
+
+    explicit = memu_env("MEMU_HTTP_PROXY") or None
     if is_loopback_url(base_url):
         # Ambient proxies (HTTP_PROXY, HTTPS_PROXY) are aimed at the network at
         # large, never at the machine itself. An explicit MEMU_HTTP_PROXY is
