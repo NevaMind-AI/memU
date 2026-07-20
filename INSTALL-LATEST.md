@@ -50,10 +50,10 @@ Requirement: `git` on `PATH`. Then take the first option that fits the machine:
 To pin an exact commit instead of the moving `main`, append `@<sha>` to the URL.
 
 The installer prints the exact commit it resolved — with uv, a line like
-`Building memu-cli @ git+…@<sha>`. Note that SHA; you confirm it to the user at
-the end.
+`Building memu-cli @ git+…@<sha>`. Note that SHA; you confirm it to the user in
+Step 3, before the setup.
 
-## Step 3 — verify it resolves
+## Step 3 — verify, then confirm the version with the user
 
 From a **fresh** shell (not the one that ran the installer, whose `PATH` may be
 stale):
@@ -66,6 +66,11 @@ memu-<your-host> --help    # e.g. memu-claude-code, memu-codex
 Both must print usage. If they do not, the install's bin directory is not on
 `PATH` (with uv it is `~/.local/bin`) — fix that before continuing, since the
 scheduled task depends on the same resolution.
+
+Then **tell the user the exact commit you installed** (the SHA from Step 2) and
+confirm it is the HEAD they wanted — **do this before the setup below.** Setup is
+the long part; catching a wrong or stale version now saves configuring the wrong
+build only to discover it afterward.
 
 ## Step 4 — set up memU
 
@@ -90,6 +95,5 @@ memu-<your-host> docs install
 
 It walks you through configuring the store in `~/.memu/config.env`, registering
 the scheduled bridging task, and patching your instruction file, each behind a
-verify gate. When done, report to the user **which seams (memorization /
-retrieval) are now active, and the exact commit you installed** (the SHA from
-Step 2) — so they can confirm which HEAD is on the machine.
+verify gate. When done, report which seams (memorization / retrieval) are now
+active.
