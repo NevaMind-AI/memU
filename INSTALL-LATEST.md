@@ -87,15 +87,18 @@ Fetch the subject and date from the GitHub API — no clone needed:
 curl -s https://api.github.com/repos/NevaMind-AI/memU/commits/<sha>
 ```
 
-read `.commit.message` (first line) and `.commit.author.date`. Then let the user
-choose:
+read `.commit.message` (first line) and `.commit.author.date`. Then offer a
+**one-tap choice** — not an open question the user has to answer in a sentence.
+If your host can render selectable options, present exactly these two; otherwise
+accept a plain "yes":
 
-- **Yes, use this version** → continue straight into Step 4 and run it to
-  completion **yourself**; do not make the user run `docs install` or any setup
-  command. Pause again only if you genuinely need them (e.g. an embedding API
-  key).
-- **A specific commit instead** → reinstall that one (Step 2 with `@<sha>`), then
-  confirm again here.
+- **Use this version** → continue straight into Step 4 and run it to completion
+  **yourself**; do not make the user run `docs install` or any setup command.
+  Pause again only if you genuinely need them (e.g. an embedding API key).
+- **Pick a different commit** → ask which, reinstall it (Step 2 with `@<sha>`),
+  then confirm again here.
+
+A bare "yes" / "ok" means **Use this version** — default to proceeding.
 
 ## Step 4 — set up memU
 
@@ -120,5 +123,12 @@ memu-<your-host> docs install
 
 It walks you through configuring the store in `~/.memu/config.env`, registering
 the scheduled bridging task, and patching your instruction file, each behind a
-verify gate. When done, report which seams (memorization / retrieval) are now
-active.
+verify gate.
+
+Because the existing `config.env` is reused, also **check it against the settings
+this build documents** (the guide lists them): if this version recognizes any
+`MEMU_*` option the user's file does not set, tell the user its name and what it
+does — that is configuration this newer build introduces. Optional ones keep
+working on their defaults; a required one is caught by the `doctor` gate.
+
+When done, report which seams (memorization / retrieval) are now active.
