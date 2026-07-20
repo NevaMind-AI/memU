@@ -53,6 +53,14 @@ hour**, cron `0 * * * *` (local time). Confirm before creating.
 Create an OpenClaw cron job (e.g. named `memu-bridging`) with the chosen
 schedule, and set its recurring prompt to this block **verbatim**:
 
+**The scheduled turn runs in the gateway's environment, not your shell.** The
+gateway is a system service (launchd/systemd) with a bare `PATH` —
+`memu-openclaw` (pipx installs land in `~/.local/bin`) may not resolve there
+even though it resolves for you. Make it resolvable to the *gateway* before
+trusting the schedule: add a `PATH` entry under `env` in `openclaw.json`
+(include the directory `command -v memu-openclaw` prints), then restart the
+gateway.
+
 ```
 Run the memU bridging pipeline. Do the three steps strictly in order; do not
 skip a step even if the previous one looks like it produced nothing.
@@ -89,6 +97,18 @@ The prompt block is fixed; only the schedule is the user's choice. Nothing in it
 is machine-specific — the pipeline is invoked through `PATH` commands.
 
 ## Step 3 — confirm
+
+**Your shell's `PATH` proves nothing about the scheduler's.** Two checks that
+count:
+
+- `env -i PATH=/usr/bin:/bin /bin/sh -c 'command -v memu-openclaw'` — this
+  *failing* is exactly why the entry needs its `PATH` line; with that line in
+  place the command must resolve from the directories it names.
+- The hard check: trigger one run now with `openclaw cron run <job>`, then
+  verify **filesystem traces** — the session
+  cursor and `jobs/` timestamps moved — rather than trusting the run's own
+  summary. Field data, twice over: scheduled runs in bare environments have
+  reported "completed successfully" on a command-not-found.
 
 Report back: the cron job's name and the schedule in words (e.g. "hourly at :00
 local time"). Mention that the first run only has work to do once there are new
