@@ -53,6 +53,19 @@ hour**, cron `0 * * * *` (local time). Confirm before creating.
 
 ## Step 2 — register the scheduled run
 
+**The crontab's first line is a `PATH`.** cron runs with a bare
+`/usr/bin:/bin`; the binaries this entry needs (pipx and npm installs land in
+`~/.local/bin` and `/opt/homebrew/bin`) are not there, and the entry dies on
+`command not found` before the pipeline starts. Derive it at registration time
+and write it **above** the entry:
+
+```
+PATH=$(dirname "$(command -v memu-claude-code)"):$(dirname "$(command -v claude)"):/usr/local/bin:/usr/bin:/bin
+```
+
+The machine-specific fact lives in the crontab, where machine facts belong —
+the pipeline prompt itself stays verbatim.
+
 Create a system cron entry — the default, macOS included (use launchd only if
 the user explicitly asks for it) — that runs Claude Code headless with the
 pipeline prompt:
@@ -65,6 +78,19 @@ The prompt block is fixed; only the cron expression is the user's choice. Nothin
 in it is machine-specific — the pipeline is invoked through `PATH` commands.
 
 ## Step 3 — confirm
+
+**Your shell's `PATH` proves nothing about the scheduler's.** Two checks that
+count:
+
+- `env -i PATH=/usr/bin:/bin /bin/sh -c 'command -v memu-claude-code'` — this
+  *failing* is exactly why the entry needs its `PATH` line; with that line in
+  place the command must resolve from the directories it names.
+- The hard check: trigger one run through cron itself (temporarily set the
+  schedule a minute ahead, or run the entry's command line by hand with
+  `env -i PATH=... /bin/sh -c`), then verify **filesystem traces** — the session
+  cursor and `jobs/` timestamps moved — rather than trusting the run's own
+  summary. Field data, twice over: scheduled runs in bare environments have
+  reported "completed successfully" on a command-not-found.
 
 Report back: where the schedule was registered (crontab/launchd), and the cron in
 words (e.g. "hourly at :00 local time"). Mention that the first run only has
