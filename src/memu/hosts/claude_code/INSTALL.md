@@ -87,6 +87,17 @@ Write them to **`~/.memu/config.env`**, which every memU command loads. Use an
 tell the user). Do **not** instead export these in a shell profile: the scheduled
 task does not inherit your interactive shell.
 
+**The existing config fails doctor? Repair the connection, never the
+identity.** If `~/.memu/config.env` predates this install and `doctor` fails,
+diagnose the transport first — is the embedding server running, is a proxy in
+the way — before touching the file. A minimal connection-level edit (say,
+`localhost` → `127.0.0.1`) is acceptable: back the file up first, and tell the
+user what changed and why. Never change `MEMU_DB`, `MEMU_EMBED_PROVIDER`, or
+`MEMU_EMBED_MODEL` on an existing store — those three bind the embedding
+space, and "fixing" them silently splits the user's memory (old vectors become
+unreachable until everything is re-embedded). If one of them looks wrong, stop
+and ask the user.
+
 ### ✅ Verify Part 1
 
 ```

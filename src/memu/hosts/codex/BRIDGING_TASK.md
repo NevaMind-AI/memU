@@ -67,34 +67,39 @@ Create a Codex scheduled task with the chosen cron, named e.g. `memu-bridging`,
 and set its recurring prompt to this block **verbatim**:
 
 ```
-Run the memU bridging pipeline. Do the three steps strictly in order; do not
+Run the memU bridging pipeline. Do the four steps strictly in order; do not
 skip a step even if the previous one looks like it produced nothing.
 
-1. PREPARE. Run this exact command with bash:
+1. LEFTOVERS. If ~/.memu/jobs/ already contains job files, they are unfinished
+   work from an earlier run (a crash, or the install itself). Process them
+   exactly as step 3 describes, then run memu-codex commit — and only then
+   continue.
+
+2. PREPARE. Run this exact command with bash:
 
      memu-codex prepare
 
    It regenerates ~/.memu/jobs/. If the command exits non-zero, stop and report
    the error — do not continue.
 
-2. SELF-EVOLVE. List ~/.memu/jobs/*.txt and process them in ascending numeric
+3. SELF-EVOLVE. List ~/.memu/jobs/*.txt and process them in ascending numeric
    order (1.txt, then 2.txt, …). There may be anywhere from 0 to ~21 files, and
    the count changes every run — always glob and sort; never assume a fixed
-   number. If there are no job files, skip to step 3.
+   number. If there are no job files, skip to step 4.
 
    For each job file: read it with `cat` and follow its instructions to the
    letter. Each job is self-contained and already carries the concrete paths it
    needs. Order matters — finish one job before starting the next. Emitting no
    files for a job is a valid outcome; do not invent content to fill a job.
 
-3. COMMIT. After every job is done, run this exact command with bash:
+4. COMMIT. After every job is done, run this exact command with bash:
 
      memu-codex commit
 
    It commits whatever the jobs created or changed. If it exits non-zero, report
    the error.
 
-Finish with a one-line summary: how many jobs ran and what was committed (or
+Finish with a one-line summary: how many jobs ran (leftovers included) and what was committed (or
 that there was nothing to commit).
 ```
 
@@ -106,6 +111,12 @@ are new Codex sessions since the last run.
 
 ## Notes
 
+- **Leftovers run before prepare.** Job files already on disk when the run
+  starts are unfinished work — a run that died mid-pipeline, or the install's
+  own verify. `prepare` deletes unprocessed job files, and the cursor already
+  marks their sessions as seen, so anything skipped at that moment would never
+  be minable again; draining leftovers first turns a half-done cycle into
+  bounded re-work instead of silent loss.
 - **Idempotent and incremental.** `prepare` tracks a per-session line cursor in
   `~/.memu/.session_manifest.codex.json`, so each run only processes turns it
   hasn't seen. A run with no new session activity correctly does nothing.

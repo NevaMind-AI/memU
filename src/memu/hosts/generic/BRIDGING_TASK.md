@@ -69,27 +69,32 @@ own scheduler instead only if the user prefers it. The recurring prompt, with `<
 in, **verbatim**:
 
 ```
-Run the memU bridging pipeline. Do the three steps strictly in order; do not
+Run the memU bridging pipeline. Do the four steps strictly in order; do not
 skip a step even if the previous one looks like it produced nothing.
 
-1. PREPARE. Run this exact command with the shell tool:
+1. LEFTOVERS. If ~/.memu/hosts/agent/jobs/ already contains job files, they are unfinished
+   work from an earlier run (a crash, or the install itself). Process them
+   exactly as step 3 describes, then run memu-agent commit — and only then
+   continue.
+
+2. PREPARE. Run this exact command with the shell tool:
 
      memu-agent prepare --session-dir <SESSION_DIR>
 
    It regenerates ~/.memu/hosts/agent/jobs/. If the command exits non-zero,
    stop and report the error — do not continue.
 
-2. SELF-EVOLVE. List ~/.memu/hosts/agent/jobs/*.txt and process them in
+3. SELF-EVOLVE. List ~/.memu/hosts/agent/jobs/*.txt and process them in
    ascending numeric order (1.txt, then 2.txt, …). The count changes every
    run — always glob and sort; never assume a fixed number. If there are no
-   job files, skip to step 3.
+   job files, skip to step 4.
 
    For each job file: read it and follow its instructions to the letter. Each
    job is self-contained and already carries the concrete paths it needs.
    Order matters — finish one job before starting the next. Emitting no files
    for a job is a valid outcome; do not invent content to fill a job.
 
-3. COMMIT. After every job is done, run this exact command with the shell
+4. COMMIT. After every job is done, run this exact command with the shell
    tool:
 
      memu-agent commit
@@ -97,7 +102,7 @@ skip a step even if the previous one looks like it produced nothing.
    It commits whatever the jobs created or changed. If it exits non-zero,
    report the error.
 
-Finish with a one-line summary: how many jobs ran and what was committed (or
+Finish with a one-line summary: how many jobs ran (leftovers included) and what was committed (or
 that there was nothing to commit).
 ```
 
@@ -122,6 +127,12 @@ last run.
 
 ## Notes
 
+- **Leftovers run before prepare.** Job files already on disk when the run
+  starts are unfinished work — a run that died mid-pipeline, or the install's
+  own verify. `prepare` deletes unprocessed job files, and the cursor already
+  marks their sessions as seen, so anything skipped at that moment would never
+  be minable again; draining leftovers first turns a half-done cycle into
+  bounded re-work instead of silent loss.
 - **Idempotent and incremental.** `prepare` tracks a per-session line cursor
   in `~/.memu/hosts/agent/.session_manifest.agent.json`.
 - **Several generic agents on one machine** must not share a working tree: add
