@@ -67,10 +67,29 @@ Both must print usage. If they do not, the install's bin directory is not on
 `PATH` (with uv it is `~/.local/bin`) — fix that before continuing, since the
 scheduled task depends on the same resolution.
 
-Then **tell the user the exact commit you installed** (the SHA from Step 2) and
-confirm it is the HEAD they wanted — **do this before the setup below.** Setup is
-the long part; catching a wrong or stale version now saves configuring the wrong
-build only to discover it afterward.
+Then confirm the version with the user — **before the setup below**, since setup
+is the long part and a wrong or stale build is painful to discover afterward. A
+bare SHA is hard to judge, so report what the commit actually **is**:
+
+- the SHA (from Step 2),
+- its **subject line and date**, and
+- the link to inspect it: `https://github.com/NevaMind-AI/memU/commit/<sha>`.
+
+Fetch the subject and date from the GitHub API — no clone needed:
+
+```
+curl -s https://api.github.com/repos/NevaMind-AI/memU/commits/<sha>
+```
+
+read `.commit.message` (first line) and `.commit.author.date`. Then let the user
+choose:
+
+- **Yes, use this version** → continue straight into Step 4 and run it to
+  completion **yourself**; do not make the user run `docs install` or any setup
+  command. Pause again only if you genuinely need them (e.g. an embedding API
+  key).
+- **A specific commit instead** → reinstall that one (Step 2 with `@<sha>`), then
+  confirm again here.
 
 ## Step 4 — set up memU
 
