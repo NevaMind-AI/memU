@@ -106,6 +106,14 @@ def test_cli_defaults_to_the_codex_instruction_file() -> None:
     assert callable(args.handler)
 
 
+def test_hermes_is_a_skill_host() -> None:
+    """Hermes loads skills on demand from ~/.hermes/skills (agentskills.io
+    layout), so its SOUL.md block must be the pointer, not the full procedure."""
+    from memu.hosts.hermes.cli import SPEC
+
+    assert SPEC.skills_dir == "~/.hermes/skills"
+
+
 def test_instruction_names_the_llm_free_retrieval() -> None:
     """`memu retrieve` is LLM-routed — one LLM call per turn is what this avoids."""
     assert "memu-codex retrieve" in instruction.instruction(BINARY)

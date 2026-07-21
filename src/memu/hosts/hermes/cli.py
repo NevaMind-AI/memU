@@ -7,7 +7,7 @@ lands in.
 
 Usage:
     memu-hermes retrieve "<query>"    # the inject seam — what the agent runs each turn
-    memu-hermes install-instruction   # the inject seam — patch ~/.hermes/SOUL.md to run it
+    memu-hermes install-instruction   # the inject seam — install the skill, point SOUL.md at it
     memu-hermes prepare               # slice new sessions into job files
     memu-hermes verify-resources      # filter the touched-file log (run by a job)
     memu-hermes commit                # submit what the agent produced back to memU
@@ -31,6 +31,11 @@ session regardless of working directory, so the inject seam lands here.
 (Project-level ``.hermes.md``/``AGENTS.md`` files are per-directory and would
 miss sessions started elsewhere.)"""
 
+SKILLS_DIR = "~/.hermes/skills"
+"""Hermes's skills directory (agentskills.io layout, loaded on demand via
+``skills_list``/``skill_view``). Because it exists, the SOUL.md block is a
+pointer and the retrieval procedure itself is installed here as a skill."""
+
 SPEC = HostSpec(
     host=HOST,
     display="Hermes",
@@ -39,6 +44,7 @@ SPEC = HostSpec(
     session_dir=STATE_DB,
     session_help="Hermes SQLite session store (state.db under HERMES_HOME)",
     instruction_path=SOUL_MD,
+    skills_dir=SKILLS_DIR,
 )
 
 
