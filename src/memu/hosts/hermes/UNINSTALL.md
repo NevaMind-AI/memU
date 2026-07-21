@@ -8,8 +8,8 @@ Uninstalling is the install run in reverse, and it is three parts:
 
 1. **Unregister the bridging task** — stop the scheduled job first, so nothing
    fires mid-teardown (the *record* seam).
-2. **Unpatch `~/.hermes/SOUL.md`** — remove the standing retrieval
-   instruction (the *inject* seam).
+2. **Unpatch `~/.hermes/SOUL.md` and remove the retrieval skill** — the
+   standing instruction and the skill it points at (the *inject* seam).
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
    tooling is removed — and close by reporting both.
 
@@ -37,7 +37,7 @@ there.
 
 ---
 
-## Part 2 — Remove the retrieval instruction
+## Part 2 — Remove the retrieval instruction and skill
 
 **Do not hand-edit the block out.** memU owns the text and removes it for you:
 
@@ -53,11 +53,22 @@ file with no block left is already the desired end state. If this install used
 a non-default home (`HERMES_HOME`, or a profile), pass
 `--path <home>/SOUL.md`.
 
+The block pointed at the `memu-retrieve` skill; remove that too. The directory
+is memU's own — the install wrote it whole, so it goes whole:
+
+```
+rm -r ~/.hermes/skills/memu-retrieve
+```
+
+(For a non-default home, it sits under `<home>/skills/` instead.) Other entries
+in `~/.hermes/skills/` are the user's or Hermes's — leave them alone.
+
 ### ✅ Verify Part 2
 
 `cat ~/.hermes/SOUL.md` — no `memu:begin`/`memu:end` markers remain, and the
-user's own content is intact. A session already running loaded the old file; a
-fresh session is what picks the removal up.
+user's own content is intact. `~/.hermes/skills/memu-retrieve` no longer
+exists. A session already running loaded the old file; a fresh session is what
+picks the removal up.
 
 ---
 
@@ -98,6 +109,6 @@ Close the report with the two things the user needs to hear, in this order:
 1. **What was kept:** their memory — the store at `MEMU_DB`,
    `~/.memu/config.env`, and the session cursor — untouched. A later reinstall
    picks it up as is and resumes mining right where it left off.
-2. **What was removed:** the bridging schedule, the retrieval instruction,
-   this host's working state, and (unless another host still needs it) the
-   `memu-cli` package.
+2. **What was removed:** the bridging schedule, the retrieval instruction and
+   skill, this host's working state, and (unless another host still needs it)
+   the `memu-cli` package.
