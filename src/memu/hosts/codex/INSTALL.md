@@ -183,42 +183,55 @@ results into your answer.
 memu-codex install-instruction
 ```
 
-That is the whole step. It writes memU's block into `~/.codex/AGENTS.md`, creating
-the file if it does not exist, and prints the diff of what it changed.
+That is the whole step. It writes two files and prints the diff of each, creating
+either if it does not exist:
+
+- **`~/.codex/skills/memu-retrieve/SKILL.md`** — the procedure: the command to run
+  and how to read what comes back.
+- **`~/.codex/AGENTS.md`** — two sentences telling you to use that skill before
+  answering.
+
+The split is the point. AGENTS.md is in your context on *every* turn, whether or
+not the turn has anything to do with memory, so it carries only what you need in
+order to decide to retrieve; the skill carries the detail and is loaded only once
+you act on it.
 
 Three properties worth knowing, because they are what make it safe to just run:
 
 - **It appends; it never overwrites.** `~/.codex/AGENTS.md` is the *user's* global
   instruction file and may already hold rules that have nothing to do with memU.
   Everything already in there survives, and the previous contents are backed up to
-  `~/.codex/AGENTS.md.bak` before anything is written.
+  `~/.codex/AGENTS.md.bak` before anything is written. (The skill directory is
+  memU's own — nothing of the user's lives there — so it is simply overwritten.)
 - **It is idempotent.** memU's text goes inside a marked block. Re-running replaces
   that block in place rather than appending a second copy, so running it twice is
   harmless — and so a later memU release can *improve* the instruction and have the
   upgrade actually reach users who already installed it. A copy pasted in by hand
-  could never be upgraded.
-- **It shows its work.** `--dry-run` prints the diff and writes nothing; `--print`
-  prints just the block. If the user wants to see what lands in their file before it
-  lands, that is how.
+  could never be upgraded. The same holds for the skill.
+- **It shows its work.** `--dry-run` prints the diffs and writes nothing; `--print`
+  prints what would be installed. If the user wants to see what lands in their file
+  before it lands, that is how.
 
-If you want to read the instruction itself, run `memu-codex install-instruction
---print`. In short: it tells you to run `memu-codex retrieve "<query>"` before
+If you want to read the text itself, run `memu-codex install-instruction --print`.
+In short: the skill tells you to run `memu-codex retrieve "<query>"` before
 answering — the LLM-free single-shot retrieval, not the LLM-routed `memu retrieve`,
 which would cost an LLM call on every turn — and it explains how to read the
 `segments`/`files`/`resources` layers that come back.
 
 ### ✅ Verify Part 3
 
-Read the file back:
+Read both files back:
 
 ```
 cat ~/.codex/AGENTS.md
+cat ~/.codex/skills/memu-retrieve/SKILL.md
 ```
 
-The memU block must appear exactly once, and anything the user had in there
-beforehand must still be intact.
+The memU block must appear in AGENTS.md exactly once and name the `memu-retrieve`
+skill, that skill must exist, and anything the user had in AGENTS.md beforehand
+must still be intact.
 
-Then confirm the command the instruction names actually works against the Part 1
+Then confirm the command the skill names actually works against the Part 1
 store:
 
 ```
@@ -228,9 +241,9 @@ memu-codex retrieve "smoke test"
 Empty result lists are fine — you are testing that the read path works, not that
 the store has content yet.
 
-Finally, note that a *fresh* Codex session is what picks up the new AGENTS.md. The
-session you are installing from already loaded the old one, so do not be surprised
-that the instruction is not in your own context yet.
+Finally, note that a *fresh* Codex session is what picks up the new AGENTS.md and
+the new skill. The session you are installing from already loaded the old one, so
+do not be surprised that the instruction is not in your own context yet.
 
 ---
 
@@ -239,9 +252,9 @@ that the instruction is not in your own context yet.
 Report back to the user:
 
 - the store (`MEMU_DB`) and provider now in use;
-- the scheduled task's name and cron, in words (e.g. "hourly at :00 local");
-- that the retrieval instruction is now in `~/.codex/AGENTS.md`, and that it takes
-  effect in their next Codex session.
+- the scheduled task's name and cron, in words (e.g. "daily at 00:00 local");
+- that the retrieval instruction is now in `~/.codex/AGENTS.md`, pointing at the
+  `memu-retrieve` skill, and that it takes effect in their next Codex session.
 
 Record (Part 2) and inject (Part 3) both read `~/.memu/config.env`, so they
 provably share the store you configured in Part 1 — what the task learns tonight

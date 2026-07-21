@@ -29,6 +29,10 @@ CLAUDE_MD = "~/.claude/CLAUDE.md"
 project, so the inject seam lands here. (Project-level CLAUDE.md files exist too,
 but the instruction belongs at the level retrieval works at: the user.)"""
 
+SKILLS_DIR = "~/.claude/skills"
+"""Claude Code's personal skills directory. Because it exists, the CLAUDE.md block
+is a pointer and the retrieval procedure itself is installed here as a skill."""
+
 SPEC = HostSpec(
     host=HOST,
     display="Claude Code",
@@ -37,6 +41,7 @@ SPEC = HostSpec(
     session_dir=SESSION_DIR,
     session_help="Claude Code session log (one project dir per escaped cwd)",
     instruction_path=CLAUDE_MD,
+    skills_dir=SKILLS_DIR,
 )
 
 

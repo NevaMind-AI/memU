@@ -18,6 +18,17 @@ when :data:`INSTRUCTION_TEMPLATE` improves in a later release, the copy already
 sitting in someone's AGENTS.md is inert. Hence :func:`install` writes a *managed
 block* between markers — re-running replaces it in place, so an upgrade is a
 re-run. Everything outside the markers is the user's and is never touched.
+
+Hosts that support **skills** take a second shape. The detail — how to word the
+query, how to read the three result layers — is not needed until the agent is
+actually retrieving, and an instruction file is read on every turn of every
+session, whether or not memory is in play. So on those hosts the detail moves
+into a skill (:data:`SKILL_TEMPLATE`, installed under the host's ``skills/``
+directory) and what lands in the instruction file shrinks to
+:data:`SKILL_INSTRUCTION_TEMPLATE`: two sentences pointing at it. Same seam, same
+markers, same upgrade-by-re-run; only the split differs. A host with no skills
+directory (:attr:`~memu.hosts.host_cli.HostSpec.skills_dir` left empty) gets the
+full text inline and no skill folder, because for it there is nowhere to put one.
 """
 
 from __future__ import annotations
@@ -32,13 +43,14 @@ from typing import Any
 BEGIN_TEMPLATE = "<!-- memu:begin — managed block, do not edit ({binary} install-instruction) -->"
 END = "<!-- memu:end -->"
 
-INSTRUCTION_TEMPLATE = """\
-## memU — retrieve before answering
+SKILL_NAME = "memu-retrieve"
+"""Directory and frontmatter name of the installed skill — ``<skills>/memu-retrieve/SKILL.md``."""
 
-Before answering, run `{binary} retrieve "<query>"` — where <query> is the
-user's request, reworded into a clearer query or focused keywords when that
-retrieves better (you need not pass their raw words verbatim). Use any relevant
-results as context. If it returns nothing, proceed normally.
+RETRIEVAL_BODY = """\
+Run `{binary} retrieve "<query>"` — where <query> is the user's request, reworded
+into a clearer query or focused keywords when that retrieves better (you need not
+pass their raw words verbatim). Use any relevant results as context. If it returns
+nothing, proceed normally.
 
 The result unfolds progressively, in three layers. `segments` are the narrowest
 and usually the most on-point: the individual slices of memory that matched the
@@ -48,18 +60,32 @@ act on. `resources` are files on the user's own machine that look related. Files
 and resources come back as a location plus a summary rather than full text; work
 from the summary, and open the raw file only when you need what it leaves out.
 """
-"""What the agent is told, every turn, before it answers.
 
-It names ``<binary> retrieve`` — a ``PATH`` command, never a script path, and
-the LLM-free single-shot retrieval. It fails open, hence "proceed normally" — an
-empty store returns empty lists and the turn goes on.
+INSTRUCTION_TEMPLATE = f"""\
+## memU — retrieve before answering
 
-The second paragraph is a legend for the JSON. ``retrieve`` prints raw
-``segments``/``files``/``resources`` with nothing to explain them, and the layers
-are not interchangeable: a segment is a matched slice, a file is the synthesized
-document that slice came from, a resource is a file on disk. Without the legend
-the reader has to guess which layer to trust, and opens raw files it did not need.
+Before answering:
+
+{RETRIEVAL_BODY}"""
+
+SKILL_INSTRUCTION_TEMPLATE = """\
+## memU — retrieve before answering
+
+Before answering, use the `{skill}` skill to pull any relevant memory into
+context. It fails open: if nothing comes back, answer normally.
 """
+
+SKILL_TEMPLATE = f"""\
+---
+name: {SKILL_NAME}
+description: Retrieve the user's durable memory from memU before answering — past
+  decisions, preferences, projects, and related files on this machine. Use at the
+  start of any turn where what the user has said or done before could matter.
+---
+
+# Retrieve from memU before answering
+
+{RETRIEVAL_BODY}"""
 
 
 def begin(binary: str) -> str:
@@ -67,14 +93,25 @@ def begin(binary: str) -> str:
     return BEGIN_TEMPLATE.format(binary=binary)
 
 
-def instruction(binary: str) -> str:
-    """The instruction text, telling the agent to run this host's ``retrieve``."""
+def skill_document(binary: str) -> str:
+    """The ``SKILL.md`` as written to disk, telling the agent how to retrieve."""
+    return SKILL_TEMPLATE.format(binary=binary)
+
+
+def instruction(binary: str, *, skill: bool = False) -> str:
+    """The instruction text, telling the agent to run this host's ``retrieve``.
+
+    ``skill=True`` returns the short pointer for hosts where :func:`install_skill`
+    has put the detail in a skill; otherwise the full inline text.
+    """
+    if skill:
+        return SKILL_INSTRUCTION_TEMPLATE.format(skill=SKILL_NAME, binary=binary)
     return INSTRUCTION_TEMPLATE.format(binary=binary)
 
 
-def block(binary: str) -> str:
+def block(binary: str, *, skill: bool = False) -> str:
     """The managed block exactly as it is written to disk, markers included."""
-    return f"{begin(binary)}\n{instruction(binary)}{END}\n"
+    return f"{begin(binary)}\n{instruction(binary, skill=skill)}{END}\n"
 
 
 def _block_re(binary: str) -> re.Pattern[str]:
@@ -84,7 +121,7 @@ def _block_re(binary: str) -> re.Pattern[str]:
     )
 
 
-def patch(current: str, binary: str) -> str:
+def patch(current: str, binary: str, *, skill: bool = False) -> str:
     """Return ``current`` with the managed block installed — replaced, or appended.
 
     Pure, so the interesting half of :func:`install` is testable without a
@@ -94,11 +131,11 @@ def patch(current: str, binary: str) -> str:
     """
     pattern = _block_re(binary)
     if pattern.search(current):
-        return pattern.sub(lambda _: block(binary), current, count=1)
+        return pattern.sub(lambda _: block(binary, skill=skill), current, count=1)
     if current and not current.endswith("\n"):
         current += "\n"
     separator = "\n" if current else ""
-    return f"{current}{separator}{block(binary)}"
+    return f"{current}{separator}{block(binary, skill=skill)}"
 
 
 def strip(current: str, binary: str) -> str:
@@ -120,16 +157,9 @@ def strip(current: str, binary: str) -> str:
     return stripped.rstrip("\n") + "\n"
 
 
-def install(path: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, str]:
-    """Install the managed block into ``path``. Returns ``(changed, diff)``.
-
-    Creates the file (and its parent) if absent, and backs up any existing content
-    to ``<path>.bak`` before rewriting it — the target belongs to the *host*, not
-    to memU, and may hold instructions that have nothing to do with us.
-    """
-    path = path.expanduser()
+def _write(path: Path, updated: str, *, backup: bool, dry_run: bool) -> tuple[bool, str]:
+    """Rewrite ``path`` to ``updated``, diffing first. Returns ``(changed, diff)``."""
     current = path.read_text(encoding="utf-8") if path.is_file() else ""
-    updated = patch(current, binary)
     diff = "".join(
         difflib.unified_diff(
             current.splitlines(keepends=True),
@@ -142,10 +172,26 @@ def install(path: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, st
         return False, diff
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    if current:
+    if backup and current:
         shutil.copyfile(path, path.with_suffix(path.suffix + ".bak"))
     path.write_text(updated, encoding="utf-8")
     return True, diff
+
+
+def install(path: Path, binary: str, *, skill: bool = False, dry_run: bool = False) -> tuple[bool, str]:
+    """Install the managed block into ``path``. Returns ``(changed, diff)``.
+
+    Creates the file (and its parent) if absent, and backs up any existing content
+    to ``<path>.bak`` before rewriting it — the target belongs to the *host*, not
+    to memU, and may hold instructions that have nothing to do with us.
+
+    ``skill`` installs the short block that points at :func:`install_skill`'s skill
+    instead of the full inline text; pass it only when that skill is being
+    installed too, or the block points at nothing.
+    """
+    path = path.expanduser()
+    current = path.read_text(encoding="utf-8") if path.is_file() else ""
+    return _write(path, patch(current, binary, skill=skill), backup=True, dry_run=dry_run)
 
 
 def remove(path: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, str]:
@@ -161,37 +207,52 @@ def remove(path: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, str
     if not path.is_file():
         return False, ""
     current = path.read_text(encoding="utf-8")
-    updated = strip(current, binary)
-    diff = "".join(
-        difflib.unified_diff(
-            current.splitlines(keepends=True),
-            updated.splitlines(keepends=True),
-            fromfile=str(path),
-            tofile=str(path),
-        )
-    )
-    if updated == current or dry_run:
-        return False, diff
+    return _write(path, strip(current, binary), backup=True, dry_run=dry_run)
 
-    shutil.copyfile(path, path.with_suffix(path.suffix + ".bak"))
-    path.write_text(updated, encoding="utf-8")
-    return True, diff
+
+def skill_path(skills_dir: Path) -> Path:
+    """Where the skill lands inside a host's ``skills/`` directory."""
+    return skills_dir.expanduser() / SKILL_NAME / "SKILL.md"
+
+
+def install_skill(skills_dir: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, str]:
+    """Install the retrieval skill under ``skills_dir``. Returns ``(changed, diff)``.
+
+    Unlike the instruction file, ``<skills_dir>/memu-retrieve/`` is memU's own —
+    nothing of the user's lives there — so it is overwritten whole rather than
+    marker-fenced and backed up. Same upgrade story either way: re-run and the
+    release's text replaces the installed one.
+    """
+    return _write(skill_path(skills_dir), skill_document(binary), backup=False, dry_run=dry_run)
+
+
+def _report(path: Path, changed: bool, diff: str, *, dry_run: bool) -> None:
+    if not diff:
+        print(f"{path}: already up to date")
+    elif dry_run:
+        print(f"{path}: would change\n\n{diff}", end="")
+    else:
+        print(f"{path}: {'updated' if changed else 'unchanged'}\n\n{diff}", end="")
 
 
 def _cmd_install_instruction(args: argparse.Namespace) -> int:
-    path = Path(args.path)
+    skills_dir = Path(args.skills_dir) if args.skills_dir else None
+    skill = skills_dir is not None
     if args.print_only:
-        print(block(args.binary), end="")
+        if skills_dir is not None:
+            print(f"# {skill_path(skills_dir)}\n\n{skill_document(args.binary)}")
+        print(block(args.binary, skill=skill), end="")
         return 0
 
-    changed, diff = install(path, args.binary, dry_run=args.dry_run)
-    if not diff:
-        print(f"{path}: already up to date")
-        return 0
-    if args.dry_run:
-        print(f"{path}: would change\n\n{diff}", end="")
-        return 0
-    print(f"{path}: {'updated' if changed else 'unchanged'}\n\n{diff}", end="")
+    # The skill goes in first: between the two writes, an instruction block naming
+    # a skill that is not there yet is the only order that can mislead an agent.
+    if skills_dir is not None:
+        changed, diff = install_skill(skills_dir, args.binary, dry_run=args.dry_run)
+        _report(skill_path(skills_dir), changed, diff, dry_run=args.dry_run)
+
+    path = Path(args.path)
+    changed, diff = install(path, args.binary, skill=skill, dry_run=args.dry_run)
+    _report(path.expanduser(), changed, diff, dry_run=args.dry_run)
     return 0
 
 
@@ -218,19 +279,35 @@ async def _cmd_remove_instruction_async(args: argparse.Namespace) -> int:
     return _cmd_remove_instruction(args)
 
 
-def register(sub: Any, *, path: str, binary: str) -> None:
+def register(sub: Any, *, path: str, binary: str, skills_dir: str = "") -> None:
     """Add ``install-instruction`` to a host CLI, bound to that host's ``path``.
 
     ``binary`` is the host adapter's own command name (``memu-codex``, …) — it is
     what the installed instruction tells the agent to run.
+
+    ``skills_dir`` is the host's skills directory (``~/.claude/skills``, …), if it
+    has one. Given it, the command installs the retrieval skill there and patches
+    ``path`` with a two-sentence pointer to it; left empty, it patches ``path``
+    with the full text and writes no skill.
     """
     parser = sub.add_parser(
         "install-instruction",
         help="Patch the host's global instruction file so the agent retrieves before answering",
     )
     parser.add_argument("--path", default=path, help=f"Instruction file to patch (default: {path})")
+    parser.add_argument(
+        "--skills-dir",
+        default=skills_dir,
+        help=(
+            f"Skills directory to install the {SKILL_NAME} skill into (default: {skills_dir})"
+            if skills_dir
+            else argparse.SUPPRESS
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true", help="Show the diff without writing")
-    parser.add_argument("--print", dest="print_only", action="store_true", help="Print the managed block and exit")
+    parser.add_argument(
+        "--print", dest="print_only", action="store_true", help="Print what would be installed and exit"
+    )
     parser.set_defaults(handler=_cmd_install_instruction_async, binary=binary)
 
     remover = sub.add_parser(

@@ -63,6 +63,13 @@ class HostSpec:
     instruction_path: str
     """The host's global instruction file — where the inject seam lands."""
 
+    skills_dir: str = ""
+    """The host's skills directory, for hosts that have skills (``~/.codex/skills``,
+    ``~/.claude/skills``). Given one, ``install-instruction`` puts the retrieval
+    procedure in a skill there and leaves only a pointer in ``instruction_path``.
+    Empty — the default, and every host without a skills mechanism — keeps the full
+    text inline, which is the only place it can live."""
+
     base_dir: str = ""
     """memU working tree. Empty means the per-host default ``~/.memu/hosts/<host>``;
     Codex overrides this with the pre-multi-host ``~/.memu`` it has always used."""
@@ -250,7 +257,7 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     # Shared across hosts, so they are registered, not redefined — only the file
     # the instruction lands in and the binary it names are ours to fill in.
     retrieval.register(sub)
-    instruction.register(sub, path=spec.instruction_path, binary=spec.binary)
+    instruction.register(sub, path=spec.instruction_path, binary=spec.binary, skills_dir=spec.skills_dir)
 
     p = with_base(sub.add_parser("prepare", help=f"Slice new {spec.display} sessions into self-evolve job files"))
     # A host with no universal session location (the generic adapter) leaves
