@@ -1,9 +1,13 @@
 """Snapshot the mirrored recall files by content hash, diff them later.
 
-Prepare records a sha256 of every mirrored file; commit re-hashes and diffs
-against that snapshot to learn which files the agent actually created or
-modified. Hashing content (not mtime, and not the agent's own account of what it
-did) means a rewrite with identical bytes is correctly seen as unchanged.
+The snapshot means "state as of the last successful commit": the first
+``prepare`` bootstraps it from the store-derived mirror (committed content by
+construction), and thereafter only a successful ``commit`` re-takes it — so
+files a crashed run wrote but never committed keep diffing until they land
+(#518). ``commit`` re-hashes and diffs against the snapshot to learn which
+files the agent actually created or modified; hashing content (not mtime, and
+not the agent's own account of what it did) means a rewrite with identical
+bytes is correctly seen as unchanged.
 """
 
 from __future__ import annotations

@@ -38,14 +38,21 @@ def prepare_transcripts(
     out_dir: Path,
     manifest_path: Path,
     max_jobs: int,
+    pending_path: Path,
 ) -> int:
-    """Extract new session turns into numbered transcripts and advance the cursor.
+    """Extract new session turns into numbered transcripts and *stage* the cursor.
 
     Scans the host's sessions newest-first, comparing each file's line count
-    against the cursor. The first already-seen file with no new lines ends the
-    scan — older files cannot hold newer content. The latest ``max_jobs`` files
-    with new lines are written oldest-first as ``<idx>.jsonl`` (conversation) and
-    ``<idx>_full.jsonl`` (conversation plus tool calls), with ``idx`` from 1.
+    against the promoted cursor at ``manifest_path``. The first already-seen
+    file with no new lines ends the scan — older files cannot hold newer
+    content. The latest ``max_jobs`` files with new lines are written
+    oldest-first as ``<idx>.jsonl`` (conversation) and ``<idx>_full.jsonl``
+    (conversation plus tool calls), with ``idx`` from 1.
+
+    The promoted cursor is read here but never written: the advanced cursor
+    goes to ``pending_path``, and only a successful ``commit`` promotes it. So
+    a bare ``prepare`` — or a run that dies before commit — leaves the durable
+    cursor untouched, and every unmined turn stays selectable next time.
 
     Returns the number of sessions written. Zero is the correct, common outcome
     on a quiet day.
@@ -81,7 +88,7 @@ def prepare_transcripts(
 
         manifest[key] = {"lines": len(records), "last_timestamp": _last_timestamp(source, records)}
 
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    pending_path.parent.mkdir(parents=True, exist_ok=True)
+    pending_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
     return len(selected)
