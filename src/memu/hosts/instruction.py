@@ -78,9 +78,10 @@ context. It fails open: if nothing comes back, answer normally.
 SKILL_TEMPLATE = f"""\
 ---
 name: {SKILL_NAME}
-description: Retrieve the user's durable memory from memU before answering — past
-  decisions, preferences, projects, and related files on this machine. Use at the
-  start of any turn where what the user has said or done before could matter.
+description: Retrieve the user's durable memory from memU before answering. Run it
+  at the start of every turn, even when the request seems self-contained — it is
+  one cheap command and fails open; skipping it means answering without what the
+  user already told you.
 ---
 
 # Retrieve from memU before answering
