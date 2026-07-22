@@ -6,7 +6,7 @@ file its standing instruction lands in.
 
 Usage:
     memu-openclaw retrieve "<query>"    # the inject seam — what the agent runs each turn
-    memu-openclaw install-instruction   # the inject seam — patch the workspace AGENTS.md
+    memu-openclaw install-instruction   # the inject seam — install the skill, point AGENTS.md at it
     memu-openclaw prepare               # slice new sessions into job files
     memu-openclaw verify-resources      # filter the touched-file log (run by a job)
     memu-openclaw commit                # submit what the agent produced back to memU
@@ -29,6 +29,11 @@ AGENTS_MD = "~/.openclaw/workspace/AGENTS.md"
 so the inject seam lands here. If the user runs a non-default workspace
 (``OPENCLAW_WORKSPACE_DIR``, or a profile), pass ``--path``."""
 
+SKILLS_DIR = "~/.openclaw/skills"
+"""OpenClaw's managed skills directory (agentskills.io layout, snapshotted at
+session start and loaded on demand). Because it exists, the AGENTS.md block is a
+pointer and the retrieval procedure itself is installed here as a skill."""
+
 SPEC = HostSpec(
     host=HOST,
     display="OpenClaw",
@@ -37,6 +42,7 @@ SPEC = HostSpec(
     session_dir=SESSION_DIR,
     session_help="OpenClaw agents dir holding <agentId>/sessions transcripts",
     instruction_path=AGENTS_MD,
+    skills_dir=SKILLS_DIR,
 )
 
 

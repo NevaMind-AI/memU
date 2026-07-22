@@ -114,6 +114,14 @@ def test_hermes_is_a_skill_host() -> None:
     assert SPEC.skills_dir == "~/.hermes/skills"
 
 
+def test_openclaw_is_a_skill_host() -> None:
+    """OpenClaw snapshots skills from ~/.openclaw/skills at session start, so its
+    workspace AGENTS.md block must be the pointer, not the full procedure."""
+    from memu.hosts.openclaw.cli import SPEC
+
+    assert SPEC.skills_dir == "~/.openclaw/skills"
+
+
 def test_instruction_names_the_llm_free_retrieval() -> None:
     """`memu retrieve` is LLM-routed — one LLM call per turn is what this avoids."""
     assert "memu-codex retrieve" in instruction.instruction(BINARY)

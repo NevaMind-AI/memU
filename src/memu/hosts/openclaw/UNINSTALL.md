@@ -8,8 +8,8 @@ Uninstalling is the install run in reverse, and it is three parts:
 
 1. **Unregister the bridging task** — stop the scheduled job first, so nothing
    fires mid-teardown (the *record* seam).
-2. **Unpatch `~/.openclaw/workspace/AGENTS.md`** — remove the standing
-   retrieval instruction (the *inject* seam).
+2. **Unpatch `~/.openclaw/workspace/AGENTS.md` and remove the retrieval skill** —
+   the standing instruction and the skill it points at (the *inject* seam).
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
    tooling is removed — and close by reporting both.
 
@@ -34,7 +34,7 @@ OpenClaw's cron job list no longer shows a memU bridging job.
 
 ---
 
-## Part 2 — Remove the retrieval instruction
+## Part 2 — Remove the retrieval instruction and skill
 
 **Do not hand-edit the block out.** memU owns the text and removes it for you:
 
@@ -47,13 +47,27 @@ prints the diff. Everything outside the markers is the user's and survives;
 the previous contents are backed up to
 `~/.openclaw/workspace/AGENTS.md.bak` before the rewrite. `--dry-run` shows
 the diff without writing. Re-running is a clean no-op — a file with no block
-left is already the desired end state.
+left is already the desired end state. If this install used a non-default
+workspace (`OPENCLAW_WORKSPACE_DIR`, or a profile), pass
+`--path <workspace>/AGENTS.md`.
+
+The block pointed at the `memu-retrieve` skill; remove that too. The directory
+is memU's own — the install wrote it whole, so it goes whole:
+
+```
+rm -r ~/.openclaw/skills/memu-retrieve
+```
+
+(For a non-default `OPENCLAW_STATE_DIR`, it sits under `<state-dir>/skills/`
+instead.) Other entries in `~/.openclaw/skills/` are the user's or OpenClaw's —
+leave them alone.
 
 ### ✅ Verify Part 2
 
 `cat ~/.openclaw/workspace/AGENTS.md` — no `memu:begin`/`memu:end` markers
-remain, and the user's own content is intact. A session already running loaded
-the old file; a fresh session is what picks the removal up.
+remain, and the user's own content is intact. `~/.openclaw/skills/memu-retrieve`
+no longer exists. A session already running loaded the old file; a fresh session
+is what picks the removal up.
 
 ---
 
@@ -93,6 +107,6 @@ Close the report with the two things the user needs to hear, in this order:
 1. **What was kept:** their memory — the store at `MEMU_DB`,
    `~/.memu/config.env`, and the session cursor — untouched. A later reinstall
    picks it up as is and resumes mining right where it left off.
-2. **What was removed:** the bridging schedule, the retrieval instruction,
-   this host's working state, and (unless another host still needs it) the
-   `memu-cli` package.
+2. **What was removed:** the bridging schedule, the retrieval instruction and
+   skill, this host's working state, and (unless another host still needs it)
+   the `memu-cli` package.
