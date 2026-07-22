@@ -121,7 +121,7 @@ is new).
 
 ---
 
-## Part 3 — Patch the workspace `AGENTS.md` with the retrieval instruction
+## Part 3 — Install the retrieval skill and point the workspace `AGENTS.md` at it
 
 The *inject* seam: a standing instruction in OpenClaw's **workspace AGENTS.md**
 telling the agent to pull relevant memory before answering. OpenClaw loads
@@ -150,7 +150,10 @@ It creates either file if absent and prints the diff of both. `AGENTS.md` is the
 `~/.openclaw/workspace/AGENTS.md.bak`), and memU's text sits in a marked block
 that a re-run — or a later memU release — replaces in place. `--dry-run` shows
 the diffs without writing; `--path` and `--skills-dir` target a non-default
-workspace or skills directory.
+workspace or skills directory. If this host uses a non-default state dir
+(`OPENCLAW_STATE_DIR`), the managed skills root is `<state-dir>/skills` — pass
+that as `--skills-dir` (and the workspace `AGENTS.md` as `--path` when the
+workspace is not the default either).
 
 ### ✅ Verify Part 3
 
