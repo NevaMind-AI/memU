@@ -134,23 +134,36 @@ instruction is simply always there.
 memu-openclaw install-instruction
 ```
 
-It writes memU's block into `~/.openclaw/workspace/AGENTS.md`, creating the file
-if absent, and prints the diff. It appends rather than overwrites (existing
-content is backed up to `AGENTS.md.bak`), and it is idempotent: the text sits in
-a marked block that a re-run — or a later memU release — replaces in place.
-`--dry-run` shows the diff without writing; `--path` targets a non-default
-workspace.
+One command, two files, because OpenClaw has skills:
+
+- `~/.openclaw/skills/memu-retrieve/SKILL.md` — the procedure: the `retrieve`
+  command to run and how to read the layers that come back. `~/.openclaw/skills`
+  is OpenClaw's managed skills directory; this subfolder is memU's own, so a
+  re-run overwrites it whole.
+- `~/.openclaw/workspace/AGENTS.md` — two sentences telling the agent to use that
+  skill before answering. The detail stays out of here on purpose: AGENTS.md is
+  in context on every turn, whether or not the turn touches memory; the skill is
+  loaded only when the agent acts on it.
+
+It creates either file if absent and prints the diff of both. `AGENTS.md` is the
+*user's*, so it appends rather than overwrites (previous content is backed up to
+`~/.openclaw/workspace/AGENTS.md.bak`), and memU's text sits in a marked block
+that a re-run — or a later memU release — replaces in place. `--dry-run` shows
+the diffs without writing; `--path` and `--skills-dir` target a non-default
+workspace or skills directory.
 
 ### ✅ Verify Part 3
 
 ```
 cat ~/.openclaw/workspace/AGENTS.md
+cat ~/.openclaw/skills/memu-retrieve/SKILL.md
 memu-openclaw retrieve "smoke test"
 ```
 
-The memU block must appear exactly once, prior content intact, and `retrieve`
-must exit cleanly (empty lists are fine). A fresh OpenClaw session picks up the
-new AGENTS.md.
+The memU block must appear exactly once and name the `memu-retrieve` skill, that
+skill must exist, anything the user had in `AGENTS.md` must be intact, and
+`retrieve` must exit cleanly (empty lists are fine). A fresh OpenClaw session is
+what picks up the new AGENTS.md and skill.
 
 ---
 
@@ -158,5 +171,6 @@ new AGENTS.md.
 
 Report back to the user: the store and provider in use; the cron job's name and
 schedule in words; and that the retrieval instruction is now in the workspace
-AGENTS.md, taking effect next session. Record and inject both read
-`~/.memu/config.env`, so they provably share one store.
+AGENTS.md, pointing at the `memu-retrieve` skill and taking effect next session.
+Record and inject both read `~/.memu/config.env`, so they provably share one
+store.
