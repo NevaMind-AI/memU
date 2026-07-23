@@ -38,4 +38,11 @@ class RecallFileSegmentRepo(Protocol):
         """Remove all segments matching the scope. Returns the removed segments."""
         ...
 
+    def vector_search_segments(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+    ) -> list[tuple[str, float]]: ...
+
     def load_existing(self) -> None: ...

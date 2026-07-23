@@ -56,6 +56,12 @@ test = [
 
 [project.optional-dependencies]
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
+milvus = [
+    "pymilvus>=3.0.0,<4.0.0",
+    "milvus-lite>=3.0,<4.0",
+    # milvus-lite 3.0 still imports pkg_resources on Python 3.13.
+    "setuptools<81; python_version >= '3.13'",
+]
 
 [project.scripts]
 memu = "memu.cli:main"
@@ -77,6 +83,10 @@ memu-agent = "memu.hosts.generic.cli:main"
 "Bug Tracker" = "https://github.com/NevaMind-AI/MemU/issues"
 "Documentation" = "https://github.com/NevaMind-AI/MemU#readme"
 
+[tool.deptry.per_rule_ignores]
+# Optional dependencies imported indirectly or loaded lazily behind extras.
+DEP002 = ["milvus-lite", "setuptools"]
+
 [tool.mypy]
 files = ["src", "tests"]
 python_version = "3.13"
@@ -97,6 +107,10 @@ disable_error_code = ["attr-defined", "call-arg"]
 
 [[tool.mypy.overrides]]
 module = ["pgvector.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["pymilvus.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
