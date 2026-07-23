@@ -54,11 +54,13 @@ nothing, proceed normally.
 
 The result unfolds progressively, in three layers. `segments` are the narrowest
 and usually the most on-point: the individual slices of memory that matched the
-query. `files` are the synthesized documents those segments were cut from —
-broader, and worth consulting when a segment reads as relevant but is too thin to
-act on. `resources` are files on the user's own machine that look related. Files
-and resources come back as a location plus a summary rather than full text; work
-from the summary, and open the raw file only when you need what it leaves out.
+query, each naming the `source_file` it was cut from. `files` are the synthesized
+documents those segments came from — broader, and worth consulting when a segment
+reads as relevant but is too thin to act on; find one by its `path` (the same
+value a segment's `source_file` points at). `resources` are files on the user's
+own machine that look related, each with a `path`. Files and resources come back
+as a location plus a summary rather than full text; work from the summary, and
+open the file at its `path` only when you need what it leaves out.
 """
 
 INSTRUCTION_TEMPLATE = f"""\
