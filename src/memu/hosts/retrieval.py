@@ -53,42 +53,59 @@ def _mirror_path(base: Path, track: Any, name: Any) -> Path | None:
     return recall_file_path(base, subdir, str(name))
 
 
+def _source_label(track: Any, name: Any) -> str | None:
+    """A stable, human-readable id for a recall file: ``<track>/<name>``.
+
+    What a segment points back to and what the agent matches against the
+    ``files`` layer. The track prefix disambiguates a bare name (which can
+    collide across tracks). It is deliberately *not* a filesystem path — the
+    openable location is the file's ``path`` — so a segment never carries a
+    location that may not exist on disk.
+    """
+    if not name:
+        return None
+    return f"{track}/{name}" if track else str(name)
+
+
 def _shape_for_agent(result: dict[str, Any]) -> dict[str, Any]:
     """Reshape raw retrieval records into the agent-facing progressive form.
 
     Matching the instruction's contract that files and resources come back as
     *a location plus a summary* rather than full text:
 
-    * ``files`` shed their ``content`` in favour of a ``path`` to the on-disk
-      mirror (``~/.memu/<track>/<name>.md``). The mirror is written by
-      ``commit`` but is not guaranteed to survive — the user owns that tree — so
-      when it is missing the ``content`` is kept inline and the result stays
-      self-sufficient. The internal ``resource_urls`` link list is dropped: the
-      standing instruction never names it, so it is noise to the agent.
-    * ``segments`` swap the internal ``recall_file_id`` UUID for ``source_file``:
-      the same ``path`` its parent file reports, so provenance is both
-      human-meaningful and directly openable, with no cross-referencing a UUID.
+    * ``files`` shed their ``content``: when the on-disk mirror
+      (``~/.memu/<track>/<name>.md``) exists, they carry a ``path`` to it; when
+      it does not — the user owns that tree and may delete it — they keep the
+      ``content`` inline and emit *no* ``path``, so the agent never sees a
+      location that isn't there. The internal ``resource_urls`` link list is
+      dropped: the standing instruction never names it, so it is noise.
+    * ``segments`` swap the internal ``recall_file_id`` UUID for ``source_file``,
+      the ``<track>/<name>`` id of their parent file — an identifier for finding
+      the fuller document in ``files``, not a path to open (that is the file's
+      job, which degrades cleanly to inline content).
     * ``resources`` collapse the duplicated ``url``/``local_path`` (``commit`` is
       the only writer and sets them equal) down to a single ``path``.
     """
     base = Path(os.path.expanduser(BASE_DIR))
 
-    file_paths: dict[str, str] = {}
+    file_labels: dict[str, str | None] = {}
     for file in result.get("files", []):
+        file_labels[file.get("id")] = _source_label(file.get("track"), file.get("name"))
+
         path = _mirror_path(base, file.get("track"), file.get("name"))
         content = file.pop("content", None)
-        _ = file.pop("resource_urls", None)
-        if path is not None:
+        file.pop("resource_urls", None)
+        if path is not None and path.exists():
+            # The mirror is on disk: hand over the openable location, not the text.
             file["path"] = str(path)
-            file_paths[file.get("id")] = str(path)
-        if path is None or not path.exists():
-            # Unlocatable, or the mirror is gone: keep the text so the agent
-            # still has it even though there is no file to open.
+        else:
+            # Unlocatable, or the mirror is gone: keep the text inline and emit no
+            # dead path, so the agent never reasons about a file that isn't there.
             file["content"] = content
 
     for segment in result.get("segments", []):
         fid = segment.pop("recall_file_id", None)
-        segment["source_file"] = file_paths.get(fid)
+        segment["source_file"] = file_labels.get(fid)
 
     for resource in result.get("resources", []):
         resource.pop("local_path", None)
