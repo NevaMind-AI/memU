@@ -59,24 +59,6 @@ def upgrade() -> None:
     op.create_index("ix_resources__scope", "resources", ["user_id", "agent_id"], unique=False)
     op.create_index(op.f("ix_resources_id"), "resources", ["id"], unique=False)
     op.create_table(
-        "recall_file_resources",
-        sa.Column("id", sa.String(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("resource_id", sa.String(), nullable=False),
-        sa.Column("file_id", sa.String(), nullable=False),
-        sa.Column("user_id", sa.String(), nullable=True),
-        sa.Column("agent_id", sa.String(), nullable=True),
-        sa.ForeignKeyConstraint(["file_id"], ["recall_files.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["resource_id"], ["resources.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        "idx_recall_file_resources_unique", "recall_file_resources", ["resource_id", "file_id"], unique=True
-    )
-    op.create_index("ix_recall_file_resources__scope", "recall_file_resources", ["user_id", "agent_id"], unique=False)
-    op.create_index(op.f("ix_recall_file_resources_id"), "recall_file_resources", ["id"], unique=False)
-    op.create_table(
         "recall_file_segments",
         sa.Column("id", sa.String(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
@@ -104,10 +86,6 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_recall_file_segments_id"), table_name="recall_file_segments")
     op.drop_index("ix_recall_file_segments__scope", table_name="recall_file_segments")
     op.drop_table("recall_file_segments")
-    op.drop_index(op.f("ix_recall_file_resources_id"), table_name="recall_file_resources")
-    op.drop_index("ix_recall_file_resources__scope", table_name="recall_file_resources")
-    op.drop_index("idx_recall_file_resources_unique", table_name="recall_file_resources")
-    op.drop_table("recall_file_resources")
     op.drop_index(op.f("ix_resources_id"), table_name="resources")
     op.drop_index("ix_resources__scope", table_name="resources")
     op.drop_table("resources")

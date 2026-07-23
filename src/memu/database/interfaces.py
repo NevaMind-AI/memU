@@ -3,12 +3,10 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from memu.database.models import RecallFile as RecallFileRecord
-from memu.database.models import RecallFileResource as RecallFileResourceRecord
 from memu.database.models import RecallFileSegment as RecallFileSegmentRecord
 from memu.database.models import Resource as ResourceRecord
 from memu.database.repositories import (
     RecallFileRepo,
-    RecallFileResourceRepo,
     RecallFileSegmentRepo,
     ResourceRepo,
 )
@@ -20,12 +18,10 @@ class Database(Protocol):
 
     resource_repo: ResourceRepo
     recall_file_repo: RecallFileRepo
-    recall_file_resource_repo: RecallFileResourceRepo
     recall_file_segment_repo: RecallFileSegmentRepo
 
     resources: dict[str, ResourceRecord]
-    categories: dict[str, RecallFileRecord]
-    resource_relations: list[RecallFileResourceRecord]
+    recall_files: dict[str, RecallFileRecord]
     segments: list[RecallFileSegmentRecord]
 
     def close(self) -> None: ...
@@ -34,7 +30,6 @@ class Database(Protocol):
 __all__ = [
     "Database",
     "RecallFileRecord",
-    "RecallFileResourceRecord",
     "RecallFileSegmentRecord",
     "ResourceRecord",
 ]

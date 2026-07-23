@@ -70,7 +70,7 @@ async def test_commit_then_list_covers_both_tracks(service: MemoryService) -> No
     assert all("embedding" not in f for f in result["recall_files"])
 
     listed = await service.list_all_recall_files()
-    by_track = sorted((f["track"], f["name"]) for f in listed["categories"])
+    by_track = sorted((f["track"], f["name"]) for f in listed["recall_files"])
     assert by_track == [("memory", "Profile"), ("skill", "deploy-checklist")]
 
 
@@ -92,7 +92,7 @@ async def test_recommit_updates_content_and_segments(service: MemoryService) -> 
     )
 
     listed = await service.list_all_recall_files()
-    profile = next(f for f in listed["categories"] if f["name"] == "Profile")
+    profile = next(f for f in listed["recall_files"] if f["name"] == "Profile")
     assert profile["content"] == "# P\nlikes tea"
 
     result = await service.progressive_retrieve("tea time")
@@ -161,7 +161,7 @@ async def test_where_scope_filters_and_rejects_unknown_fields(service: MemorySer
     )
 
     listed = await service.list_all_recall_files(where={"user_id": "u1"})
-    assert [f["name"] for f in listed["categories"]] == ["A"]
+    assert [f["name"] for f in listed["recall_files"]] == ["A"]
 
     with pytest.raises(ValueError, match="Unknown filter field"):
         await service.list_all_recall_files(where={"nope": "x"})

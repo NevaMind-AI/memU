@@ -40,7 +40,7 @@ class FakeService:
         self.committed: list[dict[str, Any]] = []
 
     async def list_all_recall_files(self) -> dict[str, Any]:
-        return {"categories": []}
+        return {"recall_files": []}
 
     async def commit_results(self, recall_files: Any, resource: Any) -> dict[str, Any]:
         self.committed.append({"recall_files": recall_files, "resource": resource})

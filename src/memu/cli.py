@@ -97,7 +97,7 @@ async def _cmd_list_files(args: argparse.Namespace) -> int:
     if args.json:
         _print_json(result)
         return 0
-    files = result.get("categories", [])
+    files = result.get("recall_files", [])
     print(f"{len(files)} recall file(s)")
     for f in files:
         print(f"  - {f.get('track')}/{f.get('name')}: {f.get('description') or ''}")
