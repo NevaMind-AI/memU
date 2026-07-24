@@ -22,6 +22,8 @@
 
 memU is a lightweight, agent-driven memory system that gives users a shared LLM wiki across sessions, agents, and devices. It automatically distills reusable skills from the user's agent sessions. Its core memory logic is only 500 lines — compact enough to inspect, understand, and adapt. It uses embedding-only retrieval with fully pluggable storage and embedding infrastructure.
 
+## Quick start
+
 **Installation is agent-driven.** The guides are written for the agent, not for you. Choose Cloud or Local, then send your agent one message:
 
 **Cloud (coming soon)**
@@ -35,17 +37,6 @@ Sign in at [memu.so](https://memu.so) to view your memory files.
 > Read https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md and follow it to install memU.
 
 It works for Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy — and any other agent, via detection. Details in [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
-
-## Quick start
-
-With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
-
-Once installed, your agent retrieves relevant memory automatically before answering. To retrieve manually, run the adapter for your host:
-
-```bash
-memu-codex retrieve "What should I remember about this project?"
-# or: memu-claude-code / memu-cursor / memu-openclaw / memu-hermes / memu-workbuddy / memu-agent
-```
 
 ## How it works
 
@@ -79,7 +70,18 @@ Afterwards `<binary> doctor` proves the whole loop resolves: config, store, and 
 
 Adding another host means implementing one `TranscriptSource` (where its session logs live, how its records are shaped) plus a `HostSpec`-sized CLI — the pipeline, verbs, and instruction text are shared.
 
-## Installation
+## CLI
+
+With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
+
+Once installed, your agent retrieves relevant memory automatically before answering. To retrieve manually, run the adapter for your host:
+
+```bash
+memu-codex retrieve "What should I remember about this project?"
+# or: memu-claude-code / memu-cursor / memu-openclaw / memu-hermes / memu-workbuddy / memu-agent
+```
+
+Install or invoke the CLI directly:
 
 ```bash
 pip install memu-cli         # library + memu + memu-codex CLIs
