@@ -121,10 +121,16 @@ the cadence (default 60).
 
 Because the scheduled run needs a standalone, headless-authenticated `claude`,
 `install` **refuses with guidance** if `claude` isn't on `PATH` or can't
-authenticate without a browser — set `CLAUDE_CODE_OAUTH_TOKEN` (`claude
-setup-token`) or `ANTHROPIC_API_KEY` first. That is the memU#538 verify gate: it's
-better to fail at install than to register a task that reports success and never
-runs.
+authenticate without a browser. That is the memU#538 verify gate: better to fail at
+install than to register a task that reports success and never runs.
+
+> **The credential must be persistent.** The task runs headless under an S4U
+> principal (session 0) and inherits only persistent user/machine environment and
+> your user profile — **not** a session-only `$env:` export. Use `claude
+> setup-token` (writes a token into your profile) or set `CLAUDE_CODE_OAUTH_TOKEN` /
+> `ANTHROPIC_API_KEY` as a persistent user variable (`setx`). A token exported only
+> in the current shell passes the install-time check yet leaves the task stuck on
+> "Not logged in" — the one false-positive the gate can't catch by itself.
 
 Confirm the same way Step 3 does — by filesystem traces, not the run's own
 summary: after a run, check that `~/.memu/hosts/claude-code/jobs/` timestamps and

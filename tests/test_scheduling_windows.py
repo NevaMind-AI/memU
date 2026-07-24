@@ -69,6 +69,9 @@ def test_register_script_is_canonical_and_hardened() -> None:
     assert "-LogonType S4U" in script  # windowless + runs whether logged on or not
     assert "-StartWhenAvailable" in script  # catch up a missed run
     assert "New-TimeSpan -Minutes 60" in script
+    assert (
+        "-RepetitionDuration (New-TimeSpan -Days 3650)" in script
+    )  # ~forever; MaxValue is out-of-range on Win11 (#539)
     assert "memu-bridge.ps1" in script
 
 
@@ -138,3 +141,61 @@ def test_execution_entry_points_are_windows_only(monkeypatch: pytest.MonkeyPatch
     ):
         with pytest.raises(RuntimeError):
             call()
+
+
+def test_builders_escape_single_quotes_in_paths() -> None:
+    # A username with an apostrophe (C:\Users\O'Brien) must not break the
+    # single-quoted PowerShell literals — every embedded ' is doubled.
+    assert windows.powershell_invocation("C:\\Users\\O'Brien\\claude.exe", "claude -p {prompt}") == (
+        "& 'C:\\Users\\O''Brien\\claude.exe' -p $prompt"
+    )
+    assert "O''Brien" in windows.register_script("t", Path("C:\\O'Brien\\memu-bridge.ps1"), 60)
+    assert "O''Brien" in windows.wrapper_script(
+        "C:\\O'Brien\\c.exe",
+        "claude -p {prompt}",
+        Path("C:\\O'Brien\\p.txt"),
+        Path("C:\\O'Brien\\l.log"),
+        ["C:\\O'Brien"],
+    )
+
+
+def test_pipeline_prompt_matches_the_bridging_doc() -> None:
+    # The prompt exists twice — this code builder and the doc's cron block — and the
+    # PR promised they stay verbatim. Lock it here: drift fails a test, not silently later.
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.claude_code") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    cron_line = next(line for line in doc.splitlines() if "claude -p 'Run the memU" in line)
+    doc_prompt = cron_line.split("claude -p '", 1)[1].rstrip()
+    assert doc_prompt.endswith("'")
+    assert doc_prompt[:-1] == prompt.bridging_pipeline_prompt(CLAUDE)
+
+
+def test_install_rejects_nonpositive_interval(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Pretend we're on Windows so the interval guard (not the platform gate) fires;
+    # `New-TimeSpan -Minutes 0` is an invalid trigger, so reject before Task Scheduler.
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+    layout = Layout.default(host=CLAUDE.host, base=tmp_path)
+    assert windows.install(CLAUDE, layout, interval_minutes=0) == 2
+    assert "positive" in capsys.readouterr().err
+
+
+def test_auth_gate_warns_that_credential_must_persist(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A pass is necessary but not sufficient: the S4U task won't see a session-only
+    # $env: token, so even the passing path must tell the user to persist it (#538 B).
+    monkeypatch.setattr(windows, "_authenticates", lambda spec, path: (True, ""))
+    assert windows._auth_gate(CLAUDE, "C:\\claude.exe") == 0
+    assert "PERSISTENT" in capsys.readouterr().err
+
+
+def test_auth_gate_aborts_when_unauthenticated(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(windows, "_authenticates", lambda spec, path: (False, "Not logged in"))
+    assert windows._auth_gate(CLAUDE, "C:\\claude.exe") == 1
+    err = capsys.readouterr().err
+    assert "setup-token" in err and "PERSISTENT" in err

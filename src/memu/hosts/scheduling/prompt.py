@@ -41,7 +41,7 @@ def bridging_pipeline_prompt(spec: HostSpec) -> str:
         f"regenerates {base}/jobs/. If the command exits non-zero, stop and report "
         "the error.  "
         f"3. SELF-EVOLVE. List {base}/jobs/*.txt and process them in ascending "
-        "numeric order (1.txt, then 2.txt, ...). The count changes every run — "
+        "numeric order (1.txt, then 2.txt, …). The count changes every run — "
         "always glob and sort. If there are no job files, skip to step 4. For each "
         "job file: read it and follow its instructions to the letter. Each job is "
         "self-contained and already carries the concrete paths it needs. Emitting "
