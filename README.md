@@ -20,7 +20,7 @@
 
 ---
 
-memU is a lightweight, agent-driven memory system that gives users a shared LLM wiki across sessions, agents, and devices. It automatically distills reusable skills from the user's agent sessions. Its core memory logic is only 500 lines — compact enough to inspect, understand, and adapt. It uses embedding-only retrieval with fully pluggable storage and embedding infrastructure.
+memU is a lightweight, agent-driven memory system that gives users a shared LLM wiki across sessions, agents, and devices. It automatically distills your own reusable skills from your agent history. Its core memory logic is only 500 lines — compact enough to inspect, understand, and adapt. It uses embedding-only retrieval with fully pluggable storage and embedding infrastructure.
 
 ## Quick start
 
@@ -30,11 +30,13 @@ memU is a lightweight, agent-driven memory system that gives users a shared LLM 
 
 > Read https://memu.pro/SKILL.md and follow it to install memU.
 
-Sign in at [memu.so](https://memu.so) to view your memory files.
+Use the same memory across devices — completely free, with unlimited use. Sign in at [memu.so](https://memu.so) to view your memory files.
 
 **Local / self-hosted**
 
 > Read https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md and follow it to install memU.
+
+Runs on one device only and does not sync across devices. You provide an embedding API key.
 
 It works for Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy — and any other agent, via detection. Details in [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
 
