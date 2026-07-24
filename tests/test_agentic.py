@@ -130,7 +130,7 @@ async def test_recommit_reembeds_description_only_when_changed(service: MemorySe
     assert counter.calls == 1
 
     listed = await service.list_all_recall_files()
-    profile = next(f for f in listed["categories"] if f["name"] == "Profile")
+    profile = next(f for f in listed["recall_files"] if f["name"] == "Profile")
     assert profile["description"] == "the user profile"
 
 
@@ -140,7 +140,7 @@ async def test_recommit_updates_skill_description_and_segment(service: MemorySer
     await service.commit_results(recall_files=[{**file, "description": "deploy the app"}])
 
     listed = await service.list_all_recall_files()
-    skill = next(f for f in listed["categories"] if f["name"] == "deploy-checklist")
+    skill = next(f for f in listed["recall_files"] if f["name"] == "deploy-checklist")
     assert skill["description"] == "deploy the app"
 
     # The skill's single segment is ``name: ...\ndescription: ...``, so it re-embeds too.
