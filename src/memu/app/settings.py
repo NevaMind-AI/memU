@@ -144,9 +144,9 @@ class EmbeddingProfilesConfig(RootModel[dict[Key, EmbeddingConfig]]):
 
 
 class MetadataStoreConfig(BaseModel):
-    provider: Annotated[Literal["inmemory", "postgres", "sqlite"], Normalize] = "inmemory"
+    provider: Annotated[Literal["inmemory", "postgres", "mysql", "sqlite"], Normalize] = "inmemory"
     ddl_mode: Annotated[Literal["create", "validate"], Normalize] = "create"
-    dsn: str | None = Field(default=None, description="Database connection string (required for postgres/sqlite).")
+    dsn: str | None = Field(default=None, description="Database connection string (required for postgres/mysql/sqlite).")
 
 
 class VectorIndexConfig(BaseModel):
