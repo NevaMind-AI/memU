@@ -9,15 +9,15 @@
 
 Installing memU on Codex is three parts:
 
-1. **Install memU** — a Python package, and the store + provider it writes to.
+1. **Install memU** — a Python package and the memory backend it uses.
 2. **Register the bridging task** — the scheduled job that turns recent Codex
    sessions into durable memory (the *record* seam).
 3. **Patch `~/.codex/AGENTS.md`** — a standing instruction that tells you to pull
    relevant memory before you answer (the *inject* seam).
 
-Parts 2 and 3 must share one store and one embedding space, or a query is
-compared against vectors written elsewhere and retrieval silently returns
-nothing. Part 1 is what makes them agree.
+Parts 2 and 3 must share one configured mode. In local mode they must also share
+one store and embedding space, or retrieval silently returns nothing. Part 1 is
+what makes them agree.
 
 ---
 
@@ -51,12 +51,40 @@ If it is not found, the install landed in an environment that isn't on your
 and the hook in Part 3 both need this command to resolve from a bare, non-
 interactive environment.
 
-### 1.2 Configure the store and provider
+### 1.2 Configure the memory backend
 
-memU needs a **database** and an **LLM/embedding provider**. Both seams read this
-one config, so decide it once, here.
+If `~/.memu/config.env` already exists from another memU host, reuse it as is
+and skip to the verify gate. An existing file without `MEMU_MEMORY_MODE` is
+local mode for backward compatibility.
 
-Collect from the user (or reuse values they already have):
+Otherwise ask the user to choose once:
+
+- **MemU Cloud** — memory and embeddings are hosted; collect a project API key.
+- **This device** — use the existing local database and embedding configuration.
+
+For **MemU Cloud**, write:
+
+```env
+MEMU_MEMORY_MODE=cloud
+MEMU_CLOUD_API_KEY=<project-api-key>
+```
+
+The production endpoint defaults to
+`https://api.memu.so/api/v4/memory/`. Set
+`MEMU_CLOUD_BASE_URL=https://staging-api.memu.so/api/v4/memory/` only when the
+user explicitly wants staging. The key is plaintext in this file: tell the user
+and set user-only permissions (`chmod 600 ~/.memu/config.env` on POSIX; restrict
+the file to the current user on Windows). Do not reuse `MEMU_API_KEY`, which is
+for local embedding providers.
+
+Cloud currently persists memory and skill recall files. It accepts workspace
+resources from the existing bridging pipeline for compatibility but does not
+persist or retrieve them yet; tell the user. After writing cloud configuration,
+skip the remaining local-mode guidance and go to the verify gate.
+
+For **This device**, write `MEMU_MEMORY_MODE=local` and collect the settings
+below. "This device" describes memory storage; it is fully offline only when
+the embedding provider is local too:
 
 | Setting | Env var | Example |
 | --- | --- | --- |
@@ -64,7 +92,7 @@ Collect from the user (or reuse values they already have):
 | Embedding provider | `MEMU_EMBED_PROVIDER` | `openai`, `jina`, `voyage`, … |
 | API key | `MEMU_API_KEY` | the key, or the name of an env var holding it |
 
-**No `MEMU_API_KEY`? Say so, then go local.** If the user has no API key to
+**No embedding `MEMU_API_KEY`? Say so, then use a local embedding server.** If the user has no API key to
 give, tell them up front what that means: memory cannot be called across
 devices — everything stays on this machine, in a local database created for
 them (SQLite, e.g. `~/.memu/memu.sqlite3`). Then configure exactly that: keep
@@ -93,6 +121,7 @@ Write them to **`~/.memu/config.env`**, which every memU command loads:
 
 ```
 MEMU_DB=/Users/<you>/.memu/memu.sqlite3
+MEMU_MEMORY_MODE=local
 MEMU_EMBED_PROVIDER=openai
 MEMU_API_KEY=<key or env-var name>
 ```
@@ -125,7 +154,7 @@ and ask the user.
 memu-codex doctor
 ```
 
-It prints the store and provider it resolved and runs a smoke-test retrieval. It
+It prints the resolved mode plus its endpoint or local store/provider, and runs a smoke-test retrieval. It
 must exit cleanly. **Zero hits is the expected result** — the store is new; you
 are testing that config resolves and the store answers, not that it has content.
 
@@ -137,7 +166,8 @@ on this working, and both fail *silently* if it is wrong.
 ## Part 2 — Register the bridging (record) task
 
 The *record* seam: a Codex scheduled task that periodically mines recent
-`~/.codex/sessions` into durable memU memory, skills, and resources.
+`~/.codex/sessions` into memU memory, skills, and resources. In cloud mode,
+workspace resources are submitted but are not currently persisted.
 
 **Do not reinvent this.** Follow the packaged procedure:
 
@@ -251,11 +281,11 @@ do not be surprised that the instruction is not in your own context yet.
 
 Report back to the user:
 
-- the store (`MEMU_DB`) and provider now in use;
+- the selected mode and its cloud endpoint or local store/provider;
 - the scheduled task's name and cron, in words (e.g. "daily at 00:00 local");
 - that the retrieval instruction is now in `~/.codex/AGENTS.md`, pointing at the
   `memu-retrieve` skill, and that it takes effect in their next Codex session.
 
 Record (Part 2) and inject (Part 3) both read `~/.memu/config.env`, so they
-provably share the store you configured in Part 1 — what the task learns tonight
+provably share the backend configured in Part 1 — what the task learns tonight
 is what retrieval finds tomorrow.

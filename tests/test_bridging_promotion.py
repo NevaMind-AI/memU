@@ -57,7 +57,7 @@ def rig(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> tuple[FakeSo
     service = FakeService()
     import memu.hosts.bridging.pipeline as pipeline
 
-    monkeypatch.setattr(pipeline, "build_service_from_env", lambda: service)
+    monkeypatch.setattr(pipeline, "build_agentic_memory_backend_from_env", lambda: service)
     return FakeSource(logs), layout, service
 
 

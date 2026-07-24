@@ -13,8 +13,9 @@ Working state is per host. Codex predates this module and keeps its original
 ``~/.memu`` working tree; every later host defaults to ``~/.memu/hosts/<host>``,
 so two hosts' bridging runs never race over one ``jobs/`` directory (the open
 issue ADR 0009 required settling before a second host shipped — see ADR 0010).
-The durable store is shared regardless: every host reads ``~/.memu/config.env``,
-which is the point — what one host's sessions taught memU, another host retrieves.
+The durable backend is shared regardless: every host reads
+``~/.memu/config.env``, which is the point — what one host's sessions taught
+memU, another host retrieves.
 """
 
 from __future__ import annotations
@@ -201,28 +202,38 @@ def _proxy_hint(base_url: str) -> str | None:
 
 
 async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
-    """Prove config resolves and the store answers — the install guide's verify gate.
+    """Prove config resolves and the selected backend answers.
 
     Deliberately exercises the same call the inject hook will, so a green doctor
-    means the hook's retrieval works, not merely that some store opened.
+    means the hook's retrieval works, not merely that some local store opened.
     """
-    from memu.env import CONFIG_ENV, embedding_provider, env
+    from memu.env import CONFIG_ENV, cloud_base_url, embedding_provider, env, memory_mode
 
     try:
+        mode = memory_mode()
         result = await retrieval.retrieve("smoke test")
     except Exception as exc:
         if os.environ.get("MEMU_DEBUG") == "1":
             raise
         print(f"error: {exc} (set MEMU_DEBUG=1 for a traceback)", file=sys.stderr)
         if _smells_like_transport(exc):
-            hint = _proxy_hint(env("MEMU_BASE_URL", "") or "")
+            try:
+                target = cloud_base_url() if memory_mode() == "cloud" else (env("MEMU_BASE_URL", "") or "")
+            except Exception:
+                target = ""
+            hint = _proxy_hint(target)
             if hint:
                 print(hint, file=sys.stderr)
         return 1
     found = sum(len(result.get(layer, [])) for layer in ("segments", "files", "resources"))
     print(f"config    {os.path.expanduser(CONFIG_ENV)}")
-    print(f"store     {env('MEMU_DB')}")
-    print(f"provider  {embedding_provider()}")
+    print(f"mode      {mode}")
+    if mode == "cloud":
+        print(f"endpoint  {cloud_base_url()}")
+        print("resources accepted but not currently persisted by memU Cloud")
+    else:
+        print(f"store     {env('MEMU_DB')}")
+        print(f"provider  {embedding_provider()}")
     print(f"retrieval ok ({found} hit(s) for a smoke-test query; 0 is fine on a new store)")
     return 0
 
@@ -279,7 +290,7 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     )
     p.set_defaults(handler=bind(_cmd_verify_resources))
 
-    p = sub.add_parser("doctor", help="Verify MEMU_* config resolves and the store is reachable")
+    p = sub.add_parser("doctor", help="Verify MEMU_* config resolves and the selected memory backend is reachable")
     p.set_defaults(handler=bind(_cmd_doctor))
 
     p = sub.add_parser("docs", help="Print a packaged agent-facing guide")

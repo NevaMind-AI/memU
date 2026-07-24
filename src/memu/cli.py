@@ -1,10 +1,10 @@
 """Command-line interface for memU.
 
-A thin wrapper over :class:`memu.app.MemoryService` exposing the agentic
-surface: ``retrieve`` (progressive, LLM-free), ``list-files``, and ``commit``.
-State persists across invocations through a SQLite database (``--db``, default
-``./data/memu.sqlite3``), so the CLI composes like the library: commit in one
-call, retrieve in the next.
+A thin wrapper over the configured agentic memory backend exposing
+``retrieve`` (progressive, LLM-free), ``list-files``, and ``commit``. Local
+mode persists state through a SQLite database (``--db``, default
+``./data/memu.sqlite3``); cloud mode forwards the same operations to the memU
+v4 API.
 
 Configuration mirrors the library defaults; every flag also reads a ``MEMU_*``
 environment variable so CI/agents can configure once and pass only the command.
@@ -26,7 +26,8 @@ import sys
 from collections.abc import Callable, Coroutine
 from typing import Any
 
-from memu.env import database_config, embedding_provider, env
+from memu.agentic_backend import AgenticMemoryBackend
+from memu.env import build_agentic_memory_backend_from_env, embedding_provider, env
 
 
 def _env(name: str, default: str) -> str:
@@ -36,7 +37,7 @@ def _env(name: str, default: str) -> str:
 
 
 def _add_common_options(parser: argparse.ArgumentParser) -> None:
-    group = parser.add_argument_group("service options (env var in parens)")
+    group = parser.add_argument_group("local service options (env var in parens; ignored in cloud mode)")
     group.add_argument(
         "--provider",
         default=embedding_provider(),
@@ -65,11 +66,7 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="Print the raw JSON response")
 
 
-def _build_service(args: argparse.Namespace) -> Any:
-    # Imported lazily so `memu --help` stays fast and dependency errors surface
-    # only when a command actually runs.
-    from memu.app import MemoryService
-
+def _build_backend(args: argparse.Namespace) -> AgenticMemoryBackend:
     profile: dict[str, Any] = {"provider": args.provider}
     if args.embed_model:
         profile["embed_model"] = args.embed_model
@@ -77,9 +74,9 @@ def _build_service(args: argparse.Namespace) -> Any:
         profile["base_url"] = args.base_url
     if args.api_key:
         profile["api_key"] = args.api_key
-    return MemoryService(
-        embedding_profiles={"default": profile},
-        database_config=database_config(args.db),
+    return build_agentic_memory_backend_from_env(
+        local_embedding_profile=profile,
+        local_database=args.db,
     )
 
 
@@ -88,15 +85,15 @@ def _print_json(payload: Any) -> None:
 
 
 async def _cmd_retrieve(args: argparse.Namespace) -> int:
-    service = _build_service(args)
-    result = await service.progressive_retrieve(args.query)
+    backend = _build_backend(args)
+    result = await backend.progressive_retrieve(args.query)
     _print_json(result)
     return 0
 
 
 async def _cmd_list_files(args: argparse.Namespace) -> int:
-    service = _build_service(args)
-    result = await service.list_all_recall_files()
+    backend = _build_backend(args)
+    result = await backend.list_all_recall_files()
     if args.json:
         _print_json(result)
         return 0
@@ -116,10 +113,11 @@ async def _cmd_commit(args: argparse.Namespace) -> int:
             print(f"error: no such file: {path}", file=sys.stderr)
             return 2
         payload = json.loads(path.read_text(encoding="utf-8"))
-    service = _build_service(args)
-    result = await service.commit_results(
+    backend = _build_backend(args)
+    result = await backend.commit_results(
         recall_files=payload.get("recall_files"),
         resource=payload.get("resource"),
+        user=payload.get("user"),
     )
     if args.json:
         _print_json(result)

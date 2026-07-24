@@ -22,21 +22,21 @@ import os
 from pathlib import Path
 from typing import Any
 
-from memu.env import build_service_from_env
+from memu.env import build_agentic_memory_backend_from_env
 from memu.hosts.bridging.layout import BASE_DIR, TRACK_DIRS
 from memu.hosts.bridging.recall_files import recall_file_path
 
 
 async def retrieve(query: str, where: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Retrieve against the configured store. Returns ``segments``/``files``/``resources``.
+    """Retrieve against the configured backend. Returns ``segments``/``files``/``resources``.
 
     Embeddings are already stripped from the hits, so the result is safe to print.
     :func:`_shape_for_agent` then reshapes the raw store records into the
     progressive form the standing instruction promises (see
     :mod:`memu.hosts.instruction`).
     """
-    service = build_service_from_env()
-    result: dict[str, Any] = await service.progressive_retrieve(query, where=where)
+    backend = build_agentic_memory_backend_from_env()
+    result: dict[str, Any] = await backend.progressive_retrieve(query, where=where)
     return _shape_for_agent(result)
 
 

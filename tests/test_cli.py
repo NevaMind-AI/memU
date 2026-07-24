@@ -7,10 +7,13 @@ handlers.
 
 from __future__ import annotations
 
+import json
 import pathlib
+from typing import Any
 
 import pytest
 
+from memu import cli
 from memu.cli import build_parser, main
 from memu.env import database_config
 
@@ -49,3 +52,55 @@ def test_database_config_dispatch(tmp_path: pathlib.Path) -> None:
 def test_commit_missing_payload_exits_2(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["commit", "/definitely/not/a/payload.json"]) == 2
     assert "no such file" in capsys.readouterr().err
+
+
+def test_commit_forwards_user_and_resources(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {
+        "user": {"user_id": "u1", "agent_id": "a1"},
+        "recall_files": [{"name": "profile"}],
+        "resource": [{"path": "/workspace/notes.md"}],
+    }
+    path = tmp_path / "payload.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    received: dict[str, Any] = {}
+
+    class Backend:
+        async def commit_results(self, **kwargs: Any) -> dict[str, Any]:
+            received.update(kwargs)
+            return {"recall_files": [], "resources": []}
+
+    monkeypatch.setattr(cli, "build_agentic_memory_backend_from_env", lambda **kwargs: Backend())
+
+    assert main(["commit", str(path)]) == 0
+    assert received == {
+        "recall_files": payload["recall_files"],
+        "resource": payload["resource"],
+        "user": payload["user"],
+    }
+
+
+def test_retrieve_and_list_files_use_selected_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls: list[tuple[str, Any]] = []
+
+    class Backend:
+        async def progressive_retrieve(self, query: str) -> dict[str, Any]:
+            calls.append(("retrieve", query))
+            return {"segments": [], "files": [], "resources": []}
+
+        async def list_all_recall_files(self) -> dict[str, Any]:
+            calls.append(("list", None))
+            return {"categories": []}
+
+    backend = Backend()
+    monkeypatch.setattr(cli, "build_agentic_memory_backend_from_env", lambda **kwargs: backend)
+
+    assert main(["retrieve", "tea"]) == 0
+    assert main(["list-files"]) == 0
+    assert calls == [("retrieve", "tea"), ("list", None)]
+    assert "0 recall file(s)" in capsys.readouterr().out

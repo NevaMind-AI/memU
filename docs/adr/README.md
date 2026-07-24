@@ -11,3 +11,4 @@
 - [0009: Packaging the Codex Integration — pip, a CLI Seam, and One Config Loader](0009-codex-packaging-cli-and-config.md)
 - [0010: Multi-Host Adapters — Claude Code, Cursor, OpenClaw, and Hermes](0010-multi-host-adapters.md)
 - [0011: A Generic Host Adapter — Detect First, Then Bind What Works](0011-generic-host-adapter.md)
+- [0012: Cloud-Backed Memory Behind the Existing CLI](0012-cloud-backed-agentic-backend.md)
