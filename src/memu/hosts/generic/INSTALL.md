@@ -52,11 +52,41 @@ memU cannot integrate with this agent yet, and no amount of setup changes that.
 
 ---
 
-## Part 1 — Configure the store and provider
+## Part 1 — Configure the memory backend
 
 If another memU host adapter is already set up on this machine,
 `~/.memu/config.env` exists and **must be reused as is**; skip to the verify
-gate. Otherwise collect from the user:
+gate. An existing file without `MEMU_MEMORY_MODE` is local mode for backward
+compatibility.
+
+Otherwise ask the user to choose once:
+
+- **MemU Cloud** — memory and embeddings are hosted; requires a memU API key.
+- **This device** — use the existing local database and embedding configuration.
+
+For **MemU Cloud**, ask the user to provide their memU API key. If they do not
+have one, direct them to [memu.so](https://memu.so) to register and create one,
+then wait for the key before continuing. Write:
+
+```env
+MEMU_MEMORY_MODE=cloud
+MEMU_CLOUD_API_KEY=<memu-api-key>
+```
+
+The production endpoint defaults to `https://api.memu.so/api/v4/memory/`. The
+key is plaintext in this file: tell the user
+and set user-only permissions (`chmod 600 ~/.memu/config.env` on POSIX; restrict
+the file to the current user on Windows). Do not reuse `MEMU_API_KEY`, which is
+for local embedding providers.
+
+Cloud currently persists memory and skill recall files. It accepts workspace
+resources from the existing bridging pipeline for compatibility but does not
+persist or retrieve them yet; tell the user. After writing cloud configuration,
+skip the remaining local-mode guidance and go to the verify gate.
+
+For **This device**, write `MEMU_MEMORY_MODE=local` and collect the settings
+below. "This device" describes memory storage; it is fully offline only when
+the embedding provider is local too:
 
 | Setting | Env var | Example |
 | --- | --- | --- |
@@ -64,7 +94,7 @@ gate. Otherwise collect from the user:
 | Embedding provider | `MEMU_EMBED_PROVIDER` | `openai`, `jina`, `voyage`, … |
 | API key | `MEMU_API_KEY` | the key, or the name of an env var holding it |
 
-**No `MEMU_API_KEY`? Say so, then go local.** If the user has no API key to
+**No embedding `MEMU_API_KEY`? Say so, then use a local embedding server.** If the user has no API key to
 give, tell them up front what that means: memory cannot be called across
 devices — everything stays on this machine, in a local database created for
 them (SQLite, e.g. `~/.memu/memu.sqlite3`). Then configure exactly that: keep
@@ -106,15 +136,17 @@ and ask the user.
 memu-agent doctor
 ```
 
-Must exit cleanly. Zero hits on the smoke-test retrieval is expected on a new
-store.
+It prints the resolved mode plus its endpoint or local store/provider and must
+exit cleanly. Zero hits on the smoke-test retrieval is expected on a new
+backend.
 
 ---
 
 ## Part 2 — Memorization (only if detect said it works)
 
 Register the bridging task against the session directory detect found. Follow
-the packaged procedure:
+the packaged procedure. In cloud mode, workspace resources are submitted by the
+same pipeline but are not currently persisted:
 
 ```
 memu-agent docs task
@@ -176,9 +208,9 @@ Report back to the user:
 
 - **which seams work**: memorization (and from which session directory),
   retrieval (and into which instruction file), both, or neither;
-- the store (`MEMU_DB`) and provider in use;
+- the selected mode and its cloud endpoint or local store/provider;
 - what was scheduled and where the instruction landed, for the seams that work.
 
-Both seams read `~/.memu/config.env`, so they provably share one store — and
+Both seams read `~/.memu/config.env`, so they provably share one backend — and
 they share it with every dedicated adapter too: what this agent's sessions
 teach memU, every other integrated agent retrieves.

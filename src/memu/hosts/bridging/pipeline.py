@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from memu.env import build_service_from_env
+from memu.env import build_agentic_memory_backend_from_env
 from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging.instructions import prepare_instruction_jobs
 from memu.hosts.bridging.layout import TRACK_DIRS, Layout
@@ -52,8 +52,8 @@ async def prepare(
     # "state as of the last commit". Re-snapshotting on every prepare would
     # absorb files a crashed run wrote but never committed, making them
     # undiffable — and therefore uncommittable — forever.
-    service = build_service_from_env()
-    result = await service.list_all_recall_files()
+    backend = build_agentic_memory_backend_from_env()
+    result = await backend.list_all_recall_files()
     for recall_file in result["categories"]:
         subdir = TRACK_DIRS.get(recall_file.get("track"))
         if subdir is None:
@@ -100,8 +100,8 @@ async def commit(layout: Layout) -> dict[str, Any]:
     recall_files = [read_recall_file(path, subdir_track[path.relative_to(layout.base).parts[0]]) for path in changed]
     resources = read_resources(layout.resources)
 
-    service = build_service_from_env()
-    result: dict[str, Any] = await service.commit_results(recall_files=recall_files, resource=resources)
+    backend = build_agentic_memory_backend_from_env()
+    result: dict[str, Any] = await backend.commit_results(recall_files=recall_files, resource=resources)
 
     snapshot_tracked(layout.base, layout.track_dirs, layout.memory_manifest)
     pending = layout.session_manifest_pending

@@ -1,14 +1,18 @@
 ---
 name: create-memu-bridging-task
-description: Register a scheduled job that bridges an agent's recent sessions into durable memU memory, skills, and resources via the generic memu-agent adapter. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
+description: Register a scheduled job that bridges recent sessions into memU memory, skills, and resource submissions via the generic adapter. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task (generic `memu-agent`)
 
 Use this when the user asks to **set up (or change) the recurring memU
 "bridging" task** for an agent that has no dedicated memU adapter — the job
-that periodically turns what the agent recently did into durable memU memory
-files, skills, and resource records.
+that periodically turns what the agent recently did into memU memory files,
+skills, and resource submissions.
+
+Memory and skills are durable in both modes. In cloud mode, the current service
+accepts workspace resources from this unchanged pipeline but does not persist or
+retrieve them yet.
 
 Your goal is to **register a recurring headless run** whose prompt is the
 three-step pipeline below. You are not running the pipeline now.

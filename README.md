@@ -78,11 +78,13 @@ memU runs as a sidecar to a desktop agent (ADR 0008/0009/0010), one binary per h
 
 For agents without a dedicated binary, `memu-agent detect` probes the machine and reports per agent whether **memorization** works (a recognizable session log exists) and whether **retrieval** works (an instruction file exists to patch) — then the same verbs run against what it found.
 
-All hosts share one store and one embedding space via `~/.memu/config.env` — what one host's sessions taught memU, another host retrieves.
+All hosts share one configured memory backend via `~/.memu/config.env` — local
+or MemU Cloud. What one host's sessions taught memU, another host retrieves.
 
-Installation is the one-message setup at the top of this README. [SKILL.md](SKILL.md) is the routing skill it hands your agent: install the package, identify which host you are (falling back to `memu-agent detect` for anything without a dedicated adapter), print that host's packaged install guide (`<binary> docs install`), and follow it — configure the store, register the scheduled bridging task, patch the instruction file, each step behind a verify gate — then report which seams (memorization / retrieval) are now active.
+Installation is the one-message setup at the top of this README. [SKILL.md](SKILL.md) is the routing skill it hands your agent: install the package, identify which host you are (falling back to `memu-agent detect` for anything without a dedicated adapter), print that host's packaged install guide (`<binary> docs install`), and follow it — configure the memory backend, register the scheduled bridging task, patch the instruction file, each step behind a verify gate — then report which seams (memorization / retrieval) are now active.
 
-Afterwards `<binary> doctor` proves the whole loop resolves: config, store, and a live retrieval.
+Afterwards `<binary> doctor` proves the whole loop resolves: config, selected
+mode, and a live retrieval.
 
 Adding another host means implementing one `TranscriptSource` (where its session logs live, how its records are shaped) plus a `HostSpec`-sized CLI — the pipeline, verbs, and instruction text are shared.
 
@@ -107,7 +109,11 @@ uvx --from memu-cli memu     # CLI via uv, no install
 
 ## Configuration
 
-Values resolve in order: process env → `~/.memu/config.env` → default. Every CLI flag has a matching variable:
+Values resolve in order: process env → `~/.memu/config.env` → default. memU
+supports Local and Cloud memory backends, selected by `MEMU_MEMORY_MODE`; an
+unset mode remains Local for backward compatibility.
+
+For Local / self-hosted installations, every CLI flag has a matching variable:
 
 | Setting | Env var | Default |
 |---|---|---|
@@ -116,6 +122,9 @@ Values resolve in order: process env → `~/.memu/config.env` → default. Every
 | API key | `MEMU_API_KEY` | the provider's env var, e.g. `OPENAI_API_KEY` |
 | Embedding model | `MEMU_EMBED_MODEL` | the provider's default |
 | Base URL | `MEMU_BASE_URL` | the provider's default |
+
+Run `<binary> doctor` to display the resolved mode and verify the same retrieval
+path the host uses.
 
 ### Storage backends
 

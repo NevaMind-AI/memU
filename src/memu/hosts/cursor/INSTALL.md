@@ -9,15 +9,15 @@
 
 Installing memU on Cursor is three parts:
 
-1. **Install memU** — a Python package, and the store + provider it writes to.
+1. **Install memU** — a Python package and the memory backend it uses.
 2. **Register the bridging task** — the scheduled job that turns recent Cursor
    agent sessions into durable memory (the *record* seam).
 3. **Patch `AGENTS.md`** — a standing instruction that tells the agent to pull
    relevant memory before answering (the *inject* seam).
 
-Parts 2 and 3 must share one store and one embedding space, or a query is
-compared against vectors written elsewhere and retrieval silently returns
-nothing. Part 1 is what makes them agree.
+Parts 2 and 3 must share one configured mode. In local mode they must also share
+one store and embedding space, or retrieval silently returns nothing. Part 1 is
+what makes them agree.
 
 **Scope note.** This adapter reads the **Cursor Agent** transcripts under
 `~/.cursor/projects/` — the CLI (`cursor-agent`) and background agents. The IDE's
@@ -36,12 +36,40 @@ This puts `memu` and **`memu-cursor`** on `PATH`. Confirm: `memu-cursor --help`.
 If it is not found, fix `PATH` now — the scheduled task in Part 2 runs from a
 bare, non-interactive environment.
 
-### 1.2 Configure the store and provider
+### 1.2 Configure the memory backend
 
-memU needs a **database** and an **LLM/embedding provider**. Both seams read this
-one config. If another memU host adapter is already set up on this machine,
-`~/.memu/config.env` exists and **must be reused as is**; skip to the verify
-gate. Otherwise collect from the user:
+If `~/.memu/config.env` already exists from another memU host, reuse it as is
+and skip to the verify gate. An existing file without `MEMU_MEMORY_MODE` is
+local mode for backward compatibility.
+
+Otherwise ask the user to choose once:
+
+- **MemU Cloud** — memory and embeddings are hosted; requires a memU API key.
+- **This device** — use the existing local database and embedding configuration.
+
+For **MemU Cloud**, ask the user to provide their memU API key. If they do not
+have one, direct them to [memu.so](https://memu.so) to register and create one,
+then wait for the key before continuing. Write:
+
+```env
+MEMU_MEMORY_MODE=cloud
+MEMU_CLOUD_API_KEY=<memu-api-key>
+```
+
+The production endpoint defaults to `https://api.memu.so/api/v4/memory/`. The
+key is plaintext in this file: tell the user
+and set user-only permissions (`chmod 600 ~/.memu/config.env` on POSIX; restrict
+the file to the current user on Windows). Do not reuse `MEMU_API_KEY`, which is
+for local embedding providers.
+
+Cloud currently persists memory and skill recall files. It accepts workspace
+resources from the existing bridging pipeline for compatibility but does not
+persist or retrieve them yet; tell the user. After writing cloud configuration,
+skip the remaining local-mode guidance and go to the verify gate.
+
+For **This device**, write `MEMU_MEMORY_MODE=local` and collect the settings
+below. "This device" describes memory storage; it is fully offline only when
+the embedding provider is local too:
 
 | Setting | Env var | Example |
 | --- | --- | --- |
@@ -49,7 +77,7 @@ gate. Otherwise collect from the user:
 | Embedding provider | `MEMU_EMBED_PROVIDER` | `openai`, `jina`, `voyage`, … |
 | API key | `MEMU_API_KEY` | the key, or the name of an env var holding it |
 
-**No `MEMU_API_KEY`? Say so, then go local.** If the user has no API key to
+**No embedding `MEMU_API_KEY`? Say so, then use a local embedding server.** If the user has no API key to
 give, tell them up front what that means: memory cannot be called across
 devices — everything stays on this machine, in a local database created for
 them (SQLite, e.g. `~/.memu/memu.sqlite3`). Then configure exactly that: keep
@@ -91,16 +119,18 @@ and ask the user.
 memu-cursor doctor
 ```
 
-Must exit cleanly. Zero hits on the smoke-test retrieval is expected on a new
-store.
+It prints the resolved mode plus its endpoint or local store/provider and must
+exit cleanly. Zero hits on the smoke-test retrieval is expected on a new
+backend.
 
 ---
 
 ## Part 2 — Register the bridging (record) task
 
 The *record* seam: a scheduled job that mines recent transcripts under
-`~/.cursor/projects/*/agent-transcripts/` into durable memU memory, skills, and
-resources. **Do not reinvent this** — follow the packaged procedure:
+`~/.cursor/projects/*/agent-transcripts/` into memU memory, skills, and
+resources. In cloud mode, workspace resources are submitted but are not
+currently persisted. **Do not reinvent this** — follow the packaged procedure:
 
 ```
 memu-cursor docs task
@@ -154,6 +184,6 @@ AGENTS.md.
 
 ## Done
 
-Report back to the user: the store and provider in use; the scheduled job and its
+Report back to the user: the selected mode and its cloud endpoint or local store/provider; the scheduled job and its
 schedule in words; which projects got the `AGENTS.md` instruction. Record and
-inject both read `~/.memu/config.env`, so they provably share one store.
+inject both read `~/.memu/config.env`, so they provably share one backend.

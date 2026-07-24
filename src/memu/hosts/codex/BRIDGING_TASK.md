@@ -1,13 +1,17 @@
 ---
 name: create-memu-bridging-task
-description: Create a Codex scheduled task that bridges the agent's recent Codex sessions into durable memU memory, skills, and resources. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
+description: Create a Codex scheduled task that bridges recent Codex sessions into memU memory, skills, and resource submissions. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task
 
 Use this when the user asks to **set up (or change) the recurring memU "bridging"
 task** — the job that periodically turns what the agent recently did in its Codex
-sessions into durable memU memory files, skills, and resource records.
+sessions into memU memory files, skills, and resource submissions.
+
+Memory and skills are durable in both modes. In cloud mode, the current service
+accepts workspace resources from this unchanged pipeline but does not persist or
+retrieve them yet.
 
 Your goal is to **create a Codex scheduled task** whose recurring prompt runs the
 three-step pipeline below. You are not running the pipeline now; you are
@@ -48,7 +52,7 @@ instruct the agent to do it, not shell out to a script.
   memu-codex doctor
   ```
 
-  It prints the store and provider in use and runs a smoke-test retrieval. If it
+  It prints the selected mode and endpoint or local store/provider, then runs a smoke-test retrieval. If it
   fails, stop — do `INSTALL.md` Part 1 first. Do not proceed with a broken store:
   the task would happily run and write nowhere useful.
 
