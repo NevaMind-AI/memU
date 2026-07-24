@@ -20,9 +20,17 @@
 
 ---
 
-memU is a lightweight, agent-driven memory system that gives users a shared LLM wiki across sessions, agents, and devices. Its core memory logic is only 500 lines — compact enough to inspect, understand, and adapt. It uses embedding-only retrieval with fully pluggable storage and embedding infrastructure.
+memU is a lightweight, agent-driven memory system that gives users a shared LLM wiki across sessions, agents, and devices. It automatically distills reusable skills from the user's agent sessions. Its core memory logic is only 500 lines — compact enough to inspect, understand, and adapt. It uses embedding-only retrieval with fully pluggable storage and embedding infrastructure.
 
-**Installation is agent-driven.** The guides are written for the agent, not for you. One message is the whole setup — tell your agent:
+**Installation is agent-driven.** The guides are written for the agent, not for you. Choose Cloud or Local, then send your agent one message:
+
+**Cloud**
+
+> Read https://memu.pro/SKILL.md and follow it to install memU.
+
+Sign in at [memu.so](https://memu.so) to view your memory files.
+
+**Local / self-hosted**
 
 > Read https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md and follow it to install memU.
 
@@ -30,7 +38,7 @@ It works for Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy — and any
 
 ## Quick start
 
-Your memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
+With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
 
 Once installed, your agent retrieves relevant memory automatically before answering. To retrieve manually, run the adapter for your host:
 
