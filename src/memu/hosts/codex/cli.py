@@ -54,9 +54,6 @@ SPEC = HostSpec(
     session_help="Codex session log",
     instruction_path=AGENTS_MD,
     skills_dir=SKILLS_DIR,
-    # Codex shipped before per-host working trees; its ~/.memu layout is a
-    # compatibility contract with already-scheduled bridging prompts (ADR 0010).
-    base_dir="~/.memu",
 )
 
 

@@ -148,7 +148,7 @@ memu-codex docs task
 It is authoritative. In summary, you will settle a cron schedule with the user
 (default: every hour, `0 * * * *`) and create a Codex scheduled task whose
 recurring prompt is the three-step block that document gives you verbatim —
-`memu-codex prepare`, then the agent works through `~/.memu/jobs/*.txt` in order,
+`memu-codex prepare`, then the agent works through `~/.memu/hosts/codex/jobs/*.txt` in order,
 then `memu-codex commit`.
 
 Nothing in that prompt is machine-specific. If you find yourself substituting an
