@@ -61,7 +61,7 @@ compatibility.
 
 Otherwise ask the user to choose once:
 
-- **MemU Cloud** — memory and embeddings are hosted; requires a memU project API key.
+- **MemU Cloud** — memory and embeddings are hosted; requires a memU API key.
 - **This device** — use the existing local database and embedding configuration.
 
 For **MemU Cloud**, ask the user to provide their memU API key. If they do not
