@@ -4,7 +4,7 @@
 
 # memU
 
-### Personal memory, stored as files
+### Personal memory, stored as an LLM wiki
 
 **Across Sessions. Across Agents. Across Devices.**
 
@@ -20,7 +20,7 @@
 
 ---
 
-memU is a 500-line memory system for AI agents. Agents write what's worth keeping as Markdown; memU stores it, embeds it, and retrieves ranked context in a single call — embeddings are the only model calls it makes. The entire memory logic lives in [`agentic.py`](src/memu/app/agentic.py) + [`service.py`](src/memu/app/service.py); everything else is pluggable storage and embedding transport.
+memU is a lightweight, agent-driven memory system that gives users a shared LLM wiki across sessions, agents, and devices. Its core memory logic is only 500 lines — compact enough to inspect, understand, and adapt. It uses embedding-only retrieval with fully pluggable storage and embedding infrastructure.
 
 **Installation is agent-driven.** The guides are written for the agent, not for you. One message is the whole setup — tell your agent:
 
@@ -28,82 +28,24 @@ memU is a 500-line memory system for AI agents. Agents write what's worth keepin
 
 It works for Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy — and any other agent, via detection. Details in [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
 
-Want to follow the latest development instead? Install from the newest source (git `main`) — tell your agent:
-
-> Read https://raw.githubusercontent.com/NevaMind-AI/MemU/main/INSTALL-LATEST.md and follow it to install the latest memU.
-
 ## Quick start
 
-```python
-from memu.app import MemoryService
+memU keeps one shared memory store, configured by `MEMU_DB` in `~/.memu/config.env` (typically `~/.memu/memu.sqlite3` for local SQLite). Human-readable memory and skill Markdown files are mirrored under:
 
-service = MemoryService(
-    database_config={"metadata_store": {"provider": "sqlite", "dsn": "sqlite:///memu.sqlite3"}},
-)
+- Codex: `~/.memu/memory/` and `~/.memu/skill/`
+- Other hosts: `~/.memu/hosts/<host>/memory/` and `~/.memu/hosts/<host>/skill/`
 
-# 1. Persist agent-prepared memory: recall files (memory/skill tracks) + resources
-await service.commit_results(
-    recall_files=[
-        {
-            "name": "Profile",
-            "track": "memory",
-            "description": "who the user is",
-            "content": "# Profile\n- prefers dark roast coffee\n- ships on Fridays",
-        },
-        {
-            "name": "deploy-checklist",
-            "track": "skill",
-            "description": "how to deploy this repo",
-            "content": "1. run tests\n2. tag\n3. push",
-        },
-    ],
-    resource=[{"path": "/abs/path/notes.md", "description": "meeting notes from the launch review"}],
-)
-
-# 2. See what is stored, across every track
-files = await service.list_all_recall_files()
-
-# 3. Single-shot embedding retrieval over segments / files / resources
-context = await service.progressive_retrieve("What should I know about this user's launch preferences?")
-```
-
-Or straight from the terminal — no code:
+Once installed, your agent retrieves relevant memory automatically before answering. To retrieve manually, run the adapter for your host:
 
 ```bash
-export OPENAI_API_KEY=sk-...    # embedding API key — the only model calls memU makes
-
-npx memu-cli commit results.json     # {"recall_files": [...], "resource": [...]}
-npx memu-cli list-files
-npx memu-cli retrieve "What should I know about this user's launch preferences?"
+memu-codex retrieve "What should I remember about this project?"
+# or: memu-claude-code / memu-cursor / memu-openclaw / memu-hermes / memu-workbuddy / memu-agent
 ```
-
-State persists in a local SQLite database (`./data/memu.sqlite3` by default), so commit in one invocation and retrieve in the next.
 
 ## How it works
 
 ![memU memory system architecture](assets/structure-v2.png)
 
-### The data model
-
-Memory is a set of **recall files** — one Markdown document per topic (`track="memory"`) or per learned skill (`track="skill"`). Committing a file also writes its search index:
-
-| Record | What it is | How it's embedded |
-|---|---|---|
-| **RecallFile** | The Markdown document itself (`name`, `track`, `description`, `content`) | `name: description`, once at creation |
-| **RecallFileSegment** | Searchable slices of a file | memory track: one per content line (headings skipped); skill track: one `name: description` segment per skill |
-| **Resource** | A raw source on disk (`url`, `caption`) | its one-line caption |
-
-Segments are reconciled on every commit: lines that disappeared are deleted, only genuinely new lines are embedded, unchanged lines keep their vectors — so re-committing a lightly edited file is nearly free.
-
-### Retrieval
-
-`progressive_retrieve(query)` embeds the query **once** and returns three ranked layers:
-
-- `segments` — the matched slices, narrowest and usually most on-point, each with a `score`
-- `files` — the documents those segments belong to (usually what you want), each scored by its best segment and carrying its linked `resource_urls`
-- `resources` — matching raw sources, for when summaries are not enough
-
-There is no intention routing, sufficiency checking, or summarization — one embedding call in, ranked context out.
 
 ## Host adapters: memory for desktop coding agents
 
@@ -130,7 +72,7 @@ Installation is the one-message setup at the top of this README. [SKILL.md](SKIL
 
 Afterwards `<binary> doctor` proves the whole loop resolves: config, store, and a live retrieval.
 
-Adding another host means implementing one `TranscriptSource` (where its session logs live, how its records are shaped) plus a `HostSpec`-sized CLI — the pipeline, verbs, and instruction text are shared (ADR 0010).
+Adding another host means implementing one `TranscriptSource` (where its session logs live, how its records are shaped) plus a `HostSpec`-sized CLI — the pipeline, verbs, and instruction text are shared.
 
 ## Installation
 
@@ -166,38 +108,6 @@ service = MemoryService(
     embedding_profiles={"default": {"provider": "jina"}},
 )
 ```
-
-### Multi-tenancy
-
-Every record carries optional scope fields (`user_id`, `agent_id` by default). Pass `user=` on writes and `where=` on reads to partition one store:
-
-```python
-await service.commit_results(recall_files=[...], user={"user_id": "alice"})
-await service.progressive_retrieve("launch preferences", where={"user_id": "alice"})
-```
-
-Need different scope fields? Supply your own model — filters are validated against it, unknown fields raise:
-
-```python
-from pydantic import BaseModel
-
-class TeamScope(BaseModel):
-    team_id: str | None = None
-    user_id: str | None = None
-
-service = MemoryService(user_config={"model": TeamScope})
-```
-
-## Development
-
-```bash
-make install     # uv sync + pre-commit hooks
-make test        # pytest with coverage
-make check       # lock check, pre-commit, mypy, deptry
-```
-
-Architecture decisions live in [`docs/adr/`](docs/adr/) — notably tracked workspace memorization (ADR 0006), the segment/file/resource retrieval lines (ADR 0007), and the host-adapter seams (ADR 0008/0009).
-
 ## License
 
 Apache-2.0
