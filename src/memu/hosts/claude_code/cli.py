@@ -42,6 +42,8 @@ SPEC = HostSpec(
     session_help="Claude Code session log (one project dir per escaped cwd)",
     instruction_path=CLAUDE_MD,
     skills_dir=SKILLS_DIR,
+    schedule_command="claude -p {prompt}",
+    needs_headless_auth=True,
 )
 
 
