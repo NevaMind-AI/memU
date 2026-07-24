@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import platform
 import sys
 import urllib.request
 from collections.abc import Callable, Coroutine
@@ -74,6 +75,28 @@ class HostSpec:
     """memU working tree. Empty means the per-host default ``~/.memu/hosts/<host>``;
     Codex overrides this with the pre-multi-host ``~/.memu`` it has always used."""
 
+    schedule_command: str = ""
+    """The headless agent invocation the bridging task runs, as a template with a
+    ``{prompt}`` placeholder — ``claude -p {prompt}``, ``codex exec {prompt}``. The
+    Windows ``schedule`` helper turns this into the scheduled task's wrapper, and
+    treats the first token as the agent binary to resolve on ``PATH``. Empty means
+    the host has no Windows scheduling wired yet, so ``schedule`` refuses rather
+    than guess. Unix scheduling is unaffected — cron/launchd stay doc-driven and
+    never read this field."""
+
+    needs_headless_auth: bool = False
+    """Whether the scheduled agent needs a headless credential distinct from any
+    desktop login (memU#538 Symptom B). True for ``claude-code`` — the Desktop
+    app's login is invisible to the standalone CLI; False for hosts with a shared
+    plain-file auth (Codex's ``~/.codex/auth.json``). Drives whether ``schedule``
+    runs the ``-p`` authentication gate before registering the task."""
+
+    install_hint: str = ""
+    """Copy-pasteable command(s) for installing this host's standalone CLI on
+    Windows, shown when ``schedule install`` finds it missing (memU#538 Symptom A).
+    Host-specific data, so the shared installer never hardcodes one host's package
+    names; empty falls back to generic guidance."""
+
     extra_flags: dict[str, str] = field(default_factory=dict)
     """Reserved for host-specific flags; unused today."""
 
@@ -93,6 +116,13 @@ class HostSpec:
     @property
     def default_base_dir(self) -> str:
         return self.base_dir or f"~/.memu/hosts/{self.host}"
+
+    @property
+    def task_name(self) -> str:
+        """Canonical scheduled-task name — stable across install/uninstall so the
+        task is addressable by name (memU#539). Windows only today; Unix keeps its
+        existing crontab/launchd identity untouched."""
+        return f"memu-bridging-{self.host}"
 
 
 def _layout(spec: HostSpec, args: argparse.Namespace) -> Layout:
@@ -232,6 +262,35 @@ async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
     return 0
 
 
+async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
+    """Register/inspect the bridging task on Windows Task Scheduler.
+
+    Only registered for hosts that set ``schedule_command`` (those that bridge via an
+    OS scheduler), so it never reaches a host that has its own. Windows-only by design
+    (memU#538/#539); on macOS/Linux it just points at the unchanged cron/launchd
+    registration in ``BRIDGING_TASK.md`` and touches neither.
+    """
+    system = platform.system()
+    if system != "Windows":
+        print(
+            f"{spec.display} bridging on {system or 'this OS'} is scheduled with cron or launchd — "
+            f"follow that section of `{spec.binary} docs task`. The `schedule` helper automates "
+            "Windows Task Scheduler only."
+        )
+        return 0
+
+    from memu.hosts import scheduling
+
+    layout = _layout(spec, args)
+    if args.action == "install":
+        return scheduling.install(spec, layout, interval_minutes=args.interval)
+    if args.action == "uninstall":
+        return scheduling.uninstall(spec, layout)
+    if args.action == "status":
+        return scheduling.status(spec, layout)
+    return scheduling.verify(spec, layout)
+
+
 def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=spec.binary,
@@ -289,6 +348,22 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
         help="install: the setup guide; task: the bridging-task procedure; uninstall: the removal guide",
     )
     p.set_defaults(handler=bind(_cmd_docs))
+
+    # Windows-only automation of the bridging task's registration — registered only
+    # for hosts that bridge via an OS scheduler, which is exactly the ones that set
+    # `schedule_command`. Hosts with their own scheduler (Codex, OpenClaw, WorkBuddy)
+    # never set it, so they never advertise a `schedule` verb they couldn't honour.
+    if spec.schedule_command:
+        p = with_base(
+            sub.add_parser("schedule", help=f"Register the {spec.display} bridging task (Windows Task Scheduler)")
+        )
+        p.add_argument(
+            "action",
+            choices=("install", "uninstall", "status", "verify"),
+            help="install/uninstall the task, show its status, or verify it can run",
+        )
+        p.add_argument("--interval", type=int, default=60, help="Minutes between runs, for install (default: 60)")
+        p.set_defaults(handler=bind(_cmd_schedule))
 
     if spec.register_extra is not None:
         spec.register_extra(sub)

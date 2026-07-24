@@ -96,6 +96,52 @@ Report back: where the schedule was registered (crontab/launchd), and the cron i
 words (e.g. "hourly at :00 local time"). Mention that the first run only has
 work to do once there are new Claude Code sessions since the last run.
 
+## Windows (Task Scheduler)
+
+Steps 2–3 above are cron/launchd — Unix only. **On Windows, do not hand-write a
+`schtasks` entry.** The pipeline prompt is ~1000 quoted characters and `schtasks
+/TR` splits it on the first space (memU#539); a bare scheduled process also can't
+authenticate a desktop-only `claude` (memU#538). Run the helper instead — it does
+the whole registration deterministically, so every install is identical and
+removable by name:
+
+```
+memu-claude-code schedule install     # register the hourly task
+memu-claude-code schedule verify      # prove it resolves + authenticates
+memu-claude-code schedule status      # last run / next run
+memu-claude-code schedule uninstall   # remove it
+```
+
+`install` writes the prompt to a file plus a small PowerShell wrapper that reads
+it (nothing long ever touches the command line), bakes in the absolute path to
+`claude`, and registers a task named `\memU\memu-bridging-claude-code` under an
+**S4U** principal — it runs whether or not you're logged in, windowless, and
+catches up a run missed while the machine was off. `--interval <minutes>` changes
+the cadence (default 60).
+
+Because the scheduled run needs a standalone, headless-authenticated `claude`,
+`install` **refuses with guidance** if `claude` isn't on `PATH` or can't
+authenticate without a browser. That is the memU#538 verify gate: better to fail at
+install than to register a task that reports success and never runs.
+
+> **The credential must be persistent.** The task runs headless under an S4U
+> principal (session 0) and inherits only persistent user/machine environment and
+> your user profile — **not** a session-only `$env:` export. Use `claude
+> setup-token` (writes a token into your profile) or set `CLAUDE_CODE_OAUTH_TOKEN` /
+> `ANTHROPIC_API_KEY` as a persistent user variable (`setx`). A token exported only
+> in the current shell passes the install-time check yet leaves the task stuck on
+> "Not logged in" — the one false-positive the gate can't catch by itself.
+
+Confirm the same way Step 3 does — by filesystem traces, not the run's own
+summary: after a run, check that `~/.memu/hosts/claude-code/jobs/` timestamps and
+the session cursor advanced.
+
+> Prior art: [jshchnz/claude-code-scheduler](https://github.com/jshchnz/claude-code-scheduler),
+> the established Claude Code scheduler (per-OS backends over schtasks/launchd/cron,
+> every task namespaced under a scheduler folder). memU diverges for bridging:
+> `Register-ScheduledTask` + S4U (windowless, runs logged-out) and a prompt file,
+> since the pipeline prompt is too long for the command line.
+
 ## Notes
 
 - **Leftovers run before prepare.** Job files already on disk when the run
