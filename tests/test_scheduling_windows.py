@@ -114,10 +114,15 @@ def test_schedule_verb_is_wired() -> None:
         parser.parse_args(["schedule", "frobnicate"])
 
 
-def test_schedule_refuses_host_without_a_command(capsys: pytest.CaptureFixture[str]) -> None:
+def test_unwired_host_has_no_schedule_verb() -> None:
+    # A host with no schedule_command — e.g. one that uses its own scheduler (Codex,
+    # OpenClaw, WorkBuddy) — must not advertise a `schedule` verb at all, not even a
+    # refusing stub. argparse rejects it as an unknown command.
     unwired = dataclasses.replace(CLAUDE, schedule_command="")
-    assert run(unwired, ["schedule", "status"]) == 2
-    assert "no scheduled-run command" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        build_parser(unwired).parse_args(["schedule", "status"])
+    # ...while a wired host does have it.
+    assert build_parser(CLAUDE).parse_args(["schedule", "status"]).action == "status"
 
 
 def test_schedule_points_at_cron_off_windows(

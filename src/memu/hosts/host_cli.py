@@ -259,13 +259,11 @@ async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
 async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
     """Register/inspect the bridging task on Windows Task Scheduler.
 
-    Windows-only by design (memU#538/#539). On macOS/Linux the cron/launchd
-    registration in ``BRIDGING_TASK.md`` is unchanged, and this verb only points at
-    it — it never touches those schedulers.
+    Only registered for hosts that set ``schedule_command`` (those that bridge via an
+    OS scheduler), so it never reaches a host that has its own. Windows-only by design
+    (memU#538/#539); on macOS/Linux it just points at the unchanged cron/launchd
+    registration in ``BRIDGING_TASK.md`` and touches neither.
     """
-    if not spec.schedule_command:
-        print(f"error: {spec.display} has no scheduled-run command wired up; nothing to register", file=sys.stderr)
-        return 2
     system = platform.system()
     if system != "Windows":
         print(
@@ -345,19 +343,21 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     )
     p.set_defaults(handler=bind(_cmd_docs))
 
-    # Windows-only automation of the bridging task's registration. Hosts opt in by
-    # setting `schedule_command`; the verb is always present (so its help explains
-    # itself) but refuses on hosts that haven't, and points at cron/launchd on Unix.
-    p = with_base(
-        sub.add_parser("schedule", help=f"Register the {spec.display} bridging task (Windows Task Scheduler)")
-    )
-    p.add_argument(
-        "action",
-        choices=("install", "uninstall", "status", "verify"),
-        help="install/uninstall the task, show its status, or verify it can run",
-    )
-    p.add_argument("--interval", type=int, default=60, help="Minutes between runs, for install (default: 60)")
-    p.set_defaults(handler=bind(_cmd_schedule))
+    # Windows-only automation of the bridging task's registration — registered only
+    # for hosts that bridge via an OS scheduler, which is exactly the ones that set
+    # `schedule_command`. Hosts with their own scheduler (Codex, OpenClaw, WorkBuddy)
+    # never set it, so they never advertise a `schedule` verb they couldn't honour.
+    if spec.schedule_command:
+        p = with_base(
+            sub.add_parser("schedule", help=f"Register the {spec.display} bridging task (Windows Task Scheduler)")
+        )
+        p.add_argument(
+            "action",
+            choices=("install", "uninstall", "status", "verify"),
+            help="install/uninstall the task, show its status, or verify it can run",
+        )
+        p.add_argument("--interval", type=int, default=60, help="Minutes between runs, for install (default: 60)")
+        p.set_defaults(handler=bind(_cmd_schedule))
 
     if spec.register_extra is not None:
         spec.register_extra(sub)
