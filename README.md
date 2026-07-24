@@ -24,21 +24,21 @@ memU is a lightweight, agent-driven memory system that gives users a shared LLM 
 
 ## Quick start
 
-**Installation is agent-driven.** The guides are written for the agent, not for you. Choose Cloud or Local, then send your agent one message:
+memU works with Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy, and more. See [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
 
-**Cloud (coming soon)**
+Choose Cloud or Local, then send the corresponding message to your agent.
 
-> Read https://memu.pro/SKILL.md and follow it to install memU.
+### Cloud (coming soon)
 
-Use the same memory across devices — completely free, with unlimited use. Sign in at [memu.so](https://memu.so) to view your memory files.
+**Cross-device · Free · Unlimited · [View online](https://memu.so)**
 
-**Local / self-hosted**
+> Read [https://memu.pro/SKILL.md](https://memu.pro/SKILL.md) and follow it to install memU.
 
-> Read https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md and follow it to install memU.
+### Local / self-hosted
 
-Runs on one device only and does not sync across devices. You provide an embedding API key.
+**Private · Single-device · Embedding key required**
 
-It works for Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy — and any other agent, via detection. Details in [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
+> Read [https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md](https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md) and follow it to install memU.
 
 ## How it works
 
