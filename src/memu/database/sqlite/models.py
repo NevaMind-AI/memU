@@ -13,7 +13,6 @@ from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
 from memu.database.models import (
     RecallFile,
-    RecallFileResource,
     RecallFileSegment,
     Resource,
 )
@@ -59,7 +58,7 @@ class SQLiteResourceModel(SQLiteBaseModelMixin, Resource):
 
 
 class SQLiteRecallFileModel(SQLiteBaseModelMixin, RecallFile):
-    """SQLite memory category model."""
+    """SQLite recall file model."""
 
     name: str = Field(sa_column=Column(String, nullable=False, index=True))
     description: str = Field(sa_column=Column(Text, nullable=False))
@@ -70,17 +69,8 @@ class SQLiteRecallFileModel(SQLiteBaseModelMixin, RecallFile):
     track: str = Field(default="memory", sa_column=Column(String, nullable=False, server_default="memory"))
 
 
-class SQLiteRecallFileResourceModel(SQLiteBaseModelMixin, RecallFileResource):
-    """SQLite category-resource relation model."""
-
-    resource_id: str = Field(sa_column=Column(String, nullable=False))
-    file_id: str = Field(sa_column=Column(String, nullable=False))
-
-    __table_args__ = (Index("idx_sqlite_recall_file_resources_unique", "resource_id", "file_id", unique=True),)
-
-
 class SQLiteRecallFileSegmentModel(SQLiteBaseModelMixin, RecallFileSegment):
-    """SQLite file-segment model."""
+    """SQLite recall file segment model."""
 
     recall_file_id: str = Field(sa_column=Column(String, nullable=False, index=True))
     track: str = Field(default="memory", sa_column=Column(String, nullable=False, server_default="memory"))
@@ -176,7 +166,6 @@ def build_sqlite_table_model(
 __all__ = [
     "SQLiteBaseModelMixin",
     "SQLiteRecallFileModel",
-    "SQLiteRecallFileResourceModel",
     "SQLiteRecallFileSegmentModel",
     "SQLiteResourceModel",
     "build_sqlite_table_model",

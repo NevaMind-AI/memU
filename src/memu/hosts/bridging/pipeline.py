@@ -54,7 +54,7 @@ async def prepare(
     # undiffable — and therefore uncommittable — forever.
     backend = build_agentic_memory_backend_from_env()
     result = await backend.list_all_recall_files()
-    for recall_file in result["categories"]:
+    for recall_file in result["recall_files"]:
         subdir = TRACK_DIRS.get(recall_file.get("track"))
         if subdir is None:
             continue

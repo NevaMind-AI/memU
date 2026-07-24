@@ -8,15 +8,15 @@ from memu.database.models import RecallFile
 
 @runtime_checkable
 class RecallFileRepo(Protocol):
-    """Repository contract for memory categories."""
+    """Repository contract for recall files."""
 
-    categories: dict[str, RecallFile]
+    recall_files: dict[str, RecallFile]
 
-    def list_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]: ...
+    def list_recall_files(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]: ...
 
-    def clear_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]: ...
+    def clear_recall_files(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]: ...
 
-    def get_or_create_category(
+    def get_or_create_recall_file(
         self,
         *,
         name: str,
@@ -26,10 +26,10 @@ class RecallFileRepo(Protocol):
         track: str = "memory",
     ) -> RecallFile: ...
 
-    def update_category(
+    def update_recall_file(
         self,
         *,
-        category_id: str,
+        recall_file_id: str,
         name: str | None = None,
         description: str | None = None,
         embedding: list[float] | None = None,
