@@ -20,7 +20,7 @@
 
 ---
 
-memU is a lightweight, agent-driven memory system that gives users a shared LLM wiki across sessions, agents, and devices. It automatically distills your own reusable skills from your agent history. Its core memory logic is only 500 lines — compact enough to inspect, understand, and adapt. It uses embedding-only retrieval with fully pluggable storage and embedding infrastructure.
+memU is a lightweight, agent-driven memory system that gives users a shared LLM wiki across sessions, agents, and devices. It automatically distills your own reusable skills from your agent history. Its core memory logic is only 500 lines — compact enough to inspect, understand, and adapt.
 
 ## Quick start
 
@@ -44,6 +44,20 @@ Choose Cloud or Local, then send the corresponding message to your agent.
 
 ![memU memory system architecture](assets/structure-v2.png)
 
+## Automatic skill extraction
+
+Once the scheduled bridging task is installed, memU can turn useful agent history into reusable Markdown skills automatically.
+
+![How memU turns agent history into reusable skills](assets/skill-extraction.png)
+
+1. **Capture new sessions.** The host adapter reads new session history, including messages and tool calls.
+2. **Prepare self-evolve jobs.** `prepare` slices each session into a self-contained job with the paths and context the agent needs.
+3. **Let the agent decide.** The agent reads related existing skills, then chooses to do nothing, patch an existing skill, or create a new one.
+4. **Write readable skill Markdown.** Each skill has a name, description, and reusable workflow, including useful branches, edge cases, and pitfalls.
+5. **Commit and index.** `commit` submits changed skill files through `commit_results`; memU embeds the skill name and description and stores it under the `skill` track.
+6. **Retrieve it later.** On a similar future task, memU returns the relevant skill so any connected agent can use the learned workflow.
+
+The judgment and synthesis stay inside the agent. `MemoryService` makes no LLM or chat calls; it stores, embeds, and retrieves the skill Markdown the agent prepared.
 
 ## Host adapters: memory for desktop coding agents
 
