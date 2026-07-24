@@ -28,14 +28,14 @@ npx memu-cli retrieve "deploy checklist"
 
 By default, state persists in a local SQLite database
 (`./data/memu.sqlite3`). Set `MEMU_MEMORY_MODE=cloud` and
-`MEMU_CLOUD_API_KEY=<project-api-key>` to run the same commands through MemU
-Cloud instead; the production API base defaults to
-`https://api.memu.so/api/v4/memory/` and can be overridden with
-`MEMU_CLOUD_BASE_URL` (for example,
-`https://staging-api.memu.so/api/v4/memory/`). Local embedding settings remain
-separate (`MEMU_EMBED_PROVIDER`, `MEMU_EMBED_MODEL`, `MEMU_DB`, ...). Cloud
-currently persists memory and skill recall files but not submitted workspace
-resources. Run `npx memu-cli <command> --help` for the local-mode flags.
+`MEMU_CLOUD_API_KEY=<memu-api-key>` to run the same commands through MemU Cloud
+instead. Register at [memu.so](https://memu.so) to obtain a memU API key. The
+production API base defaults to `https://api.memu.so/api/v4/memory/` and can be
+overridden with `MEMU_CLOUD_BASE_URL` for compatible deployments. Local
+embedding settings remain separate (`MEMU_EMBED_PROVIDER`, `MEMU_EMBED_MODEL`,
+`MEMU_DB`, ...). Cloud currently persists memory and skill recall files but not
+submitted workspace resources. Run `npx memu-cli <command> --help` for the
+local-mode flags.
 
 ## Commands
 

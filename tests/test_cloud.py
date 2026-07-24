@@ -251,10 +251,10 @@ def test_cloud_factory_needs_no_local_configuration(config_file: pathlib.Path) -
     assert backend.api_key == "secret"
 
 
-def test_cloud_factory_accepts_staging_override(config_file: pathlib.Path) -> None:
-    staging = "https://staging-api.memu.so/api/v4/memory/"
+def test_cloud_factory_accepts_custom_base_url(config_file: pathlib.Path) -> None:
+    custom_base_url = "https://cloud.example/api/v4/memory/"
     config_file.write_text(
-        f"MEMU_MEMORY_MODE=cloud\nMEMU_CLOUD_BASE_URL={staging}\nMEMU_CLOUD_API_KEY=secret\n",
+        f"MEMU_MEMORY_MODE=cloud\nMEMU_CLOUD_BASE_URL={custom_base_url}\nMEMU_CLOUD_API_KEY=secret\n",
         encoding="utf-8",
     )
     menv.reload()
@@ -262,7 +262,7 @@ def test_cloud_factory_accepts_staging_override(config_file: pathlib.Path) -> No
     backend = menv.build_agentic_memory_backend_from_env()
 
     assert isinstance(backend, CloudMemoryClient)
-    assert backend.base_url == staging
+    assert backend.base_url == custom_base_url
 
 
 def test_cloud_factory_requires_cloud_key(config_file: pathlib.Path) -> None:

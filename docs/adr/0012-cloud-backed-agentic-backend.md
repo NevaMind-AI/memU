@@ -47,13 +47,14 @@ Cloud configuration is separate from local embedding configuration:
 
 ```env
 MEMU_MEMORY_MODE=cloud
-MEMU_CLOUD_API_KEY=<project-api-key>
+MEMU_CLOUD_API_KEY=<memu-api-key>
 MEMU_CLOUD_BASE_URL=https://api.memu.so/api/v4/memory/
 ```
 
 The base URL has the production value above as its default and remains
-overridable for staging or compatible deployments. `MEMU_BASE_URL` and
-`MEMU_API_KEY` keep their existing local-embedding meaning.
+overridable for compatible deployments. Users obtain a memU API key by
+registering at [memu.so](https://memu.so). `MEMU_BASE_URL` and `MEMU_API_KEY`
+keep their existing local-embedding meaning.
 
 The main `memu` CLI retains its local database/embedding flags. They are passed
 as local-mode overrides to the shared selector; cloud mode does not construct a

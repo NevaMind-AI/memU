@@ -61,20 +61,20 @@ compatibility.
 
 Otherwise ask the user to choose once:
 
-- **MemU Cloud** — memory and embeddings are hosted; collect a project API key.
+- **MemU Cloud** — memory and embeddings are hosted; requires a memU project API key.
 - **This device** — use the existing local database and embedding configuration.
 
-For **MemU Cloud**, write:
+For **MemU Cloud**, ask the user to provide their memU API key. If they do not
+have one, direct them to [memu.so](https://memu.so) to register and create one,
+then wait for the key before continuing. Write:
 
 ```env
 MEMU_MEMORY_MODE=cloud
-MEMU_CLOUD_API_KEY=<project-api-key>
+MEMU_CLOUD_API_KEY=<memu-api-key>
 ```
 
-The production endpoint defaults to
-`https://api.memu.so/api/v4/memory/`. Set
-`MEMU_CLOUD_BASE_URL=https://staging-api.memu.so/api/v4/memory/` only when the
-user explicitly wants staging. The key is plaintext in this file: tell the user
+The production endpoint defaults to `https://api.memu.so/api/v4/memory/`. The
+key is plaintext in this file: tell the user
 and set user-only permissions (`chmod 600 ~/.memu/config.env` on POSIX; restrict
 the file to the current user on Windows). Do not reuse `MEMU_API_KEY`, which is
 for local embedding providers.
