@@ -24,7 +24,7 @@ memU is a lightweight, agent-driven memory system that gives users a shared LLM 
 
 **Installation is agent-driven.** The guides are written for the agent, not for you. Choose Cloud or Local, then send your agent one message:
 
-**Cloud**
+**Cloud (coming soon)**
 
 > Read https://memu.pro/SKILL.md and follow it to install memU.
 
