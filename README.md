@@ -4,7 +4,7 @@
 
 # memU
 
-### Personal memory, stored as an LLM wiki
+### Personal memory, stored as Wiki
 
 **Across Sessions. Across Agents. Across Devices.**
 
