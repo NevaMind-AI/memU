@@ -35,7 +35,7 @@ Choose Cloud or Local, then send the corresponding message to your agent.
 Cloud setup asks for a memU API key. If you do not have one yet, register at
 [memu.so](https://memu.so) and create one before continuing.
 
-> Read [https://memu.pro/SKILL.md](https://memu.pro/SKILL.md) and follow it to install memU.
+> Read [https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md](https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md) and follow it to install memU.
 
 ### Local / self-hosted
 
