@@ -24,7 +24,7 @@ from typing import Any
 
 from memu.env import build_service_from_env
 from memu.hosts.bridging.layout import BASE_DIR, TRACK_DIRS
-from memu.hosts.bridging.recall_files import recall_file_path
+from memu.hosts.bridging.recall_files import write_recall_file
 
 
 async def retrieve(query: str, where: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -38,19 +38,6 @@ async def retrieve(query: str, where: dict[str, Any] | None = None) -> dict[str,
     service = build_service_from_env()
     result: dict[str, Any] = await service.progressive_retrieve(query, where=where)
     return _shape_for_agent(result)
-
-
-def _mirror_path(base: Path, track: Any, name: Any) -> Path | None:
-    """The mirror path a recall file *should* live at, or ``None`` if unlocatable.
-
-    Unlocatable means the file's track has no mirror directory (only
-    ``memory``/``skill`` are mirrored) or it has no name — in either case there
-    is no path to hand the agent, so the caller falls back to inline content.
-    """
-    subdir = TRACK_DIRS.get(track or "")
-    if subdir is None or not name:
-        return None
-    return recall_file_path(base, subdir, str(name))
 
 
 def _source_label(track: Any, name: Any) -> str | None:
@@ -73,12 +60,16 @@ def _shape_for_agent(result: dict[str, Any]) -> dict[str, Any]:
     Matching the instruction's contract that files and resources come back as
     *a location plus a summary* rather than full text:
 
-    * ``files`` shed their ``content``: when the on-disk mirror
-      (``~/.memu/<track>/<name>.md``) exists, they carry a ``path`` to it; when
-      it does not — the user owns that tree and may delete it — they keep the
-      ``content`` inline and emit *no* ``path``, so the agent never sees a
-      location that isn't there. The internal ``resource_urls`` link list is
-      dropped: the standing instruction never names it, so it is noise.
+    * ``files`` shed their ``content`` for a ``path``. The mirror at
+      ``~/.memu/<track>/<name>.md`` is now the retrieve hook's own to keep: since
+      every memorize run writes under its per-host tree (``~/.memu/hosts/<host>/``,
+      #544), nothing else writes this shared root, so retrieve bootstraps the
+      mirror itself — writing the file out (atomically) and handing over the
+      openable ``path``. Only a genuinely unmappable file (a track with no mirror
+      directory, or one with no name) has nowhere to live, and there we keep the
+      ``content`` inline and emit *no* ``path`` rather than dangle a location that
+      can't exist. The internal ``resource_urls`` link list is dropped: the
+      standing instruction never names it, so it is noise.
     * ``segments`` swap the internal ``recall_file_id`` UUID for ``source_file``,
       the ``<track>/<name>`` id of their parent file — an identifier for finding
       the fuller document in ``files``, not a path to open (that is the file's
@@ -90,17 +81,26 @@ def _shape_for_agent(result: dict[str, Any]) -> dict[str, Any]:
 
     file_labels: dict[str, str | None] = {}
     for file in result.get("files", []):
-        file_labels[file.get("id")] = _source_label(file.get("track"), file.get("name"))
+        track = file.get("track")
+        name = file.get("name")
+        file_labels[file.get("id")] = _source_label(track, name)
 
-        path = _mirror_path(base, file.get("track"), file.get("name"))
         content = file.pop("content", None)
         file.pop("resource_urls", None)
-        if path is not None and path.exists():
-            # The mirror is on disk: hand over the openable location, not the text.
-            file["path"] = str(path)
+
+        subdir = TRACK_DIRS.get(track or "")
+        if subdir is not None and name:
+            # Bootstrap the mirror ourselves and hand over the openable location,
+            # not the text. Re-writing an existing mirror is harmless (same store
+            # content) and heals one the user deleted.
+            out_path = write_recall_file(
+                base, subdir, {"name": name, "description": file.get("description", ""), "content": content}
+            )
+            file["path"] = str(out_path)
         else:
-            # Unlocatable, or the mirror is gone: keep the text inline and emit no
-            # dead path, so the agent never reasons about a file that isn't there.
+            # No mirrorable location (unknown track, or no name): keep the text
+            # inline and emit no dead path, so the agent never reasons about a
+            # file that isn't there.
             file["content"] = content
 
     for segment in result.get("segments", []):

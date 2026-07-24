@@ -22,15 +22,15 @@ installed.
 Each run walks a fixed pipeline that bridges raw session history into memU:
 
 1. **Prepare** — `memu-codex prepare` scans new turns under `~/.codex/sessions`,
-   mirrors the current memU recall files to `~/.memu/memory` and `~/.memu/skill`,
+   mirrors the current memU recall files to `~/.memu/hosts/codex/memory` and `~/.memu/hosts/codex/skill`,
    snapshots them by content hash, and writes a set of numbered **job-instruction
-   files** to `~/.memu/jobs/` (`1.txt`, `2.txt`, …). Each job is a self-contained
+   files** to `~/.memu/hosts/codex/jobs/` (`1.txt`, `2.txt`, …). Each job is a self-contained
    prompt telling the agent exactly what to mine from one session.
-2. **Self-evolve** — the agent opens each `~/.memu/jobs/*.txt` **in numeric
+2. **Self-evolve** — the agent opens each `~/.memu/hosts/codex/jobs/*.txt` **in numeric
    order** and follows it. Jobs come in three kinds: mine a session into user
    **memory**, mine a session into a **skill**, and **describe** the files the
-   sessions touched. They write and patch markdown under `~/.memu/memory` and
-   `~/.memu/skill`, and fill in `~/.memu/resources.md`. "Do nothing" is an
+   sessions touched. They write and patch markdown under `~/.memu/hosts/codex/memory` and
+   `~/.memu/hosts/codex/skill`, and fill in `~/.memu/hosts/codex/resources.md`. "Do nothing" is an
    allowed, common outcome for any job.
 3. **Commit** — `memu-codex commit` diffs the tracked directories against the
    step-1 snapshot, collects only the files the agent actually created or changed
@@ -70,7 +70,7 @@ and set its recurring prompt to this block **verbatim**:
 Run the memU bridging pipeline. Do the four steps strictly in order; do not
 skip a step even if the previous one looks like it produced nothing.
 
-1. LEFTOVERS. If ~/.memu/jobs/ already contains job files, they are unfinished
+1. LEFTOVERS. If ~/.memu/hosts/codex/jobs/ already contains job files, they are unfinished
    work from an earlier run (a crash, or the install itself). Process them
    exactly as step 3 describes, then run memu-codex commit — and only then
    continue.
@@ -79,10 +79,10 @@ skip a step even if the previous one looks like it produced nothing.
 
      memu-codex prepare
 
-   It regenerates ~/.memu/jobs/. If the command exits non-zero, stop and report
+   It regenerates ~/.memu/hosts/codex/jobs/. If the command exits non-zero, stop and report
    the error — do not continue.
 
-3. SELF-EVOLVE. List ~/.memu/jobs/*.txt and process them in ascending numeric
+3. SELF-EVOLVE. List ~/.memu/hosts/codex/jobs/*.txt and process them in ascending numeric
    order (1.txt, then 2.txt, …). There may be anywhere from 0 to ~21 files, and
    the count changes every run — always glob and sort; never assume a fixed
    number. If there are no job files, skip to step 4.
@@ -118,7 +118,7 @@ are new Codex sessions since the last run.
   be minable again; draining leftovers first turns a half-done cycle into
   bounded re-work instead of silent loss.
 - **Idempotent and incremental.** `prepare` tracks a per-session line cursor in
-  `~/.memu/.session_manifest.codex.json`, so each run only processes turns it
+  `~/.memu/hosts/codex/.session_manifest.codex.json`, so each run only processes turns it
   hasn't seen. A run with no new session activity correctly does nothing.
 - **Ordering is load-bearing.** Memory jobs are numbered before skill jobs, and
   the resource-describe job is last — later jobs depend on files earlier ones
