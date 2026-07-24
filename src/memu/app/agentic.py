@@ -303,8 +303,10 @@ class AgenticMixin:
         """Create-or-update each ``{name, track, description, content}`` as a ``RecallFile``.
 
         Keyed by ``name`` within the record's ``track`` (``memory``/``skill``). New files embed
-        their ``name: description`` for file-level recall; existing files keep their embedding
-        and only take the new content. Segments are then reconciled per track.
+        their ``name: description`` for file-level recall. Existing files always take the new
+        content and re-embed only when the description actually changed — commit always carries
+        a description (read from the local file), but it's usually unchanged. Segments are then
+        reconciled per track.
         """
         user_data = dict(user_scope or {})
         committed: list[RecallFile] = []
@@ -328,7 +330,17 @@ class AgenticMixin:
                     user_data=user_data,
                     track=file_track,
                 )
-            file = store.recall_file_repo.update_category(category_id=file.id, content=content)
+            # Commit always carries a description (read from the local file), so re-embed the
+            # file-level ``name: description`` vector only when it actually changed; otherwise
+            # leave the description/embedding untouched and just take the new content.
+            description_changed = bool(description) and description != file.description
+            new_embedding = await _embed_one(embed_client, f"{name}: {description}") if description_changed else None
+            file = store.recall_file_repo.update_category(
+                category_id=file.id,
+                description=description if description_changed else None,
+                embedding=new_embedding,
+                content=content,
+            )
             await self._commit_sync_file_segments(
                 file=file,
                 file_track=file_track,
