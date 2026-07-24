@@ -44,6 +44,12 @@ SPEC = HostSpec(
     skills_dir=SKILLS_DIR,
     schedule_command="claude -p {prompt}",
     needs_headless_auth=True,
+    install_hint=(
+        "  Install a standalone claude:\n"
+        "    winget install Anthropic.ClaudeCode\n"
+        "    # or:  irm https://claude.ai/install.ps1 | iex\n"
+        "    # or:  npm install -g @anthropic-ai/claude-code"
+    ),
 )
 
 

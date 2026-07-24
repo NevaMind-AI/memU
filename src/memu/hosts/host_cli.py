@@ -91,6 +91,12 @@ class HostSpec:
     plain-file auth (Codex's ``~/.codex/auth.json``). Drives whether ``schedule``
     runs the ``-p`` authentication gate before registering the task."""
 
+    install_hint: str = ""
+    """Copy-pasteable command(s) for installing this host's standalone CLI on
+    Windows, shown when ``schedule install`` finds it missing (memU#538 Symptom A).
+    Host-specific data, so the shared installer never hardcodes one host's package
+    names; empty falls back to generic guidance."""
+
     extra_flags: dict[str, str] = field(default_factory=dict)
     """Reserved for host-specific flags; unused today."""
 

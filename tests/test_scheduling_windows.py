@@ -204,3 +204,17 @@ def test_auth_gate_aborts_when_unauthenticated(
     assert windows._auth_gate(CLAUDE, "C:\\claude.exe") == 1
     err = capsys.readouterr().err
     assert "setup-token" in err and "PERSISTENT" in err
+
+
+def test_symptom_a_message_carries_concrete_install_commands(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # When claude isn't on PATH the refusal must be copy-pasteable — the host's own
+    # install commands (memU#538 Symptom A), not vague "winget/npm" prose.
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(windows, "_resolve_agent", lambda spec: None)
+    layout = Layout.default(host=CLAUDE.host, base=tmp_path)
+    assert windows.install(CLAUDE, layout) == 1
+    err = capsys.readouterr().err
+    assert "winget install Anthropic.ClaudeCode" in err
+    assert "Symptom A" in err

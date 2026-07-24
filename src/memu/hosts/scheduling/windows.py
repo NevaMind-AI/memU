@@ -250,11 +250,12 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
         return 2
     agent_path = _resolve_agent(spec)
     if agent_path is None:
+        hint = spec.install_hint or "  Install a standalone CLI (native installer / winget / npm)."
         print(
-            f"error: `{_agent_binary(spec)}` is not on PATH.\n"
-            f"  {spec.display}'s scheduled run needs a standalone CLI a bare process can find; a "
-            "desktop-app bundle does not count (memU#538 Symptom A). Install the standalone CLI "
-            "(native installer / winget / npm) and re-run.",
+            f"error: `{_agent_binary(spec)}` is not on PATH — {spec.display}'s scheduled run needs a "
+            "standalone CLI a bare process can find; a desktop-app bundle does not count "
+            f"(memU#538 Symptom A).\n{hint}\n"
+            f"  Then re-run `{spec.binary} schedule install`.",
             file=sys.stderr,
         )
         return 1
