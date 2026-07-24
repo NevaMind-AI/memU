@@ -30,10 +30,7 @@ It works for Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy — and any
 
 ## Quick start
 
-memU keeps one shared memory store, configured by `MEMU_DB` in `~/.memu/config.env` (typically `~/.memu/memu.sqlite3` for local SQLite). Human-readable memory and skill Markdown files are mirrored under:
-
-- Codex: `~/.memu/memory/` and `~/.memu/skill/`
-- Other hosts: `~/.memu/hosts/<host>/memory/` and `~/.memu/hosts/<host>/skill/`
+Your memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
 
 Once installed, your agent retrieves relevant memory automatically before answering. To retrieve manually, run the adapter for your host:
 
