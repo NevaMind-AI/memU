@@ -99,6 +99,57 @@ async def test_recommit_updates_content_and_segments(service: MemoryService) -> 
     assert "likes coffee" not in [seg["text"] for seg in result["segments"]]
 
 
+class CountingEmbeddingClient(FakeEmbeddingClient):
+    """Wraps the fake to count ``embed`` calls, so tests can assert re-embeds."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def embed(self, inputs: list[str]) -> tuple[list[list[float]], None]:
+        self.calls += 1
+        return await super().embed(inputs)
+
+
+async def test_recommit_reembeds_description_only_when_changed(service: MemoryService) -> None:
+    counter = CountingEmbeddingClient()
+    service._embedding_pool._cache["default"] = counter
+    service._embedding_pool._cache["embedding"] = counter
+
+    file = {"name": "Profile", "track": "memory", "description": "who the user is", "content": "# P\nlikes coffee"}
+    await service.commit_results(recall_files=[file])
+
+    # Recommit with identical description and content: nothing needs embedding.
+    counter.calls = 0
+    await service.commit_results(recall_files=[dict(file)])
+    assert counter.calls == 0
+
+    # Recommit with a changed description: the file-level vector is refreshed exactly once
+    # (memory segments are per content line, so the unchanged content stays put).
+    counter.calls = 0
+    await service.commit_results(recall_files=[{**file, "description": "the user profile"}])
+    assert counter.calls == 1
+
+    listed = await service.list_all_recall_files()
+    profile = next(f for f in listed["categories"] if f["name"] == "Profile")
+    assert profile["description"] == "the user profile"
+
+
+async def test_recommit_updates_skill_description_and_segment(service: MemoryService) -> None:
+    file = {"name": "deploy-checklist", "track": "skill", "description": "how to deploy", "content": "step 1"}
+    await service.commit_results(recall_files=[file])
+    await service.commit_results(recall_files=[{**file, "description": "deploy the app"}])
+
+    listed = await service.list_all_recall_files()
+    skill = next(f for f in listed["categories"] if f["name"] == "deploy-checklist")
+    assert skill["description"] == "deploy the app"
+
+    # The skill's single segment is ``name: ...\ndescription: ...``, so it re-embeds too.
+    result = await service.progressive_retrieve("deploy")
+    seg_texts = [seg["text"] for seg in result["segments"]]
+    assert "name: deploy-checklist\ndescription: deploy the app" in seg_texts
+    assert "name: deploy-checklist\ndescription: how to deploy" not in seg_texts
+
+
 async def test_where_scope_filters_and_rejects_unknown_fields(service: MemoryService) -> None:
     await service.commit_results(
         recall_files=[{"name": "A", "track": "memory", "description": "d", "content": "alpha"}],
