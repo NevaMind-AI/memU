@@ -11,6 +11,17 @@ from pathlib import Path
 from typing import Any
 
 
+def recall_file_path(base_dir: Path, subdir: str, name: str) -> Path:
+    """The on-disk mirror path for a recall file, by name.
+
+    The one place the filename convention lives, so the writer and any reader
+    that needs to *locate* a mirrored file by name (e.g. retrieval, surfacing a
+    file's path to the agent) agree by construction rather than by comment.
+    """
+    # Escape spaces in the filename with '-'; the frontmatter keeps the raw name.
+    return base_dir / subdir / f"{name.replace(' ', '-')}.md"
+
+
 def write_recall_file(base_dir: Path, subdir: str, recall_file: dict[str, Any]) -> Path:
     """Mirror one recall file into ``base_dir/subdir`` as front-mattered markdown."""
     name = recall_file["name"]
@@ -20,8 +31,7 @@ def write_recall_file(base_dir: Path, subdir: str, recall_file: dict[str, Any]) 
     out_dir = base_dir / subdir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Escape spaces in the filename with '-'; the frontmatter keeps the raw name.
-    out_path = out_dir / f"{name.replace(' ', '-')}.md"
+    out_path = recall_file_path(base_dir, subdir, name)
     out_path.write_text(f"---\nname: {name}\ndescription: {description}\n---\n{content}", encoding="utf-8")
     return out_path
 
