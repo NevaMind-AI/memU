@@ -106,12 +106,14 @@ def test_cli_defaults_to_the_codex_instruction_file() -> None:
     assert callable(args.handler)
 
 
-def test_hermes_is_a_skill_host() -> None:
-    """Hermes loads skills on demand from ~/.hermes/skills (agentskills.io
-    layout), so its SOUL.md block must be the pointer, not the full procedure."""
+def test_hermes_is_an_inline_host() -> None:
+    """Hermes skills are pull-on-demand (skills_list/skill_view) and only a
+    relevance-selected subset is surfaced per turn, so a SOUL.md pointer to a
+    "retrieve every turn" skill never loads and the inject silently no-ops.
+    Hermes takes the full procedure inline instead — no skills_dir."""
     from memu.hosts.hermes.cli import SPEC
 
-    assert SPEC.skills_dir == "~/.hermes/skills"
+    assert SPEC.skills_dir == ""
 
 
 def test_openclaw_is_a_skill_host() -> None:
