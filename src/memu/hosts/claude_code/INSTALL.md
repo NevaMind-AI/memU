@@ -157,21 +157,26 @@ lives outside `PATH` and its login is invisible to the standalone CLI
    - macOS / Linux: `curl -fsSL https://claude.ai/install.sh | bash`, or
      `npm install -g @anthropic-ai/claude-code`
 2. **It authenticates headless, on a *persistent* credential.** Run
-   `claude setup-token` with the user (it writes a token into their profile),
-   or set `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` as a persistent
-   user-level variable. A key exported only in the current shell passes your
-   check here and still leaves the scheduled task stuck on "Not logged in" —
-   the one false positive this gate cannot catch by itself.
+   `claude setup-token` with the user (it writes a token into their profile
+   — works the same under cron, launchd, and Task Scheduler), or set
+   `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` persistently — on Windows
+   with `setx`; on macOS/Linux a shell-profile `export` does **not** reach
+   cron, so the variable goes in the crontab header exactly like the `PATH`
+   line. A key exported only in the current shell passes your check here and
+   still leaves the scheduled task stuck on "Not logged in" — the one false
+   positive this gate cannot catch by itself.
 
-**Right after installing on Windows, expect a stale-`PATH` false negative.**
-The installers register `claude` on the *user* `PATH` in the registry (the
-native one lands it in `~/.local/bin`) — but every process started before
-the install, this shell included, keeps its launch-time environment, so
-`claude` can report "not found" here while being correctly installed (the
-same mechanism is field-proven on this repo's cursor host). Judge by the
-landing directory or a **newly opened** terminal, never by a pre-install
-shell — and run `schedule install` from that fresh terminal too: the helper
-resolves `claude` from its own process `PATH`.
+**Right after installing, expect a stale-`PATH` false negative.** On
+Windows the installers register `claude` on the *user* `PATH` in the
+registry; on macOS/Linux they append to the shell rc — and in both cases
+every process started before the install, this shell included, keeps its
+launch-time environment, so `claude` can report "not found" here while
+being correctly installed (the mechanism is field-proven on this repo's
+cursor host). Judge by the landing directory (`~/.local/bin`) or a **newly
+opened** terminal, never by a pre-install shell. The gate below is immune —
+it names the install locations explicitly — but on Windows also run
+`schedule install` from that fresh terminal: the helper resolves `claude`
+from its own process `PATH`.
 
 Prove both the way the scheduler will experience them — from a bare
 environment (keep `HOME`: the credential lives under it, and real schedulers
