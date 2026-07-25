@@ -44,6 +44,11 @@ run's prompt must instruct the agent to do it, not shell out to a script.
 
 - **memU is installed and `memu-claude-code` is on `PATH`.** Verify with
   `memu-claude-code doctor`; if it fails, do `INSTALL.md` Part 1 first.
+- **A standalone, headless-authenticated `claude` is on `PATH`.** The Desktop
+  app cannot serve a scheduled run — its binary is off-`PATH` and its login is
+  invisible to the CLI (memU#538). `INSTALL.md` Part 2.0 is the install +
+  bare-environment verify procedure; on Windows, `schedule install` runs the
+  same gate and refuses with guidance if it fails.
 - **A headless run can execute the pipeline.** The scheduled run invokes
   `claude -p` non-interactively, so the commands and paths the pipeline touches
   must be pre-authorized: allow `Bash(memu-claude-code *)` and writes under

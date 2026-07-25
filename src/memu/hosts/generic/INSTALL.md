@@ -144,6 +144,29 @@ backend.
 
 ## Part 2 — Memorization (only if detect said it works)
 
+### 2.0 Prerequisite — the agent's own headless CLI
+
+The recurring run invokes **the user's agent binary non-interactively from a
+bare environment**. memU installs `memu-agent`, never the agent itself. Settle
+with the user, before registering: which binary, that it is on `PATH`, that it
+has a one-shot headless invocation (a `-p`-style prompt flag, or whatever form
+that agent actually uses), and that its credential survives a non-interactive
+environment. Prove all of it in one gate, using the binary and headless form
+the user named (keep `HOME` — credentials live under it, and real schedulers
+set it):
+
+```
+env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" <agent> -p 'ping'
+```
+
+Swap `<agent> -p 'ping'` for the real one-shot form if this agent does not use
+`-p`. This `PATH` is only a **probe** for common install locations; the
+scheduled entry still needs its own machine-specific `PATH` (see `docs task`).
+Prefer a persistent credential — a session-only export can pass here and still
+fail under the scheduler.
+
+Do not continue until the gate passes.
+
 Register the bridging task against the session directory detect found. Follow
 the packaged procedure. In cloud mode, workspace resources are submitted by the
 same pipeline but are not currently persisted:

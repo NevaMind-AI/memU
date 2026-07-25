@@ -43,9 +43,10 @@ run's prompt must instruct the agent to do it, not shell out to a script.
 - **memU is installed and `memu-hermes` is on `PATH`.** Verify with
   `memu-hermes doctor`; if it fails, do `INSTALL.md` Part 1 first.
 - **Hermes runs headless from cron** with permission to run `memu-hermes` and
-  write under `~/.memu/`. If Hermes uses a non-default `HERMES_HOME`, the cron
-  environment must export it and the prompt's prepare step must pass
-  `--session-dir "$HERMES_HOME/state.db"`.
+  write under `~/.memu/`. memU never installs `hermes` itself — `INSTALL.md`
+  Part 2.0 is the presence + headless-auth gate to pass first. If Hermes uses
+  a non-default `HERMES_HOME`, the cron environment must export it and the
+  prompt's prepare step must pass `--session-dir "$HERMES_HOME/state.db"`.
 
 ## Step 1 — settle the schedule
 

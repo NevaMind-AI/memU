@@ -28,6 +28,8 @@ already have found one whose records it recognizes (its report says
 machine-specific value in this task, fixed once at registration time.
 
 Also verify `memu-agent doctor` passes; if not, do `INSTALL.md` Part 1 first.
+And the agent binary itself must pass `INSTALL.md` Part 2.0's bare-environment
+gate first — memU installs `memu-agent`, never the agent.
 
 ## What the bridging task does (context)
 

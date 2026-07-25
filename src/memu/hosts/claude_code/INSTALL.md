@@ -142,6 +142,44 @@ The *record* seam: a scheduled job that periodically mines recent sessions under
 `~/.claude/projects` into memU memory, skills, and resources. In cloud mode,
 workspace resources are submitted but are not currently persisted.
 
+### 2.0 Prerequisite — a standalone, headless-authenticated `claude`
+
+The scheduled run invokes **`claude -p` from a bare, non-interactive
+environment**. The Claude **Desktop app cannot serve it**: its bundled binary
+lives outside `PATH` and its login is invisible to the standalone CLI
+(memU#538). Two checks, in order, before you register anything:
+
+1. **`claude` resolves on `PATH`.** If it does not, install the standalone
+   CLI *with the user* — never silently as a side effect of scheduling:
+   - Windows: `winget install Anthropic.ClaudeCode`, or
+     `irm https://claude.ai/install.ps1 | iex`, or
+     `npm install -g @anthropic-ai/claude-code`
+   - macOS / Linux: `curl -fsSL https://claude.ai/install.sh | bash`, or
+     `npm install -g @anthropic-ai/claude-code`
+2. **It authenticates headless, on a *persistent* credential.** Run
+   `claude setup-token` with the user (it writes a token into their profile),
+   or set `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` as a persistent
+   user-level variable. A key exported only in the current shell passes your
+   check here and still leaves the scheduled task stuck on "Not logged in" —
+   the one false positive this gate cannot catch by itself.
+
+Prove both the way the scheduler will experience them — from a bare
+environment (keep `HOME`: the credential lives under it, and real schedulers
+set it), resolve *and* authenticate:
+
+```
+env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" claude -p 'ping'
+```
+
+This `PATH` is only a **probe** for the common install locations. The cron
+entry still derives its own `PATH` at registration time from
+`command -v memu-claude-code` / `command -v claude` (see `docs task`); a green
+probe does not replace that line.
+
+On Windows, `schedule install` (reached through `docs task` below) runs this
+gate for you and refuses with install guidance when either check fails. Do
+not continue until the gate passes.
+
 **Do not reinvent this.** Follow the packaged procedure:
 
 ```

@@ -130,8 +130,33 @@ backend.
 
 The *record* seam: a scheduled job that mines recent sessions out of
 `~/.hermes/state.db` into memU memory, skills, and resources. In cloud mode,
-workspace resources are submitted but are not currently persisted. **Do not
-reinvent this** — follow the packaged procedure:
+workspace resources are submitted but are not currently persisted.
+
+### 2.0 Prerequisite — a headless-capable `hermes` CLI
+
+The scheduled entry invokes **`hermes` non-interactively from cron's bare
+environment**. memU installs `memu-hermes`, never `hermes` itself — that
+binary must already be on `PATH` (install it per Hermes's own docs if it is
+not) and must run headless without an interactive login. Prove both from a
+bare environment (keep `HOME` — the credential lives under it, and real
+schedulers set it) before registering. If this user's Hermes CLI does not take
+`-p` for a one-shot prompt, use the same headless invocation form that
+`docs task` will schedule (that guide allows adjusting the invocation while
+keeping the prompt block verbatim):
+
+```
+env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" hermes -p 'ping'
+```
+
+This `PATH` is only a **probe** for common install locations. The cron entry
+still derives its own `PATH` at registration time from
+`command -v memu-hermes` / `command -v hermes` (see `docs task`); a green probe
+does not replace that line. Prefer a persistent credential — a session-only
+export can pass here and still fail under cron.
+
+Do not continue until the gate passes.
+
+**Do not reinvent this** — follow the packaged procedure:
 
 ```
 memu-hermes docs task
