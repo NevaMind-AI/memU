@@ -158,15 +158,27 @@ lives outside `PATH` and its login is invisible to the standalone CLI
      `npm install -g @anthropic-ai/claude-code`
    - macOS / Linux: `curl -fsSL https://claude.ai/install.sh | bash`, or
      `npm install -g @anthropic-ai/claude-code`
-2. **It authenticates headless, on a *persistent* credential.** Run
-   `claude setup-token` with the user (it writes a token into their profile
-   — works the same under cron, launchd, and Task Scheduler), or set
-   `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` persistently — on Windows
-   with `setx`; on macOS/Linux a shell-profile `export` does **not** reach
-   cron, so the variable goes in the crontab header exactly like the `PATH`
-   line. A key exported only in the current shell passes your check here and
-   still leaves the scheduled task stuck on "Not logged in" — the one false
-   positive this gate cannot catch by itself.
+2. **It authenticates headless, on a *persistent* credential.** Settle the
+   method with the user — any of the three works, by what they have:
+   - **Claude subscription (Pro/Max):** `claude setup-token` — a browser
+     flow that issues a long-lived token; persist it as
+     `CLAUDE_CODE_OAUTH_TOKEN`. (It refuses without a subscription — do not
+     loop on it; pick another method.)
+   - **Anthropic API key** (platform account, pay per token): persist
+     `ANTHROPIC_API_KEY`.
+   - **The user's own provider or relay** (any Anthropic-compatible
+     endpoint): persist `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` (the
+     relay's key). This is the no-subscription path — the `claude` CLI
+     honors a custom endpoint headless. (Enterprise Bedrock / Vertex routes
+     exist too; follow their own docs.)
+
+   Persist per OS: on Windows, `setx` (the S4U task reads persistent user
+   env); on macOS/Linux a shell-profile `export` does **not** reach cron —
+   the variables go in the crontab header exactly like the `PATH` line. A
+   key exported only in the current shell passes your check here and still
+   leaves the scheduled task stuck on "Not logged in" — the one false
+   positive this gate cannot catch by itself. The gate below proves
+   whichever method was chosen, identically.
 
 **Right after installing, expect a stale-`PATH` false negative.** On
 Windows the installers register `claude` on the *user* `PATH` in the

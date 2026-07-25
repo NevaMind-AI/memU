@@ -135,11 +135,13 @@ install than to register a task that reports success and never runs.
 
 > **The credential must be persistent.** The task runs headless under an S4U
 > principal (session 0) and inherits only persistent user/machine environment and
-> your user profile — **not** a session-only `$env:` export. Use `claude
-> setup-token` (writes a token into your profile) or set `CLAUDE_CODE_OAUTH_TOKEN` /
-> `ANTHROPIC_API_KEY` as a persistent user variable (`setx`). A token exported only
-> in the current shell passes the install-time check yet leaves the task stuck on
-> "Not logged in" — the one false-positive the gate can't catch by itself.
+> your user profile — **not** a session-only `$env:` export. Any of the methods
+> from `INSTALL.md` Part 2.0 works: `claude setup-token` (subscription; writes a
+> token into your profile), `ANTHROPIC_API_KEY`, or — for relay / own-provider
+> users — `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`; env vars as persistent
+> user variables (`setx`). A token exported only in the current shell passes the
+> install-time check yet leaves the task stuck on "Not logged in" — the one
+> false-positive the gate can't catch by itself.
 
 Confirm the same way Step 3 does — by filesystem traces, not the run's own
 summary: after a run, check that `~/.memu/hosts/claude-code/jobs/` timestamps and
