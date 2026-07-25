@@ -45,7 +45,10 @@ run's prompt must instruct the agent to do it, not shell out to a script.
   `memu-cursor doctor`; if it fails, do `INSTALL.md` Part 1 first.
 - **`cursor-agent` runs headless.** The scheduled entry invokes
   `cursor-agent -p` non-interactively with permission to run `memu-cursor` and
-  write under `~/.memu/`.
+  write under `~/.memu/`. The Cursor IDE does not provide this binary (its
+  `cursor` launcher on `PATH` is the GUI opener, not an agent CLI) — it is
+  a separate install; `INSTALL.md` Part 2.0 is the install + bare-environment
+  verify procedure to pass first.
 
 ## Step 1 — settle the schedule
 

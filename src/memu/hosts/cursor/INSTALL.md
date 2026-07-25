@@ -130,7 +130,92 @@ backend.
 The *record* seam: a scheduled job that mines recent transcripts under
 `~/.cursor/projects/*/agent-transcripts/` into memU memory, skills, and
 resources. In cloud mode, workspace resources are submitted but are not
-currently persisted. **Do not reinvent this** — follow the packaged procedure:
+currently persisted.
+
+### 2.0 Prerequisite — the standalone `cursor-agent` CLI
+
+The scheduled entry invokes **`cursor-agent -p` from a bare, non-interactive
+environment**, and the **Cursor IDE does not provide that binary** — the CLI
+is a separate install (the scope note above draws the same line: only the
+CLI's transcripts are minable).
+
+**Do not mistake the IDE's `cursor` launcher for it — on any OS.** The
+editor puts a `cursor` shim on `PATH` everywhere (`resources/app/bin/cursor`
+inside the install: `cursor.cmd` on Windows, the "install `cursor` command"
+symlink on macOS, `/usr/bin/cursor` from Linux packages — the same pattern
+as VS Code's `code`) that looks alive: `cursor -v` prints a
+three-line `<version> / <commit> / <arch>`. It opens the GUI and has no
+headless mode — `cursor -p` answers "Warning: 'p' is not in the list of known
+options, but still passed to Electron/Chromium". Field data: a Windows
+install stalled exactly here, `cursor` resolving while `cursor-agent` was
+absent. Probe `cursor-agent`, never `cursor`.
+
+**And the opposite trap right after installing on Windows: a stale
+environment says "absent" while it is installed.** The native installer
+lands the CLI in `%LOCALAPPDATA%\cursor-agent` and adds that directory to
+the *user* `PATH` in the registry — but every process started before that
+(the Cursor IDE, its integrated terminal, you) keeps its launch-time
+environment, and any shell you spawn inherits the same staleness, so bare
+`cursor-agent` stays not-found in this session. Field data, same machine as
+above: an in-IDE probe concluded "not installed" while
+`%LOCALAPPDATA%\cursor-agent\cursor-agent.cmd --version` answered fine. On a
+"not found", check the registry user `PATH` and the landing dir before
+re-installing; verify by full path; then have the user restart Cursor (or
+open a terminal from a fresh Explorer context) before trusting the
+bare-name check. The same staleness class exists on macOS/Linux with
+different plumbing — the installer appends `~/.local/bin` to the shell rc,
+terminals opened earlier never re-read it, and macOS's default `PATH` does
+not include `~/.local/bin` at all — so there too, judge by the landing dir,
+never by a pre-install shell. The gate below is immune on every OS by the
+same move: it names the install locations explicitly instead of trusting
+the session `PATH`.
+
+Two checks before you register anything:
+
+1. **`cursor-agent` resolves on `PATH`.** If it does not, install it with the
+   user via Cursor's official installer —
+   `curl https://cursor.com/install -fsSL | bash` on macOS / Linux / WSL, or
+   `irm 'https://cursor.com/install?win32=true' | iex` on native Windows
+   (typical Unix landing path `~/.local/bin`; confirm with
+   `command -v cursor-agent`).
+2. **It authenticates headless.** On a machine where the Cursor IDE is
+   already signed in, the CLI picks up that account session — no separate
+   login needed (field-tested). Otherwise log it in once with the user
+   (`cursor-agent login`, or `CURSOR_API_KEY` — a Cursor account key, not a
+   model-provider key). Know what the credential buys: the CLI runs
+   **account-billed models through Cursor's backend**, and the IDE's custom
+   base-URL / bring-your-own-key models do **not** carry over (field-tested:
+   a custom-provider model configured in the GUI is not usable from
+   `cursor-agent`). Agent runs therefore consume the account's plan quota —
+   a green gate on a free plan can still starve at run time, the one
+   entitlement failure the gate below cannot see. A user on provider-only
+   credentials with no Cursor plan cannot run this record seam: for them
+   this host is **retrieval-only** (Part 3; the IDE's own agent serves it,
+   on whatever key the IDE uses) — their record seam belongs to a host they
+   actually run headless, writing to the same shared store.
+
+Prove both from a bare environment (keep `HOME` — the credential lives under
+it, and real schedulers set it) before registering:
+
+```
+env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" cursor-agent -p 'ping'
+```
+
+This `PATH` is only a **probe** for common install locations. The cron entry
+still derives its own `PATH` at registration time from
+`command -v memu-cursor` / `command -v cursor-agent` (see `docs task`); a green
+probe does not replace that line. On native Windows there is no `env -i`
+form — gate with the full path, which is immune to the stale-environment
+trap above:
+`& "$env:LOCALAPPDATA\cursor-agent\cursor-agent.cmd" -p 'ping'` — then
+confirm a **newly opened** terminal resolves bare `cursor-agent`. And note a
+green gate is necessary but not yet sufficient there: registration itself is
+cron/launchd-only for this host today, so on Windows set up retrieval
+(Part 3) and treat bridging as pending.
+
+Do not continue until the gate passes.
+
+**Do not reinvent this** — follow the packaged procedure:
 
 ```
 memu-cursor docs task
