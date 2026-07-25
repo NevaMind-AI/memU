@@ -205,13 +205,11 @@ This `PATH` is only a **probe** for common install locations. The cron entry
 still derives its own `PATH` at registration time from
 `command -v memu-cursor` / `command -v cursor-agent` (see `docs task`); a green
 probe does not replace that line. On native Windows there is no `env -i`
-form — gate with the full path, which is immune to the stale-environment
-trap above:
-`& "$env:LOCALAPPDATA\cursor-agent\cursor-agent.cmd" -p 'ping'` — then
-confirm a **newly opened** terminal resolves bare `cursor-agent`. And note a
-green gate is necessary but not yet sufficient there: registration itself is
-cron/launchd-only for this host today, so on Windows set up retrieval
-(Part 3) and treat bridging as pending.
+form and you do not gate by hand: `memu-cursor schedule install` (the
+registration path there — `docs task` has the section) runs the presence and
+auth gates itself, with `--trust` baked in, and refuses with copy-paste
+guidance if either fails. Just run it from a **newly opened** terminal — a
+shell started before the CLI install keeps a stale `PATH` (the trap above).
 
 Do not continue until the gate passes.
 
@@ -225,12 +223,14 @@ In summary: settle a schedule with the user (default: every hour) and
 register a cron entry that runs `cursor-agent -p "<the prompt that document gives
 you verbatim>"` — the prompt runs `memu-cursor prepare`, works through
 `~/.memu/hosts/cursor/jobs/*.txt` in order, then `memu-cursor commit`. Nothing in
-it is machine-specific.
+it is machine-specific. On Windows, that document's Task Scheduler section
+applies instead: `memu-cursor schedule install`, never a hand-written entry.
 
 ### ✅ Verify Part 2
 
-Confirm the cron entry exists, then dry-run: `memu-cursor prepare` (zero prepared
-sessions is fine and correct when nothing is new).
+Confirm the cron entry (Unix) or `memu-cursor schedule status` (Windows), then
+dry-run: `memu-cursor prepare` (zero prepared sessions is fine and correct when
+nothing is new).
 
 ---
 

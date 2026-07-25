@@ -38,6 +38,24 @@ SPEC = HostSpec(
     session_dir=SESSION_DIR,
     session_help="Cursor agent-transcript root (one project dir per escaped cwd)",
     instruction_path=AGENTS_MD,
+    # --trust: cursor-agent refuses to run headless in an untrusted directory
+    # (field-verified: exit 1 with "Workspace Trust Required"). The flag rides in
+    # the template so both the auth gate and the scheduled run carry it, and the
+    # trust lands on the task's working tree (~/.memu/hosts/cursor), nowhere else.
+    # Never --yolo — that is the blanket permission skip the guides reject.
+    schedule_command="cursor-agent --trust -p {prompt}",
+    needs_headless_auth=True,
+    install_hint=(
+        "  Install the standalone Cursor Agent CLI:\n"
+        "    irm 'https://cursor.com/install?win32=true' | iex\n"
+        "    # macOS/Linux/WSL:  curl https://cursor.com/install -fsSL | bash\n"
+        "  Then re-run from a NEW terminal - this shell's PATH may predate the install."
+    ),
+    auth_hint=(
+        "    sign in to the Cursor IDE on this machine (the CLI reuses that account\n"
+        "    session), or run `cursor-agent login` once. Note: custom-provider (BYOK)\n"
+        "    models do not work in the CLI - runs bill the Cursor account's plan,"
+    ),
 )
 
 
