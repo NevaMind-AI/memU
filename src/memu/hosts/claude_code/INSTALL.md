@@ -149,8 +149,10 @@ environment**. The Claude **Desktop app cannot serve it**: its bundled binary
 lives outside `PATH` and its login is invisible to the standalone CLI
 (memU#538). Two checks, in order, before you register anything:
 
-1. **`claude` resolves on `PATH`.** If it does not, install the standalone
-   CLI *with the user* — never silently as a side effect of scheduling:
+1. **`claude` resolves on `PATH`.** If it does not, tell the user, let them
+   pick the installer (it is their machine — npm assumes node, winget may
+   prompt for elevation), and run it with their go-ahead — never silently as
+   a side effect of scheduling:
    - Windows: `winget install Anthropic.ClaudeCode`, or
      `irm https://claude.ai/install.ps1 | iex`, or
      `npm install -g @anthropic-ai/claude-code`
