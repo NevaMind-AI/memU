@@ -148,6 +148,21 @@ options, but still passed to Electron/Chromium". Field data: a Windows
 install stalled exactly here, `cursor` resolving while `cursor-agent` was
 absent. Probe `cursor-agent`, never `cursor`.
 
+**And the opposite trap right after installing on Windows: a stale
+environment says "absent" while it is installed.** The native installer
+lands the CLI in `%LOCALAPPDATA%\cursor-agent` and adds that directory to
+the *user* `PATH` in the registry — but every process started before that
+(the Cursor IDE, its integrated terminal, you) keeps its launch-time
+environment, and any shell you spawn inherits the same staleness, so bare
+`cursor-agent` stays not-found in this session. Field data, same machine as
+above: an in-IDE probe concluded "not installed" while
+`%LOCALAPPDATA%\cursor-agent\cursor-agent.cmd --version` answered fine. On a
+"not found", check the registry user `PATH` and the landing dir before
+re-installing; verify by full path; then have the user restart Cursor (or
+open a terminal from a fresh Explorer context) before trusting the
+bare-name check. (The Unix gate below is immune by construction — it sets
+`PATH` explicitly.)
+
 Two checks before you register anything:
 
 1. **`cursor-agent` resolves on `PATH`.** If it does not, install it with the
@@ -178,11 +193,14 @@ env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr
 This `PATH` is only a **probe** for common install locations. The cron entry
 still derives its own `PATH` at registration time from
 `command -v memu-cursor` / `command -v cursor-agent` (see `docs task`); a green
-probe does not replace that line. On native Windows, run
-`cursor-agent -p 'ping'` from a fresh shell instead of the `env -i` form — and
-note a green gate is necessary but not yet sufficient there: registration
-itself is cron/launchd-only for this host today, so on Windows set up
-retrieval (Part 3) and treat bridging as pending.
+probe does not replace that line. On native Windows there is no `env -i`
+form — gate with the full path, which is immune to the stale-environment
+trap above:
+`& "$env:LOCALAPPDATA\cursor-agent\cursor-agent.cmd" -p 'ping'` — then
+confirm a **newly opened** terminal resolves bare `cursor-agent`. And note a
+green gate is necessary but not yet sufficient there: registration itself is
+cron/launchd-only for this host today, so on Windows set up retrieval
+(Part 3) and treat bridging as pending.
 
 Do not continue until the gate passes.
 
