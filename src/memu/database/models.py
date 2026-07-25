@@ -27,17 +27,12 @@ class Resource(BaseRecord):
 
 class RecallFile(BaseRecord):
     name: str
-    # Which track this file belongs to: "memory" (a memory category) or "skill"
+    # Which track this file belongs to: "memory" (a memory file) or "skill"
     # (a synthesized skill). Defaults to "memory" so existing rows backfill correctly.
     track: str = "memory"
     description: str
     embedding: list[float] | None = None
     content: str | None = None
-
-
-class RecallFileResource(BaseRecord):
-    resource_id: str
-    file_id: str
 
 
 class RecallFileSegment(BaseRecord):
@@ -81,7 +76,6 @@ def build_scoped_models(
 ) -> tuple[
     type[Resource],
     type[RecallFile],
-    type[RecallFileResource],
     type[RecallFileSegment],
 ]:
     """
@@ -89,12 +83,10 @@ def build_scoped_models(
     """
     resource_model = merge_scope_model(user_model, Resource, name_suffix="Resource")
     recall_file_model = merge_scope_model(user_model, RecallFile, name_suffix="RecallFile")
-    recall_file_resource_model = merge_scope_model(user_model, RecallFileResource, name_suffix="RecallFileResource")
     recall_file_segment_model = merge_scope_model(user_model, RecallFileSegment, name_suffix="RecallFileSegment")
     return (
         resource_model,
         recall_file_model,
-        recall_file_resource_model,
         recall_file_segment_model,
     )
 
@@ -102,7 +94,6 @@ def build_scoped_models(
 __all__ = [
     "BaseRecord",
     "RecallFile",
-    "RecallFileResource",
     "RecallFileSegment",
     "Resource",
     "build_scoped_models",

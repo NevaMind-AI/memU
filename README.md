@@ -4,7 +4,7 @@
 
 # memU
 
-### Personal memory, stored as an LLM wiki
+### Personal memory, stored as Wiki
 
 **Across Sessions. Across Agents. Across Devices.**
 
@@ -20,29 +20,44 @@
 
 ---
 
-memU is a lightweight, agent-driven memory system that gives users a shared LLM wiki across sessions, agents, and devices. Its core memory logic is only 500 lines — compact enough to inspect, understand, and adapt. It uses embedding-only retrieval with fully pluggable storage and embedding infrastructure.
-
-**Installation is agent-driven.** The guides are written for the agent, not for you. One message is the whole setup — tell your agent:
-
-> Read https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md and follow it to install memU.
-
-It works for Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy — and any other agent, via detection. Details in [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
+memU is a lightweight, agent-driven memory system that gives users a shared LLM wiki across sessions, agents, and devices. It automatically distills your own reusable skills from your agent history. Its core memory logic is only 500 lines — compact enough to inspect, understand, and adapt.
 
 ## Quick start
 
-Your memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
+memU works with Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy, and more. See [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
 
-Once installed, your agent retrieves relevant memory automatically before answering. To retrieve manually, run the adapter for your host:
+Choose Cloud or Local, then send the corresponding message to your agent.
 
-```bash
-memu-codex retrieve "What should I remember about this project?"
-# or: memu-claude-code / memu-cursor / memu-openclaw / memu-hermes / memu-workbuddy / memu-agent
-```
+### Cloud (coming soon)
+
+**Cross-device · Free · Unlimited · [View online](https://memu.so)**
+
+> Read [https://memu.pro/SKILL.md](https://memu.pro/SKILL.md) and follow it to install memU.
+
+### Local / self-hosted
+
+**Private · Single-device · Embedding key required**
+
+> Read [https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md](https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md) and follow it to install memU.
 
 ## How it works
 
 ![memU memory system architecture](assets/structure-v2.png)
 
+## Automatic skill extraction
+
+Once the scheduled bridging task is installed, memU can turn useful agent history into reusable Markdown skills automatically.
+
+![How memU turns agent history into reusable skills](assets/skill-extraction.png)
+
+1. **Capture new sessions.** The host adapter reads new session history, including messages and tool calls.
+2. **Prepare self-evolve jobs.** `prepare` slices each session into a self-contained job with the paths and context the agent needs.
+3. **Let the agent decide.** The agent reads related existing skills, then chooses to do nothing, patch an existing skill, or create a new one.
+4. **Write readable skill Markdown.** Each skill has a name, description, and reusable workflow, including useful branches, edge cases, and pitfalls.
+5. **Commit and index.** `commit` submits changed skill files through `commit_results`; memU embeds the skill name and description and stores it under the `skill` track.
+6. **Retrieve it later.** On a similar future task, memU returns the relevant skill so any connected agent can use the learned workflow.
+
+The judgment and synthesis stay inside the agent. `MemoryService` makes no LLM or chat calls; it stores, embeds, and retrieves the skill Markdown the agent prepared.
 
 ## Host adapters: memory for desktop coding agents
 
@@ -63,15 +78,28 @@ memU runs as a sidecar to a desktop agent (ADR 0008/0009/0010), one binary per h
 
 For agents without a dedicated binary, `memu-agent detect` probes the machine and reports per agent whether **memorization** works (a recognizable session log exists) and whether **retrieval** works (an instruction file exists to patch) — then the same verbs run against what it found.
 
-All hosts share one store and one embedding space via `~/.memu/config.env` — what one host's sessions taught memU, another host retrieves.
+All hosts share one configured memory backend via `~/.memu/config.env` — local
+or MemU Cloud. What one host's sessions taught memU, another host retrieves.
 
-Installation is the one-message setup at the top of this README. [SKILL.md](SKILL.md) is the routing skill it hands your agent: install the package, identify which host you are (falling back to `memu-agent detect` for anything without a dedicated adapter), print that host's packaged install guide (`<binary> docs install`), and follow it — configure the store, register the scheduled bridging task, patch the instruction file, each step behind a verify gate — then report which seams (memorization / retrieval) are now active.
+Installation is the one-message setup at the top of this README. [SKILL.md](SKILL.md) is the routing skill it hands your agent: install the package, identify which host you are (falling back to `memu-agent detect` for anything without a dedicated adapter), print that host's packaged install guide (`<binary> docs install`), and follow it — configure the memory backend, register the scheduled bridging task, patch the instruction file, each step behind a verify gate — then report which seams (memorization / retrieval) are now active.
 
-Afterwards `<binary> doctor` proves the whole loop resolves: config, store, and a live retrieval.
+Afterwards `<binary> doctor` proves the whole loop resolves: config, selected
+mode, and a live retrieval.
 
 Adding another host means implementing one `TranscriptSource` (where its session logs live, how its records are shaped) plus a `HostSpec`-sized CLI — the pipeline, verbs, and instruction text are shared.
 
-## Installation
+## CLI
+
+With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
+
+Once installed, your agent retrieves relevant memory automatically before answering. To retrieve manually, run the adapter for your host:
+
+```bash
+memu-codex retrieve "What should I remember about this project?"
+# or: memu-claude-code / memu-cursor / memu-openclaw / memu-hermes / memu-workbuddy / memu-agent
+```
+
+Install or invoke the CLI directly:
 
 ```bash
 pip install memu-cli         # library + memu + memu-codex CLIs
@@ -81,7 +109,11 @@ uvx --from memu-cli memu     # CLI via uv, no install
 
 ## Configuration
 
-Values resolve in order: process env → `~/.memu/config.env` → default. Every CLI flag has a matching variable:
+Values resolve in order: process env → `~/.memu/config.env` → default. memU
+supports Local and Cloud memory backends, selected by `MEMU_MEMORY_MODE`; an
+unset mode remains Local for backward compatibility.
+
+For Local / self-hosted installations, every CLI flag has a matching variable:
 
 | Setting | Env var | Default |
 |---|---|---|
@@ -90,6 +122,9 @@ Values resolve in order: process env → `~/.memu/config.env` → default. Every
 | API key | `MEMU_API_KEY` | the provider's env var, e.g. `OPENAI_API_KEY` |
 | Embedding model | `MEMU_EMBED_MODEL` | the provider's default |
 | Base URL | `MEMU_BASE_URL` | the provider's default |
+
+Run `<binary> doctor` to display the resolved mode and verify the same retrieval
+path the host uses.
 
 ### Storage backends
 

@@ -11,7 +11,6 @@ from sqlmodel import SQLModel
 
 from memu.database.sqlite.models import (
     SQLiteRecallFileModel,
-    SQLiteRecallFileResourceModel,
     SQLiteRecallFileSegmentModel,
     SQLiteResourceModel,
     build_sqlite_table_model,
@@ -25,7 +24,6 @@ class SQLiteSQLAModels:
     Base: type[Any]
     Resource: type[Any]
     RecallFile: type[Any]
-    RecallFileResource: type[Any]
     RecallFileSegment: type[Any]
 
 
@@ -60,19 +58,13 @@ def get_sqlite_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) 
     recall_file_model = build_sqlite_table_model(
         scope,
         SQLiteRecallFileModel,
-        tablename="memu_memory_categories",
-        metadata=metadata_obj,
-    )
-    recall_file_resource_model = build_sqlite_table_model(
-        scope,
-        SQLiteRecallFileResourceModel,
-        tablename="memu_resource_categories",
+        tablename="memu_recall_files",
         metadata=metadata_obj,
     )
     recall_file_segment_model = build_sqlite_table_model(
         scope,
         SQLiteRecallFileSegmentModel,
-        tablename="memu_file_segments",
+        tablename="memu_recall_file_segments",
         metadata=metadata_obj,
     )
 
@@ -84,7 +76,6 @@ def get_sqlite_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) 
         Base=SQLiteBase,
         Resource=resource_model,
         RecallFile=recall_file_model,
-        RecallFileResource=recall_file_resource_model,
         RecallFileSegment=recall_file_segment_model,
     )
     _MODEL_CACHE[cache_key] = models

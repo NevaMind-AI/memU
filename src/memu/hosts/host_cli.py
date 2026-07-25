@@ -13,8 +13,9 @@ Working state is per host. Codex predates this module and keeps its original
 ``~/.memu`` working tree; every later host defaults to ``~/.memu/hosts/<host>``,
 so two hosts' bridging runs never race over one ``jobs/`` directory (the open
 issue ADR 0009 required settling before a second host shipped — see ADR 0010).
-The durable store is shared regardless: every host reads ``~/.memu/config.env``,
-which is the point — what one host's sessions taught memU, another host retrieves.
+The durable backend is shared regardless: every host reads
+``~/.memu/config.env``, which is the point — what one host's sessions taught
+memU, another host retrieves.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import platform
 import sys
 import urllib.request
 from collections.abc import Callable, Coroutine
@@ -74,6 +76,28 @@ class HostSpec:
     """memU working tree. Empty means the per-host default ``~/.memu/hosts/<host>``;
     Codex overrides this with the pre-multi-host ``~/.memu`` it has always used."""
 
+    schedule_command: str = ""
+    """The headless agent invocation the bridging task runs, as a template with a
+    ``{prompt}`` placeholder — ``claude -p {prompt}``, ``codex exec {prompt}``. The
+    Windows ``schedule`` helper turns this into the scheduled task's wrapper, and
+    treats the first token as the agent binary to resolve on ``PATH``. Empty means
+    the host has no Windows scheduling wired yet, so ``schedule`` refuses rather
+    than guess. Unix scheduling is unaffected — cron/launchd stay doc-driven and
+    never read this field."""
+
+    needs_headless_auth: bool = False
+    """Whether the scheduled agent needs a headless credential distinct from any
+    desktop login (memU#538 Symptom B). True for ``claude-code`` — the Desktop
+    app's login is invisible to the standalone CLI; False for hosts with a shared
+    plain-file auth (Codex's ``~/.codex/auth.json``). Drives whether ``schedule``
+    runs the ``-p`` authentication gate before registering the task."""
+
+    install_hint: str = ""
+    """Copy-pasteable command(s) for installing this host's standalone CLI on
+    Windows, shown when ``schedule install`` finds it missing (memU#538 Symptom A).
+    Host-specific data, so the shared installer never hardcodes one host's package
+    names; empty falls back to generic guidance."""
+
     extra_flags: dict[str, str] = field(default_factory=dict)
     """Reserved for host-specific flags; unused today."""
 
@@ -93,6 +117,13 @@ class HostSpec:
     @property
     def default_base_dir(self) -> str:
         return self.base_dir or f"~/.memu/hosts/{self.host}"
+
+    @property
+    def task_name(self) -> str:
+        """Canonical scheduled-task name — stable across install/uninstall so the
+        task is addressable by name (memU#539). Windows only today; Unix keeps its
+        existing crontab/launchd identity untouched."""
+        return f"memu-bridging-{self.host}"
 
 
 def _layout(spec: HostSpec, args: argparse.Namespace) -> Layout:
@@ -201,28 +232,38 @@ def _proxy_hint(base_url: str) -> str | None:
 
 
 async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
-    """Prove config resolves and the store answers — the install guide's verify gate.
+    """Prove config resolves and the selected backend answers.
 
     Deliberately exercises the same call the inject hook will, so a green doctor
-    means the hook's retrieval works, not merely that some store opened.
+    means the hook's retrieval works, not merely that some local store opened.
     """
-    from memu.env import CONFIG_ENV, embedding_provider, env
+    from memu.env import CONFIG_ENV, cloud_base_url, embedding_provider, env, memory_mode
 
     try:
+        mode = memory_mode()
         result = await retrieval.retrieve("smoke test")
     except Exception as exc:
         if os.environ.get("MEMU_DEBUG") == "1":
             raise
         print(f"error: {exc} (set MEMU_DEBUG=1 for a traceback)", file=sys.stderr)
         if _smells_like_transport(exc):
-            hint = _proxy_hint(env("MEMU_BASE_URL", "") or "")
+            try:
+                target = cloud_base_url() if memory_mode() == "cloud" else (env("MEMU_BASE_URL", "") or "")
+            except Exception:
+                target = ""
+            hint = _proxy_hint(target)
             if hint:
                 print(hint, file=sys.stderr)
         return 1
     found = sum(len(result.get(layer, [])) for layer in ("segments", "files", "resources"))
     print(f"config    {os.path.expanduser(CONFIG_ENV)}")
-    print(f"store     {env('MEMU_DB')}")
-    print(f"provider  {embedding_provider()}")
+    print(f"mode      {mode}")
+    if mode == "cloud":
+        print(f"endpoint  {cloud_base_url()}")
+        print("resources accepted but not currently persisted by memU Cloud")
+    else:
+        print(f"store     {env('MEMU_DB')}")
+        print(f"provider  {embedding_provider()}")
     print(f"retrieval ok ({found} hit(s) for a smoke-test query; 0 is fine on a new store)")
     return 0
 
@@ -230,6 +271,35 @@ async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
 async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
     print((files(spec.package) / DOCS[args.doc]).read_text(encoding="utf-8"))
     return 0
+
+
+async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
+    """Register/inspect the bridging task on Windows Task Scheduler.
+
+    Only registered for hosts that set ``schedule_command`` (those that bridge via an
+    OS scheduler), so it never reaches a host that has its own. Windows-only by design
+    (memU#538/#539); on macOS/Linux it just points at the unchanged cron/launchd
+    registration in ``BRIDGING_TASK.md`` and touches neither.
+    """
+    system = platform.system()
+    if system != "Windows":
+        print(
+            f"{spec.display} bridging on {system or 'this OS'} is scheduled with cron or launchd — "
+            f"follow that section of `{spec.binary} docs task`. The `schedule` helper automates "
+            "Windows Task Scheduler only."
+        )
+        return 0
+
+    from memu.hosts import scheduling
+
+    layout = _layout(spec, args)
+    if args.action == "install":
+        return scheduling.install(spec, layout, interval_minutes=args.interval)
+    if args.action == "uninstall":
+        return scheduling.uninstall(spec, layout)
+    if args.action == "status":
+        return scheduling.status(spec, layout)
+    return scheduling.verify(spec, layout)
 
 
 def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
@@ -279,7 +349,7 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     )
     p.set_defaults(handler=bind(_cmd_verify_resources))
 
-    p = sub.add_parser("doctor", help="Verify MEMU_* config resolves and the store is reachable")
+    p = sub.add_parser("doctor", help="Verify MEMU_* config resolves and the selected memory backend is reachable")
     p.set_defaults(handler=bind(_cmd_doctor))
 
     p = sub.add_parser("docs", help="Print a packaged agent-facing guide")
@@ -289,6 +359,22 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
         help="install: the setup guide; task: the bridging-task procedure; uninstall: the removal guide",
     )
     p.set_defaults(handler=bind(_cmd_docs))
+
+    # Windows-only automation of the bridging task's registration — registered only
+    # for hosts that bridge via an OS scheduler, which is exactly the ones that set
+    # `schedule_command`. Hosts with their own scheduler (Codex, OpenClaw, WorkBuddy)
+    # never set it, so they never advertise a `schedule` verb they couldn't honour.
+    if spec.schedule_command:
+        p = with_base(
+            sub.add_parser("schedule", help=f"Register the {spec.display} bridging task (Windows Task Scheduler)")
+        )
+        p.add_argument(
+            "action",
+            choices=("install", "uninstall", "status", "verify"),
+            help="install/uninstall the task, show its status, or verify it can run",
+        )
+        p.add_argument("--interval", type=int, default=60, help="Minutes between runs, for install (default: 60)")
+        p.set_defaults(handler=bind(_cmd_schedule))
 
     if spec.register_extra is not None:
         spec.register_extra(sub)

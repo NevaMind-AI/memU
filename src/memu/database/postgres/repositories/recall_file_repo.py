@@ -22,9 +22,9 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
     ) -> None:
         super().__init__(state=state, sqla_models=sqla_models, sessions=sessions, scope_fields=scope_fields)
         self._recall_file_model = recall_file_model
-        self.categories: dict[str, RecallFile] = self._state.categories
+        self.recall_files: dict[str, RecallFile] = self._state.recall_files
 
-    def list_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
+    def list_recall_files(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
         from sqlmodel import select
 
         filters = self._build_filters(self._sqla_models.RecallFile, where)
@@ -33,11 +33,11 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
             result: dict[str, RecallFile] = {}
             for row in rows:
                 row.embedding = self._normalize_embedding(row.embedding)
-                cat = self._cache_category(row)
-                result[cat.id] = cat
+                recall_file = self._cache_recall_file(row)
+                result[recall_file.id] = recall_file
         return result
 
-    def clear_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
+    def clear_recall_files(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
         from sqlmodel import delete, select
 
         filters = self._build_filters(self._sqla_models.RecallFile, where)
@@ -57,12 +57,12 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
             session.commit()
 
             # Clean up cache
-            for cat_id in deleted:
-                self.categories.pop(cat_id, None)
+            for recall_file_id in deleted:
+                self.recall_files.pop(recall_file_id, None)
 
         return deleted
 
-    def get_or_create_category(
+    def get_or_create_recall_file(
         self,
         *,
         name: str,
@@ -96,9 +96,9 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
                     session.add(existing)
                     session.commit()
                     session.refresh(existing)
-                return self._cache_category(existing)
+                return self._cache_recall_file(existing)
 
-            cat = self._recall_file_model(
+            recall_file = self._recall_file_model(
                 name=name,
                 description=description,
                 embedding=self._prepare_embedding(embedding),
@@ -107,16 +107,16 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
                 updated_at=now,
                 **user_data,
             )
-            session.add(cat)
+            session.add(recall_file)
             session.commit()
-            session.refresh(cat)
+            session.refresh(recall_file)
 
-        return self._cache_category(cat)
+        return self._cache_recall_file(recall_file)
 
-    def update_category(
+    def update_recall_file(
         self,
         *,
-        category_id: str,
+        recall_file_id: str,
         name: str | None = None,
         description: str | None = None,
         embedding: list[float] | None = None,
@@ -126,29 +126,29 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
 
         now = self._now()
         with self._sessions.session() as session:
-            cat = session.scalar(
-                select(self._sqla_models.RecallFile).where(self._sqla_models.RecallFile.id == category_id)
+            recall_file = session.scalar(
+                select(self._sqla_models.RecallFile).where(self._sqla_models.RecallFile.id == recall_file_id)
             )
-            if cat is None:
-                msg = f"Category with id {category_id} not found"
+            if recall_file is None:
+                msg = f"RecallFile with id {recall_file_id} not found"
                 raise KeyError(msg)
 
             if name is not None:
-                cat.name = name
+                recall_file.name = name
             if description is not None:
-                cat.description = description
+                recall_file.description = description
             if embedding is not None:
-                cat.embedding = self._prepare_embedding(embedding)
+                recall_file.embedding = self._prepare_embedding(embedding)
             if content is not None:
-                cat.content = content
+                recall_file.content = content
 
-            cat.updated_at = now
-            session.add(cat)
+            recall_file.updated_at = now
+            session.add(recall_file)
             session.commit()
-            session.refresh(cat)
-            cat.embedding = self._normalize_embedding(cat.embedding)
+            session.refresh(recall_file)
+            recall_file.embedding = self._normalize_embedding(recall_file.embedding)
 
-        return self._cache_category(cat)
+        return self._cache_recall_file(recall_file)
 
     def load_existing(self) -> None:
         from sqlmodel import select
@@ -157,11 +157,11 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
             rows = session.scalars(select(self._sqla_models.RecallFile)).all()
             for row in rows:
                 row.embedding = self._normalize_embedding(row.embedding)
-                self._cache_category(row)
+                self._cache_recall_file(row)
 
-    def _cache_category(self, cat: RecallFile) -> RecallFile:
-        self.categories[cat.id] = cat
-        return cat
+    def _cache_recall_file(self, recall_file: RecallFile) -> RecallFile:
+        self.recall_files[recall_file.id] = recall_file
+        return recall_file
 
 
 __all__ = ["PostgresRecallFileRepo"]

@@ -1,14 +1,18 @@
 ---
 name: create-memu-bridging-task
-description: Register a scheduled automation that bridges the agent's recent WorkBuddy sessions into durable memU memory, skills, and resources. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
+description: Register a scheduled automation that bridges recent WorkBuddy sessions into memU memory, skills, and resource submissions. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task (WorkBuddy)
 
 Use this when the user asks to **set up (or change) the recurring memU
 "bridging" task** — the automation that periodically turns what the agent
-recently did in its WorkBuddy sessions into durable memU memory files, skills,
-and resource records.
+recently did in its WorkBuddy sessions into memU memory files, skills, and
+resource submissions.
+
+Memory and skills are durable in both modes. In cloud mode, the current service
+accepts workspace resources from this unchanged pipeline but does not persist or
+retrieve them yet.
 
 Your goal is to **register a recurring WorkBuddy automation** whose prompt is
 the three-step pipeline below. You are not running the pipeline now; you are
@@ -109,7 +113,8 @@ are new WorkBuddy sessions since the last run.
 - **The working tree is host-scoped.** Everything under
   `~/.memu/hosts/workbuddy/` is this adapter's run-scoped working state; other
   memU host adapters (Codex, Claude Code, …) have their own and never race with
-  this one. The durable store they all share is the `MEMU_DB` in
-  `~/.memu/config.env`.
+  this one. The durable backend they all share is selected by
+  `MEMU_MEMORY_MODE` in `~/.memu/config.env`; local mode uses the `MEMU_DB`
+  there.
 - **Failure handling.** Steps 1 and 3 are the only failure points that should
   abort the run. A single "do nothing" job in step 2 is normal, not an error.

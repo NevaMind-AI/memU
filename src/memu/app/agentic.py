@@ -46,9 +46,9 @@ class AgenticMixin:
         """
         store = self._get_database()
         where_filters = self._normalize_where(where)
-        categories = store.recall_file_repo.list_categories(where_filters)
-        categories_list = [self._model_dump_without_embeddings(category) for category in categories.values()]
-        return {"categories": categories_list}
+        recall_files = store.recall_file_repo.list_recall_files(where_filters)
+        recall_files_list = [self._model_dump_without_embeddings(recall_file) for recall_file in recall_files.values()]
+        return {"recall_files": recall_files_list}
 
     async def progressive_retrieve(
         self,
@@ -82,19 +82,16 @@ class AgenticMixin:
         segment_hits, segment_pool = self._recall_segments(
             store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.file.enabled
         )
-        file_hits, file_pool, file_resource_urls = self._collect_files(
+        file_hits, file_pool = self._collect_files(
             store=store, where_filters=where_filters, segment_hits=segment_hits, segment_pool=segment_pool
         )
         resource_hits, resource_pool = self._recall_resources(
             store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.resource.enabled
         )
 
-        files = self._materialize_hits(file_hits, file_pool)
-        for file in files:
-            file["resource_urls"] = file_resource_urls.get(file["id"], [])
         return {
             "segments": self._materialize_hits(segment_hits, segment_pool),
-            "files": files,
+            "files": self._materialize_hits(file_hits, file_pool),
             "resources": self._materialize_hits(resource_hits, resource_pool),
         }
 
@@ -134,13 +131,13 @@ class AgenticMixin:
         where_filters: dict[str, Any],
         segment_hits: list[tuple[str, float]],
         segment_pool: dict[str, Any],
-    ) -> tuple[list[tuple[str, float]], dict[str, Any], dict[str, list[str]]]:
+    ) -> tuple[list[tuple[str, float]], dict[str, Any]]:
         """Roll the ranked segments up to their files (no ranked file search).
 
         Every file pointed to by a top segment is returned; a file's score is the
         max score across the segments that point to it.
         """
-        file_pool = store.recall_file_repo.list_categories(where_filters)
+        file_pool = store.recall_file_repo.list_recall_files(where_filters)
 
         file_scores: dict[str, float] = {}
         for seg_id, score in segment_hits:
@@ -156,29 +153,7 @@ class AgenticMixin:
 
         # Preserve descending-score order so the response reads best-first.
         file_hits = sorted(file_scores.items(), key=lambda kv: kv[1], reverse=True)
-        file_resource_urls = self._collect_file_resource_urls(store, where_filters, file_pool)
-        return file_hits, file_pool, file_resource_urls
-
-    @staticmethod
-    def _collect_file_resource_urls(
-        store: Database, where_filters: dict[str, Any], file_pool: dict[str, Any]
-    ) -> dict[str, list[str]]:
-        """Map each file id to the URLs of the resources linked to it.
-
-        Resolves the ``RecallFileResource`` link table (file -> resource) and the
-        resource records (resource -> url) within the current scope, surfacing url
-        strings only.
-        """
-        resources = store.resource_repo.list_resources(where_filters)
-        file_resource_urls: dict[str, list[str]] = {}
-        for rel in store.recall_file_resource_repo.list_relations(where_filters):
-            if rel.file_id not in file_pool:
-                continue
-            resource = resources.get(rel.resource_id)
-            if resource is None:
-                continue
-            file_resource_urls.setdefault(rel.file_id, []).append(resource.url)
-        return file_resource_urls
+        return file_hits, file_pool
 
     def _recall_resources(
         self,
@@ -261,8 +236,7 @@ class AgenticMixin:
         """Create-or-update each ``{path, description}`` as a ``Resource`` keyed by url.
 
         ``ResourceRepo`` has no in-place update, so an "update" is a delete-then-create:
-        any existing resource sharing this url (and its file provenance links) is dropped
-        before the fresh record is created.
+        any existing resource sharing this url is dropped before the fresh record is created.
         """
         where = user_scope or None
         committed: list[Resource] = []
@@ -275,7 +249,6 @@ class AgenticMixin:
             # Create-or-update keyed by url: drop any prior resource for this url first.
             stale = [res for res in store.resource_repo.list_resources(where=where).values() if res.url == url]
             for res in stale:
-                store.recall_file_resource_repo.unlink_resource(res.id)
                 store.resource_repo.delete_resource(res.id)
 
             caption_embedding = await _embed_one(embed_client, caption) if caption else None
@@ -318,12 +291,12 @@ class AgenticMixin:
             description = (item.get("description") or "").strip()
             content = (item.get("content") or "").strip()
 
-            existing = store.recall_file_repo.list_categories(where={**user_data, "track": file_track})
+            existing = store.recall_file_repo.list_recall_files(where={**user_data, "track": file_track})
             file = {f.name: f for f in existing.values()}.get(name)
             if file is None:
                 emb_text = f"{name}: {description}" if description else name
                 embedding = await _embed_one(embed_client, emb_text)
-                file = store.recall_file_repo.get_or_create_category(
+                file = store.recall_file_repo.get_or_create_recall_file(
                     name=name,
                     description=description,
                     embedding=embedding,
@@ -335,8 +308,8 @@ class AgenticMixin:
             # leave the description/embedding untouched and just take the new content.
             description_changed = bool(description) and description != file.description
             new_embedding = await _embed_one(embed_client, f"{name}: {description}") if description_changed else None
-            file = store.recall_file_repo.update_category(
-                category_id=file.id,
+            file = store.recall_file_repo.update_recall_file(
+                recall_file_id=file.id,
                 description=description if description_changed else None,
                 embedding=new_embedding,
                 content=content,

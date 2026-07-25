@@ -7,8 +7,45 @@ agent left behind.
 
 from __future__ import annotations
 
+import contextlib
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` so a concurrent reader never sees it half-written.
+
+    The inject hook (``retrieval``) now writes mirror files on the per-turn hot
+    path while agents read them, so a plain ``write_text`` could hand back a torn
+    file. Write to a uniquely-named temp in the same directory (so the final
+    ``os.replace`` is a same-filesystem atomic rename) and swap it in whole. The
+    unique temp name also lets two writers of the same target run without
+    clobbering each other's in-progress file — last rename wins, and since both
+    derive their content from the same store, the content is identical anyway.
+    """
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".tmp-", suffix=path.suffix)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        # Never leave the temp file behind if the write or rename failed.
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+def recall_file_path(base_dir: Path, subdir: str, name: str) -> Path:
+    """The on-disk mirror path for a recall file, by name.
+
+    The one place the filename convention lives, so the writer and any reader
+    that needs to *locate* a mirrored file by name (e.g. retrieval, surfacing a
+    file's path to the agent) agree by construction rather than by comment.
+    """
+    # Escape spaces in the filename with '-'; the frontmatter keeps the raw name.
+    return base_dir / subdir / f"{name.replace(' ', '-')}.md"
 
 
 def write_recall_file(base_dir: Path, subdir: str, recall_file: dict[str, Any]) -> Path:
@@ -20,9 +57,8 @@ def write_recall_file(base_dir: Path, subdir: str, recall_file: dict[str, Any]) 
     out_dir = base_dir / subdir
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Escape spaces in the filename with '-'; the frontmatter keeps the raw name.
-    out_path = out_dir / f"{name.replace(' ', '-')}.md"
-    out_path.write_text(f"---\nname: {name}\ndescription: {description}\n---\n{content}", encoding="utf-8")
+    out_path = recall_file_path(base_dir, subdir, name)
+    _atomic_write_text(out_path, f"---\nname: {name}\ndescription: {description}\n---\n{content}")
     return out_path
 
 

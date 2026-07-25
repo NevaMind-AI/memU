@@ -11,18 +11,15 @@ from sqlmodel import SQLModel
 from memu.database.interfaces import Database
 from memu.database.models import (
     RecallFile,
-    RecallFileResource,
     RecallFileSegment,
     Resource,
 )
 from memu.database.repositories import (
     RecallFileRepo,
-    RecallFileResourceRepo,
     RecallFileSegmentRepo,
     ResourceRepo,
 )
 from memu.database.sqlite.repositories.recall_file_repo import SQLiteRecallFileRepo
-from memu.database.sqlite.repositories.recall_file_resource_repo import SQLiteRecallFileResourceRepo
 from memu.database.sqlite.repositories.recall_file_segment_repo import SQLiteRecallFileSegmentRepo
 from memu.database.sqlite.repositories.resource_repo import SQLiteResourceRepo
 from memu.database.sqlite.schema import SQLiteSQLAModels, get_sqlite_sqlalchemy_models
@@ -41,18 +38,16 @@ class SQLiteStore(Database):
 
     Attributes:
         resource_repo: Repository for resource records.
-        recall_file_repo: Repository for memory categories.
+        recall_file_repo: Repository for recall files.
         resources: Dict cache of resource records.
-        categories: Dict cache of memory category records.
+        recall_files: Dict cache of recall file records.
     """
 
     resource_repo: ResourceRepo
     recall_file_repo: RecallFileRepo
-    recall_file_resource_repo: RecallFileResourceRepo
     recall_file_segment_repo: RecallFileSegmentRepo
     resources: dict[str, Resource]
-    categories: dict[str, RecallFile]
-    resource_relations: list[RecallFileResource]
+    recall_files: dict[str, RecallFile]
     segments: list[RecallFileSegment]
 
     def __init__(
@@ -62,7 +57,6 @@ class SQLiteStore(Database):
         scope_model: type[BaseModel] | None = None,
         resource_model: type[Any] | None = None,
         recall_file_model: type[Any] | None = None,
-        recall_file_resource_model: type[Any] | None = None,
         recall_file_segment_model: type[Any] | None = None,
         sqla_models: SQLiteSQLAModels | None = None,
     ) -> None:
@@ -72,7 +66,7 @@ class SQLiteStore(Database):
             dsn: SQLite connection string (e.g., "sqlite:///path/to/db.sqlite").
             scope_model: Pydantic model defining user scope fields.
             resource_model: Optional custom resource model.
-            recall_file_model: Optional custom memory category model.
+            recall_file_model: Optional custom recall file model.
             sqla_models: Pre-built SQLAlchemy models container.
         """
         self.dsn = dsn
@@ -88,7 +82,6 @@ class SQLiteStore(Database):
         # Use provided models or defaults from sqla_models
         resource_model = resource_model or self._sqla_models.Resource
         recall_file_model = recall_file_model or self._sqla_models.RecallFile
-        recall_file_resource_model = recall_file_resource_model or self._sqla_models.RecallFileResource
         recall_file_segment_model = recall_file_segment_model or self._sqla_models.RecallFileSegment
 
         # Initialize repositories
@@ -106,13 +99,6 @@ class SQLiteStore(Database):
             sessions=self._sessions,
             scope_fields=self._scope_fields,
         )
-        self.recall_file_resource_repo = SQLiteRecallFileResourceRepo(
-            state=self._state,
-            recall_file_resource_model=recall_file_resource_model,
-            sqla_models=self._sqla_models,
-            sessions=self._sessions,
-            scope_fields=self._scope_fields,
-        )
         self.recall_file_segment_repo = SQLiteRecallFileSegmentRepo(
             state=self._state,
             recall_file_segment_model=recall_file_segment_model,
@@ -123,8 +109,7 @@ class SQLiteStore(Database):
 
         # Set up cache references
         self.resources = self._state.resources
-        self.categories = self._state.categories
-        self.resource_relations = self._state.resource_relations
+        self.recall_files = self._state.recall_files
         self.segments = self._state.segments
 
     def _create_tables(self) -> None:
@@ -142,7 +127,6 @@ class SQLiteStore(Database):
         """Load all existing data from database into cache."""
         self.resource_repo.load_existing()
         self.recall_file_repo.load_existing()
-        self.recall_file_resource_repo.load_existing()
         self.recall_file_segment_repo.load_existing()
 
 

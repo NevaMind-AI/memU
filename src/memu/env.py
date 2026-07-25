@@ -1,11 +1,12 @@
 """Shared ``MEMU_*`` configuration — one loader, every entrypoint.
 
 The ``memu`` CLI, the ``memu-<host>`` adapters, and the bridging pipeline all
-construct their :class:`~memu.app.MemoryService` here. That sharing is not
-tidiness: the *record* seam (bridging writes) and the *inject* seam (retrieval
-reads) must agree on the DSN **and** the embedding provider, or a query is
-embedded in one space and compared against vectors written in another — the
-comparison is meaningless and retrieval silently returns nothing (ADR 0009).
+select their agentic backend here. That sharing is not tidiness: the *record*
+seam (bridging writes) and the *inject* seam (retrieval reads) must agree on
+local versus cloud execution. In local mode they must also agree on the DSN
+**and** embedding provider, or a query is embedded in one space and compared
+against vectors written in another — the comparison is meaningless and
+retrieval silently returns nothing (ADR 0009/0012).
 
 Values resolve in this order:
 
@@ -28,7 +29,10 @@ from __future__ import annotations
 import os
 from functools import cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from memu.agentic_backend import AgenticMemoryBackend
 
 CONFIG_ENV = "~/.memu/config.env"
 """Where install persists the collected values. Override with ``MEMU_CONFIG_ENV``."""
@@ -37,7 +41,10 @@ CONFIG_ENV = "~/.memu/config.env"
 class ConfigError(RuntimeError):
     """Required ``MEMU_*`` configuration is absent or unusable."""
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, detail: str | None = None) -> None:
+        if detail is not None:
+            super().__init__(f"{name}: {detail}")
+            return
         super().__init__(
             f"{name} is not set. Add it to {CONFIG_ENV} (or export it). Refusing to fall back to a "
             f"default: record and retrieval must use the same store, or retrieval finds nothing."
@@ -131,6 +138,66 @@ def embedding_profile() -> dict[str, Any]:
         if value := env(var):
             profile[key] = value
     return profile
+
+
+MemoryMode = Literal["local", "cloud"]
+
+
+def memory_mode() -> MemoryMode:
+    """Resolve the execution backend, defaulting to local for compatibility."""
+    value = (env("MEMU_MEMORY_MODE", "local") or "local").strip().lower()
+    if value == "local":
+        return "local"
+    if value == "cloud":
+        return "cloud"
+    raise ConfigError("MEMU_MEMORY_MODE", "must be either 'local' or 'cloud'")
+
+
+def cloud_base_url() -> str:
+    """The full v4 memory API base URL, including ``/api/v4/memory/``."""
+    from memu.cloud import DEFAULT_CLOUD_BASE_URL
+
+    return env("MEMU_CLOUD_BASE_URL", DEFAULT_CLOUD_BASE_URL) or DEFAULT_CLOUD_BASE_URL
+
+
+def cloud_api_key() -> str:
+    """Resolve the project API key without reusing local embedding credentials."""
+    value = env("MEMU_CLOUD_API_KEY")
+    if not value:
+        raise ConfigError(
+            "MEMU_CLOUD_API_KEY",
+            f"is required in cloud mode. Add it to {CONFIG_ENV} (or export it)",
+        )
+    return value
+
+
+def build_agentic_memory_backend_from_env(
+    *,
+    local_database: str | None = None,
+    local_embedding_profile: dict[str, Any] | None = None,
+) -> AgenticMemoryBackend:
+    """Build the configured local service or cloud client through one selector.
+
+    ``memu`` passes its existing local CLI flag overrides. Host adapters pass no
+    overrides and therefore require the install-time ``MEMU_DB`` configuration
+    in local mode. Cloud mode ignores local-only overrides.
+    """
+    if memory_mode() == "cloud":
+        from memu.cloud import CloudMemoryClient
+
+        return CloudMemoryClient(
+            base_url=cloud_base_url(),
+            api_key=cloud_api_key(),
+        )
+
+    from memu.app import MemoryService
+
+    resolved_database = database_config(local_database if local_database is not None else require("MEMU_DB"))
+    resolved_embedding = local_embedding_profile if local_embedding_profile is not None else embedding_profile()
+    return MemoryService(
+        embedding_profiles={"default": resolved_embedding},
+        database_config=resolved_database,
+    )
 
 
 def build_service_from_env() -> Any:

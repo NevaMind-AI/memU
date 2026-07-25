@@ -62,16 +62,15 @@ binary if your host turns out to have one.
 ```
 
 Read what it prints, top to bottom, and follow it exactly. Every guide has the
-same shape — configure the store once in `~/.memu/config.env`, register the
+same shape — select the local or cloud backend once in `~/.memu/config.env`, register the
 scheduled bridging task (record), patch your instruction file (inject) — and
 every part ends with a **verify gate**; do not proceed past a failing one.
 
 Two rules that hold for every host:
 
-- **One store.** If `~/.memu/config.env` already exists (another agent on this
-  machine is already integrated), reuse it as is. A second store would split
-  the embedding space and both installs would silently retrieve nothing from
-  each other.
+- **One backend.** If `~/.memu/config.env` already exists (another agent on this
+  machine is already integrated), reuse it as is. A second mode or local store
+  would split record and retrieval so the two installs no longer share memory.
 - **Report the outcome.** When done, tell the user which seams are now active —
   memorization, retrieval, or both — and where (the session log being mined,
   the instruction file patched). For `memu-agent`, the detect report decides

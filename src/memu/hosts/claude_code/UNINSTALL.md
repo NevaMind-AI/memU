@@ -34,11 +34,19 @@ entry**. Everything else in the user's crontab is theirs and stays.
   `crontab -r` removes the now-empty crontab cleanly.
 - **launchd** — `launchctl bootout gui/$(id -u)/<label>` and delete the plist
   under `~/Library/LaunchAgents`.
+- **Windows (Task Scheduler)** — the task was registered by the helper, so remove
+  it the same way; it also deletes the generated wrapper and prompt file:
+
+  ```
+  memu-claude-code schedule uninstall
+  ```
 
 ### ✅ Verify Part 1
 
 `crontab -l` (and `ls ~/Library/LaunchAgents`, if launchd was used) shows no
-memU bridging entry, and everything unrelated is still there.
+memU bridging entry, and everything unrelated is still there. On Windows,
+`memu-claude-code schedule status` reports not-registered (equivalently,
+`Get-ScheduledTask -TaskPath '\memU\'` finds nothing).
 
 ---
 

@@ -1,14 +1,18 @@
 ---
 name: create-memu-bridging-task
-description: Create an OpenClaw cron job that bridges the agent's recent OpenClaw sessions into durable memU memory, skills, and resources. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
+description: Create an OpenClaw cron job that bridges recent OpenClaw sessions into memU memory, skills, and resource submissions. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task (OpenClaw)
 
 Use this when the user asks to **set up (or change) the recurring memU
 "bridging" task** — the job that periodically turns what the agent recently did
-in its OpenClaw sessions into durable memU memory files, skills, and resource
-records.
+in its OpenClaw sessions into memU memory files, skills, and resource
+submissions.
+
+Memory and skills are durable in both modes. In cloud mode, the current service
+accepts workspace resources from this unchanged pipeline but does not persist or
+retrieve them yet.
 
 Your goal is to **create an OpenClaw cron job** (OpenClaw schedules agent runs
 natively) whose recurring prompt runs the three-step pipeline below. You are not
@@ -134,6 +138,7 @@ OpenClaw sessions since the last run.
 - **The working tree is host-scoped.** Everything under
   `~/.memu/hosts/openclaw/` is this adapter's run-scoped working state; other
   memU host adapters never race with it. The durable store they all share is the
-  `MEMU_DB` in `~/.memu/config.env`.
+  backend selected by `MEMU_MEMORY_MODE` in `~/.memu/config.env`; local mode
+  uses the `MEMU_DB` there.
 - **Failure handling.** Steps 1 and 3 are the only failure points that should
   abort the run. A "do nothing" job in step 2 is normal, not an error.

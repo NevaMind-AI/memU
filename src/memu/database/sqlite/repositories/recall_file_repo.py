@@ -1,4 +1,4 @@
-"""SQLite memory category repository implementation."""
+"""SQLite recall file repository implementation."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
-    """SQLite implementation of memory category repository."""
+    """SQLite implementation of the recall file repository."""
 
     def __init__(
         self,
@@ -30,11 +30,11 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
         sessions: SQLiteSessionManager,
         scope_fields: list[str],
     ) -> None:
-        """Initialize memory category repository.
+        """Initialize the recall file repository.
 
         Args:
             state: Shared database state for caching.
-            recall_file_model: SQLModel class for memory categories.
+            recall_file_model: SQLModel class for recall files.
             sqla_models: SQLAlchemy model container.
             sessions: Session manager for database connections.
             scope_fields: List of user scope field names.
@@ -46,16 +46,16 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             scope_fields=scope_fields,
         )
         self._recall_file_model = recall_file_model
-        self.categories = self._state.categories
+        self.recall_files = self._state.recall_files
 
-    def list_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
-        """List categories matching the where clause.
+    def list_recall_files(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
+        """List recall files matching the where clause.
 
         Args:
             where: Optional filter conditions.
 
         Returns:
-            Dictionary of category ID to RecallFile mapping.
+            Dictionary of recall file ID to RecallFile mapping.
         """
         with self._sessions.session() as session:
             stmt = select(self._recall_file_model)
@@ -66,7 +66,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
 
         result: dict[str, RecallFile] = {}
         for row in rows:
-            cat = RecallFile(
+            recall_file = RecallFile(
                 id=row.id,
                 name=row.name,
                 description=row.description,
@@ -77,19 +77,19 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
                 updated_at=row.updated_at,
                 **self._scope_kwargs_from(row),
             )
-            result[row.id] = cat
-            self.categories[row.id] = cat
+            result[row.id] = recall_file
+            self.recall_files[row.id] = recall_file
 
         return result
 
-    def clear_categories(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
-        """Clear categories matching the where clause.
+    def clear_recall_files(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
+        """Clear recall files matching the where clause.
 
         Args:
             where: Optional filter conditions.
 
         Returns:
-            Dictionary of deleted category ID to RecallFile mapping.
+            Dictionary of deleted recall file ID to RecallFile mapping.
         """
         filters = self._build_filters(self._recall_file_model, where)
         with self._sessions.session() as session:
@@ -101,7 +101,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
 
             deleted: dict[str, RecallFile] = {}
             for row in rows:
-                cat = RecallFile(
+                recall_file = RecallFile(
                     id=row.id,
                     name=row.name,
                     description=row.description,
@@ -112,7 +112,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
                     updated_at=row.updated_at,
                     **self._scope_kwargs_from(row),
                 )
-                deleted[row.id] = cat
+                deleted[row.id] = recall_file
 
             if not deleted:
                 return {}
@@ -125,12 +125,12 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             session.commit()
 
             # Clean up cache
-            for cat_id in deleted:
-                self.categories.pop(cat_id, None)
+            for recall_file_id in deleted:
+                self.recall_files.pop(recall_file_id, None)
 
         return deleted
 
-    def get_or_create_category(
+    def get_or_create_recall_file(
         self,
         *,
         name: str,
@@ -139,11 +139,11 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
         user_data: dict[str, Any],
         track: str = "memory",
     ) -> RecallFile:
-        """Get existing category by (name, track, scope) or create a new one.
+        """Get existing recall file by (name, track, scope) or create a new one.
 
         Args:
-            name: Category name.
-            description: Category description.
+            name: Recall file name.
+            description: Recall file description.
             embedding: Embedding vector.
             user_data: User scope data.
             track: Which track the file belongs to ("memory" or "skill").
@@ -161,7 +161,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             existing = session.exec(stmt).first()
 
             if existing:
-                cat = RecallFile(
+                recall_file = RecallFile(
                     id=existing.id,
                     name=existing.name,
                     description=existing.description,
@@ -172,8 +172,8 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
                     updated_at=existing.updated_at,
                     **self._scope_kwargs_from(existing),
                 )
-                self.categories[existing.id] = cat
-                return cat
+                self.recall_files[existing.id] = recall_file
+                return recall_file
 
             # Create new file
             now = self._now()
@@ -191,7 +191,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             session.commit()
             session.refresh(row)
 
-        cat = RecallFile(
+        recall_file = RecallFile(
             id=row.id,
             name=row.name,
             description=row.description,
@@ -202,22 +202,22 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             updated_at=row.updated_at,
             **user_data,
         )
-        self.categories[row.id] = cat
-        return cat
+        self.recall_files[row.id] = recall_file
+        return recall_file
 
-    def update_category(
+    def update_recall_file(
         self,
         *,
-        category_id: str,
+        recall_file_id: str,
         name: str | None = None,
         description: str | None = None,
         embedding: list[float] | None = None,
         content: str | None = None,
     ) -> RecallFile:
-        """Update an existing category.
+        """Update an existing recall file.
 
         Args:
-            category_id: ID of category to update.
+            recall_file_id: ID of recall file to update.
             name: New name (optional).
             description: New description (optional).
             embedding: New embedding vector (optional).
@@ -227,14 +227,14 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             Updated RecallFile object.
 
         Raises:
-            KeyError: If category not found.
+            KeyError: If recall file not found.
         """
         with self._sessions.session() as session:
-            stmt = select(self._recall_file_model).where(self._recall_file_model.id == category_id)
+            stmt = select(self._recall_file_model).where(self._recall_file_model.id == recall_file_id)
             row = session.exec(stmt).first()
 
             if row is None:
-                msg = f"Category with id {category_id} not found"
+                msg = f"RecallFile with id {recall_file_id} not found"
                 raise KeyError(msg)
 
             if name is not None:
@@ -251,7 +251,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             session.commit()
             session.refresh(row)
 
-        cat = RecallFile(
+        recall_file = RecallFile(
             id=row.id,
             name=row.name,
             description=row.description,
@@ -262,12 +262,12 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             updated_at=row.updated_at,
             **self._scope_kwargs_from(row),
         )
-        self.categories[row.id] = cat
-        return cat
+        self.recall_files[row.id] = recall_file
+        return recall_file
 
     def load_existing(self) -> None:
-        """Load all existing categories from database into cache."""
-        self.list_categories()
+        """Load all existing recall files from database into cache."""
+        self.list_recall_files()
 
 
 __all__ = ["SQLiteRecallFileRepo"]

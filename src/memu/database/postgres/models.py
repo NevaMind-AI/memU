@@ -18,7 +18,6 @@ from sqlmodel import Column, DateTime, Field, Index, SQLModel, func
 
 from memu.database.models import (
     RecallFile,
-    RecallFileResource,
     RecallFileSegment,
     Resource,
 )
@@ -61,13 +60,6 @@ class RecallFileModel(BaseModelMixin, RecallFile):
     embedding: list[float] | None = Field(default=None, sa_column=Column(Vector(), nullable=True))
     content: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     track: str = Field(default="memory", sa_column=Column(String, nullable=False, server_default="memory"))
-
-
-class RecallFileResourceModel(BaseModelMixin, RecallFileResource):
-    resource_id: str = Field(sa_column=Column(ForeignKey("resources.id", ondelete="CASCADE"), nullable=False))
-    file_id: str = Field(sa_column=Column(ForeignKey("recall_files.id", ondelete="CASCADE"), nullable=False))
-
-    __table_args__ = (Index("idx_recall_file_resources_unique", "resource_id", "file_id", unique=True),)
 
 
 class RecallFileSegmentModel(BaseModelMixin, RecallFileSegment):
@@ -161,22 +153,18 @@ def build_table_model(
 
 def build_scoped_models(
     user_model: type[BaseModel],
-) -> tuple[type[SQLModel], type[SQLModel], type[SQLModel], type[SQLModel]]:
+) -> tuple[type[SQLModel], type[SQLModel], type[SQLModel]]:
     """
-    Build scoped SQLModel tables for each entity (resource, category, relation, segment).
+    Build scoped SQLModel tables for each entity (resource, recall file, segment).
     """
     resource_model = build_table_model(user_model, ResourceModel, tablename="resources")
     recall_file_model = build_table_model(
         user_model, RecallFileModel, tablename="recall_files", unique_with_scope=["name"]
     )
-    recall_file_resource_model = build_table_model(
-        user_model, RecallFileResourceModel, tablename="recall_file_resources"
-    )
     recall_file_segment_model = build_table_model(user_model, RecallFileSegmentModel, tablename="recall_file_segments")
     return (
         resource_model,
         recall_file_model,
-        recall_file_resource_model,
         recall_file_segment_model,
     )
 
@@ -184,7 +172,6 @@ def build_scoped_models(
 __all__ = [
     "BaseModelMixin",
     "RecallFileModel",
-    "RecallFileResourceModel",
     "RecallFileSegmentModel",
     "ResourceModel",
     "build_scoped_models",

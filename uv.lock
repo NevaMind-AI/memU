@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32'",
@@ -405,7 +405,7 @@ wheels = [
 
 [[package]]
 name = "memu-cli"
-version = "1.5.1"
+version = "2.0.0b0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },

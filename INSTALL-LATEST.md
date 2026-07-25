@@ -121,7 +121,7 @@ Then print your host's packaged guide and follow it to the letter:
 memu-<your-host> docs install
 ```
 
-It walks you through configuring the store in `~/.memu/config.env`, registering
+It walks you through selecting the local or cloud backend in `~/.memu/config.env`, registering
 the scheduled bridging task, and patching your instruction file, each behind a
 verify gate.
 

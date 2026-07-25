@@ -40,7 +40,7 @@ class FakeService:
         self.committed: list[dict[str, Any]] = []
 
     async def list_all_recall_files(self) -> dict[str, Any]:
-        return {"categories": []}
+        return {"recall_files": []}
 
     async def commit_results(self, recall_files: Any, resource: Any) -> dict[str, Any]:
         self.committed.append({"recall_files": recall_files, "resource": resource})
@@ -57,7 +57,7 @@ def rig(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> tuple[FakeSo
     service = FakeService()
     import memu.hosts.bridging.pipeline as pipeline
 
-    monkeypatch.setattr(pipeline, "build_service_from_env", lambda: service)
+    monkeypatch.setattr(pipeline, "build_agentic_memory_backend_from_env", lambda: service)
     return FakeSource(logs), layout, service
 
 
