@@ -159,18 +159,18 @@ lives outside `PATH` and its login is invisible to the standalone CLI
    - macOS / Linux: `curl -fsSL https://claude.ai/install.sh | bash`, or
      `npm install -g @anthropic-ai/claude-code`
 2. **It authenticates headless, on a *persistent* credential.** Settle the
-   method with the user — any of the three works, by what they have:
-   - **Claude subscription (Pro/Max):** `claude setup-token` — a browser
-     flow that issues a long-lived token; persist it as
-     `CLAUDE_CODE_OAUTH_TOKEN`. (It refuses without a subscription — do not
-     loop on it; pick another method.)
+   method with the user — three options:
+   - **Web auth** (in a browser): `claude setup-token` — issues a
+     long-lived token; persist it as `CLAUDE_CODE_OAUTH_TOKEN`. Requires a
+     Claude subscription — it refuses without one; do not loop on it, move
+     to another option.
    - **Anthropic API key** (platform account, pay per token): persist
      `ANTHROPIC_API_KEY`.
-   - **The user's own provider or relay** (any Anthropic-compatible
-     endpoint): persist `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` (the
-     relay's key). This is the no-subscription path — the `claude` CLI
-     honors a custom endpoint headless. (Enterprise Bedrock / Vertex routes
-     exist too; follow their own docs.)
+   - **Other**: whatever Anthropic-compatible route the user brings — a
+     relay or gateway (persist `ANTHROPIC_BASE_URL` +
+     `ANTHROPIC_AUTH_TOKEN`, the endpoint's key — the no-subscription
+     path; the `claude` CLI honors a custom endpoint headless), or
+     enterprise Bedrock / Vertex per their own docs.
 
    Persist per OS: on Windows, `setx` (the S4U task reads persistent user
    env); on macOS/Linux a shell-profile `export` does **not** reach cron —
