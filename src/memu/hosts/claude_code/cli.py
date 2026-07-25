@@ -50,6 +50,10 @@ SPEC = HostSpec(
         "    # or:  irm https://claude.ai/install.ps1 | iex\n"
         "    # or:  npm install -g @anthropic-ai/claude-code"
     ),
+    auth_hint=(
+        "    claude setup-token   # writes a token into your profile the task can read\n"
+        "  or a persistent ANTHROPIC_API_KEY (`setx`, not a session-only `$env:`),"
+    ),
 )
 
 

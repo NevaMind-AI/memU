@@ -120,7 +120,7 @@ def wrapper_script(
     ])
 
 
-def register_script(task_name: str, wrapper_path: Path, interval_minutes: int) -> str:
+def register_script(task_name: str, wrapper_path: Path, interval_minutes: int, workdir: Path) -> str:
     """PowerShell that registers the task.
 
     - ``-LogonType S4U``: runs whether or not the user is logged on, with no stored
@@ -130,6 +130,10 @@ def register_script(task_name: str, wrapper_path: Path, interval_minutes: int) -
     - ``-RunLevel Limited``: bridging is not an admin job; elevating could read a
       different profile's credentials.
     - ``-StartWhenAvailable``: catch up a run missed while the machine was off.
+    - ``-WorkingDirectory``: without it Task Scheduler starts the action in
+      ``System32``. Any agent CLI with a workspace-trust gate (``cursor-agent
+      --trust``) would then be granting trust to ``System32``; the host's own
+      working tree is the deliberate workdir for every host.
     - ``-RepetitionInterval`` off a ``-Once`` trigger, with an explicit
       ``-RepetitionDuration``. Without one, Win10/11 default the repetition to ~1 day
       and the task silently stops after a day (exactly the #539 "installed but quietly
@@ -139,7 +143,8 @@ def register_script(task_name: str, wrapper_path: Path, interval_minutes: int) -
     """
     arg = f'-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{wrapper_path}"'
     return "\n".join([
-        f"$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument {_ps_quote(arg)}",
+        f"$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument {_ps_quote(arg)} "
+        f"-WorkingDirectory {_ps_quote(str(workdir))}",
         "$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).Date "
         f"-RepetitionInterval (New-TimeSpan -Minutes {interval_minutes}) -RepetitionDuration (New-TimeSpan -Days 3650)",
         "$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited",
@@ -189,16 +194,20 @@ def _resolve_agent(spec: HostSpec) -> str | None:
     return shutil.which(_agent_binary(spec))
 
 
-def _authenticates(spec: HostSpec, agent_path: str) -> tuple[bool, str]:
+def _authenticates(spec: HostSpec, agent_path: str, workdir: Path) -> tuple[bool, str]:
     """Does a cold headless run authenticate? (memU#538 Symptom B.)
 
-    Runs the host's own invocation with a trivial prompt. Exit 0 means the CLI has
-    a usable headless credential; the failure to catch is "Not logged in · Please
-    run /login" (exit 1), where a desktop login exists but the CLI cannot see it.
+    Runs the host's own invocation with a trivial prompt, in ``workdir`` — the same
+    directory the scheduled task will run in, so a workspace-trust flag in the
+    template (``cursor-agent --trust``) grants trust to the host's working tree,
+    never to wherever the user happened to run ``schedule install``. Exit 0 means
+    the CLI has a usable headless credential; the failure to catch is "Not logged
+    in · Please run /login" (exit 1), where a desktop login exists but the CLI
+    cannot see it.
     """
     argv = agent_check_argv(agent_path, spec.schedule_command, "ping")
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True, timeout=120)  # noqa: S603
+        proc = subprocess.run(argv, capture_output=True, text=True, timeout=120, cwd=workdir)  # noqa: S603
     except (OSError, subprocess.TimeoutExpired) as exc:
         return False, str(exc)
     return proc.returncode == 0, (proc.stderr or proc.stdout).strip()
@@ -209,34 +218,36 @@ def _paths(layout: Layout) -> tuple[Path, Path, Path, Path]:
     return base / WRAPPER_NAME, base / PROMPT_NAME, base / LOG_NAME, base / f".schedule.{layout.host}.json"
 
 
-def _auth_gate(spec: HostSpec, agent_path: str) -> int:
+def _auth_gate(spec: HostSpec, agent_path: str, workdir: Path) -> int:
     """Run the headless-auth check for hosts that need it; 0 = pass, 1 = abort.
 
     Caveat this can't fully close: the probe runs in *this* process's environment,
     but the scheduled task runs S4U in session 0 and inherits only *persistent*
     user/machine env + the user profile — not a session-only ``$env:`` export. So a
     pass is necessary but not sufficient, and we say so rather than imply a green gate.
+    The remedy is host data (``HostSpec.auth_hint``), not hardcoded here — claude's
+    fix would be wrong advice for a cursor failure.
     """
     if not spec.needs_headless_auth:
         return 0
-    ok, detail = _authenticates(spec, agent_path)
+    ok, detail = _authenticates(spec, agent_path, workdir)
     if not ok:
+        hint = spec.auth_hint or "    give the CLI a persistent headless credential per its own docs"
         print(
             f"error: `{_agent_binary(spec)}` resolves but cannot authenticate headless "
             f"({detail or 'no output'}).\n"
-            "  The scheduled run has no browser and cannot see any Claude Desktop login. "
+            "  The scheduled run has no browser and cannot reuse a desktop-app login. "
             "Give the CLI its own PERSISTENT headless credential:\n"
-            "    claude setup-token   # writes a token into your profile the task can read\n"
-            "  or a persistent ANTHROPIC_API_KEY (`setx`, not a session-only `$env:`), then "
-            "re-run. (memU#538 Symptom B.)",
+            f"{hint}\n"
+            f"  then re-run. (memU#538 Symptom B.)",
             file=sys.stderr,
         )
         return 1
     print(
         f"  note: `{_agent_binary(spec)}` authenticated in THIS shell. The task runs headless "
         "(S4U / session 0) and sees only PERSISTENT credentials — a session-only `$env:` export "
-        "will NOT reach it. If that's how you set the token, persist it (`claude setup-token` or "
-        "`setx`) before relying on the schedule.",
+        "will NOT reach it. If the credential is session-only, persist it before relying on "
+        "the schedule.",
         file=sys.stderr,
     )
     return 0
@@ -259,11 +270,11 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
             file=sys.stderr,
         )
         return 1
-    if (rc := _auth_gate(spec, agent_path)) != 0:
+    layout.base.mkdir(parents=True, exist_ok=True)
+    if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc
 
     wrapper, prompt_file, log_file, registry = _paths(layout)
-    layout.base.mkdir(parents=True, exist_ok=True)
     prompt_file.write_text(bridging_pipeline_prompt(spec), encoding="utf-8")
 
     path_dirs = [str(Path(agent_path).parent)]
@@ -276,7 +287,7 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
         wrapper_script(agent_path, spec.schedule_command, prompt_file, log_file, path_dirs), encoding="utf-8-sig"
     )
 
-    proc = _run_powershell(register_script(spec.task_name, wrapper, interval_minutes))
+    proc = _run_powershell(register_script(spec.task_name, wrapper, interval_minutes, layout.base))
     if proc.returncode != 0:
         print(f"error: Task Scheduler registration failed: {proc.stderr.strip()}", file=sys.stderr)
         return 1
@@ -341,7 +352,8 @@ def verify(spec: HostSpec, layout: Layout) -> int:
     if agent_path is None:
         print(f"error: `{_agent_binary(spec)}` is no longer on PATH (memU#538 Symptom A)", file=sys.stderr)
         return 1
-    if (rc := _auth_gate(spec, agent_path)) != 0:
+    layout.base.mkdir(parents=True, exist_ok=True)
+    if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc
 
     print(f"ok: '{TASK_PATH}{spec.task_name}' is registered and `{_agent_binary(spec)}` authenticates headless")

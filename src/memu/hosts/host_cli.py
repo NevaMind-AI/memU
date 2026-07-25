@@ -98,6 +98,13 @@ class HostSpec:
     Host-specific data, so the shared installer never hardcodes one host's package
     names; empty falls back to generic guidance."""
 
+    auth_hint: str = ""
+    """How to give this host's CLI a usable headless credential, shown when the
+    ``schedule`` auth gate fails (memU#538 Symptom B). Host-specific data for the
+    same reason as ``install_hint`` — claude's remedy is ``setup-token``, cursor's
+    is the signed-in IDE account session; the shared gate must not prescribe one
+    host's fix for another's failure. Empty falls back to generic guidance."""
+
     extra_flags: dict[str, str] = field(default_factory=dict)
     """Reserved for host-specific flags; unused today."""
 

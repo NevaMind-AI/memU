@@ -23,6 +23,7 @@ import pytest
 from memu.hosts.bridging import Layout
 from memu.hosts.claude_code.cli import SPEC as CLAUDE
 from memu.hosts.codex.cli import SPEC as CODEX
+from memu.hosts.cursor.cli import SPEC as CURSOR
 from memu.hosts.host_cli import build_parser, run
 from memu.hosts.scheduling import prompt, windows
 
@@ -63,11 +64,14 @@ def test_wrapper_keeps_prompt_off_the_command_line(tmp_path: Path) -> None:
 
 
 def test_register_script_is_canonical_and_hardened() -> None:
-    script = windows.register_script("memu-bridging-claude-code", Path("C:\\w\\memu-bridge.ps1"), 60)
+    script = windows.register_script("memu-bridging-claude-code", Path("C:\\w\\memu-bridge.ps1"), 60, Path("C:\\w"))
     assert "memu-bridging-claude-code" in script
     assert windows.TASK_PATH in script
     assert "-LogonType S4U" in script  # windowless + runs whether logged on or not
     assert "-StartWhenAvailable" in script  # catch up a missed run
+    # Without an explicit workdir the action starts in System32 — which a
+    # workspace-trust CLI (cursor-agent --trust) would then be trusting.
+    assert "-WorkingDirectory 'C:\\w'" in script
     assert "New-TimeSpan -Minutes 60" in script
     assert (
         "-RepetitionDuration (New-TimeSpan -Days 3650)" in script
@@ -85,6 +89,22 @@ def test_uninstall_and_status_address_the_same_name() -> None:
 def test_task_name_is_canonical_per_host() -> None:
     assert CLAUDE.task_name == "memu-bridging-claude-code"
     assert CODEX.task_name == "memu-bridging-codex"
+    assert CURSOR.task_name == "memu-bridging-cursor"
+
+
+def test_cursor_template_carries_the_trust_flag_everywhere() -> None:
+    # cursor-agent refuses headless runs in an untrusted directory (field-verified:
+    # "Workspace Trust Required", exit 1). Because the flag lives in the template,
+    # BOTH consumers inherit it: the install-time auth probe and the scheduled
+    # wrapper. Never --yolo — that is the blanket skip the guides reject.
+    assert CURSOR.schedule_command == "cursor-agent --trust -p {prompt}"
+    assert windows.agent_check_argv("C:\\ca.cmd", CURSOR.schedule_command, "ping") == [
+        "C:\\ca.cmd",
+        "--trust",
+        "-p",
+        "ping",
+    ]
+    assert windows.powershell_invocation("C:\\ca.cmd", CURSOR.schedule_command) == "& 'C:\\ca.cmd' --trust -p $prompt"
 
 
 def test_pipeline_prompt_is_verbatim_but_parameterized() -> None:
@@ -154,7 +174,7 @@ def test_builders_escape_single_quotes_in_paths() -> None:
     assert windows.powershell_invocation("C:\\Users\\O'Brien\\claude.exe", "claude -p {prompt}") == (
         "& 'C:\\Users\\O''Brien\\claude.exe' -p $prompt"
     )
-    assert "O''Brien" in windows.register_script("t", Path("C:\\O'Brien\\memu-bridge.ps1"), 60)
+    assert "O''Brien" in windows.register_script("t", Path("C:\\O'Brien\\memu-bridge.ps1"), 60, Path("C:\\O'Brien"))
     assert "O''Brien" in windows.wrapper_script(
         "C:\\O'Brien\\c.exe",
         "claude -p {prompt}",
@@ -176,6 +196,18 @@ def test_pipeline_prompt_matches_the_bridging_doc() -> None:
     assert doc_prompt[:-1] == prompt.bridging_pipeline_prompt(CLAUDE)
 
 
+def test_cursor_pipeline_prompt_matches_the_bridging_doc() -> None:
+    # Wiring cursor makes bridging_pipeline_prompt(CURSOR) live on Windows; lock its
+    # guide's cron block to the canon the same way claude's is locked.
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.cursor") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    cron_line = next(line for line in doc.splitlines() if "-p 'Run the memU" in line)
+    doc_prompt = cron_line.split("-p '", 1)[1].rstrip()
+    assert doc_prompt.endswith("'")
+    assert doc_prompt[:-1] == prompt.bridging_pipeline_prompt(CURSOR)
+
+
 def test_install_rejects_nonpositive_interval(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -188,22 +220,34 @@ def test_install_rejects_nonpositive_interval(
 
 
 def test_auth_gate_warns_that_credential_must_persist(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # A pass is necessary but not sufficient: the S4U task won't see a session-only
     # $env: token, so even the passing path must tell the user to persist it (#538 B).
-    monkeypatch.setattr(windows, "_authenticates", lambda spec, path: (True, ""))
-    assert windows._auth_gate(CLAUDE, "C:\\claude.exe") == 0
+    monkeypatch.setattr(windows, "_authenticates", lambda spec, path, workdir: (True, ""))
+    assert windows._auth_gate(CLAUDE, "C:\\claude.exe", tmp_path) == 0
     assert "PERSISTENT" in capsys.readouterr().err
 
 
 def test_auth_gate_aborts_when_unauthenticated(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(windows, "_authenticates", lambda spec, path: (False, "Not logged in"))
-    assert windows._auth_gate(CLAUDE, "C:\\claude.exe") == 1
+    monkeypatch.setattr(windows, "_authenticates", lambda spec, path, workdir: (False, "Not logged in"))
+    assert windows._auth_gate(CLAUDE, "C:\\claude.exe", tmp_path) == 1
     err = capsys.readouterr().err
     assert "setup-token" in err and "PERSISTENT" in err
+
+
+def test_auth_gate_failure_speaks_the_hosts_own_remedy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The remedy is HostSpec.auth_hint data: a cursor failure must point at the
+    # IDE session / `cursor-agent login`, never at claude's `setup-token`.
+    monkeypatch.setattr(windows, "_authenticates", lambda spec, path, workdir: (False, "Not logged in"))
+    assert windows._auth_gate(CURSOR, "C:\\ca.cmd", tmp_path) == 1
+    err = capsys.readouterr().err
+    assert "cursor-agent login" in err
+    assert "setup-token" not in err
 
 
 def test_symptom_a_message_carries_concrete_install_commands(
