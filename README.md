@@ -28,7 +28,7 @@ memU works with Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy, and mor
 
 Choose Cloud or Local, then send the corresponding message to your agent.
 
-### Cloud (coming soon)
+### Cloud
 
 **Cross-device · Free · Unlimited · [View online](https://memu.so)**
 
