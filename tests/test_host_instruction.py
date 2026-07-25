@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import pathlib
 
+import pytest
+
 from memu.hosts import instruction
 from memu.hosts.codex.cli import AGENTS_MD, SKILLS_DIR, build_parser
 
@@ -128,6 +130,28 @@ def test_instruction_names_the_llm_free_retrieval() -> None:
     """`memu retrieve` is LLM-routed — one LLM call per turn is what this avoids."""
     assert "memu-codex retrieve" in instruction.instruction(BINARY)
     assert "`memu retrieve" not in instruction.instruction(BINARY)
+
+
+def test_invocation_uses_absolute_path_when_binary_is_off_the_minimal_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A GUI-launched agent's PATH may drop pipx's ~/.local/bin, so a bare name
+    would 'command not found' at runtime. Fall back to the absolute path."""
+    abs_path = "/Users/dev/.local/bin/memu-codex"
+    monkeypatch.setattr("os.name", "posix")
+    monkeypatch.setattr("shutil.which", lambda cmd, path=None: abs_path if path is None else None)
+    assert f"{abs_path} retrieve" in instruction.instruction(BINARY)
+    assert f"{abs_path} retrieve" in instruction.skill_document(BINARY)
+
+
+def test_invocation_keeps_the_bare_name_when_it_is_on_a_standard_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("os.name", "posix")
+    monkeypatch.setattr("shutil.which", lambda cmd, path=None: "/opt/homebrew/bin/memu-codex")
+    text = instruction.instruction(BINARY)
+    assert "`memu-codex retrieve" in text
+    assert "/opt/homebrew/bin" not in text
 
 
 def test_remove_restores_user_content_byte_for_byte(tmp_path: pathlib.Path) -> None:

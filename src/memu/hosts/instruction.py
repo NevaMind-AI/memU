@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import os
 import re
 import shutil
 from pathlib import Path
@@ -97,9 +98,22 @@ def begin(binary: str) -> str:
     return BEGIN_TEMPLATE.format(binary=binary)
 
 
+def _invocation(binary: str) -> str:
+    """The command the agent runs: the bare name, or its absolute path when the
+    name only resolves via a dir a GUI-launched agent may drop (pipx's
+    ``~/.local/bin``) — so the inject can't 'command not found' at runtime."""
+    if os.name != "posix":
+        return binary
+    found = shutil.which(binary)
+    if found is None:
+        return binary
+    minimal = os.pathsep.join(["/usr/local/bin", "/opt/homebrew/bin", os.defpath])
+    return binary if shutil.which(binary, path=minimal) else found
+
+
 def skill_document(binary: str) -> str:
     """The ``SKILL.md`` as written to disk, telling the agent how to retrieve."""
-    return SKILL_TEMPLATE.format(binary=binary)
+    return SKILL_TEMPLATE.format(binary=_invocation(binary))
 
 
 def instruction(binary: str, *, skill: bool = False) -> str:
@@ -110,7 +124,7 @@ def instruction(binary: str, *, skill: bool = False) -> str:
     """
     if skill:
         return SKILL_INSTRUCTION_TEMPLATE.format(skill=SKILL_NAME, binary=binary)
-    return INSTRUCTION_TEMPLATE.format(binary=binary)
+    return INSTRUCTION_TEMPLATE.format(binary=_invocation(binary))
 
 
 def block(binary: str, *, skill: bool = False) -> str:
