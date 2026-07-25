@@ -179,16 +179,20 @@ Two checks before you register anything:
    (typical Unix landing path `~/.local/bin`; confirm with
    `command -v cursor-agent`).
 2. **It authenticates headless.** On a machine where the Cursor IDE is
-   already signed in, the CLI picks up that account session and runs with
-   the model configured in the GUI — field-tested: a custom-provider model
-   set up in the IDE carried over to `cursor-agent`, so a user on their own
-   provider key is not locked out. Where that does not hold (no IDE sign-in
-   on this machine, or a build where GUI and CLI do not share state), log
-   the CLI in once with the user (`cursor-agent login`, or `CURSOR_API_KEY`
-   — a Cursor account key, not a model-provider key). Either way the
-   credential is the account, and account-billed models consume its plan
-   quota — a green gate on a free plan can still starve at run time, the
-   one entitlement failure the gate below cannot see.
+   already signed in, the CLI picks up that account session — no separate
+   login needed (field-tested). Otherwise log it in once with the user
+   (`cursor-agent login`, or `CURSOR_API_KEY` — a Cursor account key, not a
+   model-provider key). Know what the credential buys: the CLI runs
+   **account-billed models through Cursor's backend**, and the IDE's custom
+   base-URL / bring-your-own-key models do **not** carry over (field-tested:
+   a custom-provider model configured in the GUI is not usable from
+   `cursor-agent`). Agent runs therefore consume the account's plan quota —
+   a green gate on a free plan can still starve at run time, the one
+   entitlement failure the gate below cannot see. A user on provider-only
+   credentials with no Cursor plan cannot run this record seam: for them
+   this host is **retrieval-only** (Part 3; the IDE's own agent serves it,
+   on whatever key the IDE uses) — their record seam belongs to a host they
+   actually run headless, writing to the same shared store.
 
 Prove both from a bare environment (keep `HOME` — the credential lives under
 it, and real schedulers set it) before registering:
