@@ -130,7 +130,63 @@ backend.
 The *record* seam: a scheduled job that mines recent transcripts under
 `~/.cursor/projects/*/agent-transcripts/` into memU memory, skills, and
 resources. In cloud mode, workspace resources are submitted but are not
-currently persisted. **Do not reinvent this** — follow the packaged procedure:
+currently persisted.
+
+### 2.0 Prerequisite — the standalone `cursor-agent` CLI
+
+The scheduled entry invokes **`cursor-agent -p` from a bare, non-interactive
+environment**, and the **Cursor IDE does not provide that binary** — the CLI
+is a separate install (the scope note above draws the same line: only the
+CLI's transcripts are minable).
+
+**Do not mistake the IDE's `cursor` launcher for it.** The editor puts a
+`cursor` shim on `PATH` (`resources/app/bin/cursor` inside the install — the
+same pattern as VS Code's `code`) that looks alive: `cursor -v` prints a
+three-line `<version> / <commit> / <arch>`. It opens the GUI and has no
+headless mode — `cursor -p` answers "Warning: 'p' is not in the list of known
+options, but still passed to Electron/Chromium". Field data: a Windows
+install stalled exactly here, `cursor` resolving while `cursor-agent` was
+absent. Probe `cursor-agent`, never `cursor`.
+
+Two checks before you register anything:
+
+1. **`cursor-agent` resolves on `PATH`.** If it does not, install it with the
+   user via Cursor's official installer —
+   `curl https://cursor.com/install -fsSL | bash` on macOS / Linux / WSL, or
+   `irm 'https://cursor.com/install?win32=true' | iex` on native Windows
+   (typical Unix landing path `~/.local/bin`; confirm with
+   `command -v cursor-agent`).
+2. **It authenticates headless.** On a machine where the Cursor IDE is
+   already signed in, the CLI picks up that account session and runs with
+   the model configured in the GUI — field-tested: a custom-provider model
+   set up in the IDE carried over to `cursor-agent`, so a user on their own
+   provider key is not locked out. Where that does not hold (no IDE sign-in
+   on this machine, or a build where GUI and CLI do not share state), log
+   the CLI in once with the user (`cursor-agent login`, or `CURSOR_API_KEY`
+   — a Cursor account key, not a model-provider key). Either way the
+   credential is the account, and account-billed models consume its plan
+   quota — a green gate on a free plan can still starve at run time, the
+   one entitlement failure the gate below cannot see.
+
+Prove both from a bare environment (keep `HOME` — the credential lives under
+it, and real schedulers set it) before registering:
+
+```
+env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" cursor-agent -p 'ping'
+```
+
+This `PATH` is only a **probe** for common install locations. The cron entry
+still derives its own `PATH` at registration time from
+`command -v memu-cursor` / `command -v cursor-agent` (see `docs task`); a green
+probe does not replace that line. On native Windows, run
+`cursor-agent -p 'ping'` from a fresh shell instead of the `env -i` form — and
+note a green gate is necessary but not yet sufficient there: registration
+itself is cron/launchd-only for this host today, so on Windows set up
+retrieval (Part 3) and treat bridging as pending.
+
+Do not continue until the gate passes.
+
+**Do not reinvent this** — follow the packaged procedure:
 
 ```
 memu-cursor docs task
