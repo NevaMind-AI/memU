@@ -139,9 +139,11 @@ environment**, and the **Cursor IDE does not provide that binary** — the CLI
 is a separate install (the scope note above draws the same line: only the
 CLI's transcripts are minable).
 
-**Do not mistake the IDE's `cursor` launcher for it.** The editor puts a
-`cursor` shim on `PATH` (`resources/app/bin/cursor` inside the install — the
-same pattern as VS Code's `code`) that looks alive: `cursor -v` prints a
+**Do not mistake the IDE's `cursor` launcher for it — on any OS.** The
+editor puts a `cursor` shim on `PATH` everywhere (`resources/app/bin/cursor`
+inside the install: `cursor.cmd` on Windows, the "install `cursor` command"
+symlink on macOS, `/usr/bin/cursor` from Linux packages — the same pattern
+as VS Code's `code`) that looks alive: `cursor -v` prints a
 three-line `<version> / <commit> / <arch>`. It opens the GUI and has no
 headless mode — `cursor -p` answers "Warning: 'p' is not in the list of known
 options, but still passed to Electron/Chromium". Field data: a Windows
@@ -160,8 +162,13 @@ above: an in-IDE probe concluded "not installed" while
 "not found", check the registry user `PATH` and the landing dir before
 re-installing; verify by full path; then have the user restart Cursor (or
 open a terminal from a fresh Explorer context) before trusting the
-bare-name check. (The Unix gate below is immune by construction — it sets
-`PATH` explicitly.)
+bare-name check. The same staleness class exists on macOS/Linux with
+different plumbing — the installer appends `~/.local/bin` to the shell rc,
+terminals opened earlier never re-read it, and macOS's default `PATH` does
+not include `~/.local/bin` at all — so there too, judge by the landing dir,
+never by a pre-install shell. The gate below is immune on every OS by the
+same move: it names the install locations explicitly instead of trusting
+the session `PATH`.
 
 Two checks before you register anything:
 
