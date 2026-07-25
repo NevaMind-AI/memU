@@ -164,34 +164,34 @@ files would miss sessions started elsewhere.)
 memu-hermes install-instruction
 ```
 
-One command, two files, because Hermes has skills:
+One command, one file: it writes the full retrieval procedure — the `retrieve`
+command to run and how to read the layers that come back — **inline** into a
+marked block in `SOUL.md`, so it is present on every turn.
 
-- `~/.hermes/skills/memu-retrieve/SKILL.md` — the procedure: the `retrieve`
-  command to run and how to read the layers that come back. This directory is
-  memU's own, so a re-run overwrites it whole.
-- `~/.hermes/SOUL.md` — two sentences telling the agent to use that skill before
-  answering. The detail stays out of here on purpose: SOUL.md is in context on
-  every turn, whether or not the turn touches memory; the skill is loaded only
-  when the agent acts on it.
+It does **not** install a skill. Hermes has a skills directory, but skills there
+are pull-on-demand: the agent only sees a skill's body after calling
+`skills_list`/`skill_view`, and only a relevance-selected subset surfaces per
+turn — so a "retrieve before every turn" skill is not reliably surfaced, and a
+SOUL.md *pointer* at it would silently no-op. Keeping the procedure inline avoids
+that. (Skill-based hosts — Codex, Claude Code, OpenClaw — surface skill
+descriptions every turn, so they install a short pointer plus a skill instead.)
 
-It creates either file if absent and prints the diff of both. `SOUL.md` is the
-*user's*, so it appends rather than overwrites (previous content is backed up to
-`~/.hermes/SOUL.md.bak`), and memU's text sits in a marked block that a re-run —
-or a later memU release — replaces in place. `--dry-run` shows the diffs without
-writing; `--path` and `--skills-dir` target a non-default home or profile.
+`SOUL.md` is the *user's*, so it appends rather than overwrites (previous content
+is backed up to `~/.hermes/SOUL.md.bak`), and memU's text sits in a marked block
+that a re-run — or a later memU release — replaces in place. `--dry-run` shows the
+diff without writing; `--path` targets a non-default home.
 
 ### ✅ Verify Part 3
 
 ```
 cat ~/.hermes/SOUL.md
-cat ~/.hermes/skills/memu-retrieve/SKILL.md
 memu-hermes retrieve "smoke test"
 ```
 
-The memU block must appear exactly once and name the `memu-retrieve` skill, that
-skill must exist, anything the user had in `SOUL.md` must be intact, and
-`retrieve` must exit cleanly (empty lists are fine). A fresh Hermes session is
-what picks up the new SOUL.md and skill.
+The memU block must appear exactly once and carry the `memu-hermes retrieve`
+command inline, anything the user had in `SOUL.md` must be intact, and `retrieve`
+must exit cleanly (empty lists are fine). A fresh Hermes session is what picks up
+the new SOUL.md.
 
 ---
 
@@ -199,6 +199,6 @@ what picks up the new SOUL.md and skill.
 
 Report back to the user: the selected mode and its cloud endpoint or local store/provider; the scheduled job and its
 schedule in words; and that the retrieval instruction is now in
-`~/.hermes/SOUL.md`, pointing at the `memu-retrieve` skill and taking effect next
-session. Record and inject both read `~/.memu/config.env`, so they provably share
-one backend.
+`~/.hermes/SOUL.md`, carrying the `memu-hermes retrieve` procedure inline and
+taking effect next session. Record and inject both read `~/.memu/config.env`, so
+they provably share one store.

@@ -8,8 +8,8 @@ Uninstalling is the install run in reverse, and it is three parts:
 
 1. **Unregister the bridging task** — stop the scheduled job first, so nothing
    fires mid-teardown (the *record* seam).
-2. **Unpatch `~/.hermes/SOUL.md` and remove the retrieval skill** — the
-   standing instruction and the skill it points at (the *inject* seam).
+2. **Unpatch `~/.hermes/SOUL.md`** — remove the standing retrieval instruction
+   (the *inject* seam), plus a leftover `memu-retrieve` skill from older installs.
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
    tooling is removed — and close by reporting both.
 
@@ -37,7 +37,7 @@ there.
 
 ---
 
-## Part 2 — Remove the retrieval instruction and skill
+## Part 2 — Remove the retrieval instruction
 
 **Do not hand-edit the block out.** memU owns the text and removes it for you:
 
@@ -53,8 +53,10 @@ file with no block left is already the desired end state. If this install used
 a non-default home (`HERMES_HOME`, or a profile), pass
 `--path <home>/SOUL.md`.
 
-The block pointed at the `memu-retrieve` skill; remove that too. The directory
-is memU's own — the install wrote it whole, so it goes whole:
+Current releases keep the procedure inline in that block, so there is nothing
+else to remove. If this machine was set up by an **older** release that
+installed a `memu-retrieve` skill and pointed SOUL.md at it, remove that leftover
+directory too — it is memU's own:
 
 ```
 rm -r ~/.hermes/skills/memu-retrieve
