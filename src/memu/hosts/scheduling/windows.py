@@ -181,7 +181,10 @@ def _run_powershell(script: str) -> subprocess.CompletedProcess[str]:
     # powershell.exe is a fixed Windows system binary (resolved from System32) and
     # `script` is generated here, never user input — the bandit process checks don't apply.
     argv = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script]
-    return subprocess.run(argv, capture_output=True, text=True)  # noqa: S603
+    # encoding/errors pinned: PowerShell's own output follows the console code page
+    # (gbk on zh-CN Windows), but text piped through it (e.g. an agent CLI's UTF-8
+    # reply) is not re-encoded, so a locale-default decode can crash on it (memU#512).
+    return subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")  # noqa: S603
 
 
 def _agent_binary(spec: HostSpec) -> str:
@@ -207,7 +210,12 @@ def _authenticates(spec: HostSpec, agent_path: str, workdir: Path) -> tuple[bool
     """
     argv = agent_check_argv(agent_path, spec.schedule_command, "ping")
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True, timeout=120, cwd=workdir)  # noqa: S603
+        # encoding/errors pinned: the agent CLI's reply is UTF-8 regardless of the
+        # system locale codec (gbk on zh-CN Windows), which otherwise crashes the
+        # reader thread on a non-ASCII byte (memU#512) instead of returning a result.
+        proc = subprocess.run(  # noqa: S603
+            argv, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120, cwd=workdir
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return False, str(exc)
     return proc.returncode == 0, (proc.stderr or proc.stdout).strip()
