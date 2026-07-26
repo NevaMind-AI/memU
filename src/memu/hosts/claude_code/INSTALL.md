@@ -208,10 +208,11 @@ lives outside `PATH` and its login is invisible to the standalone CLI
    **exactly these three** — never improvise a fourth option, and never
    offer "skip": an unauthenticated record seam is a failed install, not a
    variant of success.
-   - **Web auth** (in a browser) — **recommended**: `claude setup-token`
-     issues a long-lived token; persist it as `CLAUDE_CODE_OAUTH_TOKEN`.
-     Requires a Claude subscription — it refuses without one; do not loop
-     on it, move down the list.
+   - **Web auth** (in a browser) — **recommended**: `claude setup-token` —
+     a browser sign-in; on success the CLI is **authenticated directly**
+     (the credential lands in the profile — nothing to copy, no variable
+     to set). Requires a Claude subscription — it refuses without one; do
+     not loop on it, move down the list.
    - **Anthropic API key** (platform account, pay per token): persist
      `ANTHROPIC_API_KEY`.
    - **Other** — only if the user *affirmatively* has an
@@ -240,20 +241,27 @@ lives outside `PATH` and its login is invisible to the standalone CLI
       terminal) — do not hand the user a bare "open a terminal and run
       this" instruction.
    2. Before they click anything, tell them exactly what they will see:
-      the browser opens → sign in → click **Authorize** → back in that
-      terminal window a long token starting `sk-ant-oat` prints.
-   3. Have them bring the token home: they paste it to you and *you*
-      persist it, or — if the secret should not transit chat — they run
-      the one persist command you give them, in that same window.
-   4. Do not stop at "tell me when you're done": watch for the persisted
-      credential, run the gate below the moment it lands, and continue
-      straight to registration in the same session. If the browser ever
-      shows an unreachable `localhost` callback page, the terminal
-      process died — close that tab and relaunch from step 1; never try
-      to salvage the code in the URL.
+      the browser opens → sign in → click **Authorize** → done. The flow
+      in that window completes by itself and **Claude Code is signed in
+      directly** — there is nothing to copy, nothing to paste, no
+      variable to set.
+   3. Then offer exactly two continuations, nothing else:
+      - **Continue** (login succeeded) — prove it immediately: run the
+        gate below, and go straight to registration in the same session.
+      - **Another way** — the login did not work, or the user changed
+        their mind: fall back to the **Anthropic API key** option.
+   4. Do not stop at "tell me when you're done": the credential file
+      appears in the profile the moment the browser flow succeeds — watch
+      for it, and treat it as the "Continue" signal if the user has
+      wandered off. If the browser ever shows an unreachable
+      `localhost:…/callback` page, the terminal process died — close that
+      tab and relaunch from step 1; never try to salvage the code in the
+      URL.
 
-   Persist per OS: on Windows, `setx` (the S4U task reads persistent user
-   env); on macOS/Linux a shell-profile `export` does **not** reach cron —
+   Persisting the env-var methods (API key / Other — Web auth needs none
+   of this; its credential is the profile file): on Windows, `setx` (the
+   S4U task reads persistent user env); on macOS/Linux a shell-profile
+   `export` does **not** reach cron —
    the variables go in the crontab header exactly like the `PATH` line. A
    key exported only in the current shell passes your check here and still
    leaves the scheduled task stuck on "Not logged in" — the one false
@@ -285,8 +293,8 @@ Prove both the way the scheduler will experience them — from a bare
 environment, resolve *and* authenticate. The probe must carry **exactly
 what the scheduler will carry, nothing more** — which differs by method:
 
-- **Web auth** — the token lives in a file under `HOME`, so keeping `HOME`
-  is enough (real schedulers set it):
+- **Web auth** — the credential lives in a file under `HOME`, so keeping
+  `HOME` is enough (real schedulers set it):
 
   ```
   env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" claude -p 'ping'
