@@ -216,6 +216,12 @@ lives outside `PATH` and its login is invisible to the standalone CLI
    - **Anthropic API key** (platform account, pay per token): persist
      `ANTHROPIC_API_KEY`.
 
+   The host's question UI may append its own free-text **"Other"** choice
+   to any question — that is the UI's escape hatch, not a third method,
+   and an answer typed through it does not reopen the menu: an API key
+   pasted there *is* the API-key option; a custom endpoint is the removed
+   trap below — explain and re-offer the two; anything else is "neither".
+
    If the user has neither, **stop here and say so**: Part 2 is blocked on
    an unmet prerequisite — Parts 1 and 3 still stand, and the user knows
    exactly what to bring back. Never register a schedule that cannot
