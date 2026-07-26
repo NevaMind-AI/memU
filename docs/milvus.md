@@ -76,7 +76,7 @@ database_config = {
 memU keeps recall files, resources, segment text, and scope fields in the metadata store and mirrors `RecallFileSegment` embeddings into Milvus on create / delete.
 
 - **Available now**: `inmemory` metadata store + Milvus vector index (feature-complete).
-- **Not wired yet**: `sqlite` and `postgres` metadata stores reject `vector_index.provider="milvus"` rather than silently ignoring it. See `docs/adr/0013-external-vector-index.md` for the rollout plan.
+- **Not wired yet**: `sqlite` and `postgres` metadata stores reject `vector_index.provider="milvus"` rather than silently ignoring it. See `docs/adr/0015-external-vector-index.md` for the rollout plan.
 
 ## How Search Works
 
