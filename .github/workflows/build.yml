@@ -33,3 +33,21 @@ jobs:
 
       - name: Run tests
         run: uv run make test
+
+  windows-console-script:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv & set Python
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-python: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Test the installed Hermes console executable
+        run: uv run python -m pytest tests/test_hermes_bootstrap.py

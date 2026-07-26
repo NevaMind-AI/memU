@@ -272,6 +272,10 @@ async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
     """
     from memu.env import CONFIG_ENV, cloud_base_url, embedding_provider, env, memory_mode
 
+    isolated = os.environ.get("MEMU_HERMES_ISOLATED_ENV")
+    if spec.host == "hermes" and isolated and os.environ.get("MEMU_DEBUG") == "1":
+        print(f"note: isolated Hermes host Python environment ({isolated})", file=sys.stderr)
+
     try:
         mode = memory_mode()
         result = await retrieval.retrieve("smoke test")

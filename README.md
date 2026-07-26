@@ -83,6 +83,11 @@ or MemU Cloud. What one host's sessions taught memU, another host retrieves.
 
 Installation is the one-message setup at the top of this README. [SKILL.md](SKILL.md) is the routing skill it hands your agent: install the package, identify which host you are (falling back to `memu-agent detect` for anything without a dedicated adapter), print that host's packaged install guide (`<binary> docs install`), and follow it — configure the memory backend, register the scheduled bridging task, patch the instruction file, each step behind a verify gate — then report which seams (memorization / retrieval) are now active.
 
+On Windows, `memu-hermes` isolates `PYTHONPATH`, `PYTHONHOME`, and
+`VIRTUAL_ENV` inherited from Hermes before it imports memU. This prevents the
+host's Python dependencies from overriding the environment where memU was
+installed; macOS and Linux keep the existing in-process launch behavior.
+
 Afterwards `<binary> doctor` proves the whole loop resolves: config, selected
 mode, and a live retrieval.
 

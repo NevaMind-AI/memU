@@ -37,6 +37,11 @@ This puts `memu` and **`memu-hermes`** on `PATH`. Confirm: `memu-hermes --help`.
 If it is not found, fix `PATH` now — the scheduled task in Part 2 runs from a
 bare, non-interactive environment.
 
+On Windows, `memu-hermes` automatically removes `PYTHONPATH`, `PYTHONHOME`, and
+`VIRTUAL_ENV` inherited from Hermes before loading memU. It keeps `PATH`, all
+`MEMU_*` settings, proxy configuration, and the console script's own Python
+interpreter. macOS and Linux retain the existing in-process launch behavior.
+
 ### 1.2 Configure the memory backend
 
 If `~/.memu/config.env` already exists from another memU host, reuse it as is
