@@ -205,8 +205,8 @@ lives outside `PATH` and its login is invisible to the standalone CLI
    already-persisted variable) serves headless runs without any new setup,
    and the gate result is the only fact that matters. Green = this step is
    already done. Only on a failing gate, ask the user to pick one of
-   **exactly these three** — never improvise a fourth option, and never
-   offer "skip": an unauthenticated record seam is a failed install, not a
+   **exactly these two** — never improvise more options, and never offer
+   "skip": an unauthenticated record seam is a failed install, not a
    variant of success.
    - **Web auth** (in a browser) — **recommended**: `claude setup-token` —
      a browser sign-in; on success the CLI is **authenticated directly**
@@ -215,18 +215,14 @@ lives outside `PATH` and its login is invisible to the standalone CLI
      not loop on it, move down the list.
    - **Anthropic API key** (platform account, pay per token): persist
      `ANTHROPIC_API_KEY`.
-   - **Other** — only if the user *affirmatively* has an
-     **Anthropic-Messages-compatible** endpoint: persist
-     `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` (the endpoint's key).
-     The endpoint must serve the Anthropic Messages protocol — an
-     OpenAI-format-only relay does **not** work. If the user is unsure
-     whether theirs qualifies, this is not their option. (Enterprise
-     Bedrock / Vertex also live here, per their own docs.)
 
-   If the user has none of the three, **stop here and say so**: Part 2 is
-   blocked on an unmet prerequisite — Parts 1 and 3 still stand, and the
-   user knows exactly what to bring back. Never register a schedule that
-   cannot authenticate.
+   If the user has neither, **stop here and say so**: Part 2 is blocked on
+   an unmet prerequisite — Parts 1 and 3 still stand, and the user knows
+   exactly what to bring back. Never register a schedule that cannot
+   authenticate. And no third options: a "custom endpoint" invites a
+   protocol trap (the CLI speaks the Anthropic Messages protocol, which
+   OpenAI-format relays do not serve), and "skip" is failure wearing a
+   menu label.
 
    **Web auth is interactive — run it start-to-finish, and never in a
    captured or background shell.** `setup-token` opens the browser and
@@ -258,10 +254,10 @@ lives outside `PATH` and its login is invisible to the standalone CLI
       tab and relaunch from step 1; never try to salvage the code in the
       URL.
 
-   Persisting the env-var methods (API key / Other — Web auth needs none
-   of this; its credential is the profile file): on Windows, `setx` (the
-   S4U task reads persistent user env); on macOS/Linux a shell-profile
-   `export` does **not** reach cron —
+   Persisting the API key (Web auth needs none of this — its credential
+   is the profile file): on Windows, `setx` (the S4U task reads persistent
+   user env); on macOS/Linux a shell-profile `export` does **not** reach
+   cron —
    the variables go in the crontab header exactly like the `PATH` line. A
    key exported only in the current shell passes your check here and still
    leaves the scheduled task stuck on "Not logged in" — the one false
@@ -300,17 +296,14 @@ what the scheduler will carry, nothing more** — which differs by method:
   env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" claude -p 'ping'
   ```
 
-- **Anthropic API key / Other** — the credential is an environment
-  variable, and `env -i` strips it: the bare probe above would
-  **false-fail a correctly configured machine**. Name the variables in the
-  probe with their values, exactly as the crontab header will carry them:
+- **Anthropic API key** — the credential is an environment variable, and
+  `env -i` strips it: the bare probe above would **false-fail a correctly
+  configured machine**. Name the variable in the probe with its value,
+  exactly as the crontab header will carry it:
 
   ```
   env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" ANTHROPIC_API_KEY="<the key>" claude -p 'ping'
   ```
-
-  (for **Other**, use `ANTHROPIC_BASE_URL="<endpoint>"
-  ANTHROPIC_AUTH_TOKEN="<key>"` instead.)
 
 This `PATH` is only a **probe** for the common install locations. The cron
 entry still derives its own `PATH` at registration time from
