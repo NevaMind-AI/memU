@@ -172,6 +172,31 @@ lives outside `PATH` and its login is invisible to the standalone CLI
      path; the `claude` CLI honors a custom endpoint headless), or
      enterprise Bedrock / Vertex per their own docs.
 
+   **Web auth is interactive — run it start-to-finish, and never in a
+   captured or background shell.** `setup-token` opens the browser and
+   listens on a localhost callback port *inside the terminal process*; if
+   you kill that process and tell the user to "just log in", they sign in
+   and land on an unreachable `localhost:…/callback` page whose code is
+   bound to the dead run and unusable — field data: exactly this strand.
+   What works, end to end:
+   1. Launch it in a **real terminal window on the user's desktop** and
+      leave it running (Windows: `Start-Process claude -ArgumentList
+      'setup-token'`; on macOS/Linux run it in the user's visible
+      terminal) — do not hand the user a bare "open a terminal and run
+      this" instruction.
+   2. Before they click anything, tell them exactly what they will see:
+      the browser opens → sign in → click **Authorize** → back in that
+      terminal window a long token starting `sk-ant-oat` prints.
+   3. Have them bring the token home: they paste it to you and *you*
+      persist it, or — if the secret should not transit chat — they run
+      the one persist command you give them, in that same window.
+   4. Do not stop at "tell me when you're done": watch for the persisted
+      credential, run the gate below the moment it lands, and continue
+      straight to registration in the same session. If the browser ever
+      shows an unreachable `localhost` callback page, the terminal
+      process died — close that tab and relaunch from step 1; never try
+      to salvage the code in the URL.
+
    Persist per OS: on Windows, `setx` (the S4U task reads persistent user
    env); on macOS/Linux a shell-profile `export` does **not** reach cron —
    the variables go in the crontab header exactly like the `PATH` line. A
