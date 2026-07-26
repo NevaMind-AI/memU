@@ -30,8 +30,8 @@ class _FakeResponse:
     def __enter__(self) -> _FakeResponse:
         return self
 
-    def __exit__(self, *exc: object) -> bool:
-        return False
+    def __exit__(self, *exc: object) -> None:
+        return None
 
 
 def _serve(monkeypatch: pytest.MonkeyPatch, body: bytes, status: int = 200) -> None:
