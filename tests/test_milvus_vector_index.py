@@ -15,6 +15,7 @@ from memu.database.vector_index.milvus import (
     _build_filter_expr,
     _cosine_distance_to_similarity,
     _format_scalar,
+    _uses_milvus_lite_cosine_distance,
 )
 
 
@@ -26,7 +27,7 @@ class _UserScope(BaseModel):
 class _FakeEmbeddingClient:
     embed_model = "fake"
 
-    async def embed(self, inputs: list[str]) -> list[list[float]]:
+    async def embed(self, inputs: list[str]) -> tuple[list[list[float]], dict[str, Any]]:
         vectors: list[list[float]] = []
         for text in inputs:
             lowered = text.lower()
@@ -35,7 +36,7 @@ class _FakeEmbeddingClient:
                 1.0 if "beta" in lowered or "deploy" in lowered else 0.0,
                 1.0 if "gamma" in lowered else 0.0,
             ])
-        return vectors
+        return vectors, {}
 
 
 def _unit_vec(values: list[float]) -> list[float]:
@@ -68,6 +69,15 @@ def test_milvus_cosine_distance_is_converted_to_similarity() -> None:
     assert _cosine_distance_to_similarity(0.0) == pytest.approx(1.0)
     assert _cosine_distance_to_similarity(1.0) == pytest.approx(0.0)
     assert _cosine_distance_to_similarity(2.0) == pytest.approx(-1.0)
+
+
+def test_milvus_cosine_workaround_is_limited_to_lite_3_0(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("memu.database.vector_index.milvus.version", lambda _: "3.0.0")
+    assert _uses_milvus_lite_cosine_distance("./milvus.db")
+    assert not _uses_milvus_lite_cosine_distance("http://localhost:19530")
+
+    monkeypatch.setattr("memu.database.vector_index.milvus.version", lambda _: "3.0.1")
+    assert not _uses_milvus_lite_cosine_distance("./milvus.db")
 
 
 def test_milvus_requires_inmemory_metadata_store() -> None:
@@ -209,7 +219,7 @@ def test_inmemory_backend_routes_segment_search_through_milvus(tmp_path: Path) -
             top_k=5,
             where={"user_id": "u1"},
         )
-        ids = [hid for hid, _ in hits]
+        ids = [segment.id for segment, _ in hits]
         assert ids[0] == alpha.id
         assert set(ids) == {alpha.id, beta.id}
         assert gamma.id not in ids
@@ -221,7 +231,7 @@ def test_inmemory_backend_routes_segment_search_through_milvus(tmp_path: Path) -
             top_k=5,
             where={"user_id": "u1"},
         )
-        assert alpha.id not in {hid for hid, _ in hits}
+        assert alpha.id not in {segment.id for segment, _ in hits}
 
         # Recreating a segment with a new embedding upserts it into Milvus.
         repo.delete_segment(beta.id)
@@ -237,7 +247,7 @@ def test_inmemory_backend_routes_segment_search_through_milvus(tmp_path: Path) -
             top_k=5,
             where={"user_id": "u1"},
         )
-        assert hits and hits[0][0] == beta.id
+        assert hits and hits[0][0].id == beta.id
     finally:
         db.close()
 
@@ -276,15 +286,15 @@ def test_inmemory_backend_milvus_filters_segment_metadata(tmp_path: Path) -> Non
             top_k=5,
             where={"track": "skill"},
         )
-        assert [hid for hid, _ in hits] == [skill.id]
-        assert memory.id not in {hid for hid, _ in hits}
+        assert [segment.id for segment, _ in hits] == [skill.id]
+        assert memory.id not in {segment.id for segment, _ in hits}
 
         hits = repo.vector_search_segments(
             query_vec=_unit_vec([1.0, 0.0, 0.0]),
             top_k=5,
             where={"recall_file_id__in": ["f2"]},
         )
-        assert [hid for hid, _ in hits] == [skill.id]
+        assert [segment.id for segment, _ in hits] == [skill.id]
     finally:
         db.close()
 

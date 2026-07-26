@@ -155,6 +155,8 @@ class MilvusVectorIndex(VectorIndex):
         self._collection_name = collection_name
         self._dim = dim
         self._consistency_level = consistency_level
+        # Milvus Lite 3.0/3.0.0 reports COSINE as distance rather than similarity.
+        # See https://github.com/milvus-io/milvus-lite/issues/343.
         self._cosine_distance_scores = _uses_milvus_lite_cosine_distance(uri)
         client_kwargs: dict[str, Any] = {"uri": uri}
         if token:
