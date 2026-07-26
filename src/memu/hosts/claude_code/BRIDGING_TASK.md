@@ -51,9 +51,13 @@ run's prompt must instruct the agent to do it, not shell out to a script.
   same gate and refuses with guidance if it fails.
 - **A headless run can execute the pipeline.** The scheduled run invokes
   `claude -p` non-interactively, so the commands and paths the pipeline touches
-  must be pre-authorized: allow `Bash(memu-claude-code *)` and writes under
-  `~/.memu/` in `~/.claude/settings.json` permissions. Do **not** reach for a
-  blanket permission-skip flag; the pipeline needs exactly those two things.
+  must be pre-authorized in `~/.claude/settings.json` permissions with exactly
+  these two rules: `Bash(memu-claude-code *)` and `Edit(~/.memu/**)`. The file
+  rule must be `Edit(...)` — a `Write(~/.memu/**)` rule is silently ignored
+  (the CLI itself warns that only `Edit` rules cover the file-editing tools;
+  field data: an install shipped the `Write` form and every run carried the
+  warning). Do **not** reach for a blanket permission-skip flag; the pipeline
+  needs exactly those two things.
 
 ## Step 1 — settle the schedule
 

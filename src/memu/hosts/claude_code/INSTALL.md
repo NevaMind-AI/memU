@@ -237,22 +237,39 @@ lives outside `PATH` and its login is invisible to the standalone CLI
       terminal) — do not hand the user a bare "open a terminal and run
       this" instruction.
    2. Before they click anything, tell them exactly what they will see:
-      the browser opens → sign in → click **Authorize** → done. The flow
-      in that window completes by itself and **Claude Code is signed in
-      directly** — there is nothing to copy, nothing to paste, no
-      variable to set.
-   3. Then offer exactly two continuations, nothing else:
-      - **Continue** (login succeeded) — prove it immediately: run the
-        gate below, and go straight to registration in the same session.
+      the browser opens → sign in → click **Authorize** → the browser
+      shows the success page ("Build something great — You're all set up
+      for Claude Code. You can now close this window."). The terminal
+      window finishes by itself and **Claude Code is signed in directly**
+      — nothing to copy, nothing to paste, no variable to set.
+   3. Then offer exactly two continuations — as a **selectable choice**
+      (the host's option UI), never a free-text "let me know":
+      - **Continue** (login succeeded) — run the gate below immediately
+        and **show the user the result** ("headless login verified —
+        prerequisite complete") before going straight to registration in
+        the same session. Never end the turn leaving the user unsure
+        whether the install finished.
       - **Another way** — the login did not work, or the user changed
         their mind: fall back to the **Anthropic API key** option.
    4. Do not stop at "tell me when you're done": the credential file
-      appears in the profile the moment the browser flow succeeds — watch
-      for it, and treat it as the "Continue" signal if the user has
-      wandered off. If the browser ever shows an unreachable
-      `localhost:…/callback` page, the terminal process died — close that
-      tab and relaunch from step 1; never try to salvage the code in the
-      URL.
+      appears in the profile when the flow truly succeeds — watch for it,
+      and treat it as the "Continue" signal if the user has wandered off.
+      If the browser shows an unreachable `localhost:…/callback` page,
+      the terminal process died — close that tab and relaunch from
+      step 1; never try to salvage the code in the URL.
+   5. **Browser shows the success page but the gate still says "Not
+      logged in"? That is the split-proxy trap** (field data) — do not
+      hunt the filesystem or the credential manager for a token that was
+      never written. The user's browser reaches Anthropic through a
+      proxy, but the terminal process has none, so the CLI half of the
+      OAuth exchange fails even though the browser half looks complete.
+      Fix it where it lives, then rerun: in that terminal window,
+      `set HTTPS_PROXY=http://127.0.0.1:<port>` (and `HTTP_PROXY`
+      likewise), then `claude setup-token` again. The scheduled run needs
+      the same outbound — persist the proxy variables exactly like a
+      credential (Windows `setx`; Unix crontab header), and keep Part 1's
+      `NO_PROXY` note in mind for loopback embedding servers. **Only the
+      gate decides success — never the browser page.**
 
    Persisting the API key (Web auth needs none of this — its credential
    is the profile file): on Windows, `setx` (the S4U task reads persistent
