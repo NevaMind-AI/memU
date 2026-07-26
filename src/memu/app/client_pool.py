@@ -10,9 +10,13 @@ than another copy of the get/cache/build dance.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from typing import Generic, TypeVar
+
+TConfig = TypeVar("TConfig")
+TClient = TypeVar("TClient")
 
 
-class ClientPool[TConfig, TClient]:
+class ClientPool(Generic[TConfig, TClient]):
     """Lazily build and cache one client per named profile.
 
     Args:
