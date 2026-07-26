@@ -23,6 +23,23 @@ class InMemoryRecallFileRepository(RecallFileRepoProtocol):
             return dict(self.recall_files)
         return {rid: recall_file for rid, recall_file in self.recall_files.items() if matches_where(recall_file, where)}
 
+    def list_recall_files_page(
+        self,
+        where: Mapping[str, Any] | None,
+        *,
+        after: tuple[str, str, str] | None,
+        limit: int,
+    ) -> tuple[list[RecallFile], tuple[str, str, str] | None]:
+        """One keyset page ordered by ``(track, name, id)`` (ADR 0014)."""
+        matches = [f for f in self.recall_files.values() if not where or matches_where(f, where)]
+        matches.sort(key=lambda f: (f.track, f.name, f.id))
+        if after is not None:
+            matches = [f for f in matches if (f.track, f.name, f.id) > after]
+        page = matches[:limit]
+        has_more = len(matches) > limit
+        next_after = (page[-1].track, page[-1].name, page[-1].id) if has_more else None
+        return page, next_after
+
     def clear_recall_files(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
         if not where:
             matches = self.recall_files.copy()

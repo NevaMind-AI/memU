@@ -6,6 +6,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
+from sqlalchemy import tuple_
 from sqlmodel import delete, select
 
 from memu.database.models import RecallFile
@@ -66,21 +67,54 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
 
         result: dict[str, RecallFile] = {}
         for row in rows:
-            recall_file = RecallFile(
-                id=row.id,
-                name=row.name,
-                description=row.description,
-                embedding=self._normalize_embedding(row.embedding),
-                content=row.content,
-                track=row.track,
-                created_at=row.created_at,
-                updated_at=row.updated_at,
-                **self._scope_kwargs_from(row),
-            )
+            recall_file = self._row_to_recall_file(row)
             result[row.id] = recall_file
-            self.recall_files[row.id] = recall_file
 
         return result
+
+    def list_recall_files_page(
+        self,
+        where: Mapping[str, Any] | None,
+        *,
+        after: tuple[str, str, str] | None,
+        limit: int,
+    ) -> tuple[list[RecallFile], tuple[str, str, str] | None]:
+        """One keyset page ordered by ``(track, name, id)`` (ADR 0014)."""
+        model = self._recall_file_model
+        with self._sessions.session() as session:
+            stmt = select(model)
+            filters = self._build_filters(model, where)
+            if filters:
+                stmt = stmt.where(*filters)
+            if after is not None:
+                # Row-value keyset: resume strictly after the last row seen.
+                stmt = stmt.where(tuple_(model.track, model.name, model.id) > after)
+            # Fetch one extra to learn whether a further page exists without a
+            # second round-trip; it is trimmed off before returning.
+            stmt = stmt.order_by(model.track, model.name, model.id).limit(limit + 1)
+            rows = session.exec(stmt).all()
+
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        files = [self._row_to_recall_file(row) for row in rows]
+        next_after = (rows[-1].track, rows[-1].name, rows[-1].id) if has_more else None
+        return files, next_after
+
+    def _row_to_recall_file(self, row: Any) -> RecallFile:
+        """Map a stored row to a cached :class:`RecallFile` (embedding normalized)."""
+        recall_file = RecallFile(
+            id=row.id,
+            name=row.name,
+            description=row.description,
+            embedding=self._normalize_embedding(row.embedding),
+            content=row.content,
+            track=row.track,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            **self._scope_kwargs_from(row),
+        )
+        self.recall_files[row.id] = recall_file
+        return recall_file
 
     def clear_recall_files(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
         """Clear recall files matching the where clause.

@@ -39,8 +39,10 @@ class FakeService:
     def __init__(self) -> None:
         self.committed: list[dict[str, Any]] = []
 
-    async def list_all_recall_files(self) -> dict[str, Any]:
-        return {"recall_files": []}
+    async def list_all_recall_files(
+        self, where: Any = None, *, cursor: str | None = None, limit: int = 100
+    ) -> dict[str, Any]:
+        return {"recall_files": [], "next_cursor": None}
 
     async def commit_results(self, recall_files: Any, resource: Any) -> dict[str, Any]:
         self.committed.append({"recall_files": recall_files, "resource": resource})

@@ -53,13 +53,21 @@ async def prepare(
     # "state as of the last commit". Re-snapshotting on every prepare would
     # absorb files a crashed run wrote but never committed, making them
     # undiffable — and therefore uncommittable — forever.
+    # list_all_recall_files returns one keyset page per call (ADR 0014); follow
+    # next_cursor to mirror every file, writing each page to disk as it arrives
+    # so the whole store is never held in memory at once.
     backend = build_agentic_memory_backend_from_env()
-    result = await backend.list_all_recall_files()
-    for recall_file in result["recall_files"]:
-        subdir = TRACK_DIRS.get(recall_file.get("track"))
-        if subdir is None:
-            continue
-        write_recall_file(layout.base, subdir, recall_file)
+    cursor: str | None = None
+    while True:
+        result = await backend.list_all_recall_files(cursor=cursor)
+        for recall_file in result["recall_files"]:
+            subdir = TRACK_DIRS.get(recall_file.get("track"))
+            if subdir is None:
+                continue
+            write_recall_file(layout.base, subdir, recall_file)
+        cursor = result.get("next_cursor")
+        if not cursor:
+            break
     if not layout.memory_manifest.exists():
         snapshot_tracked(layout.base, layout.track_dirs, layout.memory_manifest)
 

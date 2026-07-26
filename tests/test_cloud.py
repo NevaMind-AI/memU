@@ -55,6 +55,25 @@ async def test_list_uses_v4_base_auth_and_explicit_default_scope() -> None:
     assert request.headers["Authorization"] == "Bearer project-key"
 
 
+async def test_list_forwards_cursor_and_limit_and_passes_page_through() -> None:
+    seen: list[httpx.Request] = []
+    page = {"recall_files": [{"name": "m01", "track": "memory"}], "next_cursor": "next-token"}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=page)
+
+    result = await _client(handler).list_all_recall_files(cursor="cur-token", limit=25)
+
+    # One page per call: the client forwards the opaque cursor and page size and
+    # passes the server's page (next_cursor and all) straight back (ADR 0014).
+    assert result == page
+    params = dict(seen[0].url.params)
+    assert params["cursor"] == "cur-token"
+    assert params["limit"] == "25"
+    assert params["user_id"] == "default"
+
+
 async def test_search_maps_scope_and_passes_response_through() -> None:
     response_payload = {
         "segments": [{"id": "s1", "score": 0.9}],
