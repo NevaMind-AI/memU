@@ -249,7 +249,8 @@ lives outside `PATH` and its login is invisible to the standalone CLI
    key exported only in the current shell passes your check here and still
    leaves the scheduled task stuck on "Not logged in" — the one false
    positive this gate cannot catch by itself. The gate below proves
-   whichever method was chosen, identically.
+   whichever method was chosen — with the probe carrying that method's own
+   variables, and nothing else.
 
 **Right after installing, expect a stale-`PATH` false negative.** On
 Windows the installers register `claude` on the *user* `PATH` in the
@@ -264,12 +265,27 @@ it names the install locations explicitly — but on Windows also run
 from its own process `PATH`.
 
 Prove both the way the scheduler will experience them — from a bare
-environment (keep `HOME`: the credential lives under it, and real schedulers
-set it), resolve *and* authenticate:
+environment, resolve *and* authenticate. The probe must carry **exactly
+what the scheduler will carry, nothing more** — which differs by method:
 
-```
-env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" claude -p 'ping'
-```
+- **Web auth** — the token lives in a file under `HOME`, so keeping `HOME`
+  is enough (real schedulers set it):
+
+  ```
+  env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" claude -p 'ping'
+  ```
+
+- **Anthropic API key / Other** — the credential is an environment
+  variable, and `env -i` strips it: the bare probe above would
+  **false-fail a correctly configured machine**. Name the variables in the
+  probe with their values, exactly as the crontab header will carry them:
+
+  ```
+  env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" ANTHROPIC_API_KEY="<the key>" claude -p 'ping'
+  ```
+
+  (for **Other**, use `ANTHROPIC_BASE_URL="<endpoint>"
+  ANTHROPIC_AUTH_TOKEN="<key>"` instead.)
 
 This `PATH` is only a **probe** for the common install locations. The cron
 entry still derives its own `PATH` at registration time from
