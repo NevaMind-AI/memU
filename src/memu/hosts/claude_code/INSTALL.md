@@ -33,7 +33,7 @@ Windows (PowerShell):
 
 ```
 $c = Get-Command claude -ErrorAction SilentlyContinue
-"claude:     " + $(if ($c) { $c.Source } else { "NOT FOUND; landing dir has it: $(Test-Path "$env:USERPROFILE\.local\bin\claude.exe") (True = stale PATH, open a new terminal)" })
+"claude:     " + $(if ($c) { $c.Source } else { "NOT FOUND; landing dir has it: $(Test-Path "$env:USERPROFILE\.local\bin\claude.exe") (True = stale PATH - prepend the landing dir to PATH for the next commands)" })
 "memu:       " + $(if (Get-Command memu-claude-code -ErrorAction SilentlyContinue) { "ok" } else { "NOT FOUND - do Part 1" })
 "credential: token=" + [bool][Environment]::GetEnvironmentVariable('CLAUDE_CODE_OAUTH_TOKEN','User') + " apikey=" + [bool][Environment]::GetEnvironmentVariable('ANTHROPIC_API_KEY','User') + " file=" + (Test-Path "$env:USERPROFILE\.claude\.credentials.json")
 "sched task: " + [bool](Get-ScheduledTask -TaskPath '\memU\' -TaskName 'memu-bridging-claude-code' -ErrorAction SilentlyContinue)
@@ -196,11 +196,11 @@ lives outside `PATH` and its login is invisible to the standalone CLI
    - macOS / Linux: `curl -fsSL https://claude.ai/install.sh | bash`, or
      `npm install -g @anthropic-ai/claude-code`
 2. **It authenticates headless, on a *persistent* credential.** **Probe
-   before you ask**: if this session is itself the standalone `claude` CLI
-   — or the user has ever logged it in interactively — the credential
-   store under `~/.claude` may already serve headless runs. Run the gate
-   below first; a green gate means this step is already done and no method
-   is needed. Only on a failing gate, ask the user to pick one of
+   before you ask — always, wherever this guide is running.** Run the gate
+   below first: an existing credential (a prior CLI login, an
+   already-persisted variable) serves headless runs without any new setup,
+   and the gate result is the only fact that matters. Green = this step is
+   already done. Only on a failing gate, ask the user to pick one of
    **exactly these three** — never improvise a fourth option, and never
    offer "skip": an unauthenticated record seam is a failed install, not a
    variant of success.
@@ -265,13 +265,17 @@ launch-time environment, so `claude` can report "not found" here while
 being correctly installed (the mechanism is field-proven on this repo's
 cursor host). Judge by the landing directory (`~/.local/bin`) or a **newly
 opened** terminal, never by a pre-install shell. The gate below is immune —
-it names the install locations explicitly — but on Windows also run
-`schedule install` from that fresh terminal: the helper resolves `claude`
-from its own process `PATH`. An agent whose own shell is the stale one —
-it just ran the installer and cannot restart itself — prepends the landing
-directory to the child-shell `PATH` for that one command instead; this is
-safe because the registered task bakes absolute paths and never depends on
-the installing shell.
+it names the install locations explicitly. On Windows, run
+`schedule install` the same unconditional way — with the landing directory
+prepended to that one command's `PATH`:
+
+```
+$env:Path = "$env:USERPROFILE\.local\bin;$env:Path"; memu-claude-code schedule install
+```
+
+This is a no-op in a fresh shell and the fix in a stale one — there is no
+need to know which this is — and it is safe either way: the registered
+task bakes absolute paths and never depends on the invoking shell.
 
 Prove both the way the scheduler will experience them — from a bare
 environment, resolve *and* authenticate. The probe must carry **exactly
