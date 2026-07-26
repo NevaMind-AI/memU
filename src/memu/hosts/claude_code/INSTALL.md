@@ -21,6 +21,43 @@ what makes them agree.
 
 ---
 
+## Preflight — establish state in one shot
+
+Partially-installed machines and re-runs are the common case. Run the one
+block for this OS, read the answers, and do only the parts still missing.
+**Never search the filesystem for binaries** — resolution is `Get-Command` /
+`command -v` plus the one known landing directory; a recursive disk search
+is always the wrong move (field data: it is where slow installs go to die).
+
+Windows (PowerShell):
+
+```
+$c = Get-Command claude -ErrorAction SilentlyContinue
+"claude:     " + $(if ($c) { $c.Source } else { "NOT FOUND; landing dir has it: $(Test-Path "$env:USERPROFILE\.local\bin\claude.exe") (True = stale PATH - prepend the landing dir to PATH for the next commands)" })
+"memu:       " + $(if (Get-Command memu-claude-code -ErrorAction SilentlyContinue) { "ok" } else { "NOT FOUND - do Part 1" })
+"credential: token=" + [bool][Environment]::GetEnvironmentVariable('CLAUDE_CODE_OAUTH_TOKEN','User') + " apikey=" + [bool][Environment]::GetEnvironmentVariable('ANTHROPIC_API_KEY','User') + " file=" + (Test-Path "$env:USERPROFILE\.claude\.credentials.json")
+"sched task: " + [bool](Get-ScheduledTask -TaskPath '\memU\' -TaskName 'memu-bridging-claude-code' -ErrorAction SilentlyContinue)
+"inject:     " + [bool](Select-String -Path "$env:USERPROFILE\.claude\CLAUDE.md" -Pattern 'memu' -Quiet -ErrorAction SilentlyContinue)
+```
+
+macOS / Linux:
+
+```
+command -v claude || echo "claude NOT FOUND (landing dir: $(ls ~/.local/bin/claude 2>/dev/null || echo none))"
+command -v memu-claude-code || echo "memu NOT FOUND - do Part 1"
+[ -f ~/.claude/.credentials.json ] && echo "cred file: yes" || echo "cred file: no"
+crontab -l 2>/dev/null | grep -qE 'ANTHROPIC|CLAUDE_CODE' && echo "cron env: set" || echo "cron env: none"
+crontab -l 2>/dev/null | grep -q 'memU bridging pipeline' && echo "cron entry: yes" || echo "cron entry: no"
+grep -q memu ~/.claude/CLAUDE.md 2>/dev/null && echo "inject: yes" || echo "inject: no"
+```
+
+Reading the answers: `memu` missing → Part 1. `claude` missing → Part 2.0
+step 1. No credential anywhere → Part 2.0 step 2. No task / cron entry →
+Part 2 registration. `inject` false → Part 3. Everything present → verify
+gates only; there is nothing to install.
+
+---
+
 ## Part 1 — Install memU
 
 memU is distributed as a **pip package**. A Python runtime is required
@@ -141,6 +178,164 @@ must exit cleanly. **Zero hits is the expected result** on a new store.
 The *record* seam: a scheduled job that periodically mines recent sessions under
 `~/.claude/projects` into memU memory, skills, and resources. In cloud mode,
 workspace resources are submitted but are not currently persisted.
+
+### 2.0 Prerequisite — a standalone, headless-authenticated `claude`
+
+The scheduled run invokes **`claude -p` from a bare, non-interactive
+environment**. The Claude **Desktop app cannot serve it**: its bundled binary
+lives outside `PATH` and its login is invisible to the standalone CLI
+(memU#538). Two checks, in order, before you register anything:
+
+1. **`claude` resolves on `PATH`.** If it does not, install it — **do not
+   ask which installer**: announce what you are about to run, then run the
+   official install script (it lands in `~/.local/bin`, needs no elevation
+   and no node):
+   - Windows: `irm https://claude.ai/install.ps1 | iex`
+   - macOS / Linux: `curl -fsSL https://claude.ai/install.sh | bash`
+
+   `winget install Anthropic.ClaudeCode` and
+   `npm install -g @anthropic-ai/claude-code` are fallbacks — for when the
+   script fails, or the user has already stated a preference. Never install
+   silently as a side effect of scheduling, and never offer "skip" — here,
+   or anywhere in this section: an unregistered record seam is a failed
+   install, not an outcome to pick from a menu.
+2. **It authenticates headless, on a *persistent* credential.** **Probe
+   before you ask — always, wherever this guide is running.** Run the gate
+   below first: an existing credential (a prior CLI login, an
+   already-persisted variable) serves headless runs without any new setup,
+   and the gate result is the only fact that matters. Green = this step is
+   already done. Only on a failing gate, ask the user to pick one of
+   **exactly these two** — never improvise more options, and never offer
+   "skip": an unauthenticated record seam is a failed install, not a
+   variant of success.
+   - **Web auth** (in a browser) — **recommended**: `claude setup-token` —
+     a browser sign-in; on success the CLI is **authenticated directly**
+     (the credential lands in the profile — nothing to copy, no variable
+     to set). Requires a Claude subscription — it refuses without one; do
+     not loop on it, move down the list.
+   - **Anthropic API key** (platform account, pay per token): persist
+     `ANTHROPIC_API_KEY`.
+
+   The host's question UI may append its own free-text **"Other"** choice
+   to any question — that is the UI's escape hatch, not a third method,
+   and an answer typed through it does not reopen the menu: an API key
+   pasted there *is* the API-key option; a custom endpoint is the removed
+   trap below — explain and re-offer the two; anything else is "neither".
+
+   If the user has neither, **stop here and say so**: Part 2 is blocked on
+   an unmet prerequisite — Parts 1 and 3 still stand, and the user knows
+   exactly what to bring back. Never register a schedule that cannot
+   authenticate. And no third options: a "custom endpoint" invites a
+   protocol trap (the CLI speaks the Anthropic Messages protocol, which
+   OpenAI-format relays do not serve), and "skip" is failure wearing a
+   menu label.
+
+   **Web auth is interactive — run it start-to-finish, and never in a
+   captured or background shell.** `setup-token` opens the browser and
+   listens on a localhost callback port *inside the terminal process*; if
+   you kill that process and tell the user to "just log in", they sign in
+   and land on an unreachable `localhost:…/callback` page whose code is
+   bound to the dead run and unusable — field data: exactly this strand.
+   What works, end to end:
+   1. Launch it in a **real terminal window on the user's desktop** and
+      leave it running (Windows: `Start-Process claude -ArgumentList
+      'setup-token'`; on macOS/Linux run it in the user's visible
+      terminal) — do not hand the user a bare "open a terminal and run
+      this" instruction.
+   2. Before they click anything, tell them exactly what they will see:
+      the browser opens → sign in → click **Authorize** → the browser
+      shows the success page ("Build something great — You're all set up
+      for Claude Code. You can now close this window."). The terminal
+      window finishes by itself and **Claude Code is signed in directly**
+      — nothing to copy, nothing to paste, no variable to set.
+   3. Then offer exactly two continuations — as a **selectable choice**
+      (the host's option UI), never a free-text "let me know":
+      - **Continue** (login succeeded) — run the gate below immediately
+        and **show the user the result** ("headless login verified —
+        prerequisite complete") before going straight to registration in
+        the same session. Never end the turn leaving the user unsure
+        whether the install finished.
+      - **Another way** — the login did not work, or the user changed
+        their mind: fall back to the **Anthropic API key** option.
+   4. Do not stop at "tell me when you're done": the credential file
+      appears in the profile when the flow truly succeeds — watch for it,
+      and treat it as the "Continue" signal if the user has wandered off.
+      If the browser shows an unreachable `localhost:…/callback` page,
+      the terminal process died — close that tab and relaunch from
+      step 1; never try to salvage the code in the URL.
+   5. **Browser shows the success page but the gate still says "Not
+      logged in"? That is the split-proxy trap** (field data) — do not
+      hunt the filesystem or the credential manager for a token that was
+      never written. The user's browser reaches Anthropic through a
+      proxy, but the terminal process has none, so the CLI half of the
+      OAuth exchange fails even though the browser half looks complete.
+      Fix it where it lives, then rerun: in that terminal window,
+      `set HTTPS_PROXY=http://127.0.0.1:<port>` (and `HTTP_PROXY`
+      likewise), then `claude setup-token` again. The scheduled run needs
+      the same outbound — persist the proxy variables exactly like a
+      credential (Windows `setx`; Unix crontab header), and keep Part 1's
+      `NO_PROXY` note in mind for loopback embedding servers. **Only the
+      gate decides success — never the browser page.**
+
+   Persisting the API key (Web auth needs none of this — its credential
+   is the profile file): on Windows, `setx` (the S4U task reads persistent
+   user env); on macOS/Linux a shell-profile `export` does **not** reach
+   cron —
+   the variables go in the crontab header exactly like the `PATH` line. A
+   key exported only in the current shell passes your check here and still
+   leaves the scheduled task stuck on "Not logged in" — the one false
+   positive this gate cannot catch by itself. The gate below proves
+   whichever method was chosen — with the probe carrying that method's own
+   variables, and nothing else.
+
+**Right after installing, expect a stale-`PATH` false negative.** On
+Windows the installers register `claude` on the *user* `PATH` in the
+registry; on macOS/Linux they append to the shell rc — and in both cases
+every process started before the install, this shell included, keeps its
+launch-time environment, so `claude` can report "not found" here while
+being correctly installed (the mechanism is field-proven on this repo's
+cursor host). Judge by the landing directory (`~/.local/bin`) or a **newly
+opened** terminal, never by a pre-install shell. The gate below is immune —
+it names the install locations explicitly. On Windows, run
+`schedule install` the same unconditional way — with the landing directory
+prepended to that one command's `PATH`:
+
+```
+$env:Path = "$env:USERPROFILE\.local\bin;$env:Path"; memu-claude-code schedule install
+```
+
+This is a no-op in a fresh shell and the fix in a stale one — there is no
+need to know which this is — and it is safe either way: the registered
+task bakes absolute paths and never depends on the invoking shell.
+
+Prove both the way the scheduler will experience them — from a bare
+environment, resolve *and* authenticate. The probe must carry **exactly
+what the scheduler will carry, nothing more** — which differs by method:
+
+- **Web auth** — the credential lives in a file under `HOME`, so keeping
+  `HOME` is enough (real schedulers set it):
+
+  ```
+  env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" claude -p 'ping'
+  ```
+
+- **Anthropic API key** — the credential is an environment variable, and
+  `env -i` strips it: the bare probe above would **false-fail a correctly
+  configured machine**. Name the variable in the probe with its value,
+  exactly as the crontab header will carry it:
+
+  ```
+  env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" ANTHROPIC_API_KEY="<the key>" claude -p 'ping'
+  ```
+
+This `PATH` is only a **probe** for the common install locations. The cron
+entry still derives its own `PATH` at registration time from
+`command -v memu-claude-code` / `command -v claude` (see `docs task`); a green
+probe does not replace that line.
+
+On Windows, `schedule install` (reached through `docs task` below) runs this
+gate for you and refuses with install guidance when either check fails. Do
+not continue until the gate passes.
 
 **Do not reinvent this.** Follow the packaged procedure:
 
