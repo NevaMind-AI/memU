@@ -12,12 +12,32 @@ about today's behaviour moves.
 
 from __future__ import annotations
 
+import argparse
 import pathlib
+
+import pytest
 
 from memu.hosts import instruction
 from memu.hosts.codex.cli import AGENTS_MD, SKILLS_DIR, build_parser
+from memu.hosts.host_cli import build_parser as build_host_parser
+from memu.hosts.workbuddy.cli import MEMORY_MD as WORKBUDDY_LEGACY_MEMORY_MD
+from memu.hosts.workbuddy.cli import SOUL_MD as WORKBUDDY_SOUL_MD
+from memu.hosts.workbuddy.cli import SPEC as WORKBUDDY_SPEC
 
 BINARY = "memu-codex"
+WORKBUDDY_BINARY = "memu-workbuddy"
+
+
+def _migration_parser(current: pathlib.Path, legacy: pathlib.Path) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command", required=True)
+    instruction.register(
+        sub,
+        path=str(current),
+        binary=WORKBUDDY_BINARY,
+        legacy_paths=(str(legacy),),
+    )
+    return parser
 
 
 def test_creates_file_when_absent(tmp_path: pathlib.Path) -> None:
@@ -122,6 +142,102 @@ def test_openclaw_is_a_skill_host() -> None:
     from memu.hosts.openclaw.cli import SPEC
 
     assert SPEC.skills_dir == "~/.openclaw/skills"
+
+
+def test_workbuddy_defaults_to_soul_as_an_inline_host() -> None:
+    args = build_host_parser(WORKBUDDY_SPEC).parse_args(["install-instruction"])
+
+    assert args.path == WORKBUDDY_SOUL_MD
+    assert args.legacy_paths == (WORKBUDDY_LEGACY_MEMORY_MD,)
+    assert WORKBUDDY_SPEC.skills_dir == ""
+
+
+def test_default_install_migrates_the_legacy_instruction_after_writing_the_new_target(
+    tmp_path: pathlib.Path,
+) -> None:
+    soul = tmp_path / "SOUL.md"
+    memory = tmp_path / "MEMORY.md"
+    soul.write_text("# My identity\n", encoding="utf-8")
+    memory.write_text("# My memories\n", encoding="utf-8")
+    instruction.install(memory, WORKBUDDY_BINARY)
+    old_memory = memory.read_text(encoding="utf-8")
+
+    args = _migration_parser(soul, memory).parse_args(["install-instruction"])
+    assert instruction._cmd_install_instruction(args) == 0
+
+    soul_text = soul.read_text(encoding="utf-8")
+    assert "# My identity" in soul_text
+    assert "memu-workbuddy retrieve" in soul_text
+    assert soul_text.count(instruction.begin(WORKBUDDY_BINARY)) == 1
+    assert memory.read_text(encoding="utf-8") == "# My memories\n"
+    assert soul.with_suffix(".md.bak").read_text(encoding="utf-8") == "# My identity\n"
+    assert memory.with_suffix(".md.bak").read_text(encoding="utf-8") == old_memory
+
+    before = (soul_text, memory.read_text(encoding="utf-8"))
+    assert instruction._cmd_install_instruction(args) == 0
+    assert (soul.read_text(encoding="utf-8"), memory.read_text(encoding="utf-8")) == before
+
+
+def test_default_install_dry_run_reports_but_does_not_migrate(tmp_path: pathlib.Path) -> None:
+    soul = tmp_path / "SOUL.md"
+    memory = tmp_path / "MEMORY.md"
+    memory.write_text("# My memories\n", encoding="utf-8")
+    instruction.install(memory, WORKBUDDY_BINARY)
+    old_memory = memory.read_text(encoding="utf-8")
+
+    args = _migration_parser(soul, memory).parse_args(["install-instruction", "--dry-run"])
+    assert instruction._cmd_install_instruction(args) == 0
+
+    assert not soul.exists()
+    assert memory.read_text(encoding="utf-8") == old_memory
+
+
+def test_default_remove_cleans_current_and_legacy_instruction_paths(tmp_path: pathlib.Path) -> None:
+    soul = tmp_path / "SOUL.md"
+    memory = tmp_path / "MEMORY.md"
+    soul.write_text("# My identity\n", encoding="utf-8")
+    memory.write_text("# My memories\n", encoding="utf-8")
+    instruction.install(soul, WORKBUDDY_BINARY)
+    instruction.install(memory, WORKBUDDY_BINARY)
+
+    args = _migration_parser(soul, memory).parse_args(["remove-instruction"])
+    assert instruction._cmd_remove_instruction(args) == 0
+
+    assert soul.read_text(encoding="utf-8") == "# My identity\n"
+    assert memory.read_text(encoding="utf-8") == "# My memories\n"
+
+
+def test_custom_instruction_path_leaves_default_legacy_path_alone(tmp_path: pathlib.Path) -> None:
+    soul = tmp_path / "SOUL.md"
+    memory = tmp_path / "MEMORY.md"
+    custom = tmp_path / "profile" / "SOUL.md"
+    instruction.install(memory, WORKBUDDY_BINARY)
+    old_memory = memory.read_text(encoding="utf-8")
+
+    args = _migration_parser(soul, memory).parse_args(["install-instruction", "--path", str(custom)])
+    assert instruction._cmd_install_instruction(args) == 0
+
+    assert "memu-workbuddy retrieve" in custom.read_text(encoding="utf-8")
+    assert memory.read_text(encoding="utf-8") == old_memory
+
+
+def test_failed_new_target_install_keeps_the_legacy_instruction(monkeypatch, tmp_path: pathlib.Path) -> None:
+    soul = tmp_path / "SOUL.md"
+    memory = tmp_path / "MEMORY.md"
+    instruction.install(memory, WORKBUDDY_BINARY)
+    old_memory = memory.read_text(encoding="utf-8")
+    args = _migration_parser(soul, memory).parse_args(["install-instruction"])
+
+    install_error = OSError("new target is not writable")
+
+    def fail_install(*_args: object, **_kwargs: object) -> None:
+        raise install_error
+
+    monkeypatch.setattr(instruction, "install", fail_install)
+    with pytest.raises(OSError, match="not writable"):
+        instruction._cmd_install_instruction(args)
+
+    assert memory.read_text(encoding="utf-8") == old_memory
 
 
 def test_instruction_names_the_llm_free_retrieval() -> None:

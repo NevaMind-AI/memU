@@ -350,19 +350,41 @@ def _cmd_install_instruction(args: argparse.Namespace) -> int:
     path = Path(args.path)
     changed, diff = install(path, args.binary, skill=skill, skill_text=skill_text, dry_run=args.dry_run)
     _report(path.expanduser(), changed, diff, dry_run=args.dry_run)
+
+    # Migrate only when the host's default target is in use. An explicit --path
+    # describes a separate profile or workspace and must not rewrite files under
+    # the default home. Install the new target first so a failed write can never
+    # remove the user's only working retrieval instruction.
+    if args.path == args.default_instruction_path:
+        for legacy_text in args.legacy_paths:
+            legacy = Path(legacy_text)
+            if legacy.expanduser() == path.expanduser():
+                continue
+            legacy_changed, legacy_diff = remove(legacy, args.binary, dry_run=args.dry_run)
+            if legacy_diff:
+                _report(legacy.expanduser(), legacy_changed, legacy_diff, dry_run=args.dry_run)
     return 0
 
 
 def _cmd_remove_instruction(args: argparse.Namespace) -> int:
-    path = Path(args.path)
-    changed, diff = remove(path, args.binary, dry_run=args.dry_run)
-    if not diff:
-        print(f"{path}: no managed block to remove")
-        return 0
-    if args.dry_run:
-        print(f"{path}: would change\n\n{diff}", end="")
-        return 0
-    print(f"{path}: {'updated' if changed else 'unchanged'}\n\n{diff}", end="")
+    paths = [Path(args.path)]
+    if args.path == args.default_instruction_path:
+        paths.extend(Path(path) for path in args.legacy_paths)
+
+    reported = False
+    seen: set[Path] = set()
+    for path in paths:
+        expanded = path.expanduser()
+        if expanded in seen:
+            continue
+        seen.add(expanded)
+        changed, diff = remove(path, args.binary, dry_run=args.dry_run)
+        if not diff:
+            continue
+        reported = True
+        _report(expanded, changed, diff, dry_run=args.dry_run)
+    if not reported:
+        print(f"{Path(args.path)}: no managed block to remove")
     return 0
 
 
@@ -376,7 +398,14 @@ async def _cmd_remove_instruction_async(args: argparse.Namespace) -> int:
     return _cmd_remove_instruction(args)
 
 
-def register(sub: Any, *, path: str, binary: str, skills_dir: str = "") -> None:
+def register(
+    sub: Any,
+    *,
+    path: str,
+    binary: str,
+    skills_dir: str = "",
+    legacy_paths: tuple[str, ...] = (),
+) -> None:
     """Add ``install-instruction`` to a host CLI, bound to that host's ``path``.
 
     ``binary`` is the host adapter's own command name (``memu-codex``, …) — it is
@@ -386,6 +415,11 @@ def register(sub: Any, *, path: str, binary: str, skills_dir: str = "") -> None:
     has one. Given it, the command installs the retrieval skill there and patches
     ``path`` with a two-sentence pointer to it; left empty, it patches ``path``
     with the full text and writes no skill.
+
+    ``legacy_paths`` names earlier defaults owned by the same host adapter. A
+    default-path install removes this binary's managed block from them only after
+    the current target is installed; default-path uninstall checks both. Custom
+    ``--path`` calls leave them alone.
     """
     parser = sub.add_parser(
         "install-instruction",
@@ -405,7 +439,12 @@ def register(sub: Any, *, path: str, binary: str, skills_dir: str = "") -> None:
     parser.add_argument(
         "--print", dest="print_only", action="store_true", help="Print what would be installed and exit"
     )
-    parser.set_defaults(handler=_cmd_install_instruction_async, binary=binary)
+    parser.set_defaults(
+        handler=_cmd_install_instruction_async,
+        binary=binary,
+        default_instruction_path=path,
+        legacy_paths=legacy_paths,
+    )
 
     remover = sub.add_parser(
         "remove-instruction",
@@ -413,4 +452,9 @@ def register(sub: Any, *, path: str, binary: str, skills_dir: str = "") -> None:
     )
     remover.add_argument("--path", default=path, help=f"Instruction file to unpatch (default: {path})")
     remover.add_argument("--dry-run", action="store_true", help="Show the diff without writing")
-    remover.set_defaults(handler=_cmd_remove_instruction_async, binary=binary)
+    remover.set_defaults(
+        handler=_cmd_remove_instruction_async,
+        binary=binary,
+        default_instruction_path=path,
+        legacy_paths=legacy_paths,
+    )

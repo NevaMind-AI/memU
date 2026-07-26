@@ -66,6 +66,12 @@ class HostSpec:
     instruction_path: str
     """The host's global instruction file — where the inject seam lands."""
 
+    legacy_instruction_paths: tuple[str, ...] = ()
+    """Previous default instruction files to unpatch after installing the current
+    target, and to inspect during uninstall. Only used when the CLI's default
+    ``--path`` is in effect, so an explicit custom target never rewrites unrelated
+    files. This is an upgrade seam, not a second active instruction location."""
+
     skills_dir: str = ""
     """The host's skills directory, for hosts that have skills (``~/.codex/skills``,
     ``~/.claude/skills``). Given one, ``install-instruction`` puts the retrieval
@@ -361,7 +367,13 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     # Shared across hosts, so they are registered, not redefined — only the file
     # the instruction lands in and the binary it names are ours to fill in.
     retrieval.register(sub)
-    instruction.register(sub, path=spec.instruction_path, binary=spec.binary, skills_dir=spec.skills_dir)
+    instruction.register(
+        sub,
+        path=spec.instruction_path,
+        binary=spec.binary,
+        skills_dir=spec.skills_dir,
+        legacy_paths=spec.legacy_instruction_paths,
+    )
 
     p = with_base(sub.add_parser("prepare", help=f"Slice new {spec.display} sessions into self-evolve job files"))
     # A host with no universal session location (the generic adapter) leaves
