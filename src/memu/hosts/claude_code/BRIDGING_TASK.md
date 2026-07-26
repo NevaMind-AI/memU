@@ -118,7 +118,7 @@ memu-claude-code schedule uninstall   # remove it
 
 `install` writes the prompt to a file plus a small PowerShell wrapper that reads
 it (nothing long ever touches the command line), bakes in the absolute path to
-`claude`, and registers a task named `\memU\memu-bridging-claude-code` under an
+`claude`, and registers a task named `\memU\memu-remember-claude-code` under an
 **S4U** principal — it runs whether or not you're logged in, windowless, and
 catches up a run missed while the machine was off. `--interval <minutes>` changes
 the cadence (default 60).

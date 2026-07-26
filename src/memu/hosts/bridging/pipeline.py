@@ -15,12 +15,13 @@ import os
 from typing import Any
 
 from memu.env import build_agentic_memory_backend_from_env
+from memu.hosts import templates
 from memu.hosts.base import TranscriptSource
-from memu.hosts.bridging.instructions import prepare_instruction_jobs
+from memu.hosts.bridging.instructions import MEMORY_JOB_TEMPLATE, SKILL_JOB_TEMPLATE, prepare_instruction_jobs
 from memu.hosts.bridging.layout import TRACK_DIRS, Layout
 from memu.hosts.bridging.manifest import diff_tracked, snapshot_tracked
 from memu.hosts.bridging.recall_files import read_recall_file, write_recall_file
-from memu.hosts.bridging.resources import prepare_resource_job, read_resources
+from memu.hosts.bridging.resources import RESOURCE_JOB_TEMPLATE, prepare_resource_job, read_resources
 from memu.hosts.bridging.transcripts import prepare_transcripts
 
 MAX_JOBS = 10
@@ -67,6 +68,10 @@ async def prepare(
     # eventually crowd out every file the current run actually touched.
     layout.resource_log.unlink(missing_ok=True)
 
+    # Pull the current job templates from the server, each falling back to its
+    # last-good cache and then the embedded copy (:mod:`memu.hosts.templates`).
+    # prepare is low-frequency and latency-tolerant, so pulling every run is fine;
+    # a total outage silently degrades to the embedded text the SDK shipped with.
     prepare_instruction_jobs(
         job_dir=layout.jobs,
         session_dir=layout.sessions,
@@ -74,12 +79,15 @@ async def prepare(
         skill_dir=layout.skill,
         resource_log=layout.resource_log,
         num_sessions=num_sessions,
+        memory_template=templates.resolve(templates.MEMORY_JOB, MEMORY_JOB_TEMPLATE),
+        skill_template=templates.resolve(templates.SKILL_JOB, SKILL_JOB_TEMPLATE),
     )
     prepare_resource_job(
         job_dir=layout.jobs,
         verify_command=verify_command,
         resource_file=layout.resources,
         job_index=2 * num_sessions + 1,
+        template=templates.resolve(templates.RESOURCE_JOB, RESOURCE_JOB_TEMPLATE),
     )
     return num_sessions
 
