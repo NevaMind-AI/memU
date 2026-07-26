@@ -186,15 +186,19 @@ environment**. The Claude **Desktop app cannot serve it**: its bundled binary
 lives outside `PATH` and its login is invisible to the standalone CLI
 (memU#538). Two checks, in order, before you register anything:
 
-1. **`claude` resolves on `PATH`.** If it does not, tell the user, let them
-   pick the installer (it is their machine — npm assumes node, winget may
-   prompt for elevation), and run it with their go-ahead — never silently as
-   a side effect of scheduling:
-   - Windows: `winget install Anthropic.ClaudeCode`, or
-     `irm https://claude.ai/install.ps1 | iex`, or
-     `npm install -g @anthropic-ai/claude-code`
-   - macOS / Linux: `curl -fsSL https://claude.ai/install.sh | bash`, or
-     `npm install -g @anthropic-ai/claude-code`
+1. **`claude` resolves on `PATH`.** If it does not, install it — **do not
+   ask which installer**: announce what you are about to run, then run the
+   official install script (it lands in `~/.local/bin`, needs no elevation
+   and no node):
+   - Windows: `irm https://claude.ai/install.ps1 | iex`
+   - macOS / Linux: `curl -fsSL https://claude.ai/install.sh | bash`
+
+   `winget install Anthropic.ClaudeCode` and
+   `npm install -g @anthropic-ai/claude-code` are fallbacks — for when the
+   script fails, or the user has already stated a preference. Never install
+   silently as a side effect of scheduling, and never offer "skip" — here,
+   or anywhere in this section: an unregistered record seam is a failed
+   install, not an outcome to pick from a menu.
 2. **It authenticates headless, on a *persistent* credential.** **Probe
    before you ask — always, wherever this guide is running.** Run the gate
    below first: an existing credential (a prior CLI login, an
