@@ -21,6 +21,43 @@ what makes them agree.
 
 ---
 
+## Preflight — establish state in one shot
+
+Partially-installed machines and re-runs are the common case. Run the one
+block for this OS, read the answers, and do only the parts still missing.
+**Never search the filesystem for binaries** — resolution is `Get-Command` /
+`command -v` plus the one known landing directory; a recursive disk search
+is always the wrong move (field data: it is where slow installs go to die).
+
+Windows (PowerShell):
+
+```
+$c = Get-Command claude -ErrorAction SilentlyContinue
+"claude:     " + $(if ($c) { $c.Source } else { "NOT FOUND; landing dir has it: $(Test-Path "$env:USERPROFILE\.local\bin\claude.exe") (True = stale PATH, open a new terminal)" })
+"memu:       " + $(if (Get-Command memu-claude-code -ErrorAction SilentlyContinue) { "ok" } else { "NOT FOUND - do Part 1" })
+"credential: token=" + [bool][Environment]::GetEnvironmentVariable('CLAUDE_CODE_OAUTH_TOKEN','User') + " apikey=" + [bool][Environment]::GetEnvironmentVariable('ANTHROPIC_API_KEY','User') + " file=" + (Test-Path "$env:USERPROFILE\.claude\.credentials.json")
+"sched task: " + [bool](Get-ScheduledTask -TaskPath '\memU\' -TaskName 'memu-bridging-claude-code' -ErrorAction SilentlyContinue)
+"inject:     " + [bool](Select-String -Path "$env:USERPROFILE\.claude\CLAUDE.md" -Pattern 'memu' -Quiet -ErrorAction SilentlyContinue)
+```
+
+macOS / Linux:
+
+```
+command -v claude || echo "claude NOT FOUND (landing dir: $(ls ~/.local/bin/claude 2>/dev/null || echo none))"
+command -v memu-claude-code || echo "memu NOT FOUND - do Part 1"
+[ -f ~/.claude/.credentials.json ] && echo "cred file: yes" || echo "cred file: no"
+crontab -l 2>/dev/null | grep -qE 'ANTHROPIC|CLAUDE_CODE' && echo "cron env: set" || echo "cron env: none"
+crontab -l 2>/dev/null | grep -q 'memU bridging pipeline' && echo "cron entry: yes" || echo "cron entry: no"
+grep -q memu ~/.claude/CLAUDE.md 2>/dev/null && echo "inject: yes" || echo "inject: no"
+```
+
+Reading the answers: `memu` missing → Part 1. `claude` missing → Part 2.0
+step 1. No credential anywhere → Part 2.0 step 2. No task / cron entry →
+Part 2 registration. `inject` false → Part 3. Everything present → verify
+gates only; there is nothing to install.
+
+---
+
 ## Part 1 — Install memU
 
 memU is distributed as a **pip package**. A Python runtime is required
