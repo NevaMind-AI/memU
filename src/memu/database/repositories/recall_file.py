@@ -14,6 +14,23 @@ class RecallFileRepo(Protocol):
 
     def list_recall_files(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]: ...
 
+    def list_recall_files_page(
+        self,
+        where: Mapping[str, Any] | None,
+        *,
+        after: tuple[str, str, str] | None,
+        limit: int,
+    ) -> tuple[list[RecallFile], tuple[str, str, str] | None]:
+        """One keyset page ordered by ``(track, name, id)``, plus the next cursor.
+
+        Returns the ordered page and the ``(track, name, id)`` of its last row
+        when more rows remain, or ``None`` on the final page. Distinct from
+        :meth:`list_recall_files`, which returns the whole unordered mapping its
+        roll-up and commit callers need — this one is the paginated read behind
+        ``list_all_recall_files`` (see ADR 0014).
+        """
+        ...
+
     def clear_recall_files(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]: ...
 
     def get_or_create_recall_file(

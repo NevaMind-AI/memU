@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -11,6 +13,26 @@ if TYPE_CHECKING:
     from memu.app.settings import ProgressiveRetrieveConfig
     from memu.database.interfaces import Database
     from memu.database.models import RecallFile, Resource
+
+# Default recall-file page size for ``list_all_recall_files`` (ADR 0014). Callers
+# follow ``next_cursor`` to reassemble the full set; the page size only bounds the
+# per-call read/serialization/response, not the total returned.
+DEFAULT_PAGE_LIMIT = 50
+
+
+def _encode_cursor(after: tuple[str, str, str] | None) -> str | None:
+    """Opaque token for a ``(track, name, id)`` keyset position (``None`` = end)."""
+    if after is None:
+        return None
+    return base64.urlsafe_b64encode(json.dumps(list(after)).encode()).decode()
+
+
+def _decode_cursor(cursor: str | None) -> tuple[str, str, str] | None:
+    """Inverse of :func:`_encode_cursor`; a blank/absent cursor starts at the top."""
+    if not cursor:
+        return None
+    track, name, _id = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+    return (track, name, _id)
 
 
 async def _embed_one(embed_client: Any, text: str) -> list[float]:
@@ -38,17 +60,27 @@ class AgenticMixin:
     async def list_all_recall_files(
         self,
         where: dict[str, Any] | None = None,
+        *,
+        cursor: str | None = None,
+        limit: int = DEFAULT_PAGE_LIMIT,
     ) -> dict[str, Any]:
-        """List RecallFiles across every track.
+        """List one keyset page of RecallFiles across every track (ADR 0014).
 
         No ``track`` filter is forced (ADR 0006), so skill-track files are
-        included alongside memory-track ones; the repository is queried directly.
+        included alongside memory-track ones. The page is ordered by
+        ``(track, name, id)`` and returned with ``next_cursor``; a ``None``
+        ``next_cursor`` marks the last page. Callers follow the cursor to walk
+        the full set — ordering on the domain identity ``(track, name)`` (unique
+        within a scope, immutable under commit) is what makes that walk skip- and
+        duplicate-free.
         """
         store = self._get_database()
         where_filters = self._normalize_where(where)
-        recall_files = store.recall_file_repo.list_recall_files(where_filters)
-        recall_files_list = [self._model_dump_without_embeddings(recall_file) for recall_file in recall_files.values()]
-        return {"recall_files": recall_files_list}
+        recall_files, next_after = store.recall_file_repo.list_recall_files_page(
+            where_filters, after=_decode_cursor(cursor), limit=limit
+        )
+        recall_files_list = [self._model_dump_without_embeddings(recall_file) for recall_file in recall_files]
+        return {"recall_files": recall_files_list, "next_cursor": _encode_cursor(next_after)}
 
     async def progressive_retrieve(
         self,

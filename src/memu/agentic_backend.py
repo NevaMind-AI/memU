@@ -14,7 +14,17 @@ class AgenticMemoryBackend(Protocol):
     async def list_all_recall_files(
         self,
         where: dict[str, Any] | None = None,
-    ) -> dict[str, Any]: ...
+        *,
+        cursor: str | None = None,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """One keyset page of recall files with an opaque ``next_cursor`` (ADR 0014).
+
+        ``next_cursor`` is ``None`` on the last page; callers follow it to
+        reassemble the full set. Both backends order identically, so the two
+        execution paths stay byte-for-byte the same.
+        """
+        ...
 
     async def progressive_retrieve(
         self,

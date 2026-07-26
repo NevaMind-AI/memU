@@ -93,11 +93,19 @@ async def _cmd_retrieve(args: argparse.Namespace) -> int:
 
 async def _cmd_list_files(args: argparse.Namespace) -> int:
     backend = _build_backend(args)
-    result = await backend.list_all_recall_files()
+    # "list-files" shows everything, so follow next_cursor across pages (ADR 0014)
+    # and gather the full set before printing.
+    files: list[dict[str, Any]] = []
+    cursor: str | None = None
+    while True:
+        result = await backend.list_all_recall_files(cursor=cursor)
+        files.extend(result.get("recall_files", []))
+        cursor = result.get("next_cursor")
+        if not cursor:
+            break
     if args.json:
-        _print_json(result)
+        _print_json({"recall_files": files})
         return 0
-    files = result.get("recall_files", [])
     print(f"{len(files)} recall file(s)")
     for f in files:
         print(f"  - {f.get('track')}/{f.get('name')}: {f.get('description') or ''}")

@@ -93,9 +93,11 @@ def test_retrieve_and_list_files_use_selected_backend(
             calls.append(("retrieve", query))
             return {"segments": [], "files": [], "resources": []}
 
-        async def list_all_recall_files(self) -> dict[str, Any]:
-            calls.append(("list", None))
-            return {"categories": []}
+        async def list_all_recall_files(
+            self, where: Any = None, *, cursor: str | None = None, limit: int = 100
+        ) -> dict[str, Any]:
+            calls.append(("list", cursor))
+            return {"recall_files": [], "next_cursor": None}
 
     backend = Backend()
     monkeypatch.setattr(cli, "build_agentic_memory_backend_from_env", lambda **kwargs: backend)

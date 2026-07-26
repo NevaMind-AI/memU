@@ -74,6 +74,37 @@ async def test_commit_then_list_covers_both_tracks(service: MemoryService) -> No
     assert by_track == [("memory", "Profile"), ("skill", "deploy-checklist")]
 
 
+async def test_list_all_recall_files_paginates_by_track_name_id(service: MemoryService) -> None:
+    # Commit more files than the page size, spread across both tracks.
+    limit = 3
+    committed = await service.commit_results(
+        recall_files=[
+            {"name": f"m{i:02d}", "track": "memory", "description": "d", "content": f"line {i}"} for i in range(4)
+        ]
+        + [{"name": f"s{i:02d}", "track": "skill", "description": "d", "content": f"step {i}"} for i in range(4)],
+    )
+    assert len(committed["recall_files"]) == 8
+
+    # Walk every page by following next_cursor, as prepare/CLI do.
+    seen: list[tuple[str, str]] = []
+    pages = 0
+    cursor: str | None = None
+    while True:
+        page = await service.list_all_recall_files(cursor=cursor, limit=limit)
+        assert len(page["recall_files"]) <= limit
+        seen.extend((f["track"], f["name"]) for f in page["recall_files"])
+        pages += 1
+        cursor = page["next_cursor"]
+        if not cursor:
+            break
+
+    # Every file exactly once (no skips/dups), in (track, name) order, and the
+    # final page correctly signalled the end.
+    expected = sorted([("memory", f"m{i:02d}") for i in range(4)] + [("skill", f"s{i:02d}") for i in range(4)])
+    assert seen == expected
+    assert pages == 3  # 8 files / page size 3 -> 3,3,2
+
+
 async def test_progressive_retrieve_ranks_all_three_layers(service: MemoryService) -> None:
     await _seed(service)
     result = await service.progressive_retrieve("coffee")
