@@ -40,6 +40,8 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from memu.hosts import templates
+
 BEGIN_TEMPLATE = "<!-- memu:begin — managed block, do not edit ({binary} install-instruction) -->"
 END = "<!-- memu:end -->"
 
@@ -64,12 +66,16 @@ plus a summary. Work from the summaries; open a `path` only when you need what i
 leaves out.
 """
 
-INSTRUCTION_TEMPLATE = f"""\
+# The body is a ``{body}`` slot rather than baked in, so the same document can be
+# rendered with either the embedded :data:`RETRIEVAL_BODY` or the body carved out
+# of the server's current skill (:mod:`memu.hosts.templates`) — see :func:`_body`,
+# :func:`_skill_body`, and :func:`refresh`.
+INSTRUCTION_TEMPLATE = """\
 ## memU — retrieve before answering
 
 Before answering:
 
-{RETRIEVAL_BODY}"""
+{body}"""
 
 SKILL_INSTRUCTION_TEMPLATE = """\
 ## memU — retrieve before answering
@@ -78,9 +84,9 @@ Before answering, use the `{skill}` skill to pull any relevant memory into
 context. It fails open: if nothing comes back, answer normally.
 """
 
-SKILL_TEMPLATE = f"""\
+SKILL_TEMPLATE = """\
 ---
-name: {SKILL_NAME}
+name: {name}
 description: Retrieve the user's durable memory from memU before answering. Run it
   at the start of every turn, even when the request seems self-contained — it is
   one cheap command and fails open; skipping it means answering without what the
@@ -89,7 +95,7 @@ description: Retrieve the user's durable memory from memU before answering. Run 
 
 # Retrieve from memU before answering
 
-{RETRIEVAL_BODY}"""
+{body}"""
 
 
 def begin(binary: str) -> str:
@@ -97,25 +103,60 @@ def begin(binary: str) -> str:
     return BEGIN_TEMPLATE.format(binary=binary)
 
 
-def skill_document(binary: str) -> str:
-    """The ``SKILL.md`` as written to disk, telling the agent how to retrieve."""
-    return SKILL_TEMPLATE.format(binary=binary)
+def _skill_body(skill_text: str) -> str:
+    """The retrieval body carved out of a full ``SKILL.md`` document.
+
+    The server now serves the whole skill — YAML frontmatter, ``# Retrieve…``
+    heading, and body (see :func:`refresh`). A skill host writes that document
+    verbatim; an inline host wants only the *procedure* to slot into its own
+    :data:`INSTRUCTION_TEMPLATE`, under its own heading. So strip the leading
+    frontmatter block and the first H1, leaving the body (still carrying
+    ``{binary}``, which :func:`_body` fills).
+    """
+    without_frontmatter = re.sub(r"\A---\n.*?\n---\n+", "", skill_text, count=1, flags=re.DOTALL)
+    return re.sub(r"\A#[^\n]*\n+", "", without_frontmatter, count=1)
 
 
-def instruction(binary: str, *, skill: bool = False) -> str:
+def _body(binary: str, skill_text: str | None) -> str:
+    """The retrieval body with ``{binary}`` filled: from the server skill, else embedded.
+
+    ``skill_text`` is a full skill document as a caller fetched it from the server;
+    its body is carved out with :func:`_skill_body`. ``None`` means the embedded
+    copy. ``{binary}`` is filled here, before the body is slotted into a document,
+    so a body that happens to contain other braces stays safe — ``.format`` never
+    re-parses a value it substituted in.
+    """
+    body = RETRIEVAL_BODY if skill_text is None else _skill_body(skill_text)
+    return body.format(binary=binary)
+
+
+def skill_document(binary: str, *, skill_text: str | None = None) -> str:
+    """The ``SKILL.md`` as written to disk, telling the agent how to retrieve.
+
+    ``skill_text`` is the server's current full skill document, written verbatim
+    with only ``{binary}`` filled; ``None`` renders the embedded skill.
+    """
+    if skill_text is not None:
+        return skill_text.format(binary=binary)
+    return SKILL_TEMPLATE.format(name=SKILL_NAME, body=_body(binary, None))
+
+
+def instruction(binary: str, *, skill: bool = False, skill_text: str | None = None) -> str:
     """The instruction text, telling the agent to run this host's ``retrieve``.
 
     ``skill=True`` returns the short pointer for hosts where :func:`install_skill`
-    has put the detail in a skill; otherwise the full inline text.
+    has put the detail in a skill; otherwise the full inline text. ``skill_text``
+    overrides the embedded retrieval body with the body carved out of a
+    server-fetched skill (ignored for the pointer, which carries no body).
     """
     if skill:
         return SKILL_INSTRUCTION_TEMPLATE.format(skill=SKILL_NAME, binary=binary)
-    return INSTRUCTION_TEMPLATE.format(binary=binary)
+    return INSTRUCTION_TEMPLATE.format(body=_body(binary, skill_text))
 
 
-def block(binary: str, *, skill: bool = False) -> str:
+def block(binary: str, *, skill: bool = False, skill_text: str | None = None) -> str:
     """The managed block exactly as it is written to disk, markers included."""
-    return f"{begin(binary)}\n{instruction(binary, skill=skill)}{END}\n"
+    return f"{begin(binary)}\n{instruction(binary, skill=skill, skill_text=skill_text)}{END}\n"
 
 
 def _block_re(binary: str) -> re.Pattern[str]:
@@ -125,7 +166,7 @@ def _block_re(binary: str) -> re.Pattern[str]:
     )
 
 
-def patch(current: str, binary: str, *, skill: bool = False) -> str:
+def patch(current: str, binary: str, *, skill: bool = False, skill_text: str | None = None) -> str:
     """Return ``current`` with the managed block installed — replaced, or appended.
 
     Pure, so the interesting half of :func:`install` is testable without a
@@ -135,11 +176,11 @@ def patch(current: str, binary: str, *, skill: bool = False) -> str:
     """
     pattern = _block_re(binary)
     if pattern.search(current):
-        return pattern.sub(lambda _: block(binary, skill=skill), current, count=1)
+        return pattern.sub(lambda _: block(binary, skill=skill, skill_text=skill_text), current, count=1)
     if current and not current.endswith("\n"):
         current += "\n"
     separator = "\n" if current else ""
-    return f"{current}{separator}{block(binary, skill=skill)}"
+    return f"{current}{separator}{block(binary, skill=skill, skill_text=skill_text)}"
 
 
 def strip(current: str, binary: str) -> str:
@@ -182,7 +223,9 @@ def _write(path: Path, updated: str, *, backup: bool, dry_run: bool) -> tuple[bo
     return True, diff
 
 
-def install(path: Path, binary: str, *, skill: bool = False, dry_run: bool = False) -> tuple[bool, str]:
+def install(
+    path: Path, binary: str, *, skill: bool = False, skill_text: str | None = None, dry_run: bool = False
+) -> tuple[bool, str]:
     """Install the managed block into ``path``. Returns ``(changed, diff)``.
 
     Creates the file (and its parent) if absent, and backs up any existing content
@@ -191,11 +234,13 @@ def install(path: Path, binary: str, *, skill: bool = False, dry_run: bool = Fal
 
     ``skill`` installs the short block that points at :func:`install_skill`'s skill
     instead of the full inline text; pass it only when that skill is being
-    installed too, or the block points at nothing.
+    installed too, or the block points at nothing. ``skill_text`` overrides the
+    embedded retrieval body (for an inline host being refreshed from the server's
+    current skill).
     """
     path = path.expanduser()
     current = path.read_text(encoding="utf-8") if path.is_file() else ""
-    return _write(path, patch(current, binary, skill=skill), backup=True, dry_run=dry_run)
+    return _write(path, patch(current, binary, skill=skill, skill_text=skill_text), backup=True, dry_run=dry_run)
 
 
 def remove(path: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, str]:
@@ -219,15 +264,59 @@ def skill_path(skills_dir: Path) -> Path:
     return skills_dir.expanduser() / SKILL_NAME / "SKILL.md"
 
 
-def install_skill(skills_dir: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, str]:
+def install_skill(
+    skills_dir: Path, binary: str, *, skill_text: str | None = None, dry_run: bool = False
+) -> tuple[bool, str]:
     """Install the retrieval skill under ``skills_dir``. Returns ``(changed, diff)``.
 
     Unlike the instruction file, ``<skills_dir>/memu-retrieve/`` is memU's own —
     nothing of the user's lives there — so it is overwritten whole rather than
     marker-fenced and backed up. Same upgrade story either way: re-run and the
-    release's text replaces the installed one.
+    release's text replaces the installed one. ``skill_text`` overrides the
+    embedded skill with the server's current full document (for a skill host being
+    refreshed from the server).
     """
-    return _write(skill_path(skills_dir), skill_document(binary), backup=False, dry_run=dry_run)
+    return _write(skill_path(skills_dir), skill_document(binary, skill_text=skill_text), backup=False, dry_run=dry_run)
+
+
+def refresh(path: Path, binary: str, *, skills_dir: Path | None = None) -> list[tuple[Path, bool]]:
+    """Refresh an already-installed retrieval procedure from the server, in place.
+
+    The scheduled counterpart to :func:`install`: the bridging run calls this so
+    the installed copy tracks server improvements, while the per-turn retrieve
+    hook never touches the network. The server serves the full skill document; this
+    rewrites whatever holds the retrieval procedure — the ``SKILL.md`` on a skill
+    host with that document verbatim, the inline managed block on an inline host
+    with the body carved out of it (:func:`_skill_body`) — from
+    :mod:`memu.hosts.templates`'s current server copy.
+
+    Two properties matter here and differ from :func:`install`:
+
+    * **Skip, never downgrade.** On an unreachable or malformed server the fetch
+      is ``None`` and this writes nothing, so a transient outage leaves the
+      already-installed (newer) copy in place instead of overwriting it with the
+      embedded text. This is *why* the retrieval skill needs no cache of its own:
+      the installed file already is the last-good.
+    * **Refresh, never bootstrap.** With nothing installed here yet, it does
+      nothing — installing is ``install-instruction``'s job. A scheduled run must
+      not silently create files the user never asked for.
+
+    Returns ``(target, changed)`` for each file touched — empty when it skipped.
+    """
+    skill_text = templates.fetch(templates.RETRIEVAL_SKILL)
+    if skill_text is None:
+        return []
+    if skills_dir is not None:
+        target = skill_path(skills_dir)
+        if not target.is_file():
+            return []
+        changed, _ = install_skill(skills_dir, binary, skill_text=skill_text)
+        return [(target, changed)]
+    target = path.expanduser()
+    if not target.is_file() or not _block_re(binary).search(target.read_text(encoding="utf-8")):
+        return []
+    changed, _ = install(path, binary, skill=False, skill_text=skill_text)
+    return [(target, changed)]
 
 
 def _report(path: Path, changed: bool, diff: str, *, dry_run: bool) -> None:
@@ -242,20 +331,24 @@ def _report(path: Path, changed: bool, diff: str, *, dry_run: bool) -> None:
 def _cmd_install_instruction(args: argparse.Namespace) -> int:
     skills_dir = Path(args.skills_dir) if args.skills_dir else None
     skill = skills_dir is not None
+    # An explicit, one-off, latency-tolerant command, so it pulls the server's
+    # current retrieval skill here (fail-open to embedded on any failure); the
+    # scheduled `refresh` keeps it current afterwards.
+    skill_text = templates.fetch(templates.RETRIEVAL_SKILL)
     if args.print_only:
         if skills_dir is not None:
-            print(f"# {skill_path(skills_dir)}\n\n{skill_document(args.binary)}")
-        print(block(args.binary, skill=skill), end="")
+            print(f"# {skill_path(skills_dir)}\n\n{skill_document(args.binary, skill_text=skill_text)}")
+        print(block(args.binary, skill=skill, skill_text=skill_text), end="")
         return 0
 
     # The skill goes in first: between the two writes, an instruction block naming
     # a skill that is not there yet is the only order that can mislead an agent.
     if skills_dir is not None:
-        changed, diff = install_skill(skills_dir, args.binary, dry_run=args.dry_run)
+        changed, diff = install_skill(skills_dir, args.binary, skill_text=skill_text, dry_run=args.dry_run)
         _report(skill_path(skills_dir), changed, diff, dry_run=args.dry_run)
 
     path = Path(args.path)
-    changed, diff = install(path, args.binary, skill=skill, dry_run=args.dry_run)
+    changed, diff = install(path, args.binary, skill=skill, skill_text=skill_text, dry_run=args.dry_run)
     _report(path.expanduser(), changed, diff, dry_run=args.dry_run)
     return 0
 

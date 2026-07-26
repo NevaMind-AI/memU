@@ -29,6 +29,7 @@ import urllib.request
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from importlib.resources import files
+from pathlib import Path
 from typing import Any
 
 from memu.hosts import instruction, retrieval
@@ -130,6 +131,24 @@ def _layout(spec: HostSpec, args: argparse.Namespace) -> Layout:
     return Layout.default(host=spec.host, base=args.base_dir)
 
 
+def _refresh_retrieval(spec: HostSpec) -> None:
+    """Piggyback the retrieval-procedure refresh on the scheduled prepare.
+
+    The retrieval body self-updates from the server on this low-frequency run
+    instead of on the per-turn retrieve hook, which must never fetch. Best-effort
+    and firewalled: any failure here is a note, never a failed bridging run — and
+    :func:`instruction.refresh` skips (rather than downgrades) when the server is
+    unreachable, so a note here means the installed copy simply stayed put.
+    """
+    skills_dir = Path(spec.skills_dir) if spec.skills_dir else None
+    try:
+        for target, changed in instruction.refresh(Path(spec.instruction_path), spec.binary, skills_dir=skills_dir):
+            if changed:
+                print(f"refreshed the retrieval procedure at {target}")
+    except Exception as exc:
+        print(f"note: could not refresh the retrieval procedure ({exc})", file=sys.stderr)
+
+
 async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
     source = spec.source_factory(args.session_dir)
     if not source.exists():
@@ -142,6 +161,7 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
     print(f"prepared {num_sessions} session(s) -> {num_jobs} job(s) in {layout.jobs}")
     if num_sessions == 0:
         print("no new session turns since the last run; nothing to mine")
+    _refresh_retrieval(spec)
     return 0
 
 

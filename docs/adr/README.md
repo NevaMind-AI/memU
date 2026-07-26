@@ -12,3 +12,4 @@
 - [0010: Multi-Host Adapters — Claude Code, Cursor, OpenClaw, and Hermes](0010-multi-host-adapters.md)
 - [0011: A Generic Host Adapter — Detect First, Then Bind What Works](0011-generic-host-adapter.md)
 - [0012: Cloud-Backed Memory Behind the Existing CLI](0012-cloud-backed-agentic-backend.md)
+- [0013: Self-Updating Instruction Templates — Server First, Last-Good Next, Embedded Last](0013-self-updating-instruction-templates.md)
