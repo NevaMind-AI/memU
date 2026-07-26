@@ -32,7 +32,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
-from memu.hosts import instruction, retrieval
+from memu.hosts import instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging import Layout, commit, prepare
 from memu.hosts.bridging.pipeline import MAX_JOBS
@@ -289,7 +289,14 @@ async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
 
 
 async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
-    print((files(spec.package) / DOCS[args.doc]).read_text(encoding="utf-8"))
+    # Server-first, then last-good cache, then the embedded floor — the same
+    # self-updating shape ADR 0013 gives the instruction templates, applied to the
+    # host guides. `docs task` prints the guide named BRIDGING_TASK.md; the doc key
+    # ("task") and its filename differ, and both the URL and cache key off the
+    # filename so the server layout mirrors the package layout.
+    filename = DOCS[args.doc]
+    embedded = (files(spec.package) / filename).read_text(encoding="utf-8")
+    print(templates.resolve_doc(spec.host, filename, embedded))
     return 0
 
 

@@ -104,19 +104,15 @@ def _valid(text: str, required_keys: Iterable[str]) -> bool:
     return True
 
 
-def fetch(name: str) -> str | None:
-    """The server's current ``name`` template, validated — or ``None``.
+def _get(url: str) -> str | None:
+    """Raw GET of one small UTF-8 asset, fail-open — the shared transport for
+    both templates and docs. ``None`` on offline, non-200, oversize, or
+    undecodable; content trust is the *caller's* job, applied to what this returns.
 
-    Never raises: offline, non-200, oversize, or malformed all return ``None``,
-    which every caller treats as "fall back". A successful, valid fetch also
-    refreshes the on-disk last-good cache as a side effect.
+    Never raises.
     """
-    base = _base_url()
-    if base is None:
-        return None
-    required_keys = REQUIRED_KEYS[name]
     try:
-        with urllib.request.urlopen(f"{base}/{name}.txt", timeout=_TIMEOUT_SECONDS) as resp:  # noqa: S310
+        with urllib.request.urlopen(url, timeout=_TIMEOUT_SECONDS) as resp:  # noqa: S310
             if getattr(resp, "status", 200) != 200:
                 return None
             # Read one byte past the cap so an exactly-cap body is still accepted
@@ -127,10 +123,23 @@ def fetch(name: str) -> str | None:
     if len(raw) > _MAX_BYTES:
         return None
     try:
-        text: str = raw.decode("utf-8")
+        return raw.decode("utf-8")
     except UnicodeDecodeError:
         return None
-    if not _valid(text, required_keys):
+
+
+def fetch(name: str) -> str | None:
+    """The server's current ``name`` template, validated — or ``None``.
+
+    Never raises: offline, non-200, oversize, or malformed all return ``None``,
+    which every caller treats as "fall back". A successful, valid fetch also
+    refreshes the on-disk last-good cache as a side effect.
+    """
+    base = _base_url()
+    if base is None:
+        return None
+    text = _get(f"{base}/{name}.txt")
+    if text is None or not _valid(text, REQUIRED_KEYS[name]):
         return None
     _write_cache(name, text)
     return text
@@ -170,3 +179,99 @@ def resolve(name: str, embedded: str) -> str:
     so a total outage degrades to it, never to nothing.
     """
     return fetch(name) or _read_cache(name) or embedded
+
+
+# --------------------------------------------------------------------------- #
+# Host-facing docs (``<binary> docs install|task|uninstall``)
+#
+# Same server-first / cache / embedded shape as the templates above, but for the
+# per-host guides the SDK ships in each host package (``INSTALL.md`` etc). Two
+# differences drive the separate code path:
+#
+#   * **Host-scoped, not host-agnostic.** Each host has its own copy, so the URL
+#     and cache carry a ``<host>`` segment: ``<base>/<host>/<filename>`` and
+#     ``~/.memu/cache/docs/<host>/<filename>``. (The templates share one flat
+#     namespace precisely because they are host-agnostic.)
+#   * **Printed, not executed.** ``docs`` prints the guide to a human's terminal;
+#     the text is never ``.format()``-ed or fed to an agent. So there is no
+#     ``{placeholder}`` contract to enforce — the trust check is just "non-empty,
+#     decodes, under the size cap", which ``_get`` already covers. See
+#     :func:`_valid_doc`.
+#
+# Duty cycle is interactive and one-off (like ``install-instruction``), and a user
+# may re-run ``docs`` offline, so this keeps the cached :func:`resolve`-style
+# fallback rather than the uncached :func:`fetch` shape.
+# --------------------------------------------------------------------------- #
+
+DEFAULT_DOCS_BASE_URL = "https://memu.pro/sdk/docs"
+"""Server root for the host guides. Override with ``MEMU_DOCS_BASE_URL``; set it
+empty to switch remote doc refresh off (air-gapped installs, offline CI, tests).
+Kept distinct from ``MEMU_TEMPLATE_BASE_URL`` so the two can be steered — and
+disabled — independently."""
+
+
+def _docs_base_url() -> str | None:
+    """The docs server root, or ``None`` when remote doc refresh is off. Read live
+    (not captured at import) so a test or air-gapped install can steer it."""
+    value = os.environ.get("MEMU_DOCS_BASE_URL", DEFAULT_DOCS_BASE_URL)
+    return value or None
+
+
+def _docs_cache_dir(host: str) -> Path:
+    """Last-good docs for one host. Host-scoped, since the guides differ per host."""
+    return Path(os.path.expanduser(BASE_DIR)) / "cache" / "docs" / host
+
+
+def _valid_doc(text: str) -> bool:
+    """True if the doc is worth trusting. Unlike a template it is only printed for
+    a human, so there is no placeholder contract — non-empty is the whole check.
+
+    TODO(review): consider a light sanity marker (e.g. a leading ``#`` heading) so
+    an accidentally-served error page or redirect body is rejected as well.
+    """
+    return bool(text.strip())
+
+
+def fetch_doc(host: str, filename: str) -> str | None:
+    """The server's current ``<host>/<filename>`` guide, validated — or ``None``.
+
+    Never raises; a valid fetch refreshes the host-scoped last-good cache.
+    """
+    base = _docs_base_url()
+    if base is None:
+        return None
+    text = _get(f"{base}/{host}/{filename}")
+    if text is None or not _valid_doc(text):
+        return None
+    _write_doc_cache(host, filename, text)
+    return text
+
+
+def _write_doc_cache(host: str, filename: str, text: str) -> None:
+    """Refresh a host's last-good doc, atomically. Best-effort (see :func:`_write_cache`)."""
+    try:
+        cache_dir = _docs_cache_dir(host)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        tmp = cache_dir / f"{filename}.tmp"
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, cache_dir / filename)
+    except OSError:
+        pass
+
+
+def _read_doc_cache(host: str, filename: str) -> str | None:
+    """The last server doc we saw for this host, re-validated on read."""
+    try:
+        text = (_docs_cache_dir(host) / filename).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return text if _valid_doc(text) else None
+
+
+def resolve_doc(host: str, filename: str, embedded: str) -> str:
+    """The best guide available: server, then host-scoped cache, then ``embedded``.
+
+    ``embedded`` is the copy shipped in the host package — the guaranteed floor,
+    so a total outage degrades to it, never to nothing.
+    """
+    return fetch_doc(host, filename) or _read_doc_cache(host, filename) or embedded
