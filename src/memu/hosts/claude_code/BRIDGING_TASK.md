@@ -136,10 +136,11 @@ install than to register a task that reports success and never runs.
 > **The credential must be persistent.** The task runs headless under an S4U
 > principal (session 0) and inherits only persistent user/machine environment and
 > your user profile — **not** a session-only `$env:` export. Any option from
-> `INSTALL.md` Part 2.0 works: **Web auth** (`claude setup-token`,
-> subscription — interactive; run it start-to-finish per Part 2.0, never in a
-> background shell), an **Anthropic API key**, or **Other** — an
-> Anthropic-compatible relay (`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`);
+> `INSTALL.md` Part 2.0 works — exactly three, "skip" is not one: **Web
+> auth** (recommended; `claude setup-token`, subscription — interactive; run
+> it start-to-finish per Part 2.0, never in a background shell), an
+> **Anthropic API key**, or **Other** — an Anthropic-**Messages**-compatible
+> endpoint only (`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`);
 > env vars as persistent user variables (`setx`). A token exported only in the
 > install-time check yet leaves the task stuck on "Not logged in" — the one
 > false-positive the gate can't catch by itself.

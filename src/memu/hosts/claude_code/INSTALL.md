@@ -158,19 +158,28 @@ lives outside `PATH` and its login is invisible to the standalone CLI
      `npm install -g @anthropic-ai/claude-code`
    - macOS / Linux: `curl -fsSL https://claude.ai/install.sh | bash`, or
      `npm install -g @anthropic-ai/claude-code`
-2. **It authenticates headless, on a *persistent* credential.** Settle the
-   method with the user — three options:
-   - **Web auth** (in a browser): `claude setup-token` — issues a
-     long-lived token; persist it as `CLAUDE_CODE_OAUTH_TOKEN`. Requires a
-     Claude subscription — it refuses without one; do not loop on it, move
-     to another option.
+2. **It authenticates headless, on a *persistent* credential.** Ask the
+   user to pick one of **exactly these three** — never improvise a fourth
+   option, and never offer "skip": an unauthenticated record seam is a
+   failed install, not a variant of success.
+   - **Web auth** (in a browser) — **recommended**: `claude setup-token`
+     issues a long-lived token; persist it as `CLAUDE_CODE_OAUTH_TOKEN`.
+     Requires a Claude subscription — it refuses without one; do not loop
+     on it, move down the list.
    - **Anthropic API key** (platform account, pay per token): persist
      `ANTHROPIC_API_KEY`.
-   - **Other**: whatever Anthropic-compatible route the user brings — a
-     relay or gateway (persist `ANTHROPIC_BASE_URL` +
-     `ANTHROPIC_AUTH_TOKEN`, the endpoint's key — the no-subscription
-     path; the `claude` CLI honors a custom endpoint headless), or
-     enterprise Bedrock / Vertex per their own docs.
+   - **Other** — only if the user *affirmatively* has an
+     **Anthropic-Messages-compatible** endpoint: persist
+     `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` (the endpoint's key).
+     The endpoint must serve the Anthropic Messages protocol — an
+     OpenAI-format-only relay does **not** work. If the user is unsure
+     whether theirs qualifies, this is not their option. (Enterprise
+     Bedrock / Vertex also live here, per their own docs.)
+
+   If the user has none of the three, **stop here and say so**: Part 2 is
+   blocked on an unmet prerequisite — Parts 1 and 3 still stand, and the
+   user knows exactly what to bring back. Never register a schedule that
+   cannot authenticate.
 
    **Web auth is interactive — run it start-to-finish, and never in a
    captured or background shell.** `setup-token` opens the browser and
