@@ -195,10 +195,15 @@ lives outside `PATH` and its login is invisible to the standalone CLI
      `npm install -g @anthropic-ai/claude-code`
    - macOS / Linux: `curl -fsSL https://claude.ai/install.sh | bash`, or
      `npm install -g @anthropic-ai/claude-code`
-2. **It authenticates headless, on a *persistent* credential.** Ask the
-   user to pick one of **exactly these three** — never improvise a fourth
-   option, and never offer "skip": an unauthenticated record seam is a
-   failed install, not a variant of success.
+2. **It authenticates headless, on a *persistent* credential.** **Probe
+   before you ask**: if this session is itself the standalone `claude` CLI
+   — or the user has ever logged it in interactively — the credential
+   store under `~/.claude` may already serve headless runs. Run the gate
+   below first; a green gate means this step is already done and no method
+   is needed. Only on a failing gate, ask the user to pick one of
+   **exactly these three** — never improvise a fourth option, and never
+   offer "skip": an unauthenticated record seam is a failed install, not a
+   variant of success.
    - **Web auth** (in a browser) — **recommended**: `claude setup-token`
      issues a long-lived token; persist it as `CLAUDE_CODE_OAUTH_TOKEN`.
      Requires a Claude subscription — it refuses without one; do not loop
@@ -262,7 +267,11 @@ cursor host). Judge by the landing directory (`~/.local/bin`) or a **newly
 opened** terminal, never by a pre-install shell. The gate below is immune —
 it names the install locations explicitly — but on Windows also run
 `schedule install` from that fresh terminal: the helper resolves `claude`
-from its own process `PATH`.
+from its own process `PATH`. An agent whose own shell is the stale one —
+it just ran the installer and cannot restart itself — prepends the landing
+directory to the child-shell `PATH` for that one command instead; this is
+safe because the registered task bakes absolute paths and never depends on
+the installing shell.
 
 Prove both the way the scheduler will experience them — from a bare
 environment, resolve *and* authenticate. The probe must carry **exactly
