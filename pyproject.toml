@@ -7,13 +7,15 @@ authors = [
 description = "Personal memory as files — fast retrieval, higher accuracy, lower cost."
 readme = "README.md"
 # license = {file = "LICENSE"}
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
 
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
 keywords = ["agent", "agentic", "agent-harness", "harness", "loop-engineering", "context-engineering", "context-window", "memory", "personal-information", "workspace", "retrieval", "llm"]
@@ -28,13 +30,11 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["maturin>=1.0,<2.0"]
-build-backend = "maturin"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.maturin]
-module-name = "memu._core"
-python-packages = ["memu"]
-python-source = "src"
+[tool.hatch.build.targets.wheel]
+packages = ["src/memu"]
 
 [dependency-groups]
 dev = [
@@ -79,7 +79,7 @@ memu-agent = "memu.hosts.generic.cli:main"
 
 [tool.mypy]
 files = ["src", "tests"]
-python_version = "3.13"
+python_version = "3.11"
 disallow_untyped_defs = true
 disallow_any_unimported = true
 no_implicit_optional = true
@@ -100,7 +100,7 @@ module = ["pgvector.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py311"
 line-length = 120
 fix = true
 

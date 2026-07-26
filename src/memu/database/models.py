@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import TypeVar
 
 import pendulum
 from pydantic import BaseModel, ConfigDict, Field
@@ -55,7 +56,10 @@ class RecallFileSegment(BaseRecord):
     embedding: list[float] | None = None
 
 
-def merge_scope_model[TBaseRecord: BaseRecord](
+TBaseRecord = TypeVar("TBaseRecord", bound=BaseRecord)
+
+
+def merge_scope_model(
     user_model: type[BaseModel], core_model: type[TBaseRecord], *, name_suffix: str
 ) -> type[TBaseRecord]:
     """Create a scoped model inheriting both the user scope model and the core model."""
