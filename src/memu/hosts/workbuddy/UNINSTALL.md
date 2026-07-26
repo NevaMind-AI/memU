@@ -8,8 +8,8 @@ Uninstalling is the install run in reverse, and it is three parts:
 
 1. **Unregister the bridging task** — stop the scheduled automation first, so
    nothing fires mid-teardown (the *record* seam).
-2. **Unpatch `~/.workbuddy/MEMORY.md`** — remove the standing retrieval
-   instruction (the *inject* seam).
+2. **Unpatch `~/.workbuddy/SOUL.md`** — remove the standing retrieval instruction
+   (the *inject* seam), including any block left in the legacy `MEMORY.md` target.
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
    tooling is removed — and close by reporting both.
 
@@ -40,18 +40,19 @@ The automation no longer appears in WorkBuddy's automation list.
 memu-workbuddy remove-instruction
 ```
 
-It deletes memU's marked block from `~/.workbuddy/MEMORY.md` and prints the
-diff. Everything outside the markers is the user's and survives; the previous
-contents are backed up to `~/.workbuddy/MEMORY.md.bak` before the rewrite.
-`--dry-run` shows the diff without writing. Re-running is a clean no-op — a
-file with no block left is already the desired end state.
+It deletes memU's marked block from `~/.workbuddy/SOUL.md` and also checks the
+former `~/.workbuddy/MEMORY.md` target so an older install is removed cleanly.
+Everything outside the markers is the user's and survives; each changed file is
+backed up to its adjacent `.bak` path before the rewrite. `--dry-run` shows both
+diffs without writing. Re-running is a clean no-op — files with no block left are
+already the desired end state.
 
 ### ✅ Verify Part 2
 
-`cat ~/.workbuddy/MEMORY.md` — no `memu:begin`/`memu:end` markers remain, and
-the user's own content is intact. The session you are working in already loaded
-the old file, so the instruction may still be in your own context; a fresh
-session is what picks the removal up.
+Check both `cat ~/.workbuddy/SOUL.md` and `cat ~/.workbuddy/MEMORY.md`: no
+`memu:begin`/`memu:end` markers remain, and the user's own content is intact. The
+session you are working in already loaded the old file, so the instruction may
+still be in your own context; a fresh session is what picks the removal up.
 
 ---
 
@@ -75,7 +76,7 @@ Only one thing overrides a default: the user's own explicit words.
   history as already mined, and it would never be mined again.
 - **Remove this host's residue.** Everything else under
   `~/.memu/hosts/workbuddy/` — job files and mirrors, sparing the session
-  cursor above; `~/.workbuddy/MEMORY.md` itself **if** Part 2 left it empty
+  cursor above; `~/.workbuddy/SOUL.md` itself **if** Part 2 left it empty
   (it held only memU's block, so the install created it) — a file with the
   user's own content stays, of course.
 - **Uninstall the package** — `pip uninstall memu-cli` (or `pipx uninstall

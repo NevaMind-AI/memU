@@ -6,7 +6,7 @@ standing instruction lands in.
 
 Usage:
     memu-workbuddy retrieve "<query>"    # the inject seam — what the agent runs each turn
-    memu-workbuddy install-instruction   # the inject seam — patch ~/.workbuddy/MEMORY.md
+    memu-workbuddy install-instruction   # the inject seam — patch ~/.workbuddy/SOUL.md
     memu-workbuddy prepare               # slice new sessions into job files
     memu-workbuddy verify-resources      # filter the touched-file log (run by a job)
     memu-workbuddy commit                # submit what the agent produced back to memU
@@ -24,10 +24,14 @@ from memu.hosts.workbuddy.sessions import SESSION_DIR, WorkBuddyTranscriptSource
 
 HOST = "workbuddy"
 
+SOUL_MD = "~/.workbuddy/SOUL.md"
+"""WorkBuddy's global behavior file — loaded into every session, so standing
+instructions that must run before every answer belong here rather than among the
+facts and summaries in long-term memory."""
+
 MEMORY_MD = "~/.workbuddy/MEMORY.md"
-"""WorkBuddy's global memory file — loaded into every session, so the inject
-seam lands here.  (User-level: ``~/.workbuddy/MEMORY.md``; per-project memory
-files also exist but the instruction belongs at the level retrieval works at.)"""
+"""The legacy inject target. Existing installs are migrated from this file when
+``install-instruction`` runs against the default ``SOUL_MD`` target."""
 
 SPEC = HostSpec(
     host=HOST,
@@ -36,7 +40,8 @@ SPEC = HostSpec(
     source_factory=WorkBuddyTranscriptSource,
     session_dir=SESSION_DIR,
     session_help="WorkBuddy session log (one project dir per escaped cwd)",
-    instruction_path=MEMORY_MD,
+    instruction_path=SOUL_MD,
+    legacy_instruction_paths=(MEMORY_MD,),
 )
 
 

@@ -12,7 +12,7 @@ Installing memU on WorkBuddy is three parts:
 1. **Install memU** — a Python package and the memory backend it uses.
 2. **Register the bridging task** — the scheduled job that turns recent WorkBuddy
    sessions into durable memory (the *record* seam).
-3. **Patch `~/.workbuddy/MEMORY.md`** — a standing instruction that tells you to
+3. **Patch `~/.workbuddy/SOUL.md`** — a standing instruction that tells you to
    pull relevant memory before you answer (the *inject* seam).
 
 Parts 2 and 3 must share one configured mode. In local mode they must also share
@@ -147,12 +147,13 @@ since the cursor — that is fine and correct).
 
 ---
 
-## Part 3 — Patch `~/.workbuddy/MEMORY.md` with the retrieval instruction
+## Part 3 — Patch `~/.workbuddy/SOUL.md` with the retrieval instruction
 
-The *inject* seam: a standing instruction in WorkBuddy's **global memory file**
+The *inject* seam: a standing instruction in WorkBuddy's **global behavior file**
 telling you to pull relevant memory before you answer. WorkBuddy loads
-`~/.workbuddy/MEMORY.md` into every session, so the instruction is simply always
-there — no hook, no wrapper, no per-turn process.
+`~/.workbuddy/SOUL.md` into every session, so the instruction is simply always
+there — no hook, no wrapper, no per-turn process. The behavior belongs here, not
+in `MEMORY.md` alongside user facts and conversation summaries.
 
 **Do not hand-write the instruction.** memU owns the text and installs it for you:
 
@@ -160,24 +161,33 @@ there — no hook, no wrapper, no per-turn process.
 memu-workbuddy install-instruction
 ```
 
-It writes memU's block into `~/.workbuddy/MEMORY.md`, creating the file if it
+It writes memU's block into `~/.workbuddy/SOUL.md`, creating the file if it
 does not exist, and prints the diff. It appends rather than overwrites (existing
-content is backed up to `~/.workbuddy/MEMORY.md.bak`), and it is idempotent: the
+content is backed up to `~/.workbuddy/SOUL.md.bak`), and it is idempotent: the
 text sits in a marked block that a re-run — or a later memU release — replaces in
 place. `--dry-run` shows the diff without writing; `--print` prints just the
 block.
 
+For an install made by an older memU release, the command also removes only
+memU's marked block from the former `~/.workbuddy/MEMORY.md` target after the
+new `SOUL.md` block is safely installed. User-authored memory stays byte-for-byte
+intact, and the previous file contents are backed up to `MEMORY.md.bak`. This
+migration runs only for the default target; an explicit `--path` never rewrites
+files under the default WorkBuddy home.
+
 ### ✅ Verify Part 3
 
 ```
+cat ~/.workbuddy/SOUL.md
 cat ~/.workbuddy/MEMORY.md
 memu-workbuddy retrieve "smoke test"
 ```
 
-The memU block must appear exactly once, anything the user had there must be
-intact, and `retrieve` must exit cleanly (empty result lists are fine). A *fresh*
-WorkBuddy session is what picks up the new MEMORY.md — do not be surprised that
-the instruction is not in your own context yet.
+The memU block must appear exactly once in `SOUL.md` and not at all in the legacy
+`MEMORY.md`; anything the user had in either file must be intact, and `retrieve`
+must exit cleanly (empty result lists are fine). A *fresh* WorkBuddy session is
+what picks up the new SOUL.md — do not be surprised that the instruction is not
+in your own context yet.
 
 ---
 
@@ -185,6 +195,6 @@ the instruction is not in your own context yet.
 
 Report back to the user: the selected mode and its cloud endpoint or local store/provider; the scheduled
 automation and its schedule in words; and that the retrieval instruction is now in
-`~/.workbuddy/MEMORY.md`, taking effect in their next session. Record and inject
+`~/.workbuddy/SOUL.md`, taking effect in their next session. Record and inject
 both read `~/.memu/config.env`, so they provably share one backend — what the task
 learns tonight is what retrieval finds tomorrow.
