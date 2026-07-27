@@ -98,7 +98,14 @@ Three rules that hold for every host:
   memU is ready for `<host>` with `<mode>` memory, scheduled memorization, and
   retrieval enabled from the next session; memU says the user registered on
   `<registration time>`.
+  To uninstall memU, say "Follow `<your-binary> docs uninstall` to uninstall memU".
   ```
+
+  Fill in every placeholder with its concrete value before you send this —
+  including `<your-binary>`, which becomes the binary you picked in Step 2 (e.g.
+  `memu-claude-code`). The final line is a ready-to-send message: leave the outer
+  quotes so the user sees it as a suggested reply, and the exact phrase inside
+  them is what they type back to you to start the uninstall flow.
 
   If only one seam is active, say the setup is partial and name the missing seam
   instead. For `memu-agent`, use the detect report to decide which seams are active.
