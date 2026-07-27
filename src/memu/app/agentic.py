@@ -7,6 +7,15 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
+from memu.observability import (
+    memory_operation,
+    record_recall_results,
+    register_volume_source,
+    semconv,
+    snapshot_store,
+    traced_embed,
+)
+from memu.observability.config import capture_query_text
 from memu.vector import cosine_topk
 
 if TYPE_CHECKING:
@@ -18,6 +27,30 @@ if TYPE_CHECKING:
 # follow ``next_cursor`` to reassemble the full set; the page size only bounds the
 # per-call read/serialization/response, not the total returned.
 DEFAULT_PAGE_LIMIT = 50
+
+
+def _input_size_bytes(
+    recall_files: list[dict[str, Any]] | None,
+    resource: list[dict[str, Any]] | None,
+) -> int:
+    """Total UTF-8 byte size of the content a ``commit_results`` call ingests.
+
+    Feeds ``memory.input.size_bytes`` — the "data managed" surface (ISI-1905 §1)
+    seen from the write side, before it fans out into files/segments/resources.
+    """
+    total = 0
+    for item in recall_files or []:
+        total += len((item.get("content") or "").encode("utf-8"))
+        total += len((item.get("description") or "").encode("utf-8"))
+    for item in resource or []:
+        total += len((item.get("description") or "").encode("utf-8"))
+    return total
+
+
+def _top_similarity(*hit_lists: list[tuple[str, float]]) -> float | None:
+    """The single highest similarity score across the given ``(id, score)`` hit lists."""
+    scores = [score for hits in hit_lists for _id, score in hits]
+    return max(scores) if scores else None
 
 
 def _encode_cursor(after: tuple[str, str, str] | None) -> str | None:
@@ -44,7 +77,7 @@ async def _embed_one(embed_client: Any, text: str) -> list[float]:
     would hand back the whole vectors list instead.
     """
     vectors: list[list[float]]
-    vectors, _ = await embed_client.embed([text])
+    vectors, _ = await traced_embed(embed_client, [text])
     return vectors[0]
 
 
@@ -56,6 +89,35 @@ class AgenticMixin:
         _get_embedding_client: Callable[..., Any]
         progressive_retrieve_config: ProgressiveRetrieveConfig
         user_model: type[BaseModel]
+
+    def _telemetry_store_kind(self) -> str:
+        """The ``memory.store.kind`` label — the configured metadata-store backend.
+
+        Read defensively so instrumentation never breaks a service that omits
+        the standard ``database_config`` attribute; unknown backends label as
+        ``"unknown"`` rather than raising.
+        """
+        db_config = getattr(self, "database_config", None)
+        provider = getattr(getattr(db_config, "metadata_store", None), "provider", None)
+        return provider or "unknown"
+
+    def _ensure_volume_source(self, store: Database) -> None:
+        """Register this store once with the observable volume gauges.
+
+        The gauges (``memory_items_total`` / ``memory_bytes_total``) read counts
+        at the meter's collection interval, so binding is a one-time O(1) hook —
+        the O(n) scan happens off the request path, not on every operation.
+        """
+        if getattr(self, "_otel_volume_registered", False):
+            return
+        store_kind = self._telemetry_store_kind()
+
+        def _source() -> tuple[str, int, int]:
+            snap = snapshot_store(store)
+            return store_kind, snap.items, snap.content_bytes
+
+        register_volume_source(_source)
+        self._otel_volume_registered = True
 
     async def list_all_recall_files(
         self,
@@ -75,12 +137,18 @@ class AgenticMixin:
         duplicate-free.
         """
         store = self._get_database()
-        where_filters = self._normalize_where(where)
-        recall_files, next_after = store.recall_file_repo.list_recall_files_page(
-            where_filters, after=_decode_cursor(cursor), limit=limit
-        )
-        recall_files_list = [self._model_dump_without_embeddings(recall_file) for recall_file in recall_files]
-        return {"recall_files": recall_files_list, "next_cursor": _encode_cursor(next_after)}
+        self._ensure_volume_source(store)
+        store_kind = self._telemetry_store_kind()
+        with memory_operation(semconv.SPAN_MEMORY_READ, semconv.OP_LIST, store_kind) as scope:
+            scope.set(semconv.ATTR_QUERY_K, limit)
+            where_filters = self._normalize_where(where)
+            recall_files, next_after = store.recall_file_repo.list_recall_files_page(
+                where_filters, after=_decode_cursor(cursor), limit=limit
+            )
+            recall_files_list = [self._model_dump_without_embeddings(recall_file) for recall_file in recall_files]
+            scope.set(semconv.ATTR_RESULTS_COUNT, len(recall_files_list))
+            record_recall_results(store_kind, len(recall_files_list))
+            return {"recall_files": recall_files_list, "next_cursor": _encode_cursor(next_after)}
 
     async def progressive_retrieve(
         self,
@@ -106,26 +174,43 @@ class AgenticMixin:
         if not query or not query.strip():
             raise ValueError("empty_query")
         store = self._get_database()
-        where_filters = self._normalize_where(where)
+        self._ensure_volume_source(store)
+        store_kind = self._telemetry_store_kind()
         config = self.progressive_retrieve_config
-        embed_client = self._get_embedding_client("embedding")
-        query_vector = await _embed_one(embed_client, query)
+        with memory_operation(semconv.SPAN_MEMORY_READ, semconv.OP_SEARCH, store_kind) as scope:
+            scope.set(semconv.ATTR_QUERY_K, config.file.top_k)
+            # PII-safe by default: only the query *length* rides on the span
+            # (semconv v0.1.0 §2.4 forbids the raw text unless explicitly opted in).
+            scope.set(semconv.ATTR_QUERY_LENGTH, len(query))
+            if capture_query_text():
+                scope.set(semconv.ATTR_QUERY_TEXT, query)
 
-        segment_hits, segment_pool = self._recall_segments(
-            store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.file.enabled
-        )
-        file_hits, file_pool = self._collect_files(
-            store=store, where_filters=where_filters, segment_hits=segment_hits, segment_pool=segment_pool
-        )
-        resource_hits, resource_pool = self._recall_resources(
-            store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.resource.enabled
-        )
+            where_filters = self._normalize_where(where)
+            embed_client = self._get_embedding_client("embedding")
+            query_vector = await _embed_one(embed_client, query)
 
-        return {
-            "segments": self._materialize_hits(segment_hits, segment_pool),
-            "files": self._materialize_hits(file_hits, file_pool),
-            "resources": self._materialize_hits(resource_hits, resource_pool),
-        }
+            segment_hits, segment_pool = self._recall_segments(
+                store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.file.enabled
+            )
+            file_hits, file_pool = self._collect_files(
+                store=store, where_filters=where_filters, segment_hits=segment_hits, segment_pool=segment_pool
+            )
+            resource_hits, resource_pool = self._recall_resources(
+                store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.resource.enabled
+            )
+
+            segments = self._materialize_hits(segment_hits, segment_pool)
+            files = self._materialize_hits(file_hits, file_pool)
+            resources = self._materialize_hits(resource_hits, resource_pool)
+
+            results_count = len(segments) + len(files) + len(resources)
+            scope.set(semconv.ATTR_RESULTS_COUNT, results_count)
+            top_similarity = _top_similarity(segment_hits, resource_hits)
+            if top_similarity is not None:
+                scope.set(semconv.ATTR_TOP_SIMILARITY, top_similarity)
+            record_recall_results(store_kind, results_count)
+
+            return {"segments": segments, "files": files, "resources": resources}
 
     def _recall_segments(
         self,
@@ -243,19 +328,34 @@ class AgenticMixin:
           with the same track-specific segment (re)generation as the workspace path.
         """
         store = self._get_database()
+        self._ensure_volume_source(store)
+        store_kind = self._telemetry_store_kind()
         user_scope = self.user_model(**user).model_dump() if user is not None else None
         embed_client = self._get_embedding_client("embedding")
 
-        committed_resources = await self._commit_resources(
-            resource or [], store=store, user_scope=user_scope, embed_client=embed_client
-        )
-        committed_files = await self._commit_recall_files(
-            recall_files or [], store=store, user_scope=user_scope, embed_client=embed_client
-        )
-        return {
-            "resources": [self._model_dump_without_embeddings(r) for r in committed_resources],
-            "recall_files": [self._model_dump_without_embeddings(f) for f in committed_files],
-        }
+        with memory_operation(semconv.SPAN_MEMORY_WRITE, semconv.OP_WRITE, store_kind) as scope:
+            scope.set(semconv.ATTR_INPUT_SIZE_BYTES, _input_size_bytes(recall_files, resource))
+
+            committed_resources = await self._commit_resources(
+                resource or [], store=store, user_scope=user_scope, embed_client=embed_client
+            )
+            committed_files = await self._commit_recall_files(
+                recall_files or [], store=store, user_scope=user_scope, embed_client=embed_client
+            )
+
+            # ``extracted.facts_count`` = the memory items this write persisted;
+            # the ``items.*`` attributes are post-write per-tier utilization
+            # (files / segments-as-vectors / resources) — data managed, ISI-1905 §1.
+            scope.set(semconv.ATTR_EXTRACTED_FACTS_COUNT, len(committed_files) + len(committed_resources))
+            snapshot = snapshot_store(store)
+            scope.set(semconv.ATTR_ITEMS_FILES, snapshot.files)
+            scope.set(semconv.ATTR_ITEMS_SEGMENTS, snapshot.segments)
+            scope.set(semconv.ATTR_ITEMS_RESOURCES, snapshot.resources)
+
+            return {
+                "resources": [self._model_dump_without_embeddings(r) for r in committed_resources],
+                "recall_files": [self._model_dump_without_embeddings(f) for f in committed_files],
+            }
 
     async def _commit_resources(
         self,
@@ -402,7 +502,7 @@ class AgenticMixin:
         to_add = [text for text in new_texts if text not in existing_texts]
         if not to_add:
             return
-        vecs, _ = await embed_client.embed(to_add)
+        vecs, _ = await traced_embed(embed_client, to_add)
         for text, vec in zip(to_add, vecs, strict=True):
             store.recall_file_segment_repo.create_segment(
                 recall_file_id=file.id, track=file_track, text=text, embedding=vec, user_data=dict(user_scope)
