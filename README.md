@@ -59,6 +59,14 @@ To run memU locally with your own storage and embedding provider, send this mess
 
 > Read [https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md](https://raw.githubusercontent.com/NevaMind-AI/MemU/main/SKILL.md) and follow it to install memU.
 
+## Uninstall
+
+To uninstall memU, send this message to your agent:
+
+> Read [https://memu.pro/SKILL.md](https://memu.pro/SKILL.md) and follow its instructions to uninstall memU.
+
+By default, uninstalling removes the host integration and tooling while keeping your memory store and `~/.memu/config.env`, so a later reinstall can resume where you left off. Memory is erased only when you explicitly ask for it.
+
 ## Host adapters: memory for desktop coding agents
 
 memU runs as a sidecar to a desktop agent, one binary per host. Each binds two seams:
