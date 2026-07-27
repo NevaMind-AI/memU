@@ -171,6 +171,18 @@ memu-claude-code doctor
 It prints the resolved mode plus its endpoint or local store/provider, and runs a smoke-test retrieval. It
 must exit cleanly. **Zero hits is the expected result** on a new store.
 
+With `doctor` green, plant the packaged install/uninstall skill into the store:
+
+```
+memu-claude-code seed-skills
+```
+
+This stores `SKILL.md` as a `skill`-track recall file, so a later bare
+"uninstall memU" — said without pointing at any guide — can surface the packaged
+instructions through retrieval, on any host sharing this store. Rerunning is an
+upsert, never a duplicate; if the store already carries it from another host's
+install, this refreshes it to this package's copy.
+
 ---
 
 ## Part 2 — Register the bridging (record) task
