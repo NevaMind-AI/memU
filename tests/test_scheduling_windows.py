@@ -192,9 +192,7 @@ def test_pipeline_prompt_matches_the_bridging_doc() -> None:
 
     doc = (files("memu.hosts.claude_code") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
     doc_prompt = next(
-        line.strip()
-        for line in doc.splitlines()
-        if line.strip().startswith("Run the memU bridging pipeline.")
+        line.strip() for line in doc.splitlines() if line.strip().startswith("Run the memU bridging pipeline.")
     )
     assert doc_prompt == prompt.bridging_pipeline_prompt(CLAUDE)
 
@@ -206,9 +204,7 @@ def test_cursor_pipeline_prompt_matches_the_bridging_doc() -> None:
 
     doc = (files("memu.hosts.cursor") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
     doc_prompt = next(
-        line.strip()
-        for line in doc.splitlines()
-        if line.strip().startswith("Run the memU bridging pipeline.")
+        line.strip() for line in doc.splitlines() if line.strip().startswith("Run the memU bridging pipeline.")
     )
     assert doc_prompt == prompt.bridging_pipeline_prompt(CURSOR)
 
