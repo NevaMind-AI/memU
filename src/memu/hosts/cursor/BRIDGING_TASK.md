@@ -72,7 +72,13 @@ the same shape: **the prompt lives in a file; the crontab line stays short.**
    Run the memU bridging pipeline. Do the four steps strictly in order; do not skip a step even if the previous one looks like it produced nothing.  1. LEFTOVERS. If ~/.memu/hosts/cursor/jobs/ already contains job files, they are unfinished work from an earlier run (a crash, or the install itself) — process them exactly as step 3 describes, then run:  memu-cursor commit  — and only then continue.  2. PREPARE. Run this exact command with bash:  memu-cursor prepare  — it regenerates ~/.memu/hosts/cursor/jobs/. If the command exits non-zero, stop and report the error.  3. SELF-EVOLVE. List ~/.memu/hosts/cursor/jobs/*.txt and process them in ascending numeric order (1.txt, then 2.txt, …). The count changes every run — always glob and sort. If there are no job files, skip to step 4. For each job file: read it and follow its instructions to the letter. Each job is self-contained and already carries the concrete paths it needs. Emitting no files for a job is a valid outcome; do not invent content.  4. COMMIT. Run this exact command with bash:  memu-cursor commit  — it commits whatever the jobs created or changed. If it exits non-zero, report the error.  Finish with a one-line summary: how many jobs ran (leftovers included) and what was committed.
    ```
 
-2. Write `~/.memu/hosts/cursor/bridge.sh` and `chmod +x` it:
+2. Write `~/.memu/hosts/cursor/bridge.sh` and `chmod +x` it. Note the
+   **`--trust` flag and the `cd` into the host working tree**: `cursor-agent`
+   refuses headless runs in an untrusted directory ("Workspace Trust
+   Required", exit 1 — field-verified on Windows in memU#571, and the wall is
+   in headless running itself, so it applies to cron too). The trust lands on
+   memU's own tree, never on whatever directory cron happens to start in.
+   Never `--yolo` — that is the blanket permission-skip this guide rejects:
 
    ```sh
    #!/bin/sh
@@ -94,7 +100,10 @@ the same shape: **the prompt lives in a file; the crontab line stays short.**
      fi
    fi
    trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
-   cursor-agent -p "$(cat "$DIR/pipeline-prompt.txt")" >> "$DIR/bridging.log" 2>&1
+   # --trust scopes workspace trust to $DIR (memU's own tree), which is also
+   # the working directory — headless cursor-agent dies without it.
+   cd "$DIR" || exit 1
+   cursor-agent --trust -p "$(cat "$DIR/pipeline-prompt.txt")" >> "$DIR/bridging.log" 2>&1
    ```
 
 **The crontab's first line is a `PATH`.** cron runs with a bare
