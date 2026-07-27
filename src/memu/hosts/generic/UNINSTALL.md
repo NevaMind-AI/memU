@@ -20,7 +20,11 @@ bridging task was ever registered) simply has no Part 1 — skip to Part 2.
 **One store, many hosts.** `~/.memu/config.env` and the store it names may be
 shared by other memU host adapters on this machine (`memu-claude-code`,
 `memu-codex`, …). Removing *this* host's seams never requires touching the
-shared store; Part 3 spells out when touching it is safe at all.
+shared store; Part 3 spells out when touching it is safe at all. Those other
+adapters are **out of scope here** — this guide uninstalls the generic
+`memu-agent` host only. Never touch, unpatch, or run the uninstall for another
+host: leave its working tree under `~/.memu/hosts/` (e.g. `~/.memu/hosts/codex/`)
+and its instruction file exactly as they are.
 
 ---
 
@@ -90,11 +94,16 @@ Only one thing overrides a default: the user's own explicit words.
   the install created it) — a file with the user's own content stays, of
   course. The agent's own session log belongs to the agent — memU only ever
   read it; leave it alone.
-- **Uninstall the package** — `pip uninstall memu-cli` (or `pipx uninstall
-  memu-cli` — match how it was installed) — **unless** another host adapter is
-  still integrated on this machine (another host's instruction file still
-  carries a memU block, or its bridging task still exists). Then the package
-  stays, and the report says which host is still using it.
+- **Uninstall the package — only if this is the last memU host.** `memu-cli` is
+  shared by every host adapter, so uninstall it (`pip uninstall memu-cli`, or
+  `pipx uninstall memu-cli` — match how it was installed) **only once no other
+  host is still integrated on this machine.** To check, list `~/.memu/hosts/`:
+  any directory there *other than* this host's own `~/.memu/hosts/agent/` (or
+  the `--base-dir` chosen at install), which may survive holding just the kept
+  session cursor, is another live host — confirm it by its instruction file
+  still carrying a memU block, or its bridging task still existing. If any other
+  host remains, leave `memu-cli` installed and name the surviving host(s) in the
+  report.
 
 ### ✅ Done
 
