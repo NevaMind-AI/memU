@@ -66,6 +66,20 @@ plus a summary. Work from the summaries; open a `path` only when you need what i
 leaves out.
 """
 
+# "Uninstall memU" arrives with no file to point at: the user won't say "read
+# SKILL.md and follow its uninstall section", they'll just say the words, and an
+# agent with no routing in context improvises — deleting too much or too little.
+# This one sentence is that routing, and it must sit in the *instruction file*
+# (both variants), not in the retrieval body or the skill: the body is replaced
+# wholesale by :func:`refresh` from the server's copy, so anything riding inside
+# it would be washed out on the next scheduled run. Outside the ``{body}`` slot
+# it survives refresh, upgrades with the managed block, and — because
+# ``remove-instruction`` takes the whole block — removes itself with the seam.
+UNINSTALL_POINTER = """\
+If the user asks to uninstall or remove memU, do not improvise: run
+`{binary} docs uninstall` and follow the guide it prints, top to bottom.
+"""
+
 # The body is a ``{body}`` slot rather than baked in, so the same document can be
 # rendered with either the embedded :data:`RETRIEVAL_BODY` or the body carved out
 # of the server's current skill (:mod:`memu.hosts.templates`) — see :func:`_body`,
@@ -75,14 +89,16 @@ INSTRUCTION_TEMPLATE = """\
 
 Before answering:
 
-{body}"""
+{body}
+{uninstall}"""
 
 SKILL_INSTRUCTION_TEMPLATE = """\
 ## memU — retrieve before answering
 
 Before answering, use the `{skill}` skill to pull any relevant memory into
 context. It fails open: if nothing comes back, answer normally.
-"""
+
+{uninstall}"""
 
 SKILL_TEMPLATE = """\
 ---
@@ -149,9 +165,10 @@ def instruction(binary: str, *, skill: bool = False, skill_text: str | None = No
     overrides the embedded retrieval body with the body carved out of a
     server-fetched skill (ignored for the pointer, which carries no body).
     """
+    uninstall = UNINSTALL_POINTER.format(binary=binary)
     if skill:
-        return SKILL_INSTRUCTION_TEMPLATE.format(skill=SKILL_NAME, binary=binary)
-    return INSTRUCTION_TEMPLATE.format(body=_body(binary, skill_text))
+        return SKILL_INSTRUCTION_TEMPLATE.format(skill=SKILL_NAME, binary=binary, uninstall=uninstall)
+    return INSTRUCTION_TEMPLATE.format(body=_body(binary, skill_text), uninstall=uninstall)
 
 
 def block(binary: str, *, skill: bool = False, skill_text: str | None = None) -> str:

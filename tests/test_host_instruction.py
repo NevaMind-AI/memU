@@ -246,6 +246,39 @@ def test_instruction_names_the_llm_free_retrieval() -> None:
     assert "`memu retrieve" not in instruction.instruction(BINARY)
 
 
+def test_both_variants_route_an_uninstall_to_the_packaged_guide() -> None:
+    """A user says "uninstall memU", not "read SKILL.md and follow its uninstall
+    section" — so the routing to `docs uninstall` must already sit in the one
+    thing guaranteed to be in context: the instruction block, in both shapes."""
+    inline = instruction.instruction(BINARY)
+    pointer = instruction.instruction(BINARY, skill=True)
+    assert "memu-codex docs uninstall" in inline
+    assert "memu-codex docs uninstall" in pointer
+
+
+def test_uninstall_routing_survives_a_server_refreshed_body() -> None:
+    """`refresh` replaces the retrieval body wholesale from the server's skill —
+    the uninstall pointer lives outside the ``{body}`` slot precisely so a
+    scheduled refresh cannot wash it out."""
+    skill_text = "---\nname: memu-retrieve\n---\n\n# Retrieve\n\nServer body: run {binary} retrieve.\n"
+    text = instruction.instruction(BINARY, skill_text=skill_text)
+    assert "Server body" in text, "the refreshed body must actually be in use"
+    assert "memu-codex docs uninstall" in text
+
+
+def test_uninstall_routing_leaves_with_the_block(tmp_path: pathlib.Path) -> None:
+    """After an uninstall the pointer must not linger, naming a binary that is
+    about to be gone — `remove-instruction` takes the whole block, pointer included."""
+    path = tmp_path / "AGENTS.md"
+    path.write_text("# My rules\n", encoding="utf-8")
+    instruction.install(path, BINARY)
+    assert "docs uninstall" in path.read_text(encoding="utf-8")
+
+    instruction.remove(path, BINARY)
+
+    assert "docs uninstall" not in path.read_text(encoding="utf-8")
+
+
 def test_remove_restores_user_content_byte_for_byte(tmp_path: pathlib.Path) -> None:
     """The uninstall promise: an install/remove round-trip is invisible."""
     original = "# My rules\n\nAlways use tabs.\n"
