@@ -31,7 +31,9 @@ personal machine.
 This puts `memu` and every host-adapter binary on `PATH`. If `pip` is not the
 right tool for this machine (managed Python, uv-only), use the equivalent —
 what matters is that the binaries below resolve from a bare, non-interactive
-shell.
+shell. With uv this means `uv tool install memu-cli`, **not** `uv pip install`:
+however it is installed, `memu-cli` is a cross-session bridging tool and must
+be callable everywhere, not scoped to one project venv.
 
 ## Step 2 — pick your host binary
 
