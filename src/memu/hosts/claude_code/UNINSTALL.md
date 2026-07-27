@@ -9,7 +9,7 @@ Uninstalling is the install run in reverse, and it is three parts:
 1. **Unregister the bridging task** — stop the scheduled job first, so nothing
    fires mid-teardown (the *record* seam).
 2. **Unpatch `~/.claude/CLAUDE.md`** — remove the standing retrieval
-   instruction (the *inject* seam).
+   instruction and the `memu-retrieve` skill it points at (the *inject* seam).
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
    tooling is removed — and close by reporting both.
 
@@ -68,12 +68,21 @@ contents are backed up to `~/.claude/CLAUDE.md.bak` before the rewrite.
 `--dry-run` shows the diff without writing. Re-running is a clean no-op — a
 file with no block left is already the desired end state.
 
+On Claude Code the block is a **pointer** to memU's `memu-retrieve` skill,
+installed at `~/.claude/skills/memu-retrieve/`. The same command takes that
+skill out too — the pointer first, then the skill, so no live instruction is
+ever left aiming at a deleted skill. The directory is memU's own (the install
+wrote it whole, so it goes whole); a same-named directory without memU's
+`SKILL.md` is left alone, as are the user's or Claude Code's other entries in
+`~/.claude/skills/`. So there is nothing to remove by hand.
+
 ### ✅ Verify Part 2
 
 `cat ~/.claude/CLAUDE.md` — no `memu:begin`/`memu:end` markers remain, and the
-user's own content is intact. The session you are working in already loaded
-the old file, so the instruction may still be in your own context; a fresh
-session is what picks the removal up.
+user's own content is intact; `~/.claude/skills/memu-retrieve` no longer
+exists. The session you are working in already loaded the old file, so the
+instruction may still be in your own context; a fresh session is what picks
+the removal up.
 
 ---
 

@@ -55,16 +55,15 @@ left is already the desired end state. If this install used a non-default
 workspace (`OPENCLAW_WORKSPACE_DIR`, or a profile), pass
 `--path <workspace>/AGENTS.md`.
 
-The block pointed at the `memu-retrieve` skill; remove that too. The directory
-is memU's own — the install wrote it whole, so it goes whole:
-
-```
-rm -r ~/.openclaw/skills/memu-retrieve
-```
-
-(For a non-default `OPENCLAW_STATE_DIR`, it sits under `<state-dir>/skills/`
-instead.) Other entries in `~/.openclaw/skills/` are the user's or OpenClaw's —
-leave them alone.
+The same command takes the skill the block pointed at out too — memU's own
+`memu-retrieve` directory under `~/.openclaw/skills/`. It comes out after the
+pointer, so nothing is ever left aiming at a deleted skill; the directory is
+memU's own (installed whole, so it goes whole), while a same-named directory
+without memU's `SKILL.md` and the user's or OpenClaw's other entries in
+`~/.openclaw/skills/` are left alone. So there is nothing to remove by hand. If
+this install used a non-default `OPENCLAW_STATE_DIR`, the skill sits under
+`<state-dir>/skills/` — pass `--skills-dir <state-dir>/skills` so removal finds
+it.
 
 ### ✅ Verify Part 2
 
