@@ -5,7 +5,7 @@ prepare -> self-evolve -> commit pipeline. Neither scheduler can carry the
 ~1200-character quoted prompt on its command line — cron truncates crontab lines
 around 1 KB, and Task Scheduler's ``/TR`` splits on the first space — so on both
 platforms the prompt lives in a file the scheduled wrapper reads (Unix:
-``pipeline-prompt.txt`` + ``bridge.sh``, see each host's ``BRIDGING_TASK.md``;
+``bridge-prompt.txt`` + ``bridge.sh``, see each host's ``BRIDGING_TASK.md``;
 Windows: the ``schedule`` helper writes it) — which means the prompt has to exist
 as a value here, not only inside the guide.
 

@@ -40,7 +40,7 @@ running `memu-agent prepare --session-dir …`, the job files, then
 for cron:
 `crontab -l | grep -vE 'hosts/agent/bridge\.sh|memU bridging pipeline' | crontab -`.
 If nothing at all remains, `crontab -r` removes the now-empty crontab cleanly.
-The `bridge.sh`, `pipeline-prompt.txt`, and `bridging.log` files live under
+The `bridge.sh`, `bridge-prompt.txt`, and `bridge.log` files live under
 `~/.memu/hosts/agent/` and go with the host residue in the later cleanup part.
 
 ### ✅ Verify Part 1

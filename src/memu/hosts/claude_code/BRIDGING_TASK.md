@@ -77,7 +77,7 @@ the Unix sibling of the Windows `schtasks /TR` limit (memU#539), and the fix is
 the same shape: **the prompt lives in a file; the crontab line stays short.**
 
 1. Write the pipeline prompt to
-   `~/.memu/hosts/claude-code/pipeline-prompt.txt`, this content **verbatim**
+   `~/.memu/hosts/claude-code/bridge-prompt.txt`, this content **verbatim**
    as a single line:
 
    ```
@@ -89,24 +89,28 @@ the same shape: **the prompt lives in a file; the crontab line stays short.**
    ```sh
    #!/bin/sh
    # memU bridging for Claude Code — invoked by cron.
-   # The pipeline prompt lives in pipeline-prompt.txt because cron truncates
+   # The pipeline prompt lives in bridge-prompt.txt because cron truncates
    # crontab lines around 1 KB (see BRIDGING_TASK.md).
    DIR="$HOME/.memu/hosts/claude-code"
    # Single-instance lock: an hourly tick can fire while a long backlog run is
    # still going; a second run would race it on jobs/ and double-commit.
-   # mkdir is atomic; a stale lock older than 3h is reclaimed.
+   # mkdir is atomic; a stale lock older than 3h is reclaimed. Tradeoff: a
+   # legitimate run longer than 3h loses its lock to the next tick and can
+   # double-run — accepted deliberately, because the alternative (no reclaim)
+   # lets one crashed run wedge the schedule forever. Do not "fix" one side
+   # without weighing the other.
    LOCK="$DIR/.bridge.lock"
    if ! mkdir "$LOCK" 2>/dev/null; then
      if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +180 2>/dev/null)" ]; then
        rmdir "$LOCK" 2>/dev/null
        mkdir "$LOCK" 2>/dev/null || exit 0
      else
-       echo "$(date '+%F %T') skipped: another bridging run is in progress" >> "$DIR/bridging.log"
+       echo "$(date '+%F %T') skipped: another bridging run is in progress" >> "$DIR/bridge.log"
        exit 0
      fi
    fi
    trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
-   claude -p "$(cat "$DIR/pipeline-prompt.txt")" >> "$DIR/bridging.log" 2>&1
+   claude -p "$(cat "$DIR/bridge-prompt.txt")" >> "$DIR/bridge.log" 2>&1
    ```
 
 **The crontab's first line is a `PATH`.** cron runs with a bare
@@ -134,7 +138,7 @@ literal absolute path is equally fine):
 The prompt block is fixed; only the cron expression is the user's choice.
 Nothing machine-specific leaks into the prompt — the pipeline is invoked
 through `PATH` commands. As a side benefit the run's output now lands in
-`~/.memu/hosts/claude-code/bridging.log` (an inlined entry discarded it), so a
+`~/.memu/hosts/claude-code/bridge.log` (an inlined entry discarded it), so a
 failed tick leaves a diagnosable trace instead of only a cron mail.
 
 ## Step 3 — confirm
@@ -149,7 +153,7 @@ count:
   schedule a minute ahead, or run `bridge.sh` by hand with
   `env -i PATH=... HOME="$HOME" /bin/sh -c`), then verify **filesystem
   traces** — the session cursor and `jobs/` timestamps moved, and
-  `~/.memu/hosts/claude-code/bridging.log` grew — rather than trusting the
+  `~/.memu/hosts/claude-code/bridge.log` grew — rather than trusting the
   run's own summary. Field data, twice over: scheduled runs in bare
   environments have reported "completed successfully" on a command-not-found.
 

@@ -54,9 +54,15 @@ hour**, cron `0 * * * *` (local time). Confirm before creating.
 
 ## Step 2 — register the scheduled run
 
-Prefer Hermes's own native `cronjob` tool when available — it already runs in
-the correct headless environment; give it the prompt from step 1 below and skip
-the crontab machinery. The rest of this step is the raw-crontab fallback.
+**Hermes's own native `cronjob` tool is the recommended path — use it whenever
+it is available.** It runs in the correct headless environment and takes the
+prompt as *data* (like Codex/OpenClaw schedulers do), sidestepping the crontab
+machinery and its line-length wall entirely: give it the prompt from step 1
+below and you are done. The raw-crontab route that follows is a **fallback
+only**, for setups where the native tool is unavailable — and treat it with
+suspicion proportional to its history: no install is known to have ever run
+successfully through it (the previous revision of this guide shipped a flag
+that does not exist in the Hermes CLI, and nobody hit it in the field).
 
 **Never inline the pipeline prompt in the crontab entry.** The quoted prompt is
 ~1.2 KB, and cron truncates a crontab line at roughly 1 KB before handing it to
@@ -67,7 +73,7 @@ an inlined Hermes entry failed exactly this way on every tick). This is the
 Unix sibling of the Windows `schtasks /TR` limit (memU#539), and the fix is the
 same shape: **the prompt lives in a file; the crontab line stays short.**
 
-1. Write the pipeline prompt to `~/.memu/hosts/hermes/pipeline-prompt.txt`,
+1. Write the pipeline prompt to `~/.memu/hosts/hermes/bridge-prompt.txt`,
    this content **verbatim** as a single line:
 
    ```
@@ -82,24 +88,28 @@ same shape: **the prompt lives in a file; the crontab line stays short.**
    ```sh
    #!/bin/sh
    # memU bridging for Hermes — invoked by cron.
-   # The pipeline prompt lives in pipeline-prompt.txt because cron truncates
+   # The pipeline prompt lives in bridge-prompt.txt because cron truncates
    # crontab lines around 1 KB (see BRIDGING_TASK.md).
    DIR="$HOME/.memu/hosts/hermes"
    # Single-instance lock: an hourly tick can fire while a long backlog run is
    # still going; a second run would race it on jobs/ and double-commit.
-   # mkdir is atomic; a stale lock older than 3h is reclaimed.
+   # mkdir is atomic; a stale lock older than 3h is reclaimed. Tradeoff: a
+   # legitimate run longer than 3h loses its lock to the next tick and can
+   # double-run — accepted deliberately, because the alternative (no reclaim)
+   # lets one crashed run wedge the schedule forever. Do not "fix" one side
+   # without weighing the other.
    LOCK="$DIR/.bridge.lock"
    if ! mkdir "$LOCK" 2>/dev/null; then
      if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +180 2>/dev/null)" ]; then
        rmdir "$LOCK" 2>/dev/null
        mkdir "$LOCK" 2>/dev/null || exit 0
      else
-       echo "$(date '+%F %T') skipped: another bridging run is in progress" >> "$DIR/bridging.log"
+       echo "$(date '+%F %T') skipped: another bridging run is in progress" >> "$DIR/bridge.log"
        exit 0
      fi
    fi
    trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
-   hermes -z "$(cat "$DIR/pipeline-prompt.txt")" >> "$DIR/bridging.log" 2>&1
+   hermes -z "$(cat "$DIR/bridge-prompt.txt")" >> "$DIR/bridge.log" 2>&1
    ```
 
 **The crontab's first line is a `PATH`.** cron runs with a bare
@@ -126,7 +136,7 @@ absolute path is equally fine):
 The prompt block is fixed; only the cron expression is the user's choice.
 Nothing machine-specific leaks into the prompt — the pipeline is invoked
 through `PATH` commands. As a side benefit the run's output now lands in
-`~/.memu/hosts/hermes/bridging.log` (an inlined entry discarded it), so a
+`~/.memu/hosts/hermes/bridge.log` (an inlined entry discarded it), so a
 failed tick leaves a diagnosable trace instead of only a cron mail.
 
 ## Step 3 — confirm
@@ -141,7 +151,7 @@ count:
   schedule a minute ahead, or run `bridge.sh` by hand with
   `env -i PATH=... HOME="$HOME" /bin/sh -c`), then verify **filesystem
   traces** — the session cursor and `jobs/` timestamps moved, and
-  `~/.memu/hosts/hermes/bridging.log` grew — rather than trusting the run's
+  `~/.memu/hosts/hermes/bridge.log` grew — rather than trusting the run's
   own summary. Field data, twice over: scheduled runs in bare environments
   have reported "completed successfully" on a command-not-found.
 

@@ -35,7 +35,7 @@ crontab is theirs and stays, e.g.
 If the memU line was the only reason a `PATH=` line was added, that line may go
 too — but only if nothing else in the crontab needs it. If nothing at all
 remains, `crontab -r` removes the now-empty crontab cleanly. The `bridge.sh`,
-`pipeline-prompt.txt`, and `bridging.log` files live under
+`bridge-prompt.txt`, and `bridge.log` files live under
 `~/.memu/hosts/cursor/` and go with the host residue in the later cleanup part.
 
 ### ✅ Verify Part 1

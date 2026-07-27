@@ -185,7 +185,7 @@ def test_builders_escape_single_quotes_in_paths() -> None:
 
 
 def test_pipeline_prompt_matches_the_bridging_doc() -> None:
-    # The prompt exists twice — this code builder and the doc's pipeline-prompt.txt
+    # The prompt exists twice — this code builder and the doc's bridge-prompt.txt
     # block (the single-line fence the Unix registration step writes to disk) — and
     # they must stay verbatim. Lock it here: drift fails a test, not silently later.
     from importlib.resources import files
@@ -199,7 +199,7 @@ def test_pipeline_prompt_matches_the_bridging_doc() -> None:
 
 def test_cursor_pipeline_prompt_matches_the_bridging_doc() -> None:
     # Wiring cursor makes bridging_pipeline_prompt(CURSOR) live on Windows; lock its
-    # guide's pipeline-prompt.txt block to the canon the same way claude's is locked.
+    # guide's bridge-prompt.txt block to the canon the same way claude's is locked.
     from importlib.resources import files
 
     doc = (files("memu.hosts.cursor") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
@@ -207,6 +207,22 @@ def test_cursor_pipeline_prompt_matches_the_bridging_doc() -> None:
         line.strip() for line in doc.splitlines() if line.strip().startswith("Run the memU bridging pipeline.")
     )
     assert doc_prompt == prompt.bridging_pipeline_prompt(CURSOR)
+
+
+@pytest.mark.parametrize("pkg", ["claude_code", "cursor", "hermes", "generic"])
+def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
+    # The bug class behind memU#591: an inlined pipeline prompt pushed the guide's
+    # crontab entry past cron's ~1KB line buffer, so every tick died mid-quote
+    # before the agent binary ever started. The prompt-lock tests above catch
+    # content drift but not re-inlining — this gate does. Every cron entry a
+    # Unix guide tells the agent to write must stay far below the buffer.
+    from importlib.resources import files
+
+    doc = (files(f"memu.hosts.{pkg}") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    cron_entries = [line for line in doc.splitlines() if line.lstrip().startswith("0 * * * * ")]
+    assert cron_entries, f"{pkg} guide lost its cron entry example"
+    for line in cron_entries:
+        assert len(line) < 512, f"{pkg} cron entry is {len(line)} chars — cron truncates around 1KB: {line[:80]!r}"
 
 
 def test_install_rejects_nonpositive_interval(

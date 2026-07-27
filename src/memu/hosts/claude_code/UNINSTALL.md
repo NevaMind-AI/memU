@@ -39,7 +39,7 @@ and stays.
   If the memU line was the only reason a `PATH=` line was added, that line may
   go too — but only if nothing else in the crontab needs it. If nothing at all
   remains, `crontab -r` removes the now-empty crontab cleanly. The `bridge.sh`,
-  `pipeline-prompt.txt`, and `bridging.log` files live under
+  `bridge-prompt.txt`, and `bridge.log` files live under
   `~/.memu/hosts/claude-code/` and go with the host residue in Part 3.
 - **launchd** — `launchctl bootout gui/$(id -u)/<label>` and delete the plist
   under `~/Library/LaunchAgents`.

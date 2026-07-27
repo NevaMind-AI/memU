@@ -79,13 +79,16 @@ mailed to `/var/mail/$USER` and visible nowhere else; the agent never starts
 (field data: inlined entries for two hosts failed exactly this way on every
 tick). This is the Unix sibling of the Windows `schtasks /TR` limit
 (memU#539), and the fix is the same shape: write the prompt **verbatim** to
-`~/.memu/hosts/agent/pipeline-prompt.txt`, wrap the headless invocation in a
+`~/.memu/hosts/agent/bridge-prompt.txt`, wrap the headless invocation in a
 small `~/.memu/hosts/agent/bridge.sh` (`<agent-cli> <headless-flag> "$(cat
-~/.memu/hosts/agent/pipeline-prompt.txt)" >> ~/.memu/hosts/agent/bridging.log
+~/.memu/hosts/agent/bridge-prompt.txt)" >> ~/.memu/hosts/agent/bridge.log
 2>&1`, ideally with an atomic `mkdir`-based lock so an hourly tick can't race
 a still-running backlog run — see the claude-code host's `BRIDGING_TASK.md`
-for the full script), and keep the crontab line to just
-`0 * * * * $HOME/.memu/hosts/agent/bridge.sh`.
+for the full script), and keep the crontab entry to one short line:
+
+```
+0 * * * * $HOME/.memu/hosts/agent/bridge.sh
+```
 
 The recurring prompt, with `<SESSION_DIR>` filled in, **verbatim**:
 
