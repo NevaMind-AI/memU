@@ -32,6 +32,28 @@ Get your API key from [memu.so](https://memu.so), then send this message to your
 
 > Read [https://memu.pro/SKILL.md](https://memu.pro/SKILL.md), follow its instructions to install and configure memU, API Key is memu_•••••••••(get Api Key from memu.so).
 
+## Agent support
+
+> [!IMPORTANT]
+> This compatibility matrix is based on **macOS devices only**. Results on Windows and Linux have not been verified.
+
+memU supports two parts of the memory loop:
+
+- **Memorize** — capture useful session knowledge and turn it into reusable memory.
+- **Retrieve** — bring relevant memory into a future task.
+
+| Agent | Mode | Memorize | Retrieve | User note |
+| --- | --- | :---: | :---: | --- |
+| Codex | Code, Work, and VS Code extension | ✅ | ✅ | Codex Chat is not currently supported. |
+| Claude | Claude Code (desktop and CLI) | ✅ | ✅ | If the selected model declines the setup steps, retry with **Opus** or another model. Sonnet 5 can occasionally do this. |
+| Claude | Chat and Cowork | ❌ | ❌ | Not currently supported. |
+| Cursor | CLI | ✅ | ✅ | |
+| OpenClaw | — | ✅ | — | Retrieval support is not yet available. |
+| Hermes Agent | — | ✅ | ✅ | |
+| WorkBuddy | — | ✅ | ✅ | |
+
+Support status reflects the current release and may change as host integrations evolve.
+
 ## How it works
 
 ![memU memory system architecture](assets/structure-v2.png)
