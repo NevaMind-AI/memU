@@ -79,6 +79,13 @@ class HostSpec:
     Empty — the default, and every host without a skills mechanism — keeps the full
     text inline, which is the only place it can live."""
 
+    inline_instruction_preamble: str = ""
+    """Host-specific guidance prepended to an inline retrieval procedure.
+
+    Empty preserves the shared instruction byte-for-byte. Skill hosts ignore it;
+    inline hosts use it only when their command-execution surface needs explanation.
+    """
+
     base_dir: str = ""
     """memU working tree. Empty means the per-host default ``~/.memu/hosts/<host>``;
     Codex overrides this with the pre-multi-host ``~/.memu`` it has always used."""
@@ -155,7 +162,12 @@ def _refresh_retrieval(spec: HostSpec) -> None:
     """
     skills_dir = Path(spec.skills_dir) if spec.skills_dir else None
     try:
-        for target, changed in instruction.refresh(Path(spec.instruction_path), spec.binary, skills_dir=skills_dir):
+        for target, changed in instruction.refresh(
+            Path(spec.instruction_path),
+            spec.binary,
+            skills_dir=skills_dir,
+            inline_preamble=spec.inline_instruction_preamble,
+        ):
             if changed:
                 print(f"refreshed the retrieval procedure at {target}")
     except Exception as exc:
@@ -373,6 +385,7 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
         binary=spec.binary,
         skills_dir=spec.skills_dir,
         legacy_paths=spec.legacy_instruction_paths,
+        inline_preamble=spec.inline_instruction_preamble,
     )
 
     p = with_base(sub.add_parser("prepare", help=f"Slice new {spec.display} sessions into self-evolve job files"))

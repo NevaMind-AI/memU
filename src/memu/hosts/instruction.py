@@ -141,22 +141,46 @@ def skill_document(binary: str, *, skill_text: str | None = None) -> str:
     return SKILL_TEMPLATE.format(name=SKILL_NAME, body=_body(binary, None))
 
 
-def instruction(binary: str, *, skill: bool = False, skill_text: str | None = None) -> str:
+def instruction(
+    binary: str,
+    *,
+    skill: bool = False,
+    skill_text: str | None = None,
+    inline_preamble: str = "",
+) -> str:
     """The instruction text, telling the agent to run this host's ``retrieve``.
 
     ``skill=True`` returns the short pointer for hosts where :func:`install_skill`
     has put the detail in a skill; otherwise the full inline text. ``skill_text``
     overrides the embedded retrieval body with the body carved out of a
     server-fetched skill (ignored for the pointer, which carries no body).
+    ``inline_preamble`` adds host-specific command-execution guidance ahead of an
+    inline body; it is ignored for skill hosts and empty by default so their text
+    stays byte-for-byte unchanged.
     """
     if skill:
         return SKILL_INSTRUCTION_TEMPLATE.format(skill=SKILL_NAME, binary=binary)
-    return INSTRUCTION_TEMPLATE.format(body=_body(binary, skill_text))
+    body = _body(binary, skill_text)
+    if inline_preamble:
+        body = f"{inline_preamble.rstrip()}\n\n{body}"
+    return INSTRUCTION_TEMPLATE.format(body=body)
 
 
-def block(binary: str, *, skill: bool = False, skill_text: str | None = None) -> str:
+def block(
+    binary: str,
+    *,
+    skill: bool = False,
+    skill_text: str | None = None,
+    inline_preamble: str = "",
+) -> str:
     """The managed block exactly as it is written to disk, markers included."""
-    return f"{begin(binary)}\n{instruction(binary, skill=skill, skill_text=skill_text)}{END}\n"
+    rendered = instruction(
+        binary,
+        skill=skill,
+        skill_text=skill_text,
+        inline_preamble=inline_preamble,
+    )
+    return f"{begin(binary)}\n{rendered}{END}\n"
 
 
 def _block_re(binary: str) -> re.Pattern[str]:
@@ -166,7 +190,14 @@ def _block_re(binary: str) -> re.Pattern[str]:
     )
 
 
-def patch(current: str, binary: str, *, skill: bool = False, skill_text: str | None = None) -> str:
+def patch(
+    current: str,
+    binary: str,
+    *,
+    skill: bool = False,
+    skill_text: str | None = None,
+    inline_preamble: str = "",
+) -> str:
     """Return ``current`` with the managed block installed — replaced, or appended.
 
     Pure, so the interesting half of :func:`install` is testable without a
@@ -176,11 +207,26 @@ def patch(current: str, binary: str, *, skill: bool = False, skill_text: str | N
     """
     pattern = _block_re(binary)
     if pattern.search(current):
-        return pattern.sub(lambda _: block(binary, skill=skill, skill_text=skill_text), current, count=1)
+        return pattern.sub(
+            lambda _: block(
+                binary,
+                skill=skill,
+                skill_text=skill_text,
+                inline_preamble=inline_preamble,
+            ),
+            current,
+            count=1,
+        )
     if current and not current.endswith("\n"):
         current += "\n"
     separator = "\n" if current else ""
-    return f"{current}{separator}{block(binary, skill=skill, skill_text=skill_text)}"
+    rendered = block(
+        binary,
+        skill=skill,
+        skill_text=skill_text,
+        inline_preamble=inline_preamble,
+    )
+    return f"{current}{separator}{rendered}"
 
 
 def strip(current: str, binary: str) -> str:
@@ -224,7 +270,13 @@ def _write(path: Path, updated: str, *, backup: bool, dry_run: bool) -> tuple[bo
 
 
 def install(
-    path: Path, binary: str, *, skill: bool = False, skill_text: str | None = None, dry_run: bool = False
+    path: Path,
+    binary: str,
+    *,
+    skill: bool = False,
+    skill_text: str | None = None,
+    inline_preamble: str = "",
+    dry_run: bool = False,
 ) -> tuple[bool, str]:
     """Install the managed block into ``path``. Returns ``(changed, diff)``.
 
@@ -240,7 +292,14 @@ def install(
     """
     path = path.expanduser()
     current = path.read_text(encoding="utf-8") if path.is_file() else ""
-    return _write(path, patch(current, binary, skill=skill, skill_text=skill_text), backup=True, dry_run=dry_run)
+    updated = patch(
+        current,
+        binary,
+        skill=skill,
+        skill_text=skill_text,
+        inline_preamble=inline_preamble,
+    )
+    return _write(path, updated, backup=True, dry_run=dry_run)
 
 
 def remove(path: Path, binary: str, *, dry_run: bool = False) -> tuple[bool, str]:
@@ -279,7 +338,13 @@ def install_skill(
     return _write(skill_path(skills_dir), skill_document(binary, skill_text=skill_text), backup=False, dry_run=dry_run)
 
 
-def refresh(path: Path, binary: str, *, skills_dir: Path | None = None) -> list[tuple[Path, bool]]:
+def refresh(
+    path: Path,
+    binary: str,
+    *,
+    skills_dir: Path | None = None,
+    inline_preamble: str = "",
+) -> list[tuple[Path, bool]]:
     """Refresh an already-installed retrieval procedure from the server, in place.
 
     The scheduled counterpart to :func:`install`: the bridging run calls this so
@@ -315,7 +380,13 @@ def refresh(path: Path, binary: str, *, skills_dir: Path | None = None) -> list[
     target = path.expanduser()
     if not target.is_file() or not _block_re(binary).search(target.read_text(encoding="utf-8")):
         return []
-    changed, _ = install(path, binary, skill=False, skill_text=skill_text)
+    changed, _ = install(
+        path,
+        binary,
+        skill=False,
+        skill_text=skill_text,
+        inline_preamble=inline_preamble,
+    )
     return [(target, changed)]
 
 
@@ -338,7 +409,15 @@ def _cmd_install_instruction(args: argparse.Namespace) -> int:
     if args.print_only:
         if skills_dir is not None:
             print(f"# {skill_path(skills_dir)}\n\n{skill_document(args.binary, skill_text=skill_text)}")
-        print(block(args.binary, skill=skill, skill_text=skill_text), end="")
+        print(
+            block(
+                args.binary,
+                skill=skill,
+                skill_text=skill_text,
+                inline_preamble=args.inline_preamble,
+            ),
+            end="",
+        )
         return 0
 
     # The skill goes in first: between the two writes, an instruction block naming
@@ -348,7 +427,14 @@ def _cmd_install_instruction(args: argparse.Namespace) -> int:
         _report(skill_path(skills_dir), changed, diff, dry_run=args.dry_run)
 
     path = Path(args.path)
-    changed, diff = install(path, args.binary, skill=skill, skill_text=skill_text, dry_run=args.dry_run)
+    changed, diff = install(
+        path,
+        args.binary,
+        skill=skill,
+        skill_text=skill_text,
+        inline_preamble=args.inline_preamble,
+        dry_run=args.dry_run,
+    )
     _report(path.expanduser(), changed, diff, dry_run=args.dry_run)
 
     # Migrate only when the host's default target is in use. An explicit --path
@@ -405,6 +491,7 @@ def register(
     binary: str,
     skills_dir: str = "",
     legacy_paths: tuple[str, ...] = (),
+    inline_preamble: str = "",
 ) -> None:
     """Add ``install-instruction`` to a host CLI, bound to that host's ``path``.
 
@@ -420,6 +507,9 @@ def register(
     default-path install removes this binary's managed block from them only after
     the current target is installed; default-path uninstall checks both. Custom
     ``--path`` calls leave them alone.
+
+    ``inline_preamble`` is host-specific guidance inserted before the full
+    procedure for inline hosts. It is empty by default and ignored by skill hosts.
     """
     parser = sub.add_parser(
         "install-instruction",
@@ -444,6 +534,7 @@ def register(
         binary=binary,
         default_instruction_path=path,
         legacy_paths=legacy_paths,
+        inline_preamble=inline_preamble,
     )
 
     remover = sub.add_parser(

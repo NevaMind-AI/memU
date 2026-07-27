@@ -202,3 +202,24 @@ def test_refresh_updates_an_inline_host_in_place(monkeypatch: pytest.MonkeyPatch
     assert "name: memu-retrieve" not in text
     assert "# Retrieve from memU before answering" not in text
     assert "# My rules" in text, "the user's own content survives the refresh"
+
+
+def test_refresh_preserves_an_inline_hosts_local_preamble(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    path = tmp_path / "SOUL.md"
+    preamble = "Use WorkBuddy's `bash` tool; this is a CLI command, not a tool name."
+    instruction.install(path, "memu-workbuddy", inline_preamble=preamble)
+    _serve(monkeypatch, _skill("Fresh retrieval body: run {binary} retrieve."))
+
+    touched = instruction.refresh(
+        path,
+        "memu-workbuddy",
+        skills_dir=None,
+        inline_preamble=preamble,
+    )
+
+    text = path.read_text(encoding="utf-8")
+    assert touched == [(path, True)]
+    assert preamble in text
+    assert "Fresh retrieval body: run memu-workbuddy retrieve." in text

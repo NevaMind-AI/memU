@@ -168,6 +168,11 @@ text sits in a marked block that a re-run — or a later memU release — replac
 place. `--dry-run` shows the diff without writing; `--print` prints just the
 block.
 
+The block identifies `memu-workbuddy` as a CLI executable on `PATH` and tells
+WorkBuddy to invoke it with the `bash` tool, rather than look for a native tool
+with that name. A missing `bash` tool or failed command is reported as an
+unavailable retrieval seam; only a successful command with no hits fails open.
+
 For an install made by an older memU release, the command also removes only
 memU's marked block from the former `~/.workbuddy/MEMORY.md` target after the
 new `SOUL.md` block is safely installed. User-authored memory stays byte-for-byte
@@ -185,9 +190,10 @@ memu-workbuddy retrieve "smoke test"
 
 The memU block must appear exactly once in `SOUL.md` and not at all in the legacy
 `MEMORY.md`; anything the user had in either file must be intact, and `retrieve`
-must exit cleanly (empty result lists are fine). A *fresh* WorkBuddy session is
-what picks up the new SOUL.md — do not be surprised that the instruction is not
-in your own context yet.
+must exit cleanly (empty result lists are fine). Confirm that the block names the
+`bash` tool and says `memu-workbuddy` is a command-line executable. A *fresh*
+WorkBuddy session is what picks up the new SOUL.md — do not be surprised that the
+instruction is not in your own context yet.
 
 ---
 
