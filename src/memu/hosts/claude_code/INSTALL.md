@@ -47,7 +47,7 @@ command -v claude || echo "claude NOT FOUND (landing dir: $(ls ~/.local/bin/clau
 command -v memu-claude-code || echo "memu NOT FOUND - do Part 1"
 [ -f ~/.claude/.credentials.json ] && echo "cred file: yes" || echo "cred file: no"
 crontab -l 2>/dev/null | grep -qE 'ANTHROPIC|CLAUDE_CODE' && echo "cron env: set" || echo "cron env: none"
-crontab -l 2>/dev/null | grep -q 'memU bridging pipeline' && echo "cron entry: yes" || echo "cron entry: no"
+crontab -l 2>/dev/null | grep -qE 'hosts/claude-code/bridge\.sh|memU bridging pipeline' && echo "cron entry: yes" || echo "cron entry: no"
 grep -q memu ~/.claude/CLAUDE.md 2>/dev/null && echo "inject: yes" || echo "inject: no"
 ```
 

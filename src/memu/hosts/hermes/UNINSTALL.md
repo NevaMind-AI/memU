@@ -26,13 +26,17 @@ file exactly as they are.
 
 ## Part 1 — Unregister the bridging (record) task
 
-Find the cron entry that runs the memU bridging pipeline — it invokes Hermes
-headless with the three-step prepare / self-evolve / commit prompt — and
+Find the cron entry that runs the memU bridging pipeline — it invokes
+`~/.memu/hosts/hermes/bridge.sh` (or, on installs predating the prompt-file
+layout, invokes Hermes headless with the inlined three-step prompt) — and
 delete **only that line**. Everything else in the user's crontab is theirs and
-stays, e.g. `crontab -l | grep -v 'memU bridging pipeline' | crontab -`. If
-the memU line was the only reason a `PATH=` line was added, that line may go
+stays, e.g.
+`crontab -l | grep -vE 'hosts/hermes/bridge\.sh|memU bridging pipeline' | crontab -`.
+If the memU line was the only reason a `PATH=` line was added, that line may go
 too — but only if nothing else in the crontab needs it. If nothing at all
-remains, `crontab -r` removes the now-empty crontab cleanly.
+remains, `crontab -r` removes the now-empty crontab cleanly. The `bridge.sh`,
+`pipeline-prompt.txt`, and `bridging.log` files live under
+`~/.memu/hosts/hermes/` and go with the host residue in the later cleanup part.
 
 ### ✅ Verify Part 1
 
