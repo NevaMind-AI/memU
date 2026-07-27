@@ -33,8 +33,15 @@ layout, inlining `claude -p 'Run the memU bridging pipeline. …'` directly) —
 and delete **only that entry**. Everything else in the user's crontab is theirs
 and stays.
 
-- **cron** — `crontab -l` to find the line, then rewrite the crontab without
-  it, e.g.
+- **cron (helper)** — if `memu-claude-code` is still installed, this does the
+  whole part, either layout, keeping only the run log:
+
+  ```
+  memu-claude-code schedule uninstall
+  ```
+
+- **cron (manual fallback)** — `crontab -l` to find the line, then rewrite the
+  crontab without it, e.g.
   `crontab -l | grep -vE 'hosts/claude-code/bridge\.sh|memU bridging pipeline' | crontab -`.
   If the memU line was the only reason a `PATH=` line was added, that line may
   go too — but only if nothing else in the crontab needs it. If nothing at all

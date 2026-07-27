@@ -66,6 +66,20 @@ hour**, cron `0 * * * *` (local time). Confirm before creating.
 
 ## Step 2 — register the scheduled run
 
+**Preferred: run the helper.**
+
+```
+memu-claude-code schedule install
+```
+
+It does everything below deterministically — writes `bridge-prompt.txt` and
+`bridge.sh`, registers the short crontab entry, and migrates any legacy
+inlined entry it finds (replacing, never duplicating). Then
+`memu-claude-code schedule verify` proves the entry can actually run without
+waiting for the next tick, and `schedule status` / `schedule uninstall`
+manage it. The manual registration below is the **fallback** for when the
+helper is unavailable; both produce the same layout.
+
 **Never inline the pipeline prompt in the crontab entry.** The quoted prompt is
 ~1.2 KB, and cron truncates a crontab line at roughly 1 KB before handing it to
 `/bin/sh` — the shell receives a command cut off mid-quote and every tick dies

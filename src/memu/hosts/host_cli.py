@@ -23,7 +23,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-import platform
 import sys
 import urllib.request
 from collections.abc import Callable, Coroutine
@@ -86,11 +85,11 @@ class HostSpec:
     schedule_command: str = ""
     """The headless agent invocation the bridging task runs, as a template with a
     ``{prompt}`` placeholder — ``claude -p {prompt}``, ``codex exec {prompt}``. The
-    Windows ``schedule`` helper turns this into the scheduled task's wrapper, and
-    treats the first token as the agent binary to resolve on ``PATH``. Empty means
-    the host has no Windows scheduling wired yet, so ``schedule`` refuses rather
-    than guess. Unix scheduling is unaffected — cron/launchd stay doc-driven and
-    never read this field."""
+    ``schedule`` helper turns this into the scheduled task's wrapper (Task Scheduler
+    on Windows, cron on macOS/Linux), and treats the first token as the agent binary
+    to resolve on ``PATH``. Empty means the host has no OS scheduling wired yet, so
+    ``schedule`` refuses rather than guess. launchd stays doc-driven and never reads
+    this field."""
 
     needs_headless_auth: bool = False
     """Whether the scheduled agent needs a headless credential distinct from any
@@ -135,8 +134,8 @@ class HostSpec:
     @property
     def task_name(self) -> str:
         """Canonical scheduled-task name — stable across install/uninstall so the
-        task is addressable by name (memU#539). Windows only today; Unix keeps its
-        existing crontab/launchd identity untouched."""
+        task is addressable by name (memU#539). Names the Windows task; the cron
+        backend addresses its entry by the generated script's path instead."""
         return f"memu-bridging-{self.host}"
 
 
@@ -314,22 +313,13 @@ async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
 
 
 async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
-    """Register/inspect the bridging task on Windows Task Scheduler.
+    """Register/inspect the bridging task on the OS scheduler.
 
     Only registered for hosts that set ``schedule_command`` (those that bridge via an
-    OS scheduler), so it never reaches a host that has its own. Windows-only by design
-    (memU#538/#539); on macOS/Linux it just points at the unchanged cron/launchd
-    registration in ``BRIDGING_TASK.md`` and touches neither.
+    OS scheduler), so it never reaches a host that has its own. The backend is picked
+    by platform: Task Scheduler on Windows (memU#538/#539), cron on macOS/Linux
+    (memU#591). launchd stays doc-driven.
     """
-    system = platform.system()
-    if system != "Windows":
-        print(
-            f"{spec.display} bridging on {system or 'this OS'} is scheduled with cron or launchd — "
-            f"follow that section of `{spec.binary} docs task`. The `schedule` helper automates "
-            "Windows Task Scheduler only."
-        )
-        return 0
-
     from memu.hosts import scheduling
 
     layout = _layout(spec, args)
@@ -406,13 +396,16 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     )
     p.set_defaults(handler=bind(_cmd_docs))
 
-    # Windows-only automation of the bridging task's registration — registered only
+    # OS-scheduler automation of the bridging task's registration — registered only
     # for hosts that bridge via an OS scheduler, which is exactly the ones that set
     # `schedule_command`. Hosts with their own scheduler (Codex, OpenClaw, WorkBuddy)
     # never set it, so they never advertise a `schedule` verb they couldn't honour.
     if spec.schedule_command:
         p = with_base(
-            sub.add_parser("schedule", help=f"Register the {spec.display} bridging task (Windows Task Scheduler)")
+            sub.add_parser(
+                "schedule",
+                help=f"Register the {spec.display} bridging task (Task Scheduler on Windows, cron on macOS/Linux)",
+            )
         )
         p.add_argument(
             "action",

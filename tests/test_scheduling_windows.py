@@ -24,7 +24,7 @@ from memu.hosts.bridging import Layout
 from memu.hosts.claude_code.cli import SPEC as CLAUDE
 from memu.hosts.codex.cli import SPEC as CODEX
 from memu.hosts.cursor.cli import SPEC as CURSOR
-from memu.hosts.host_cli import build_parser, run
+from memu.hosts.host_cli import build_parser
 from memu.hosts.scheduling import prompt, windows
 
 # ---------------------------------------------------------------------------
@@ -143,16 +143,6 @@ def test_unwired_host_has_no_schedule_verb() -> None:
         build_parser(unwired).parse_args(["schedule", "status"])
     # ...while a wired host does have it.
     assert build_parser(CLAUDE).parse_args(["schedule", "status"]).action == "status"
-
-
-def test_schedule_points_at_cron_off_windows(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    import memu.hosts.host_cli as host_cli
-
-    monkeypatch.setattr(host_cli.platform, "system", lambda: "Linux")
-    assert run(CLAUDE, ["schedule", "status"]) == 0
-    assert "cron or launchd" in capsys.readouterr().out
 
 
 def test_execution_entry_points_are_windows_only(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
