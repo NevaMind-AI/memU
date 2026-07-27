@@ -49,9 +49,7 @@ def backend(monkeypatch: pytest.MonkeyPatch) -> _FakeBackend:
     return fake
 
 
-async def test_seed_writes_the_mirror_and_commits_to_the_store(
-    backend: _FakeBackend, tmp_path: pathlib.Path
-) -> None:
+async def test_seed_writes_the_mirror_and_commits_to_the_store(backend: _FakeBackend, tmp_path: pathlib.Path) -> None:
     mirror, result = await seed.seed(tmp_path)
 
     assert mirror == tmp_path / "skill" / "install-memu.md"
