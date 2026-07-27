@@ -124,6 +124,14 @@ def test_openclaw_is_a_skill_host() -> None:
     assert SPEC.skills_dir == "~/.openclaw/skills"
 
 
+def test_cola_is_a_skill_host() -> None:
+    """Cola loads its user Skills directory, while MEMORY.md carries only the pointer."""
+    from memu.hosts.cola.cli import MEMORY_MD, SKILLS_DIR, SPEC
+
+    assert SPEC.instruction_path == MEMORY_MD == "~/.cola/memory-bank/MEMORY.md"
+    assert SPEC.skills_dir == SKILLS_DIR == "~/.cola/resources/skills"
+
+
 def test_instruction_names_the_llm_free_retrieval() -> None:
     """`memu retrieve` is LLM-routed — one LLM call per turn is what this avoids."""
     assert "memu-codex retrieve" in instruction.instruction(BINARY)

@@ -42,6 +42,7 @@ executing this skill):
 | OpenClaw | `memu-openclaw` |
 | Hermes Agent | `memu-hermes` |
 | WorkBuddy | `memu-workbuddy` |
+| Cola | `memu-cola` |
 | anything else | `memu-agent` |
 
 Unsure, or not in the table? You are `memu-agent`. Run:
