@@ -279,6 +279,29 @@ def install_skill(
     return _write(skill_path(skills_dir), skill_document(binary, skill_text=skill_text), backup=False, dry_run=dry_run)
 
 
+def remove_skill(skills_dir: Path, *, dry_run: bool = False) -> tuple[bool, str]:
+    """Remove the retrieval skill under ``skills_dir``. Returns ``(changed, diff)``.
+
+    The uninstall-side mirror of :func:`install_skill`. Because
+    ``<skills_dir>/memu-retrieve/`` is memU's own — written whole on install, with
+    nothing of the user's inside — it is removed whole rather than edited, and no
+    ``.bak`` is left (a reinstall rewrites it from the template, so a backup would
+    buy nothing). Its ``SKILL.md`` is the marker that the directory is ours to take
+    back: a directory missing that file, or absent entirely, is already the desired
+    end state — a clean no-op, never an error — so a same-named directory the user
+    created without memU's skill in it is left untouched.
+    """
+    target = skill_path(skills_dir)
+    if not target.is_file():
+        return False, ""
+    directory = target.parent
+    diff = f"removed {directory}/\n"
+    if dry_run:
+        return False, diff
+    shutil.rmtree(directory)
+    return True, diff
+
+
 def refresh(path: Path, binary: str, *, skills_dir: Path | None = None) -> list[tuple[Path, bool]]:
     """Refresh an already-installed retrieval procedure from the server, in place.
 
@@ -383,6 +406,18 @@ def _cmd_remove_instruction(args: argparse.Namespace) -> int:
             continue
         reported = True
         _report(expanded, changed, diff, dry_run=args.dry_run)
+
+    # The skill comes out after the instruction that points at it — the inverse of
+    # install's skill-first order (an instruction naming a skill that is not there
+    # is the one state that misleads an agent), so no live pointer ever dangles.
+    # Skill hosts only; inline hosts pass an empty --skills-dir and skip this.
+    if args.skills_dir:
+        skills_dir = Path(args.skills_dir)
+        changed, diff = remove_skill(skills_dir, dry_run=args.dry_run)
+        if diff:
+            reported = True
+            _report(skill_path(skills_dir), changed, diff, dry_run=args.dry_run)
+
     if not reported:
         print(f"{Path(args.path)}: no managed block to remove")
     return 0
@@ -448,9 +483,21 @@ def register(
 
     remover = sub.add_parser(
         "remove-instruction",
-        help="Remove memU's managed block from the host's global instruction file (the uninstall mirror)",
+        help=(
+            "Remove memU's managed block from the host's global instruction file — and, on a "
+            "skill host, the retrieval skill it points at (the uninstall mirror)"
+        ),
     )
     remover.add_argument("--path", default=path, help=f"Instruction file to unpatch (default: {path})")
+    remover.add_argument(
+        "--skills-dir",
+        default=skills_dir,
+        help=(
+            f"Skills directory the {SKILL_NAME} skill was installed into (default: {skills_dir})"
+            if skills_dir
+            else argparse.SUPPRESS
+        ),
+    )
     remover.add_argument("--dry-run", action="store_true", help="Show the diff without writing")
     remover.set_defaults(
         handler=_cmd_remove_instruction_async,

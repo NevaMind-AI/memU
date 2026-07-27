@@ -410,3 +410,85 @@ def test_cli_without_a_skills_dir_keeps_the_full_text_and_writes_no_skill(tmp_pa
     text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
     assert "memu-codex retrieve" in text and "segments" in text
     assert not (tmp_path / "skills").exists()
+
+
+def test_remove_skill_takes_the_whole_directory(tmp_path: pathlib.Path) -> None:
+    skills = tmp_path / "skills"
+    instruction.install_skill(skills, BINARY)
+    assert (skills / instruction.SKILL_NAME / "SKILL.md").is_file()
+
+    changed, diff = instruction.remove_skill(skills)
+
+    assert changed and diff
+    assert not (skills / instruction.SKILL_NAME).exists(), "the skill directory goes whole, as it arrived"
+
+
+def test_remove_skill_absent_is_a_noop(tmp_path: pathlib.Path) -> None:
+    assert instruction.remove_skill(tmp_path / "skills") == (False, "")
+
+
+def test_remove_skill_leaves_a_foreign_same_named_directory_alone(tmp_path: pathlib.Path) -> None:
+    """A memu-retrieve dir without our SKILL.md is not ours to take back."""
+    foreign = tmp_path / "skills" / instruction.SKILL_NAME
+    foreign.mkdir(parents=True)
+    (foreign / "notes.md").write_text("the user's own\n", encoding="utf-8")
+
+    changed, diff = instruction.remove_skill(tmp_path / "skills")
+
+    assert not changed and not diff
+    assert (foreign / "notes.md").is_file()
+
+
+def test_remove_skill_dry_run_writes_nothing(tmp_path: pathlib.Path) -> None:
+    skills = tmp_path / "skills"
+    instruction.install_skill(skills, BINARY)
+
+    changed, diff = instruction.remove_skill(skills, dry_run=True)
+
+    assert not changed
+    assert diff, "a dry run still reports what it would do"
+    assert (skills / instruction.SKILL_NAME / "SKILL.md").is_file()
+
+
+def test_cli_remove_takes_the_skill_with_the_instruction_for_a_skill_host(tmp_path: pathlib.Path) -> None:
+    agents = tmp_path / "AGENTS.md"
+    skills = tmp_path / "skills"
+    install = build_parser().parse_args(["install-instruction", "--path", str(agents), "--skills-dir", str(skills)])
+    assert instruction._cmd_install_instruction(install) == 0
+    assert (skills / instruction.SKILL_NAME / "SKILL.md").is_file()
+
+    remove = build_parser().parse_args(["remove-instruction", "--path", str(agents), "--skills-dir", str(skills)])
+    assert instruction._cmd_remove_instruction(remove) == 0
+
+    assert not (skills / instruction.SKILL_NAME).exists(), "the pointed-at skill leaves with its pointer"
+    assert instruction.begin(BINARY) not in agents.read_text(encoding="utf-8")
+
+
+def test_cli_remove_dry_run_leaves_the_skill_in_place(tmp_path: pathlib.Path) -> None:
+    agents = tmp_path / "AGENTS.md"
+    skills = tmp_path / "skills"
+    install = build_parser().parse_args(["install-instruction", "--path", str(agents), "--skills-dir", str(skills)])
+    assert instruction._cmd_install_instruction(install) == 0
+
+    remove = build_parser().parse_args([
+        "remove-instruction",
+        "--path",
+        str(agents),
+        "--skills-dir",
+        str(skills),
+        "--dry-run",
+    ])
+    assert instruction._cmd_remove_instruction(remove) == 0
+
+    assert (skills / instruction.SKILL_NAME / "SKILL.md").is_file()
+    assert instruction.begin(BINARY) in agents.read_text(encoding="utf-8")
+
+
+def test_cli_remove_without_a_skills_dir_touches_no_skill(tmp_path: pathlib.Path) -> None:
+    """An inline host passes an empty --skills-dir and must not error on the skill step."""
+    agents = tmp_path / "AGENTS.md"
+    instruction.install(agents, BINARY)
+
+    remove = build_parser().parse_args(["remove-instruction", "--path", str(agents), "--skills-dir", ""])
+    assert instruction._cmd_remove_instruction(remove) == 0
+    assert instruction.begin(BINARY) not in agents.read_text(encoding="utf-8")
