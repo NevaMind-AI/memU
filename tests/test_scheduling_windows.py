@@ -185,27 +185,32 @@ def test_builders_escape_single_quotes_in_paths() -> None:
 
 
 def test_pipeline_prompt_matches_the_bridging_doc() -> None:
-    # The prompt exists twice — this code builder and the doc's cron block — and the
-    # PR promised they stay verbatim. Lock it here: drift fails a test, not silently later.
+    # The prompt exists twice — this code builder and the doc's pipeline-prompt.txt
+    # block (the single-line fence the Unix registration step writes to disk) — and
+    # they must stay verbatim. Lock it here: drift fails a test, not silently later.
     from importlib.resources import files
 
     doc = (files("memu.hosts.claude_code") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
-    cron_line = next(line for line in doc.splitlines() if "claude -p 'Run the memU" in line)
-    doc_prompt = cron_line.split("claude -p '", 1)[1].rstrip()
-    assert doc_prompt.endswith("'")
-    assert doc_prompt[:-1] == prompt.bridging_pipeline_prompt(CLAUDE)
+    doc_prompt = next(
+        line.strip()
+        for line in doc.splitlines()
+        if line.strip().startswith("Run the memU bridging pipeline.")
+    )
+    assert doc_prompt == prompt.bridging_pipeline_prompt(CLAUDE)
 
 
 def test_cursor_pipeline_prompt_matches_the_bridging_doc() -> None:
     # Wiring cursor makes bridging_pipeline_prompt(CURSOR) live on Windows; lock its
-    # guide's cron block to the canon the same way claude's is locked.
+    # guide's pipeline-prompt.txt block to the canon the same way claude's is locked.
     from importlib.resources import files
 
     doc = (files("memu.hosts.cursor") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
-    cron_line = next(line for line in doc.splitlines() if "-p 'Run the memU" in line)
-    doc_prompt = cron_line.split("-p '", 1)[1].rstrip()
-    assert doc_prompt.endswith("'")
-    assert doc_prompt[:-1] == prompt.bridging_pipeline_prompt(CURSOR)
+    doc_prompt = next(
+        line.strip()
+        for line in doc.splitlines()
+        if line.strip().startswith("Run the memU bridging pipeline.")
+    )
+    assert doc_prompt == prompt.bridging_pipeline_prompt(CURSOR)
 
 
 def test_install_rejects_nonpositive_interval(

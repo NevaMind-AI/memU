@@ -1,16 +1,18 @@
 """The bridging pipeline prompt, as data.
 
 The scheduled bridging task is a headless agent run whose prompt is the four-step
-prepare -> self-evolve -> commit pipeline. On Unix that prompt is pasted verbatim
-into the crontab (see each host's ``BRIDGING_TASK.md``). The Windows ``schedule``
-helper can't push a ~1000-character quoted string through Task Scheduler, so it
-writes the prompt to a file the wrapper reads — which means the prompt has to
-exist as a value here, not only inside the guide.
+prepare -> self-evolve -> commit pipeline. Neither scheduler can carry the
+~1200-character quoted prompt on its command line — cron truncates crontab lines
+around 1 KB, and Task Scheduler's ``/TR`` splits on the first space — so on both
+platforms the prompt lives in a file the scheduled wrapper reads (Unix:
+``pipeline-prompt.txt`` + ``bridge.sh``, see each host's ``BRIDGING_TASK.md``;
+Windows: the ``schedule`` helper writes it) — which means the prompt has to exist
+as a value here, not only inside the guide.
 
 Parameterized by :class:`~memu.hosts.host_cli.HostSpec` (working tree + binary) so
 one text serves every host. It mirrors the canonical prompt in each host's
-``BRIDGING_TASK.md`` cron block; if you change one, change both. (A test asserting
-the two agree is a good follow-up — today they are kept in sync by hand.)
+``BRIDGING_TASK.md`` prompt-file block; if you change one, change both — a test
+in ``test_scheduling_windows.py`` asserts the two agree.
 """
 
 from __future__ import annotations
