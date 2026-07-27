@@ -15,6 +15,7 @@ import sqlite3
 from memu.hosts.base import RecordKind
 from memu.hosts.claude_code.sessions import ClaudeCodeTranscriptSource
 from memu.hosts.codex.sessions import CodexTranscriptSource
+from memu.hosts.cola.sessions import ColaTranscriptSource
 from memu.hosts.cursor.sessions import CursorTranscriptSource
 from memu.hosts.hermes.sessions import HermesTranscriptSource
 from memu.hosts.openclaw.sessions import OpenClawTranscriptSource
@@ -23,6 +24,43 @@ from memu.hosts.workbuddy.sessions import WorkBuddyTranscriptSource
 
 def _line(entry: dict) -> str:
     return json.dumps(entry)
+
+
+# ── Cola ──────────────────────────────────────────────────────────────────────
+
+
+def test_cola_classifies_message_and_tool_rows() -> None:
+    source = ColaTranscriptSource()
+    user = {"type": "message", "message": {"role": "user", "content": [{"type": "text", "text": "hi"}]}}
+    assistant = {"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": "hello"}]}}
+    tool_call = {"type": "message", "message": {"role": "assistant", "content": [{"type": "toolCall"}]}}
+    tool_result = {"type": "message", "message": {"role": "toolResult", "content": [{"type": "text", "text": "ok"}]}}
+    assert source.classify(_line(user)) is RecordKind.MESSAGE
+    assert source.classify(_line(assistant)) is RecordKind.MESSAGE
+    assert source.classify(_line(tool_call)) is RecordKind.TOOL
+    assert source.classify(_line(tool_result)) is RecordKind.TOOL
+
+
+def test_cola_drops_runtime_metadata_and_reads_nested_timestamp() -> None:
+    source = ColaTranscriptSource()
+    metadata = {"type": "model_change", "timestamp": "2026-07-26T09:37:18.122Z"}
+    message = {
+        "type": "message",
+        "message": {
+            "role": "user",
+            "timestamp": "2026-07-26T09:37:18.124Z",
+            "content": [{"type": "text", "text": "hi"}],
+        },
+    }
+    assert source.classify(_line(metadata)) is RecordKind.OTHER
+    assert source.timestamp(_line(message)) == "2026-07-26T09:37:18.124Z"
+
+
+def test_cola_discovers_scope_transcripts(tmp_path: pathlib.Path) -> None:
+    transcript = tmp_path / "desktop-local" / "session.jsonl"
+    transcript.parent.mkdir()
+    transcript.write_text('{"type":"message"}\n', encoding="utf-8")
+    assert ColaTranscriptSource(tmp_path).discover() == [transcript]
 
 
 # ── Codex ──────────────────────────────────────────────────────────────────────

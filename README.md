@@ -24,7 +24,7 @@ memU is a lightweight, agent-driven memory system that gives users a shared LLM 
 
 ## Quick start
 
-memU works with Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy, and more. See [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
+memU works with Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy, Cola, and more. See [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
 
 **Cross-device · Free · Unlimited · [View online](https://memu.so)**
 
@@ -82,6 +82,7 @@ memU runs as a sidecar to a desktop agent, one binary per host. Each binds two s
 | OpenClaw | `memu-openclaw` | `~/.openclaw/agents/<agentId>/sessions/*.jsonl` | `~/.openclaw/workspace/AGENTS.md` |
 | Hermes Agent | `memu-hermes` | `~/.hermes/state.db` (SQLite, read-only) | `~/.hermes/SOUL.md` |
 | WorkBuddy | `memu-workbuddy` | `~/.workbuddy/projects/<project>/<session>.jsonl` | `~/.workbuddy/SOUL.md` |
+| Cola | `memu-cola` | `~/.cola/sessions/<scope>/<session>.jsonl` | `~/.cola/memory-bank/MEMORY.md` |
 | **any other agent** | `memu-agent` | found by `memu-agent detect` (JSONL dialect sniffed) | found by `detect` (AGENTS.md / CLAUDE.md / SOUL.md / …) |
 
 For agents without a dedicated binary, `memu-agent detect` probes the machine and reports per agent whether **memorization** works (a recognizable session log exists) and whether **retrieval** works (an instruction file exists to patch) — then the same verbs run against what it found.
