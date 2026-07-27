@@ -36,6 +36,7 @@ def _migration_parser(current: pathlib.Path, legacy: pathlib.Path) -> argparse.A
         path=str(current),
         binary=WORKBUDDY_BINARY,
         legacy_paths=(str(legacy),),
+        inline_preamble=WORKBUDDY_SPEC.inline_instruction_preamble,
     )
     return parser
 
@@ -150,6 +151,31 @@ def test_workbuddy_defaults_to_soul_as_an_inline_host() -> None:
     assert args.path == WORKBUDDY_SOUL_MD
     assert args.legacy_paths == (WORKBUDDY_LEGACY_MEMORY_MD,)
     assert WORKBUDDY_SPEC.skills_dir == ""
+    assert args.inline_preamble == WORKBUDDY_SPEC.inline_instruction_preamble
+
+
+def test_workbuddy_inline_instruction_names_bash_as_the_cli_runner() -> None:
+    text = instruction.instruction(
+        WORKBUDDY_BINARY,
+        inline_preamble=WORKBUDDY_SPEC.inline_instruction_preamble,
+    )
+
+    assert "WorkBuddy's `bash` tool" in text
+    assert "command-line executable" in text
+    assert "not a WorkBuddy tool" in text
+    assert "Do not silently treat an execution failure" in text
+    assert "memu-workbuddy retrieve" in text
+
+
+def test_workbuddy_inline_preamble_does_not_change_other_host_shapes() -> None:
+    preamble = WORKBUDDY_SPEC.inline_instruction_preamble
+
+    hermes = instruction.instruction("memu-hermes")
+    assert "WorkBuddy" not in hermes
+    assert "`bash` tool" not in hermes
+
+    codex_pointer = instruction.instruction(BINARY, skill=True)
+    assert instruction.instruction(BINARY, skill=True, inline_preamble=preamble) == codex_pointer
 
 
 def test_default_install_migrates_the_legacy_instruction_after_writing_the_new_target(
@@ -167,6 +193,7 @@ def test_default_install_migrates_the_legacy_instruction_after_writing_the_new_t
 
     soul_text = soul.read_text(encoding="utf-8")
     assert "# My identity" in soul_text
+    assert "WorkBuddy's `bash` tool" in soul_text
     assert "memu-workbuddy retrieve" in soul_text
     assert soul_text.count(instruction.begin(WORKBUDDY_BINARY)) == 1
     assert memory.read_text(encoding="utf-8") == "# My memories\n"

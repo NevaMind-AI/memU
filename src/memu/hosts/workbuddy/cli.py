@@ -33,6 +33,16 @@ MEMORY_MD = "~/.workbuddy/MEMORY.md"
 """The legacy inject target. Existing installs are migrated from this file when
 ``install-instruction`` runs against the default ``SOUL_MD`` target."""
 
+INLINE_INSTRUCTION_PREAMBLE = """\
+`memu-workbuddy` is a command-line executable on `PATH`, not a WorkBuddy tool
+name. Use WorkBuddy's `bash` tool to execute the command below. Do not look for a
+tool named `memu-workbuddy`.
+
+If the `bash` tool is unavailable or the command fails, report that memU retrieval
+is unavailable. Do not silently treat an execution failure as an empty retrieval
+result.
+"""
+
 SPEC = HostSpec(
     host=HOST,
     display="WorkBuddy",
@@ -42,6 +52,7 @@ SPEC = HostSpec(
     session_help="WorkBuddy session log (one project dir per escaped cwd)",
     instruction_path=SOUL_MD,
     legacy_instruction_paths=(MEMORY_MD,),
+    inline_instruction_preamble=INLINE_INSTRUCTION_PREAMBLE,
 )
 
 
