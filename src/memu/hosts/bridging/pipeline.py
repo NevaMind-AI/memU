@@ -90,13 +90,18 @@ async def prepare(
         memory_template=templates.resolve(templates.MEMORY_JOB, MEMORY_JOB_TEMPLATE),
         skill_template=templates.resolve(templates.SKILL_JOB, SKILL_JOB_TEMPLATE),
     )
-    prepare_resource_job(
-        job_dir=layout.jobs,
-        verify_command=verify_command,
-        resource_file=layout.resources,
-        job_index=2 * num_sessions + 1,
-        template=templates.resolve(templates.RESOURCE_JOB, RESOURCE_JOB_TEMPLATE),
-    )
+    # The resource job describes files the skill jobs logged as touched. With no
+    # sessions there are no skill jobs, so the touched-file log stays empty and
+    # there is nothing to describe — skipping keeps a no-new-session run a true
+    # no-op instead of a pointless agent pass over an empty log.
+    if num_sessions:
+        prepare_resource_job(
+            job_dir=layout.jobs,
+            verify_command=verify_command,
+            resource_file=layout.resources,
+            job_index=2 * num_sessions + 1,
+            template=templates.resolve(templates.RESOURCE_JOB, RESOURCE_JOB_TEMPLATE),
+        )
     return num_sessions
 
 
@@ -123,4 +128,17 @@ async def commit(layout: Layout) -> dict[str, Any]:
     pending = layout.session_manifest_pending
     if pending.exists():
         os.replace(pending, layout.session_manifest)
+
+    # The run is durable, so clear this run's ephemeral working files: the job
+    # instructions, the session slices they mine, and the touched-file log.
+    # Done strictly last — after the store accepted the submission and the
+    # cursor/snapshot advanced — so a crash anywhere earlier leaves jobs/ and
+    # sessions/ intact and the next run's LEFTOVERS step recovers them. Without
+    # this, a *successful* run's jobs survive too, and every following run
+    # re-mines already-committed sessions before prepare wipes them.
+    for stale in layout.jobs.glob("*.txt"):
+        stale.unlink()
+    for stale in layout.sessions.glob("*.jsonl"):
+        stale.unlink()
+    layout.resource_log.unlink(missing_ok=True)
     return result
