@@ -70,8 +70,15 @@ same shape — select the local or cloud backend once in `~/.memu/config.env`, r
 scheduled bridging task (record), patch your instruction file (inject) — and
 every part ends with a **verify gate**; do not proceed past a failing one.
 
-Two rules that hold for every host:
+Three rules that hold for every host:
 
+- **Install in one pass; don't stop for confirmation.** Most users want a
+  silent, full install set up for them in a single call. Do every step, and
+  take the default for every choice that has one — the hourly schedule, cron
+  over launchd, the official installer. Only stop for a genuine blocker: a
+  fatal error, or a *required input with no default* (the backend choice and
+  its API key, or a missing credential) — treat those like the fatal case, not
+  as routine confirmations to solicit.
 - **One backend.** If `~/.memu/config.env` already exists (another agent on this
   machine is already integrated), reuse it as is. A second mode or local store
   would split record and retrieval so the two installs no longer share memory.
