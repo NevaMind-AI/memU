@@ -113,6 +113,36 @@ async def test_files_from_a_died_run_stay_committable(rig) -> None:
     assert "orphan" in submitted
 
 
+async def test_commit_clears_this_runs_working_files(rig) -> None:
+    """A durable commit wipes the ephemeral working dirs, so the next run's
+    LEFTOVERS step re-processes nothing that was already committed."""
+    source, layout, _ = rig
+
+    await prepare(source, layout, verify_command="x verify-resources")
+    assert list(layout.jobs.glob("*.txt")), "prepare should have written job files"
+    assert list(layout.sessions.glob("*.jsonl")), "prepare should have written session slices"
+
+    await commit(layout)
+
+    assert list(layout.jobs.glob("*.txt")) == [], "commit must clear the job instructions"
+    assert list(layout.sessions.glob("*.jsonl")) == [], "commit must clear the session slices"
+    assert not layout.resource_log.exists(), "commit must clear the touched-file log"
+
+
+async def test_prepare_skips_the_resource_job_when_no_new_sessions(rig) -> None:
+    """No sessions means no skill jobs to populate the touched-file log, so the
+    resource-describe job has nothing to do and is not written at all."""
+    source, layout, _ = rig
+
+    await prepare(source, layout, verify_command="x verify-resources")
+    await commit(layout)  # spend the batch
+
+    n = await prepare(source, layout, verify_command="x verify-resources")
+
+    assert n == 0
+    assert list(layout.jobs.glob("*.txt")) == [], "a no-new-session prepare writes no jobs at all"
+
+
 async def test_snapshot_is_retaken_at_commit_so_reruns_are_clean(rig) -> None:
     source, layout, service = rig
 
