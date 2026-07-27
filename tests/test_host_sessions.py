@@ -44,7 +44,14 @@ def test_cola_classifies_message_and_tool_rows() -> None:
 def test_cola_drops_runtime_metadata_and_reads_nested_timestamp() -> None:
     source = ColaTranscriptSource()
     metadata = {"type": "model_change", "timestamp": "2026-07-26T09:37:18.122Z"}
-    message = {"type": "message", "message": {"role": "user", "timestamp": "2026-07-26T09:37:18.124Z", "content": [{"type": "text", "text": "hi"}]}}
+    message = {
+        "type": "message",
+        "message": {
+            "role": "user",
+            "timestamp": "2026-07-26T09:37:18.124Z",
+            "content": [{"type": "text", "text": "hi"}],
+        },
+    }
     assert source.classify(_line(metadata)) is RecordKind.OTHER
     assert source.timestamp(_line(message)) == "2026-07-26T09:37:18.124Z"
 

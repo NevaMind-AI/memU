@@ -44,11 +44,20 @@ run's prompt must instruct the agent to do it, not shell out to a script.
 
 - **memU is installed and `memu-claude-code` is on `PATH`.** Verify with
   `memu-claude-code doctor`; if it fails, do `INSTALL.md` Part 1 first.
+- **A standalone, headless-authenticated `claude` is on `PATH`.** The Desktop
+  app cannot serve a scheduled run — its binary is off-`PATH` and its login is
+  invisible to the CLI (memU#538). `INSTALL.md` Part 2.0 is the install +
+  bare-environment verify procedure; on Windows, `schedule install` runs the
+  same gate and refuses with guidance if it fails.
 - **A headless run can execute the pipeline.** The scheduled run invokes
   `claude -p` non-interactively, so the commands and paths the pipeline touches
-  must be pre-authorized: allow `Bash(memu-claude-code *)` and writes under
-  `~/.memu/` in `~/.claude/settings.json` permissions. Do **not** reach for a
-  blanket permission-skip flag; the pipeline needs exactly those two things.
+  must be pre-authorized in `~/.claude/settings.json` permissions with exactly
+  these two rules: `Bash(memu-claude-code *)` and `Edit(~/.memu/**)`. The file
+  rule must be `Edit(...)` — a `Write(~/.memu/**)` rule is silently ignored
+  (the CLI itself warns that only `Edit` rules cover the file-editing tools;
+  field data: an install shipped the `Write` form and every run carried the
+  warning). Do **not** reach for a blanket permission-skip flag; the pipeline
+  needs exactly those two things.
 
 ## Step 1 — settle the schedule
 
@@ -118,7 +127,7 @@ memu-claude-code schedule uninstall   # remove it
 
 `install` writes the prompt to a file plus a small PowerShell wrapper that reads
 it (nothing long ever touches the command line), bakes in the absolute path to
-`claude`, and registers a task named `\memU\memu-bridging-claude-code` under an
+`claude`, and registers a task named `\memU\memu-remember-claude-code` under an
 **S4U** principal — it runs whether or not you're logged in, windowless, and
 catches up a run missed while the machine was off. `--interval <minutes>` changes
 the cadence (default 60).
@@ -130,11 +139,14 @@ install than to register a task that reports success and never runs.
 
 > **The credential must be persistent.** The task runs headless under an S4U
 > principal (session 0) and inherits only persistent user/machine environment and
-> your user profile — **not** a session-only `$env:` export. Use `claude
-> setup-token` (writes a token into your profile) or set `CLAUDE_CODE_OAUTH_TOKEN` /
-> `ANTHROPIC_API_KEY` as a persistent user variable (`setx`). A token exported only
-> in the current shell passes the install-time check yet leaves the task stuck on
-> "Not logged in" — the one false-positive the gate can't catch by itself.
+> your user profile — **not** a session-only `$env:` export. Either option
+> from `INSTALL.md` Part 2.0 works — exactly two, "skip" is not one: **Web
+> auth** (recommended; `claude setup-token`, subscription — interactive; run
+> it start-to-finish per Part 2.0, never in a background shell; the
+> credential lands in the profile) or an **Anthropic API key** (persist with
+> `setx`). A token exported only in the
+> install-time check yet leaves the task stuck on "Not logged in" — the one
+> false-positive the gate can't catch by itself.
 
 Confirm the same way Step 3 does — by filesystem traces, not the run's own
 summary: after a run, check that `~/.memu/hosts/claude-code/jobs/` timestamps and

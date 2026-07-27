@@ -120,8 +120,20 @@ def read_resources(resource_file: Path) -> list[dict[str, Any]]:
     return records
 
 
-def prepare_resource_job(job_dir: Path, verify_command: str, resource_file: Path, job_index: int) -> None:
-    """Write the resource-describe job as ``<job_index>.txt`` under ``job_dir``."""
-    instruction = RESOURCE_JOB_TEMPLATE.format(verify_command=verify_command, resource_file=resource_file)
+def prepare_resource_job(
+    job_dir: Path,
+    verify_command: str,
+    resource_file: Path,
+    job_index: int,
+    *,
+    template: str = RESOURCE_JOB_TEMPLATE,
+) -> None:
+    """Write the resource-describe job as ``<job_index>.txt`` under ``job_dir``.
+
+    ``template`` defaults to the embedded constant and is overridden by
+    :func:`~memu.hosts.bridging.pipeline.prepare` with the server's current copy
+    when it is reachable (:mod:`memu.hosts.templates`).
+    """
+    instruction = template.format(verify_command=verify_command, resource_file=resource_file)
     job_dir.mkdir(parents=True, exist_ok=True)
     (job_dir / f"{job_index}.txt").write_text(instruction, encoding="utf-8")

@@ -37,6 +37,36 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
                 result[recall_file.id] = recall_file
         return result
 
+    def list_recall_files_page(
+        self,
+        where: Mapping[str, Any] | None,
+        *,
+        after: tuple[str, str, str] | None,
+        limit: int,
+    ) -> tuple[list[RecallFile], tuple[str, str, str] | None]:
+        """One keyset page ordered by ``(track, name, id)`` (ADR 0014)."""
+        from sqlalchemy import tuple_
+        from sqlmodel import select
+
+        model = self._sqla_models.RecallFile
+        filters = self._build_filters(model, where)
+        with self._sessions.session() as session:
+            stmt = select(model).where(*filters)
+            if after is not None:
+                # Row-value keyset: resume strictly after the last row seen.
+                stmt = stmt.where(tuple_(model.track, model.name, model.id) > after)
+            # One extra row reveals whether a further page exists; trimmed below.
+            stmt = stmt.order_by(model.track, model.name, model.id).limit(limit + 1)
+            rows = session.scalars(stmt).all()
+            has_more = len(rows) > limit
+            rows = rows[:limit]
+            files: list[RecallFile] = []
+            for row in rows:
+                row.embedding = self._normalize_embedding(row.embedding)
+                files.append(self._cache_recall_file(row))
+        next_after = (files[-1].track, files[-1].name, files[-1].id) if has_more else None
+        return files, next_after
+
     def clear_recall_files(self, where: Mapping[str, Any] | None = None) -> dict[str, RecallFile]:
         from sqlmodel import delete, select
 

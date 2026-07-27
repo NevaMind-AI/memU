@@ -29,9 +29,10 @@ import urllib.request
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from importlib.resources import files
+from pathlib import Path
 from typing import Any
 
-from memu.hosts import instruction, retrieval
+from memu.hosts import instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging import Layout, commit, prepare
 from memu.hosts.bridging.pipeline import MAX_JOBS
@@ -64,6 +65,12 @@ class HostSpec:
 
     instruction_path: str
     """The host's global instruction file — where the inject seam lands."""
+
+    legacy_instruction_paths: tuple[str, ...] = ()
+    """Previous default instruction files to unpatch after installing the current
+    target, and to inspect during uninstall. Only used when the CLI's default
+    ``--path`` is in effect, so an explicit custom target never rewrites unrelated
+    files. This is an upgrade seam, not a second active instruction location."""
 
     skills_dir: str = ""
     """The host's skills directory, for hosts that have skills (``~/.codex/skills``,
@@ -137,6 +144,24 @@ def _layout(spec: HostSpec, args: argparse.Namespace) -> Layout:
     return Layout.default(host=spec.host, base=args.base_dir)
 
 
+def _refresh_retrieval(spec: HostSpec) -> None:
+    """Piggyback the retrieval-procedure refresh on the scheduled prepare.
+
+    The retrieval body self-updates from the server on this low-frequency run
+    instead of on the per-turn retrieve hook, which must never fetch. Best-effort
+    and firewalled: any failure here is a note, never a failed bridging run — and
+    :func:`instruction.refresh` skips (rather than downgrades) when the server is
+    unreachable, so a note here means the installed copy simply stayed put.
+    """
+    skills_dir = Path(spec.skills_dir) if spec.skills_dir else None
+    try:
+        for target, changed in instruction.refresh(Path(spec.instruction_path), spec.binary, skills_dir=skills_dir):
+            if changed:
+                print(f"refreshed the retrieval procedure at {target}")
+    except Exception as exc:
+        print(f"note: could not refresh the retrieval procedure ({exc})", file=sys.stderr)
+
+
 async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
     source = spec.source_factory(args.session_dir)
     if not source.exists():
@@ -149,6 +174,7 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
     print(f"prepared {num_sessions} session(s) -> {num_jobs} job(s) in {layout.jobs}")
     if num_sessions == 0:
         print("no new session turns since the last run; nothing to mine")
+    _refresh_retrieval(spec)
     return 0
 
 
@@ -276,7 +302,14 @@ async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
 
 
 async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
-    print((files(spec.package) / DOCS[args.doc]).read_text(encoding="utf-8"))
+    # Server-first, then last-good cache, then the embedded floor — the same
+    # self-updating shape ADR 0013 gives the instruction templates, applied to the
+    # host guides. `docs task` prints the guide named BRIDGING_TASK.md; the doc key
+    # ("task") and its filename differ, and both the URL and cache key off the
+    # filename so the server layout mirrors the package layout.
+    filename = DOCS[args.doc]
+    embedded = (files(spec.package) / filename).read_text(encoding="utf-8")
+    print(templates.resolve_doc(spec.host, filename, embedded))
     return 0
 
 
@@ -334,7 +367,13 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     # Shared across hosts, so they are registered, not redefined — only the file
     # the instruction lands in and the binary it names are ours to fill in.
     retrieval.register(sub)
-    instruction.register(sub, path=spec.instruction_path, binary=spec.binary, skills_dir=spec.skills_dir)
+    instruction.register(
+        sub,
+        path=spec.instruction_path,
+        binary=spec.binary,
+        skills_dir=spec.skills_dir,
+        legacy_paths=spec.legacy_instruction_paths,
+    )
 
     p = with_base(sub.add_parser("prepare", help=f"Slice new {spec.display} sessions into self-evolve job files"))
     # A host with no universal session location (the generic adapter) leaves

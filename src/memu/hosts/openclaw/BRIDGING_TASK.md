@@ -54,7 +54,7 @@ hour**, cron `0 * * * *` (local time). Confirm before creating.
 
 ## Step 2 — create the cron job
 
-Create an OpenClaw cron job (e.g. named `memu-bridging`) with the chosen
+Create an OpenClaw cron job (e.g. named `memu-remember`) with the chosen
 schedule, and set its recurring prompt to this block **verbatim**:
 
 **The scheduled turn runs in the gateway's environment, not your shell.** The

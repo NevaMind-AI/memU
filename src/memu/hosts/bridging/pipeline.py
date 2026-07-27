@@ -15,12 +15,13 @@ import os
 from typing import Any
 
 from memu.env import build_agentic_memory_backend_from_env
+from memu.hosts import templates
 from memu.hosts.base import TranscriptSource
-from memu.hosts.bridging.instructions import prepare_instruction_jobs
+from memu.hosts.bridging.instructions import MEMORY_JOB_TEMPLATE, SKILL_JOB_TEMPLATE, prepare_instruction_jobs
 from memu.hosts.bridging.layout import TRACK_DIRS, Layout
 from memu.hosts.bridging.manifest import diff_tracked, snapshot_tracked
 from memu.hosts.bridging.recall_files import read_recall_file, write_recall_file
-from memu.hosts.bridging.resources import prepare_resource_job, read_resources
+from memu.hosts.bridging.resources import RESOURCE_JOB_TEMPLATE, prepare_resource_job, read_resources
 from memu.hosts.bridging.transcripts import prepare_transcripts
 
 MAX_JOBS = 10
@@ -52,13 +53,21 @@ async def prepare(
     # "state as of the last commit". Re-snapshotting on every prepare would
     # absorb files a crashed run wrote but never committed, making them
     # undiffable — and therefore uncommittable — forever.
+    # list_all_recall_files returns one keyset page per call (ADR 0014); follow
+    # next_cursor to mirror every file, writing each page to disk as it arrives
+    # so the whole store is never held in memory at once.
     backend = build_agentic_memory_backend_from_env()
-    result = await backend.list_all_recall_files()
-    for recall_file in result["recall_files"]:
-        subdir = TRACK_DIRS.get(recall_file.get("track"))
-        if subdir is None:
-            continue
-        write_recall_file(layout.base, subdir, recall_file)
+    cursor: str | None = None
+    while True:
+        result = await backend.list_all_recall_files(cursor=cursor)
+        for recall_file in result["recall_files"]:
+            subdir = TRACK_DIRS.get(recall_file.get("track"))
+            if subdir is None:
+                continue
+            write_recall_file(layout.base, subdir, recall_file)
+        cursor = result.get("next_cursor")
+        if not cursor:
+            break
     if not layout.memory_manifest.exists():
         snapshot_tracked(layout.base, layout.track_dirs, layout.memory_manifest)
 
@@ -67,6 +76,10 @@ async def prepare(
     # eventually crowd out every file the current run actually touched.
     layout.resource_log.unlink(missing_ok=True)
 
+    # Pull the current job templates from the server, each falling back to its
+    # last-good cache and then the embedded copy (:mod:`memu.hosts.templates`).
+    # prepare is low-frequency and latency-tolerant, so pulling every run is fine;
+    # a total outage silently degrades to the embedded text the SDK shipped with.
     prepare_instruction_jobs(
         job_dir=layout.jobs,
         session_dir=layout.sessions,
@@ -74,13 +87,21 @@ async def prepare(
         skill_dir=layout.skill,
         resource_log=layout.resource_log,
         num_sessions=num_sessions,
+        memory_template=templates.resolve(templates.MEMORY_JOB, MEMORY_JOB_TEMPLATE),
+        skill_template=templates.resolve(templates.SKILL_JOB, SKILL_JOB_TEMPLATE),
     )
-    prepare_resource_job(
-        job_dir=layout.jobs,
-        verify_command=verify_command,
-        resource_file=layout.resources,
-        job_index=2 * num_sessions + 1,
-    )
+    # The resource job describes files the skill jobs logged as touched. With no
+    # sessions there are no skill jobs, so the touched-file log stays empty and
+    # there is nothing to describe — skipping keeps a no-new-session run a true
+    # no-op instead of a pointless agent pass over an empty log.
+    if num_sessions:
+        prepare_resource_job(
+            job_dir=layout.jobs,
+            verify_command=verify_command,
+            resource_file=layout.resources,
+            job_index=2 * num_sessions + 1,
+            template=templates.resolve(templates.RESOURCE_JOB, RESOURCE_JOB_TEMPLATE),
+        )
     return num_sessions
 
 
@@ -107,4 +128,17 @@ async def commit(layout: Layout) -> dict[str, Any]:
     pending = layout.session_manifest_pending
     if pending.exists():
         os.replace(pending, layout.session_manifest)
+
+    # The run is durable, so clear this run's ephemeral working files: the job
+    # instructions, the session slices they mine, and the touched-file log.
+    # Done strictly last — after the store accepted the submission and the
+    # cursor/snapshot advanced — so a crash anywhere earlier leaves jobs/ and
+    # sessions/ intact and the next run's LEFTOVERS step recovers them. Without
+    # this, a *successful* run's jobs survive too, and every following run
+    # re-mines already-committed sessions before prepare wipes them.
+    for stale in layout.jobs.glob("*.txt"):
+        stale.unlink()
+    for stale in layout.sessions.glob("*.jsonl"):
+        stale.unlink()
+    layout.resource_log.unlink(missing_ok=True)
     return result

@@ -16,7 +16,11 @@ Uninstalling is the install run in reverse, and it is three parts:
 **One store, many hosts.** `~/.memu/config.env` and the store it names may be
 shared by other memU host adapters on this machine (`memu-claude-code`,
 `memu-codex`, …). Removing *this* host's seams never requires touching the
-shared store; Part 3 spells out when touching it is safe at all.
+shared store; Part 3 spells out when touching it is safe at all. Those other
+adapters are **out of scope here** — this guide uninstalls the OpenClaw host
+only. Never touch, unpatch, or run the uninstall for another host: leave its
+working tree under `~/.memu/hosts/` (e.g. `~/.memu/hosts/codex/`) and its
+instruction file exactly as they are.
 
 ---
 
@@ -51,16 +55,15 @@ left is already the desired end state. If this install used a non-default
 workspace (`OPENCLAW_WORKSPACE_DIR`, or a profile), pass
 `--path <workspace>/AGENTS.md`.
 
-The block pointed at the `memu-retrieve` skill; remove that too. The directory
-is memU's own — the install wrote it whole, so it goes whole:
-
-```
-rm -r ~/.openclaw/skills/memu-retrieve
-```
-
-(For a non-default `OPENCLAW_STATE_DIR`, it sits under `<state-dir>/skills/`
-instead.) Other entries in `~/.openclaw/skills/` are the user's or OpenClaw's —
-leave them alone.
+The same command takes the skill the block pointed at out too — memU's own
+`memu-retrieve` directory under `~/.openclaw/skills/`. It comes out after the
+pointer, so nothing is ever left aiming at a deleted skill; the directory is
+memU's own (installed whole, so it goes whole), while a same-named directory
+without memU's `SKILL.md` and the user's or OpenClaw's other entries in
+`~/.openclaw/skills/` are left alone. So there is nothing to remove by hand. If
+this install used a non-default `OPENCLAW_STATE_DIR`, the skill sits under
+`<state-dir>/skills/` — pass `--skills-dir <state-dir>/skills` so removal finds
+it.
 
 ### ✅ Verify Part 2
 
@@ -94,11 +97,15 @@ Only one thing overrides a default: the user's own explicit words.
   cursor above; and `~/.openclaw/workspace/AGENTS.md` itself
   **if** Part 2 left it empty (it held only memU's block, so the install
   created it) — a file with the user's own content stays, of course.
-- **Uninstall the package** — `pip uninstall memu-cli` (or `pipx uninstall
-  memu-cli` — match how it was installed) — **unless** another host adapter is
-  still integrated on this machine (another host's instruction file still
-  carries a memU block, or its bridging task still exists). Then the package
-  stays, and the report says which host is still using it.
+- **Uninstall the package — only if this is the last memU host.** `memu-cli` is
+  shared by every host adapter, so uninstall it (`pip uninstall memu-cli`, or
+  `pipx uninstall memu-cli` — match how it was installed) **only once no other
+  host is still integrated on this machine.** To check, list `~/.memu/hosts/`:
+  any directory there *other than* this host's own `~/.memu/hosts/openclaw/`
+  (which may survive, holding just the kept session cursor) is another live
+  host — confirm it by its instruction file still carrying a memU block, or its
+  bridging task still existing. If any other host remains, leave `memu-cli`
+  installed and name the surviving host(s) in the report.
 
 ### ✅ Done
 

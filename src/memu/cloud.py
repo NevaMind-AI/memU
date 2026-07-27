@@ -116,8 +116,18 @@ class CloudMemoryClient:
     async def list_all_recall_files(
         self,
         where: dict[str, Any] | None = None,
+        *,
+        cursor: str | None = None,
+        limit: int | None = None,
     ) -> dict[str, Any]:
-        return await self._request("GET", "", params=self._scope(where))
+        # One page per call: the server paginates (ADR 0014) and the caller
+        # follows ``next_cursor``. The cursor is opaque here — forwarded as-is.
+        params = self._scope(where)
+        if cursor:
+            params["cursor"] = cursor
+        if limit is not None:
+            params["limit"] = str(limit)
+        return await self._request("GET", "", params=params)
 
     async def progressive_retrieve(
         self,

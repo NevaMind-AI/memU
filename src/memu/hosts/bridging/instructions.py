@@ -152,6 +152,9 @@ def prepare_instruction_jobs(
     skill_dir: Path,
     resource_log: Path,
     num_sessions: int,
+    *,
+    memory_template: str = MEMORY_JOB_TEMPLATE,
+    skill_template: str = SKILL_JOB_TEMPLATE,
 ) -> None:
     """Write per-session job-instruction files under ``job_dir``.
 
@@ -160,20 +163,24 @@ def prepare_instruction_jobs(
     (mining ``<idx>_full.jsonl``). Memory jobs are numbered first (1..N), skill
     jobs after them (N+1..2N) — ordering is load-bearing, since the skill jobs
     are what populate ``resource_log`` for the resource job that comes last.
+
+    ``memory_template``/``skill_template`` default to the embedded constants and
+    are overridden by :func:`~memu.hosts.bridging.pipeline.prepare` with the
+    server's current copy when it is reachable (:mod:`memu.hosts.templates`).
     """
     job_dir.mkdir(parents=True, exist_ok=True)
     for stale in job_dir.glob("*.txt"):
         stale.unlink()
 
     for idx in range(1, num_sessions + 1):
-        instruction = MEMORY_JOB_TEMPLATE.format(
+        instruction = memory_template.format(
             input_path=session_dir / f"{idx}.jsonl",
             track_dir=memory_dir,
         )
         (job_dir / f"{idx}.txt").write_text(instruction, encoding="utf-8")
 
     for idx in range(1, num_sessions + 1):
-        instruction = SKILL_JOB_TEMPLATE.format(
+        instruction = skill_template.format(
             input_path=session_dir / f"{idx}_full.jsonl",
             track_dir=skill_dir,
             resource_log=resource_log,

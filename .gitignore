@@ -213,6 +213,3 @@ api_keys.txt
 .cursor
 
 .local/
-
-# Locally built Rust extension (offline dev convenience; normally built by maturin)
-src/memu/_core.abi3.so

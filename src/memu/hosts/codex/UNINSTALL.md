@@ -9,14 +9,18 @@ Uninstalling is the install run in reverse, and it is three parts:
 1. **Unregister the bridging task** — stop the scheduled job first, so nothing
    fires mid-teardown (the *record* seam).
 2. **Unpatch `~/.codex/AGENTS.md`** — remove the standing retrieval
-   instruction (the *inject* seam).
+   instruction and the `memu-retrieve` skill it points at (the *inject* seam).
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
    tooling is removed — and close by reporting both.
 
 **One store, many hosts.** `~/.memu/config.env` and the store it names may be
 shared by other memU host adapters on this machine (`memu-claude-code`,
 `memu-cursor`, …). Removing *this* host's seams never requires touching the
-shared store; Part 3 spells out when touching it is safe at all.
+shared store; Part 3 spells out when touching it is safe at all. Those other
+adapters are **out of scope here** — this guide uninstalls the Codex host only.
+Never touch, unpatch, or run the uninstall for another host: leave its working
+tree under `~/.memu/hosts/` (e.g. `~/.memu/hosts/claude-code/`) and its
+instruction file exactly as they are.
 
 ---
 
@@ -48,12 +52,20 @@ contents are backed up to `~/.codex/AGENTS.md.bak` before the rewrite.
 `--dry-run` shows the diff without writing. Re-running is a clean no-op — a
 file with no block left is already the desired end state.
 
+On Codex the block is a **pointer** to memU's `memu-retrieve` skill, installed
+at `~/.codex/skills/memu-retrieve/`. The same command takes that skill out too
+— the pointer first, then the skill, so no live instruction is ever left aiming
+at a deleted skill. The directory is memU's own (the install wrote it whole, so
+it goes whole); a same-named directory without memU's `SKILL.md` is left alone,
+as are the user's or Codex's other entries in `~/.codex/skills/`. So there is
+nothing to remove by hand.
+
 ### ✅ Verify Part 2
 
 `cat ~/.codex/AGENTS.md` — no `memu:begin`/`memu:end` markers remain, and the
-user's own content is intact. The session you are working in already loaded
-the old file, so the instruction may still be in your own context; a fresh
-session is what picks the removal up.
+user's own content is intact; `~/.codex/skills/memu-retrieve` no longer exists.
+The session you are working in already loaded the old file, so the instruction
+may still be in your own context; a fresh session is what picks the removal up.
 
 ---
 
@@ -84,11 +96,15 @@ Only one thing overrides a default: the user's own explicit words.
   `~/.codex/AGENTS.md` itself **if** Part 2
   left it empty (it held only memU's block, so the install created it) — a
   file with the user's own content stays, of course.
-- **Uninstall the package** — `pip uninstall memu-cli` (or `pipx uninstall
-  memu-cli` — match how it was installed) — **unless** another host adapter is
-  still integrated on this machine (another host's instruction file still
-  carries a memU block, or its bridging task still exists). Then the package
-  stays, and the report says which host is still using it.
+- **Uninstall the package — only if this is the last memU host.** `memu-cli` is
+  shared by every host adapter, so uninstall it (`pip uninstall memu-cli`, or
+  `pipx uninstall memu-cli` — match how it was installed) **only once no other
+  host is still integrated on this machine.** To check, list `~/.memu/hosts/`:
+  any directory there *other than* this host's own `~/.memu/hosts/codex/`
+  (which may survive, holding just the kept session cursor) is another live
+  host — confirm it by its instruction file still carrying a memU block, or its
+  bridging task still existing. If any other host remains, leave `memu-cli`
+  installed and name the surviving host(s) in the report.
 
 ### ✅ Done
 
