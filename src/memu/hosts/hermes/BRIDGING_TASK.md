@@ -54,9 +54,67 @@ hour**, cron `0 * * * *` (local time). Confirm before creating.
 
 ## Step 2 — register the scheduled run
 
+**Hermes's own native `cronjob` tool is the recommended path — use it whenever
+it is available.** It runs in the correct headless environment and takes the
+prompt as *data* (like Codex/OpenClaw schedulers do), sidestepping the crontab
+machinery and its line-length wall entirely: give it the prompt from step 1
+below and you are done. The raw-crontab route that follows is a **fallback
+only**, for setups where the native tool is unavailable — and treat it with
+suspicion proportional to its history: no install is known to have ever run
+successfully through it (the previous revision of this guide shipped a flag
+that does not exist in the Hermes CLI, and nobody hit it in the field).
+
+**Never inline the pipeline prompt in the crontab entry.** The quoted prompt is
+~1.2 KB, and cron truncates a crontab line at roughly 1 KB before handing it to
+`/bin/sh` — the shell receives a command cut off mid-quote and every tick dies
+instantly with `unexpected EOF while looking for matching "'"`, mailed to
+`/var/mail/$USER` and visible nowhere else; `hermes` never starts (field data:
+an inlined Hermes entry failed exactly this way on every tick). This is the
+Unix sibling of the Windows `schtasks /TR` limit (memU#539), and the fix is the
+same shape: **the prompt lives in a file; the crontab line stays short.**
+
+1. Write the pipeline prompt to `~/.memu/hosts/hermes/bridge-prompt.txt`,
+   this content **verbatim** as a single line:
+
+   ```
+   Run the memU bridging pipeline. Do the four steps strictly in order; do not skip a step even if the previous one looks like it produced nothing.  1. LEFTOVERS. If ~/.memu/hosts/hermes/jobs/ already contains job files, they are unfinished work from an earlier run (a crash, or the install itself) — process them exactly as step 3 describes, then run:  memu-hermes commit  — and only then continue.  2. PREPARE. Run this exact command with the shell tool:  memu-hermes prepare  — it regenerates ~/.memu/hosts/hermes/jobs/. If the command exits non-zero, stop and report the error.  3. SELF-EVOLVE. List ~/.memu/hosts/hermes/jobs/*.txt and process them in ascending numeric order (1.txt, then 2.txt, …). The count changes every run — always glob and sort. If there are no job files, skip to step 4. For each job file: read it and follow its instructions to the letter. Each job is self-contained and already carries the concrete paths it needs. Emitting no files for a job is a valid outcome; do not invent content.  4. COMMIT. Run this exact command with the shell tool:  memu-hermes commit  — it commits whatever the jobs created or changed. If it exits non-zero, report the error.  Finish with a one-line summary: how many jobs ran (leftovers included) and what was committed.
+   ```
+
+2. Write `~/.memu/hosts/hermes/bridge.sh` and `chmod +x` it. Note the headless
+   flag: **Hermes's one-shot flag is `-z`/`--oneshot`, not `-p`** — copying
+   another host's bridge script without fixing this flag has broken installs
+   in the field:
+
+   ```sh
+   #!/bin/sh
+   # memU bridging for Hermes — invoked by cron.
+   # The pipeline prompt lives in bridge-prompt.txt because cron truncates
+   # crontab lines around 1 KB (see BRIDGING_TASK.md).
+   DIR="$HOME/.memu/hosts/hermes"
+   # Single-instance lock: an hourly tick can fire while a long backlog run is
+   # still going; a second run would race it on jobs/ and double-commit.
+   # mkdir is atomic; a stale lock older than 3h is reclaimed. Tradeoff: a
+   # legitimate run longer than 3h loses its lock to the next tick and can
+   # double-run — accepted deliberately, because the alternative (no reclaim)
+   # lets one crashed run wedge the schedule forever. Do not "fix" one side
+   # without weighing the other.
+   LOCK="$DIR/.bridge.lock"
+   if ! mkdir "$LOCK" 2>/dev/null; then
+     if [ -n "$(find "$LOCK" -maxdepth 0 -mmin +180 2>/dev/null)" ]; then
+       rmdir "$LOCK" 2>/dev/null
+       mkdir "$LOCK" 2>/dev/null || exit 0
+     else
+       echo "$(date '+%F %T') skipped: another bridging run is in progress" >> "$DIR/bridge.log"
+       exit 0
+     fi
+   fi
+   trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
+   hermes -z "$(cat "$DIR/bridge-prompt.txt")" >> "$DIR/bridge.log" 2>&1
+   ```
+
 **The crontab's first line is a `PATH`.** cron runs with a bare
-`/usr/bin:/bin`; the binaries this entry needs (pipx and npm installs land in
-`~/.local/bin` and `/opt/homebrew/bin`) are not there, and the entry dies on
+`/usr/bin:/bin`; the binaries the pipeline needs (pipx and npm installs land in
+`~/.local/bin` and `/opt/homebrew/bin`) are not there, and the run dies on
 `command not found` before the pipeline starts. Derive it at registration time
 and write it **above** the entry:
 
@@ -65,17 +123,21 @@ PATH=$(dirname "$(command -v memu-hermes)"):$(dirname "$(command -v hermes)"):/u
 ```
 
 The machine-specific fact lives in the crontab, where machine facts belong —
-the pipeline prompt itself stays verbatim.
+the pipeline prompt itself stays verbatim in its file.
 
-Create a system cron entry that runs Hermes headless with the pipeline prompt:
+Then the cron entry is one short line (cron does not expand `~` in the command
+field, but it does run the line through `/bin/sh`, so `$HOME` works; a literal
+absolute path is equally fine):
 
 ```
-0 * * * * hermes -p 'Run the memU bridging pipeline. Do the four steps strictly in order; do not skip a step even if the previous one looks like it produced nothing.  1. LEFTOVERS. If ~/.memu/hosts/hermes/jobs/ already contains job files, they are unfinished work from an earlier run (a crash, or the install itself) — process them exactly as step 3 describes, then run:  memu-hermes commit  — and only then continue.  2. PREPARE. Run this exact command with the shell tool:  memu-hermes prepare  — it regenerates ~/.memu/hosts/hermes/jobs/. If the command exits non-zero, stop and report the error.  3. SELF-EVOLVE. List ~/.memu/hosts/hermes/jobs/*.txt and process them in ascending numeric order (1.txt, then 2.txt, …). The count changes every run — always glob and sort. If there are no job files, skip to step 4. For each job file: read it and follow its instructions to the letter. Each job is self-contained and already carries the concrete paths it needs. Emitting no files for a job is a valid outcome; do not invent content.  4. COMMIT. Run this exact command with the shell tool:  memu-hermes commit  — it commits whatever the jobs created or changed. If it exits non-zero, report the error.  Finish with a one-line summary: how many jobs ran (leftovers included) and what was committed.'
+0 * * * * $HOME/.memu/hosts/hermes/bridge.sh
 ```
 
-(Adjust the headless invocation to the Hermes CLI the user runs, but keep the
-prompt block verbatim.) Nothing in it is machine-specific — the pipeline is
-invoked through `PATH` commands.
+The prompt block is fixed; only the cron expression is the user's choice.
+Nothing machine-specific leaks into the prompt — the pipeline is invoked
+through `PATH` commands. As a side benefit the run's output now lands in
+`~/.memu/hosts/hermes/bridge.log` (an inlined entry discarded it), so a
+failed tick leaves a diagnosable trace instead of only a cron mail.
 
 ## Step 3 — confirm
 
@@ -86,11 +148,12 @@ count:
   *failing* is exactly why the entry needs its `PATH` line; with that line in
   place the command must resolve from the directories it names.
 - The hard check: trigger one run through cron itself (temporarily set the
-  schedule a minute ahead, or run the entry's command line by hand with
-  `env -i PATH=... /bin/sh -c`), then verify **filesystem traces** — the session
-  cursor and `jobs/` timestamps moved — rather than trusting the run's own
-  summary. Field data, twice over: scheduled runs in bare environments have
-  reported "completed successfully" on a command-not-found.
+  schedule a minute ahead, or run `bridge.sh` by hand with
+  `env -i PATH=... HOME="$HOME" /bin/sh -c`), then verify **filesystem
+  traces** — the session cursor and `jobs/` timestamps moved, and
+  `~/.memu/hosts/hermes/bridge.log` grew — rather than trusting the run's
+  own summary. Field data, twice over: scheduled runs in bare environments
+  have reported "completed successfully" on a command-not-found.
 
 Report back: where the schedule was registered, and the cron in words. Mention
 that the first run only has work to do once there are new Hermes sessions since

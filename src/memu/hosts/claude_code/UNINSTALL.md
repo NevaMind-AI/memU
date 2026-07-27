@@ -28,14 +28,19 @@ instruction file exactly as they are.
 
 Find the scheduled entry that runs the memU bridging pipeline — a cron entry
 (or launchd job, if that is what the user chose at install time) invoking
-`claude -p 'Run the memU bridging pipeline. …'` — and delete **only that
-entry**. Everything else in the user's crontab is theirs and stays.
+`~/.memu/hosts/claude-code/bridge.sh` (or, on installs predating the prompt-file
+layout, inlining `claude -p 'Run the memU bridging pipeline. …'` directly) —
+and delete **only that entry**. Everything else in the user's crontab is theirs
+and stays.
 
 - **cron** — `crontab -l` to find the line, then rewrite the crontab without
-  it, e.g. `crontab -l | grep -v 'memU bridging pipeline' | crontab -`. If the
-  memU line was the only reason a `PATH=` line was added, that line may go too —
-  but only if nothing else in the crontab needs it. If nothing at all remains,
-  `crontab -r` removes the now-empty crontab cleanly.
+  it, e.g.
+  `crontab -l | grep -vE 'hosts/claude-code/bridge\.sh|memU bridging pipeline' | crontab -`.
+  If the memU line was the only reason a `PATH=` line was added, that line may
+  go too — but only if nothing else in the crontab needs it. If nothing at all
+  remains, `crontab -r` removes the now-empty crontab cleanly. The `bridge.sh`,
+  `bridge-prompt.txt`, and `bridge.log` files live under
+  `~/.memu/hosts/claude-code/` and go with the host residue in Part 3.
 - **launchd** — `launchctl bootout gui/$(id -u)/<label>` and delete the plist
   under `~/Library/LaunchAgents`.
 - **Windows (Task Scheduler)** — the task was registered by the helper, so remove

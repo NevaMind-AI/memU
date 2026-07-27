@@ -69,8 +69,28 @@ The machine-specific fact lives in the crontab, where machine facts belong —
 the pipeline prompt itself stays verbatim.
 
 Default to a system cron entry invoking the agent headless; use the agent's
-own scheduler instead only if the user prefers it. The recurring prompt, with `<SESSION_DIR>` filled
-in, **verbatim**:
+own scheduler instead only if the user prefers it.
+
+**Never inline the pipeline prompt in the crontab entry.** The quoted prompt
+is over 1 KB, and cron truncates a crontab line at roughly 1 KB before handing
+it to `/bin/sh` — the shell receives a command cut off mid-quote and every
+tick dies instantly with `unexpected EOF while looking for matching "'"`,
+mailed to `/var/mail/$USER` and visible nowhere else; the agent never starts
+(field data: inlined entries for two hosts failed exactly this way on every
+tick). This is the Unix sibling of the Windows `schtasks /TR` limit
+(memU#539), and the fix is the same shape: write the prompt **verbatim** to
+`~/.memu/hosts/agent/bridge-prompt.txt`, wrap the headless invocation in a
+small `~/.memu/hosts/agent/bridge.sh` (`<agent-cli> <headless-flag> "$(cat
+~/.memu/hosts/agent/bridge-prompt.txt)" >> ~/.memu/hosts/agent/bridge.log
+2>&1`, ideally with an atomic `mkdir`-based lock so an hourly tick can't race
+a still-running backlog run — see the claude-code host's `BRIDGING_TASK.md`
+for the full script), and keep the crontab entry to one short line:
+
+```
+0 * * * * $HOME/.memu/hosts/agent/bridge.sh
+```
+
+The recurring prompt, with `<SESSION_DIR>` filled in, **verbatim**:
 
 ```
 Run the memU bridging pipeline. Do the four steps strictly in order; do not
