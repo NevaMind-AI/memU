@@ -39,18 +39,17 @@ This matrix lists the currently tested memU integrations by operating system.
 - **Memorize** — capture useful session knowledge through a scheduled background task and turn it into reusable memory.
 - **Retrieve** — bring relevant memory into a future task.
 - **⚠️** — supported with an important limitation; see the user note.
-- **—** — not yet verified on that platform.
 
 ### macOS
 
 | Agent | Mode | Memorize | Retrieve | User note |
 | --- | --- | :---: | :---: | --- |
-| Codex | Code, Work, and VS Code extension | ✅ | ✅ | |
-| Codex | Chat | ❌ | ❌ | Not currently supported. |
+| ChatGPT | ChatGPT(Work mode), codex and VS Code extension | ✅ | ✅ | |
+| ChatGPT | Chat | ❌ | ❌ | Chat mode is not currently supported. Please use Work mode. |
 | Claude Code | Desktop and CLI | ✅ | ✅ | If the selected model declines the setup steps, retry with **Opus** or another model. Sonnet 5 can occasionally do this. |
-| Claude | Chat and Cowork | ❌ | ❌ | Not currently supported. |
-| Cursor | CLI | ✅ | ✅ | |
-| OpenClaw | — | ✅ | — | Retrieve support has not yet been verified. |
+| Claude | Chat and Cowork | ❌ | ❌ | |
+| Cursor | — | ✅ | ✅ | |
+| OpenClaw | — | ✅ | ✅ | Retrieve support has not yet been verified. |
 | Hermes Agent | — | ✅ | ✅ | |
 | WorkBuddy | — | ✅ | ✅ | |
 
@@ -58,13 +57,11 @@ This matrix lists the currently tested memU integrations by operating system.
 
 | Agent | Mode | Memorize | Retrieve | User note |
 | --- | --- | :---: | :---: | --- |
-| Codex | — | ❌ | ✅ | |
-| Claude Code | Chat | ❌ | ❌ | Not currently supported. |
-| Claude Code | Cowork | ❌ | ❌ | Not currently supported. |
-| Claude Code | Desktop | ✅ | ✅ | If the selected model declines the setup steps, retry with **Opus** or another model. Sonnet 5 can occasionally do this. |
-| Claude Code | CLI | ✅ | ✅ | If the selected model declines the setup steps, retry with **Opus** or another model. Sonnet 5 can occasionally do this. |
-| Cursor | GUI | ✅ | ✅ | Each project needs its own installation. Scheduled memorization requires a Cursor model; Free-plan model usage may be exhausted. |
-| Cursor | CLI | ✅ | ✅ | Scheduled memorization requires a Cursor model; Free-plan model usage may be exhausted. |
+| ChatGPT | ChatGPT(Work mode), codex and VS Code extension | ✅ | ✅ | |
+| ChatGPT | Chat | ❌ | ❌ | Chat mode is not currently supported. Please use Work mode. |
+| Claude Code | Desktop and CLI | ✅ | ✅ | If the selected model declines the setup steps, retry with **Opus** or another model. Sonnet 5 can occasionally do this. |
+| Claude | Chat and Cowork | ❌ | ❌ | |
+| Cursor | — | ✅ | ✅ | |
 | OpenClaw | — | ✅ | ✅ | |
 | Hermes Agent | — | ✅ | ⚠️ | Use a memU version with Windows `HERMES_HOME` support; older versions may retrieve from the wrong files. |
 | WorkBuddy | — | ✅ | ✅ | With Hy3, retrieval may fail. Retry with another model if this happens. |
@@ -75,7 +72,6 @@ This matrix lists the currently tested memU integrations by operating system.
 | --- | --- | :---: | :---: | --- |
 | Codex | VS Code extension | ❌ | ✅ | |
 | Claude Code | CLI | ✅ | ✅ | |
-| Cursor | — | — | — | Not yet verified. |
 | OpenClaw | 4.23 / 7.1 | ✅ | ✅ | |
 
 Support status reflects the current release and may change as host integrations evolve.
