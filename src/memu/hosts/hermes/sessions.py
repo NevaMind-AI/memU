@@ -1,14 +1,14 @@
-"""Hermes Agent's session log: the SQLite store at ``~/.hermes/state.db``.
+"""Hermes Agent's session log: the SQLite store under ``HERMES_HOME``.
 
 The whole of what makes this host Hermes. Everything the bridging task does with
 these records is host-agnostic and lives in :mod:`memu.hosts.bridging`.
 
 Hermes is the one supported host whose log is not JSONL-on-disk: sessions and
 their full message history live in two tables (``sessions``, ``messages``) of a
-WAL-mode SQLite database under the Hermes home (``~/.hermes`` by default; the
-host honors ``HERMES_HOME``, in which case pass ``--session-dir`` pointing at
-that ``state.db``). ``~/.hermes/sessions/saved/`` holds only manual snapshots and
-is ignored. This is exactly the "different container" seam
+WAL-mode SQLite database under the active Hermes home. Both Hermes and this
+adapter honor ``HERMES_HOME`` and fall back to ``~/.hermes`` when it is unset.
+The ``sessions/saved/`` directory there holds only manual snapshots and is
+ignored. This is exactly the "different container" seam
 :class:`~memu.hosts.base.TranscriptSource` anticipates: :meth:`discover`,
 :meth:`read_records`, :meth:`key`, and :meth:`timestamp` are overridden; each
 session row plays the role a session *file* plays elsewhere, and each message row
@@ -24,14 +24,14 @@ from __future__ import annotations
 
 import datetime
 import json
-import os
 import sqlite3
 from pathlib import Path
 from typing import ClassVar
 
 from memu.hosts.base import RecordKind, TranscriptSource
+from memu.hosts.hermes.paths import state_db_path
 
-STATE_DB = "~/.hermes/state.db"
+STATE_DB = str(state_db_path())
 
 _MESSAGE_ROLES = ("user", "assistant")
 
@@ -50,8 +50,8 @@ class HermesTranscriptSource(TranscriptSource):
 
     name: ClassVar[str] = "hermes"
 
-    def __init__(self, state_db: str | Path = STATE_DB) -> None:
-        self._db = Path(os.path.expanduser(str(state_db)))
+    def __init__(self, state_db: str | Path | None = None) -> None:
+        self._db = Path(state_db).expanduser() if state_db is not None else state_db_path()
 
     def root(self) -> Path:
         return self._db.parent

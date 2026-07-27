@@ -20,13 +20,14 @@ from __future__ import annotations
 
 import sys
 
-from memu.hosts.hermes.sessions import STATE_DB, HermesTranscriptSource
+from memu.hosts.hermes.paths import soul_path, state_db_path
+from memu.hosts.hermes.sessions import HermesTranscriptSource
 from memu.hosts.host_cli import HostSpec, run
 
 HOST = "hermes"
 
-SOUL_MD = "~/.hermes/SOUL.md"
-"""Hermes's identity file — the one file loaded from ``HERMES_HOME`` into every
+SOUL_MD = str(soul_path())
+"""Hermes's identity file — resolved from ``HERMES_HOME`` and loaded into every
 session regardless of working directory, so the inject seam lands here.
 (Project-level ``.hermes.md``/``AGENTS.md`` files are per-directory and would
 miss sessions started elsewhere.)"""
@@ -47,19 +48,25 @@ miss sessions started elsewhere.)"""
 # Code) can use the pointer shape. Hermes cannot, so it takes the full retrieval
 # procedure inline in SOUL.md, which is present on every turn.
 
-SPEC = HostSpec(
-    host=HOST,
-    display="Hermes",
-    package="memu.hosts.hermes",
-    source_factory=HermesTranscriptSource,
-    session_dir=STATE_DB,
-    session_help="Hermes SQLite session store (state.db under HERMES_HOME)",
-    instruction_path=SOUL_MD,
-)
+
+def build_spec() -> HostSpec:
+    """Build the adapter defaults from the active Hermes home."""
+    return HostSpec(
+        host=HOST,
+        display="Hermes",
+        package="memu.hosts.hermes",
+        source_factory=HermesTranscriptSource,
+        session_dir=str(state_db_path()),
+        session_help="Hermes SQLite session store (state.db under HERMES_HOME)",
+        instruction_path=str(soul_path()),
+    )
+
+
+SPEC = build_spec()
 
 
 def main(argv: list[str] | None = None) -> int:
-    return run(SPEC, argv)
+    return run(build_spec(), argv)
 
 
 if __name__ == "__main__":

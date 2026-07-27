@@ -12,7 +12,7 @@ Installing memU on Hermes is three parts:
 1. **Install memU** — a Python package and the memory backend it uses.
 2. **Register the bridging task** — the scheduled job that turns recent Hermes
    sessions into durable memory (the *record* seam).
-3. **Patch `~/.hermes/SOUL.md`** — a standing instruction that tells the agent to
+3. **Patch `$HERMES_HOME/SOUL.md`** — a standing instruction that tells the agent to
    pull relevant memory before answering (the *inject* seam).
 
 Parts 2 and 3 must share one configured mode. In local mode they must also share
@@ -20,10 +20,13 @@ one store and embedding space, or retrieval silently returns nothing. Part 1 is
 what makes them agree.
 
 **Scope note.** This adapter reads Hermes's SQLite session store —
-`~/.hermes/state.db` (the `sessions` and `messages` tables), opened read-only so
-it never contends with the gateway's writer. If this install runs a non-default
-home (`HERMES_HOME`, or a profile), pass `--session-dir <home>/state.db` to
-`prepare`. The manual snapshots under `~/.hermes/sessions/saved/` are not mined.
+`$HERMES_HOME/state.db` (the `sessions` and `messages` tables), opened read-only
+so it never contends with the gateway's writer. It honors the same
+`HERMES_HOME` as Hermes (including profiles) and falls back to `~/.hermes` when
+the variable is unset. The native Windows installer sets `HERMES_HOME` to
+`%LOCALAPPDATA%\hermes`. The manual snapshots under the active home's
+`sessions/saved/` directory are not mined. `--session-dir` remains available as
+an explicit one-command override.
 
 ---
 
@@ -129,7 +132,7 @@ backend.
 ## Part 2 — Register the bridging (record) task
 
 The *record* seam: a scheduled job that mines recent sessions out of
-`~/.hermes/state.db` into memU memory, skills, and resources. In cloud mode,
+`$HERMES_HOME/state.db` into memU memory, skills, and resources. In cloud mode,
 workspace resources are submitted but are not currently persisted. **Do not
 reinvent this** — follow the packaged procedure:
 
@@ -150,7 +153,7 @@ sessions is fine and correct when nothing is new).
 
 ---
 
-## Part 3 — Patch `~/.hermes/SOUL.md` with the retrieval instruction
+## Part 3 — Patch `$HERMES_HOME/SOUL.md` with the retrieval instruction
 
 The *inject* seam: a standing instruction in Hermes's **SOUL.md** telling the
 agent to pull relevant memory before answering. SOUL.md is the one file Hermes
@@ -177,14 +180,17 @@ that. (Skill-based hosts — Codex, Claude Code, OpenClaw — surface skill
 descriptions every turn, so they install a short pointer plus a skill instead.)
 
 `SOUL.md` is the *user's*, so it appends rather than overwrites (previous content
-is backed up to `~/.hermes/SOUL.md.bak`), and memU's text sits in a marked block
+is backed up beside it as `SOUL.md.bak`), and memU's text sits in a marked block
 that a re-run — or a later memU release — replaces in place. `--dry-run` shows the
-diff without writing; `--path` targets a non-default home.
+diff without writing; `--path` explicitly overrides the resolved home for one
+command. The command prints the resolved absolute path it touched.
 
 ### ✅ Verify Part 3
 
+Run `memu-hermes install-instruction --dry-run` to confirm the resolved absolute
+path is already up to date, inspect that `SOUL.md`, then run:
+
 ```
-cat ~/.hermes/SOUL.md
 memu-hermes retrieve "smoke test"
 ```
 
@@ -198,7 +204,7 @@ the new SOUL.md.
 ## Done
 
 Report back to the user: the selected mode and its cloud endpoint or local store/provider; the scheduled job and its
-schedule in words; and that the retrieval instruction is now in
-`~/.hermes/SOUL.md`, carrying the `memu-hermes retrieve` procedure inline and
+schedule in words; and that the retrieval instruction is now in the active
+`$HERMES_HOME/SOUL.md`, carrying the `memu-hermes retrieve` procedure inline and
 taking effect next session. Record and inject both read `~/.memu/config.env`, so
 they provably share one store.

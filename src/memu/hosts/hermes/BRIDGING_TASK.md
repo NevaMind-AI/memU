@@ -22,7 +22,7 @@ on its own.
 ## What the bridging task does (context)
 
 1. **Prepare** — `memu-hermes prepare` scans new message rows in
-   `~/.hermes/state.db` (read-only; sessions ordered by recent activity),
+   `$HERMES_HOME/state.db` (read-only; sessions ordered by recent activity),
    mirrors the current memU recall files to `~/.memu/hosts/hermes/memory` and
    `~/.memu/hosts/hermes/skill`, snapshots them by content hash, and writes
    numbered **job-instruction files** to `~/.memu/hosts/hermes/jobs/` (`1.txt`,
@@ -43,9 +43,10 @@ run's prompt must instruct the agent to do it, not shell out to a script.
 - **memU is installed and `memu-hermes` is on `PATH`.** Verify with
   `memu-hermes doctor`; if it fails, do `INSTALL.md` Part 1 first.
 - **Hermes runs headless from cron** with permission to run `memu-hermes` and
-  write under `~/.memu/`. If Hermes uses a non-default `HERMES_HOME`, the cron
-  environment must export it and the prompt's prepare step must pass
-  `--session-dir "$HERMES_HOME/state.db"`.
+  write under `~/.memu/`. The cron environment must inherit the same
+  `HERMES_HOME` as Hermes; `memu-hermes prepare` then resolves `state.db`
+  automatically. When it is unset, both Hermes and memU fall back to
+  `~/.hermes`.
 
 ## Step 1 — settle the schedule
 

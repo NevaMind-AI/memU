@@ -8,7 +8,7 @@ Uninstalling is the install run in reverse, and it is three parts:
 
 1. **Unregister the bridging task** — stop the scheduled job first, so nothing
    fires mid-teardown (the *record* seam).
-2. **Unpatch `~/.hermes/SOUL.md`** — remove the standing retrieval instruction
+2. **Unpatch `$HERMES_HOME/SOUL.md`** — remove the standing retrieval instruction
    (the *inject* seam), plus a leftover `memu-retrieve` skill from older installs.
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
    tooling is removed — and close by reporting both.
@@ -45,13 +45,13 @@ there.
 memu-hermes remove-instruction
 ```
 
-It deletes memU's marked block from `~/.hermes/SOUL.md` and prints the diff.
+It deletes memU's marked block from the active `$HERMES_HOME/SOUL.md` and prints the diff.
 Everything outside the markers is the user's and survives; the previous
-contents are backed up to `~/.hermes/SOUL.md.bak` before the rewrite.
+contents are backed up beside it as `SOUL.md.bak` before the rewrite.
 `--dry-run` shows the diff without writing. Re-running is a clean no-op — a
-file with no block left is already the desired end state. If this install used
-a non-default home (`HERMES_HOME`, or a profile), pass
-`--path <home>/SOUL.md`.
+file with no block left is already the desired end state. The command honors
+the same `HERMES_HOME` as Hermes, including profiles; `--path <home>/SOUL.md`
+remains available as an explicit one-command override.
 
 Current releases keep the procedure inline in that block, so there is nothing
 else to remove. If this machine was set up by an **older** release that
@@ -62,13 +62,13 @@ directory too — it is memU's own:
 rm -r ~/.hermes/skills/memu-retrieve
 ```
 
-(For a non-default home, it sits under `<home>/skills/` instead.) Other entries
-in `~/.hermes/skills/` are the user's or Hermes's — leave them alone.
+Other entries in `$HERMES_HOME/skills/` are the user's or Hermes's — leave them
+alone.
 
 ### ✅ Verify Part 2
 
-`cat ~/.hermes/SOUL.md` — no `memu:begin`/`memu:end` markers remain, and the
-user's own content is intact. `~/.hermes/skills/memu-retrieve` no longer
+Inspect the resolved `$HERMES_HOME/SOUL.md`: no `memu:begin`/`memu:end` markers
+remain, and the user's own content is intact. `$HERMES_HOME/skills/memu-retrieve` no longer
 exists. A session already running loaded the old file; a fresh session is what
 picks the removal up.
 
@@ -94,9 +94,9 @@ Only one thing overrides a default: the user's own explicit words.
   store marks history as already mined, and it would never be mined again.
 - **Remove this host's residue.** Everything else under `~/.memu/hosts/hermes/`
   — job files and mirrors, sparing the session cursor above; and
-  `~/.hermes/SOUL.md` itself **if** Part 2 left it
-  empty (it held only memU's block, so the install created it) — a file with
-  the user's own content stays, of course. Hermes's own `~/.hermes/state.db`
+  `$HERMES_HOME/SOUL.md` itself **if** Part 2 left it
+empty (it held only memU's block, so the install created it) — a file with
+  the user's own content stays, of course. Hermes's own `$HERMES_HOME/state.db`
   belongs to Hermes, not memU — the adapter only ever read it; leave it alone.
 - **Uninstall the package** — `pip uninstall memu-cli` (or `pipx uninstall
   memu-cli` — match how it was installed) — **unless** another host adapter is
