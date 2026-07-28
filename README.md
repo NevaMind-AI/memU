@@ -196,3 +196,6 @@ service = MemoryService(
 ## License
 
 Apache-2.0
+
+
+<sub>Partnership Community: <a href="https://linux.do">LINUX DO</a></sub>
