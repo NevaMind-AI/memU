@@ -27,10 +27,12 @@ instruction file exactly as they are.
 ## Part 1 — Unregister the bridging (record) task
 
 Find the Codex scheduled task that runs the memU bridging pipeline — it was
-created at install time (named e.g. `memu-bridging`) with the three-step
+created at install time (named e.g. `memu-remember`) with the three-step
 prepare / self-evolve / commit prompt — and delete **that task only**, through
-the same scheduled-task surface Codex used to create it. Any other scheduled
-tasks the user has are theirs and stay.
+the same scheduled-task surface Codex used to create it. The name is only a
+hint (the user may have chosen another); the load-bearing signal is the prompt,
+which runs the memU bridging pipeline. Any other scheduled tasks the user has
+are theirs and stay.
 
 ### ✅ Verify Part 1
 
