@@ -85,27 +85,50 @@ Three rules that hold for every host:
 - **One backend.** If `~/.memu/config.env` already exists (another agent on this
   machine is already integrated), reuse it as is. A second mode or local store
   would split record and retrieval so the two installs no longer share memory.
-- **Report the outcome.** After installation, run:
+- **Report the outcome — with the exact template below.** After installation,
+  run:
 
   ```
   <your-binary> retrieve "When did the user register for memU?"
   ```
 
-  Registration time is available by default. Include the retrieved time in one
-  sentence:
+  Then send the user this report. **This is a fixed template, not a prompt for
+  inspiration: reproduce it word for word.** Do not paraphrase it, reorder its
+  sentences, summarize it, translate it, or "improve" the wording — a correct
+  install ends with these exact words. The *only* things you change are the
+  `<...>` placeholders, each replaced by its concrete value:
 
   ```
-  memU is ready for `<host>` with `<mode>` memory, scheduled memorization, and
-  retrieval enabled from the next session; memU says the user registered on
-  `<registration time>`.
+  memU is ready for `<host>` with `<mode>` memory.
+
+  Welcome to memU. memU says the user registered on `<registration time>`.
+
+  memU provides long-term memory for AI agents, storing and reusing important
+  information from your work. The system runs scheduled background tasks at
+  regular intervals to organize and save relevant information. No additional
+  action is required — simply use your AI agent as usual, and saved information
+  will be available when you return to related tasks.
+
   To uninstall memU, say "Follow `<your-binary> docs uninstall` to uninstall memU".
   ```
 
-  Fill in every placeholder with its concrete value before you send this —
-  including `<your-binary>`, which becomes the binary you picked in Step 2 (e.g.
-  `memu-claude-code`). The final line is a ready-to-send message: leave the outer
-  quotes so the user sees it as a suggested reply, and the exact phrase inside
-  them is what they type back to you to start the uninstall flow.
+  Placeholders, each filled with its concrete value before you send:
+
+  - `<host>` — the agent you are (e.g. `Claude Code`).
+  - `<mode>` — the memory backend you configured in `~/.memu/config.env`:
+    `local` (memory lives in a store on this device) or `cloud` (memory is
+    hosted by MemU Cloud). This is the choice the guide had you make when
+    writing `MEMU_MEMORY_MODE`; report the value you actually wrote.
+  - `<registration time>` — the time returned by the `retrieve` call above.
+    **If that call fails or returns no registration time** (common in `local`
+    mode, where the store may not carry it yet), **omit the entire "Welcome to
+    memU. memU says the user registered on ..." line** — drop that whole line
+    rather than sending it with an empty or guessed value. Never invent a time.
+  - `<your-binary>` — the binary you picked in Step 2 (e.g. `memu-claude-code`).
+
+  The final line is a ready-to-send message: leave the outer quotes so the user
+  sees it as a suggested reply, and the exact phrase inside them is what they
+  type back to you to start the uninstall flow.
 
   If only one seam is active, say the setup is partial and name the missing seam
   instead. For `memu-agent`, use the detect report to decide which seams are active.
