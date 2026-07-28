@@ -26,7 +26,7 @@ memU is a lightweight, agent-driven memory system that gives users a shared LLM 
 
 memU works with Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy, Cola, and more. See [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
 
-**Cross-device · Free · Unlimited · [View online](https://memu.so)**
+**Cross-device · Free · Unlimited · [View online](https://shr.pn/bwTR)**
 
 Get your API key from [memu.so](https://memu.so), then send this message to your agent:
 
