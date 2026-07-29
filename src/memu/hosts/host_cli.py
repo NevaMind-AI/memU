@@ -182,11 +182,26 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
     # about to look. Remember it now — before the scan — so it is skipped by this
     # run and every later one (#606).
     own_session = os.environ.get(spec.session_id_env, "").strip() if spec.session_id_env else ""
-    skip_sessions = (
-        self_sessions.remember(layout.self_sessions, own_session)
-        if own_session
-        else self_sessions.load(layout.self_sessions)
-    )
+    skip_sessions = self_sessions.load(layout.self_sessions)
+    if spec.session_id_env and not own_session:
+        # The host advertised a variable and did not set it — a headless runner
+        # that lost it, or a version that dropped it. Say so: the alternative is
+        # #606 quietly returning while everything still looks healthy.
+        print(
+            f"warning: {spec.session_id_env} is unset, so this run cannot recognise its own"
+            " session; it will be mined like any other",
+            file=sys.stderr,
+        )
+    if own_session and own_session not in skip_sessions:
+        # Also fires when a human runs `prepare` inside a real conversation, and
+        # that session is then excluded from mining for good — so it must never
+        # happen silently.
+        print(
+            f"note: recording this session ({own_session}) as a bridging run; its transcript "
+            f"will not be mined. Undo by removing it from {layout.self_sessions}"
+        )
+    if own_session:
+        skip_sessions = self_sessions.remember(layout.self_sessions, own_session)
     num_sessions = await prepare(
         source,
         layout,

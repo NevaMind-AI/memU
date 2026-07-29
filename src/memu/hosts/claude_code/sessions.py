@@ -46,6 +46,19 @@ class ClaudeCodeTranscriptSource(TranscriptSource):
     def root(self) -> Path:
         return self._root
 
+    def session_id(self, path: Path) -> str:
+        """The session that *owns* this transcript, which is not always its name.
+
+        A subagent transcript sits one level deeper, in a directory named by the
+        session that spawned it, so its own file name is the subagent's id. The
+        owning session is what matters for skipping a bridging run (#606): if a
+        run spawns a subagent, the child's transcript is just as much memU's own
+        bookkeeping as the parent's, and keying on the file name alone would let
+        it through.
+        """
+        parts = path.relative_to(self.root()).parts
+        return parts[-2] if len(parts) > 2 else path.stem
+
     def classify(self, record: str) -> RecordKind:
         try:
             entry = json.loads(record)

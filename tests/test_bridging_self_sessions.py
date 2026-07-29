@@ -19,6 +19,7 @@ from memu.hosts.bridging.layout import Layout
 from memu.hosts.bridging.transcripts import prepare_transcripts
 from memu.hosts.claude_code.cli import SESSION_ID_ENV
 from memu.hosts.claude_code.cli import SPEC as CLAUDE_CODE_SPEC
+from memu.hosts.claude_code.sessions import ClaudeCodeTranscriptSource
 
 
 class FakeSource(TranscriptSource):
@@ -166,6 +167,19 @@ def test_session_id_defaults_to_the_file_stem(tmp_path: pathlib.Path) -> None:
     assert source.session_id(tmp_path / "6ea28aed-874f-44e1-9dd2-d8ad0b1bbc85.jsonl") == (
         "6ea28aed-874f-44e1-9dd2-d8ad0b1bbc85"
     )
+
+
+def test_claude_code_attributes_a_subagent_transcript_to_its_parent(tmp_path: pathlib.Path) -> None:
+    """Subagent transcripts sit one level deeper, in a directory named by the
+    session that spawned them. A bridging run that spawns a subagent would
+    otherwise leak the child's transcript into mining."""
+    source = ClaudeCodeTranscriptSource(tmp_path)
+    parent = "6ea28aed-874f-44e1-9dd2-d8ad0b1bbc85"
+    top_level = tmp_path / "D--lab-proj" / f"{parent}.jsonl"
+    subagent = tmp_path / "D--lab-proj" / parent / "b1c2d3e4-0000-4000-8000-000000000000.jsonl"
+
+    assert source.session_id(top_level) == parent
+    assert source.session_id(subagent) == parent
 
 
 def test_claude_code_declares_its_session_id_variable() -> None:
