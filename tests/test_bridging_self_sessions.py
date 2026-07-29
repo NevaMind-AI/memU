@@ -239,10 +239,9 @@ def test_the_unix_bridging_wrapper_exports_the_marker() -> None:
     """The scheduled run on macOS/Linux has to carry a signal too: cron's cwd is
     ``$HOME``, never memU's base dir, so without this the Unix task reads as a
     hand-run and #606 continues there while Windows is fixed."""
-    doc = (
-        pathlib.Path(__file__).resolve().parents[1]
-        / "src/memu/hosts/claude_code/BRIDGING_TASK.md"
-    ).read_text(encoding="utf-8")
+    doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/claude_code/BRIDGING_TASK.md").read_text(
+        encoding="utf-8"
+    )
     assert f"export {self_sessions.BRIDGING_RUN_ENV}=1" in doc
 
 
