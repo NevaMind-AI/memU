@@ -12,6 +12,7 @@ Nothing here knows what a Codex is. The host arrives as a
 from __future__ import annotations
 
 import os
+from collections.abc import Collection
 from typing import Any
 
 from memu.env import build_agentic_memory_backend_from_env
@@ -33,8 +34,13 @@ async def prepare(
     *,
     verify_command: str,
     max_jobs: int = MAX_JOBS,
+    skip_sessions: Collection[str] = (),
 ) -> int:
     """Regenerate the job files from whatever the host has logged since last run.
+
+    ``skip_sessions`` are the bridging runs' own host sessions, which must not be
+    mined (#606); the caller collects them because only the CLI knows how this
+    host names the environment variable carrying them.
 
     Returns the number of sessions prepared. Zero is a correct, common outcome —
     a scheduled run on a day with no new sessions has nothing to do.
@@ -45,6 +51,7 @@ async def prepare(
         manifest_path=layout.session_manifest,
         max_jobs=max_jobs,
         pending_path=layout.session_manifest_pending,
+        skip_sessions=skip_sessions,
     )
 
     # Mirror the store's current recall files to disk. The snapshot is only

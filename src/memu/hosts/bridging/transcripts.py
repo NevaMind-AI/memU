@@ -7,6 +7,7 @@ record is shaped — arrives through :class:`~memu.hosts.base.TranscriptSource`.
 from __future__ import annotations
 
 import json
+from collections.abc import Collection
 from pathlib import Path
 
 from memu.hosts.base import RecordKind, TranscriptSource
@@ -39,6 +40,7 @@ def prepare_transcripts(
     manifest_path: Path,
     max_jobs: int,
     pending_path: Path,
+    skip_sessions: Collection[str] = (),
 ) -> int:
     """Extract new session turns into numbered transcripts and *stage* the cursor.
 
@@ -54,13 +56,21 @@ def prepare_transcripts(
     a bare ``prepare`` — or a run that dies before commit — leaves the durable
     cursor untouched, and every unmined turn stays selectable next time.
 
+    ``skip_sessions`` holds the ids of the bridging runs' own sessions
+    (:mod:`memu.hosts.bridging.self_sessions`). They are passed over rather than
+    ending the scan: they are the newest transcripts on disk, so stopping there
+    would hide every real session underneath them.
+
     Returns the number of sessions written. Zero is the correct, common outcome
     on a quiet day.
     """
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
+    skip = set(skip_sessions)
 
     pending: list[tuple[str, list[str], int]] = []
     for path in source.discover():
+        if source.session_id(path) in skip:
+            continue
         key = source.key(path)
         previous = manifest.get(key)
         seen_lines = previous["lines"] if previous else 0

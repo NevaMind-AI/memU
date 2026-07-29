@@ -34,7 +34,7 @@ from typing import Any
 
 from memu.hosts import instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
-from memu.hosts.bridging import Layout, commit, prepare
+from memu.hosts.bridging import Layout, commit, prepare, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
 from memu.hosts.bridging.resources import verify_resource_log
 
@@ -91,6 +91,15 @@ class HostSpec:
     the host has no Windows scheduling wired yet, so ``schedule`` refuses rather
     than guess. Unix scheduling is unaffected — cron/launchd stay doc-driven and
     never read this field."""
+
+    session_id_env: str = ""
+    """Environment variable through which the host tells a tool subprocess which
+    session it is running in (``CLAUDE_CODE_SESSION_ID``). ``prepare`` runs inside
+    the bridging session, so this is how a run recognises its *own* transcript and
+    declines to mine it (#606) — an exact identity, never a guess about content.
+    Its value must match what :meth:`~memu.hosts.base.TranscriptSource.session_id`
+    derives from a discovered session. Empty — the default — means the host has
+    not been surveyed yet, and the run keeps mining itself as before."""
 
     needs_headless_auth: bool = False
     """Whether the scheduled agent needs a headless credential distinct from any
@@ -169,7 +178,22 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
         return 2
 
     layout = _layout(spec, args)
-    num_sessions = await prepare(source, layout, verify_command=spec.verify_command, max_jobs=args.max_jobs)
+    # This run is itself a host session, and the host is logging it where we are
+    # about to look. Remember it now — before the scan — so it is skipped by this
+    # run and every later one (#606).
+    own_session = os.environ.get(spec.session_id_env, "").strip() if spec.session_id_env else ""
+    skip_sessions = (
+        self_sessions.remember(layout.self_sessions, own_session)
+        if own_session
+        else self_sessions.load(layout.self_sessions)
+    )
+    num_sessions = await prepare(
+        source,
+        layout,
+        verify_command=spec.verify_command,
+        max_jobs=args.max_jobs,
+        skip_sessions=skip_sessions,
+    )
     num_jobs = 2 * num_sessions + 1
     print(f"prepared {num_sessions} session(s) -> {num_jobs} job(s) in {layout.jobs}")
     if num_sessions == 0:
