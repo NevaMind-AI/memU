@@ -214,16 +214,36 @@ def test_session_id_defaults_to_the_file_stem(tmp_path: pathlib.Path) -> None:
 
 
 def test_claude_code_attributes_a_subagent_transcript_to_its_parent(tmp_path: pathlib.Path) -> None:
-    """Subagent transcripts sit one level deeper, in a directory named by the
-    session that spawned them. A bridging run that spawns a subagent would
-    otherwise leak the child's transcript into mining."""
-    source = ClaudeCodeTranscriptSource(tmp_path)
-    parent = "6ea28aed-874f-44e1-9dd2-d8ad0b1bbc85"
-    top_level = tmp_path / "D--lab-proj" / f"{parent}.jsonl"
-    subagent = tmp_path / "D--lab-proj" / parent / "b1c2d3e4-0000-4000-8000-000000000000.jsonl"
+    """Both nesting shapes seen on a real machine, not an invented one.
 
-    assert source.session_id(top_level) == parent
-    assert source.session_id(subagent) == parent
+    A census of 703 live transcripts found 340 top-level, 130 under
+    ``subagents/`` and 235 under ``subagents/workflows/<wf>/`` — and *none* of the
+    ``<sessionId>/<subagentId>.jsonl`` shape an earlier version of this test
+    assumed. The owner is never the parent directory (that is ``subagents`` or a
+    workflow id), so these paths are what pins the rule.
+    """
+    source = ClaudeCodeTranscriptSource(tmp_path)
+    owner = "72437ae7-588b-4bd5-b4ec-e143e5db1781"
+    project = tmp_path / "D--lab-boids"
+
+    top_level = project / f"{owner}.jsonl"
+    subagent = project / owner / "subagents" / "agent-a1a4f93e4dfa97ec5.jsonl"
+    workflow = project / owner / "subagents" / "workflows" / "wf_x" / "agent-acfdaaf110b4ceecb.jsonl"
+
+    assert source.session_id(top_level) == owner
+    assert source.session_id(subagent) == owner
+    assert source.session_id(workflow) == owner
+
+
+def test_the_unix_bridging_wrapper_exports_the_marker() -> None:
+    """The scheduled run on macOS/Linux has to carry a signal too: cron's cwd is
+    ``$HOME``, never memU's base dir, so without this the Unix task reads as a
+    hand-run and #606 continues there while Windows is fixed."""
+    doc = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / "src/memu/hosts/claude_code/BRIDGING_TASK.md"
+    ).read_text(encoding="utf-8")
+    assert f"export {self_sessions.BRIDGING_RUN_ENV}=1" in doc
 
 
 def test_claude_code_declares_its_session_id_variable() -> None:
