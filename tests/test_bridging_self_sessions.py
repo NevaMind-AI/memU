@@ -157,6 +157,50 @@ def test_skipping_frees_the_job_slots_for_real_sessions(tmp_path: pathlib.Path) 
     assert set(staged) == {"real-2.jsonl", "real-1.jsonl"}
 
 
+# ── only the scheduled run may claim a session ─────────────────────────────────
+
+
+def test_a_hand_run_from_a_project_dir_is_not_a_bridging_run(tmp_path: pathlib.Path) -> None:
+    """The regression this guards: running `prepare` by hand — during development,
+    or to say "remember this conversation now" — must not permanently exclude the
+    session it was run in. That would deliver the opposite of what was asked."""
+    base = tmp_path / "memu" / "hosts" / "claude-code"
+    project = tmp_path / "some" / "project"
+    assert self_sessions.is_bridging_run(project, base, env={}) is False
+
+
+def test_the_scheduled_workdir_is_a_bridging_run(tmp_path: pathlib.Path) -> None:
+    """`schedule` passes -WorkingDirectory, so the task runs in memU's own tree.
+    This keeps tasks registered before the env marker existed working."""
+    base = tmp_path / "memu" / "hosts" / "claude-code"
+    assert self_sessions.is_bridging_run(base, base, env={}) is True
+
+
+def test_the_env_marker_wins_wherever_the_agent_wandered(tmp_path: pathlib.Path) -> None:
+    """The wrapper exports it, so an agent that changes directory before running
+    the command cannot lose the signal."""
+    base = tmp_path / "memu" / "hosts" / "claude-code"
+    elsewhere = tmp_path / "wherever"
+    env = {self_sessions.BRIDGING_RUN_ENV: "1"}
+    assert self_sessions.is_bridging_run(elsewhere, base, env=env) is True
+    assert self_sessions.is_bridging_run(elsewhere, base, env={self_sessions.BRIDGING_RUN_ENV: "  "}) is False
+
+
+def test_the_windows_wrapper_exports_the_marker() -> None:
+    """Pins the wrapper to the constant, so renaming one without the other fails
+    here rather than silently reopening #606."""
+    from memu.hosts.scheduling.windows import wrapper_script
+
+    script = wrapper_script(
+        agent_path="C:/agents/claude.exe",
+        schedule_command="claude -p {prompt}",
+        prompt_file=pathlib.Path("C:/memu/bridge-prompt.txt"),
+        log_file=pathlib.Path("C:/memu/bridge.log"),
+        path_dirs=["C:/bin"],
+    )
+    assert f"$env:{self_sessions.BRIDGING_RUN_ENV} = '1'" in script
+
+
 # ── the identity seam ──────────────────────────────────────────────────────────
 
 

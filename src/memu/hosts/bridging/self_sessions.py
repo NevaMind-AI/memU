@@ -20,12 +20,42 @@ keyed on the bridging prompt, which is deliberately not in this module.
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Mapping
 from pathlib import Path
 
 MAX_REMEMBERED = 1000
 """How many ids to keep. One is added per run — hourly bridging takes six weeks
 to fill this — and a session old enough to fall off the end is long gone from
 the host's log too, so it cannot come back to be re-mined."""
+
+BRIDGING_RUN_ENV = "MEMU_BRIDGING_RUN"
+"""Set by the wrapper ``schedule install`` generates, so a run can tell that *it*
+is the scheduled one."""
+
+
+def is_bridging_run(cwd: Path, base: Path, env: Mapping[str, str] | None = None) -> bool:
+    """Whether this invocation is the scheduled bridging task, not a person.
+
+    Running ``prepare`` is emphatically *not* the test. It is an ordinary command
+    people run by hand — during development, or simply to say "remember this
+    conversation now" — and treating that as a bridging run would exclude the very
+    session the user asked to have mined, permanently and for every later run.
+
+    What actually marks the scheduled task is how it was *launched*: the wrapper
+    exports :data:`BRIDGING_RUN_ENV`, and the task runs in memU's own working
+    directory (``schedule`` passes ``-WorkingDirectory``; without it Task Scheduler
+    would start in ``System32``). Either signal is enough — the directory keeps
+    tasks registered before this existed working, and the variable survives an
+    agent that changes directory before running the command.
+
+    Fails open in the safe direction: unrecognised means "a person ran this", so
+    nothing is recorded and nothing is skipped.
+    """
+    environ = os.environ if env is None else env
+    if environ.get(BRIDGING_RUN_ENV, "").strip():
+        return True
+    return cwd == base
 
 
 def load(path: Path) -> list[str]:

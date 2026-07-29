@@ -183,7 +183,12 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
     # run and every later one (#606).
     own_session = os.environ.get(spec.session_id_env, "").strip() if spec.session_id_env else ""
     skip_sessions = self_sessions.load(layout.self_sessions)
-    if spec.session_id_env and not own_session:
+    # Only the *scheduled* run may claim a session. A person running prepare by
+    # hand is asking for the current conversation to be mined, so claiming it
+    # there would deliver the exact opposite, permanently.
+    if not self_sessions.is_bridging_run(Path.cwd(), layout.base):
+        own_session = ""
+    elif spec.session_id_env and not own_session:
         # The host advertised a variable and did not set it — a headless runner
         # that lost it, or a version that dropped it. Say so: the alternative is
         # #606 quietly returning while everything still looks healthy.
