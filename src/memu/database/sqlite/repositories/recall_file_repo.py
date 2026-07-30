@@ -195,19 +195,22 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             existing = session.exec(stmt).first()
 
             if existing:
-                recall_file = RecallFile(
-                    id=existing.id,
-                    name=existing.name,
-                    description=existing.description,
-                    embedding=self._normalize_embedding(existing.embedding),
-                    content=existing.content,
-                    track=existing.track,
-                    created_at=existing.created_at,
-                    updated_at=existing.updated_at,
-                    **self._scope_kwargs_from(existing),
-                )
-                self.recall_files[existing.id] = recall_file
-                return recall_file
+                # Backfill a stub that was created with an empty description/embedding.
+                # Each side is written only when the caller actually carries something
+                # better, so a no-op call leaves the row — and updated_at — untouched.
+                updated = False
+                if embedding and not self._normalize_embedding(existing.embedding):
+                    existing.embedding = self._prepare_embedding(embedding)
+                    updated = True
+                if description and not existing.description:
+                    existing.description = description
+                    updated = True
+                if updated:
+                    existing.updated_at = self._now()
+                    session.add(existing)
+                    session.commit()
+                    session.refresh(existing)
+                return self._row_to_recall_file(existing)
 
             # Create new file
             now = self._now()
