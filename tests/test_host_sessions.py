@@ -9,6 +9,7 @@ these tests localize the break to.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import sqlite3
 
@@ -274,6 +275,262 @@ def test_openclaw_discovers_only_main_session_transcripts(tmp_path: pathlib.Path
     checkpoint.write_text("{}\n", encoding="utf-8")
 
     assert OpenClawTranscriptSource(tmp_path).discover() == [session]
+
+
+# ── OpenClaw, SQLite session store ────────────────────────────────────────────
+#
+# Upstream moved transcripts out of the JSONL files into one database per agent.
+# The fixtures below are the real schema (STRICT tables, the session_windows
+# foreign key, the separate trajectory table) so that a future upstream change
+# breaks the fixture rather than the pipeline.
+
+
+def _openclaw_store(
+    root: pathlib.Path,
+    agent_id: str,
+    events: dict[str, list[tuple[int, dict, int]]],
+    *,
+    empty_sessions: tuple[str, ...] = (),
+    trajectory: tuple[str, ...] = (),
+) -> pathlib.Path:
+    """One agent's transcript database, in the layout OpenClaw writes it to.
+
+    ``events`` maps session id to ``(seq, entry, created_at_millis)`` rows.
+    """
+    db = root / agent_id / "agent" / "openclaw-agent.sqlite"
+    db.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE session_windows (
+          session_id TEXT PRIMARY KEY,
+          session_key TEXT,
+          reason TEXT
+        ) STRICT;
+        CREATE TABLE transcript_events (
+          session_id TEXT NOT NULL,
+          seq INTEGER NOT NULL,
+          event_json TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          PRIMARY KEY (session_id, seq),
+          FOREIGN KEY (session_id) REFERENCES "session_windows"(session_id) ON DELETE CASCADE
+        ) STRICT;
+        CREATE TABLE trajectory_runtime_events (
+          session_id TEXT NOT NULL,
+          seq INTEGER NOT NULL,
+          event_json TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          PRIMARY KEY (session_id, seq)
+        ) STRICT;
+        """
+    )
+    for session_id in (*events, *empty_sessions, *trajectory):
+        conn.execute(
+            "INSERT OR IGNORE INTO session_windows (session_id, session_key, reason) VALUES (?, ?, NULL)",
+            (session_id, f"agent:{agent_id}:main"),
+        )
+    for session_id, rows in events.items():
+        conn.executemany(
+            "INSERT INTO transcript_events (session_id, seq, event_json, created_at) VALUES (?, ?, ?, ?)",
+            [(session_id, seq, json.dumps(entry), created_at) for seq, entry, created_at in rows],
+        )
+    for session_id in trajectory:
+        conn.execute(
+            "INSERT INTO trajectory_runtime_events (session_id, seq, event_json, created_at) VALUES (?, 0, ?, ?)",
+            (session_id, json.dumps({"type": "trace"}), 1785377019307),
+        )
+    conn.commit()
+    conn.close()
+    return db
+
+
+def _openclaw_turn(role: str, text: str) -> dict:
+    return {"type": "message", "id": text, "message": {"role": role, "content": text}}
+
+
+def test_openclaw_discovers_stored_sessions_most_recent_first(tmp_path: pathlib.Path) -> None:
+    _openclaw_store(
+        tmp_path,
+        "main",
+        {
+            "older": [(0, _openclaw_turn("user", "first"), 1785308110945)],
+            "newer": [(0, _openclaw_turn("user", "second"), 1785379402605)],
+        },
+    )
+    source = OpenClawTranscriptSource(tmp_path)
+
+    assert source.exists()
+    assert [source.key(path) for path in source.discover()] == [
+        "main/sessions/newer.jsonl",
+        "main/sessions/older.jsonl",
+    ]
+
+
+def test_openclaw_stored_session_keeps_the_legacy_cursor_key(tmp_path: pathlib.Path) -> None:
+    """The upgrade must not re-mine anything. The legacy file name *was* the
+    session id, so a stored session is addressed exactly as its file was — a
+    session mined to N records as a file resumes at N+1 as rows, with no manifest
+    migration and no flag day."""
+    session_id = "a83c9e20-072d-4708-902a-47c596b14d55"
+    _openclaw_store(tmp_path, "main", {session_id: [(0, _openclaw_turn("user", "hi"), 1785308110945)]})
+
+    (path,) = OpenClawTranscriptSource(tmp_path).discover()
+    assert OpenClawTranscriptSource(tmp_path).key(path) == f"main/sessions/{session_id}.jsonl"
+
+
+def test_openclaw_reads_stored_events_in_sequence_order(tmp_path: pathlib.Path) -> None:
+    """``event_json`` is the entry verbatim — the same string that was one line
+    of the file — so classify() needs no container-specific branch."""
+    _openclaw_store(
+        tmp_path,
+        "main",
+        {
+            "s1": [
+                (0, {"type": "session", "id": "s1", "cwd": "/w"}, 1785308110945),
+                (1, _openclaw_turn("user", "delete the temp files"), 1785308110946),
+                (2, _openclaw_turn("assistant", "on it"), 1785308110947),
+                (3, _openclaw_turn("toolResult", "removed 3 files"), 1785308110948),
+                (4, {"type": "reset", "reason": "new", "firstKeptEntryId": "e9"}, 1785308110949),
+            ]
+        },
+    )
+    source = OpenClawTranscriptSource(tmp_path)
+    (path,) = source.discover()
+
+    records = source.read_records(path)
+    assert [source.classify(record) for record in records] == [
+        RecordKind.OTHER,  # session header
+        RecordKind.MESSAGE,  # user turn
+        RecordKind.MESSAGE,  # assistant turn
+        RecordKind.TOOL,  # tool output
+        RecordKind.OTHER,  # reset marker
+    ]
+    assert json.loads(records[1])["message"]["content"] == "delete the temp files"
+
+
+def test_openclaw_merges_both_shapes_on_one_time_scale(tmp_path: pathlib.Path) -> None:
+    """A host that upgraded keeps its old files, so both shapes coexist — and
+    they count time differently: the store in epoch *milliseconds*, files in
+    st_mtime *seconds*. Compared raw, every stored session sorts ahead of every
+    file and prepare's early stop then hides real sessions behind them."""
+    _openclaw_store(tmp_path, "main", {"stored-old": [(0, _openclaw_turn("user", "a"), 1_600_000_000_000)]})
+    legacy = tmp_path / "main" / "sessions" / "file-new.jsonl"
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_text(_line(_openclaw_turn("user", "b")) + "\n", encoding="utf-8")
+    os.utime(legacy, (1_700_000_000, 1_700_000_000))  # newer than the stored session
+
+    source = OpenClawTranscriptSource(tmp_path)
+    assert [source.key(path) for path in source.discover()] == [
+        "main/sessions/file-new.jsonl",
+        "main/sessions/stored-old.jsonl",
+    ]
+
+
+def test_openclaw_store_wins_over_a_leftover_file(tmp_path: pathlib.Path) -> None:
+    """Same session in both containers is one conversation on one cursor key.
+    The store is the live one; the file stopped being appended to at the upgrade."""
+    session_id = "a83c9e20-072d-4708-902a-47c596b14d55"
+    _openclaw_store(tmp_path, "main", {session_id: [(0, _openclaw_turn("user", "from the store"), 1785308110945)]})
+    stale = tmp_path / "main" / "sessions" / f"{session_id}.jsonl"
+    stale.parent.mkdir(parents=True, exist_ok=True)
+    stale.write_text(_line(_openclaw_turn("user", "from the file")) + "\n", encoding="utf-8")
+
+    source = OpenClawTranscriptSource(tmp_path)
+    (path,) = source.discover()  # not two entries
+    (record,) = source.read_records(path)
+    assert json.loads(record)["message"]["content"] == "from the store"
+
+
+def test_openclaw_reads_a_file_whose_session_is_not_in_the_store(tmp_path: pathlib.Path) -> None:
+    """Mid-migration, or a file the import never took: the store exists but does
+    not hold this session, so the file is still the only copy of it."""
+    _openclaw_store(tmp_path, "main", {"imported": [(0, _openclaw_turn("user", "a"), 1785308110945)]})
+    orphan = tmp_path / "main" / "sessions" / "never-imported.jsonl"
+    orphan.parent.mkdir(parents=True, exist_ok=True)
+    orphan.write_text(_line(_openclaw_turn("user", "only on disk")) + "\n", encoding="utf-8")
+
+    source = OpenClawTranscriptSource(tmp_path)
+    (path,) = [candidate for candidate in source.discover() if candidate.name == "never-imported.jsonl"]
+    (record,) = source.read_records(path)
+    assert json.loads(record)["message"]["content"] == "only on disk"
+
+
+def test_openclaw_skips_sessions_with_no_transcript_events(tmp_path: pathlib.Path) -> None:
+    """Grouping over the events themselves is what keeps empty sessions out of
+    prepare's slots — the #533 failure, avoided by construction rather than by a
+    name filter. Trajectory events cannot resurrect one: they live in their own
+    table, unreachable from the one we select from."""
+    _openclaw_store(
+        tmp_path,
+        "main",
+        {"real": [(0, _openclaw_turn("user", "hi"), 1785308110945)]},
+        empty_sessions=("slash-command-only",),
+        trajectory=("trace-only",),
+    )
+    source = OpenClawTranscriptSource(tmp_path)
+
+    assert [source.key(path) for path in source.discover()] == ["main/sessions/real.jsonl"]
+
+
+def test_openclaw_skips_the_sqlite_import_archive(tmp_path: pathlib.Path) -> None:
+    """``doctor`` moves imported legacy files here. Their turns are already being
+    read out of the store under the pre-upgrade cursor key, so discovering them at
+    their new path would re-mine the whole pre-upgrade history under a second key."""
+    _openclaw_store(tmp_path, "main", {"imported": [(0, _openclaw_turn("user", "hi"), 1785308110945)]})
+    archived = tmp_path / "main" / "session-sqlite-import-archive" / "imported.jsonl"
+    archived.parent.mkdir(parents=True, exist_ok=True)
+    archived.write_text(_line(_openclaw_turn("user", "hi")) + "\n", encoding="utf-8")
+
+    source = OpenClawTranscriptSource(tmp_path)
+    assert [source.key(path) for path in source.discover()] == ["main/sessions/imported.jsonl"]
+
+
+def test_openclaw_discovers_every_agents_store(tmp_path: pathlib.Path) -> None:
+    """One database per agent, so discovery is per agent directory."""
+    _openclaw_store(tmp_path, "main", {"s-main": [(0, _openclaw_turn("user", "a"), 1785308110945)]})
+    _openclaw_store(tmp_path, "second", {"s-second": [(0, _openclaw_turn("user", "b"), 1785379402605)]})
+
+    source = OpenClawTranscriptSource(tmp_path)
+    assert [source.key(path) for path in source.discover()] == [
+        "second/sessions/s-second.jsonl",
+        "main/sessions/s-main.jsonl",
+    ]
+
+
+def test_openclaw_opens_the_store_read_only(tmp_path: pathlib.Path) -> None:
+    """The gateway and live sessions share this database in WAL mode — the
+    bridging task must never take its write lock. As with Hermes, the path is
+    percent-escaped into the URI: pasted in raw, a '%' would decode and a '#'
+    would truncate it, silently dropping ?mode=ro."""
+    import pytest
+
+    weird = tmp_path / "pct %41 #frag"
+    weird.mkdir()
+    db = _openclaw_store(weird, "main", {"s1": [(0, _openclaw_turn("user", "hi"), 1785308110945)]})
+    source = OpenClawTranscriptSource(weird)
+
+    assert [source.key(path) for path in source.discover()] == ["main/sessions/s1.jsonl"]
+    with pytest.raises(sqlite3.OperationalError, match="readonly"):
+        source._connect(db).execute(
+            "INSERT INTO transcript_events (session_id, seq, event_json, created_at) VALUES ('x', 0, '{}', 1)"
+        )
+
+
+def test_openclaw_unreadable_store_contributes_nothing_rather_than_raising(tmp_path: pathlib.Path) -> None:
+    """prepare runs unattended on a schedule. A store that is corrupt, or on a
+    schema this adapter does not recognize, has to degrade to "no sessions here" —
+    a crash would stop mining silently until someone noticed. The legacy files
+    beside it must still be read."""
+    db = tmp_path / "main" / "agent" / "openclaw-agent.sqlite"
+    db.parent.mkdir(parents=True)
+    db.write_bytes(b"this is not a database")
+    legacy = tmp_path / "main" / "sessions" / "still-here.jsonl"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text(_line(_openclaw_turn("user", "hi")) + "\n", encoding="utf-8")
+
+    source = OpenClawTranscriptSource(tmp_path)
+    assert [source.key(path) for path in source.discover()] == ["main/sessions/still-here.jsonl"]
+    assert source.read_records(legacy) == [_line(_openclaw_turn("user", "hi"))]
 
 
 # ── Hermes ─────────────────────────────────────────────────────────────────────

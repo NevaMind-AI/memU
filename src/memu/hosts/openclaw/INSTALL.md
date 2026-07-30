@@ -19,11 +19,13 @@ Parts 2 and 3 must share one configured mode. In local mode they must also share
 one store and embedding space, or retrieval silently returns nothing. Part 1 is
 what makes them agree.
 
-**Scope note.** This adapter reads the JSONL transcripts under
-`~/.openclaw/agents/<agentId>/sessions/` (all agents). If this install runs a
-non-default state dir (`OPENCLAW_STATE_DIR`), pass
-`--session-dir <state-dir>/agents` to `prepare`; if it keeps transcripts in the
-newer SQLite session target, this adapter cannot read them.
+**Scope note.** This adapter reads every agent's transcripts under
+`~/.openclaw/agents/`, in either shape OpenClaw has shipped: the current
+per-agent SQLite store (`<agentId>/agent/openclaw-agent.sqlite`) and the legacy
+JSONL files (`<agentId>/sessions/*.jsonl`). Both are read, so an install works
+either side of the upgrade — and a session mined before it keeps its place in the
+cursor after it. If this install runs a non-default state dir
+(`OPENCLAW_STATE_DIR`), pass `--session-dir <state-dir>/agents` to `prepare`.
 
 ---
 
