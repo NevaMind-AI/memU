@@ -94,13 +94,13 @@ The scan stops at the first already-seen unchanged session, which is sound only 
 discovery is newest-first. Self-sessions are the newest files on disk, so ending the scan
 there would hide every real session beneath them. They are passed over instead.
 
-### 4. The gate has two grades, and a new host must say which it has
+### 4. The gate has three grades, and a host's grade follows from how it is scheduled
 
 Hosts differ in *who* schedules the run, and this is the part that does not generalise for
 free:
 
-- **memU writes the invocation** (`claude_code`, `cursor`, `hermes`, `generic` — crontab,
-  launchd, Task Scheduler). The wrapper exports the marker. Strong: no prose, no compliance.
+- **memU writes the invocation** (`claude_code`, `cursor`, `hermes` — crontab, launchd, Task
+  Scheduler). The wrapper exports the marker. Strong: no prose, no compliance.
 - **The host schedules it natively and the payload is a prompt** (`openclaw`'s `openclaw
   cron`, `codex`, `workbuddy`, `cola`'s native task UI). There is no wrapper to write, so the
   marker can only ride in the documented command inside the prompt. It is still read from the
@@ -112,6 +112,11 @@ free:
   `created_actor_id`, so if the latter holds the cron job's id, memU can record its own job
   identity at install time and match on it — exact, structural, needing neither marker nor
   environment variable. Preferred wherever a host offers it.
+
+A host's grade is not a fixed property of the host — it follows from what its guide tells the
+user to register. `codex` sits in the second grade because its guide creates a native Codex
+scheduled task; registering `codex exec` under an OS scheduler instead would move it to the
+first. So the grade is something a guide can improve, not something to accept.
 
 So each new host adapter owes three things: the variable name (surveyed on a real install,
 on Unix — Windows `os.environ` is case-insensitive and will hide a casing error), a
@@ -144,21 +149,26 @@ of the three grades applies.
 
 ## Out of scope
 
-- **`generic` cannot self-witness, and the reason is identity rather than the gate.** Its
-  invocation *is* memU-documented, so the marker could be carried — but ADR 0011 makes the
-  host indeterminate by design: memU does not know which agent it is pointed at, so there is
-  no variable to read and no reliable way to name the session to skip. A fallback for
-  `generic` is owed and deliberately not decided here.
+- **`generic` cannot be wired by memU, because memU does not know what it is.** ADR 0011
+  makes the host indeterminate by design, and *both* halves are missing rather than just one:
+  there is no known variable to read, and no invocation that can be assumed to be ours to
+  mark — the guide suggests cron, but a generic agent may well have a scheduler of its own,
+  and memU never sees which the user chose. The escape is the one ADR 0011 already relies on:
+  the user supplies what detection cannot. `session_id_env` is data, so a flag could carry it
+  for an agent that does export an id. Deliberately not decided here.
 - Wiring the remaining hosts, pending their surveys.
 - Assigning the session id ourselves (`claude --session-id <uuid>`) was considered: it would
   make the id known before launch, covering a run that dies before `prepare`. Rejected as
   narrower than it looks — it needs both that memU launches the host *and* that the CLI has
   such a flag, which of the CLIs surveyed only `claude` does. Recorded so it is not
   re-proposed as a general answer.
-- Suppressing the session entirely (`claude --no-session-persistence`, `codex exec
-  --ephemeral`) would remove the problem rather than skip it, but only for hosts memU
-  launches, and it discards the transcript that post-mortem debugging of failed runs depends
-  on. Left as a separate discussion.
+- Not writing the run's session at all. Some agent CLIs appear to offer this — one machine's
+  `claude --help` (2.1.220) and `codex exec --help` (codex-cli 0.144.5) each list such a flag.
+  **Neither was run**: the behaviour above is read off a one-line help string, and which
+  versions have it is unknown, so nothing in this ADR rests on it. If it does what it says, it
+  would remove the problem rather than skip it — but only where memU constructs the
+  invocation, and at the cost of the transcript a failed run is debugged from. Verify before
+  building on it.
 
 ## Related ADRs
 
@@ -166,5 +176,6 @@ of the three grades applies.
   of "trajectory as the source": the seam emits trajectory of its own.
 - Builds on `docs/adr/0010-multi-host-adapters.md` — adds `session_id_env` and
   `session_id()` to what a host declaration owes, alongside its existing fields.
-- Builds on `docs/adr/0011-generic-host-adapter.md` — the indeterminate host is the one that
-  structurally cannot satisfy this decision.
+- Builds on `docs/adr/0011-generic-host-adapter.md` — the indeterminate host is the one memU
+  cannot wire on its own; if it is wired, the user supplies the missing value, as with
+  `--session-dir`.
