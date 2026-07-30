@@ -14,6 +14,7 @@ The public surface is small on purpose:
 from __future__ import annotations
 
 from memu.observability import config, semconv
+from memu.observability.entrypoint import cli_telemetry
 from memu.observability.instruments import (
     record_embed_tokens,
     record_operation_duration,
@@ -27,6 +28,10 @@ from memu.observability.operation import (
     snapshot_store,
     traced_embed,
 )
+from memu.observability.propagation import (
+    env_with_current_context,
+    extract_context_from_env,
+)
 from memu.observability.telemetry import (
     TelemetryHandle,
     get_telemetry_handle,
@@ -38,7 +43,10 @@ __all__ = [
     "OperationScope",
     "StoreSnapshot",
     "TelemetryHandle",
+    "cli_telemetry",
     "config",
+    "env_with_current_context",
+    "extract_context_from_env",
     "get_telemetry_handle",
     "init_telemetry",
     "memory_operation",

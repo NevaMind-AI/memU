@@ -13,13 +13,16 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
+from opentelemetry import trace as trace_api
 from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter, SimpleLogRecordProcessor
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from memu.app import MemoryService
-from memu.observability import instruments, semconv, shutdown_telemetry
+from memu.observability import entrypoint, instruments, semconv, shutdown_telemetry
+from memu.observability.entrypoint import cli_telemetry
+from memu.observability.propagation import env_with_current_context, extract_context_from_env
 from memu.observability.telemetry import init_telemetry
 from tests.test_agentic import FakeEmbeddingClient
 
@@ -395,3 +398,95 @@ def test_extract_tokens_handles_provider_shapes(raw: Any, expected: int) -> None
     from memu.observability.operation import _extract_tokens
 
     assert _extract_tokens(raw) == expected
+
+
+# --------------------------------------------------------------------------- #
+# End-to-end trace: W3C context propagation across the process boundary
+# --------------------------------------------------------------------------- #
+_TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736"
+_PARENT_SPAN_ID = "00f067aa0ba902b7"
+_TRACEPARENT = f"00-{_TRACE_ID}-{_PARENT_SPAN_ID}-01"
+
+
+def test_extract_context_from_env_absent_returns_none() -> None:
+    assert extract_context_from_env({}) is None
+
+
+def test_extract_context_from_env_reads_traceparent() -> None:
+    ctx = extract_context_from_env({"TRACEPARENT": _TRACEPARENT})
+    assert ctx is not None
+    span_ctx = trace_api.get_current_span(ctx).get_span_context()
+    assert format(span_ctx.trace_id, "032x") == _TRACE_ID
+    assert format(span_ctx.span_id, "016x") == _PARENT_SPAN_ID
+    assert span_ctx.is_remote
+
+
+async def test_search_span_joins_inbound_trace(telemetry: Telemetry, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A memory op run under an extracted context shares the caller's trace id."""
+    monkeypatch.setenv("TRACEPARENT", _TRACEPARENT)
+    parent = extract_context_from_env()
+    assert parent is not None
+    service = make_service()
+    await _seed(service)
+    telemetry.spans.clear()
+    import opentelemetry.context as otel_context
+
+    ctx_token = otel_context.attach(parent)
+    try:
+        await service.progressive_retrieve("coffee")
+    finally:
+        otel_context.detach(ctx_token)
+    read = telemetry.span(semconv.SPAN_MEMORY_READ)
+    assert format(read.context.trace_id, "032x") == _TRACE_ID
+    # Its parent is the remote agent span carried in the traceparent.
+    assert read.parent is not None
+    assert format(read.parent.span_id, "016x") == _PARENT_SPAN_ID
+
+
+async def test_cli_telemetry_wraps_ops_in_server_span_under_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """cli_telemetry opens a SERVER span parented to TRACEPARENT; memory ops nest in it."""
+    span_exporter = InMemorySpanExporter()
+    handle = init_telemetry(
+        metric_reader=InMemoryMetricReader(),
+        log_processor=SimpleLogRecordProcessor(InMemoryLogRecordExporter()),
+        set_global=False,
+        force=True,
+    )
+    handle.tracer_provider.add_span_processor(SimpleSpanProcessor(span_exporter))
+    instruments.reset_instruments()
+    monkeypatch.setattr(entrypoint.config, "otel_enabled", lambda: True)
+    monkeypatch.setattr(entrypoint, "init_telemetry", lambda **_kw: handle)
+    monkeypatch.setenv("TRACEPARENT", _TRACEPARENT)
+
+    service = make_service()
+    with cli_telemetry("retrieve"):
+        await service.progressive_retrieve("coffee")
+
+    spans = span_exporter.get_finished_spans()
+    server = next(s for s in spans if s.name == "memu.retrieve")
+    read = next(s for s in spans if s.name == semconv.SPAN_MEMORY_READ)
+    assert server.kind.name == "SERVER"
+    assert server.attributes is not None
+    assert server.attributes[semconv.ATTR_OPERATION] == "retrieve"
+    # One trace, agent → memu.retrieve → memory.read.
+    assert format(server.context.trace_id, "032x") == _TRACE_ID
+    assert server.parent is not None and read.parent is not None
+    assert format(server.parent.span_id, "016x") == _PARENT_SPAN_ID
+    assert read.context.trace_id == server.context.trace_id
+    assert read.parent.span_id == server.context.span_id
+
+
+def test_cli_telemetry_noop_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(entrypoint.config, "otel_enabled", lambda: False)
+    with cli_telemetry("list-files"):
+        pass  # must not raise or attempt SDK wiring
+
+
+def test_env_with_current_context_injects_traceparent(telemetry: Telemetry) -> None:
+    from memu.observability import providers
+
+    tracer = providers.get_tracer("test", "1")  # recording provider from the fixture
+    with tracer.start_as_current_span("agent.request"):
+        env = env_with_current_context({"PATH": "/usr/bin"})
+    assert "TRACEPARENT" in env
+    assert env["PATH"] == "/usr/bin"  # base env preserved
