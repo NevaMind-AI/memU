@@ -41,7 +41,18 @@ class RecallFileRepo(Protocol):
         embedding: list[float],
         user_data: dict[str, Any],
         track: str = "memory",
-    ) -> RecallFile: ...
+    ) -> RecallFile:
+        """Match on ``(name, track, user scope)``, or insert a new file.
+
+        On a match, backfill: a stored ``description``/``embedding`` that is empty
+        (falsy — ``""`` and ``[]``, not just ``None``) takes the argument's value,
+        and ``updated_at`` is refreshed. This is the only channel that can repair a
+        persisted-empty field, since :meth:`update_recall_file` skips ``None``
+        arguments. Backfill is not an update: a populated field is never overwritten,
+        and an argument that is itself empty writes nothing — so a call carrying
+        nothing better leaves the row, ``updated_at`` included, untouched.
+        """
+        ...
 
     def update_recall_file(
         self,

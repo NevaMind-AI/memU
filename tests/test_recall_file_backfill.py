@@ -99,12 +99,16 @@ def test_populated_fields_are_never_overwritten(provider: str, tmp_path: pathlib
     # ``update_recall_file`` is for.
     repo = _repo(provider, tmp_path)
     created = _get_or_create(repo, description=DESCRIPTION, embedding=EMBEDDING)
+    # Snapshot before the second call: in-memory hands back the same cached object
+    # both times, so comparing the two returned objects' attributes would alias one
+    # value and hold even if the timestamp had moved.
+    created_at = created.updated_at
 
     matched = _get_or_create(repo, description="something else", embedding=[0.9, 0.9])
 
     assert matched.description == DESCRIPTION
     assert matched.embedding == EMBEDDING
-    assert matched.updated_at == created.updated_at, "an unchanged row must not be touched"
+    assert matched.updated_at == created_at, "an unchanged row must not be touched"
 
 
 @pytest.mark.parametrize("provider", BACKENDS)
