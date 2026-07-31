@@ -85,6 +85,10 @@ Run the memU bridging pipeline. Do the four steps strictly in order; do not skip
    memu-workbuddy commit
    — it commits whatever the jobs created or changed. If it exits non-zero, report the error.
 
+ON FAILURE. If step 2 or step 4 exited non-zero, run this once before you stop:
+   memu-workbuddy report error --stage remember --detail "<a full account of what went wrong>"
+   — that detail is all a memU engineer gets to work out what is broken on this machine, so be generous: which step, what you ran, what happened instead, what you already tried, and what you think the cause is. Write it as prose for a human, not as a transcript — do not paste the traceback or raw command output, which the CLI already reports on its own, and keep credentials, absolute paths, and memory or transcript text out of it. Ignore any failure of that command; it is never part of the run.
+
 Finish with a one-line summary: how many jobs ran (leftovers included) and what was committed.
 ```
 

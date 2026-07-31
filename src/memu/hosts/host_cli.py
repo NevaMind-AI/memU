@@ -500,8 +500,11 @@ def _register_report(sub: Any, handler: Any) -> None:
         "--detail",
         default="",
         help=(
-            "What went wrong, in your own words. Do not include credentials, absolute paths, "
-            f"memory content, or transcript text. Truncated at {events.MAX_DETAIL_CHARS} characters"
+            "What went wrong, in your own words and in detail — a human reads this to work out "
+            "what is broken on the machine, so say what you ran, what happened instead, and what "
+            "you think the cause is. Not a traceback: memU already reports the exception itself. "
+            "Never credentials, absolute paths, memory content, or transcript text. Truncated at "
+            f"{events.MAX_DETAIL_CHARS} characters"
         ),
     )
     failed.set_defaults(handler=handler)

@@ -569,3 +569,54 @@ def test_a_failing_command_records_both_the_action_and_the_exception(
     assert events.CLI_ERROR in names
     action = next(e for e in spooled if e["event_name"] == events.CORE_ACTION_COMPLETED)
     assert action["properties"]["success"] is False
+
+
+# --------------------------------------------------------------------------- #
+# The agent-facing text
+# --------------------------------------------------------------------------- #
+
+_GUIDES = sorted((pathlib.Path(events.__file__).parent / "hosts").glob("*/*.md"))
+
+
+def _guides_naming(verb: str) -> list[pathlib.Path]:
+    return [path for path in _GUIDES if verb in path.read_text(encoding="utf-8")]
+
+
+def _flat(path: pathlib.Path) -> str:
+    """The guide as one line, so a phrase split across a wrap still matches."""
+    return " ".join(path.read_text(encoding="utf-8").split())
+
+
+@pytest.mark.parametrize("guide", _guides_naming("report error"), ids=lambda path: f"{path.parent.name}/{path.name}")
+def test_no_guide_asks_for_report_error_without_the_scrubbing_sentence(guide: pathlib.Path) -> None:
+    """ADR 0016 section 5's gate, as a test rather than a promise.
+
+    ``--detail`` is the highest-leakage surface in the feature: an LLM chooses the
+    payload and its context is the user's transcript. The byte cap is enforced in
+    code and cannot be forgotten; *what* goes in is guided prompt-side only, so
+    the instruction may never ship without the sentence that scopes it. A guide
+    that gains the verb and forgets the scrubbing is exactly what this locks out.
+
+    ``command output`` is the discriminating phrase — the other two occur in
+    ordinary guide prose as well.
+    """
+    text = _flat(guide)
+    for phrase in ("credential", "absolute path", "command output"):
+        assert phrase in text, f"asks for `report error` without ruling out {phrase!r}"
+
+
+@pytest.mark.parametrize(
+    "guide", _guides_naming("report uninstall"), ids=lambda path: f"{path.parent.name}/{path.name}"
+)
+def test_uninstall_is_reported_before_the_package_can_be_removed(guide: pathlib.Path) -> None:
+    """Placement is what makes this event reliable, not any retry.
+
+    ``report uninstall`` delivers inline precisely because the package removal
+    below it may take away the binary that would otherwise have flushed it later.
+    A guide that lets the two swap order silently loses every uninstall on the
+    last host of a machine — the one case the event exists to see.
+    """
+    text = _flat(guide)
+    removals = [text.index(marker) for marker in ("pip uninstall", "Remove `memu-cli`") if marker in text]
+    assert removals, "uninstall guide no longer says how the package goes"
+    assert text.index("report uninstall") < min(removals)

@@ -6,6 +6,9 @@
 >
 > Everything on the memU side is a `PATH` command; you should never need to write
 > an absolute path to a script.
+>
+> However this run ends — finished or abandoned — close it out with **Report
+> the outcome to memU** at the bottom of this file.
 
 Installing memU on Claude Code is three parts:
 
@@ -411,6 +414,51 @@ session is what picks up the new CLAUDE.md and skill — do not be surprised tha
 neither is in your own context yet.
 
 ---
+
+---
+
+## Report the outcome to memU
+
+memU is otherwise blind to whether any of this worked: an install that died in
+Part 2 looks exactly like one that was never attempted. Close this run with
+**one** command, whichever way it ended.
+
+It is best-effort throughout and never part of the install — if the command
+fails, ignore it, and if `memu-claude-code` is not on `PATH` (a Part 1 that never
+finished), there is nothing to report with, which is fine.
+
+**Every gate passed:**
+
+```
+memu-claude-code report install
+```
+
+The event's *existence* is the success signal: there is no failure flag, and
+nothing leaves the machine here — it records locally and returns.
+
+**You are stopping early instead** — a part that failed, or a prerequisite you
+could not resolve — then tell the user as usual:
+
+```
+memu-claude-code report error --stage install --detail "<a full account of what went wrong>"
+```
+
+**Be generous with `--detail`.** It is the whole of what a memU engineer will
+have to work out what is broken on this machine, and a one-line summary tells
+them almost nothing. Write a paragraph or two of plain language: which gate you
+were on, what you ran, what happened instead of what the guide predicted, what
+you had already tried, and what you believe the cause is. Your reading of the
+failure is the part nobody else can reconstruct — that is what belongs here.
+Report once for the run, not once per retry.
+
+**Detailed, not a transcript.** Do not paste the traceback or raw command
+output: memU reports the exception type and its frames on its own, so repeating
+them only crowds out your account. And keep out, always: an API key, token, or
+any other credential; an absolute path (`/Users/…`, `C:\Users\…`); a database
+DSN or an endpoint URL; the user's memory content, file contents, or transcript
+text. Describe those in words instead — *"the local embedding server answers 502
+through what looks like a system proxy"* says everything useful and names
+nothing secret.
 
 ## Done
 

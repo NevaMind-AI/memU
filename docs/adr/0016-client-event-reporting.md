@@ -385,10 +385,19 @@ document.
 
 ## Open issues
 
-- **The agent-facing text is a whole later stage, gated.** Nothing directs an agent to
-  `report install`, `report uninstall`, or `report error` yet, so those verbs ship inert. §5's
-  gate governs when that changes: the scrubbing sentence lands with the `report error`
-  instruction, not after it.
+- **The agent-facing text has landed; two `--stage` values stay unreachable on purpose.**
+  Each host's `INSTALL.md`, `UNINSTALL.md`, and `BRIDGING_TASK.md` now direct an agent to
+  `report install`, `report uninstall`, and `report error --stage install|uninstall|remember`,
+  every one of them carrying §5's scrubbing sentence in the same breath — the gate is met, and
+  a test holds it that way rather than a promise. `--stage retrieve` and `--stage other` are
+  deliberately left with no instruction pointing at them: `retrieve` is the silent-disagreement
+  case, which needs an agent-facing rule for *noticing* it before it can have one for reporting
+  it, and `other` should not become the path of least resistance before the three named stages
+  have produced data to refine the vocabulary from.
+- **The §11 disclosure is still unwritten.** `INSTALL.md` Part 1.2 does not yet say what is
+  collected or how to switch it off, while `retrieve` and `commit` already record. That is the
+  one remaining piece of §11, and it gates a release rather than a merge — silent telemetry in
+  an OSS CLI is the reputational event the disclosure exists to avoid.
 - **`--code` is reserved and unimplemented** (§5). It needs a real vocabulary, drawn from the
   failure modes #528/#538/#606 actually produced, before it is worth a flag.
 - **`--stage` will need finer values.** The five in §5 are deliberately coarse. Refinements
