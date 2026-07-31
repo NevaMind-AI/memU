@@ -7,14 +7,28 @@ report zero, and the mining jobs chew through memU's own bookkeeping — the
 newest transcripts on disk, so they sort to the top and take the ``max_jobs``
 slots real conversations were waiting for (#606).
 
-The run identifies *itself*: ``prepare`` executes inside that very session, so
-the host has already put the session id in the environment
-(:attr:`~memu.hosts.host_cli.HostSpec.session_id_env`). That is an exact
-identity rather than a guess about content — nothing is matched, so nothing can
-be forged later by a memory that happens to quote the wrong text.
+Claiming a session takes two facts, and they are known in different places:
 
-Hosts that expose no such variable are not served here; they need a fallback
-keyed on the bridging prompt, which is deliberately not in this module.
+    the launch  — "this is the scheduled run", but the session does not exist
+                  yet, so its id cannot be known there
+    inside it   — the host has put the session id in the environment
+                  (:attr:`~memu.hosts.host_cli.HostSpec.session_id_env`), but a
+                  process there cannot tell why it was started
+
+``prepare`` is simply where the two meet: it runs *inside* the session, and it
+inherits the launcher's environment. So running ``prepare`` is not part of the
+condition — it is where the condition can be evaluated. Treating the command
+itself as the signal is the bug this module was corrected for: people run
+``prepare`` by hand, often meaning "remember this conversation now", and
+claiming that session delivers the opposite, permanently.
+
+Both signals live in the invocation rather than in the transcript, so the
+identity is exact, and nothing can be forged later by a memory that happens to
+quote the wrong text.
+
+Hosts that expose no such variable are not served here. What to do for them is
+open — see ADR 0015, which rejects matching a marker against transcript content
+and records the alternatives — so this module deliberately offers no fallback.
 """
 
 from __future__ import annotations

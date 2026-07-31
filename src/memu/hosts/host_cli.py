@@ -94,12 +94,15 @@ class HostSpec:
 
     session_id_env: str = ""
     """Environment variable through which the host tells a tool subprocess which
-    session it is running in (``CLAUDE_CODE_SESSION_ID``). ``prepare`` runs inside
-    the bridging session, so this is how a run recognises its *own* transcript and
-    declines to mine it (#606) — an exact identity, never a guess about content.
-    Its value must match what :meth:`~memu.hosts.base.TranscriptSource.session_id`
-    derives from a discovered session. Empty — the default — means the host has
-    not been surveyed yet, and the run keeps mining itself as before."""
+    session it is running in (``CLAUDE_CODE_SESSION_ID``). It answers *which*
+    session, never *whether* to claim one: only a run that
+    :func:`~memu.hosts.bridging.self_sessions.is_bridging_run` recognises as the
+    scheduled one reads it at all, so a person running ``prepare`` by hand keeps
+    their conversation mineable (#606). An exact identity, never a guess about
+    content. Its value must match what
+    :meth:`~memu.hosts.base.TranscriptSource.session_id` derives from a discovered
+    session. Empty — the default — means the host has not been surveyed yet, and
+    the run keeps mining itself as before."""
 
     needs_headless_auth: bool = False
     """Whether the scheduled agent needs a headless credential distinct from any
