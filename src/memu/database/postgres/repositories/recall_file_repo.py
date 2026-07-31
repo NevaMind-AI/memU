@@ -114,11 +114,16 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
             existing = session.scalar(select(self._sqla_models.RecallFile).where(*filters))
 
             if existing:
+                # A stub can be empty rather than NULL: ``description`` is NOT NULL so it
+                # stubs as "", and an embedding may round-trip as []. Test both falsy —
+                # an ``is None`` check never fires for the former. Writes are guarded on
+                # the incoming value so no-op calls leave updated_at alone, which also
+                # keeps an empty embedding from ever reaching the vector column.
                 updated = False
-                if getattr(existing, "embedding", None) is None:
+                if embedding and not self._normalize_embedding(getattr(existing, "embedding", None)):
                     existing.embedding = self._prepare_embedding(embedding)
                     updated = True
-                if getattr(existing, "description", None) is None:
+                if description and not getattr(existing, "description", ""):
                     existing.description = description
                     updated = True
                 if updated:
