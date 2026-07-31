@@ -33,6 +33,13 @@ SKILLS_DIR = "~/.claude/skills"
 """Claude Code's personal skills directory. Because it exists, the CLAUDE.md block
 is a pointer and the retrieval procedure itself is installed here as a skill."""
 
+SESSION_ID_ENV = "CLAUDE_CODE_SESSION_ID"
+"""Claude Code exports the running session's id to every tool subprocess, headless
+``claude -p`` runs included — verified on 2.1.220. Its value is the transcript's
+file name (``<projects>/<escaped cwd>/<sessionId>.jsonl``), which is exactly what
+:meth:`TranscriptSource.session_id` reads back, so the bridging run can recognise
+its own session without matching any content (#606)."""
+
 SPEC = HostSpec(
     host=HOST,
     display="Claude Code",
@@ -43,6 +50,7 @@ SPEC = HostSpec(
     instruction_path=CLAUDE_MD,
     skills_dir=SKILLS_DIR,
     schedule_command="claude -p {prompt}",
+    session_id_env=SESSION_ID_ENV,
     needs_headless_auth=True,
     install_hint=(
         "  Install a standalone claude:\n"
