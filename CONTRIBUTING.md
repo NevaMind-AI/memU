@@ -18,7 +18,7 @@ We welcome all types of contributions:
 ## 🚀 Quick Start for Contributors
 
 ### Prerequisites
-- Python 3.13+
+- Python 3.11+
 - Git
 - [uv](https://github.com/astral-sh/uv) (Python package manager)
 - A code editor (VS Code recommended)
@@ -76,7 +76,7 @@ uv run python -m pytest
 uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=html
 
 # Run specific test file
-uv run python -m pytest tests/rust_entry_test.py
+uv run python -m pytest tests/test_vector.py
 
 # Run tests with specific marker
 uv run python -m pytest -m "not slow"
@@ -120,9 +120,8 @@ For feature requests, please describe:
 
 3. **Test your changes**
    ```bash
+   make check
    make test
-   make lint
-   make coverage
    ```
 
 4. **Submit pull request**
