@@ -1,0 +1,571 @@
+"""Client event reporting (ADR 0016).
+
+Weighted toward the two properties that matter more than delivery: **nothing
+leaks**, and **nothing breaks**. A telemetry module that loses events is a
+disappointment; one that ships a user's memory content, or that turns a working
+``retrieve`` into a failed one, is a defect of a different kind.
+"""
+
+from __future__ import annotations
+
+import json
+import pathlib
+import urllib.error
+from typing import Any
+
+import pytest
+
+from memu import events
+from memu.hosts.claude_code.cli import SPEC as CLAUDE_SPEC
+from memu.hosts.codex.cli import SPEC as CODEX_SPEC
+from memu.hosts.host_cli import run
+
+
+@pytest.fixture
+def reporting(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> pathlib.Path:
+    """Reporting on, pointed at a spool under ``tmp_path``. Returns the spool."""
+    from memu import env as env_module
+
+    spool = tmp_path / "events.jsonl"
+    monkeypatch.setenv("MEMU_EVENTS_BASE_URL", "https://example.invalid/events")
+    monkeypatch.setenv("MEMU_EVENTS_SPOOL", str(spool))
+    monkeypatch.setenv("MEMU_CONFIG_ENV", str(tmp_path / "config.env"))
+    monkeypatch.setenv("MEMU_MEMORY_MODE", "local")
+    monkeypatch.delenv("DO_NOT_TRACK", raising=False)
+    monkeypatch.delenv("MEMU_TELEMETRY", raising=False)
+    monkeypatch.delenv("MEMU_CLOUD_API_KEY", raising=False)
+    # The dotenv loader is process-cached, so a previous test's config file would
+    # otherwise leak in — including its MEMU_CLIENT_ID.
+    env_module.reload()
+    return spool
+
+
+def _spooled(spool: pathlib.Path) -> list[dict[str, Any]]:
+    if not spool.is_file():
+        return []
+    return [json.loads(line) for line in spool.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+class _Posted:
+    """Stands in for the endpoint, capturing what was sent."""
+
+    def __init__(self, status: int = 200, error: Exception | None = None) -> None:
+        self.status = status
+        self.error = error
+        self.batches: list[list[dict[str, Any]]] = []
+        self.headers: list[dict[str, str]] = []
+
+    def __call__(self, request: Any, timeout: float | None = None) -> Any:
+        self.batches.append(json.loads(request.data))
+        self.headers.append(dict(request.headers))
+        if self.error is not None:
+            raise self.error
+        return _Response(self.status)
+
+
+class _Response:
+    def __init__(self, status: int) -> None:
+        self.status = status
+
+    def __enter__(self) -> _Response:
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
+
+
+# --------------------------------------------------------------------------- #
+# The envelope
+# --------------------------------------------------------------------------- #
+
+
+def test_envelope_carries_every_field_the_backend_expects(reporting: pathlib.Path) -> None:
+    events.record(events.CLIENT_INSTALLED, host="claude-code")
+
+    (event,) = _spooled(reporting)
+    assert set(event) >= {
+        "event_id",
+        "event_name",
+        "client_type",
+        "client_instance_id",
+        "client_version",
+        "agent_platform",
+        "os",
+        "deployment_mode",
+        "occurred_at",
+        "context",
+        "properties",
+    }
+    assert event["client_type"] == "memu_cli"
+    assert event["deployment_mode"] == "local"
+    assert event["occurred_at"].endswith("Z")
+
+
+def test_event_ids_are_unique_so_a_retry_can_be_deduplicated(reporting: pathlib.Path) -> None:
+    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLIENT_INSTALLED, host="codex")
+
+    ids = {event["event_id"] for event in _spooled(reporting)}
+    assert len(ids) == 2
+
+
+def test_agent_platform_is_normalised_not_passed_through(reporting: pathlib.Path) -> None:
+    # `claude-code` is also the on-disk directory name, so the mapping has to
+    # happen here rather than by renaming the host.
+    assert events.agent_platform("claude-code") == "claude_code"
+    # The generic adapter's host id is `agent`; "agent" is meaningless as a
+    # platform dimension.
+    assert events.agent_platform("agent") == "generic"
+    assert events.agent_platform("codex") == "codex"
+    # The core `memu` binary has no host at all.
+    assert events.agent_platform("") == "none"
+
+
+def test_session_id_is_omitted_rather_than_faked(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
+    events.record(events.CLIENT_INSTALLED, host="claude-code", session_id_env="CLAUDE_CODE_SESSION_ID")
+    (absent,) = _spooled(reporting)
+    assert "session_id" not in absent
+
+    reporting.unlink()
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "abc-123")
+    events.record(events.CLIENT_INSTALLED, host="claude-code", session_id_env="CLAUDE_CODE_SESSION_ID")
+    (present,) = _spooled(reporting)
+    assert present["session_id"] == "abc-123"
+
+
+def test_client_instance_id_persists_in_config_and_survives_a_reinstall(
+    reporting: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    from memu import env as env_module
+
+    events.record(events.CLIENT_INSTALLED, host="codex")
+    first = _spooled(reporting)[0]["client_instance_id"]
+
+    # `UNINSTALL.md` Part 3 keeps config.env unconditionally, which is the whole
+    # reason the id lives there: install -> uninstall -> reinstall stays one
+    # instance's history.
+    assert f"MEMU_CLIENT_ID={first}" in (tmp_path / "config.env").read_text(encoding="utf-8")
+
+    env_module.reload()
+    reporting.unlink()
+    events.record(events.CLIENT_UNINSTALLED, host="codex")
+    assert _spooled(reporting)[0]["client_instance_id"] == first
+
+
+# --------------------------------------------------------------------------- #
+# Nothing leaks
+# --------------------------------------------------------------------------- #
+
+
+def test_properties_are_an_allowlist_not_a_passthrough(reporting: pathlib.Path) -> None:
+    events.record(
+        events.CORE_ACTION_COMPLETED,
+        host="codex",
+        properties={
+            "action_name": "memory_search",
+            "result_count": 3,
+            # Everything below is exactly what must never leave the machine.
+            "query": "what did I tell you about my salary",
+            "store_dsn": "postgres://user:pw@host/db",
+            "path": "/Users/someone/secret-project/notes.md",
+        },
+    )
+
+    (event,) = _spooled(reporting)
+    assert event["properties"] == {"action_name": "memory_search", "result_count": 3}
+
+
+def test_success_only_events_carry_no_properties(reporting: pathlib.Path) -> None:
+    # A constant `success: true` would teach a consumer nothing and invite
+    # someone to later send `false`, re-creating the failure channel that the
+    # success-only decision removed.
+    events.record(events.CLIENT_INSTALLED, host="codex", properties={"success": True})
+    assert _spooled(reporting)[0]["properties"] == {}
+
+
+_LEAKY_MESSAGE = "connect to postgres://user:hunter2@db.internal/memu failed"
+
+
+def _raise_leaky() -> None:
+    raise RuntimeError(_LEAKY_MESSAGE)
+
+
+def test_cli_error_reports_modules_and_never_paths_or_messages(reporting: pathlib.Path) -> None:
+    try:
+        _raise_leaky()
+    except RuntimeError as exc:
+        events.record_cli_error(exc, command="prepare", host="codex")
+
+    (event,) = _spooled(reporting)
+    blob = json.dumps(event)
+    assert event["properties"]["error_type"] == "RuntimeError"
+    # The message is where DSNs, tokens and home paths actually surface.
+    assert "hunter2" not in blob
+    assert "postgres://" not in blob
+    # Frames are dotted modules, never filesystem paths.
+    assert event["properties"]["frames"]
+    for frame in event["properties"]["frames"]:
+        assert "/" not in frame
+        assert "\\" not in frame
+    assert any(frame.startswith("tests.") or frame.startswith("<external>") for frame in event["properties"]["frames"])
+
+
+def test_cli_error_collapses_frames_from_outside_the_package(reporting: pathlib.Path) -> None:
+    # A path through the user's own checkout is not safe to report, and telling
+    # it apart from site-packages reliably is not worth the risk.
+    assert events._module_of("/Users/someone/private/thing.py") == "<external>"
+    assert events._module_of("/opt/venv/lib/python3.13/site-packages/memu/hosts/host_cli.py") == "memu.hosts.host_cli"
+
+
+def test_agent_detail_is_truncated_so_a_transcript_cannot_be_pasted(reporting: pathlib.Path) -> None:
+    events.record_agent_error(stage="other", detail="x" * 5000, host="codex")
+
+    (event,) = _spooled(reporting)
+    assert len(event["properties"]["detail"]) == events.MAX_DETAIL_CHARS
+
+
+def test_agent_error_deduplicates_a_retry_loop(reporting: pathlib.Path) -> None:
+    for _ in range(5):
+        events.record_agent_error(stage="remember", detail="cron never fired", host="codex")
+    events.record_agent_error(stage="retrieve", detail="cron never fired", host="codex")
+
+    assert len(_spooled(reporting)) == 2
+
+
+def test_stage_vocabulary_keeps_its_two_load_bearing_values() -> None:
+    # `retrieve`: a retrieval that returns nothing forever throws nothing, so
+    # `cli_error` cannot see it and only an agent can report it.
+    assert "retrieve" in events.STAGES
+    # `other`: a closed enum without an escape hatch turns *unclassifiable* into
+    # *unreported*, which is the loss this feature exists to prevent.
+    assert "other" in events.STAGES
+
+
+# --------------------------------------------------------------------------- #
+# Nothing breaks
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("variable", "value"),
+    [("MEMU_TELEMETRY", "0"), ("DO_NOT_TRACK", "1"), ("MEMU_EVENTS_BASE_URL", "")],
+)
+def test_each_kill_switch_stops_recording_entirely(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, variable: str, value: str
+) -> None:
+    monkeypatch.setenv(variable, value)
+    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record_agent_error(stage="other", detail="nope", host="codex")
+
+    assert not reporting.exists()
+    assert events.flush() == (0, 0)
+
+
+def test_recording_survives_an_unwritable_spool(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEMU_EVENTS_SPOOL", "/definitely/not/a/writable/path/events.jsonl")
+    events.record(events.CLIENT_INSTALLED, host="codex")  # must not raise
+
+
+def test_recording_survives_broken_config(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # `memory_mode()` raises on this. Reporting must not be what surfaces it.
+    monkeypatch.setenv("MEMU_MEMORY_MODE", "nonsense")
+    events.record(events.CLIENT_INSTALLED, host="codex")
+    assert not reporting.exists()
+
+
+def test_flush_survives_an_unreachable_endpoint(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    events.record(events.CLIENT_INSTALLED, host="codex")
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError("no route to host")))
+
+    assert events.flush() == (0, 0)
+    # Retained, not lost.
+    assert list(reporting.parent.glob("events.jsonl.*.sending"))
+
+
+def test_a_retrieve_that_cannot_report_is_still_a_successful_retrieve(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The load-bearing guarantee: reporting cannot fail a command.
+
+    ``_cmd_retrieve`` does not guard its own call — the guard lives inside
+    ``events``, which is what makes it hold for every call site rather than the
+    ones someone remembered to wrap.
+    """
+    from memu.hosts import retrieval
+
+    async def _fake(query: str, where: Any = None) -> dict[str, Any]:
+        return {"segments": [{"text": "hi"}], "files": [], "resources": []}
+
+    def _explode(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(retrieval, "retrieve", _fake)
+    monkeypatch.setattr(events, "envelope", _explode)
+
+    assert run(CODEX_SPEC, ["retrieve", "anything"]) == 0
+
+
+# --------------------------------------------------------------------------- #
+# Delivery
+# --------------------------------------------------------------------------- #
+
+
+def test_flush_posts_a_batch_and_clears_the_spool(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLIENT_UNINSTALLED, host="codex")
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert events.flush() == (2, 0)
+    assert [event["event_name"] for event in posted.batches[0]] == [
+        events.CLIENT_INSTALLED,
+        events.CLIENT_UNINSTALLED,
+    ]
+    assert not reporting.exists()
+    assert not list(reporting.parent.glob("events.jsonl.*.sending"))
+
+
+def test_the_api_key_rides_along_when_present_and_is_absent_otherwise(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    events.record(events.CLIENT_INSTALLED, host="codex")
+    anonymous = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", anonymous)
+    events.flush()
+    # Local-mode users have no key at all and must stay first-class.
+    assert "Authorization" not in {key.title(): value for key, value in anonymous.headers[0].items()}
+
+    events.record(events.CLIENT_INSTALLED, host="codex")
+    identified = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", identified)
+    monkeypatch.setenv("MEMU_CLOUD_API_KEY", "sk-live-abc")
+    events.flush()
+    assert {key.title(): value for key, value in identified.headers[0].items()}["Authorization"] == "Bearer sk-live-abc"
+
+
+@pytest.mark.parametrize("status", [500, 503, 429])
+def test_a_transient_failure_retains_the_events(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, status: int
+) -> None:
+    events.record(events.CLIENT_INSTALLED, host="codex")
+    error = urllib.error.HTTPError("https://example.invalid/events", status, "nope", {}, None)  # type: ignore[arg-type]
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=error))
+
+    assert events.flush() == (0, 0)
+    assert list(reporting.parent.glob("events.jsonl.*.sending"))
+
+
+@pytest.mark.parametrize("status", [400, 422])
+def test_a_permanent_rejection_is_discarded_rather_than_wedging_the_spool(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, status: int
+) -> None:
+    events.record(events.CLIENT_INSTALLED, host="codex")
+    error = urllib.error.HTTPError("https://example.invalid/events", status, "nope", {}, None)  # type: ignore[arg-type]
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=error))
+
+    # Rejected is counted apart from accepted: a backend rejecting everything
+    # must never read as healthy delivery.
+    assert events.flush() == (0, 1)
+    assert not list(reporting.parent.glob("events.jsonl.*.sending"))
+
+
+def test_a_retained_file_is_picked_up_by_the_next_flush(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    events.record(events.CLIENT_INSTALLED, host="codex")
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError("offline")))
+    events.flush()
+
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted())
+    assert events.flush() == (1, 0)
+
+
+def test_a_truncated_line_costs_one_event_not_the_file(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLIENT_UNINSTALLED, host="codex")
+    # The signature of a process killed mid-append: a partial *final* line.
+    with open(reporting, "a", encoding="utf-8") as handle:
+        handle.write('{"event_name": "clie')
+
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+    assert events.flush() == (2, 0)
+
+
+def test_the_spool_is_capped_and_the_loss_is_reported_not_silent(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(events, "MAX_SPOOL_BYTES", 1)
+    events.record(events.CLIENT_INSTALLED, host="codex")  # lands: cap checked before writing
+    events.record(events.CLIENT_INSTALLED, host="codex")  # dropped
+    events.record(events.CLIENT_INSTALLED, host="codex")  # dropped
+    assert len(_spooled(reporting)) == 1
+
+    monkeypatch.setattr(events, "MAX_SPOOL_BYTES", 1024 * 1024)
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+    events.flush()
+    names = [event["event_name"] for batch in posted.batches for event in batch]
+    assert events.EVENTS_DROPPED in names
+    dropped = next(e for b in posted.batches for e in b if e["event_name"] == events.EVENTS_DROPPED)
+    assert dropped["properties"]["dropped_count"] == 2
+
+
+def test_batches_are_bounded(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(events, "MAX_BATCH", 3)
+    for _ in range(7):
+        events.record(events.CLIENT_INSTALLED, host="codex")
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert events.flush() == (7, 0)
+    assert [len(batch) for batch in posted.batches] == [3, 3, 1]
+
+
+def test_send_now_has_no_caller_in_the_shipped_code() -> None:
+    # It exists so the transport seam is proven to admit both modes, and is
+    # deliberately dormant (ADR 0016 section 2). If this fails, someone wired it
+    # up — which is a decision that owes a reason, not an accident.
+    root = pathlib.Path(events.__file__).parent
+    callers = [
+        path
+        for path in root.rglob("*.py")
+        if path.name != "events.py" and "send_now(" in path.read_text(encoding="utf-8")
+    ]
+    assert callers == []
+
+
+# --------------------------------------------------------------------------- #
+# The CLI surface
+# --------------------------------------------------------------------------- #
+
+
+def test_report_verbs_exist_on_every_host(reporting: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
+    for spec in (CODEX_SPEC, CLAUDE_SPEC):
+        assert run(spec, ["report", "install"]) == 0
+    assert len(_spooled(reporting)) == 2
+    assert {event["agent_platform"] for event in _spooled(reporting)} == {"codex", "claude_code"}
+
+
+def test_report_install_and_uninstall_take_no_failure_flag(reporting: pathlib.Path) -> None:
+    # Success-only by decision: failure has exactly one channel, `report error`.
+    with pytest.raises(SystemExit):
+        run(CODEX_SPEC, ["report", "install", "--failed"])
+
+
+def test_report_error_rejects_a_stage_outside_the_vocabulary(reporting: pathlib.Path) -> None:
+    with pytest.raises(SystemExit):
+        run(CODEX_SPEC, ["report", "error", "--stage", "whatever"])
+
+
+def test_report_error_records_stage_and_detail(reporting: pathlib.Path) -> None:
+    assert run(CODEX_SPEC, ["report", "error", "--stage", "install", "--detail", "pip resolved no wheel"]) == 0
+    (event,) = _spooled(reporting)
+    assert event["event_name"] == events.CLIENT_ERROR_REPORTED
+    assert event["properties"] == {"stage": "install", "detail": "pip resolved no wheel"}
+
+
+def test_report_uninstall_delivers_immediately(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # It cannot wait for a later flush: `UNINSTALL.md` Part 3 may remove the very
+    # binary that would deliver it.
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert run(CODEX_SPEC, ["report", "uninstall"]) == 0
+    assert [event["event_name"] for event in posted.batches[0]] == [events.CLIENT_UNINSTALLED]
+    assert not reporting.exists()
+
+
+def test_report_says_so_when_reporting_is_switched_off(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("MEMU_TELEMETRY", "0")
+    assert run(CODEX_SPEC, ["report", "install"]) == 0
+    assert "nothing recorded" in capsys.readouterr().out
+
+
+def test_retrieve_records_counts_and_never_the_query(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from memu.hosts import retrieval
+
+    async def _fake(query: str, where: Any = None) -> dict[str, Any]:
+        return {"segments": [{"text": "a"}, {"text": "b"}], "files": [{"name": "f"}], "resources": []}
+
+    monkeypatch.setattr(retrieval, "retrieve", _fake)
+    assert run(CODEX_SPEC, ["retrieve", "my bank password reminder"]) == 0
+
+    (event,) = _spooled(reporting)
+    assert event["event_name"] == events.CORE_ACTION_COMPLETED
+    assert event["properties"]["action_name"] == "memory_search"
+    assert event["properties"]["success"] is True
+    assert event["properties"]["result_count"] == 3
+    assert "bank password" not in json.dumps(event)
+
+
+def test_a_failing_retrieve_never_posts_from_the_per_turn_hook(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The invariant that survives the error path too.
+
+    A store the hook cannot reach fails ``retrieve`` on *every* turn. If the error
+    handler flushed, that would put a blocking POST on the hot path once per turn,
+    precisely when the user is already broken.
+    """
+    from memu.hosts import retrieval
+
+    async def _boom(query: str, where: Any = None) -> dict[str, Any]:
+        raise RuntimeError("boom")
+
+    posted = _Posted()
+    monkeypatch.setattr(retrieval, "retrieve", _boom)
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert run(CODEX_SPEC, ["retrieve", "anything"]) == 1
+    assert posted.batches == []
+    # Recorded, just not delivered from here — the bridging pair will carry it.
+    assert len(_spooled(reporting)) == 2
+
+
+def test_a_failing_bridging_run_does_flush_because_its_flush_point_is_what_broke(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from memu.hosts import host_cli
+
+    async def _boom(layout: Any) -> dict[str, Any]:
+        raise RuntimeError("boom")
+
+    posted = _Posted()
+    monkeypatch.setattr(host_cli, "commit", _boom)
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert run(CODEX_SPEC, ["commit"]) == 1
+    names = [event["event_name"] for batch in posted.batches for event in batch]
+    assert events.CLI_ERROR in names
+
+
+def test_a_failing_command_records_both_the_action_and_the_exception(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from memu.hosts import retrieval
+
+    async def _boom(query: str, where: Any = None) -> dict[str, Any]:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(retrieval, "retrieve", _boom)
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError("offline")))
+
+    assert run(CODEX_SPEC, ["retrieve", "anything"]) == 1
+    # The spool was rotated by the error handler's flush, which then failed.
+    spooled = [
+        json.loads(line)
+        for path in reporting.parent.glob("events.jsonl*")
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    names = [event["event_name"] for event in spooled]
+    assert events.CORE_ACTION_COMPLETED in names
+    assert events.CLI_ERROR in names
+    action = next(e for e in spooled if e["event_name"] == events.CORE_ACTION_COMPLETED)
+    assert action["properties"]["success"] is False

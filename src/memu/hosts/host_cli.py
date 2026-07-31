@@ -32,6 +32,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
+from memu import events
 from memu.hosts import instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging import Layout, commit, prepare, self_sessions
@@ -222,13 +223,32 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
     if num_sessions == 0:
         print("no new session turns since the last run; nothing to mine")
     _refresh_retrieval(spec)
+    # One of the two designated flush points (ADR 0016): low-frequency and
+    # latency-tolerant, which is exactly what the per-turn retrieve hook is not.
+    events.flush()
     return 0
 
 
 async def _cmd_commit(spec: HostSpec, args: argparse.Namespace) -> int:
-    result = await commit(_layout(spec, args))
+    # The terminal step of the record seam, so this is where the remember event
+    # belongs — and it already holds the counts that event reports.
+    layout = _layout(spec, args)
+    session_count = _pending_session_count(layout)
+    try:
+        result = await commit(layout)
+    except Exception:
+        _record_remember(spec, success=False, recall_files=0, resources=0, sessions=session_count)
+        raise
     recall_files = result.get("recall_files", [])
     resources = result.get("resources", [])
+    _record_remember(
+        spec,
+        success=True,
+        recall_files=len(recall_files),
+        resources=len(resources),
+        sessions=session_count,
+    )
+    events.flush()
     if not recall_files and not resources:
         print("nothing to commit")
         return 0
@@ -236,6 +256,30 @@ async def _cmd_commit(spec: HostSpec, args: argparse.Namespace) -> int:
     for recall_file in recall_files:
         print(f"  - {recall_file.get('track')}/{recall_file.get('name')}")
     return 0
+
+
+def _pending_session_count(layout: Layout) -> int:
+    """How many session slices this run mined, read before ``commit`` clears them.
+
+    A count, never a name: which sessions were mined is content, and content does
+    not leave the machine (ADR 0016 §10).
+    """
+    try:
+        return len(list(layout.sessions.glob("*.jsonl")))
+    except OSError:
+        return 0
+
+
+def _record_remember(spec: HostSpec, *, success: bool, recall_files: int, resources: int, sessions: int) -> None:
+    events.record_action(
+        "memory_update",
+        host=spec.host,
+        session_id_env=spec.session_id_env,
+        success=success,
+        recall_file_count=recall_files,
+        resource_count=resources,
+        session_count=sessions,
+    )
 
 
 async def _cmd_verify_resources(spec: HostSpec, args: argparse.Namespace) -> int:
@@ -389,6 +433,83 @@ async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
     return scheduling.verify(spec, layout)
 
 
+async def _cmd_report(spec: HostSpec, args: argparse.Namespace) -> int:
+    """The one command surface for events code cannot observe by itself (ADR 0016).
+
+    ``install`` and ``uninstall`` exist because those procedures are agent-driven
+    prose: ``INSTALL.md`` is a multi-part guide with verify gates and no single
+    command spans it, so only the agent knows it reached the final one. Both
+    report **success only** — the event's existence is the signal, and failure has
+    exactly one channel, ``report error``.
+    """
+    # Said plainly rather than silently: a user who switched reporting off should
+    # see that this command did nothing, not a "recorded" that is not true.
+    outcome = "recorded" if events.enabled() else "reporting is off; nothing recorded"
+
+    if args.what == "install":
+        events.record(events.CLIENT_INSTALLED, host=spec.host, session_id_env=spec.session_id_env)
+        print(outcome)
+        return 0
+
+    if args.what == "uninstall":
+        events.record(events.CLIENT_UNINSTALLED, host=spec.host, session_id_env=spec.session_id_env)
+        # The one event that cannot wait for a later flush: `UNINSTALL.md` Part 3
+        # may remove the very binary that would deliver it. An ordinary inline
+        # flush, not `send_now` — the spool stays the only wired transport.
+        events.flush()
+        print(outcome)
+        return 0
+
+    if args.what == "error":
+        events.record_agent_error(
+            stage=args.stage,
+            detail=args.detail,
+            host=spec.host,
+            session_id_env=spec.session_id_env,
+        )
+        print(outcome)
+        return 0
+
+    accepted, rejected = events.flush()
+    print(f"delivered {accepted} event(s)")
+    if rejected:
+        # Never folded into the delivered count: a backend rejecting everything
+        # must not read as healthy delivery.
+        print(f"{rejected} event(s) discarded — the server rejected them", file=sys.stderr)
+    return 0
+
+
+def _register_report(sub: Any, handler: Any) -> None:
+    parser = sub.add_parser("report", help="Report a lifecycle event to memU")
+    what = parser.add_subparsers(dest="what", required=True)
+
+    installed = what.add_parser("install", help="Record that installation completed successfully")
+    installed.set_defaults(handler=handler)
+
+    uninstalled = what.add_parser("uninstall", help="Record that memU was uninstalled (delivers immediately)")
+    uninstalled.set_defaults(handler=handler)
+
+    failed = what.add_parser("error", help="Report a failure memU could not observe on its own")
+    failed.add_argument(
+        "--stage",
+        required=True,
+        choices=events.STAGES,
+        help="Which operation failed. 'other' is the catchall — use it rather than not reporting",
+    )
+    failed.add_argument(
+        "--detail",
+        default="",
+        help=(
+            "What went wrong, in your own words. Do not include credentials, absolute paths, "
+            f"memory content, or transcript text. Truncated at {events.MAX_DETAIL_CHARS} characters"
+        ),
+    )
+    failed.set_defaults(handler=handler)
+
+    flusher = what.add_parser("flush", help="Deliver any events still spooled on this machine")
+    flusher.set_defaults(handler=handler)
+
+
 def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=spec.binary,
@@ -413,7 +534,8 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     # Both halves of the inject seam: what the agent runs, and what tells it to.
     # Shared across hosts, so they are registered, not redefined — only the file
     # the instruction lands in and the binary it names are ours to fill in.
-    retrieval.register(sub)
+    retrieval.register(sub, host=spec.host, session_id_env=spec.session_id_env)
+    _register_report(sub, bind(_cmd_report))
     instruction.register(
         sub,
         path=spec.instruction_path,
@@ -490,6 +612,28 @@ def run(spec: HostSpec, argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         return 130
     except Exception as exc:
+        # Where genuine unhandled failures already land, so it is free to observe
+        # them here — and no model is in the loop, which makes this the
+        # higher-quality of the two error feeds (ADR 0016 §5). Recorded with the
+        # exception *type* and reduced frames only; the message is omitted,
+        # because messages are where DSNs, tokens, and home paths surface.
+        command = getattr(args, "command", "")
+        events.record_cli_error(
+            exc,
+            command=command,
+            host=spec.host,
+            session_id_env=spec.session_id_env,
+        )
+        # Flushed here, unlike other errors: if what broke *is* prepare or commit,
+        # the normal flush points are exactly the ones that will never run again.
+        #
+        # Never for `retrieve`, though, and the exception is the whole point. That
+        # is the per-turn hook, and a store it cannot reach fails it on *every*
+        # turn — so flushing here would put a blocking POST on the hot path, once
+        # per turn, exactly when the user is already broken. Its events wait for
+        # the bridging pair like any other.
+        if command != "retrieve":
+            events.flush()
         if os.environ.get("MEMU_DEBUG") == "1":
             raise
         print(f"error: {exc} (set MEMU_DEBUG=1 for a traceback)", file=sys.stderr)

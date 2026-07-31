@@ -19,9 +19,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 
+from memu import events
 from memu.env import build_agentic_memory_backend_from_env
 from memu.hosts.bridging.layout import BASE_DIR, TRACK_DIRS
 from memu.hosts.bridging.recall_files import write_recall_file
@@ -116,16 +118,44 @@ def _shape_for_agent(result: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _cmd_retrieve(args: argparse.Namespace) -> int:
-    result = await retrieve(args.query)
+    # Spool only, never flush (ADR 0016): this is the per-turn hook, and the rule
+    # that it must never fetch is the same one `_refresh_retrieval` exists for.
+    # The query text is deliberately not among what is recorded — counts only.
+    started = time.monotonic()
+    try:
+        result = await retrieve(args.query)
+    except Exception:
+        events.record_action(
+            "memory_search",
+            host=args.host,
+            session_id_env=args.session_id_env,
+            success=False,
+            result_count=0,
+            latency_ms=round((time.monotonic() - started) * 1000),
+        )
+        raise
+    events.record_action(
+        "memory_search",
+        host=args.host,
+        session_id_env=args.session_id_env,
+        success=True,
+        result_count=events.counts(result),
+        latency_ms=round((time.monotonic() - started) * 1000),
+    )
     print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
     return 0
 
 
-def register(sub: Any) -> None:
-    """Add the ``retrieve`` subcommand to a host CLI's subparsers."""
+def register(sub: Any, *, host: str = "", session_id_env: str = "") -> None:
+    """Add the ``retrieve`` subcommand to a host CLI's subparsers.
+
+    ``host`` and ``session_id_env`` come from the caller's :class:`HostSpec` and
+    are carried on the parser defaults purely so the event this command records
+    can name its platform and session — this module has no other access to them.
+    """
     parser = sub.add_parser(
         "retrieve",
         help="LLM-free single-shot retrieval over memory, skills, and resources (what the inject hook runs)",
     )
     parser.add_argument("query", help="Natural-language query")
-    parser.set_defaults(handler=_cmd_retrieve)
+    parser.set_defaults(handler=_cmd_retrieve, host=host, session_id_env=session_id_env)

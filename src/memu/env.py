@@ -98,6 +98,28 @@ def env(name: str, default: str | None = None) -> str | None:
     return os.environ.get(name) or _file_values().get(name) or default
 
 
+def env_declared(name: str, default: str = "") -> str:
+    """Like :func:`env`, but a *declared* value wins even when it is empty.
+
+    Two differences from :func:`env`, both deliberate. An empty value is returned
+    rather than treated as absent, and an empty process variable shadows the dotenv
+    instead of falling through to it. Together they are what makes
+    ``MEMU_EVENTS_BASE_URL=`` switch reporting off: under :func:`env` the empty
+    string reads as "unset", so the file value — or the default — silently switches
+    it back on.
+
+    :func:`env` is still right for a store DSN, where an empty ``MEMU_DB`` is a
+    mistake rather than a choice. Reach for this one only where the *off* position
+    of a switch **is** the empty string.
+    """
+    if name in os.environ:
+        return os.environ[name]
+    values = _file_values()
+    if name in values:
+        return values[name]
+    return default
+
+
 def require(name: str) -> str:
     """Like :func:`env`, but raise rather than guess."""
     value = env(name)
