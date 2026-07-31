@@ -1,4 +1,4 @@
-"""Unit test verifying PostgresRecallFileSegmentRepo list_segments deduplicates segment cache."""
+"""Unit test verifying recall file segment repositories do not duplicate segment objects in cache."""
 
 from __future__ import annotations
 
@@ -8,12 +8,36 @@ from unittest.mock import MagicMock
 
 import pytest
 
-pytest.importorskip("pgvector")
+from memu.app.settings import DatabaseConfig, DefaultUserModel
+from memu.database.factory import build_database
+from memu.database.interfaces import Database
 
-from memu.database.postgres.models import RecallFileSegment as SQLARecallFileSegment
-from memu.database.postgres.repositories.recall_file_segment_repo import PostgresRecallFileSegmentRepo
-from memu.database.postgres.schema import SQLAModels
-from memu.database.state import DatabaseState
+
+@pytest.fixture(params=["inmemory", "sqlite"])
+def db_backend(request: pytest.FixtureRequest, tmp_path: Any) -> Database:
+    if request.param == "inmemory":
+        config = DatabaseConfig.model_validate({"metadata_store": {"provider": "inmemory"}})
+    else:
+        config = DatabaseConfig.model_validate({
+            "metadata_store": {"provider": "sqlite", "dsn": f"sqlite:///{tmp_path}/memu.sqlite3"}
+        })
+    return build_database(config=config, user_model=DefaultUserModel)
+
+
+def test_list_segments_no_duplicates_in_cache(db_backend: Database) -> None:
+    """Test inmemory and sqlite backends do not duplicate segment objects in cache."""
+    f = db_backend.recall_file_repo.get_or_create_recall_file(
+        name="file1", description="desc", embedding=[0.1], user_data={"user_id": "u1"}
+    )
+    db_backend.recall_file_segment_repo.create_segment(
+        recall_file_id=f.id, text="seg1", embedding=[0.1], user_data={"user_id": "u1"}
+    )
+
+    db_backend.recall_file_segment_repo.list_segments()
+    db_backend.recall_file_segment_repo.list_segments()
+    db_backend.recall_file_segment_repo.list_segments()
+
+    assert len(db_backend.recall_file_segment_repo.segments) == 1
 
 
 class StubSession:
@@ -37,6 +61,14 @@ class StubSessionManager:
 
 
 def test_postgres_list_segments_deduplicates_cache() -> None:
+    """Test PostgresRecallFileSegmentRepo list_segments deduplication logic directly with a stub session."""
+    pytest.importorskip("pgvector")
+
+    from memu.database.postgres.models import RecallFileSegment as SQLARecallFileSegment
+    from memu.database.postgres.repositories.recall_file_segment_repo import PostgresRecallFileSegmentRepo
+    from memu.database.postgres.schema import SQLAModels
+    from memu.database.state import DatabaseState
+
     state = DatabaseState()
     sqla_models = SQLAModels(
         Resource=MagicMock(),
