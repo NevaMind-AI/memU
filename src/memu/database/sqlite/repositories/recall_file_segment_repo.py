@@ -14,6 +14,7 @@ from memu.database.sqlite.repositories.base import SQLiteRepoBase
 from memu.database.sqlite.schema import SQLiteSQLAModels
 from memu.database.sqlite.session import SQLiteSessionManager
 from memu.database.state import DatabaseState
+from memu.vector import cosine_topk
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,15 @@ class SQLiteRecallFileSegmentRepo(SQLiteRepoBase, RecallFileSegmentRepo):
         removed_ids = {seg.id for seg in removed}
         self.segments[:] = [seg for seg in self.segments if seg.id not in removed_ids]
         return removed
+
+    def vector_search_segments(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+    ) -> list[tuple[str, float]]:
+        pool = self.list_segments(where)
+        return cosine_topk(query_vec, [(seg.id, seg.embedding) for seg in pool], k=top_k)
 
     def load_existing(self) -> None:
         self.list_segments()

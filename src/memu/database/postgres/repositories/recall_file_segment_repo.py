@@ -8,6 +8,7 @@ from memu.database.postgres.repositories.base import PostgresRepoBase
 from memu.database.postgres.session import SessionManager
 from memu.database.repositories.recall_file_segment import RecallFileSegmentRepo
 from memu.database.state import DatabaseState
+from memu.vector import cosine_topk
 
 
 class PostgresRecallFileSegmentRepo(PostgresRepoBase, RecallFileSegmentRepo):
@@ -120,6 +121,15 @@ class PostgresRecallFileSegmentRepo(PostgresRepoBase, RecallFileSegmentRepo):
         removed_ids = {seg.id for seg in removed}
         self.segments[:] = [seg for seg in self.segments if seg.id not in removed_ids]
         return removed
+
+    def vector_search_segments(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+    ) -> list[tuple[str, float]]:
+        pool = self.list_segments(where)
+        return cosine_topk(query_vec, [(seg.id, seg.embedding) for seg in pool], k=top_k)
 
     def load_existing(self) -> None:
         from sqlmodel import select
