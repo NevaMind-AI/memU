@@ -3,6 +3,7 @@ from memu.embedding.backends.doubao import DoubaoEmbeddingBackend, DoubaoMultimo
 from memu.embedding.backends.jina import JinaEmbeddingBackend
 from memu.embedding.backends.openai import OpenAIEmbeddingBackend
 from memu.embedding.backends.openrouter import OpenRouterEmbeddingBackend
+from memu.embedding.backends.orcarouter import OrcaRouterEmbeddingBackend
 from memu.embedding.backends.voyage import VoyageEmbeddingBackend
 
 __all__ = [
@@ -12,5 +13,6 @@ __all__ = [
     "JinaEmbeddingBackend",
     "OpenAIEmbeddingBackend",
     "OpenRouterEmbeddingBackend",
+    "OrcaRouterEmbeddingBackend",
     "VoyageEmbeddingBackend",
 ]

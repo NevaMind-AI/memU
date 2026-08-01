@@ -39,7 +39,7 @@ class EmbeddingConfig(BaseModel):
         description=(
             "Which embedding client backend to use: 'sdk' (official OpenAI SDK) or "
             "'httpx' (raw HTTP, supports all providers in memu.embedding.backends, "
-            "e.g. openai/jina/voyage/doubao/openrouter)."
+            "e.g. openai/jina/voyage/doubao/openrouter/orcarouter)."
         ),
     )
     endpoint_overrides: dict[str, str] = Field(

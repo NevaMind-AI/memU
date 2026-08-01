@@ -171,7 +171,7 @@ For Local / self-hosted installations, every CLI flag has a matching variable:
 | Setting | Env var | Default |
 |---|---|---|
 | Store | `MEMU_DB` | `./data/memu.sqlite3` (CLI); **required** for host adapters |
-| Embedding provider | `MEMU_EMBED_PROVIDER` | `openai` (also: `jina`, `voyage`, `doubao`, `openrouter`); legacy `MEMU_LLM_PROVIDER` still read |
+| Embedding provider | `MEMU_EMBED_PROVIDER` | `openai` (also: `jina`, `voyage`, `doubao`, `openrouter`, `orcarouter`); legacy `MEMU_LLM_PROVIDER` still read |
 | API key | `MEMU_API_KEY` | the provider's env var, e.g. `OPENAI_API_KEY` |
 | Embedding model | `MEMU_EMBED_MODEL` | the provider's default |
 | Base URL | `MEMU_BASE_URL` | the provider's default |
