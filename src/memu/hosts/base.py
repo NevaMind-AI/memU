@@ -1,7 +1,7 @@
 """The host seam: where a session log lives, and how to read one record of it.
 
 This is deliberately the *only* abstraction between hosts. Everything else the
-bridging task does — the per-session line cursor, the job-instruction templates,
+bridging task does — staged per-session cursors, the job-instruction templates,
 the content-hash snapshot/diff of the mirrored recall files, the commit back into
 memU — is host-agnostic and already lives in :mod:`memu.hosts.bridging`.
 
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import ClassVar
@@ -45,6 +46,19 @@ class TranscriptReadError(RuntimeError):
         self.path = path
         self.cause = cause
         super().__init__(f"could not read transcript data from {path}: {cause}")
+
+
+@dataclass(frozen=True)
+class TranscriptRead:
+    """One source-owned incremental read and the cursor to stage after it."""
+
+    records: list[str]
+    start: int
+    cursor: dict[str, object]
+
+    @property
+    def changed(self) -> bool:
+        return len(self.records) > self.start
 
 
 class TranscriptSource(ABC):
@@ -93,6 +107,14 @@ class TranscriptSource(ABC):
         """A session's records in order; sources may raise ``TranscriptReadError`` for recoverable I/O failures."""
         with path.open(encoding="utf-8") as handle:
             return [line for line in (raw.strip() for raw in handle) if line]
+
+    def read_incremental(self, path: Path, previous: dict[str, object] | None) -> TranscriptRead:
+        """Read a session and interpret its cursor; append-only lines are the default."""
+        records = self.read_records(path)
+        start = previous.get("lines", 0) if previous else 0
+        if not isinstance(start, int):
+            start = 0
+        return TranscriptRead(records=records, start=start, cursor={"lines": len(records)})
 
     def timestamp(self, record: str) -> str | None:
         """The record's timestamp, if it carries one. Recorded in the cursor file."""

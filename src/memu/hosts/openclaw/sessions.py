@@ -22,10 +22,11 @@ The legacy ``sessions.json`` index sitting next to the transcripts is not JSONL
 and is naturally skipped by discovery; the ``*.trajectory.jsonl`` and
 ``*.checkpoint.*.jsonl`` sidecars *are* JSONL and are skipped by name.
 
-The line-count cursor stays sound in both shapes: ``transcript_events.seq`` is
-allocated per session as ``MAX(seq)+1``, so rows are append-only exactly as file
-lines were, and sessions are discovered most-recently-active first, so the scan's
-early stop at the first unchanged session cannot hide newer content.
+OpenClaw assigns every SQLite transcript a rewrite generation. Appends preserve
+that token; destructive replacement rotates it and restarts ``seq`` at zero. The
+adapter therefore keeps the legacy path key but augments its cursor with the
+SQLite generation, so a rewrite invalidates the old line offset instead of
+silently stranding new content behind it.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ import sqlite3
 from pathlib import Path
 from typing import ClassVar
 
-from memu.hosts.base import RecordKind, TranscriptReadError, TranscriptSource
+from memu.hosts.base import RecordKind, TranscriptRead, TranscriptReadError, TranscriptSource
 
 logger = logging.getLogger(__name__)
 
@@ -130,9 +131,9 @@ class OpenClawTranscriptSource(TranscriptSource):
 
         A session keeps the address it had as a file — ``<agentId>/sessions/
         <sessionId>.jsonl`` — because the legacy file name *was* the session id.
-        So :meth:`key` needs no override and the cursor survives the upgrade: a
-        session mined to 120 records as a file resumes at record 121 as rows,
-        with no manifest migration and no flag day. The path is never opened.
+        So :meth:`key` needs no override, while :meth:`read_incremental` augments
+        the existing manifest entry with the store's rewrite generation. The path
+        is never opened.
         """
         return db.parent.parent / "sessions" / f"{session_id}{_SESSION_SUFFIX}"
 
@@ -165,7 +166,10 @@ class OpenClawTranscriptSource(TranscriptSource):
             try:
                 rows = self._query(
                     db,
-                    "SELECT session_id, MAX(created_at) FROM transcript_events GROUP BY session_id",
+                    "SELECT w.session_id, COALESCE(w.transcript_updated_at, MAX(e.created_at)) "
+                    "FROM transcript_events AS e "
+                    "JOIN session_windows AS w ON w.session_id = e.session_id "
+                    "GROUP BY w.session_id, w.transcript_updated_at",
                 )
             except TranscriptReadError as exc:
                 logger.warning("skipping unreadable OpenClaw transcript store %s: %s", db, exc.cause)
@@ -174,6 +178,9 @@ class OpenClawTranscriptSource(TranscriptSource):
             # out: a session that holds no transcript event has no row here, so
             # it never occupies a prepare slot. Trajectory events live in their
             # own table and are unreachable from this one.
+            # Use OpenClaw's transcript mutation clock, not only event timestamps:
+            # maintenance rewrites can preserve old created_at values while still
+            # rotating the generation. The fallback serves early migrated rows.
             stored.extend((last_at / 1000, self._virtual_path(db, session_id)) for session_id, last_at in rows)
 
         claimed = {path for _, path in stored}
@@ -194,13 +201,7 @@ class OpenClawTranscriptSource(TranscriptSource):
         return [path for _, path in merged]
 
     def read_records(self, path: Path) -> list[str]:
-        """One session's entries, in order, as the raw JSON lines they were.
-
-        Raw ``transcript_events`` rows rather than the active-events projection:
-        the file carried the whole parent-linked tree including branches, so raw
-        rows reproduce today's semantics exactly, and no rewind can make the
-        visible count shrink underneath the line cursor.
-        """
+        """One session's entries, in order, as the raw JSON lines they were."""
         stored = self._stored_session(path)
         if stored is not None:
             db, session_id = stored
@@ -209,11 +210,49 @@ class OpenClawTranscriptSource(TranscriptSource):
                 "SELECT event_json FROM transcript_events WHERE session_id = ? ORDER BY seq",
                 session_id,
             )
-            if rows:
-                return [event_json for (event_json,) in rows]
-        # No such session in the store — a legacy file that was never imported,
-        # or a host that has not upgraded at all.
+            return [event_json for (event_json,) in rows]
+        # A legacy file that was never imported, or a host that has not upgraded.
         return super().read_records(path)
+
+    def read_incremental(self, path: Path, previous: dict[str, object] | None) -> TranscriptRead:
+        """Use OpenClaw's rewrite generation to validate the SQLite row offset."""
+        stored = self._stored_session(path)
+        if stored is None:
+            return super().read_incremental(path, previous)
+
+        db, session_id = stored
+        rows = self._query(
+            db,
+            "SELECT r.generation, e.event_json "
+            "FROM transcript_rewrite_watermarks AS r "
+            "LEFT JOIN transcript_events AS e ON e.session_id = r.session_id "
+            "WHERE r.session_id = ? ORDER BY e.seq",
+            session_id,
+        )
+        if not rows:
+            error = sqlite3.DatabaseError(f"missing transcript generation for session {session_id}")
+            raise TranscriptReadError(db, error) from error
+
+        generation = rows[0][0]
+        records = [event_json for _, event_json in rows if event_json is not None]
+        previous_lines = previous.get("lines", 0) if previous else 0
+        if not isinstance(previous_lines, int):
+            previous_lines = 0
+        previous_generation = previous.get("generation") if previous else None
+        previous_container = previous.get("container") if previous else None
+
+        # A rotated generation restarts seq at zero. A legacy JSONL cursor has no
+        # generation or stable prefix identity either, so the first SQLite read
+        # must make the same conservative choice: replay this generation once
+        # rather than risk silently skipping rewritten content.
+        same_generation = previous_container == "sqlite" and previous_generation == generation
+        start = previous_lines if same_generation else 0
+
+        return TranscriptRead(
+            records=records,
+            start=start,
+            cursor={"container": "sqlite", "generation": generation, "lines": len(records)},
+        )
 
     # ── shape ─────────────────────────────────────────────────────────────────
 

@@ -295,6 +295,8 @@ def _openclaw_store(
     *,
     empty_sessions: tuple[str, ...] = (),
     trajectory: tuple[str, ...] = (),
+    generations: dict[str, str] | None = None,
+    activity: dict[str, int] | None = None,
 ) -> pathlib.Path:
     """One agent's transcript database, in the layout OpenClaw writes it to.
 
@@ -308,7 +310,8 @@ def _openclaw_store(
         CREATE TABLE session_windows (
           session_id TEXT PRIMARY KEY,
           session_key TEXT,
-          reason TEXT
+          reason TEXT,
+          transcript_updated_at INTEGER
         ) STRICT;
         CREATE TABLE transcript_events (
           session_id TEXT NOT NULL,
@@ -316,6 +319,12 @@ def _openclaw_store(
           event_json TEXT NOT NULL,
           created_at INTEGER NOT NULL,
           PRIMARY KEY (session_id, seq),
+          FOREIGN KEY (session_id) REFERENCES "session_windows"(session_id) ON DELETE CASCADE
+        ) STRICT;
+        CREATE TABLE transcript_rewrite_watermarks (
+          session_id TEXT NOT NULL PRIMARY KEY,
+          generation TEXT NOT NULL,
+          updated_at INTEGER NOT NULL,
           FOREIGN KEY (session_id) REFERENCES "session_windows"(session_id) ON DELETE CASCADE
         ) STRICT;
         CREATE TABLE trajectory_runtime_events (
@@ -327,15 +336,26 @@ def _openclaw_store(
         ) STRICT;
         """
     )
+    if generations is None:
+        generations = {session_id: f"generation-{session_id}" for session_id in events}
+    activity = activity or {}
     for session_id in (*events, *empty_sessions, *trajectory):
+        rows = events.get(session_id, [])
+        fallback_activity = max((created_at for _, _, created_at in rows), default=None)
         conn.execute(
-            "INSERT OR IGNORE INTO session_windows (session_id, session_key, reason) VALUES (?, ?, NULL)",
-            (session_id, f"agent:{agent_id}:main"),
+            "INSERT OR IGNORE INTO session_windows "
+            "(session_id, session_key, reason, transcript_updated_at) VALUES (?, ?, NULL, ?)",
+            (session_id, f"agent:{agent_id}:main", activity.get(session_id, fallback_activity)),
         )
     for session_id, rows in events.items():
         conn.executemany(
             "INSERT INTO transcript_events (session_id, seq, event_json, created_at) VALUES (?, ?, ?, ?)",
             [(session_id, seq, json.dumps(entry), created_at) for seq, entry, created_at in rows],
+        )
+    for session_id, generation in generations.items():
+        conn.execute(
+            "INSERT INTO transcript_rewrite_watermarks (session_id, generation, updated_at) VALUES (?, ?, ?)",
+            (session_id, generation, activity.get(session_id, 1785377019307)),
         )
     for session_id in trajectory:
         conn.execute(
@@ -591,6 +611,162 @@ def test_openclaw_prepare_warns_and_continues_after_stored_session_read_error(
     assert "healthy" in (out_dir / "1.jsonl").read_text(encoding="utf-8")
     assert "broken-new" in caplog.text
     assert "database is locked" in caplog.text
+
+
+def test_openclaw_missing_generation_is_a_recoverable_read_error(tmp_path: pathlib.Path) -> None:
+    _openclaw_store(
+        tmp_path,
+        "main",
+        {"s1": [(0, _openclaw_turn("user", "hi"), 1785308110945)]},
+        generations={},
+    )
+    source = OpenClawTranscriptSource(tmp_path)
+    (session,) = source.discover()
+
+    with pytest.raises(TranscriptReadError, match="missing transcript generation"):
+        source.read_incremental(session, None)
+
+
+def _prepare_openclaw(
+    source: OpenClawTranscriptSource,
+    tmp_path: pathlib.Path,
+    manifest: dict[str, dict[str, object]],
+) -> tuple[int, pathlib.Path, dict[str, dict[str, object]]]:
+    manifest_path = tmp_path / "manifest.json"
+    pending_path = tmp_path / "pending.json"
+    out_dir = tmp_path / "out"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    prepared = prepare_transcripts(
+        source,
+        out_dir=out_dir,
+        manifest_path=manifest_path,
+        max_jobs=10,
+        pending_path=pending_path,
+    )
+    return prepared, out_dir, json.loads(pending_path.read_text(encoding="utf-8"))
+
+
+def test_openclaw_same_generation_emits_only_appended_rows(tmp_path: pathlib.Path) -> None:
+    events = [(seq, _openclaw_turn("user", f"turn-{seq}"), 1785308110945 + seq) for seq in range(4)]
+    _openclaw_store(tmp_path, "main", {"s1": events}, generations={"s1": "generation-1"})
+    source = OpenClawTranscriptSource(tmp_path)
+
+    prepared, out_dir, pending = _prepare_openclaw(
+        source,
+        tmp_path,
+        {
+            "main/sessions/s1.jsonl": {
+                "container": "sqlite",
+                "generation": "generation-1",
+                "lines": 3,
+                "last_timestamp": None,
+            }
+        },
+    )
+
+    assert prepared == 1
+    assert "turn-3" in (out_dir / "1.jsonl").read_text(encoding="utf-8")
+    assert "turn-2" not in (out_dir / "1.jsonl").read_text(encoding="utf-8")
+    assert pending["main/sessions/s1.jsonl"]["generation"] == "generation-1"
+    assert pending["main/sessions/s1.jsonl"]["lines"] == 4
+
+
+def test_openclaw_generation_rotation_reoffers_rewritten_transcript(tmp_path: pathlib.Path) -> None:
+    events = [(seq, _openclaw_turn("user", f"rewritten-{seq}"), 1785308110945 + seq) for seq in range(5)]
+    _openclaw_store(tmp_path, "main", {"s1": events}, generations={"s1": "generation-2"})
+    source = OpenClawTranscriptSource(tmp_path)
+
+    prepared, out_dir, pending = _prepare_openclaw(
+        source,
+        tmp_path,
+        {
+            "main/sessions/s1.jsonl": {
+                "container": "sqlite",
+                "generation": "generation-1",
+                "lines": 10,
+                "last_timestamp": None,
+            }
+        },
+    )
+
+    assert prepared == 1
+    transcript = (out_dir / "1.jsonl").read_text(encoding="utf-8")
+    assert "rewritten-0" in transcript
+    assert "rewritten-4" in transcript
+    assert pending["main/sessions/s1.jsonl"] == {
+        "container": "sqlite",
+        "generation": "generation-2",
+        "lines": 5,
+        "last_timestamp": None,
+    }
+
+
+def test_openclaw_legacy_cursor_migration_reoffers_current_generation(tmp_path: pathlib.Path) -> None:
+    """The legacy cursor has no generation or prefix identity, so a container
+    switch cannot prove the imported prefix survived a rewrite. Replay once."""
+    events = [(seq, _openclaw_turn("user", f"turn-{seq}"), 1785308110945 + seq) for seq in range(4)]
+    _openclaw_store(tmp_path, "main", {"s1": events}, generations={"s1": "generation-1"})
+    source = OpenClawTranscriptSource(tmp_path)
+
+    prepared, out_dir, pending = _prepare_openclaw(
+        source,
+        tmp_path,
+        {"main/sessions/s1.jsonl": {"lines": 3, "last_timestamp": None}},
+    )
+
+    assert prepared == 1
+    transcript = (out_dir / "1.jsonl").read_text(encoding="utf-8")
+    assert "turn-0" in transcript
+    assert "turn-3" in transcript
+    assert pending["main/sessions/s1.jsonl"]["generation"] == "generation-1"
+
+
+def test_openclaw_same_generation_without_new_rows_creates_no_job(tmp_path: pathlib.Path) -> None:
+    events = [(seq, _openclaw_turn("user", f"turn-{seq}"), 1785308110945 + seq) for seq in range(3)]
+    _openclaw_store(tmp_path, "main", {"s1": events}, generations={"s1": "generation-1"})
+    source = OpenClawTranscriptSource(tmp_path)
+
+    prepared, out_dir, pending = _prepare_openclaw(
+        source,
+        tmp_path,
+        {
+            "main/sessions/s1.jsonl": {
+                "container": "sqlite",
+                "generation": "generation-1",
+                "lines": 3,
+                "last_timestamp": None,
+            }
+        },
+    )
+
+    assert prepared == 0
+    assert list(out_dir.glob("*.jsonl")) == []
+    assert pending["main/sessions/s1.jsonl"] == {
+        "container": "sqlite",
+        "generation": "generation-1",
+        "lines": 3,
+        "last_timestamp": None,
+    }
+
+
+def test_openclaw_rewrite_activity_controls_mixed_store_order(tmp_path: pathlib.Path) -> None:
+    """Replacement preserves old event timestamps but advances transcript activity,
+    which must lift the rewritten session above the early-stop frontier."""
+    _openclaw_store(
+        tmp_path,
+        "main",
+        {
+            "rewritten": [(0, _openclaw_turn("user", "old-created-at"), 1_000_000_000_000)],
+            "ordinary": [(0, _openclaw_turn("user", "ordinary"), 1_700_000_000_000)],
+        },
+        activity={"rewritten": 1_800_000_000_000, "ordinary": 1_700_000_000_000},
+    )
+
+    source = OpenClawTranscriptSource(tmp_path)
+    assert [source.key(path) for path in source.discover()] == [
+        "main/sessions/rewritten.jsonl",
+        "main/sessions/ordinary.jsonl",
+    ]
 
 
 # ── Hermes ─────────────────────────────────────────────────────────────────────
