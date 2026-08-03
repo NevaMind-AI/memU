@@ -26,6 +26,16 @@ Run the memU bridging pipeline. Do the four steps strictly in order.
    ascending numeric order. Read and follow each job. Doing nothing for a job is valid.
 4. COMMIT. Run `memu-cola commit`. If it fails, report the error.
 
+ON FAILURE. If step 2 or step 4 failed, run this once before you stop:
+`memu-cola report error --stage remember --detail "<a full account of what went
+wrong>"`. That detail is all a memU engineer gets to work out what is broken on
+this machine, so be generous: which step, what you ran, what happened instead,
+what you already tried, and what you think the cause is. Write it as prose for a
+human, not as a transcript — do not paste the traceback or raw command output,
+which the CLI already reports on its own, and keep credentials, absolute paths,
+and memory or transcript text out of it. Ignore any failure of that command; it
+is never part of the run.
+
 Finish with a one-line summary of jobs processed and recall files committed.
 ```
 

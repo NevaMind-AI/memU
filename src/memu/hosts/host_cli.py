@@ -22,9 +22,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
+import json
 import os
 import platform
 import sys
+import time
 import urllib.request
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
@@ -32,6 +35,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
+from memu import events
 from memu.hosts import instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging import Layout, commit, prepare, self_sessions
@@ -181,6 +185,7 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
         return 2
 
     layout = _layout(spec, args)
+    _mark_cycle_start(layout)
     # This run is itself a host session, and the host is logging it where we are
     # about to look. Remember it now — before the scan — so it is skipped by this
     # run and every later one (#606).
@@ -216,19 +221,59 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
         verify_command=spec.verify_command,
         max_jobs=args.max_jobs,
         skip_sessions=skip_sessions,
+        # Carried purely so the `memory_list` event the store mirror records can
+        # name its platform and session, the same two strings `retrieve` carries.
+        host=spec.host,
+        session_id_env=spec.session_id_env,
     )
     num_jobs = 2 * num_sessions + 1
     print(f"prepared {num_sessions} session(s) -> {num_jobs} job(s) in {layout.jobs}")
     if num_sessions == 0:
         print("no new session turns since the last run; nothing to mine")
     _refresh_retrieval(spec)
+    # One of the two designated flush points (ADR 0016): low-frequency and
+    # latency-tolerant, which is exactly what the per-turn retrieve hook is not.
+    events.flush()
     return 0
 
 
 async def _cmd_commit(spec: HostSpec, args: argparse.Namespace) -> int:
-    result = await commit(_layout(spec, args))
+    # The terminal step of the record seam, so this is where the remember event
+    # belongs — and it already holds the counts that event reports.
+    layout = _layout(spec, args)
+    session_count = _pending_session_count(layout)
+    started = time.monotonic()
+    try:
+        result = await commit(layout)
+    except Exception:
+        _record_remember(
+            spec,
+            success=False,
+            recall_files=0,
+            resources=0,
+            sessions=session_count,
+            latency_ms=_elapsed_ms(started),
+            duration_ms=_cycle_duration_ms(layout),
+        )
+        raise
     recall_files = result.get("recall_files", [])
     resources = result.get("resources", [])
+    _record_remember(
+        spec,
+        success=True,
+        recall_files=len(recall_files),
+        resources=len(resources),
+        sessions=session_count,
+        latency_ms=_elapsed_ms(started),
+        duration_ms=_cycle_duration_ms(layout),
+    )
+    # The cycle is closed and reported, so the marker has done its job. Cleared
+    # only on the success path — the `raise` above keeps it, so a retried commit
+    # still measures from the prepare that actually opened this cycle rather than
+    # reporting nothing.
+    with contextlib.suppress(OSError):
+        layout.run_marker.unlink(missing_ok=True)
+    events.flush()
     if not recall_files and not resources:
         print("nothing to commit")
         return 0
@@ -236,6 +281,102 @@ async def _cmd_commit(spec: HostSpec, args: argparse.Namespace) -> int:
     for recall_file in recall_files:
         print(f"  - {recall_file.get('track')}/{recall_file.get('name')}")
     return 0
+
+
+def _pending_session_count(layout: Layout) -> int:
+    """How many session slices this run mined, read before ``commit`` clears them.
+
+    A count, never a name: which sessions were mined is content, and content does
+    not leave the machine (ADR 0016 §10).
+    """
+    try:
+        return len(list(layout.sessions.glob("*.jsonl")))
+    except OSError:
+        return 0
+
+
+MAX_CYCLE_SECONDS = 24 * 60 * 60
+"""Past this a reported cycle is not believed. See :func:`_cycle_duration_ms`."""
+
+
+def _elapsed_ms(started: float) -> int:
+    """Milliseconds since a :func:`time.monotonic` reading."""
+    return round((time.monotonic() - started) * 1000)
+
+
+def _mark_cycle_start(layout: Layout) -> None:
+    """Stamp when this bridging cycle began, for ``commit`` to close.
+
+    Wall clock, unavoidably: the two halves of the record seam are separate
+    processes and no monotonic clock survives that boundary. What follows from
+    that is handled where the stamp is read, in :func:`_cycle_duration_ms`.
+
+    Overwritten by every ``prepare``, which is the right reading of a second one:
+    it regenerated the job files, so the cycle the agent is working is the one
+    that starts here. Best-effort like everything on the reporting path — an
+    unwritable marker costs the field, never the run.
+    """
+    try:
+        layout.run_marker.parent.mkdir(parents=True, exist_ok=True)
+        layout.run_marker.write_text(json.dumps({"started_at": time.time()}), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _cycle_duration_ms(layout: Layout) -> int | None:
+    """How long the whole cycle took, ``prepare`` to here — or ``None``.
+
+    Not a latency, and it must not be read as one. Most of this number is the
+    agent's self-evolve pass *between* the two commands — reading transcripts,
+    writing markdown — so it measures the bridging round trip, not memU's work.
+    ``latency_ms`` beside it is the part that is memU's.
+
+    Being wall clock (see :func:`_mark_cycle_start`), a suspended laptop or an
+    NTP step lands inside it too. So the impossible is dropped rather than sent:
+    a negative span means the clock moved backwards, and one longer than
+    :data:`MAX_CYCLE_SECONDS` is a machine that slept through a week, not a slow
+    agent. ``None`` — an absent field, never a zero — is also the honest answer
+    when there is no marker at all: a ``commit`` with no preceding ``prepare``, or
+    an upgrade that landed mid-cycle. A row a consumer can exclude, rather than
+    one that silently poisons an average.
+    """
+    try:
+        started = json.loads(layout.run_marker.read_text(encoding="utf-8"))["started_at"]
+        elapsed = time.time() - float(started)
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+    if not 0 <= elapsed <= MAX_CYCLE_SECONDS:
+        return None
+    return round(elapsed * 1000)
+
+
+def _record_remember(
+    spec: HostSpec,
+    *,
+    success: bool,
+    recall_files: int,
+    resources: int,
+    sessions: int,
+    latency_ms: int,
+    duration_ms: int | None,
+) -> None:
+    counts: dict[str, Any] = {
+        "recall_file_count": recall_files,
+        "resource_count": resources,
+        "session_count": sessions,
+        "latency_ms": latency_ms,
+    }
+    if duration_ms is not None:
+        # Omitted rather than zeroed when the cycle could not be measured — the
+        # distinction is the whole point of `_cycle_duration_ms` returning None.
+        counts["duration_ms"] = duration_ms
+    events.record_action(
+        "memory_update",
+        host=spec.host,
+        session_id_env=spec.session_id_env,
+        success=success,
+        **counts,
+    )
 
 
 async def _cmd_verify_resources(spec: HostSpec, args: argparse.Namespace) -> int:
@@ -357,7 +498,35 @@ async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
     filename = DOCS[args.doc]
     embedded = (files(spec.package) / filename).read_text(encoding="utf-8")
     print(templates.resolve_doc(spec.host, filename, embedded))
+    if args.doc == "install":
+        _report_install_started(spec)
     return 0
+
+
+def _report_install_started(spec: HostSpec) -> None:
+    """The install funnel's entry point (ADR 0016 §4).
+
+    Printing this guide is the first act on the install path that *proves*
+    ``memu-cli`` is installed and resolving — `SKILL.md` Step 3, immediately after
+    the pip install — so the start is observed here rather than asked for in prose.
+    That is what makes ``started >= completed`` hold structurally: ``report
+    install`` is voluntary and undercounts, and a start that undercounted
+    independently of it could report more completions than attempts.
+
+    ``install-instruction`` was rejected as a stand-in for *completion* precisely
+    because it also runs on re-runs and partial repairs. For a *start* that is the
+    correct reading: a re-run is a new attempt.
+
+    Flushed, not merely recorded, and that is the load-bearing half. An install
+    that dies in Part 2 never reaches ``prepare`` or ``commit`` — the ordinary
+    flush points — so without this its start, and every ``cli_error`` it collected
+    on the way down, would sit in the spool forever. That run is the exact one
+    this event exists to make visible. Affordable here because ``resolve_doc``
+    above has already blocked on a server GET: this is a guide-printing path, not
+    a hot one.
+    """
+    events.record(events.CLI_INSTALL_STARTED, host=spec.host, session_id_env=spec.session_id_env)
+    events.flush()
 
 
 async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
@@ -389,6 +558,98 @@ async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
     return scheduling.verify(spec, layout)
 
 
+async def _cmd_report(spec: HostSpec, args: argparse.Namespace) -> int:
+    """The one command surface for events code cannot observe by itself (ADR 0016).
+
+    ``install`` and ``uninstall`` exist because those procedures are agent-driven
+    prose: ``INSTALL.md`` is a multi-part guide with verify gates and no single
+    command spans it, so only the agent knows it reached the final one. Both
+    report **success only** — the event's existence is the signal, and failure has
+    exactly one channel, ``report error``.
+
+    Only the *completion* needs a verb. The matching start is code-observed in
+    :func:`_report_install_started`, because a funnel whose two ends are both
+    voluntary can report more completions than attempts.
+    """
+    # Said plainly rather than silently: a user who switched reporting off should
+    # see that this command did nothing, not a "recorded" that is not true.
+    outcome = "recorded" if events.enabled() else "reporting is off; nothing recorded"
+
+    if args.what == "install":
+        events.record(events.CLI_INSTALL_COMPLETED, host=spec.host, session_id_env=spec.session_id_env)
+        print(outcome)
+        return 0
+
+    if args.what == "uninstall":
+        events.record(events.CLI_UNINSTALLED, host=spec.host, session_id_env=spec.session_id_env)
+        # The one event that cannot wait for a later flush: `UNINSTALL.md` Part 3
+        # may remove the very binary that would deliver it. An ordinary inline
+        # flush, not `send_now` — the spool stays the only wired transport.
+        events.flush()
+        print(outcome)
+        return 0
+
+    if args.what == "error":
+        events.record_agent_error(
+            stage=args.stage,
+            detail=args.detail,
+            host=spec.host,
+            session_id_env=spec.session_id_env,
+        )
+        # Delivered inline, for the same reason `docs install` flushes: the runs
+        # that file an error are disproportionately the runs that never reach
+        # `prepare` or `commit` — a failed install, a store the bridging pair
+        # cannot talk to — so a later flush is exactly what cannot be counted on
+        # here. An agent already blocked long enough to decide it had a failure to
+        # report; one POST on that path is affordable, and fail-open means a
+        # dead network costs the wait, not the event, which stays spooled.
+        events.flush()
+        print(outcome)
+        return 0
+
+    accepted, rejected = events.flush()
+    print(f"delivered {accepted} event(s)")
+    if rejected:
+        # Never folded into the delivered count: a backend rejecting everything
+        # must not read as healthy delivery.
+        print(f"{rejected} event(s) discarded — the server rejected them", file=sys.stderr)
+    return 0
+
+
+def _register_report(sub: Any, handler: Any) -> None:
+    parser = sub.add_parser("report", help="Report a lifecycle event to memU")
+    what = parser.add_subparsers(dest="what", required=True)
+
+    installed = what.add_parser("install", help="Record that installation completed successfully")
+    installed.set_defaults(handler=handler)
+
+    uninstalled = what.add_parser("uninstall", help="Record that memU was uninstalled (delivers immediately)")
+    uninstalled.set_defaults(handler=handler)
+
+    failed = what.add_parser("error", help="Report a failure memU could not observe on its own")
+    failed.add_argument(
+        "--stage",
+        required=True,
+        choices=events.STAGES,
+        help="Which operation failed. 'other' is the catchall — use it rather than not reporting",
+    )
+    failed.add_argument(
+        "--detail",
+        default="",
+        help=(
+            "What went wrong, in your own words and in detail — a human reads this to work out "
+            "what is broken on the machine, so say what you ran, what happened instead, and what "
+            "you think the cause is. Not a traceback: memU already reports the exception itself. "
+            "Never credentials, absolute paths, memory content, or transcript text. Truncated at "
+            f"{events.MAX_DETAIL_CHARS} characters"
+        ),
+    )
+    failed.set_defaults(handler=handler)
+
+    flusher = what.add_parser("flush", help="Deliver any events still spooled on this machine")
+    flusher.set_defaults(handler=handler)
+
+
 def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=spec.binary,
@@ -413,7 +674,8 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     # Both halves of the inject seam: what the agent runs, and what tells it to.
     # Shared across hosts, so they are registered, not redefined — only the file
     # the instruction lands in and the binary it names are ours to fill in.
-    retrieval.register(sub)
+    retrieval.register(sub, host=spec.host, session_id_env=spec.session_id_env)
+    _register_report(sub, bind(_cmd_report))
     instruction.register(
         sub,
         path=spec.instruction_path,
@@ -490,6 +752,28 @@ def run(spec: HostSpec, argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         return 130
     except Exception as exc:
+        # Where genuine unhandled failures already land, so it is free to observe
+        # them here — and no model is in the loop, which makes this the
+        # higher-quality of the two error feeds (ADR 0016 §5). Recorded with the
+        # exception *type* and reduced frames only; the message is omitted,
+        # because messages are where DSNs, tokens, and home paths surface.
+        command = getattr(args, "command", "")
+        events.record_cli_error(
+            exc,
+            command=command,
+            host=spec.host,
+            session_id_env=spec.session_id_env,
+        )
+        # Flushed here, unlike other errors: if what broke *is* prepare or commit,
+        # the normal flush points are exactly the ones that will never run again.
+        #
+        # Never for `retrieve`, though, and the exception is the whole point. That
+        # is the per-turn hook, and a store it cannot reach fails it on *every*
+        # turn — so flushing here would put a blocking POST on the hot path, once
+        # per turn, exactly when the user is already broken. Its events wait for
+        # the bridging pair like any other.
+        if command != "retrieve":
+            events.flush()
         if os.environ.get("MEMU_DEBUG") == "1":
             raise
         print(f"error: {exc} (set MEMU_DEBUG=1 for a traceback)", file=sys.stderr)

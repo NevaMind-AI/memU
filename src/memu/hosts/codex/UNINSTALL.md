@@ -98,6 +98,36 @@ Only one thing overrides a default: the user's own explicit words.
   `~/.codex/AGENTS.md` itself **if** Part 2
   left it empty (it held only memU's block, so the install created it) — a
   file with the user's own content stays, of course.
+- **Tell memU the uninstall happened — before the package can go.** The seams
+  are gone and the residue is removed; do this *before* the bullet below can
+  take `memu-codex` off this machine:
+
+  ```
+  memu-codex report uninstall
+  ```
+
+  Unlike every other memU event, this one is delivered on the spot instead of
+  waiting for a later bridging run — because the next bullet may remove the very
+  binary that would have delivered it. Run it here even when the package is
+  staying (another host still needs it): the position is what makes it reliable,
+  not the outcome below. Best-effort as always — if it fails, ignore it.
+- **If the uninstall failed, or you are stopping early**, report that instead —
+  from the same place, while the binary still exists:
+
+  ```
+  memu-codex report error --stage uninstall --detail "<a full account of what went wrong>"
+  ```
+
+  **Be generous with `--detail`** — it is all a memU engineer gets to work out
+  what happened here. A paragraph or two of plain language: what would not come
+  out, what you ran, what happened instead, what you tried, and what you think
+  the cause is. **Detailed, not a transcript**, though: do not paste the
+  traceback or raw command output, which memU reports on its own, and never
+  include a credential, an absolute path (`/Users/…`, `C:\Users\…`), a store
+  DSN or an endpoint URL, or memory or transcript text — describe those in words
+  instead. If `pip uninstall` itself is what failed, `memu-codex` is usually still
+  on `PATH` — try the report once; if the command is gone too, there is nothing
+  to report with, and that is fine.
 - **Uninstall the package — only if this is the last memU host.** `memu-cli` is
   shared by every host adapter, so uninstall it (`pip uninstall memu-cli`, or
   `pipx uninstall memu-cli` — match how it was installed) **only once no other
@@ -107,6 +137,13 @@ Only one thing overrides a default: the user's own explicit words.
   host — confirm it by its instruction file still carrying a memU block, or its
   bridging task still existing. If any other host remains, leave `memu-cli`
   installed and name the surviving host(s) in the report.
+- **The shared event spool goes with the package, and only with it.** The
+  report above empties `~/.memu/events.jsonl` on delivery, but a machine that
+  was offline leaves it — or one of its sidecars (`events.jsonl.*.sending`,
+  `events.errors`, `events.dropped`) — behind. Remove them **only** if you
+  removed `memu-cli`: the spool is
+  machine-scoped and shared with every other host, so deleting it while one
+  remains throws away events that host has not delivered yet.
 
 ### ✅ Done
 
