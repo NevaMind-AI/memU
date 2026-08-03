@@ -34,7 +34,7 @@ from typing import Any
 
 from memu.hosts import instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
-from memu.hosts.bridging import Layout, commit, prepare
+from memu.hosts.bridging import Layout, commit, prepare, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
 from memu.hosts.bridging.resources import verify_resource_log
 
@@ -91,6 +91,18 @@ class HostSpec:
     the host has no Windows scheduling wired yet, so ``schedule`` refuses rather
     than guess. Unix scheduling is unaffected — cron/launchd stay doc-driven and
     never read this field."""
+
+    session_id_env: str = ""
+    """Environment variable through which the host tells a tool subprocess which
+    session it is running in (``CLAUDE_CODE_SESSION_ID``). It answers *which*
+    session, never *whether* to claim one: only a run that
+    :func:`~memu.hosts.bridging.self_sessions.is_bridging_run` recognises as the
+    scheduled one reads it at all, so a person running ``prepare`` by hand keeps
+    their conversation mineable (#606). An exact identity, never a guess about
+    content. Its value must match what
+    :meth:`~memu.hosts.base.TranscriptSource.session_id` derives from a discovered
+    session. Empty — the default — means the host has not been surveyed yet, and
+    the run keeps mining itself as before."""
 
     needs_headless_auth: bool = False
     """Whether the scheduled agent needs a headless credential distinct from any
@@ -169,7 +181,42 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
         return 2
 
     layout = _layout(spec, args)
-    num_sessions = await prepare(source, layout, verify_command=spec.verify_command, max_jobs=args.max_jobs)
+    # This run is itself a host session, and the host is logging it where we are
+    # about to look. Remember it now — before the scan — so it is skipped by this
+    # run and every later one (#606).
+    own_session = os.environ.get(spec.session_id_env, "").strip() if spec.session_id_env else ""
+    skip_sessions = self_sessions.load(layout.self_sessions)
+    # Only the *scheduled* run may claim a session. A person running prepare by
+    # hand is asking for the current conversation to be mined, so claiming it
+    # there would deliver the exact opposite, permanently.
+    if not self_sessions.is_bridging_run(Path.cwd(), layout.base):
+        own_session = ""
+    elif spec.session_id_env and not own_session:
+        # The host advertised a variable and did not set it — a headless runner
+        # that lost it, or a version that dropped it. Say so: the alternative is
+        # #606 quietly returning while everything still looks healthy.
+        print(
+            f"warning: {spec.session_id_env} is unset, so this run cannot recognise its own"
+            " session; it will be mined like any other",
+            file=sys.stderr,
+        )
+    if own_session and own_session not in skip_sessions:
+        # Also fires when a human runs `prepare` inside a real conversation, and
+        # that session is then excluded from mining for good — so it must never
+        # happen silently.
+        print(
+            f"note: recording this session ({own_session}) as a bridging run; its transcript "
+            f"will not be mined. Undo by removing it from {layout.self_sessions}"
+        )
+    if own_session:
+        skip_sessions = self_sessions.remember(layout.self_sessions, own_session)
+    num_sessions = await prepare(
+        source,
+        layout,
+        verify_command=spec.verify_command,
+        max_jobs=args.max_jobs,
+        skip_sessions=skip_sessions,
+    )
     num_jobs = 2 * num_sessions + 1
     print(f"prepared {num_sessions} session(s) -> {num_jobs} job(s) in {layout.jobs}")
     if num_sessions == 0:

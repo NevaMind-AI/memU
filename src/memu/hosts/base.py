@@ -127,3 +127,16 @@ class TranscriptSource(ABC):
     def key(self, path: Path) -> str:
         """The cursor-file key for a session — its path relative to :meth:`root`."""
         return path.relative_to(self.root()).as_posix()
+
+    def session_id(self, path: Path) -> str:
+        """The host's own id for this session — what it reports in the environment.
+
+        Used to recognise the bridging run's own session and skip it (#606), so
+        this must line up with
+        :attr:`~memu.hosts.host_cli.HostSpec.session_id_env`'s value. The
+        default holds wherever the session is named by its id: every
+        ``<sessionId>.jsonl`` host, and Hermes's virtual paths alike. A host
+        whose file name carries more than the id (Codex's
+        ``rollout-<timestamp>-<uuid>.jsonl``) overrides this.
+        """
+        return path.stem

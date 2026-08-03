@@ -65,6 +65,15 @@ class Layout:
         return self.session_manifest.with_name(self.session_manifest.name + ".pending")
 
     @property
+    def self_sessions(self) -> Path:
+        """Session ids of the bridging runs themselves, skipped by ``prepare``.
+
+        Host-scoped like the cursor, and for the same reason: two hosts' session
+        ids are unrelated, and a shared file would let one host's run id mask an
+        unrelated real session on the other."""
+        return self.base / f".self_sessions.{self.host}.json"
+
+    @property
     def memory_manifest(self) -> Path:
         """Content hashes of the tracked files as of the last successful
         ``commit`` (bootstrapped by the first ``prepare`` from the

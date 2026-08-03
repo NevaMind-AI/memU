@@ -68,10 +68,12 @@ class InMemoryRecallFileRepository(RecallFileRepoProtocol):
                 and all(getattr(recall_file, k) == v for k, v in user_data.items())
             ):
                 now = pendulum.now("UTC")
-                if recall_file.embedding is None:
+                # Falsy, not ``is None``: a stub embedding may be []. Guarded on the
+                # incoming value so a no-op call does not bump updated_at.
+                if embedding and not recall_file.embedding:
                     recall_file.embedding = embedding
                     recall_file.updated_at = now
-                if not recall_file.description:
+                if description and not recall_file.description:
                     recall_file.description = description
                     recall_file.updated_at = now
                 return recall_file

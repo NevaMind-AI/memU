@@ -110,6 +110,11 @@ the same shape: **the prompt lives in a file; the crontab line stays short.**
      fi
    fi
    trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
+   # Marks this as the scheduled run, so `prepare` skips its own session instead
+   # of mining memU's own bookkeeping every hour. Without it cron looks like a
+   # person running prepare by hand (cron's cwd is $HOME, not $DIR), and the run
+   # keeps feeding on itself.
+   export MEMU_BRIDGING_RUN=1
    claude -p "$(cat "$DIR/bridge-prompt.txt")" >> "$DIR/bridge.log" 2>&1
    ```
 
