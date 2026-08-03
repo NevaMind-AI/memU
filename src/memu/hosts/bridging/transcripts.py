@@ -7,10 +7,13 @@ record is shaped — arrives through :class:`~memu.hosts.base.TranscriptSource`.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Collection
 from pathlib import Path
 
-from memu.hosts.base import RecordKind, TranscriptSource
+from memu.hosts.base import RecordKind, TranscriptRead, TranscriptReadError, TranscriptSource
+
+logger = logging.getLogger(__name__)
 
 
 def _split(source: TranscriptSource, records: list[str]) -> tuple[list[str], list[str]]:
@@ -44,12 +47,13 @@ def prepare_transcripts(
 ) -> int:
     """Extract new session turns into numbered transcripts and *stage* the cursor.
 
-    Scans the host's sessions newest-first, comparing each file's line count
-    against the promoted cursor at ``manifest_path``. The first already-seen
-    file with no new lines ends the scan — older files cannot hold newer
-    content. The latest ``max_jobs`` files with new lines are written
-    oldest-first as ``<idx>.jsonl`` (conversation) and ``<idx>_full.jsonl``
-    (conversation plus tool calls), with ``idx`` from 1.
+    Scans the host's sessions newest-first, asking each source to interpret its
+    promoted cursor at ``manifest_path``. Append-only sources use a line count;
+    sources with rewrite generations can invalidate that offset. The first
+    already-seen session with no new records ends the scan — older sessions cannot
+    hold newer activity. The latest ``max_jobs`` sessions with new records are
+    written oldest-first as ``<idx>.jsonl`` (conversation) and
+    ``<idx>_full.jsonl`` (conversation plus tool calls), with ``idx`` from 1.
 
     The promoted cursor is read here but never written: the advanced cursor
     goes to ``pending_path``, and only a successful ``commit`` promotes it. So
@@ -67,17 +71,20 @@ def prepare_transcripts(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
     skip = set(skip_sessions)
 
-    pending: list[tuple[str, list[str], int]] = []
+    pending: list[tuple[str, TranscriptRead]] = []
     for path in source.discover():
         if source.session_id(path) in skip:
             continue
         key = source.key(path)
         previous = manifest.get(key)
-        seen_lines = previous["lines"] if previous else 0
 
-        records = source.read_records(path)
-        if len(records) > seen_lines:
-            pending.append((key, records, seen_lines))
+        try:
+            read = source.read_incremental(path, previous)
+        except TranscriptReadError as exc:
+            logger.warning("skipping unreadable transcript %s: %s", key, exc.cause)
+            continue
+        if read.changed:
+            pending.append((key, read))
         elif previous is not None:
             # Already recorded and unchanged; older files cannot be newer either.
             break
@@ -90,13 +97,13 @@ def prepare_transcripts(
     for stale in out_dir.glob("*.jsonl"):
         stale.unlink()
 
-    for idx, (key, records, seen_lines) in enumerate(selected, start=1):
-        messages, full = _split(source, records[seen_lines:])
+    for idx, (key, read) in enumerate(selected, start=1):
+        messages, full = _split(source, read.records[read.start :])
 
         (out_dir / f"{idx}.jsonl").write_text("\n".join(messages) + "\n", encoding="utf-8")
         (out_dir / f"{idx}_full.jsonl").write_text("\n".join(full) + "\n", encoding="utf-8")
 
-        manifest[key] = {"lines": len(records), "last_timestamp": _last_timestamp(source, records)}
+        manifest[key] = {**read.cursor, "last_timestamp": _last_timestamp(source, read.records)}
 
     pending_path.parent.mkdir(parents=True, exist_ok=True)
     pending_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")

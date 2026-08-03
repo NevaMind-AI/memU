@@ -3,7 +3,8 @@
 The whole of what makes this host Hermes. Everything the bridging task does with
 these records is host-agnostic and lives in :mod:`memu.hosts.bridging`.
 
-Hermes is the one supported host whose log is not JSONL-on-disk: sessions and
+Hermes is the one supported host whose log is *only* ever SQLite, never
+JSONL-on-disk (OpenClaw reads both): sessions and
 their full message history live in two tables (``sessions``, ``messages``) of a
 WAL-mode SQLite database under the Hermes home (``~/.hermes`` by default; the
 host honors ``HERMES_HOME``, in which case pass ``--session-dir`` pointing at

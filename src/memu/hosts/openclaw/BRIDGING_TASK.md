@@ -131,8 +131,10 @@ OpenClaw sessions since the last run.
   marks their sessions as seen, so anything skipped at that moment would never
   be minable again; draining leftovers first turns a half-done cycle into
   bounded re-work instead of silent loss.
-- **Idempotent and incremental.** `prepare` tracks a per-session line cursor in
-  `~/.memu/hosts/openclaw/.session_manifest.openclaw.json`.
+- **Idempotent and incremental.** `prepare` tracks a per-session cursor in
+  `~/.memu/hosts/openclaw/.session_manifest.openclaw.json`: JSONL sessions use
+  their line count, while SQLite sessions also record OpenClaw's rewrite
+  generation so a manual compact/replacement invalidates the old row offset.
 - **Ordering is load-bearing.** Memory jobs before skill jobs, the
   resource-describe job last. Always ascending numeric order.
 - **The working tree is host-scoped.** Everything under

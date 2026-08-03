@@ -40,7 +40,7 @@ SPEC = HostSpec(
     package="memu.hosts.openclaw",
     source_factory=OpenClawTranscriptSource,
     session_dir=SESSION_DIR,
-    session_help="OpenClaw agents dir holding <agentId>/sessions transcripts",
+    session_help="OpenClaw agents dir holding each agent's transcript store (SQLite, or legacy sessions/*.jsonl)",
     instruction_path=AGENTS_MD,
     skills_dir=SKILLS_DIR,
 )
