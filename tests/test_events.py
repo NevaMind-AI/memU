@@ -80,7 +80,7 @@ class _Response:
 
 
 def test_envelope_carries_every_field_the_backend_expects(reporting: pathlib.Path) -> None:
-    events.record(events.CLIENT_INSTALLED, host="claude-code")
+    events.record(events.CLI_INSTALL_COMPLETED, host="claude-code")
 
     (event,) = _spooled(reporting)
     assert set(event) >= {
@@ -102,8 +102,8 @@ def test_envelope_carries_every_field_the_backend_expects(reporting: pathlib.Pat
 
 
 def test_event_ids_are_unique_so_a_retry_can_be_deduplicated(reporting: pathlib.Path) -> None:
-    events.record(events.CLIENT_INSTALLED, host="codex")
-    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
 
     ids = {event["event_id"] for event in _spooled(reporting)}
     assert len(ids) == 2
@@ -123,13 +123,13 @@ def test_agent_platform_is_normalised_not_passed_through(reporting: pathlib.Path
 
 def test_session_id_is_omitted_rather_than_faked(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
-    events.record(events.CLIENT_INSTALLED, host="claude-code", session_id_env="CLAUDE_CODE_SESSION_ID")
+    events.record(events.CLI_INSTALL_COMPLETED, host="claude-code", session_id_env="CLAUDE_CODE_SESSION_ID")
     (absent,) = _spooled(reporting)
     assert "session_id" not in absent
 
     reporting.unlink()
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "abc-123")
-    events.record(events.CLIENT_INSTALLED, host="claude-code", session_id_env="CLAUDE_CODE_SESSION_ID")
+    events.record(events.CLI_INSTALL_COMPLETED, host="claude-code", session_id_env="CLAUDE_CODE_SESSION_ID")
     (present,) = _spooled(reporting)
     assert present["session_id"] == "abc-123"
 
@@ -139,7 +139,7 @@ def test_client_instance_id_persists_in_config_and_survives_a_reinstall(
 ) -> None:
     from memu import env as env_module
 
-    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
     first = _spooled(reporting)[0]["client_instance_id"]
 
     # `UNINSTALL.md` Part 3 keeps config.env unconditionally, which is the whole
@@ -180,7 +180,7 @@ def test_success_only_events_carry_no_properties(reporting: pathlib.Path) -> Non
     # A constant `success: true` would teach a consumer nothing and invite
     # someone to later send `false`, re-creating the failure channel that the
     # success-only decision removed.
-    events.record(events.CLIENT_INSTALLED, host="codex", properties={"success": True})
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex", properties={"success": True})
     assert _spooled(reporting)[0]["properties"] == {}
 
 
@@ -255,7 +255,7 @@ def test_each_kill_switch_stops_recording_entirely(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, variable: str, value: str
 ) -> None:
     monkeypatch.setenv(variable, value)
-    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
     events.record_agent_error(stage="other", detail="nope", host="codex")
 
     assert not reporting.exists()
@@ -264,18 +264,18 @@ def test_each_kill_switch_stops_recording_entirely(
 
 def test_recording_survives_an_unwritable_spool(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEMU_EVENTS_SPOOL", "/definitely/not/a/writable/path/events.jsonl")
-    events.record(events.CLIENT_INSTALLED, host="codex")  # must not raise
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")  # must not raise
 
 
 def test_recording_survives_broken_config(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # `memory_mode()` raises on this. Reporting must not be what surfaces it.
     monkeypatch.setenv("MEMU_MEMORY_MODE", "nonsense")
-    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
     assert not reporting.exists()
 
 
 def test_flush_survives_an_unreachable_endpoint(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
     monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError("no route to host")))
 
     assert events.flush() == (0, 0)
@@ -312,14 +312,14 @@ def test_a_retrieve_that_cannot_report_is_still_a_successful_retrieve(
 
 
 def test_flush_posts_a_batch_and_clears_the_spool(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
     events.record(events.CLIENT_UNINSTALLED, host="codex")
     posted = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
     assert events.flush() == (2, 0)
     assert [event["event_name"] for event in posted.batches[0]] == [
-        events.CLIENT_INSTALLED,
+        events.CLI_INSTALL_COMPLETED,
         events.CLIENT_UNINSTALLED,
     ]
     assert not reporting.exists()
@@ -329,14 +329,14 @@ def test_flush_posts_a_batch_and_clears_the_spool(reporting: pathlib.Path, monke
 def test_the_api_key_rides_along_when_present_and_is_absent_otherwise(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
     anonymous = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", anonymous)
     events.flush()
     # Local-mode users have no key at all and must stay first-class.
     assert "Authorization" not in {key.title(): value for key, value in anonymous.headers[0].items()}
 
-    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
     identified = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", identified)
     monkeypatch.setenv("MEMU_CLOUD_API_KEY", "sk-live-abc")
@@ -348,7 +348,7 @@ def test_the_api_key_rides_along_when_present_and_is_absent_otherwise(
 def test_a_transient_failure_retains_the_events(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, status: int
 ) -> None:
-    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
     error = urllib.error.HTTPError("https://example.invalid/events", status, "nope", {}, None)  # type: ignore[arg-type]
     monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=error))
 
@@ -360,7 +360,7 @@ def test_a_transient_failure_retains_the_events(
 def test_a_permanent_rejection_is_discarded_rather_than_wedging_the_spool(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, status: int
 ) -> None:
-    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
     error = urllib.error.HTTPError("https://example.invalid/events", status, "nope", {}, None)  # type: ignore[arg-type]
     monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=error))
 
@@ -373,7 +373,7 @@ def test_a_permanent_rejection_is_discarded_rather_than_wedging_the_spool(
 def test_a_retained_file_is_picked_up_by_the_next_flush(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
     monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError("offline")))
     events.flush()
 
@@ -384,7 +384,7 @@ def test_a_retained_file_is_picked_up_by_the_next_flush(
 def test_a_truncated_line_costs_one_event_not_the_file(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    events.record(events.CLIENT_INSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
     events.record(events.CLIENT_UNINSTALLED, host="codex")
     # The signature of a process killed mid-append: a partial *final* line.
     with open(reporting, "a", encoding="utf-8") as handle:
@@ -399,9 +399,9 @@ def test_the_spool_is_capped_and_the_loss_is_reported_not_silent(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(events, "MAX_SPOOL_BYTES", 1)
-    events.record(events.CLIENT_INSTALLED, host="codex")  # lands: cap checked before writing
-    events.record(events.CLIENT_INSTALLED, host="codex")  # dropped
-    events.record(events.CLIENT_INSTALLED, host="codex")  # dropped
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")  # lands: cap checked before writing
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")  # dropped
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")  # dropped
     assert len(_spooled(reporting)) == 1
 
     monkeypatch.setattr(events, "MAX_SPOOL_BYTES", 1024 * 1024)
@@ -417,7 +417,7 @@ def test_the_spool_is_capped_and_the_loss_is_reported_not_silent(
 def test_batches_are_bounded(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(events, "MAX_BATCH", 3)
     for _ in range(7):
-        events.record(events.CLIENT_INSTALLED, host="codex")
+        events.record(events.CLI_INSTALL_COMPLETED, host="codex")
     posted = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
@@ -448,6 +448,63 @@ def test_report_verbs_exist_on_every_host(reporting: pathlib.Path, capsys: pytes
         assert run(spec, ["report", "install"]) == 0
     assert len(_spooled(reporting)) == 2
     assert {event["agent_platform"] for event in _spooled(reporting)} == {"codex", "claude_code"}
+
+
+def test_the_install_funnel_has_a_code_observed_start_and_a_reported_end(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Printing the guide *is* the start signal, and it delivers on the spot.
+
+    ``report install`` is prose-driven and undercounts by design. If the start
+    were too, the funnel could report more completions than attempts — so the
+    start is taken where code can see it, and only the completion needs a verb.
+    """
+    monkeypatch.setenv("MEMU_DOCS_BASE_URL", "")
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert run(CLAUDE_SPEC, ["docs", "install"]) == 0
+    assert capsys.readouterr().out.strip(), "the guide itself must still be what this command prints"
+    assert run(CLAUDE_SPEC, ["report", "install"]) == 0
+
+    assert [event["event_name"] for event in posted.batches[0]] == [events.CLI_INSTALL_STARTED]
+    # The completion keeps the ordinary treatment: spooled, carried by a bridging run.
+    assert [event["event_name"] for event in _spooled(reporting)] == [events.CLI_INSTALL_COMPLETED]
+    assert all(event["properties"] == {} for event in _spooled(reporting) + posted.batches[0])
+
+
+def test_the_install_start_carries_the_backlog_off_a_machine_that_may_never_bridge(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Why ``docs install`` flushes rather than only recording.
+
+    An install that dies in Part 2 never reaches ``prepare`` or ``commit``, so
+    this is the only flush point its earlier events will ever see — and those are
+    exactly the events that explain why it died.
+    """
+    monkeypatch.setenv("MEMU_DOCS_BASE_URL", "")
+    events.record_cli_error(RuntimeError("an earlier doctor"), command="doctor", host="claude-code")
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert run(CLAUDE_SPEC, ["docs", "install"]) == 0
+
+    assert [event["event_name"] for event in posted.batches[0]] == [
+        events.CLI_ERROR,
+        events.CLI_INSTALL_STARTED,
+    ]
+    assert not reporting.exists()
+
+
+def test_only_the_install_guide_reports_an_attempt(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # `docs task` runs on every scheduled-task repair and `docs uninstall` is the
+    # opposite intent; neither is an install attempt.
+    monkeypatch.setenv("MEMU_DOCS_BASE_URL", "")
+    assert run(CLAUDE_SPEC, ["docs", "task"]) == 0
+    assert run(CLAUDE_SPEC, ["docs", "uninstall"]) == 0
+    assert _spooled(reporting) == []
 
 
 def test_report_install_and_uninstall_take_no_failure_flag(reporting: pathlib.Path) -> None:

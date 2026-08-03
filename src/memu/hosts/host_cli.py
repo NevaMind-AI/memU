@@ -401,7 +401,35 @@ async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
     filename = DOCS[args.doc]
     embedded = (files(spec.package) / filename).read_text(encoding="utf-8")
     print(templates.resolve_doc(spec.host, filename, embedded))
+    if args.doc == "install":
+        _report_install_started(spec)
     return 0
+
+
+def _report_install_started(spec: HostSpec) -> None:
+    """The install funnel's entry point (ADR 0016 §4).
+
+    Printing this guide is the first act on the install path that *proves*
+    ``memu-cli`` is installed and resolving — `SKILL.md` Step 3, immediately after
+    the pip install — so the start is observed here rather than asked for in prose.
+    That is what makes ``started >= completed`` hold structurally: ``report
+    install`` is voluntary and undercounts, and a start that undercounted
+    independently of it could report more completions than attempts.
+
+    ``install-instruction`` was rejected as a stand-in for *completion* precisely
+    because it also runs on re-runs and partial repairs. For a *start* that is the
+    correct reading: a re-run is a new attempt.
+
+    Flushed, not merely recorded, and that is the load-bearing half. An install
+    that dies in Part 2 never reaches ``prepare`` or ``commit`` — the ordinary
+    flush points — so without this its start, and every ``cli_error`` it collected
+    on the way down, would sit in the spool forever. That run is the exact one
+    this event exists to make visible. Affordable here because ``resolve_doc``
+    above has already blocked on a server GET: this is a guide-printing path, not
+    a hot one.
+    """
+    events.record(events.CLI_INSTALL_STARTED, host=spec.host, session_id_env=spec.session_id_env)
+    events.flush()
 
 
 async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
@@ -441,13 +469,17 @@ async def _cmd_report(spec: HostSpec, args: argparse.Namespace) -> int:
     command spans it, so only the agent knows it reached the final one. Both
     report **success only** — the event's existence is the signal, and failure has
     exactly one channel, ``report error``.
+
+    Only the *completion* needs a verb. The matching start is code-observed in
+    :func:`_report_install_started`, because a funnel whose two ends are both
+    voluntary can report more completions than attempts.
     """
     # Said plainly rather than silently: a user who switched reporting off should
     # see that this command did nothing, not a "recorded" that is not true.
     outcome = "recorded" if events.enabled() else "reporting is off; nothing recorded"
 
     if args.what == "install":
-        events.record(events.CLIENT_INSTALLED, host=spec.host, session_id_env=spec.session_id_env)
+        events.record(events.CLI_INSTALL_COMPLETED, host=spec.host, session_id_env=spec.session_id_env)
         print(outcome)
         return 0
 

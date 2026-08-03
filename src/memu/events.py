@@ -65,8 +65,23 @@ reporting off entirely (air-gapped installs, offline CI, tests)."""
 CORE_ACTION_COMPLETED = "core_action_completed"
 """Shared by retrieve and remember; ``properties.action_name`` discriminates."""
 
-CLIENT_INSTALLED = "client_installed"
-"""PLACEHOLDER."""
+CLI_INSTALL_STARTED = "cli_install_started"
+"""PLACEHOLDER. An install *attempt*, recorded when a host prints its install
+guide — the first act on that path which proves ``memu-cli`` is installed and
+resolving on ``PATH``.
+
+Code-observed rather than agent-reported, and that is the whole point: the
+completion below is prose-driven and undercounts (ADR 0016 §4), so a start that
+undercounted independently could report more completions than attempts. Two
+caveats for whoever reads these. A guide re-printed mid-run — a compaction, a
+restarted agent — counts twice, so the denominator is attempts-as-observed, not
+distinct machines. And ``deployment_mode`` here predates ``INSTALL.md`` Part 1.2's
+backend choice, so it is a default rather than the mode the install lands on:
+never join a start to a completion on that field."""
+
+CLI_INSTALL_COMPLETED = "cli_install_completed"
+"""PLACEHOLDER. The agent reached the guide's final gate. Formerly
+``client_installed``."""
 
 CLIENT_UNINSTALLED = "client_uninstalled"
 """PLACEHOLDER."""
@@ -152,8 +167,11 @@ _ALLOWED_PROPERTIES: dict[str, frozenset[str]] = {
     # Success-only events (ADR 0016 §4), so there is nothing to say. A constant
     # ``success: true`` would teach a consumer nothing while inviting someone to
     # later "fix" it by sending ``false`` — quietly re-creating the second failure
-    # channel the success-only decision removed.
-    CLIENT_INSTALLED: frozenset(),
+    # channel the success-only decision removed. The start event carries nothing
+    # for the same reason from the other end: it reports that an attempt began,
+    # and its existence is the entire signal.
+    CLI_INSTALL_STARTED: frozenset(),
+    CLI_INSTALL_COMPLETED: frozenset(),
     CLIENT_UNINSTALLED: frozenset(),
     CLIENT_ERROR_REPORTED: frozenset({"stage", "detail"}),
     CLI_ERROR: frozenset({"command", "error_type", "frames", "frames_truncated"}),

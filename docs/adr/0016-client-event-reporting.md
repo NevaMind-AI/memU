@@ -107,6 +107,10 @@ Flush points, all of them low-frequency and latency-tolerant:
 - `report uninstall` — **synchronously, before returning** (§4). Uninstall is the one event
   that cannot wait for a later flush, because `UNINSTALL.md` Part 3 may remove the very binary
   that would perform it.
+- `docs install` — which is also where `cli_install_started` is recorded (§4). A machine that
+  abandons the install never reaches `prepare` or `commit`, so this is the only flush its
+  events may ever get; the command has already contacted the docs server by then, so it costs
+  nothing new.
 - `report flush`, an explicit verb, for guides and for debugging.
 - The CLI's top-level error handler — **except when the failing command is
   `retrieve`**. Flushing there is right for the bridging pair, where the thing that
@@ -166,6 +170,7 @@ The dividing line is whether any code can observe the completion.
 | retrieve | `retrieval._cmd_retrieve` — spool only, never flush |
 | remember finished | `host_cli._cmd_commit` — the terminal step of the record seam, which already holds the recall-file and resource counts |
 | `cli_error` | `host_cli.run`'s top-level `except` — see §5 |
+| `cli_install_started` | `host_cli._cmd_docs`, on `docs install` only — see below |
 
 **An explicit verb, registered once in `host_cli.build_parser` so every host inherits it:**
 
@@ -189,11 +194,31 @@ channel for "it did not" — the error event of §5, whose `--stage` covers both
 alternative, a `--failed` flag, would duplicate that channel with a second, coarser one and
 force every consumer to join them.
 
-The cost is recorded rather than hidden: memU never sees the *attempt*, only the completion,
-so there is no install funnel and no "started, died in Part 2" bucket. Failure visibility rests
-entirely on an agent choosing to call `report error`, which is voluntary and model-judged. This
-is the same under-counting the Consequences section describes for success, one degree worse,
-and it is why the trustworthy denominator remains a code-observed first `retrieve` or `commit`.
+**Only the completion needs a verb; the start is observed.** `cli_install_started` is recorded
+by `docs install` itself, and flushed there. Printing the guide is the first act on the install
+path that *proves* `memu-cli` is installed and resolving — `SKILL.md` Step 3, immediately after
+the pip install — so the attempt can be seen without asking prose for it. The asymmetry with
+the completion is the point: `report install` is voluntary and undercounts, and a start that
+undercounted independently of it could report *more completions than attempts*, which is worse
+than no funnel at all. Taking the start in code makes `started >= completed` hold structurally,
+since the guides are only reachable through `docs install`.
+
+The `install-instruction` objection above does not carry over. It was rejected as a stand-in
+for *completion* because it also runs on re-runs and partial repairs; for a *start*, a re-run
+is a new attempt, which is the correct reading rather than a defect.
+
+Flushing there, rather than recording only, is the load-bearing half. An install that dies in
+Part 2 never reaches `prepare` or `commit`, so without this flush its start — and every
+`cli_error` it accumulated on the way down — would sit in the spool until the cap ate it, and
+that run is precisely the one this event exists to make visible. The path affords a flush:
+`resolve_doc` has already blocked on a server GET by the time the guide is printed.
+
+The remaining costs are recorded rather than hidden. A guide re-printed mid-run — a compaction,
+a restarted agent — counts twice, so the start is *attempts as observed*, not distinct
+machines. A start event's `deployment_mode` predates Part 1.2's backend choice, so it is a
+default and must never be joined on. And failure *detail* still rests on an agent choosing to
+call `report error`, which is voluntary and model-judged: the funnel says that an install died,
+never why.
 
 ### 5. Two error events, because they have two different provenances
 
@@ -365,7 +390,10 @@ document.
   that stops early, hits an edited guide, or is interrupted never reaches the verb. They are a
   floor on install volume, not a census. The trustworthy denominator is the first `retrieve` or
   first `commit` seen from a `client_instance_id` — both code-observed — and dashboards should
-  be built on those, with `client_installed` read as a funnel signal rather than a total.
+  be built on those, with `cli_install_completed` read as a funnel signal rather than a total.
+  `cli_install_started` is code-observed and so does not share this bias, but it counts
+  attempts as observed rather than machines (§4), which makes it a numerator for "how many
+  installs finish", not a substitute denominator for "how many installs exist".
 - **Every event's delivery is bounded by a bridging run.** On a machine whose schedule is
   broken, retrieve events accumulate to the cap and are then dropped. This is the correct
   failure — a broken bridging task is precisely a thing worth being unable to hide — but it
@@ -403,10 +431,13 @@ document.
 - **`--stage` will need finer values.** The five in §5 are deliberately coarse. Refinements
   must follow the hierarchical `install.part2.schedule` shape so old rows stay joinable.
 - **`event_name` for the non-core events is not settled with the backend.** The implementation
-  carries placeholders — `client_installed`, `client_uninstalled`, `cli_error`,
-  `client_error_reported` — with retrieve and remember sharing `core_action_completed`
-  discriminated by `properties.action_name`. They are constants in one place, to be replaced
-  once the backend fixes the vocabulary.
+  carries placeholders — `cli_install_started`, `cli_install_completed`, `client_uninstalled`,
+  `cli_error`, `client_error_reported` — with retrieve and remember sharing
+  `core_action_completed` discriminated by `properties.action_name`. They are constants in one
+  place, to be replaced once the backend fixes the vocabulary. Note that the install pair no
+  longer shares the `client_` prefix the uninstall and error events use; whether
+  `client_uninstalled` becomes `cli_uninstall_completed` is part of settling this vocabulary,
+  and is cheap only while these remain placeholders.
 - **The endpoint URL and batch wire format are not settled.** The implementation carries a
   placeholder URL and posts a JSON array of envelopes; the route and whether it wants an array
   or newline-delimited bodies are the backend's to fix.
