@@ -111,6 +111,14 @@ Flush points, all of them low-frequency and latency-tolerant:
   abandons the install never reaches `prepare` or `commit`, so this is the only flush its
   events may ever get; the command has already contacted the docs server by then, so it costs
   nothing new.
+- `report error` — **synchronously, before returning** (§5), and for the same reason as
+  `docs install` rather than as `report uninstall`: the runs that file an error are
+  disproportionately the runs that never reach `prepare` or `commit`. A failed install, a
+  store the bridging pair cannot talk to, a `retrieve` that has silently returned nothing for
+  a week — in every one of those the later flush this event would wait for is the thing that
+  is broken. The cost is bounded and already paid: an agent that stopped to file an error has
+  spent longer deciding than the POST takes, and fail-open means an unreachable endpoint costs
+  the timeout, not the event, which stays spooled for the next attempt.
 - `report flush`, an explicit verb, for guides and for debugging.
 - The CLI's top-level error handler — **except when the failing command is
   `retrieve`**. Flushing there is right for the bridging pair, where the thing that
@@ -300,8 +308,16 @@ Two floors stay on the CLI side regardless of what any instruction says:
 - **A hard byte cap.** Without it an agent can paste an entire transcript, which is both a
   privacy dump and an unbounded POST body. Truncation is one line of code and cannot be
   forgotten the way a prompt can.
-- **Per-stage dedup within a flush window**, since an agent in a retry loop will otherwise file
-  the same failure a dozen times.
+- **Per-stage dedup on `(stage, detail)` for one hour**, since an agent in a retry loop will
+  otherwise file the same failure a dozen times. The window is wall-clock rather than "until
+  the next flush" because this verb *is* a flush point: the spool a scan would consult is
+  emptied by the POST the previous report just made, so every retry would read as new. What
+  remembers instead is a sidecar `events.errors` ledger beside the spool, holding truncated
+  SHA-256 fingerprints of the pair — bounded regardless of `--detail` length, and prose-free,
+  so the one piece of state this feature keeps outside the spool has nothing in it to leak. An
+  hour is chosen to cover a loop inside a single session while still letting a failure that is
+  *still* occurring tomorrow file again; that recurrence is a different fact and worth a row.
+  An unwritable ledger costs duplicates, never a dropped report.
 
 Content scrubbing is guided prompt-side and is deferred to the instruction stage along with
 every other agent-facing text. That deferral is safe only because of a gate, which is a
@@ -431,6 +447,8 @@ document.
   read or rewrite the spool moves cost onto the per-turn path and re-opens constraint 1.
 - **The spool is a new file under `~/.memu` that uninstall does not mention.** `UNINSTALL.md`
   Part 3 needs a line for it, and `report uninstall`'s flush should leave it empty anyway.
+  It is not alone: `events.jsonl.*.sending`, the `events.dropped` counter, and §5's
+  `events.errors` ledger are siblings, so that line names the family rather than one file.
 - **Two hosts share one spool.** The rename-then-send flush makes concurrent flushes safe, but
   this is the first shared mutable file across host adapters — ADR 0010 otherwise scoped
   per-host state under `~/.memu/hosts/<host>/` exactly to avoid such races. The deviation is

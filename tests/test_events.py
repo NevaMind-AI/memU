@@ -237,6 +237,48 @@ def test_agent_error_deduplicates_a_retry_loop(reporting: pathlib.Path) -> None:
     assert len(_spooled(reporting)) == 2
 
 
+def test_agent_error_dedup_survives_the_flush_its_own_command_performs(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The reason dedup remembers in a sidecar rather than by scanning the spool.
+
+    `report error` flushes inline, so by the time an agent retries, the spool it
+    would have been checked against is empty — and every repeat would read as new.
+    """
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    for _ in range(3):
+        assert run(CODEX_SPEC, ["report", "error", "--stage", "install", "--detail", "no wheel"]) == 0
+
+    assert len(posted.events) == 1
+
+
+def test_agent_error_reports_again_once_the_dedup_window_has_passed(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A failure still happening an hour later is a different fact, and worth a row.
+    events.record_agent_error(stage="install", detail="no wheel", host="codex")
+    monkeypatch.setattr(events, "ERROR_DEDUP_SECONDS", 0.0)
+    events.record_agent_error(stage="install", detail="no wheel", host="codex")
+
+    assert len(_spooled(reporting)) == 2
+
+
+def test_report_error_keeps_the_event_when_the_endpoint_is_unreachable(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # An inline flush that fails costs the wait, never the event: it stays on disk
+    # for the next one. Fail-open is the whole reason this verb may flush at all.
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError("offline")))
+
+    assert run(CODEX_SPEC, ["report", "error", "--stage", "other", "--detail", "offline"]) == 0
+
+    (retained,) = reporting.parent.glob("events.jsonl.*.sending")
+    (event,) = _spooled(retained)
+    assert event["properties"]["detail"] == "offline"
+
+
 def test_stage_vocabulary_keeps_its_two_load_bearing_values() -> None:
     # `retrieve`: a retrieval that returns nothing forever throws nothing, so
     # `cli_error` cannot see it and only an agent can report it.
@@ -559,9 +601,16 @@ def test_report_error_rejects_a_stage_outside_the_vocabulary(reporting: pathlib.
         run(CODEX_SPEC, ["report", "error", "--stage", "whatever"])
 
 
-def test_report_error_records_stage_and_detail(reporting: pathlib.Path) -> None:
+def test_report_error_records_stage_and_detail(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
     assert run(CODEX_SPEC, ["report", "error", "--stage", "install", "--detail", "pip resolved no wheel"]) == 0
-    (event,) = _spooled(reporting)
+
+    # Delivered inline, not left for a later flush: the runs that file an error are
+    # disproportionately the runs that never reach `prepare` or `commit`.
+    (event,) = posted.events
+    assert not reporting.exists()
     assert event["event_name"] == events.CORE_ACTION_FAILED
     # `action_name` mirrors `stage` at the envelope, so the failure event carries
     # the same discriminator `core_action_completed` does. The CLI surface stays

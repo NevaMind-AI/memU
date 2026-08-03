@@ -499,6 +499,13 @@ async def _cmd_report(spec: HostSpec, args: argparse.Namespace) -> int:
             host=spec.host,
             session_id_env=spec.session_id_env,
         )
+        # Delivered inline, for the same reason `docs install` flushes: the runs
+        # that file an error are disproportionately the runs that never reach
+        # `prepare` or `commit` — a failed install, a store the bridging pair
+        # cannot talk to — so a later flush is exactly what cannot be counted on
+        # here. An agent already blocked long enough to decide it had a failure to
+        # report; one POST on that path is affordable, and fail-open means a
+        # dead network costs the wait, not the event, which stays spooled.
         events.flush()
         print(outcome)
         return 0

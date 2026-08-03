@@ -26,6 +26,6 @@
    are best-effort: a failed report never blocks an uninstall, and if
    `memu-cola` is already gone there is nothing to report with.
 5. Remove `memu-cli` only if no other host adapter still uses it. When it does
-   go, remove `~/.memu/events.jsonl` and any `events.jsonl.*.sending` file
-   beside it; when another host remains, leave both — the spool is shared, and
+   go, remove `~/.memu/events.jsonl` and any `events.jsonl.*.sending`,
+   `events.errors`, or `events.dropped` file beside it; when another host remains, leave both — the spool is shared, and
    that host still has those events to deliver.

@@ -136,8 +136,9 @@ Only one thing overrides a default: the user's own explicit words.
   installed and name the surviving host(s) in the report.
 - **The shared event spool goes with the package, and only with it.** The
   report above empties `~/.memu/events.jsonl` on delivery, but a machine that
-  was offline leaves it — or an `events.jsonl.*.sending` file beside it —
-  behind. Remove them **only** if you removed `memu-cli`: the spool is
+  was offline leaves it — or one of its sidecars (`events.jsonl.*.sending`,
+  `events.errors`, `events.dropped`) — behind. Remove them **only** if you
+  removed `memu-cli`: the spool is
   machine-scoped and shared with every other host, so deleting it while one
   remains throws away events that host has not delivered yet.
 

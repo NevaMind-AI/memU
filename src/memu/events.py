@@ -37,6 +37,7 @@ environment), the conventional ``DO_NOT_TRACK=1``, or an empty
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import platform
@@ -140,6 +141,20 @@ one line of code and, unlike a prompt, cannot be forgotten."""
 
 MAX_FRAMES = 20
 """Traceback frames kept on a ``cli_error``, innermost last."""
+
+ERROR_DEDUP_SECONDS = 3600.0
+"""How long one ``(stage, detail)`` pair stays deduplicated (:func:`_claim_error`).
+
+A window in wall-clock, not "until the next flush", because ``report error``
+flushes inline: the spool it would have been measured against is empty by the time
+the agent retries. An hour covers the case the dedup exists for — an agent looping
+on the same failure inside one session — while still letting a failure that is
+*still* happening tomorrow report itself again, which is a different fact and
+worth a row."""
+
+MAX_LEDGER_ENTRIES = 200
+"""Fingerprints kept in the dedup ledger. Bounds a file that is otherwise appended
+to forever; oldest go first, and losing one only costs a duplicate."""
 
 _TIMEOUT_SECONDS = 5.0
 
@@ -467,16 +482,18 @@ def record_agent_error(
     spans ``install``/``uninstall``/``other``, which name no core action at all,
     and translating the two that do overlap would leave the rest lying.
 
-    Deduplicated on ``(stage, detail)`` against what is already spooled, because
-    an agent in a retry loop will otherwise file the same failure a dozen times.
-    Reading the spool here is affordable in a way it would not be in
-    :func:`record`: this path is rare, not per-turn.
+    Deduplicated on ``(stage, detail)`` for :data:`ERROR_DEDUP_SECONDS`, because an
+    agent in a retry loop will otherwise file the same failure a dozen times. The
+    ledger that remembers this is a sidecar file rather than the spool: the caller
+    flushes inline, so by the next retry the spool is empty and a scan of it would
+    call every repeat new. Reading a small file here is affordable in a way it
+    would not be in :func:`record` — this path is rare, not per-turn.
     """
     try:
         if not enabled():
             return
         clipped = detail.strip()[:MAX_DETAIL_CHARS]
-        if _already_spooled(stage, clipped):
+        if not _claim_error(stage, clipped):
             return
         record(
             CORE_ACTION_FAILED,
@@ -488,14 +505,36 @@ def record_agent_error(
         return
 
 
-def _already_spooled(stage: str, detail: str) -> bool:
-    for event in _read(_spool_path()):
-        if event.get("event_name") != CORE_ACTION_FAILED:
-            continue
-        properties = event.get("properties") or {}
-        if properties.get("stage") == stage and properties.get("detail") == detail:
-            return True
-    return False
+def _error_ledger() -> Path:
+    return _spool_path().with_suffix(".errors")
+
+
+def _claim_error(stage: str, detail: str) -> bool:
+    """Whether this failure is new — and if so, remember it.
+
+    Fingerprints rather than the pair itself, so the ledger is bounded no matter
+    how long a ``--detail`` is and so the one file this module keeps *outside* the
+    spool holds no agent prose. It never leaves the machine either way; a hash
+    simply gives it nothing to leak.
+
+    Fails open like everything else here: an unwritable ledger costs duplicate
+    events, never a lost one.
+    """
+    ledger = _error_ledger()
+    fingerprint = hashlib.sha256(f"{stage}\x00{detail}".encode()).hexdigest()[:16]
+    now = datetime.now(UTC).timestamp()
+    kept = [entry for entry in _read(ledger) if now - _stamp(entry) < ERROR_DEDUP_SECONDS]
+    if any(entry.get("fingerprint") == fingerprint for entry in kept):
+        return False
+    _retain(ledger, [*kept[-(MAX_LEDGER_ENTRIES - 1) :], {"fingerprint": fingerprint, "at": now}])
+    return True
+
+
+def _stamp(entry: dict[str, Any]) -> float:
+    """A ledger entry's age basis. An unparseable stamp reads as ancient, so a
+    corrupted line expires rather than deduplicating forever."""
+    at = entry.get("at")
+    return float(at) if isinstance(at, (int, float)) else 0.0
 
 
 def record_cli_error(exc: BaseException, *, command: str = "", host: str = "", session_id_env: str = "") -> None:
@@ -671,8 +710,11 @@ def _unlink(path: Path) -> None:
 
 
 def _retain(path: Path, events: list[dict[str, Any]]) -> None:
-    """Leave only the undelivered tail behind, so the next flush resumes instead
-    of re-posting what this one already delivered.
+    """Rewrite *path* to hold exactly *events* — the one writer for every file this
+    module replaces wholesale, the spool tail and the dedup ledger alike.
+
+    For a flush it leaves only the undelivered tail behind, so the next one resumes
+    instead of re-posting what this one already delivered.
 
     Without this a spool longer than :data:`MAX_FLUSH_POSTS` never drains: every
     flush would spend its whole budget on the same leading events and stop in the
