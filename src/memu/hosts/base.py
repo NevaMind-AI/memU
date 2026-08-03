@@ -38,6 +38,15 @@ class RecordKind(Enum):
     """Anything else (session metadata, reasoning traces, …) — dropped."""
 
 
+class TranscriptReadError(RuntimeError):
+    """A recoverable failure to read one transcript container or session."""
+
+    def __init__(self, path: Path, cause: BaseException) -> None:
+        self.path = path
+        self.cause = cause
+        super().__init__(f"could not read transcript data from {path}: {cause}")
+
+
 class TranscriptSource(ABC):
     """One host's on-disk session log.
 
@@ -81,7 +90,7 @@ class TranscriptSource(ABC):
         return files
 
     def read_records(self, path: Path) -> list[str]:
-        """A session file's records, in order, as raw non-empty lines."""
+        """A session's records in order; sources may raise ``TranscriptReadError`` for recoverable I/O failures."""
         with path.open(encoding="utf-8") as handle:
             return [line for line in (raw.strip() for raw in handle) if line]
 

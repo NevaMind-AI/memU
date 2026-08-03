@@ -32,12 +32,15 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 import os
 import sqlite3
 from pathlib import Path
 from typing import ClassVar
 
-from memu.hosts.base import RecordKind, TranscriptSource
+from memu.hosts.base import RecordKind, TranscriptReadError, TranscriptSource
+
+logger = logging.getLogger(__name__)
 
 SESSION_DIR = "~/.openclaw/agents"
 
@@ -85,6 +88,7 @@ class OpenClawTranscriptSource(TranscriptSource):
 
     def __init__(self, session_dir: str | Path = SESSION_DIR) -> None:
         self._root = Path(os.path.expanduser(str(session_dir)))
+        self._stored_paths: set[Path] = set()
 
     def root(self) -> Path:
         return self._root
@@ -106,21 +110,15 @@ class OpenClawTranscriptSource(TranscriptSource):
         return sqlite3.connect(f"{db.resolve().as_uri()}?mode=ro", uri=True)
 
     def _query(self, db: Path, sql: str, *args: object) -> list[tuple]:
-        """Run one read-only query, or return nothing if the store is unreadable.
-
-        Fails open, deliberately: ``prepare`` runs unattended on a schedule, so a
-        database that is locked, half-written, or on a schema this adapter does
-        not recognize has to degrade to "this store contributes no sessions" —
-        never to a crashed run that stops mining until someone notices.
-        """
+        """Run one read-only query, distinguishing failure from no rows."""
         try:
             conn = self._connect(db)
-        except sqlite3.Error:
-            return []
+        except sqlite3.Error as exc:
+            raise TranscriptReadError(db, exc) from exc
         try:
             return conn.execute(sql, args).fetchall()
-        except sqlite3.Error:
-            return []
+        except sqlite3.Error as exc:
+            raise TranscriptReadError(db, exc) from exc
         finally:
             # Closed here rather than by a `with` block: that one commits a
             # transaction but leaves the handle open, and there is one database
@@ -139,7 +137,9 @@ class OpenClawTranscriptSource(TranscriptSource):
         return db.parent.parent / "sessions" / f"{session_id}{_SESSION_SUFFIX}"
 
     def _stored_session(self, path: Path) -> tuple[Path, str] | None:
-        """``(database, session_id)`` if this path addresses a stored session."""
+        """``(database, session_id)`` if discovery found this stored session."""
+        if path not in self._stored_paths:
+            return None
         try:
             parts = path.relative_to(self._root).parts
         except ValueError:
@@ -162,10 +162,14 @@ class OpenClawTranscriptSource(TranscriptSource):
         """
         stored: list[tuple[float, Path]] = []
         for db in self._databases():
-            rows = self._query(
-                db,
-                "SELECT session_id, MAX(created_at) FROM transcript_events GROUP BY session_id",
-            )
+            try:
+                rows = self._query(
+                    db,
+                    "SELECT session_id, MAX(created_at) FROM transcript_events GROUP BY session_id",
+                )
+            except TranscriptReadError as exc:
+                logger.warning("skipping unreadable OpenClaw transcript store %s: %s", db, exc.cause)
+                continue
             # Grouping over the events themselves is what keeps empty sessions
             # out: a session that holds no transcript event has no row here, so
             # it never occupies a prepare slot. Trajectory events live in their
@@ -173,6 +177,7 @@ class OpenClawTranscriptSource(TranscriptSource):
             stored.extend((last_at / 1000, self._virtual_path(db, session_id)) for session_id, last_at in rows)
 
         claimed = {path for _, path in stored}
+        self._stored_paths = claimed
         files = [
             (path.stat().st_mtime, path)
             for path in super().discover()

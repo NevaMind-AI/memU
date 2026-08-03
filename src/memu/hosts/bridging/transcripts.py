@@ -7,9 +7,12 @@ record is shaped — arrives through :class:`~memu.hosts.base.TranscriptSource`.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
-from memu.hosts.base import RecordKind, TranscriptSource
+from memu.hosts.base import RecordKind, TranscriptReadError, TranscriptSource
+
+logger = logging.getLogger(__name__)
 
 
 def _split(source: TranscriptSource, records: list[str]) -> tuple[list[str], list[str]]:
@@ -65,7 +68,11 @@ def prepare_transcripts(
         previous = manifest.get(key)
         seen_lines = previous["lines"] if previous else 0
 
-        records = source.read_records(path)
+        try:
+            records = source.read_records(path)
+        except TranscriptReadError as exc:
+            logger.warning("skipping unreadable transcript %s: %s", key, exc.cause)
+            continue
         if len(records) > seen_lines:
             pending.append((key, records, seen_lines))
         elif previous is not None:

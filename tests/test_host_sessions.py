@@ -13,7 +13,10 @@ import os
 import pathlib
 import sqlite3
 
-from memu.hosts.base import RecordKind
+import pytest
+
+from memu.hosts.base import RecordKind, TranscriptReadError
+from memu.hosts.bridging.transcripts import prepare_transcripts
 from memu.hosts.claude_code.sessions import ClaudeCodeTranscriptSource
 from memu.hosts.codex.sessions import CodexTranscriptSource
 from memu.hosts.cola.sessions import ColaTranscriptSource
@@ -531,6 +534,63 @@ def test_openclaw_unreadable_store_contributes_nothing_rather_than_raising(tmp_p
     source = OpenClawTranscriptSource(tmp_path)
     assert [source.key(path) for path in source.discover()] == ["main/sessions/still-here.jsonl"]
     assert source.read_records(legacy) == [_line(_openclaw_turn("user", "hi"))]
+
+
+def test_openclaw_failed_stored_session_read_does_not_fall_back_to_virtual_file(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A database-held session has only a virtual legacy path. A read error is
+    not an empty query result and must never try to open that nonexistent file."""
+    _openclaw_store(tmp_path, "main", {"stored-only": [(0, _openclaw_turn("user", "hi"), 1785308110945)]})
+    source = OpenClawTranscriptSource(tmp_path)
+    (session,) = source.discover()
+    monkeypatch.setattr(
+        source,
+        "_connect",
+        lambda db: (_ for _ in ()).throw(sqlite3.OperationalError("database is locked")),
+    )
+
+    with pytest.raises(TranscriptReadError, match="database is locked"):
+        source.read_records(session)
+
+
+def test_openclaw_prepare_warns_and_continues_after_stored_session_read_error(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """One transient SQLite failure must not crash unattended prepare or trigger
+    the early stop before a healthy older session."""
+    _openclaw_store(
+        tmp_path,
+        "main",
+        {
+            "broken-new": [(0, _openclaw_turn("user", "broken"), 1_800_000_000_000)],
+            "healthy-old": [(0, _openclaw_turn("user", "healthy"), 1_700_000_000_000)],
+        },
+    )
+    source = OpenClawTranscriptSource(tmp_path)
+    query = source._query
+
+    def fail_one_session(db: pathlib.Path, sql: str, *args: object) -> list[tuple]:
+        if args == ("broken-new",):
+            error = sqlite3.OperationalError("database is locked")
+            raise TranscriptReadError(db, error) from error
+        return query(db, sql, *args)
+
+    monkeypatch.setattr(source, "_query", fail_one_session)
+    out_dir = tmp_path / "out"
+
+    prepared = prepare_transcripts(
+        source,
+        out_dir=out_dir,
+        manifest_path=tmp_path / "manifest.json",
+        max_jobs=10,
+        pending_path=tmp_path / "pending.json",
+    )
+
+    assert prepared == 1
+    assert "healthy" in (out_dir / "1.jsonl").read_text(encoding="utf-8")
+    assert "broken-new" in caplog.text
+    assert "database is locked" in caplog.text
 
 
 # ── Hermes ─────────────────────────────────────────────────────────────────────
