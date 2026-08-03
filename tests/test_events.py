@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import time
 import urllib.error
 from typing import Any
 
@@ -723,6 +724,146 @@ def test_a_failing_command_records_both_the_action_and_the_exception(
     assert events.CLI_ERROR in names
     action = next(e for e in spooled if e["event_name"] == events.CORE_ACTION_COMPLETED)
     assert action["properties"]["success"] is False
+
+
+# --------------------------------------------------------------------------- #
+# The two clocks on `memory_update` (ADR 0016 §10)
+#
+# `latency_ms` is memU's own work inside one process; `duration_ms` is the whole
+# prepare -> commit cycle across two. The tests below pin the second one's edges,
+# because that is the one that can be wrong: it is wall clock by necessity, and a
+# fail-open path must drop what it cannot believe rather than invent a number.
+# --------------------------------------------------------------------------- #
+
+
+def _commit(base: pathlib.Path, monkeypatch: pytest.MonkeyPatch, recall_files: int = 1) -> _Posted:
+    """Run the ``commit`` CLI against *base* with the store stubbed out."""
+    from memu.hosts import host_cli
+
+    async def _committed(layout: Any) -> dict[str, Any]:
+        return {"recall_files": [{"name": str(i)} for i in range(recall_files)], "resources": []}
+
+    posted = _Posted()
+    monkeypatch.setattr(host_cli, "commit", _committed)
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+    assert run(CODEX_SPEC, ["commit", "--base-dir", str(base)]) == 0
+    return posted
+
+
+def _remember(posted: _Posted) -> dict[str, Any]:
+    event = next(e for e in posted.events if e["event_name"] == events.CORE_ACTION_COMPLETED)
+    properties: dict[str, Any] = event["properties"]
+    assert properties["action_name"] == "memory_update"
+    return properties
+
+
+def test_commit_reports_both_clocks_and_clears_the_marker(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    """The whole seam: prepare stamps, commit closes the cycle and tidies up."""
+    from memu.hosts import host_cli
+    from memu.hosts.bridging import Layout
+
+    base = tmp_path / "work"
+    layout = Layout.default(host="codex", base=base)
+    host_cli._mark_cycle_start(layout)
+    assert layout.run_marker.is_file()
+
+    properties = _remember(_commit(base, monkeypatch))
+    assert properties["latency_ms"] >= 0
+    assert properties["duration_ms"] >= 0
+    # Reported, so the marker's job is done — otherwise the next cycle would
+    # measure from this one's prepare.
+    assert not layout.run_marker.exists()
+
+
+def test_a_commit_with_no_prepare_omits_the_cycle_rather_than_reporting_zero(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    """An unmeasurable cycle is a missing field, never a zero that averages in.
+
+    The live cases are a hand-run ``commit`` and an upgrade that landed mid-cycle,
+    and neither is a fast bridging run.
+    """
+    properties = _remember(_commit(tmp_path / "work", monkeypatch))
+    assert "duration_ms" not in properties
+    # The in-process clock is unaffected: it never needed the marker.
+    assert properties["latency_ms"] >= 0
+
+
+@pytest.mark.parametrize(
+    ("started_at", "why"),
+    [
+        (time.time() + 600, "the clock moved backwards between prepare and commit"),
+        (time.time() - 10 * 86400, "the machine slept through a week"),
+        ("not-a-number", "the marker is corrupt"),
+    ],
+)
+def test_a_span_that_cannot_be_believed_is_dropped_not_sent(
+    reporting: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    started_at: Any,
+    why: str,
+) -> None:
+    from memu.hosts.bridging import Layout
+
+    base = tmp_path / "work"
+    layout = Layout.default(host="codex", base=base)
+    layout.run_marker.parent.mkdir(parents=True, exist_ok=True)
+    layout.run_marker.write_text(json.dumps({"started_at": started_at}), encoding="utf-8")
+
+    properties = _remember(_commit(base, monkeypatch))
+    assert "duration_ms" not in properties, why
+
+
+def test_a_failed_commit_keeps_the_marker_so_the_retry_still_measures(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    """Clearing on failure would make every retried cycle unmeasurable."""
+    from memu.hosts import host_cli
+    from memu.hosts.bridging import Layout
+
+    base = tmp_path / "work"
+    layout = Layout.default(host="codex", base=base)
+    host_cli._mark_cycle_start(layout)
+
+    async def _boom(layout: Any) -> dict[str, Any]:
+        raise RuntimeError("boom")
+
+    posted = _Posted()
+    monkeypatch.setattr(host_cli, "commit", _boom)
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+    assert run(CODEX_SPEC, ["commit", "--base-dir", str(base)]) == 1
+
+    assert layout.run_marker.is_file()
+    # The failure is reported with its clocks, not silently dropped.
+    properties = _remember(posted)
+    assert properties["success"] is False
+    assert properties["duration_ms"] >= 0
+
+
+def test_the_cycle_marker_is_host_scoped_like_the_cursor_beside_it(tmp_path: pathlib.Path) -> None:
+    """Two hosts bridge independently; one shared marker would cross their cycles."""
+    from memu.hosts.bridging import Layout
+
+    codex = Layout.default(host="codex", base=tmp_path)
+    claude = Layout.default(host="claude-code", base=tmp_path)
+    assert codex.run_marker != claude.run_marker
+
+
+def test_a_cycle_that_cannot_be_stamped_is_still_a_successful_prepare(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    """Reporting is never a dependency — an unwritable marker costs the field only."""
+    from memu.hosts import host_cli
+    from memu.hosts.bridging import Layout
+
+    def _unwritable(*args: Any, **kwargs: Any) -> None:
+        raise OSError("read-only")
+
+    monkeypatch.setattr(pathlib.Path, "write_text", _unwritable)
+    host_cli._mark_cycle_start(Layout.default(host="codex", base=tmp_path))
 
 
 # --------------------------------------------------------------------------- #

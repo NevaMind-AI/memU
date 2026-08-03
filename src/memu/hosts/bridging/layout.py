@@ -65,6 +65,24 @@ class Layout:
         return self.session_manifest.with_name(self.session_manifest.name + ".pending")
 
     @property
+    def run_marker(self) -> Path:
+        """When this cycle's ``prepare`` began, for ``commit`` to close (ADR 0016 §10).
+
+        The two halves of the record seam are separate processes, usually minutes
+        or hours apart, so the start cannot be held in memory — and
+        :func:`time.monotonic` does not cross a process boundary at all. A file is
+        the only carrier, and an explicit one rather than an existing artifact's
+        mtime: ``session_manifest_pending`` is written partway through ``prepare``,
+        before the store mirror and the template fetches, so reading its timestamp
+        would silently exclude exactly the network time worth measuring — and would
+        bind the number to a statement order nobody has agreed to preserve.
+
+        Host-scoped like the cursor beside it, and ephemeral: written by every
+        ``prepare``, cleared by the ``commit`` that reports it.
+        """
+        return self.base / f".bridging_run.{self.host}.json"
+
+    @property
     def self_sessions(self) -> Path:
         """Session ids of the bridging runs themselves, skipped by ``prepare``.
 

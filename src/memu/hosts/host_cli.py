@@ -22,9 +22,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
+import json
 import os
 import platform
 import sys
+import time
 import urllib.request
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
@@ -182,6 +185,7 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
         return 2
 
     layout = _layout(spec, args)
+    _mark_cycle_start(layout)
     # This run is itself a host session, and the host is logging it where we are
     # about to look. Remember it now — before the scan — so it is skipped by this
     # run and every later one (#606).
@@ -234,10 +238,19 @@ async def _cmd_commit(spec: HostSpec, args: argparse.Namespace) -> int:
     # belongs — and it already holds the counts that event reports.
     layout = _layout(spec, args)
     session_count = _pending_session_count(layout)
+    started = time.monotonic()
     try:
         result = await commit(layout)
     except Exception:
-        _record_remember(spec, success=False, recall_files=0, resources=0, sessions=session_count)
+        _record_remember(
+            spec,
+            success=False,
+            recall_files=0,
+            resources=0,
+            sessions=session_count,
+            latency_ms=_elapsed_ms(started),
+            duration_ms=_cycle_duration_ms(layout),
+        )
         raise
     recall_files = result.get("recall_files", [])
     resources = result.get("resources", [])
@@ -247,7 +260,15 @@ async def _cmd_commit(spec: HostSpec, args: argparse.Namespace) -> int:
         recall_files=len(recall_files),
         resources=len(resources),
         sessions=session_count,
+        latency_ms=_elapsed_ms(started),
+        duration_ms=_cycle_duration_ms(layout),
     )
+    # The cycle is closed and reported, so the marker has done its job. Cleared
+    # only on the success path — the `raise` above keeps it, so a retried commit
+    # still measures from the prepare that actually opened this cycle rather than
+    # reporting nothing.
+    with contextlib.suppress(OSError):
+        layout.run_marker.unlink(missing_ok=True)
     events.flush()
     if not recall_files and not resources:
         print("nothing to commit")
@@ -270,15 +291,87 @@ def _pending_session_count(layout: Layout) -> int:
         return 0
 
 
-def _record_remember(spec: HostSpec, *, success: bool, recall_files: int, resources: int, sessions: int) -> None:
+MAX_CYCLE_SECONDS = 24 * 60 * 60
+"""Past this a reported cycle is not believed. See :func:`_cycle_duration_ms`."""
+
+
+def _elapsed_ms(started: float) -> int:
+    """Milliseconds since a :func:`time.monotonic` reading."""
+    return round((time.monotonic() - started) * 1000)
+
+
+def _mark_cycle_start(layout: Layout) -> None:
+    """Stamp when this bridging cycle began, for ``commit`` to close.
+
+    Wall clock, unavoidably: the two halves of the record seam are separate
+    processes and no monotonic clock survives that boundary. What follows from
+    that is handled where the stamp is read, in :func:`_cycle_duration_ms`.
+
+    Overwritten by every ``prepare``, which is the right reading of a second one:
+    it regenerated the job files, so the cycle the agent is working is the one
+    that starts here. Best-effort like everything on the reporting path — an
+    unwritable marker costs the field, never the run.
+    """
+    try:
+        layout.run_marker.parent.mkdir(parents=True, exist_ok=True)
+        layout.run_marker.write_text(json.dumps({"started_at": time.time()}), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _cycle_duration_ms(layout: Layout) -> int | None:
+    """How long the whole cycle took, ``prepare`` to here — or ``None``.
+
+    Not a latency, and it must not be read as one. Most of this number is the
+    agent's self-evolve pass *between* the two commands — reading transcripts,
+    writing markdown — so it measures the bridging round trip, not memU's work.
+    ``latency_ms`` beside it is the part that is memU's.
+
+    Being wall clock (see :func:`_mark_cycle_start`), a suspended laptop or an
+    NTP step lands inside it too. So the impossible is dropped rather than sent:
+    a negative span means the clock moved backwards, and one longer than
+    :data:`MAX_CYCLE_SECONDS` is a machine that slept through a week, not a slow
+    agent. ``None`` — an absent field, never a zero — is also the honest answer
+    when there is no marker at all: a ``commit`` with no preceding ``prepare``, or
+    an upgrade that landed mid-cycle. A row a consumer can exclude, rather than
+    one that silently poisons an average.
+    """
+    try:
+        started = json.loads(layout.run_marker.read_text(encoding="utf-8"))["started_at"]
+        elapsed = time.time() - float(started)
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+    if not 0 <= elapsed <= MAX_CYCLE_SECONDS:
+        return None
+    return round(elapsed * 1000)
+
+
+def _record_remember(
+    spec: HostSpec,
+    *,
+    success: bool,
+    recall_files: int,
+    resources: int,
+    sessions: int,
+    latency_ms: int,
+    duration_ms: int | None,
+) -> None:
+    counts: dict[str, Any] = {
+        "recall_file_count": recall_files,
+        "resource_count": resources,
+        "session_count": sessions,
+        "latency_ms": latency_ms,
+    }
+    if duration_ms is not None:
+        # Omitted rather than zeroed when the cycle could not be measured — the
+        # distinction is the whole point of `_cycle_duration_ms` returning None.
+        counts["duration_ms"] = duration_ms
     events.record_action(
         "memory_update",
         host=spec.host,
         session_id_env=spec.session_id_env,
         success=success,
-        recall_file_count=recall_files,
-        resource_count=resources,
-        session_count=sessions,
+        **counts,
     )
 
 

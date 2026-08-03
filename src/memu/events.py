@@ -187,7 +187,12 @@ _ALLOWED_PROPERTIES: dict[str, frozenset[str]] = {
         "action_name",
         "success",
         "result_count",
+        # Two clocks, deliberately not one field. `latency_ms` is memU's own
+        # blocking work inside a single process; `duration_ms` is the whole
+        # prepare -> commit bridging cycle, which spans two of them and is mostly
+        # the agent's. See `_cycle_duration_ms` in `memu.hosts.host_cli`.
         "latency_ms",
+        "duration_ms",
         "recall_file_count",
         "resource_count",
         "session_count",

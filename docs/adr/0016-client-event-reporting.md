@@ -402,7 +402,29 @@ rather than passed through — including anything an agent supplies.
 - retrieve → `action_name: "memory_search"`, `success`, `result_count`, `latency_ms`.
   `result_count` is the segments + files + resources sum that `doctor` already computes.
 - remember → `action_name: "memory_update"`, `success`, `recall_file_count`,
-  `resource_count`, `session_count`.
+  `resource_count`, `session_count`, `latency_ms`, `duration_ms`.
+
+  The last two are two clocks, deliberately not one field, and averaging them together is
+  meaningless. `latency_ms` is memU's own blocking work — the store call `commit` makes —
+  measured in-process with a monotonic clock, exactly as retrieve's is. `duration_ms` is the
+  whole bridging cycle, `prepare` to `commit`, and is mostly *the agent's* self-evolve pass
+  between the two: it is a round-trip time, not a latency.
+
+  Measuring it costs a file, because the two halves are separate processes minutes or hours
+  apart and no monotonic clock crosses that boundary: `prepare` stamps
+  `~/.memu/hosts/<host>/.bridging_run.<host>.json`, and the `commit` that reports the cycle
+  clears it. An explicit marker rather than an existing artifact's mtime — the nearest
+  candidate, the pending session cursor, is written partway through `prepare` (before the
+  store mirror and the template fetches), so its timestamp would silently exclude exactly the
+  network time worth measuring, and would bind the number to a statement order nobody has
+  agreed to preserve. A failed `commit` keeps the marker, so the retry after it still measures
+  from the `prepare` that opened the cycle.
+
+  Being wall clock, a suspended laptop or an NTP step lands inside `duration_ms`. Consumers do
+  not have to filter that themselves: a negative span, or one longer than a day, is dropped at
+  the client. And the field is **absent, never zero**, whenever the cycle cannot be measured —
+  a `commit` with no preceding `prepare`, an upgrade that landed mid-cycle. Same rule as
+  `session_id` below: a field the CLI cannot fill is omitted, never faked.
 - install / uninstall → `{}`. There is nothing to say: the event is emitted only on success
   (§4), so a `success: true` would be constant, and a field that is always true teaches a
   consumer nothing while inviting someone to later "fix" it by sending `false` — quietly
