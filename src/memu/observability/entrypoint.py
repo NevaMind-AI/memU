@@ -33,7 +33,12 @@ def cli_telemetry(command: str) -> Iterator[None]:
         yield
         return
 
-    handle = init_telemetry()
+    # Don't register process globals from the CLI: this handle is shut down when
+    # the command exits, and leaving it as ``telemetry._handle`` would make a
+    # later init_telemetry() in the same process return a dead, torn-down handle.
+    # memU's own provider registry is populated regardless of ``set_global``, so
+    # ``providers.get_tracer`` below still resolves the freshly-built provider.
+    handle = init_telemetry(set_global=False)
     try:
         parent = extract_context_from_env()
         tracer = providers.get_tracer("memu.cli", semconv.SEMCONV_VERSION)

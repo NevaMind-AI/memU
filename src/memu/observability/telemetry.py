@@ -18,19 +18,26 @@ import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from opentelemetry import metrics, trace
 from opentelemetry._logs import get_logger_provider, set_logger_provider
-from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler, LogRecordProcessor
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import MetricReader, PeriodicExportingMetricReader
-from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter, SpanProcessor
 
 from memu.observability import config, instruments, providers, semconv
+
+# The SDK ships in memU's optional ``observability`` extra; the library itself
+# hard-depends only on ``opentelemetry-api``. Import SDK symbols lazily inside
+# the functions that install providers, so that merely importing this module
+# (which ``memu.cli`` and ``memu.observability`` do at load time) never requires
+# the SDK. With ``from __future__ import annotations`` the type references below
+# are strings, resolved by type-checkers only — never at runtime.
+if TYPE_CHECKING:
+    from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler, LogRecordProcessor
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import MetricReader
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SpanExporter, SpanProcessor
 
 _LOG_LOGGER_NAME = "memu.observability"
 
@@ -66,6 +73,8 @@ def _memu_version() -> str:
 
 def build_resource(resource_attributes: Mapping[str, str] | None, store_backend: str | None) -> Resource:
     """Assemble the per-process resource with the ``memory.sut.*`` identity."""
+    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+
     attrs: dict[str, Any] = {
         SERVICE_NAME: semconv.SUT_NAME,
         semconv.ATTR_SUT_NAME: semconv.SUT_NAME,
@@ -92,6 +101,7 @@ def _otlp_metric_reader() -> MetricReader | None:
     if not config.otel_enabled():
         return None
     from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 
     return PeriodicExportingMetricReader(OTLPMetricExporter())
 
@@ -100,6 +110,7 @@ def _otlp_log_processor() -> LogRecordProcessor | None:
     if not config.otel_enabled():
         return None
     from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+    from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 
     return BatchLogRecordProcessor(OTLPLogExporter())
 
@@ -122,6 +133,11 @@ def init_telemetry(
     exporters from the standard ``OTEL_EXPORTER_OTLP_*`` environment when
     :func:`config.otel_enabled` is true.
     """
+    from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
     global _handle
     if _handle is not None and not force:
         return _handle

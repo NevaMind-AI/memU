@@ -490,3 +490,34 @@ def test_env_with_current_context_injects_traceparent(telemetry: Telemetry) -> N
         env = env_with_current_context({"PATH": "/usr/bin"})
     assert "TRACEPARENT" in env
     assert env["PATH"] == "/usr/bin"  # base env preserved
+
+
+def test_cli_imports_without_observability_extra() -> None:
+    """``memu.cli`` must import when only ``opentelemetry-api`` is installed.
+
+    memU hard-depends on ``opentelemetry-api``; the SDK lives in the optional
+    ``observability`` extra. Importing ``memu.observability.telemetry`` (which the
+    CLI does transitively) must not pull the SDK at module load — otherwise every
+    ``memu`` invocation raises ``ModuleNotFoundError: opentelemetry.sdk`` for users
+    who never opted into export. Run in a subprocess so blocking the SDK import
+    can't leak into this already-SDK-loaded test process.
+    """
+    import subprocess
+    import sys
+
+    guard = (
+        "import builtins\n"
+        "_real = builtins.__import__\n"
+        "def _guard(name, *a, **k):\n"
+        "    if name == 'opentelemetry.sdk' or name.startswith('opentelemetry.sdk.'):\n"
+        "        raise ModuleNotFoundError(\"No module named '%s'\" % name)\n"
+        "    return _real(name, *a, **k)\n"
+        "builtins.__import__ = _guard\n"
+        "import memu.cli\n"
+        "import memu.observability\n"
+        "from memu.observability.telemetry import init_telemetry\n"
+        "print('ok')\n"
+    )
+    result = subprocess.run([sys.executable, "-c", guard], capture_output=True, text=True)
+    assert result.returncode == 0, f"import failed without SDK extra:\n{result.stderr}"
+    assert result.stdout.strip() == "ok"
