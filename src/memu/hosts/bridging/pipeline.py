@@ -12,9 +12,11 @@ Nothing here knows what a Codex is. The host arrives as a
 from __future__ import annotations
 
 import os
+import time
 from collections.abc import Collection
 from typing import Any
 
+from memu import events
 from memu.env import build_agentic_memory_backend_from_env
 from memu.hosts import templates
 from memu.hosts.base import TranscriptSource
@@ -35,12 +37,19 @@ async def prepare(
     verify_command: str,
     max_jobs: int = MAX_JOBS,
     skip_sessions: Collection[str] = (),
+    host: str = "",
+    session_id_env: str = "",
 ) -> int:
     """Regenerate the job files from whatever the host has logged since last run.
 
     ``skip_sessions`` are the bridging runs' own host sessions, which must not be
     mined (#606); the caller collects them because only the CLI knows how this
     host names the environment variable carrying them.
+
+    ``host`` and ``session_id_env`` are labels for the ``memory_list`` event the
+    store mirror below records, and nothing else — exactly as ``retrieval.register``
+    carries them for its own event. This module still knows nothing about what a
+    Codex *is*; it only knows what to call the platform it is running for.
 
     Returns the number of sessions prepared. Zero is a correct, common outcome —
     a scheduled run on a day with no new sessions has nothing to do.
@@ -63,18 +72,33 @@ async def prepare(
     # list_all_recall_files returns one keyset page per call (ADR 0014); follow
     # next_cursor to mirror every file, writing each page to disk as it arrives
     # so the whole store is never held in memory at once.
+    # Reported as one `memory_list` action covering the whole sweep, not one per
+    # page: a page count is an implementation detail of ADR 0014's keyset paging,
+    # while "how long did mirroring the store take, and how much came back" is the
+    # thing that changes as a user's memory grows. Spooled only — `_cmd_prepare`
+    # flushes once at the end of the run, so this rides out with the rest of it.
     backend = build_agentic_memory_backend_from_env()
+    started = time.monotonic()
+    listed = 0
     cursor: str | None = None
-    while True:
-        result = await backend.list_all_recall_files(cursor=cursor)
-        for recall_file in result["recall_files"]:
-            subdir = TRACK_DIRS.get(recall_file.get("track"))
-            if subdir is None:
-                continue
-            write_recall_file(layout.base, subdir, recall_file)
-        cursor = result.get("next_cursor")
-        if not cursor:
-            break
+    try:
+        while True:
+            result = await backend.list_all_recall_files(cursor=cursor)
+            page = result["recall_files"]
+            listed += len(page)
+            for recall_file in page:
+                subdir = TRACK_DIRS.get(recall_file.get("track"))
+                if subdir is None:
+                    continue
+                write_recall_file(layout.base, subdir, recall_file)
+            cursor = result.get("next_cursor")
+            if not cursor:
+                break
+    except Exception:
+        events.record_list(started=started, listed=listed, success=False, host=host, session_id_env=session_id_env)
+        raise
+    events.record_list(started=started, listed=listed, success=True, host=host, session_id_env=session_id_env)
+
     if not layout.memory_manifest.exists():
         snapshot_tracked(layout.base, layout.track_dirs, layout.memory_manifest)
 

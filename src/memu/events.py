@@ -41,6 +41,7 @@ import hashlib
 import json
 import os
 import platform
+import time
 import traceback
 import urllib.error
 import urllib.request
@@ -64,7 +65,7 @@ DEFAULT_EVENTS_URL = "https://api.memu.so/api/memu/analytics/events"
 entirely (air-gapped installs, offline CI, tests)."""
 
 CORE_ACTION_COMPLETED = "core_action_completed"
-"""Shared by retrieve and remember; ``properties.action_name`` discriminates."""
+"""Shared by retrieve, remember, and list; ``properties.action_name`` discriminates."""
 
 CLI_INSTALL_STARTED = "cli_install_started"
 """An install *attempt*, recorded when a host prints its install guide — the
@@ -461,6 +462,45 @@ def record_action(
         host=host,
         session_id_env=session_id_env,
         properties={"action_name": action_name, "success": success, **counts},
+    )
+
+
+def record_list(
+    *,
+    started: float,
+    listed: int,
+    success: bool,
+    host: str = "",
+    session_id_env: str = "",
+) -> None:
+    """A ``memory_list`` core action — the one action with two call sites.
+
+    ``memory_search`` and ``memory_update`` are each built where they happen, and
+    that is right for them. This one is recorded both by the bridging mirror
+    (:func:`memu.hosts.bridging.pipeline.prepare`) and by ``memu list-files``, so
+    its shape lives here rather than being written twice and drifting.
+
+    ``started`` is a :func:`time.monotonic` reading taken before the first page,
+    so ``latency_ms`` covers the **whole paginated sweep** — every page's store
+    call and, in the bridging case, the disk mirroring between them. That is what
+    :data:`CORE_ACTION_COMPLETED` already means by the field (memU's own blocking
+    work inside one process), and it is deliberately *not* store latency: a slow
+    disk lands in this number.
+
+    ``listed`` is what the store returned, not what the caller kept — the mirror
+    drops files whose track has no directory on disk, and those were still
+    listed — and it is reported on the failure path too, so a sweep that dies
+    midway says how far it got instead of zero. It goes out as ``result_count``,
+    the read actions' field, matching ``memory_search``; ``recall_file_count``
+    stays what ``memory_update`` *wrote*.
+    """
+    record_action(
+        "memory_list",
+        host=host,
+        session_id_env=session_id_env,
+        success=success,
+        result_count=listed,
+        latency_ms=round((time.monotonic() - started) * 1000),
     )
 
 

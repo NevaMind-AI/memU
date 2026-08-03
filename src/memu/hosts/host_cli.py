@@ -221,6 +221,10 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
         verify_command=spec.verify_command,
         max_jobs=args.max_jobs,
         skip_sessions=skip_sessions,
+        # Carried purely so the `memory_list` event the store mirror records can
+        # name its platform and session, the same two strings `retrieve` carries.
+        host=spec.host,
+        session_id_env=spec.session_id_env,
     )
     num_jobs = 2 * num_sessions + 1
     print(f"prepared {num_sessions} session(s) -> {num_jobs} job(s) in {layout.jobs}")

@@ -23,9 +23,11 @@ import json
 import os
 import pathlib
 import sys
+import time
 from collections.abc import Callable, Coroutine
 from typing import Any
 
+from memu import events
 from memu.agentic_backend import AgenticMemoryBackend
 from memu.env import build_agentic_memory_backend_from_env, embedding_provider, env
 
@@ -95,14 +97,29 @@ async def _cmd_list_files(args: argparse.Namespace) -> int:
     backend = _build_backend(args)
     # "list-files" shows everything, so follow next_cursor across pages (ADR 0014)
     # and gather the full set before printing.
+    #
+    # The same `memory_list` action the bridging store mirror records (ADR 0016),
+    # with two things it cannot carry. This is the core `memu` binary, which has no
+    # host at all, so `agent_platform` is `none` and there is no session — both
+    # already the defined answer for this binary, not a gap. And nothing on this
+    # path flushes: a hand-run command must not block on a POST, and unlike the
+    # bridging pair this one has no reason to be the last thing that ever runs, so
+    # the event waits in the spool for whichever run drains it next.
     files: list[dict[str, Any]] = []
     cursor: str | None = None
-    while True:
-        result = await backend.list_all_recall_files(cursor=cursor)
-        files.extend(result.get("recall_files", []))
-        cursor = result.get("next_cursor")
-        if not cursor:
-            break
+    started = time.monotonic()
+    try:
+        while True:
+            result = await backend.list_all_recall_files(cursor=cursor)
+            files.extend(result.get("recall_files", []))
+            cursor = result.get("next_cursor")
+            if not cursor:
+                break
+    except Exception:
+        events.record_list(started=started, listed=len(files), success=False)
+        raise
+    events.record_list(started=started, listed=len(files), success=True)
+
     if args.json:
         _print_json({"recall_files": files})
         return 0

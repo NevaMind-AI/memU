@@ -867,6 +867,121 @@ def test_a_cycle_that_cannot_be_stamped_is_still_a_successful_prepare(
 
 
 # --------------------------------------------------------------------------- #
+# The store sweep (`memory_list`, ADR 0016 §10)
+#
+# The one core action with two call sites — `prepare`'s mirror of the store to
+# disk, and the core binary's `memu list-files`. What is pinned here is what the
+# number means: one event for the whole paginated loop, counting what the store
+# returned rather than what the caller kept.
+# --------------------------------------------------------------------------- #
+
+
+class _Store:
+    """Serves *pages* one page at a time. With ``boom``, dies after the last one."""
+
+    def __init__(self, pages: list[list[dict[str, Any]]], boom: bool = False) -> None:
+        self._pages = pages
+        self._boom = boom
+
+    async def list_all_recall_files(
+        self, where: Any = None, *, cursor: str | None = None, limit: int = 100
+    ) -> dict[str, Any]:
+        index = int(cursor or 0)
+        if index >= len(self._pages):
+            raise RuntimeError("boom")
+        more = index + 1 < len(self._pages) or self._boom
+        return {"recall_files": self._pages[index], "next_cursor": str(index + 1) if more else None}
+
+
+def _recall_file(name: str, track: str = "memory") -> dict[str, Any]:
+    return {"name": name, "track": track, "description": "d", "content": "c"}
+
+
+def _sweep(pages: list[list[dict[str, Any]]], boom: bool = False) -> Any:
+    """Point the bridging mirror at a fake store."""
+    return lambda: _Store(pages, boom=boom)
+
+
+def _prepare(tmp_path: pathlib.Path) -> list[str]:
+    logs = tmp_path / "logs"
+    logs.mkdir(exist_ok=True)
+    return ["prepare", "--session-dir", str(logs), "--base-dir", str(tmp_path / "work")]
+
+
+def _listing(events_seen: list[dict[str, Any]]) -> dict[str, Any]:
+    (event,) = [e for e in events_seen if e["properties"].get("action_name") == "memory_list"]
+    assert event["event_name"] == events.CORE_ACTION_COMPLETED
+    properties: dict[str, Any] = event["properties"]
+    return properties
+
+
+def test_prepare_reports_the_whole_sweep_as_one_event_and_delivers_it(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    """Two pages and an unmirrorable file: one event, counting all three."""
+    from memu.hosts.bridging import pipeline
+
+    pages = [[_recall_file("a"), _recall_file("x", track="nowhere")], [_recall_file("b")]]
+    monkeypatch.setattr(pipeline, "build_agentic_memory_backend_from_env", _sweep(pages))
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert run(CLAUDE_SPEC, _prepare(tmp_path)) == 0
+
+    # Delivered, not merely spooled: `prepare` is one of the two flush points.
+    properties = _listing(posted.events)
+    assert properties["success"] is True
+    # Three listed, two mirrored — the unknown track has nowhere to live on disk,
+    # but the store still returned it.
+    assert properties["result_count"] == 3
+    assert properties["latency_ms"] >= 0
+    event = next(e for e in posted.events if e["properties"].get("action_name") == "memory_list")
+    assert event["agent_platform"] == "claude_code", "the pipeline reports the host it ran for"
+
+
+def test_a_sweep_that_dies_midway_reports_how_far_it_got(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    """A partial count, never zero — and the failure still reaches the caller."""
+    from memu.hosts.bridging import pipeline
+
+    monkeypatch.setattr(pipeline, "build_agentic_memory_backend_from_env", _sweep([[_recall_file("a")]], boom=True))
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert run(CLAUDE_SPEC, _prepare(tmp_path)) == 1
+
+    properties = _listing(posted.events)
+    assert properties["success"] is False
+    assert properties["result_count"] == 1
+    # The exception the CLI caught is reported beside it, from its own channel.
+    assert events.CLI_ERROR in [e["event_name"] for e in posted.events]
+
+
+def test_list_files_reports_the_same_action_from_a_binary_with_no_host(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`memu list-files` records and does not flush: a hand-run command must not
+    block on a POST, and it is never the last thing to run on a broken machine."""
+    from memu import cli
+
+    store = _Store([[_recall_file("a")], [_recall_file("b")]])
+    monkeypatch.setattr(cli, "build_agentic_memory_backend_from_env", lambda **kwargs: store)
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert cli.main(["list-files"]) == 0
+
+    assert posted.events == [], "nothing on this path flushes"
+    properties = _listing(_spooled(reporting))
+    assert properties["success"] is True
+    assert properties["result_count"] == 2
+    (event,) = _spooled(reporting)
+    assert event["agent_platform"] == "none", "the core binary has no host, and says so"
+    assert "session_id" not in event
+
+
+# --------------------------------------------------------------------------- #
 # The agent-facing text
 # --------------------------------------------------------------------------- #
 

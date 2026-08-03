@@ -40,8 +40,8 @@ The backend wants a fixed event envelope, of which the CLI fills every field:
 }
 ```
 
-Five things are to be reported: install completed, uninstall, a bridging (remember) run
-finished, a retrieval, and a fatal error.
+Six things are to be reported: install completed, uninstall, a bridging (remember) run
+finished, a retrieval, a listing of the store, and a fatal error.
 
 Four facts about this codebase constrain the answer, and each one rules something out:
 
@@ -233,7 +233,7 @@ later revision is one edit:
 
 | `event_name` | Emitted for |
 | --- | --- |
-| `core_action_completed` | retrieve and remember, discriminated by `properties.action_name` |
+| `core_action_completed` | retrieve, remember, and list, discriminated by `properties.action_name` |
 | `core_action_failed` | the agent-reported error — §5 |
 | `cli_install_started` | `docs install` printed the guide |
 | `cli_install_completed` | `report install` |
@@ -425,6 +425,31 @@ rather than passed through — including anything an agent supplies.
   the client. And the field is **absent, never zero**, whenever the cycle cannot be measured —
   a `commit` with no preceding `prepare`, an upgrade that landed mid-cycle. Same rule as
   `session_id` below: a field the CLI cannot fill is omitted, never faked.
+- list → `action_name: "memory_list"`, `success`, `result_count`, `latency_ms`.
+
+  Emitted from the two places that sweep the whole store: `prepare`'s mirror of the recall
+  files to disk, and the core binary's `memu list-files`. One event per sweep, not one per
+  page — a page count is an artifact of ADR 0014's keyset paging, whereas how long the sweep
+  took and how much came back is what actually moves as a user's memory grows. (`page_count`
+  was considered and dropped: a new allowlist key for a number nobody has a question about
+  yet.)
+
+  `latency_ms` covers the **entire loop**, disk writes between pages included, on the same
+  definition the other two actions use — memU's own blocking work inside one process. It is
+  therefore not store latency, and a slow disk lands in it.
+
+  `result_count` is what the store returned, not what the caller kept: the bridging mirror
+  skips files whose track has no directory on disk, and those were still listed. It is reported
+  on the failure leg too, so a sweep that dies midway says how far it got rather than zero.
+  Calling it `result_count` rather than `recall_file_count` follows the split the two existing
+  actions already draw — a read action reports what came back (`memory_search`), while
+  `recall_file_count` is what the write action *wrote* (`memory_update`).
+
+  `memu list-files` is the first core action emitted by a binary with no host, so it carries
+  `agent_platform: "none"` and no `session_id` — the defined answer for that binary (§9), not a
+  gap. It is also the one core action that does not flush: a hand-run command must not block on
+  a POST, and unlike the bridging pair it is never the last thing to run on a machine that is
+  breaking, so its event waits in the spool for whichever run drains it next.
 - install / uninstall → `{}`. There is nothing to say: the event is emitted only on success
   (§4), so a `success: true` would be constant, and a field that is always true teaches a
   consumer nothing while inviting someone to later "fix" it by sending `false` — quietly
