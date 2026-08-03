@@ -44,7 +44,7 @@ import traceback
 import urllib.error
 import urllib.request
 import uuid
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -124,9 +124,14 @@ MAX_SPOOL_BYTES = 1024 * 1024
 machine whose bridging schedule is broken: ``retrieve`` keeps appending every
 turn and nothing ever flushes."""
 
-MAX_BATCH = 200
-"""Envelopes per POST, so one flush after a long offline stretch cannot post an
-unbounded body."""
+MAX_FLUSH_POSTS = 200
+"""Requests one flush may make, so a long offline stretch cannot turn the next
+bridging run into an unbounded stream of POSTs.
+
+It bounds *requests* rather than envelopes-per-request because the endpoint takes
+one event per POST — see :func:`_post`. Anything still spooled when the budget
+runs out stays spooled and goes out on the following flush, so a full spool
+drains over several runs instead of stalling one."""
 
 MAX_DETAIL_CHARS = 5000
 """Hard cap on the agent's free-form ``--detail``. Without it an agent can paste a
@@ -571,25 +576,34 @@ def _flush() -> tuple[int, int]:
         return (0, 0)
     _promote_drop_counter()
     accepted = rejected = 0
+    posts_left = MAX_FLUSH_POSTS
     for path in _pending():
         events = _read(path)
         if not events:
             _unlink(path)
             continue
-        retry = False
-        for batch in _batches(events):
-            outcome = _post(url, batch)
-            if outcome == RETRY:
-                retry = True
+        index = 0
+        stalled = False
+        while index < len(events):
+            if posts_left <= 0:
+                # Out of budget, not broken: the tail is retained and the next
+                # flush picks up exactly where this one stopped.
+                stalled = True
                 break
+            outcome = _post(url, events[index])
+            posts_left -= 1
+            if outcome == RETRY:
+                # Left at `index`, so the event that failed is the first one
+                # retried rather than being counted as delivered.
+                stalled = True
+                break
+            index += 1
             if outcome == ACCEPTED:
-                accepted += len(batch)
+                accepted += 1
             else:
-                rejected += len(batch)
-        if retry:
-            # Whole file retried next time, so an already-accepted batch is
-            # re-sent. That is precisely what client-generated `event_id`
-            # covers — the backend deduplicates and we stay simple.
+                rejected += 1
+        if stalled:
+            _retain(path, events[index:])
             break
         _unlink(path)
     return (accepted, rejected)
@@ -651,14 +665,29 @@ def _read(path: Path) -> list[dict[str, Any]]:
     return events
 
 
-def _batches(events: Sequence[dict[str, Any]]) -> Iterator[list[dict[str, Any]]]:
-    for start in range(0, len(events), MAX_BATCH):
-        yield list(events[start : start + MAX_BATCH])
-
-
 def _unlink(path: Path) -> None:
     with contextlib.suppress(OSError):
         path.unlink(missing_ok=True)
+
+
+def _retain(path: Path, events: list[dict[str, Any]]) -> None:
+    """Leave only the undelivered tail behind, so the next flush resumes instead
+    of re-posting what this one already delivered.
+
+    Without this a spool longer than :data:`MAX_FLUSH_POSTS` never drains: every
+    flush would spend its whole budget on the same leading events and stop in the
+    same place. Written via a temporary file and :func:`os.replace` so a crash
+    mid-rewrite cannot leave a half-written spool. If the rewrite fails the file
+    is left whole — the next flush re-posts and ``event_id`` deduplicates, which
+    is the same bargain the retry path already makes.
+    """
+    lines = "".join(json.dumps(event, ensure_ascii=False, default=str) + "\n" for event in events)
+    temp = path.parent / f"{path.name}.partial"
+    try:
+        temp.write_text(lines, encoding="utf-8")
+        os.replace(temp, path)
+    except OSError:
+        _unlink(temp)
 
 
 def _headers() -> dict[str, str]:
@@ -669,8 +698,19 @@ def _headers() -> dict[str, str]:
 
     Read through :func:`env` and not ``env.cloud_api_key()`` — the latter *raises*
     when unset, which is right for its own caller and exactly wrong here.
+
+    ``User-Agent`` is not decoration and must not be dropped as noise. Left unset,
+    ``urllib`` sends ``Python-urllib/<version>``, which the CDN in front of the
+    ingest host blocks outright — every POST comes back ``403`` with Cloudflare
+    error 1010, before the endpoint is ever reached. Since :func:`_post` reads a
+    permanent 4xx as "the server will never take this" and discards the batch,
+    the failure mode was total silent event loss on a fail-open path: nothing
+    logged, nothing retried, nothing delivered.
     """
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": f"memu-cli/{client_version()}",
+    }
     key = env("MEMU_CLOUD_API_KEY")
     if key:
         headers["Authorization"] = f"Bearer {key}"
@@ -678,21 +718,31 @@ def _headers() -> dict[str, str]:
 
 
 ACCEPTED, REJECTED, RETRY = "accepted", "rejected", "retry"
-"""What became of one batch. ``REJECTED`` is distinct from ``ACCEPTED`` on
-purpose: both mean "stop holding these", but only one means the backend has the
+"""What became of one event. ``REJECTED`` is distinct from ``ACCEPTED`` on
+purpose: both mean "stop holding this", but only one means the backend has the
 data, and collapsing them would let a server rejecting *everything* report itself
 as healthy delivery — the precise class of invisible failure this module exists
 to end."""
 
 
-def _post(url: str, batch: list[dict[str, Any]]) -> str:
-    """POST one batch, returning one of :data:`ACCEPTED` / :data:`REJECTED` / :data:`RETRY`.
+def _post(url: str, event: dict[str, Any]) -> str:
+    """POST one event, returning one of :data:`ACCEPTED` / :data:`REJECTED` / :data:`RETRY`.
+
+    One event per request, because that is what the endpoint accepts: its schema
+    validates the body as a single envelope object, and a JSON array comes back
+    ``422 "Input should be an object"``. Sending a batch would be discarded as a
+    permanent 4xx — the whole batch, silently.
+
+    Provisional. Batching is the shape this client wants and :data:`MAX_FLUSH_POSTS`
+    is sized on the assumption it returns; whether the endpoint grows an array form
+    is the backend team's call, and until they make it the client matches what is
+    deployed rather than what it would prefer.
 
     Blocking, on a short timeout, using ``urllib`` for the same reason
     :mod:`memu.hosts.templates` does: this must not depend on the async stack or
     on an HTTP client's configuration to stay fail-open.
     """
-    body = json.dumps(batch, ensure_ascii=False, default=str).encode("utf-8")
+    body = json.dumps(event, ensure_ascii=False, default=str).encode("utf-8")
     request = urllib.request.Request(url, data=body, headers=_headers(), method="POST")  # noqa: S310
     try:
         with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:  # noqa: S310
@@ -732,7 +782,7 @@ def send_now(
         if url is None:
             return False
         built = envelope(event_name, host=host, session_id_env=session_id_env, properties=properties)
-        return _post(url, [built]) == ACCEPTED
+        return _post(url, built) == ACCEPTED
     except Exception:
         return False
 

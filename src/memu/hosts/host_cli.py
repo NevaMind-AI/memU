@@ -499,6 +499,7 @@ async def _cmd_report(spec: HostSpec, args: argparse.Namespace) -> int:
             host=spec.host,
             session_id_env=spec.session_id_env,
         )
+        events.flush()
         print(outcome)
         return 0
 

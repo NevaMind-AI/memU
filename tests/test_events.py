@@ -52,11 +52,15 @@ class _Posted:
     def __init__(self, status: int = 200, error: Exception | None = None) -> None:
         self.status = status
         self.error = error
-        self.batches: list[list[dict[str, Any]]] = []
+        # One envelope per request, never a list: the endpoint validates the body
+        # as a single object, so a body that is not a dict is itself the failure.
+        self.events: list[dict[str, Any]] = []
         self.headers: list[dict[str, str]] = []
 
     def __call__(self, request: Any, timeout: float | None = None) -> Any:
-        self.batches.append(json.loads(request.data))
+        body = json.loads(request.data)
+        assert isinstance(body, dict), f"the endpoint takes one event per POST, got {type(body).__name__}"
+        self.events.append(body)
         self.headers.append(dict(request.headers))
         if self.error is not None:
             raise self.error
@@ -311,19 +315,40 @@ def test_a_retrieve_that_cannot_report_is_still_a_successful_retrieve(
 # --------------------------------------------------------------------------- #
 
 
-def test_flush_posts_a_batch_and_clears_the_spool(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_flush_posts_each_event_singly_and_clears_the_spool(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     events.record(events.CLI_INSTALL_COMPLETED, host="codex")
     events.record(events.CLI_UNINSTALLED, host="codex")
     posted = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
     assert events.flush() == (2, 0)
-    assert [event["event_name"] for event in posted.batches[0]] == [
+    # Two events, two requests, spool order preserved.
+    assert [event["event_name"] for event in posted.events] == [
         events.CLI_INSTALL_COMPLETED,
         events.CLI_UNINSTALLED,
     ]
     assert not reporting.exists()
     assert not list(reporting.parent.glob("events.jsonl.*.sending"))
+
+
+def test_the_user_agent_is_set_because_the_default_one_is_blocked(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CDN in front of the ingest host 403s ``Python-urllib/*`` (error 1010).
+
+    urllib supplies that header itself when the caller does not, so an omission
+    here is not a missing nicety — it is every event silently discarded.
+    """
+    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+    events.flush()
+
+    agent = {key.title(): value for key, value in posted.headers[0].items()}["User-Agent"]
+    assert agent.startswith("memu-cli/")
+    assert "urllib" not in agent
 
 
 def test_the_api_key_rides_along_when_present_and_is_absent_otherwise(
@@ -408,21 +433,37 @@ def test_the_spool_is_capped_and_the_loss_is_reported_not_silent(
     posted = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
     events.flush()
-    names = [event["event_name"] for batch in posted.batches for event in batch]
+    names = [event["event_name"] for event in posted.events]
     assert events.CLI_EVENTS_DROPPED in names
-    dropped = next(e for b in posted.batches for e in b if e["event_name"] == events.CLI_EVENTS_DROPPED)
+    dropped = next(e for e in posted.events if e["event_name"] == events.CLI_EVENTS_DROPPED)
     assert dropped["properties"]["dropped_count"] == 2
 
 
-def test_batches_are_bounded(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(events, "MAX_BATCH", 3)
+def test_a_flush_is_bounded_and_the_next_one_resumes_where_it_stopped(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The budget must not cost events, and must not stall on the same ones.
+
+    One POST per event means a long backlog is a long stream of requests, so a
+    flush stops at :data:`MAX_FLUSH_POSTS`. The undelivered tail is written back,
+    which is what stops the next flush from spending its budget re-posting the
+    same leading events forever — a cap without that is a spool that never drains.
+    """
+    monkeypatch.setattr(events, "MAX_FLUSH_POSTS", 3)
     for _ in range(7):
         events.record(events.CLI_INSTALL_COMPLETED, host="codex")
-    posted = _Posted()
-    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+    spooled = [event["event_id"] for event in _spooled(reporting)]
 
-    assert events.flush() == (7, 0)
-    assert [len(batch) for batch in posted.batches] == [3, 3, 1]
+    delivered: list[str] = []
+    for expected in (3, 3, 1):
+        posted = _Posted()
+        monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+        assert events.flush() == (expected, 0)
+        delivered += [event["event_id"] for event in posted.events]
+
+    # Every event exactly once, in order, and nothing left behind.
+    assert delivered == spooled
+    assert not list(reporting.parent.glob("events.jsonl.*"))
 
 
 def test_send_now_has_no_caller_in_the_shipped_code() -> None:
@@ -467,10 +508,10 @@ def test_the_install_funnel_has_a_code_observed_start_and_a_reported_end(
     assert capsys.readouterr().out.strip(), "the guide itself must still be what this command prints"
     assert run(CLAUDE_SPEC, ["report", "install"]) == 0
 
-    assert [event["event_name"] for event in posted.batches[0]] == [events.CLI_INSTALL_STARTED]
+    assert [event["event_name"] for event in posted.events] == [events.CLI_INSTALL_STARTED]
     # The completion keeps the ordinary treatment: spooled, carried by a bridging run.
     assert [event["event_name"] for event in _spooled(reporting)] == [events.CLI_INSTALL_COMPLETED]
-    assert all(event["properties"] == {} for event in _spooled(reporting) + posted.batches[0])
+    assert all(event["properties"] == {} for event in _spooled(reporting) + posted.events)
 
 
 def test_the_install_start_carries_the_backlog_off_a_machine_that_may_never_bridge(
@@ -489,7 +530,7 @@ def test_the_install_start_carries_the_backlog_off_a_machine_that_may_never_brid
 
     assert run(CLAUDE_SPEC, ["docs", "install"]) == 0
 
-    assert [event["event_name"] for event in posted.batches[0]] == [
+    assert [event["event_name"] for event in posted.events] == [
         events.CLI_ERROR,
         events.CLI_INSTALL_STARTED,
     ]
@@ -539,7 +580,7 @@ def test_report_uninstall_delivers_immediately(reporting: pathlib.Path, monkeypa
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
     assert run(CODEX_SPEC, ["report", "uninstall"]) == 0
-    assert [event["event_name"] for event in posted.batches[0]] == [events.CLI_UNINSTALLED]
+    assert [event["event_name"] for event in posted.events] == [events.CLI_UNINSTALLED]
     assert not reporting.exists()
 
 
@@ -587,7 +628,7 @@ def test_a_failing_retrieve_never_posts_from_the_per_turn_hook(
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
     assert run(CODEX_SPEC, ["retrieve", "anything"]) == 1
-    assert posted.batches == []
+    assert posted.events == []
     # Recorded, just not delivered from here — the bridging pair will carry it.
     assert len(_spooled(reporting)) == 2
 
@@ -605,7 +646,7 @@ def test_a_failing_bridging_run_does_flush_because_its_flush_point_is_what_broke
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
     assert run(CODEX_SPEC, ["commit"]) == 1
-    names = [event["event_name"] for batch in posted.batches for event in batch]
+    names = [event["event_name"] for event in posted.events]
     assert events.CLI_ERROR in names
 
 
