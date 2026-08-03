@@ -38,7 +38,8 @@ class PostgresRecallFileSegmentRepo(PostgresRepoBase, RecallFileSegmentRepo):
 
     def _cache_segment(self, row: Any) -> RecallFileSegment:
         seg = self._row_to_record(row)
-        self.segments.append(seg)
+        if not any(s.id == seg.id for s in self.segments):
+            self.segments.append(seg)
         return seg
 
     def list_segments(self, where: Mapping[str, Any] | None = None) -> list[RecallFileSegment]:
