@@ -484,7 +484,7 @@ async def _cmd_report(spec: HostSpec, args: argparse.Namespace) -> int:
         return 0
 
     if args.what == "uninstall":
-        events.record(events.CLIENT_UNINSTALLED, host=spec.host, session_id_env=spec.session_id_env)
+        events.record(events.CLI_UNINSTALLED, host=spec.host, session_id_env=spec.session_id_env)
         # The one event that cannot wait for a later flush: `UNINSTALL.md` Part 3
         # may remove the very binary that would deliver it. An ordinary inline
         # flush, not `send_now` — the spool stays the only wired transport.

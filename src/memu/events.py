@@ -52,23 +52,23 @@ from typing import Any
 from memu.env import CONFIG_ENV, env, env_declared, memory_mode, reload
 
 # --------------------------------------------------------------------------- #
-# PLACEHOLDERS — pending the backend (ADR 0016, Open issues)
+# The wire vocabulary: the endpoint, and every event name the client can emit.
 #
-# The endpoint and the non-core event names are not settled yet. They are
-# constants in exactly one place so fixing them is an edit here and nowhere else.
+# Settled with the backend (ADR 0016 §5). Constants in exactly one place, so a
+# later revision stays an edit here and nowhere else.
 # --------------------------------------------------------------------------- #
 
 DEFAULT_EVENTS_URL = "https://api.memu.so/api/memu/analytics/events"
-"""PLACEHOLDER. Override with ``MEMU_EVENTS_BASE_URL``; set it empty to switch
-reporting off entirely (air-gapped installs, offline CI, tests)."""
+"""Override with ``MEMU_EVENTS_BASE_URL``; set it empty to switch reporting off
+entirely (air-gapped installs, offline CI, tests)."""
 
 CORE_ACTION_COMPLETED = "core_action_completed"
 """Shared by retrieve and remember; ``properties.action_name`` discriminates."""
 
 CLI_INSTALL_STARTED = "cli_install_started"
-"""PLACEHOLDER. An install *attempt*, recorded when a host prints its install
-guide — the first act on that path which proves ``memu-cli`` is installed and
-resolving on ``PATH``.
+"""An install *attempt*, recorded when a host prints its install guide — the
+first act on that path which proves ``memu-cli`` is installed and resolving on
+``PATH``.
 
 Code-observed rather than agent-reported, and that is the whole point: the
 completion below is prose-driven and undercounts (ADR 0016 §4), so a start that
@@ -80,25 +80,33 @@ backend choice, so it is a default rather than the mode the install lands on:
 never join a start to a completion on that field."""
 
 CLI_INSTALL_COMPLETED = "cli_install_completed"
-"""PLACEHOLDER. The agent reached the guide's final gate. Formerly
-``client_installed``."""
+"""The agent reached the guide's final gate. Formerly ``client_installed``."""
 
-CLIENT_UNINSTALLED = "client_uninstalled"
-"""PLACEHOLDER."""
+CLI_UNINSTALLED = "cli_uninstalled"
+"""The agent reached ``UNINSTALL.md``'s final gate — the uninstall counterpart to
+:data:`CLI_INSTALL_COMPLETED`, success-only for the same reason. Formerly
+``client_uninstalled``."""
 
-CLIENT_ERROR_REPORTED = "client_error_reported"
-"""PLACEHOLDER. The agent-reported error — model-judged, free-form detail."""
+CORE_ACTION_FAILED = "core_action_failed"
+"""The agent-reported error — model-judged, free-form detail.
+
+Named as the failure counterpart to :data:`CORE_ACTION_COMPLETED`, and carrying
+``properties.action_name`` for the same reason: one discriminator field, so a
+consumer slices both events the same way. That field mirrors ``--stage``
+exactly — see :func:`record_agent_error`, which is where the mirroring happens and
+where its one sharp edge is written down. Nothing user-facing gains a name: the
+flag, the prose, and every agent-facing instruction still say *stage*."""
 
 CLI_ERROR = "cli_error"
-"""PLACEHOLDER. The code-observed error, raised from the CLI's top-level handler.
+"""The code-observed error, raised from the CLI's top-level handler.
 
-Deliberately *not* the same event as :data:`CLIENT_ERROR_REPORTED`: one is an
+Deliberately *not* the same event as :data:`CORE_ACTION_FAILED`: one is an
 exception the CLI actually caught, the other is a model's judgement about the
 world. Same word, different provenance, so they must not share a name."""
 
-EVENTS_DROPPED = "client_events_dropped"
-"""PLACEHOLDER. Emitted when the spool hit its cap and events were discarded, so
-the loss is reported rather than silent."""
+CLI_EVENTS_DROPPED = "cli_events_dropped"
+"""Emitted when the spool hit its cap and events were discarded, so the loss is
+reported rather than silent."""
 
 CLIENT_TYPE = "memu_cli"
 
@@ -172,10 +180,10 @@ _ALLOWED_PROPERTIES: dict[str, frozenset[str]] = {
     # and its existence is the entire signal.
     CLI_INSTALL_STARTED: frozenset(),
     CLI_INSTALL_COMPLETED: frozenset(),
-    CLIENT_UNINSTALLED: frozenset(),
-    CLIENT_ERROR_REPORTED: frozenset({"stage", "detail"}),
+    CLI_UNINSTALLED: frozenset(),
+    CORE_ACTION_FAILED: frozenset({"stage", "action_name", "detail"}),
     CLI_ERROR: frozenset({"command", "error_type", "frames", "frames_truncated"}),
-    EVENTS_DROPPED: frozenset({"dropped_count"}),
+    CLI_EVENTS_DROPPED: frozenset({"dropped_count"}),
 }
 """Per event, the keys allowed out. Anything else is dropped rather than passed
 through — including anything an agent supplied. An allowlist, so adding a leak
@@ -443,6 +451,17 @@ def record_agent_error(
     In v1 this is *stage plus prose*, so consume it as a triage inbox read by
     humans, not as a metric.
 
+    ``action_name`` is the same string as ``stage``, written at this one site so
+    :data:`CORE_ACTION_FAILED` carries the discriminator its ``completed``
+    counterpart does. The two fields are one value and stay one value: nothing
+    reads ``action_name`` back, and any future rule that would make them differ
+    belongs in a mapping here rather than in a caller. What they are *not* is one
+    vocabulary — :data:`STAGES` says ``remember``/``retrieve`` where
+    :data:`CORE_ACTION_COMPLETED` says ``memory_update``/``memory_search``, so the
+    two events do not join on this field as they stand. Deliberate: ``stage`` also
+    spans ``install``/``uninstall``/``other``, which name no core action at all,
+    and translating the two that do overlap would leave the rest lying.
+
     Deduplicated on ``(stage, detail)`` against what is already spooled, because
     an agent in a retry loop will otherwise file the same failure a dozen times.
     Reading the spool here is affordable in a way it would not be in
@@ -455,10 +474,10 @@ def record_agent_error(
         if _already_spooled(stage, clipped):
             return
         record(
-            CLIENT_ERROR_REPORTED,
+            CORE_ACTION_FAILED,
             host=host,
             session_id_env=session_id_env,
-            properties={"stage": stage, "detail": clipped},
+            properties={"stage": stage, "action_name": stage, "detail": clipped},
         )
     except Exception:
         return
@@ -466,7 +485,7 @@ def record_agent_error(
 
 def _already_spooled(stage: str, detail: str) -> bool:
     for event in _read(_spool_path()):
-        if event.get("event_name") != CLIENT_ERROR_REPORTED:
+        if event.get("event_name") != CORE_ACTION_FAILED:
             continue
         properties = event.get("properties") or {}
         if properties.get("stage") == stage and properties.get("detail") == detail:
@@ -606,7 +625,7 @@ def _promote_drop_counter() -> None:
         counter.unlink(missing_ok=True)
     except OSError:
         return
-    record(EVENTS_DROPPED, properties={"dropped_count": dropped})
+    record(CLI_EVENTS_DROPPED, properties={"dropped_count": dropped})
 
 
 def _read(path: Path) -> list[dict[str, Any]]:

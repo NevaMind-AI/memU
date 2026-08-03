@@ -149,7 +149,7 @@ def test_client_instance_id_persists_in_config_and_survives_a_reinstall(
 
     env_module.reload()
     reporting.unlink()
-    events.record(events.CLIENT_UNINSTALLED, host="codex")
+    events.record(events.CLI_UNINSTALLED, host="codex")
     assert _spooled(reporting)[0]["client_instance_id"] == first
 
 
@@ -313,14 +313,14 @@ def test_a_retrieve_that_cannot_report_is_still_a_successful_retrieve(
 
 def test_flush_posts_a_batch_and_clears_the_spool(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     events.record(events.CLI_INSTALL_COMPLETED, host="codex")
-    events.record(events.CLIENT_UNINSTALLED, host="codex")
+    events.record(events.CLI_UNINSTALLED, host="codex")
     posted = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
     assert events.flush() == (2, 0)
     assert [event["event_name"] for event in posted.batches[0]] == [
         events.CLI_INSTALL_COMPLETED,
-        events.CLIENT_UNINSTALLED,
+        events.CLI_UNINSTALLED,
     ]
     assert not reporting.exists()
     assert not list(reporting.parent.glob("events.jsonl.*.sending"))
@@ -385,7 +385,7 @@ def test_a_truncated_line_costs_one_event_not_the_file(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     events.record(events.CLI_INSTALL_COMPLETED, host="codex")
-    events.record(events.CLIENT_UNINSTALLED, host="codex")
+    events.record(events.CLI_UNINSTALLED, host="codex")
     # The signature of a process killed mid-append: a partial *final* line.
     with open(reporting, "a", encoding="utf-8") as handle:
         handle.write('{"event_name": "clie')
@@ -409,8 +409,8 @@ def test_the_spool_is_capped_and_the_loss_is_reported_not_silent(
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
     events.flush()
     names = [event["event_name"] for batch in posted.batches for event in batch]
-    assert events.EVENTS_DROPPED in names
-    dropped = next(e for b in posted.batches for e in b if e["event_name"] == events.EVENTS_DROPPED)
+    assert events.CLI_EVENTS_DROPPED in names
+    dropped = next(e for b in posted.batches for e in b if e["event_name"] == events.CLI_EVENTS_DROPPED)
     assert dropped["properties"]["dropped_count"] == 2
 
 
@@ -521,8 +521,15 @@ def test_report_error_rejects_a_stage_outside_the_vocabulary(reporting: pathlib.
 def test_report_error_records_stage_and_detail(reporting: pathlib.Path) -> None:
     assert run(CODEX_SPEC, ["report", "error", "--stage", "install", "--detail", "pip resolved no wheel"]) == 0
     (event,) = _spooled(reporting)
-    assert event["event_name"] == events.CLIENT_ERROR_REPORTED
-    assert event["properties"] == {"stage": "install", "detail": "pip resolved no wheel"}
+    assert event["event_name"] == events.CORE_ACTION_FAILED
+    # `action_name` mirrors `stage` at the envelope, so the failure event carries
+    # the same discriminator `core_action_completed` does. The CLI surface stays
+    # `--stage` only — nothing asks an agent for a second name for one thing.
+    assert event["properties"] == {
+        "stage": "install",
+        "action_name": "install",
+        "detail": "pip resolved no wheel",
+    }
 
 
 def test_report_uninstall_delivers_immediately(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -532,7 +539,7 @@ def test_report_uninstall_delivers_immediately(reporting: pathlib.Path, monkeypa
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
     assert run(CODEX_SPEC, ["report", "uninstall"]) == 0
-    assert [event["event_name"] for event in posted.batches[0]] == [events.CLIENT_UNINSTALLED]
+    assert [event["event_name"] for event in posted.batches[0]] == [events.CLI_UNINSTALLED]
     assert not reporting.exists()
 
 
