@@ -289,7 +289,11 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
         return rc
 
     wrapper, prompt_file, log_file, registry = _paths(layout)
-    prompt_file.write_text(bridging_pipeline_prompt(spec), encoding="utf-8")
+    prepare_session_dir = spec.session_dir if spec.schedule_prepare_session_dir else None
+    prompt_file.write_text(
+        bridging_pipeline_prompt(spec, prepare_session_dir=prepare_session_dir),
+        encoding="utf-8",
+    )
 
     path_dirs = [str(Path(agent_path).parent)]
     if (memu_path := shutil.which(spec.binary)) is not None:

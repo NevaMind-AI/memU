@@ -98,6 +98,7 @@ def test_hermes_template_uses_its_oneshot_flag_everywhere() -> None:
     # Hermes ships its CLI with the client; the only host-specific invocation
     # detail is its real one-shot flag. The old guide's copied `-p` never existed.
     assert HERMES.schedule_command == "hermes -z {prompt}"
+    assert HERMES.schedule_prepare_session_dir is True
     assert HERMES.needs_headless_auth is False
     assert windows.agent_check_argv("C:\\hermes.exe", HERMES.schedule_command, "ping") == [
         "C:\\hermes.exe",
@@ -105,6 +106,15 @@ def test_hermes_template_uses_its_oneshot_flag_everywhere() -> None:
         "ping",
     ]
     assert windows.powershell_invocation("C:\\hermes.exe", HERMES.schedule_command) == ("& 'C:\\hermes.exe' -z $prompt")
+
+
+def test_hermes_scheduled_prompt_bakes_in_its_session_store() -> None:
+    scheduled = prompt.bridging_pipeline_prompt(
+        HERMES,
+        prepare_session_dir="C:/Hermes Home/state.db",
+    )
+    assert "memu-hermes prepare --session-dir 'C:/Hermes Home/state.db'" in scheduled
+    assert "--session-dir" not in prompt.bridging_pipeline_prompt(CLAUDE)
 
 
 def test_cursor_template_carries_the_trust_flag_everywhere() -> None:

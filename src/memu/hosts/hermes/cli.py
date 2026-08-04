@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import sys
 
-from memu.hosts.hermes.sessions import STATE_DB, HermesTranscriptSource
+from memu.hosts.hermes.sessions import HermesTranscriptSource, state_db_path
 from memu.hosts.host_cli import HostSpec, run
 
 HOST = "hermes"
@@ -52,10 +52,11 @@ SPEC = HostSpec(
     display="Hermes",
     package="memu.hosts.hermes",
     source_factory=HermesTranscriptSource,
-    session_dir=STATE_DB,
+    session_dir=str(state_db_path()),
     session_help="Hermes SQLite session store (state.db under HERMES_HOME)",
     instruction_path=SOUL_MD,
     schedule_command="hermes -z {prompt}",
+    schedule_prepare_session_dir=True,
 )
 
 

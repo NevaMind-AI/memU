@@ -21,7 +21,7 @@ from memu.hosts.claude_code.sessions import ClaudeCodeTranscriptSource
 from memu.hosts.codex.sessions import CodexTranscriptSource
 from memu.hosts.cola.sessions import ColaTranscriptSource
 from memu.hosts.cursor.sessions import CursorTranscriptSource
-from memu.hosts.hermes.sessions import HermesTranscriptSource
+from memu.hosts.hermes.sessions import HermesTranscriptSource, state_db_path
 from memu.hosts.openclaw.sessions import OpenClawTranscriptSource
 from memu.hosts.workbuddy.sessions import WorkBuddyTranscriptSource
 
@@ -806,6 +806,24 @@ def _hermes_db(tmp_path: pathlib.Path) -> pathlib.Path:
     conn.commit()
     conn.close()
     return db
+
+
+def test_hermes_default_db_follows_hermes_home(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    home = tmp_path / "Hermes Home %41 #片段"
+    monkeypatch.setenv("HERMES_HOME", str(home))
+
+    assert state_db_path() == home / "state.db"
+    assert HermesTranscriptSource().root() == home
+
+
+def test_hermes_native_windows_default_uses_local_appdata(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    monkeypatch.delenv("HERMES_HOME", raising=False)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setattr("memu.hosts.hermes.sessions.sys.platform", "win32")
+
+    assert state_db_path() == tmp_path / "hermes" / "state.db"
 
 
 def test_hermes_discovers_sessions_most_recent_first(tmp_path: pathlib.Path) -> None:
