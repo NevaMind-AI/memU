@@ -54,15 +54,11 @@ hour**, cron `0 * * * *` (local time). Confirm before creating.
 
 ## Step 2 — register the scheduled run
 
-**Hermes's own native `cronjob` tool is the recommended path — use it whenever
-it is available.** It runs in the correct headless environment and takes the
-prompt as *data* (like Codex/OpenClaw schedulers do), sidestepping the crontab
-machinery and its line-length wall entirely: give it the prompt from step 1
-below and you are done. The raw-crontab route that follows is a **fallback
-only**, for setups where the native tool is unavailable — and treat it with
-suspicion proportional to its history: no install is known to have ever run
-successfully through it (the previous revision of this guide shipped a flag
-that does not exist in the Hermes CLI, and nobody hit it in the field).
+**Do not use Hermes's native `cronjob` for memU bridging.** Use the OS
+scheduler described here so every install has one scheduling authority. Before
+registering it, run `hermes cron list --all`; if a legacy job named
+`memu-bridging-hermes` exists, remove it with
+`hermes cron remove memu-bridging-hermes`.
 
 **Never inline the pipeline prompt in the crontab entry.** The quoted prompt is
 ~1.2 KB, and cron truncates a crontab line at roughly 1 KB before handing it to
@@ -109,6 +105,9 @@ same shape: **the prompt lives in a file; the crontab line stays short.**
      fi
    fi
    trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
+   # Marks this as the scheduled run, so `prepare` skips its own session instead
+   # of mining memU's bookkeeping every hour (#606).
+   export MEMU_BRIDGING_RUN=1
    hermes -z "$(cat "$DIR/bridge-prompt.txt")" >> "$DIR/bridge.log" 2>&1
    ```
 
@@ -158,6 +157,33 @@ count:
 Report back: where the schedule was registered, and the cron in words. Mention
 that the first run only has work to do once there are new Hermes sessions since
 the last run.
+
+## Windows (Task Scheduler)
+
+Steps 2–3 above are cron/launchd — Unix only. **On Windows, do not hand-write a
+`schtasks` entry and do not use Hermes's native `cronjob`.** First remove any
+legacy native job named `memu-bridging-hermes`, then use the shared helper:
+
+```
+hermes cron remove memu-bridging-hermes  # only if `hermes cron list --all` finds it
+memu-hermes schedule install             # register the hourly OS task
+memu-hermes schedule verify              # prove one authority + a resolvable CLI
+memu-hermes schedule status              # last run / next run
+memu-hermes schedule uninstall           # remove it
+```
+
+`install` writes the prompt plus a small PowerShell wrapper under
+`~/.memu/hosts/hermes`, resolves the bundled `hermes` CLI to an absolute path,
+and registers `\memU\memu-bridging-hermes` under an **S4U** principal — hidden,
+runs while logged out, and catches up a run missed while the machine was off.
+`--interval <minutes>` changes the cadence (default 60). It refuses if the
+legacy native job still exists, so the pipeline can never have two schedulers.
+Unlike Claude Code or Cursor, Hermes ships its client and CLI together and uses
+one runtime/configuration; there is no separate CLI install or headless-auth
+step.
+
+After a run, check filesystem traces rather than trusting its summary:
+`~/.memu/hosts/hermes/jobs/` timestamps and the session manifest must advance.
 
 ## Notes
 

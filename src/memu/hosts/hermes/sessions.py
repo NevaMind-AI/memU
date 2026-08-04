@@ -64,6 +64,15 @@ class HermesTranscriptSource(TranscriptSource):
         """Sessions have no path of their own — the cursor key is the session id."""
         return path.name
 
+    def session_id(self, path: Path) -> str:
+        """The whole virtual name, matching Hermes's ``HERMES_SESSION_ID``.
+
+        These paths have no extension: their name *is* the id. The inherited
+        ``path.stem`` would truncate a future dotted id and silently break the
+        bridging-run self-skip (#606, ADR 0015).
+        """
+        return path.name
+
     def _connect(self) -> sqlite3.Connection:
         # Read-only: the bridging task must never take Hermes's write lock —
         # the gateway and live CLI sessions share this database in WAL mode.
