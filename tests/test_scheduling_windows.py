@@ -251,76 +251,17 @@ def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
         assert len(line) < 512, f"{pkg} cron entry is {len(line)} chars — cron truncates around 1KB: {line[:80]!r}"
 
 
-def test_legacy_schedule_gate_blocks_the_exact_native_job(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    class Result:
-        returncode = 0
-        stdout = "  c3fc5c456385 [active]\n    Name:      memu-bridging-hermes\n"
-        stderr = ""
+def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
+    from importlib.resources import files
 
-    monkeypatch.setattr(windows.subprocess, "run", lambda *args, **kwargs: Result())
-    assert windows._legacy_schedule_gate(HERMES, "C:\\hermes.exe") == 1
-    err = capsys.readouterr().err
-    assert "exactly one scheduling authority" in err
-    assert "hermes cron remove memu-bridging-hermes" in err
-
-
-def test_legacy_schedule_gate_ignores_other_native_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
-    class Result:
-        returncode = 0
-        stdout = "  abc [active]\n    Name:      memu-bridging-hermes-backup\n"
-        stderr = ""
-
-    monkeypatch.setattr(windows.subprocess, "run", lambda *args, **kwargs: Result())
-    assert windows._legacy_schedule_gate(HERMES, "C:\\hermes.exe") == 0
-
-
-def test_legacy_schedule_gate_fails_closed_when_listing_fails(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    class Result:
-        returncode = 1
-        stdout = ""
-        stderr = "cron store unreadable"
-
-    monkeypatch.setattr(windows.subprocess, "run", lambda *args, **kwargs: Result())
-    assert windows._legacy_schedule_gate(HERMES, "C:\\hermes.exe") == 1
-    err = capsys.readouterr().err
-    assert "refusing to add an OS task" in err
-    assert "cron store unreadable" in err
-
-
-def test_install_checks_native_scheduler_before_writing_artifacts(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
-    monkeypatch.setattr(windows, "_resolve_agent", lambda spec: "C:\\hermes.exe")
-    monkeypatch.setattr(windows, "_legacy_schedule_gate", lambda spec, path: 1)
-    layout = Layout.default(host=HERMES.host, base=tmp_path)
-
-    assert windows.install(HERMES, layout) == 1
-    assert list(tmp_path.iterdir()) == []
-
-
-def test_hermes_verify_does_not_claim_a_separate_auth_gate(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    class Result:
-        returncode = 0
-        stdout = ""
-        stderr = ""
-
-    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
-    monkeypatch.setattr(windows, "_run_powershell", lambda script: Result())
-    monkeypatch.setattr(windows, "_resolve_agent", lambda spec: "C:\\hermes.exe")
-    monkeypatch.setattr(windows, "_legacy_schedule_gate", lambda spec, path: 0)
-    layout = Layout.default(host=HERMES.host, base=tmp_path)
-
-    assert windows.verify(HERMES, layout) == 0
-    out = capsys.readouterr().out
-    assert "`hermes` resolves" in out
-    assert "authenticates headless" not in out
+    doc = (files("memu.hosts.hermes") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    migration = doc.index("hermes cron list --all")
+    unix_registration = doc.index("0 * * * * $HOME/.memu/hosts/hermes/bridge.sh")
+    windows_registration = doc.index("memu-hermes schedule install")
+    assert migration < unix_registration
+    assert migration < windows_registration
+    assert "hermes cron remove <job-id>" in doc
+    assert "If listing or removal fails, stop" in doc
 
 
 def test_install_rejects_nonpositive_interval(

@@ -55,10 +55,11 @@ hour**, cron `0 * * * *` (local time). Confirm before creating.
 ## Step 2 — register the scheduled run
 
 **Do not use Hermes's native `cronjob` for memU bridging.** Use the OS
-scheduler described here so every install has one scheduling authority. Before
-registering it, run `hermes cron list --all`; if a legacy job named
-`memu-bridging-hermes` exists, remove it with
-`hermes cron remove memu-bridging-hermes`.
+scheduler described here. First migrate any install made by the older guide:
+run `hermes cron list --all`; for every job whose name is exactly
+`memu-bridging-hermes`, run `hermes cron remove <job-id>`, then list again and
+confirm none remain. If listing or removal fails, stop — never add the OS task
+beside a native copy.
 
 **Never inline the pipeline prompt in the crontab entry.** The quoted prompt is
 ~1.2 KB, and cron truncates a crontab line at roughly 1 KB before handing it to
@@ -158,23 +159,22 @@ the last run.
 ## Windows (Task Scheduler)
 
 Steps 2–3 above are cron/launchd — Unix only. **On Windows, do not hand-write a
-`schtasks` entry and do not use Hermes's native `cronjob`.** First remove any
-legacy native job named `memu-bridging-hermes`, then use the shared helper:
+`schtasks` entry and do not use Hermes's native `cronjob`.** Complete the legacy
+native-job removal at the start of Step 2, then use the shared helper:
 
 ```
-hermes cron remove memu-bridging-hermes  # only if `hermes cron list --all` finds it
-memu-hermes schedule install             # register the hourly OS task
-memu-hermes schedule verify              # prove one authority + a resolvable CLI
-memu-hermes schedule status              # last run / next run
-memu-hermes schedule uninstall           # remove it
+memu-hermes schedule install     # register the hourly OS task
+memu-hermes schedule verify      # prove a resolvable CLI
+memu-hermes schedule status      # last run / next run
+memu-hermes schedule uninstall   # remove it
 ```
 
 `install` writes the prompt plus a small PowerShell wrapper under
 `~/.memu/hosts/hermes`, resolves the bundled `hermes` CLI to an absolute path,
 and registers `\memU\memu-bridging-hermes` under an **S4U** principal — hidden,
 runs while logged out, and catches up a run missed while the machine was off.
-`--interval <minutes>` changes the cadence (default 60). It refuses if the
-legacy native job still exists, so the pipeline can never have two schedulers.
+`--interval <minutes>` changes the cadence (default 60). The migration check
+above makes sure the pipeline has only the OS scheduler.
 Unlike Claude Code or Cursor, Hermes ships its client and CLI together and uses
 one runtime/configuration; there is no separate CLI install or headless-auth
 step.

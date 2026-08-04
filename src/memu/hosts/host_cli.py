@@ -128,16 +128,6 @@ class HostSpec:
     is the signed-in IDE account session; the shared gate must not prescribe one
     host's fix for another's failure. Empty falls back to generic guidance."""
 
-    legacy_schedule_list_argv: tuple[str, ...] = ()
-    """Command that lists a host-native scheduler's jobs, when an older guide may
-    have registered bridging there. ``schedule install`` and ``verify`` refuse if
-    its output names :attr:`task_name`, so one pipeline never has two authorities.
-    Empty — the default — means this host has no legacy scheduler to check."""
-
-    legacy_schedule_remove_command: str = ""
-    """Copy-pasteable command that removes :attr:`task_name` from the legacy
-    scheduler. Used only in the conflict refusal; never executed by memU."""
-
     extra_flags: dict[str, str] = field(default_factory=dict)
     """Reserved for host-specific flags; unused today."""
 

@@ -44,10 +44,10 @@ that entry:
   memu-hermes schedule uninstall
   ```
 
-Older guides could register the same task in Hermes's native scheduler. If
-`hermes cron list --all` still names `memu-bridging-hermes`, remove that legacy
-copy with `hermes cron remove memu-bridging-hermes` too. Current installs never
-create it. The generated `bridge.sh`/`memu-bridge.ps1`, `bridge-prompt.txt`, and
+Also sweep installs made by the older guide: list `hermes cron list --all`,
+remove every job whose name is exactly `memu-bridging-hermes` with
+`hermes cron remove <job-id>`, then confirm none remain. Current installs never
+create one. The generated `bridge.sh`/`memu-bridge.ps1`, `bridge-prompt.txt`, and
 `bridge.log` live under `~/.memu/hosts/hermes/` and go with the host residue in
 the later cleanup part.
 

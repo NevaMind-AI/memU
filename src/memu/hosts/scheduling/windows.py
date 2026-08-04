@@ -203,65 +203,6 @@ def _resolve_agent(spec: HostSpec) -> str | None:
     return shutil.which(_agent_binary(spec))
 
 
-def _legacy_schedule_conflict(spec: HostSpec, agent_path: str | None = None) -> tuple[bool, str]:
-    """Whether an older guide left this task in the host's native scheduler.
-
-    The check is host-declared data because only the host knows how to list that
-    scheduler. Empty data means there is no legacy authority to inspect. A list
-    failure is returned separately and must fail closed: silently registering an
-    OS task then would risk two schedulers running the same pipeline (#618).
-    """
-    if not spec.legacy_schedule_list_argv:
-        return False, ""
-    argv = list(spec.legacy_schedule_list_argv)
-    if agent_path is not None and argv[0] == _agent_binary(spec):
-        argv[0] = agent_path
-    try:
-        proc = subprocess.run(  # noqa: S603
-            argv,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=30,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return False, str(exc)
-    if proc.returncode != 0:
-        return False, (proc.stderr or proc.stdout).strip() or f"exit {proc.returncode}"
-    conflict = any(
-        key.strip() == "Name" and value.strip() == spec.task_name
-        for line in proc.stdout.splitlines()
-        for key, separator, value in [line.partition(":")]
-        if separator
-    )
-    return conflict, ""
-
-
-def _legacy_schedule_gate(spec: HostSpec, agent_path: str | None = None) -> int:
-    """Refuse a duplicate native-plus-OS schedule; 0 = clear, 1 = abort."""
-    conflict, detail = _legacy_schedule_conflict(spec, agent_path)
-    if detail:
-        command = " ".join(spec.legacy_schedule_list_argv)
-        print(
-            f"error: could not check {spec.display}'s legacy native scheduler with `{command}` "
-            f"({detail}); refusing to add an OS task while another authority may exist",
-            file=sys.stderr,
-        )
-        return 1
-    if conflict:
-        remove = spec.legacy_schedule_remove_command or f"remove `{spec.task_name}` from the host's native scheduler"
-        print(
-            f"error: `{spec.task_name}` already exists in {spec.display}'s native scheduler. "
-            "memU bridging must have exactly one scheduling authority.\n"
-            f"  Remove the legacy job first:\n    {remove}\n"
-            f"  Then re-run `{spec.binary} schedule install`.",
-            file=sys.stderr,
-        )
-        return 1
-    return 0
-
-
 def _authenticates(spec: HostSpec, agent_path: str, workdir: Path) -> tuple[bool, str]:
     """Does a cold headless run authenticate? (memU#538 Symptom B.)
 
@@ -327,7 +268,7 @@ def _auth_gate(spec: HostSpec, agent_path: str, workdir: Path) -> int:
 
 
 def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_INTERVAL_MINUTES) -> int:
-    """Register the bridging task, gating on one authority and a usable CLI."""
+    """Register the bridging task, gating on a usable CLI first."""
     _require_windows()
     if interval_minutes < 1:
         print(f"error: --interval must be a positive number of minutes (got {interval_minutes})", file=sys.stderr)
@@ -343,8 +284,6 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
             file=sys.stderr,
         )
         return 1
-    if (rc := _legacy_schedule_gate(spec, agent_path)) != 0:
-        return rc
     layout.base.mkdir(parents=True, exist_ok=True)
     if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc
@@ -427,8 +366,6 @@ def verify(spec: HostSpec, layout: Layout) -> int:
     if agent_path is None:
         print(f"error: `{_agent_binary(spec)}` is no longer on PATH (memU#538 Symptom A)", file=sys.stderr)
         return 1
-    if (rc := _legacy_schedule_gate(spec, agent_path)) != 0:
-        return rc
     layout.base.mkdir(parents=True, exist_ok=True)
     if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc

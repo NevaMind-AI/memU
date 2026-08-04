@@ -145,7 +145,9 @@ recurring headless Hermes run through the **OS scheduler** — system cron on Un
 or `memu-hermes schedule install` on Windows — with the prompt that document
 gives you verbatim. It runs `memu-hermes prepare`, works through
 `~/.memu/hosts/hermes/jobs/*.txt` in order, then `memu-hermes commit`. Do not use
-Hermes's native `cronjob` for this task. Hermes already ships its CLI with the
+Hermes's native `cronjob` for this task. The packaged task procedure first
+removes every exact-name job an older guide created, and must stop rather than
+add an OS task if that cleanup fails. Hermes already ships its CLI with the
 client, so there is no separate CLI installation or authentication step.
 
 ### ✅ Verify Part 2

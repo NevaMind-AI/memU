@@ -56,10 +56,6 @@ SPEC = HostSpec(
     session_help="Hermes SQLite session store (state.db under HERMES_HOME)",
     instruction_path=SOUL_MD,
     schedule_command="hermes -z {prompt}",
-    # Before #618 the guide recommended Hermes's own cronjob tool. Refuse to
-    # register a second authority until that legacy job is removed explicitly.
-    legacy_schedule_list_argv=("hermes", "cron", "list", "--all"),
-    legacy_schedule_remove_command="hermes cron remove memu-bridging-hermes",
 )
 
 
