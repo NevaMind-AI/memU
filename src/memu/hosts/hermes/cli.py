@@ -25,11 +25,6 @@ from memu.hosts.host_cli import HostSpec, run
 
 HOST = "hermes"
 
-SESSION_ID_ENV = "HERMES_SESSION_ID"
-"""Hermes exports the current ``sessions.id`` to every tool subprocess. The OS
-scheduler wrapper marks why the session was launched; this value identifies which
-session to exclude from the next bridging scan (#606, ADR 0015)."""
-
 SOUL_MD = "~/.hermes/SOUL.md"
 """Hermes's identity file — the one file loaded from ``HERMES_HOME`` into every
 session regardless of working directory, so the inject seam lands here.
@@ -61,7 +56,6 @@ SPEC = HostSpec(
     session_help="Hermes SQLite session store (state.db under HERMES_HOME)",
     instruction_path=SOUL_MD,
     schedule_command="hermes -z {prompt}",
-    session_id_env=SESSION_ID_ENV,
     # Before #618 the guide recommended Hermes's own cronjob tool. Refuse to
     # register a second authority until that legacy job is removed explicitly.
     legacy_schedule_list_argv=("hermes", "cron", "list", "--all"),

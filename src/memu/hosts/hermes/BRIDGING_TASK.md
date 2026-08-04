@@ -105,9 +105,6 @@ same shape: **the prompt lives in a file; the crontab line stays short.**
      fi
    fi
    trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
-   # Marks this as the scheduled run, so `prepare` skips its own session instead
-   # of mining memU's bookkeeping every hour (#606).
-   export MEMU_BRIDGING_RUN=1
    hermes -z "$(cat "$DIR/bridge-prompt.txt")" >> "$DIR/bridge.log" 2>&1
    ```
 

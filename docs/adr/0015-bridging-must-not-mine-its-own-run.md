@@ -116,9 +116,7 @@ free:
 A host's grade is not a fixed property of the host — it follows from what its guide tells the
 user to register. `codex` sits in the second grade because its guide creates a native Codex
 scheduled task; registering `codex exec` under an OS scheduler instead would move it to the
-first. Hermes did exactly that in #618: dropping its native `cronjob` path in favour of the
-memU-marked OS wrappers moved it to the first grade on Unix and Windows. So the grade is
-something a guide can improve, not something to accept.
+first. So the grade is something a guide can improve, not something to accept.
 
 So each new host adapter owes three things: the variable name (surveyed on a real install,
 on Unix — Windows `os.environ` is case-insensitive and will hide a casing error), a
@@ -127,15 +125,14 @@ of the three grades applies.
 
 ## Consequences
 
-- Every host is a separate survey. As of this ADR `claude_code` and `hermes` are
-  verified end to end: Claude Code 2.1.220 exports `CLAUDE_CODE_SESSION_ID`; Hermes
-  exports `HERMES_SESSION_ID`, matching the SQLite `sessions.id` represented by its
-  virtual path. Hosts with `session_id_env` empty keep the pre-#606 behaviour, which
-  is why the default is empty rather than guessed.
+- Every host is a separate survey. As of this ADR only `claude_code` is verified end to end
+  (2.1.220: headless `claude -p` exports the variable, and its value is the transcript's file
+  name). Hosts with `session_id_env` empty keep the pre-#606 behaviour, which is why the
+  default is empty rather than guessed.
 - Three adapters need `session_id()` overrides before they can be wired at all: `codex`
-  (`rollout-<ts>-<uuid>.jsonl` — the stem is not the id), and `openclaw`
-  (`<sessionId>-topic-<threadId>.jsonl`). Hermes uses virtual paths whose whole name is
-  the id and now overrides the mapping accordingly.
+  (`rollout-<ts>-<uuid>.jsonl` — the stem is not the id), `hermes` (virtual paths, where
+  `stem` would truncate any id containing a dot, exactly as `key()` already avoids), and
+  `openclaw` (`<sessionId>-topic-<threadId>.jsonl`).
 - Subagent transcripts must be attributed to the session that spawned them, not to their own
   file name: a run that spawns a subagent produces bookkeeping under a different name. Claude
   Code nests them two ways (`<sessionId>/subagents/…` and
