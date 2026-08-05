@@ -125,14 +125,15 @@ of the three grades applies.
 
 ## Consequences
 
-- Every host is a separate survey. As of this ADR only `claude_code` is verified end to end
+- Every host is a separate survey. As of this ADR `claude_code` is verified end to end
   (2.1.220: headless `claude -p` exports the variable, and its value is the transcript's file
-  name). Hosts with `session_id_env` empty keep the pre-#606 behaviour, which is why the
-  default is empty rather than guessed.
-- Three adapters need `session_id()` overrides before they can be wired at all: `codex`
-  (`rollout-<ts>-<uuid>.jsonl` — the stem is not the id), `hermes` (virtual paths, where
-  `stem` would truncate any id containing a dot, exactly as `key()` already avoids), and
-  `openclaw` (`<sessionId>-topic-<threadId>.jsonl`).
+  name), and Hermes is verified to export `HERMES_SESSION_ID` to tool subprocesses during a
+  one-shot run, matching its SQLite session id. Hosts with `session_id_env` empty keep the
+  pre-#606 behaviour, which is why the default is empty rather than guessed.
+- Two adapters still need `session_id()` overrides before they can be wired at all: `codex`
+  (`rollout-<ts>-<uuid>.jsonl` — the stem is not the id) and `openclaw`
+  (`<sessionId>-topic-<threadId>.jsonl`). Hermes's virtual paths now return `path.name`, matching
+  the SQLite id without truncating ids that contain a dot.
 - Subagent transcripts must be attributed to the session that spawned them, not to their own
   file name: a run that spawns a subagent produces bookkeeping under a different name. Claude
   Code nests them two ways (`<sessionId>/subagents/…` and

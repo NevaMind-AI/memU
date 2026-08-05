@@ -106,6 +106,7 @@ same shape: **the prompt lives in a file; the crontab line stays short.**
      fi
    fi
    trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
+   export MEMU_BRIDGING_RUN=1
    hermes -z "$(cat "$DIR/bridge-prompt.txt")" >> "$DIR/bridge.log" 2>&1
    ```
 

@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import json
 import pathlib
+from argparse import Namespace
+from dataclasses import replace
 
 import pytest
 
+from memu.hosts import host_cli
 from memu.hosts.base import RecordKind, TranscriptSource
 from memu.hosts.bridging import self_sessions
 from memu.hosts.bridging.layout import Layout
@@ -20,6 +23,9 @@ from memu.hosts.bridging.transcripts import prepare_transcripts
 from memu.hosts.claude_code.cli import SESSION_ID_ENV
 from memu.hosts.claude_code.cli import SPEC as CLAUDE_CODE_SPEC
 from memu.hosts.claude_code.sessions import ClaudeCodeTranscriptSource
+from memu.hosts.hermes.cli import SESSION_ID_ENV as HERMES_SESSION_ID_ENV
+from memu.hosts.hermes.cli import SPEC as HERMES_SPEC
+from memu.hosts.hermes.sessions import HermesTranscriptSource
 
 
 class FakeSource(TranscriptSource):
@@ -235,11 +241,9 @@ def test_claude_code_attributes_a_subagent_transcript_to_its_parent(tmp_path: pa
     assert source.session_id(workflow) == owner
 
 
-def test_the_unix_bridging_wrapper_exports_the_marker() -> None:
-    """The scheduled run on macOS/Linux has to carry a signal too: cron's cwd is
-    ``$HOME``, never memU's base dir, so without this the Unix task reads as a
-    hand-run and #606 continues there while Windows is fixed."""
-    doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/claude_code/BRIDGING_TASK.md").read_text(
+@pytest.mark.parametrize("host", ["claude_code", "hermes"])
+def test_os_scheduled_unix_wrappers_export_the_marker(host: str) -> None:
+    doc = (pathlib.Path(__file__).resolve().parents[1] / f"src/memu/hosts/{host}/BRIDGING_TASK.md").read_text(
         encoding="utf-8"
     )
     assert f"export {self_sessions.BRIDGING_RUN_ENV}=1" in doc
@@ -251,6 +255,53 @@ def test_claude_code_declares_its_session_id_variable() -> None:
     assert CLAUDE_CODE_SPEC.session_id_env == SESSION_ID_ENV == "CLAUDE_CODE_SESSION_ID"
 
 
+def test_hermes_declares_its_session_id_variable() -> None:
+    assert HERMES_SPEC.session_id_env == HERMES_SESSION_ID_ENV == "HERMES_SESSION_ID"
+
+
+def test_hermes_session_id_is_the_full_virtual_path_name(tmp_path: pathlib.Path) -> None:
+    source = HermesTranscriptSource(tmp_path / "state.db")
+    assert source.session_id(tmp_path / "session.with.dots") == "session.with.dots"
+
+
+@pytest.mark.parametrize("marked", [False, True])
+async def test_only_an_os_marked_hermes_run_claims_its_session(
+    marked: bool, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    session_id = "session.with.dots"
+    captured: dict[str, object] = {}
+
+    class ExistingHermesSource(HermesTranscriptSource):
+        def exists(self) -> bool:
+            return True
+
+    spec = replace(HERMES_SPEC, source_factory=ExistingHermesSource)
+
+    async def fake_prepare(*args: object, **kwargs: object) -> int:
+        captured["skip_sessions"] = kwargs["skip_sessions"]
+        return 0
+
+    monkeypatch.setattr(host_cli, "prepare", fake_prepare)
+    monkeypatch.setattr(host_cli, "_refresh_retrieval", lambda spec: None)
+    monkeypatch.setattr(host_cli.events, "flush", lambda: None)
+    monkeypatch.setattr(host_cli.Path, "cwd", lambda: tmp_path / "project")
+    monkeypatch.setenv(HERMES_SESSION_ID_ENV, session_id)
+    if marked:
+        monkeypatch.setenv(self_sessions.BRIDGING_RUN_ENV, "1")
+    else:
+        monkeypatch.delenv(self_sessions.BRIDGING_RUN_ENV, raising=False)
+
+    base = tmp_path / "memu-hermes"
+    rc = await host_cli._cmd_prepare(
+        spec,
+        Namespace(session_dir=str(tmp_path / "state.db"), base_dir=str(base), max_jobs=10),
+    )
+
+    assert rc == 0
+    assert captured["skip_sessions"] == ([session_id] if marked else [])
+    assert self_sessions.load(Layout(base=base, host="hermes").self_sessions) == ([session_id] if marked else [])
+
+
 def test_layout_scopes_the_file_per_host(tmp_path: pathlib.Path) -> None:
     """Two hosts' session ids are unrelated; a shared file would let one host's
     run id mask an unrelated real session on the other."""
@@ -258,7 +309,7 @@ def test_layout_scopes_the_file_per_host(tmp_path: pathlib.Path) -> None:
     assert Layout(base=tmp_path, host="hermes").self_sessions.name == ".self_sessions.hermes.json"
 
 
-@pytest.mark.parametrize("host_spec", [CLAUDE_CODE_SPEC])
+@pytest.mark.parametrize("host_spec", [CLAUDE_CODE_SPEC, HERMES_SPEC])
 def test_surveyed_hosts_keep_a_non_empty_variable(host_spec: object) -> None:
     """Guards the fan-out: a host listed here has been checked on a real install,
     so silently blanking the variable should fail rather than quietly restore the
