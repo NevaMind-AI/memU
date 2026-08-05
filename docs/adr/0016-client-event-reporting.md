@@ -55,11 +55,16 @@ finished, a retrieval, a listing of the store, and a fatal error.
 
 Four facts about this codebase constrain the answer, and each one rules something out:
 
-1. **`retrieve` runs on every turn and must never fetch.** This is already written down and
-   already load-bearing: `_refresh_retrieval` exists precisely so the retrieval body updates on
-   the low-frequency `prepare` rather than on the per-turn hook (`host_cli.py`). A synchronous
-   POST inside `retrieve` would violate the rule the module was built to honour, on the hottest
-   path in the product.
+1. **`retrieve` runs on every turn, so its reporting cost must be a constant.** This is already
+   written down and already load-bearing: `_refresh_retrieval` exists precisely so the retrieval
+   body updates on the low-frequency `prepare` rather than on the per-turn hook (`host_cli.py`).
+   As first written this constraint was "must never fetch", and the retrieve event was
+   spool-only. **Amended:** the backend asked for that event promptly and accepted the round
+   trip, so `retrieve` now delivers *its own single envelope* inline — see §2. What the
+   amendment does not relax is the bound: a `flush()` there would drain the whole spool at one
+   POST per event, up to `MAX_FLUSH_POSTS`, which is a cost that grows with how far behind the
+   machine has fallen. One request per turn is a constant; a flush is not, and the difference is
+   the entire content of this constraint.
 2. **Install and uninstall are agent-driven prose, not commands.** `INSTALL.md` is a
    multi-part guide with verify gates; `UNINSTALL.md` likewise. No code path spans either, so
    no code path can *observe* that one succeeded.
@@ -130,15 +135,19 @@ Flush points, all of them low-frequency and latency-tolerant:
   spent longer deciding than the POST takes, and fail-open means an unreachable endpoint costs
   the timeout, not the event, which stays spooled for the next attempt.
 - `report flush`, an explicit verb, for guides and for debugging.
+- **Not `retrieve`.** It delivers inline, but through the single-event path below rather than
+  a flush; the distinction is one POST versus all of them. See "the immediate path" below.
 - The CLI's top-level error handler — **except when the failing command is
   `retrieve`**. Flushing there is right for the bridging pair, where the thing that
   broke *is* the normal flush point, so waiting for it would mean waiting forever.
   It is wrong for the per-turn hook: a store the hook cannot reach fails it on
   every turn, so the error path would put a blocking POST on the hot path once per
   turn, precisely when the user is already broken. Caught by exercising a real
-  install against a live endpoint, not by reasoning — the rule that `retrieve`
-  never fetches has to survive the error path too, and constraint 1 alone does not
-  say so.
+  install against a live endpoint, not by reasoning — constraint 1 alone does not
+  say that the error path is covered too. It still does not: the amendment to
+  constraint 1 lets a *successful* retrieve spend one POST, and deliberately leaves
+  the failing one spool-only, because "every turn" is exactly the multiplier the
+  failure path has and the success path does not.
 
 Mechanics, stated because they are what make a shared spool safe:
 
@@ -153,13 +162,31 @@ Mechanics, stated because they are what make a shared spool safe:
   offline machine running `retrieve` every turn is the case this exists for.
 - A batch is capped, so one flush after a long offline stretch cannot post an unbounded body.
 
-**The immediate path is implemented and left dormant.** `memu/events.py` also carries a
+**The immediate path is wired, for `retrieve` and nothing else.** `memu/events.py` carries a
 single-event blocking POST with a short timeout — the same shape as `templates._get`, in the
-other direction. It has **no caller**, and is marked as such in its docstring: reserved for an
-event that some future decision shows cannot tolerate spool latency. It is written now, rather
-than later, so the transport seam is proven to admit both modes and the choice stays a
-one-line change instead of a refactor. Note that `report uninstall` does *not* use it — it
-triggers an ordinary flush inline, which is a spool operation.
+other direction. It was written dormant, reserved for an event that some future decision showed
+could not tolerate spool latency; the backend's request for prompt retrieval telemetry is that
+decision, and `record(deliver=True)` is how it is spent. It is **not** fire-and-forget: the
+envelope is POSTed once, and anything the server did not settle (a timeout, a 5xx, a 429) is
+appended to the spool for the bridging pair, exactly as if it had never been attempted. Only a
+permanent 4xx is dropped, because that is a payload the server will refuse every time — the
+same call `_flush` makes. A bare send would lose precisely the events an offline laptop
+generates, which is the case the spool exists for.
+
+Two consequences are accepted rather than solved:
+
+- **Events can arrive out of order.** A delivered retrieve event overtakes everything still
+  spooled behind it. `occurred_at` says when each event happened and `event_id` makes a replay
+  idempotent, so no consumer needs arrival order; a client that preserved it would have to
+  drain the spool first, which is the cost this design exists to avoid.
+- **A failed `retrieve` still does not deliver.** The success leg reports inline; the failure
+  leg spools, for the same reason the CLI's error handler skips `retrieve` below — a store the
+  hook cannot reach fails it on *every* turn, and that is when a per-turn blocking POST is
+  least affordable. Nothing is stranded: the next successful retrieve carries the backlog out
+  ahead of its own event.
+
+Note that `report uninstall` does *not* use this path — it triggers an ordinary flush inline,
+which is a spool operation, and it needs the whole spool gone rather than one event sent.
 
 Both paths are fail-open in the ADR 0013 sense: no network, a non-2xx, a timeout, an
 unwritable spool, a corrupt spool line — every one of them is swallowed. **No event failure
@@ -185,7 +212,7 @@ The dividing line is whether any code can observe the completion.
 
 | Event | Call site |
 | --- | --- |
-| retrieve | `retrieval._cmd_retrieve` — spool only, never flush |
+| retrieve | `retrieval._cmd_retrieve` — one inline POST on success, spool-only on failure, never a flush (§2) |
 | remember finished | `host_cli._cmd_commit` — the terminal step of the record seam, which already holds the recall-file and resource counts |
 | `cli_error` | `host_cli.run`'s top-level `except` — see §5 |
 | `cli_install_started` | `host_cli._cmd_docs`, on `docs install` only — see below |
@@ -623,13 +650,18 @@ document.
   boundary, so rows on either side of the release must be read differently:
   `context.client_version` is the discriminator, and history below the cutover means *commit*.
   Accepted in preference to an `event_name` remap the backend would maintain indefinitely.
-- **Every event's delivery is bounded by a bridging run.** On a machine whose schedule is
-  broken, retrieve events accumulate to the cap and are then dropped. This is the correct
-  failure — a broken bridging task is precisely a thing worth being unable to hide — but it
-  means "no events from this install" has two causes, and reading it as "uninstalled" is wrong.
-- **`retrieve` gains one append per turn.** A single line to an `O_APPEND` file, no network,
-  no parse of the existing file. It must stay that way; any future work that makes recording
-  read or rewrite the spool moves cost onto the per-turn path and re-opens constraint 1.
+- **Most events' delivery is bounded by a bridging run.** On a machine whose schedule is
+  broken, events accumulate to the cap and are then dropped. This is the correct failure — a
+  broken bridging task is precisely a thing worth being unable to hide — but it means "no
+  events from this install" has two causes, and reading it as "uninstalled" is wrong. Since §2,
+  a successful `retrieve` is the exception that partly covers this: it delivers its own event
+  and so keeps reporting from a machine whose bridging never runs, which also means the spool
+  reaches its cap far less often than originally expected.
+- **`retrieve` gains one blocking POST per successful turn.** Bounded to exactly one request,
+  taken after the result is already on stdout, and fail-open: an unreachable endpoint costs the
+  timeout and spools the event rather than losing it or failing the command. What must not
+  change is the *shape* — recording still neither parses nor rewrites the spool, and any future
+  work that makes it do either, or that turns this into a flush, re-opens constraint 1.
 - **The spool is a new file under `~/.memu` that uninstall does not mention.** `UNINSTALL.md`
   Part 3 needs a line for it, and `report uninstall`'s flush should leave it empty anyway.
   It is not alone: `events.jsonl.*.sending`, the `events.dropped` counter, and §5's

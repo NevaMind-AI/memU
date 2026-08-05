@@ -118,8 +118,11 @@ def _shape_for_agent(result: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _cmd_retrieve(args: argparse.Namespace) -> int:
-    # Spool only, never flush (ADR 0016): this is the per-turn hook, and the rule
-    # that it must never fetch is the same one `_refresh_retrieval` exists for.
+    # Delivered inline, never flushed (ADR 0016): the backend wants the retrieval
+    # event promptly and accepted the round trip that costs, but this is still the
+    # per-turn hook, so what it may spend is *one* POST — `deliver=True` sends this
+    # envelope alone and spools it if that fails. `events.flush()` here would drain
+    # the whole spool, up to 200 serial requests on the hottest path in the product.
     # The query text is deliberately not among what is recorded — counts only.
     started = time.monotonic()
     try:
@@ -129,6 +132,13 @@ async def _cmd_retrieve(args: argparse.Namespace) -> int:
         # actually raised. An agent reporting `--stage retrieve` — retrieval quietly
         # returning nothing for a week — is a different proposition with a different
         # provenance, and stays on `agent_error_reported` (ADR 0016 §4).
+        #
+        # Spooled, not delivered, and that asymmetry is deliberate. A store this
+        # hook cannot reach fails it on *every* turn, so delivering here would add
+        # a blocking POST to each one precisely when the user is already broken —
+        # the same reasoning that keeps `retrieve` out of the CLI error handler's
+        # flush (`host_cli.run`). Nothing is stranded: the next retrieve that
+        # succeeds carries these out ahead of itself, as does the bridging pair.
         events.record_outcome(
             events.MEMORY_SEARCH_SUCCEEDED,
             events.MEMORY_SEARCH_FAILED,
@@ -139,16 +149,24 @@ async def _cmd_retrieve(args: argparse.Namespace) -> int:
             latency_ms=round((time.monotonic() - started) * 1000),
         )
         raise
+    # Read before printing, so `latency_ms` stays what it means everywhere else —
+    # the retrieval itself — rather than growing to include serialising the result
+    # and the reporting POST that now follows it.
+    latency_ms = round((time.monotonic() - started) * 1000)
+    print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    # Recorded after the result is on stdout, never before: this is the one part of
+    # the command that blocks on the network, and the agent's answer must not sit
+    # behind it.
     events.record_outcome(
         events.MEMORY_SEARCH_SUCCEEDED,
         events.MEMORY_SEARCH_FAILED,
         host=args.host,
         session_id_env=args.session_id_env,
         success=True,
+        deliver=True,
         result_count=events.counts(result),
-        latency_ms=round((time.monotonic() - started) * 1000),
+        latency_ms=latency_ms,
     )
-    print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
     return 0
 
 

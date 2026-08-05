@@ -164,7 +164,10 @@ def _refresh_retrieval(spec: HostSpec) -> None:
     """Piggyback the retrieval-procedure refresh on the scheduled prepare.
 
     The retrieval body self-updates from the server on this low-frequency run
-    instead of on the per-turn retrieve hook, which must never fetch. Best-effort
+    instead of on the per-turn retrieve hook (ADR 0013). That the hook now spends
+    one bounded POST reporting its own event (ADR 0016 §2) does not open a door
+    here: this fetch is a document download whose size and count are the server's
+    to decide, which is a different proposition from one fixed envelope. Best-effort
     and firewalled: any failure here is a note, never a failed bridging run — and
     :func:`instruction.refresh` skips (rather than downgrades) when the server is
     unreachable, so a note here means the installed copy simply stayed put.
@@ -632,8 +635,9 @@ async def _cmd_report(spec: HostSpec, args: argparse.Namespace) -> int:
     if args.what == "uninstall":
         events.record(events.CLI_UNINSTALL_SUCCEEDED, host=spec.host, session_id_env=spec.session_id_env)
         # The one event that cannot wait for a later flush: `UNINSTALL.md` Part 3
-        # may remove the very binary that would deliver it. An ordinary inline
-        # flush, not `send_now` — the spool stays the only wired transport.
+        # may remove the very binary that would deliver it. A whole flush, not the
+        # single-event `deliver=True` path — what this needs is the spool *emptied*
+        # before the binary goes, not one envelope sent.
         events.flush()
         print(outcome)
         return 0

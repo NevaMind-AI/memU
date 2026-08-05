@@ -570,17 +570,78 @@ def test_a_flush_is_bounded_and_the_next_one_resumes_where_it_stopped(
     assert not list(reporting.parent.glob("events.jsonl.*"))
 
 
-def test_send_now_has_no_caller_in_the_shipped_code() -> None:
-    # It exists so the transport seam is proven to admit both modes, and is
-    # deliberately dormant (ADR 0016 section 2). If this fails, someone wired it
-    # up — which is a decision that owes a reason, not an accident.
+def test_only_retrieve_delivers_inline(reporting: pathlib.Path) -> None:
+    """``deliver=True`` is the per-turn hook's alone (ADR 0016 section 2).
+
+    It puts a blocking POST on the calling command, which is affordable exactly
+    once, on the one path whose event the backend wants promptly. If this fails
+    someone wired it to a second call site — a decision that owes a reason, not an
+    accident.
+    """
     root = pathlib.Path(events.__file__).parent
-    callers = [
-        path
+    callers = sorted(
+        path.name
         for path in root.rglob("*.py")
-        if path.name != "events.py" and "send_now(" in path.read_text(encoding="utf-8")
-    ]
-    assert callers == []
+        if path.name != "events.py"
+        # Comment lines are skipped so that *explaining* this path — which several
+        # docstrings around the codebase now do — cannot trip a tripwire meant for
+        # a second caller.
+        and any(
+            "deliver=True" in line and not line.lstrip().startswith("#")
+            for line in path.read_text(encoding="utf-8").splitlines()
+        )
+    )
+    assert callers == ["retrieval.py"]
+
+
+def test_delivering_an_event_posts_it_alone_and_never_drains_the_spool(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bound that lets the per-turn hook report at all.
+
+    A flush would send everything spooled, one POST each. This sends one, however
+    far behind the machine has fallen — so the hook's cost is a constant, not a
+    function of the backlog.
+    """
+    for _ in range(5):
+        events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    events.record(events.MEMORY_SEARCH_SUCCEEDED, host="codex", properties={"result_count": 1}, deliver=True)
+
+    assert [event["event_name"] for event in posted.events] == [events.MEMORY_SEARCH_SUCCEEDED]
+    # The backlog is untouched — not read, not rewritten, not sent — and the
+    # delivered event was never appended to it.
+    assert [event["event_name"] for event in _spooled(reporting)] == [events.CLI_INSTALL_SUCCEEDED] * 5
+
+
+def test_an_undelivered_event_falls_back_to_the_spool(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inline delivery must not become fire-and-forget.
+
+    An offline laptop is exactly where these events matter, so a POST that does not
+    land leaves the event spooled for the bridging pair — the same bargain every
+    other path makes, and the reason this is not a bare send.
+    """
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError("no route to host")))
+
+    events.record(events.MEMORY_SEARCH_SUCCEEDED, host="codex", properties={"result_count": 1}, deliver=True)
+
+    (event,) = _spooled(reporting)
+    assert event["event_name"] == events.MEMORY_SEARCH_SUCCEEDED
+
+
+def test_a_permanently_rejected_event_is_not_spooled_to_be_rejected_again(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A 4xx means the server will refuse this payload every time, so holding it
+    # only buys a second refusal on the next flush — the same call `_flush` makes.
+    error = urllib.error.HTTPError("https://example.invalid/events", 422, "Unprocessable", {}, None)  # type: ignore[arg-type]
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=error))
+
+    events.record(events.MEMORY_SEARCH_SUCCEEDED, host="codex", properties={"result_count": 1}, deliver=True)
+
+    assert _spooled(reporting) == []
 
 
 # --------------------------------------------------------------------------- #
@@ -743,29 +804,58 @@ def test_report_says_so_when_reporting_is_switched_off(
     assert "nothing recorded" in capsys.readouterr().out
 
 
-def test_retrieve_records_counts_and_never_the_query(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_retrieve_delivers_counts_and_never_the_query(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from memu.hosts import retrieval
 
     async def _fake(query: str, where: Any = None) -> dict[str, Any]:
         return {"segments": [{"text": "a"}, {"text": "b"}], "files": [{"name": "f"}], "resources": []}
 
+    posted = _Posted()
     monkeypatch.setattr(retrieval, "retrieve", _fake)
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
     assert run(CODEX_SPEC, ["retrieve", "my bank password reminder"]) == 0
 
-    (event,) = _spooled(reporting)
+    # Delivered on the spot, not left for the bridging pair: the backend asked for
+    # this event promptly and accepted the round trip.
+    (event,) = posted.events
     assert event["event_name"] == events.MEMORY_SEARCH_SUCCEEDED
     assert event["properties"]["result_count"] == 3
+    # Both fields the allowlist admits for a read, so a `latency_ms` dropped from
+    # `_READ_COUNTS` is caught here rather than going silently missing.
+    assert event["properties"]["latency_ms"] >= 0
     assert "bank password" not in json.dumps(event)
+    assert _spooled(reporting) == [], "a delivered event is not also spooled"
+
+
+def test_a_retrieve_that_cannot_deliver_still_succeeds_and_keeps_its_event(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reporting on the hot path must cost the wait, never the command.
+
+    The result is already on stdout before the POST is attempted, so an endpoint
+    that is merely unreachable cannot touch what the agent gets back.
+    """
+    from memu.hosts import retrieval
+
+    async def _fake(query: str, where: Any = None) -> dict[str, Any]:
+        return {"segments": [{"text": "a"}], "files": [], "resources": []}
+
+    monkeypatch.setattr(retrieval, "retrieve", _fake)
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError("no route to host")))
+
+    assert run(CODEX_SPEC, ["retrieve", "anything"]) == 0
+    (event,) = _spooled(reporting)
+    assert event["event_name"] == events.MEMORY_SEARCH_SUCCEEDED
 
 
 def test_a_failing_retrieve_never_posts_from_the_per_turn_hook(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The invariant that survives the error path too.
+    """The error path stays spool-only, even though the success path delivers.
 
-    A store the hook cannot reach fails ``retrieve`` on *every* turn. If the error
-    handler flushed, that would put a blocking POST on the hot path once per turn,
-    precisely when the user is already broken.
+    A store the hook cannot reach fails ``retrieve`` on *every* turn. Delivering
+    here — or flushing from the CLI's error handler — would put a blocking POST on
+    the hot path once per turn, precisely when the user is already broken.
     """
     from memu.hosts import retrieval
 
@@ -778,7 +868,8 @@ def test_a_failing_retrieve_never_posts_from_the_per_turn_hook(
 
     assert run(CODEX_SPEC, ["retrieve", "anything"]) == 1
     assert posted.events == []
-    # Recorded, just not delivered from here — the bridging pair will carry it.
+    # Recorded, just not delivered from here — the next successful retrieve carries
+    # these out ahead of its own event, as does the bridging pair.
     assert len(_spooled(reporting)) == 2
 
 

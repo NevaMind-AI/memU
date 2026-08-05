@@ -12,16 +12,29 @@ Two rules shape everything here, and both are inherited rather than invented:
   below swallows every failure. A ``retrieve`` that cannot record an event is a
   successful ``retrieve``; nothing here may change a command's exit code, its
   output, or its latency in any way a user could notice.
-* **The per-turn hook must never fetch.** ``retrieve`` runs on every agent turn,
-  and ``_refresh_retrieval`` in :mod:`memu.hosts.host_cli` exists precisely
-  because of that. So recording an event *appends one line to a spool* and
-  returns; delivery happens later, from the low-frequency bridging pair.
+* **The per-turn hook must never drain the spool.** ``retrieve`` runs on every
+  agent turn. Recording an event ordinarily *appends one line to a spool* and
+  returns, with delivery happening later from the low-frequency bridging pair.
+  ``retrieve`` is the one exception, and a deliberately narrow one: it POSTs *its
+  own single envelope* inline (:func:`record` with ``deliver=True``) because the
+  backend asked for that event promptly and accepted the round trip it costs.
+  What it must not do is :func:`flush`, which drains everything spooled — one
+  event per POST, up to :data:`MAX_FLUSH_POSTS` of them, serially. That is an
+  unbounded blocking run on the hottest path in the product, and it is why
+  ``retrieve`` delivers one event rather than flushing.
+
+Delivering the current event ahead of older spooled ones means events can reach
+the backend out of order. Accepted knowingly: ``occurred_at`` carries when each
+event happened and ``event_id`` makes a replay idempotent, so arrival order is
+not load-bearing for any consumer.
 
 The spool is also what makes ``event_id`` mean anything. Client-generated ids buy
 idempotence *for a client that retries* — a fire-and-forget sender never
 double-delivers, so it would give the backend nothing to deduplicate. A spool
 that survives an offline laptop and re-POSTs on the next flush does. One
-decision, not two.
+decision, not two. It is why the inline delivery above still *falls back* to the
+spool rather than dropping what it could not send: a hook that fetched and forgot
+would lose exactly the events an offline laptop generates.
 
 What leaves the machine is counts, never content: no query text, no memory, no
 recall-file names, no store DSN, no absolute paths, no transcripts.
@@ -476,7 +489,8 @@ def envelope(
     properties: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build one event. The single construction site, shared by both transports,
-    so :func:`record` and :func:`send_now` cannot drift into different shapes.
+    so a spooled event and an inline-delivered one cannot drift into different
+    shapes — :func:`record` builds here whichever way it then sends.
 
     ``client_version``, ``agent_platform``, ``os``, ``deployment_mode`` and
     ``session_id`` live under ``context`` and not at the top level: the deployed
@@ -519,22 +533,53 @@ def record(
     host: str = "",
     session_id_env: str = "",
     properties: dict[str, Any] | None = None,
+    deliver: bool = False,
 ) -> None:
-    """Append one event to the spool. Never sends, never raises.
+    """Record one event. Never raises.
 
-    The only cost on the per-turn ``retrieve`` path: one ``O_APPEND`` line, no
-    network, and no read of the existing spool. Keep it that way — anything that
-    makes recording read or rewrite the spool moves cost onto that path.
+    By default this appends one ``O_APPEND`` line to the spool and returns: no
+    network, and no read of the existing spool. Keep that the default — anything
+    that makes recording read or rewrite the spool moves cost onto the per-turn
+    path.
+
+    ``deliver=True`` POSTs *this envelope alone* first, spooling it only if that
+    does not settle it. It is emphatically not a :func:`flush`: nothing else
+    spooled is read, rewritten, or sent, so the cost is exactly one request no
+    matter how far behind this machine has fallen. That bound is the whole reason
+    the per-turn ``retrieve`` hook may use it at all — see the module docstring,
+    and :func:`_deliver` for what "settled" means.
+
+    The fallback is structural rather than remembered: there is one ``_append``
+    below, on the path every unsettled event takes, so a delivery that fails
+    cannot silently drop its event.
     """
     try:
         if not enabled():
             return
         built = envelope(event_name, host=host, session_id_env=session_id_env, properties=properties)
+        if deliver and _deliver(built):
+            return
         _append(json.dumps(built, ensure_ascii=False, default=str))
     except Exception:
         # Includes a broken MEMU_MEMORY_MODE, which `memory_mode()` raises on.
         # Reporting must not be the thing that surfaces a config error.
         return
+
+
+def _deliver(event: dict[str, Any]) -> bool:
+    """POST one event now. ``True`` when it is *settled* and needs no spooling.
+
+    Settled covers both :data:`ACCEPTED` and :data:`REJECTED`, for the same reason
+    :func:`_flush` stops holding either: a permanent 4xx means the server will
+    refuse this payload every time, so spooling it would only buy a second refusal
+    on the next flush. Only :data:`RETRY` — an unreachable endpoint, a 5xx, a 429
+    — returns ``False`` and sends the event to the spool, which is exactly the
+    case the spool exists for.
+    """
+    url = events_url()
+    if url is None:
+        return False
+    return _post(url, event) != RETRY
 
 
 def _filter(event_name: str, properties: dict[str, Any] | None) -> dict[str, Any]:
@@ -577,6 +622,7 @@ def record_outcome(
     host: str = "",
     session_id_env: str = "",
     success: bool,
+    deliver: bool = False,
     **counts: Any,
 ) -> None:
     """Record one action under whichever of its two names the outcome calls for.
@@ -586,8 +632,17 @@ def record_outcome(
     leg of a try or the line after it. So the boolean stays in the signature and the
     name choice happens here, once, instead of at each site where a hand-picked
     constant could drift from the branch it is in.
+
+    ``deliver`` is passed straight through to :func:`record`; it is a keyword rather
+    than part of ``**counts`` so it can never be mistaken for a property and sent.
     """
-    record(succeeded if success else failed, host=host, session_id_env=session_id_env, properties=counts)
+    record(
+        succeeded if success else failed,
+        host=host,
+        session_id_env=session_id_env,
+        properties=counts,
+        deliver=deliver,
+    )
 
 
 def record_list(
@@ -773,6 +828,13 @@ def flush() -> tuple[int, int]:
     ``report uninstall`` (which cannot wait — ``UNINSTALL.md`` Part 3 may remove
     the very binary that would flush later), the explicit ``report flush``, and
     the CLI's error handler.
+
+    **Never from ``retrieve``.** This drains the whole spool one POST at a time, so
+    its cost scales with how far behind the machine has fallen — bounded only by
+    :data:`MAX_FLUSH_POSTS`, which is 200 requests. That is fine on the bridging
+    pair and disqualifying on a per-turn hook, which instead delivers its own
+    single envelope through :func:`record` with ``deliver=True``. The distinction
+    is one event versus all of them, and it is the whole reason both exist.
 
     Never raises. A failed POST leaves its file in place for the next flush.
     """
@@ -971,37 +1033,6 @@ def _post(url: str, event: dict[str, Any]) -> str:
         return REJECTED if 400 <= exc.code < 500 and exc.code != 429 else RETRY
     except Exception:
         return RETRY
-
-
-def send_now(
-    event_name: str,
-    *,
-    host: str = "",
-    session_id_env: str = "",
-    properties: dict[str, Any] | None = None,
-) -> bool:
-    """Deliver one event immediately, bypassing the spool.
-
-    **Not in use.** No caller exists, by decision (ADR 0016 §2): the spool is the
-    active path, and ``report uninstall`` — the one event that cannot wait —
-    triggers an ordinary inline :func:`flush` rather than this.
-
-    It is written now so the transport seam is proven to admit both modes and
-    turning it on later stays a one-line change instead of a refactor. Enabling it
-    for a given event is a future decision that must state why that event cannot
-    tolerate spool latency; it blocks the calling command for up to
-    :data:`_TIMEOUT_SECONDS`, which is why ``retrieve`` will never be that event.
-    """
-    try:
-        if not enabled():
-            return False
-        url = events_url()
-        if url is None:
-            return False
-        built = envelope(event_name, host=host, session_id_env=session_id_env, properties=properties)
-        return _post(url, built) == ACCEPTED
-    except Exception:
-        return False
 
 
 def counts(result: dict[str, Any], layers: Iterable[str] = ("segments", "files", "resources")) -> int:
