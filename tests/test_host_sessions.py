@@ -808,6 +808,20 @@ def _hermes_db(tmp_path: pathlib.Path) -> pathlib.Path:
     return db
 
 
+def test_hermes_default_db_follows_hermes_home(monkeypatch, tmp_path: pathlib.Path) -> None:
+    home = tmp_path / "Hermes Home %41 #片段"
+    home.mkdir()
+    db = _hermes_db(home)
+    monkeypatch.setenv("HERMES_HOME", str(home))
+
+    source = HermesTranscriptSource()
+
+    assert source.root() == home
+    assert source.exists()
+    assert [source.key(path) for path in source.discover()] == ["new", "old"]
+    assert db == home / "state.db"
+
+
 def test_hermes_discovers_sessions_most_recent_first(tmp_path: pathlib.Path) -> None:
     source = HermesTranscriptSource(_hermes_db(tmp_path))
     assert source.exists()

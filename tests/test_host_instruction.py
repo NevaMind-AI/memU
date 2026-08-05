@@ -19,6 +19,8 @@ import pytest
 
 from memu.hosts import instruction
 from memu.hosts.codex.cli import AGENTS_MD, SKILLS_DIR, build_parser
+from memu.hosts.hermes.cli import build_spec as build_hermes_spec
+from memu.hosts.hermes.paths import hermes_home
 from memu.hosts.host_cli import build_parser as build_host_parser
 from memu.hosts.workbuddy.cli import MEMORY_MD as WORKBUDDY_LEGACY_MEMORY_MD
 from memu.hosts.workbuddy.cli import SOUL_MD as WORKBUDDY_SOUL_MD
@@ -134,6 +136,43 @@ def test_hermes_is_an_inline_host() -> None:
     from memu.hosts.hermes.cli import SPEC
 
     assert SPEC.skills_dir == ""
+
+
+def test_hermes_defaults_follow_hermes_home(monkeypatch, tmp_path: pathlib.Path) -> None:
+    fallback_home = tmp_path / "os-home"
+    active_home = tmp_path / "Hermes Home %41 #片段"
+    monkeypatch.setattr(pathlib.Path, "home", lambda: fallback_home)
+    monkeypatch.setenv("HERMES_HOME", str(active_home))
+
+    spec = build_hermes_spec()
+    args = build_host_parser(spec).parse_args(["install-instruction"])
+
+    assert pathlib.Path(args.path) == active_home / "SOUL.md"
+    assert pathlib.Path(spec.session_dir) == active_home / "state.db"
+    assert instruction._cmd_install_instruction(args) == 0
+    assert "memu-hermes retrieve" in (active_home / "SOUL.md").read_text(encoding="utf-8")
+    assert not (fallback_home / ".hermes" / "SOUL.md").exists()
+
+
+def test_hermes_home_ignores_blank_override(monkeypatch, tmp_path: pathlib.Path) -> None:
+    monkeypatch.setattr(pathlib.Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("HERMES_HOME", "   ")
+
+    assert hermes_home() == tmp_path / ".hermes"
+
+
+def test_hermes_explicit_path_overrides_resolved_home(monkeypatch, tmp_path: pathlib.Path) -> None:
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / "Hermes"))
+    custom_soul = tmp_path / "profile" / "SOUL.md"
+    custom_db = tmp_path / "profile" / "state.db"
+    spec = build_hermes_spec()
+    parser = build_host_parser(spec)
+
+    instruction_args = parser.parse_args(["install-instruction", "--path", str(custom_soul)])
+    prepare_args = parser.parse_args(["prepare", "--session-dir", str(custom_db)])
+
+    assert pathlib.Path(instruction_args.path) == custom_soul
+    assert pathlib.Path(prepare_args.session_dir) == custom_db
 
 
 def test_openclaw_is_a_skill_host() -> None:
