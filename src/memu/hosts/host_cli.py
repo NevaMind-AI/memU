@@ -185,7 +185,7 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
         return 2
 
     layout = _layout(spec, args)
-    _mark_cycle_start(layout)
+    _mark_cycle_start(spec, layout)
     # This run is itself a host session, and the host is logging it where we are
     # about to look. Remember it now — before the scan — so it is skipped by this
     # run and every later one (#606).
@@ -246,26 +246,26 @@ async def _cmd_commit(spec: HostSpec, args: argparse.Namespace) -> int:
     try:
         result = await commit(layout)
     except Exception:
-        _record_remember(
+        _record_commit(
             spec,
+            layout,
             success=False,
             recall_files=0,
             resources=0,
             sessions=session_count,
             latency_ms=_elapsed_ms(started),
-            duration_ms=_cycle_duration_ms(layout),
         )
         raise
     recall_files = result.get("recall_files", [])
     resources = result.get("resources", [])
-    _record_remember(
+    _record_commit(
         spec,
+        layout,
         success=True,
         recall_files=len(recall_files),
         resources=len(resources),
         sessions=session_count,
         latency_ms=_elapsed_ms(started),
-        duration_ms=_cycle_duration_ms(layout),
     )
     # The cycle is closed and reported, so the marker has done its job. Cleared
     # only on the success path — the `raise` above keeps it, so a retried commit
@@ -304,8 +304,8 @@ def _elapsed_ms(started: float) -> int:
     return round((time.monotonic() - started) * 1000)
 
 
-def _mark_cycle_start(layout: Layout) -> None:
-    """Stamp when this bridging cycle began, for ``commit`` to close.
+def _mark_cycle_start(spec: HostSpec, layout: Layout) -> None:
+    """Stamp when this bridging cycle began, for ``commit`` to close, and report it.
 
     Wall clock, unavoidably: the two halves of the record seam are separate
     processes and no monotonic clock survives that boundary. What follows from
@@ -315,12 +315,19 @@ def _mark_cycle_start(layout: Layout) -> None:
     it regenerated the job files, so the cycle the agent is working is the one
     that starts here. Best-effort like everything on the reporting path — an
     unwritable marker costs the field, never the run.
+
+    ``memory_update_started`` is emitted here rather than at the call site, and only
+    when the marker actually landed, because the marker is what lets ``commit``
+    emit the matching ``memory_update_succeeded`` (:func:`_record_commit`). Announcing
+    a cycle this machine cannot later close would manufacture a failure out of a
+    full disk — the two must not be able to disagree, so one function owns both.
     """
     try:
         layout.run_marker.parent.mkdir(parents=True, exist_ok=True)
         layout.run_marker.write_text(json.dumps({"started_at": time.time()}), encoding="utf-8")
     except OSError:
-        pass
+        return
+    events.record(events.MEMORY_UPDATE_STARTED, host=spec.host, session_id_env=spec.session_id_env)
 
 
 def _cycle_duration_ms(layout: Layout) -> int | None:
@@ -350,32 +357,74 @@ def _cycle_duration_ms(layout: Layout) -> int | None:
     return round(elapsed * 1000)
 
 
-def _record_remember(
+def _cycle_is_open(layout: Layout) -> bool:
+    """Whether this ``commit`` is closing a cycle a ``prepare`` here opened.
+
+    Deliberately *not* "did :func:`_cycle_duration_ms` return a number". The two read
+    the same marker and answer different questions: a cycle whose clock skewed, or
+    which outlived :data:`MAX_CYCLE_SECONDS`, still happened and still deserves its
+    event — it simply reports no duration.
+    """
+    try:
+        return layout.run_marker.is_file()
+    except OSError:
+        return False
+
+
+def _record_commit(
     spec: HostSpec,
+    layout: Layout,
     *,
     success: bool,
     recall_files: int,
     resources: int,
     sessions: int,
     latency_ms: int,
-    duration_ms: int | None,
 ) -> None:
+    """The commit store call — and, when it closed one, the cycle around it.
+
+    Two events over two spans (ADR 0016 §4). ``memory_commit_*`` is *this call*: one
+    process, one store round trip, and ``latency_ms`` is memU's own blocking work in
+    it. ``memory_update_succeeded`` is the whole ``prepare`` → ``commit`` cycle,
+    mostly the agent's self-evolve pass, carrying ``duration_ms`` instead.
+
+    **The cycle event is gated on the run marker.** ``BRIDGING_TASK.md``'s LEFTOVERS
+    step commits a crashed run's jobs with no ``prepare`` of its own, so that commit
+    closes no cycle and must not report one — otherwise a single bridging run emits
+    one start and two successes, and ``started >= succeeded`` stops holding on
+    exactly the runs already in trouble. Its counts are still reported, on the commit
+    event, which is the only place a leftover's output is ever visible.
+
+    Nothing reports a *failed* cycle from here. A failed commit keeps the marker for
+    the retry, so the cycle is not over; ``memory_update_failed`` is agent-reported
+    (§5), because a cycle can also die where no code is watching at all.
+    """
     counts: dict[str, Any] = {
         "recall_file_count": recall_files,
         "resource_count": resources,
         "session_count": sessions,
-        "latency_ms": latency_ms,
     }
+    events.record_outcome(
+        events.MEMORY_COMMIT_SUCCEEDED,
+        events.MEMORY_COMMIT_FAILED,
+        host=spec.host,
+        session_id_env=spec.session_id_env,
+        success=success,
+        latency_ms=latency_ms,
+        **counts,
+    )
+    if not success or not _cycle_is_open(layout):
+        return
+    duration_ms = _cycle_duration_ms(layout)
     if duration_ms is not None:
         # Omitted rather than zeroed when the cycle could not be measured — the
         # distinction is the whole point of `_cycle_duration_ms` returning None.
         counts["duration_ms"] = duration_ms
-    events.record_action(
-        "memory_update",
+    events.record(
+        events.MEMORY_UPDATE_SUCCEEDED,
         host=spec.host,
         session_id_env=spec.session_id_env,
-        success=success,
-        **counts,
+        properties=counts,
     )
 
 
@@ -576,12 +625,12 @@ async def _cmd_report(spec: HostSpec, args: argparse.Namespace) -> int:
     outcome = "recorded" if events.enabled() else "reporting is off; nothing recorded"
 
     if args.what == "install":
-        events.record(events.CLI_INSTALL_COMPLETED, host=spec.host, session_id_env=spec.session_id_env)
+        events.record(events.CLI_INSTALL_SUCCEEDED, host=spec.host, session_id_env=spec.session_id_env)
         print(outcome)
         return 0
 
     if args.what == "uninstall":
-        events.record(events.CLI_UNINSTALLED, host=spec.host, session_id_env=spec.session_id_env)
+        events.record(events.CLI_UNINSTALL_SUCCEEDED, host=spec.host, session_id_env=spec.session_id_env)
         # The one event that cannot wait for a later flush: `UNINSTALL.md` Part 3
         # may remove the very binary that would deliver it. An ordinary inline
         # flush, not `send_now` — the spool stays the only wired transport.

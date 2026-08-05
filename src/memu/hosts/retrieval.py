@@ -125,8 +125,13 @@ async def _cmd_retrieve(args: argparse.Namespace) -> int:
     try:
         result = await retrieve(args.query)
     except Exception:
-        events.record_action(
-            "memory_search",
+        # `memory_search_failed`, and only ever for an exception this command
+        # actually raised. An agent reporting `--stage retrieve` — retrieval quietly
+        # returning nothing for a week — is a different proposition with a different
+        # provenance, and stays on `agent_error_reported` (ADR 0016 §4).
+        events.record_outcome(
+            events.MEMORY_SEARCH_SUCCEEDED,
+            events.MEMORY_SEARCH_FAILED,
             host=args.host,
             session_id_env=args.session_id_env,
             success=False,
@@ -134,8 +139,9 @@ async def _cmd_retrieve(args: argparse.Namespace) -> int:
             latency_ms=round((time.monotonic() - started) * 1000),
         )
         raise
-    events.record_action(
-        "memory_search",
+    events.record_outcome(
+        events.MEMORY_SEARCH_SUCCEEDED,
+        events.MEMORY_SEARCH_FAILED,
         host=args.host,
         session_id_env=args.session_id_env,
         success=True,

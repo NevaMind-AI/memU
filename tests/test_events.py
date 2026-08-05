@@ -91,7 +91,7 @@ would lose events silently rather than fail loudly."""
 
 
 def test_envelope_carries_every_field_the_backend_expects(reporting: pathlib.Path) -> None:
-    events.record(events.CLI_INSTALL_COMPLETED, host="claude-code")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="claude-code")
 
     (event,) = _spooled(reporting)
     assert set(event) >= {
@@ -108,14 +108,36 @@ def test_envelope_carries_every_field_the_backend_expects(reporting: pathlib.Pat
     # The environment dimensions are nested, not top-level: the ingest schema
     # rejects them at the top level, and a rejection is a permanent 4xx the flush
     # discards rather than retries.
-    assert set(event["context"]) == {"client_version", "agent_platform", "os", "deployment_mode"}
+    assert set(event["context"]) == {
+        "client_version",
+        "agent_platform",
+        "os",
+        "deployment_mode",
+        "reported_by",
+    }
     assert event["context"]["deployment_mode"] == "local"
     assert not _CONTEXT_FIELDS & set(event)
 
 
+def test_reported_by_separates_what_code_saw_from_what_a_model_asserted(reporting: pathlib.Path) -> None:
+    # Three name families mix an exact `_started`/`_succeeded` with a voluntary,
+    # undercounting `_failed`, so `succeeded + failed` never sums to `started`
+    # there. This field is what makes that one predicate away rather than a fact a
+    # consumer has to already know.
+    events.record(events.MEMORY_UPDATE_STARTED, host="codex")
+    events.record(events.MEMORY_UPDATE_FAILED, host="codex")
+    started, failed = _spooled(reporting)
+    assert started["context"]["reported_by"] == "code"
+    assert failed["context"]["reported_by"] == "agent"
+
+    # Derived from the name, never passed in, so a call site cannot get it wrong.
+    assert events.reported_by(events.MEMORY_SEARCH_FAILED) == "code"
+    assert events.reported_by(events.CLI_INSTALL_SUCCEEDED) == "agent"
+
+
 def test_event_ids_are_unique_so_a_retry_can_be_deduplicated(reporting: pathlib.Path) -> None:
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
 
     ids = {event["event_id"] for event in _spooled(reporting)}
     assert len(ids) == 2
@@ -135,13 +157,13 @@ def test_agent_platform_is_normalised_not_passed_through(reporting: pathlib.Path
 
 def test_session_id_is_omitted_rather_than_faked(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
-    events.record(events.CLI_INSTALL_COMPLETED, host="claude-code", session_id_env="CLAUDE_CODE_SESSION_ID")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="claude-code", session_id_env="CLAUDE_CODE_SESSION_ID")
     (absent,) = _spooled(reporting)
     assert "session_id" not in absent["context"]
 
     reporting.unlink()
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "abc-123")
-    events.record(events.CLI_INSTALL_COMPLETED, host="claude-code", session_id_env="CLAUDE_CODE_SESSION_ID")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="claude-code", session_id_env="CLAUDE_CODE_SESSION_ID")
     (present,) = _spooled(reporting)
     assert present["context"]["session_id"] == "abc-123"
     assert "session_id" not in present, "nested like the rest of the context, never top-level"
@@ -152,7 +174,7 @@ def test_client_instance_id_persists_in_config_and_survives_a_reinstall(
 ) -> None:
     from memu import env as env_module
 
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
     first = _spooled(reporting)[0]["client_instance_id"]
 
     # `UNINSTALL.md` Part 3 keeps config.env unconditionally, which is the whole
@@ -162,7 +184,7 @@ def test_client_instance_id_persists_in_config_and_survives_a_reinstall(
 
     env_module.reload()
     reporting.unlink()
-    events.record(events.CLI_UNINSTALLED, host="codex")
+    events.record(events.CLI_UNINSTALL_SUCCEEDED, host="codex")
     assert _spooled(reporting)[0]["client_instance_id"] == first
 
 
@@ -173,10 +195,9 @@ def test_client_instance_id_persists_in_config_and_survives_a_reinstall(
 
 def test_properties_are_an_allowlist_not_a_passthrough(reporting: pathlib.Path) -> None:
     events.record(
-        events.CORE_ACTION_COMPLETED,
+        events.MEMORY_SEARCH_SUCCEEDED,
         host="codex",
         properties={
-            "action_name": "memory_search",
             "result_count": 3,
             # Everything below is exactly what must never leave the machine.
             "query": "what did I tell you about my salary",
@@ -186,15 +207,35 @@ def test_properties_are_an_allowlist_not_a_passthrough(reporting: pathlib.Path) 
     )
 
     (event,) = _spooled(reporting)
-    assert event["properties"] == {"action_name": "memory_search", "result_count": 3}
+    assert event["properties"] == {"result_count": 3}
 
 
-def test_success_only_events_carry_no_properties(reporting: pathlib.Path) -> None:
-    # A constant `success: true` would teach a consumer nothing and invite
-    # someone to later send `false`, re-creating the failure channel that the
-    # success-only decision removed.
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex", properties={"success": True})
-    assert _spooled(reporting)[0]["properties"] == {}
+def test_one_allowlist_per_action_not_the_union_of_every_action(reporting: pathlib.Path) -> None:
+    # The payoff of splitting `core_action_completed` by action: a read event can no
+    # longer carry a write's counts, and a write cannot carry a read's, purely
+    # because one shared entry had to admit the union of both.
+    events.record(
+        events.MEMORY_SEARCH_SUCCEEDED,
+        host="codex",
+        properties={"result_count": 3, "recall_file_count": 9, "session_count": 2},
+    )
+    events.record(
+        events.MEMORY_COMMIT_SUCCEEDED,
+        host="codex",
+        properties={"recall_file_count": 9, "result_count": 3},
+    )
+    search, commit = _spooled(reporting)
+    assert search["properties"] == {"result_count": 3}
+    assert commit["properties"] == {"recall_file_count": 9}
+
+
+def test_outcome_in_the_name_means_no_outcome_in_the_properties(reporting: pathlib.Path) -> None:
+    # A `success` field would now be constant per event name — teaching a consumer
+    # nothing while inviting someone to later send the other value, contradicting
+    # the name it sits beside.
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex", properties={"success": True})
+    events.record(events.MEMORY_UPDATE_FAILED, host="codex", properties={"success": False, "detail": "nope"})
+    assert [event["properties"] for event in _spooled(reporting)] == [{}, {}]
 
 
 _LEAKY_MESSAGE = "connect to postgres://user:hunter2@db.internal/memu failed"
@@ -243,7 +284,14 @@ def test_agent_error_deduplicates_a_retry_loop(reporting: pathlib.Path) -> None:
         events.record_agent_error(stage="remember", detail="cron never fired", host="codex")
     events.record_agent_error(stage="retrieve", detail="cron never fired", host="codex")
 
-    assert len(_spooled(reporting)) == 2
+    # One dedup decision covers both projections of a report, so a retry loop files
+    # neither a duplicate prose row nor a duplicate counter — a gate that let one
+    # through would silently make the counter the less trustworthy of the pair.
+    assert [event["event_name"] for event in _spooled(reporting)] == [
+        events.AGENT_ERROR_REPORTED,
+        events.MEMORY_UPDATE_FAILED,
+        events.AGENT_ERROR_REPORTED,
+    ]
 
 
 def test_agent_error_dedup_survives_the_flush_its_own_command_performs(
@@ -260,7 +308,10 @@ def test_agent_error_dedup_survives_the_flush_its_own_command_performs(
     for _ in range(3):
         assert run(CODEX_SPEC, ["report", "error", "--stage", "install", "--detail", "no wheel"]) == 0
 
-    assert len(posted.events) == 1
+    assert [event["event_name"] for event in posted.events] == [
+        events.AGENT_ERROR_REPORTED,
+        events.CLI_INSTALL_FAILED,
+    ]
 
 
 def test_agent_error_reports_again_once_the_dedup_window_has_passed(
@@ -271,7 +322,9 @@ def test_agent_error_reports_again_once_the_dedup_window_has_passed(
     monkeypatch.setattr(events, "ERROR_DEDUP_SECONDS", 0.0)
     events.record_agent_error(stage="install", detail="no wheel", host="codex")
 
-    assert len(_spooled(reporting)) == 2
+    names = [event["event_name"] for event in _spooled(reporting)]
+    assert names.count(events.AGENT_ERROR_REPORTED) == 2
+    assert names.count(events.CLI_INSTALL_FAILED) == 2
 
 
 def test_report_error_keeps_the_event_when_the_endpoint_is_unreachable(
@@ -310,7 +363,7 @@ def test_each_kill_switch_stops_recording_entirely(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, variable: str, value: str
 ) -> None:
     monkeypatch.setenv(variable, value)
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
     events.record_agent_error(stage="other", detail="nope", host="codex")
 
     assert not reporting.exists()
@@ -319,18 +372,18 @@ def test_each_kill_switch_stops_recording_entirely(
 
 def test_recording_survives_an_unwritable_spool(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MEMU_EVENTS_SPOOL", "/definitely/not/a/writable/path/events.jsonl")
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")  # must not raise
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")  # must not raise
 
 
 def test_recording_survives_broken_config(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # `memory_mode()` raises on this. Reporting must not be what surfaces it.
     monkeypatch.setenv("MEMU_MEMORY_MODE", "nonsense")
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
     assert not reporting.exists()
 
 
 def test_flush_survives_an_unreachable_endpoint(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
     monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError("no route to host")))
 
     assert events.flush() == (0, 0)
@@ -369,16 +422,16 @@ def test_a_retrieve_that_cannot_report_is_still_a_successful_retrieve(
 def test_flush_posts_each_event_singly_and_clears_the_spool(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
-    events.record(events.CLI_UNINSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
+    events.record(events.CLI_UNINSTALL_SUCCEEDED, host="codex")
     posted = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
     assert events.flush() == (2, 0)
     # Two events, two requests, spool order preserved.
     assert [event["event_name"] for event in posted.events] == [
-        events.CLI_INSTALL_COMPLETED,
-        events.CLI_UNINSTALLED,
+        events.CLI_INSTALL_SUCCEEDED,
+        events.CLI_UNINSTALL_SUCCEEDED,
     ]
     assert not reporting.exists()
     assert not list(reporting.parent.glob("events.jsonl.*.sending"))
@@ -392,7 +445,7 @@ def test_the_user_agent_is_set_because_the_default_one_is_blocked(
     urllib supplies that header itself when the caller does not, so an omission
     here is not a missing nicety — it is every event silently discarded.
     """
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
     posted = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
     events.flush()
@@ -405,14 +458,14 @@ def test_the_user_agent_is_set_because_the_default_one_is_blocked(
 def test_the_api_key_rides_along_when_present_and_is_absent_otherwise(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
     anonymous = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", anonymous)
     events.flush()
     # Local-mode users have no key at all and must stay first-class.
     assert "Authorization" not in {key.title(): value for key, value in anonymous.headers[0].items()}
 
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
     identified = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", identified)
     monkeypatch.setenv("MEMU_CLOUD_API_KEY", "sk-live-abc")
@@ -424,7 +477,7 @@ def test_the_api_key_rides_along_when_present_and_is_absent_otherwise(
 def test_a_transient_failure_retains_the_events(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, status: int
 ) -> None:
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
     error = urllib.error.HTTPError("https://example.invalid/events", status, "nope", {}, None)  # type: ignore[arg-type]
     monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=error))
 
@@ -436,7 +489,7 @@ def test_a_transient_failure_retains_the_events(
 def test_a_permanent_rejection_is_discarded_rather_than_wedging_the_spool(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, status: int
 ) -> None:
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
     error = urllib.error.HTTPError("https://example.invalid/events", status, "nope", {}, None)  # type: ignore[arg-type]
     monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=error))
 
@@ -449,7 +502,7 @@ def test_a_permanent_rejection_is_discarded_rather_than_wedging_the_spool(
 def test_a_retained_file_is_picked_up_by_the_next_flush(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
     monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError("offline")))
     events.flush()
 
@@ -460,8 +513,8 @@ def test_a_retained_file_is_picked_up_by_the_next_flush(
 def test_a_truncated_line_costs_one_event_not_the_file(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")
-    events.record(events.CLI_UNINSTALLED, host="codex")
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
+    events.record(events.CLI_UNINSTALL_SUCCEEDED, host="codex")
     # The signature of a process killed mid-append: a partial *final* line.
     with open(reporting, "a", encoding="utf-8") as handle:
         handle.write('{"event_name": "clie')
@@ -475,9 +528,9 @@ def test_the_spool_is_capped_and_the_loss_is_reported_not_silent(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(events, "MAX_SPOOL_BYTES", 1)
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")  # lands: cap checked before writing
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")  # dropped
-    events.record(events.CLI_INSTALL_COMPLETED, host="codex")  # dropped
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")  # lands: cap checked before writing
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")  # dropped
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")  # dropped
     assert len(_spooled(reporting)) == 1
 
     monkeypatch.setattr(events, "MAX_SPOOL_BYTES", 1024 * 1024)
@@ -502,7 +555,7 @@ def test_a_flush_is_bounded_and_the_next_one_resumes_where_it_stopped(
     """
     monkeypatch.setattr(events, "MAX_FLUSH_POSTS", 3)
     for _ in range(7):
-        events.record(events.CLI_INSTALL_COMPLETED, host="codex")
+        events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
     spooled = [event["event_id"] for event in _spooled(reporting)]
 
     delivered: list[str] = []
@@ -561,7 +614,7 @@ def test_the_install_funnel_has_a_code_observed_start_and_a_reported_end(
 
     assert [event["event_name"] for event in posted.events] == [events.CLI_INSTALL_STARTED]
     # The completion keeps the ordinary treatment: spooled, carried by a bridging run.
-    assert [event["event_name"] for event in _spooled(reporting)] == [events.CLI_INSTALL_COMPLETED]
+    assert [event["event_name"] for event in _spooled(reporting)] == [events.CLI_INSTALL_SUCCEEDED]
     assert all(event["properties"] == {} for event in _spooled(reporting) + posted.events)
 
 
@@ -618,17 +671,57 @@ def test_report_error_records_stage_and_detail(reporting: pathlib.Path, monkeypa
 
     # Delivered inline, not left for a later flush: the runs that file an error are
     # disproportionately the runs that never reach `prepare` or `commit`.
-    (event,) = posted.events
     assert not reporting.exists()
-    assert event["event_name"] == events.CORE_ACTION_FAILED
-    # `action_name` mirrors `stage` at the envelope, so the failure event carries
-    # the same discriminator `core_action_completed` does. The CLI surface stays
-    # `--stage` only — nothing asks an agent for a second name for one thing.
-    assert event["properties"] == {
-        "stage": "install",
-        "action_name": "install",
-        "detail": "pip resolved no wheel",
-    }
+    # One report projected twice: the prose for a human, the counter for the funnel.
+    report, concrete = posted.events
+    assert report["event_name"] == events.AGENT_ERROR_REPORTED
+    assert report["properties"] == {"stage": "install", "detail": "pip resolved no wheel"}
+    # No `action_name` any more — it asserted a join to `core_action_completed` that
+    # never worked, and under the split it would sit beside a real
+    # `memory_update_failed`. The CLI surface stays `--stage` only.
+    assert "action_name" not in report["properties"]
+    # The counter carries nothing: `--detail` has exactly one destination on the
+    # wire, so there is exactly one place to audit and truncate it.
+    assert concrete["event_name"] == events.CLI_INSTALL_FAILED
+    assert concrete["properties"] == {}
+    assert concrete["context"]["reported_by"] == "agent"
+
+
+@pytest.mark.parametrize(
+    ("stage", "concrete"),
+    [
+        ("install", events.CLI_INSTALL_FAILED),
+        ("uninstall", events.CLI_UNINSTALL_FAILED),
+        ("remember", events.MEMORY_UPDATE_FAILED),
+    ],
+)
+def test_taught_stages_also_emit_a_concrete_failure_event(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, stage: str, concrete: str
+) -> None:
+    # Exactly the three stages an agent is actually directed to: `INSTALL.md`,
+    # `UNINSTALL.md`, and `BRIDGING_TASK.md` each name one.
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert run(CODEX_SPEC, ["report", "error", "--stage", stage, "--detail", "d"]) == 0
+    assert [event["event_name"] for event in posted.events] == [events.AGENT_ERROR_REPORTED, concrete]
+
+
+@pytest.mark.parametrize("stage", ["retrieve", "other"])
+def test_unreachable_stages_report_prose_only(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, stage: str
+) -> None:
+    # No instruction points an agent at either, so a concrete event would be a name
+    # that is almost always zero. For `retrieve` it would be worse: a code-observed
+    # `memory_search_failed` means "the command raised", while an agent reporting
+    # that stage means "retrieval has silently returned nothing for a week" — the
+    # rare signal this whole feature exists for, buried inside the common one.
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert run(CODEX_SPEC, ["report", "error", "--stage", stage, "--detail", "d"]) == 0
+    assert [event["event_name"] for event in posted.events] == [events.AGENT_ERROR_REPORTED]
+    assert events.MEMORY_SEARCH_FAILED not in events.STAGE_FAILURE_EVENTS.values()
 
 
 def test_report_uninstall_delivers_immediately(reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -638,7 +731,7 @@ def test_report_uninstall_delivers_immediately(reporting: pathlib.Path, monkeypa
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
     assert run(CODEX_SPEC, ["report", "uninstall"]) == 0
-    assert [event["event_name"] for event in posted.events] == [events.CLI_UNINSTALLED]
+    assert [event["event_name"] for event in posted.events] == [events.CLI_UNINSTALL_SUCCEEDED]
     assert not reporting.exists()
 
 
@@ -660,9 +753,7 @@ def test_retrieve_records_counts_and_never_the_query(reporting: pathlib.Path, mo
     assert run(CODEX_SPEC, ["retrieve", "my bank password reminder"]) == 0
 
     (event,) = _spooled(reporting)
-    assert event["event_name"] == events.CORE_ACTION_COMPLETED
-    assert event["properties"]["action_name"] == "memory_search"
-    assert event["properties"]["success"] is True
+    assert event["event_name"] == events.MEMORY_SEARCH_SUCCEEDED
     assert event["properties"]["result_count"] == 3
     assert "bank password" not in json.dumps(event)
 
@@ -728,19 +819,26 @@ def test_a_failing_command_records_both_the_action_and_the_exception(
         if line.strip()
     ]
     names = [event["event_name"] for event in spooled]
-    assert events.CORE_ACTION_COMPLETED in names
+    # The outcome is in the name now, so the failed leg is its own event — and it
+    # is code-observed, an exception this command actually raised, never the silent
+    # -nothing failure an agent reports through `--stage retrieve`.
+    assert events.MEMORY_SEARCH_FAILED in names
+    assert events.MEMORY_SEARCH_SUCCEEDED not in names
     assert events.CLI_ERROR in names
-    action = next(e for e in spooled if e["event_name"] == events.CORE_ACTION_COMPLETED)
-    assert action["properties"]["success"] is False
+    action = next(e for e in spooled if e["event_name"] == events.MEMORY_SEARCH_FAILED)
+    assert action["context"]["reported_by"] == "code"
 
 
 # --------------------------------------------------------------------------- #
-# The two clocks on `memory_update` (ADR 0016 §10)
+# The two clocks, now two events (ADR 0016 §4, §10)
 #
-# `latency_ms` is memU's own work inside one process; `duration_ms` is the whole
-# prepare -> commit cycle across two. The tests below pin the second one's edges,
-# because that is the one that can be wrong: it is wall clock by necessity, and a
-# fail-open path must drop what it cannot believe rather than invent a number.
+# `latency_ms` on `memory_commit_*` is memU's own work inside one process;
+# `duration_ms` on `memory_update_succeeded` is the whole prepare -> commit cycle
+# across two. The tests below pin the second one's edges, because that is the one
+# that can be wrong: it is wall clock by necessity, and a fail-open path must drop
+# what it cannot believe rather than invent a number. They also pin the gate that
+# decides whether the cycle event exists at all, which is a different question off
+# the same marker.
 # --------------------------------------------------------------------------- #
 
 
@@ -758,11 +856,14 @@ def _commit(base: pathlib.Path, monkeypatch: pytest.MonkeyPatch, recall_files: i
     return posted
 
 
-def _remember(posted: _Posted) -> dict[str, Any]:
-    event = next(e for e in posted.events if e["event_name"] == events.CORE_ACTION_COMPLETED)
+def _named(posted: _Posted, event_name: str) -> dict[str, Any]:
+    event = next(e for e in posted.events if e["event_name"] == event_name)
     properties: dict[str, Any] = event["properties"]
-    assert properties["action_name"] == "memory_update"
     return properties
+
+
+def _cycle(posted: _Posted) -> dict[str, Any]:
+    return _named(posted, events.MEMORY_UPDATE_SUCCEEDED)
 
 
 def test_commit_reports_both_clocks_and_clears_the_marker(
@@ -774,29 +875,99 @@ def test_commit_reports_both_clocks_and_clears_the_marker(
 
     base = tmp_path / "work"
     layout = Layout.default(host="codex", base=base)
-    host_cli._mark_cycle_start(layout)
+    host_cli._mark_cycle_start(CODEX_SPEC, layout)
     assert layout.run_marker.is_file()
 
-    properties = _remember(_commit(base, monkeypatch))
-    assert properties["latency_ms"] >= 0
-    assert properties["duration_ms"] >= 0
+    posted = _commit(base, monkeypatch)
+    # Two spans, two events: the store call, and the cycle around it. `latency_ms`
+    # is memU's own blocking work in one process; `duration_ms` is prepare ->
+    # commit across two, and is mostly the agent's.
+    assert _named(posted, events.MEMORY_COMMIT_SUCCEEDED)["latency_ms"] >= 0
+    assert "duration_ms" not in _named(posted, events.MEMORY_COMMIT_SUCCEEDED)
+    assert _cycle(posted)["duration_ms"] >= 0
+    assert "latency_ms" not in _cycle(posted)
     # Reported, so the marker's job is done — otherwise the next cycle would
     # measure from this one's prepare.
     assert not layout.run_marker.exists()
 
 
-def test_a_commit_with_no_prepare_omits_the_cycle_rather_than_reporting_zero(
+def test_prepare_announces_a_cycle_only_when_the_marker_landed(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
-    """An unmeasurable cycle is a missing field, never a zero that averages in.
+    """No `_started` this machine cannot later close.
 
-    The live cases are a hand-run ``commit`` and an upgrade that landed mid-cycle,
-    and neither is a fast bridging run.
+    The marker is what lets `commit` emit the matching `_succeeded`, so announcing a
+    cycle without one would manufacture a failure out of a full disk.
     """
-    properties = _remember(_commit(tmp_path / "work", monkeypatch))
-    assert "duration_ms" not in properties
-    # The in-process clock is unaffected: it never needed the marker.
-    assert properties["latency_ms"] >= 0
+    from memu.hosts import host_cli
+    from memu.hosts.bridging import Layout
+
+    layout = Layout.default(host="codex", base=tmp_path / "work")
+    host_cli._mark_cycle_start(CODEX_SPEC, layout)
+    assert [e["event_name"] for e in _spooled(reporting)] == [events.MEMORY_UPDATE_STARTED]
+
+    reporting.unlink()
+    # A base whose parent is a file, so the marker's `mkdir` raises — the storage
+    # failure the pairing has to survive.
+    blocked = tmp_path / "blocked"
+    blocked.write_text("not a directory", encoding="utf-8")
+    host_cli._mark_cycle_start(CODEX_SPEC, Layout.default(host="codex", base=blocked / "work"))
+    assert not reporting.exists()
+
+
+def test_a_leftover_commit_reports_the_call_but_not_a_cycle(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    """`BRIDGING_TASK.md`'s LEFTOVERS step, which commits with no prepare of its own.
+
+    Without the gate one bridging run emits one `_started` and two `_succeeded` —
+    leftovers, then step 4 — and `started >= succeeded` stops holding on exactly the
+    runs that are already in trouble. The counts are still reported, on the commit
+    event, which is the only place a leftover's output is ever visible.
+    """
+    base = tmp_path / "work"
+    posted = _commit(base, monkeypatch, recall_files=3)
+
+    names = [event["event_name"] for event in posted.events]
+    assert events.MEMORY_COMMIT_SUCCEEDED in names
+    assert events.MEMORY_UPDATE_SUCCEEDED not in names
+    assert _named(posted, events.MEMORY_COMMIT_SUCCEEDED)["recall_file_count"] == 3
+
+
+def test_a_failed_commit_reports_the_call_and_leaves_the_cycle_to_the_agent(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    """A failed commit keeps the marker for the retry, so the cycle is not over.
+
+    `memory_update_failed` is agent-reported, because a cycle can also die where no
+    code is watching at all — the agent never reached `commit`.
+    """
+    from memu.hosts import host_cli
+    from memu.hosts.bridging import Layout
+
+    base = tmp_path / "work"
+    layout = Layout.default(host="codex", base=base)
+    host_cli._mark_cycle_start(CODEX_SPEC, layout)
+
+    async def _fails(layout: Any) -> dict[str, Any]:
+        raise RuntimeError("boom")
+
+    posted = _Posted()
+    monkeypatch.setattr(host_cli, "commit", _fails)
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+    # Delivered by the CLI's top-level error handler, which flushes.
+    assert run(CODEX_SPEC, ["commit", "--base-dir", str(base)]) == 1
+
+    names = [event["event_name"] for event in posted.events]
+    assert events.MEMORY_COMMIT_FAILED in names
+    assert events.MEMORY_UPDATE_SUCCEEDED not in names
+    assert events.MEMORY_UPDATE_FAILED not in names
+
+    # The marker is kept, so the retry closes the cycle the original prepare
+    # opened. Clearing it on failure would make every retried cycle unmeasurable.
+    assert layout.run_marker.is_file()
+    monkeypatch.undo()
+    assert _cycle(_commit(base, monkeypatch))["duration_ms"] >= 0
 
 
 @pytest.mark.parametrize(
@@ -821,34 +992,11 @@ def test_a_span_that_cannot_be_believed_is_dropped_not_sent(
     layout.run_marker.parent.mkdir(parents=True, exist_ok=True)
     layout.run_marker.write_text(json.dumps({"started_at": started_at}), encoding="utf-8")
 
-    properties = _remember(_commit(base, monkeypatch))
+    # The marker exists, so the cycle happened and still reports — it simply
+    # reports no duration. The gate on the event and the gate on this field read
+    # the same file and answer two different questions.
+    properties = _cycle(_commit(base, monkeypatch))
     assert "duration_ms" not in properties, why
-
-
-def test_a_failed_commit_keeps_the_marker_so_the_retry_still_measures(
-    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
-) -> None:
-    """Clearing on failure would make every retried cycle unmeasurable."""
-    from memu.hosts import host_cli
-    from memu.hosts.bridging import Layout
-
-    base = tmp_path / "work"
-    layout = Layout.default(host="codex", base=base)
-    host_cli._mark_cycle_start(layout)
-
-    async def _boom(layout: Any) -> dict[str, Any]:
-        raise RuntimeError("boom")
-
-    posted = _Posted()
-    monkeypatch.setattr(host_cli, "commit", _boom)
-    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
-    assert run(CODEX_SPEC, ["commit", "--base-dir", str(base)]) == 1
-
-    assert layout.run_marker.is_file()
-    # The failure is reported with its clocks, not silently dropped.
-    properties = _remember(posted)
-    assert properties["success"] is False
-    assert properties["duration_ms"] >= 0
 
 
 def test_the_cycle_marker_is_host_scoped_like_the_cursor_beside_it(tmp_path: pathlib.Path) -> None:
@@ -871,7 +1019,7 @@ def test_a_cycle_that_cannot_be_stamped_is_still_a_successful_prepare(
         raise OSError("read-only")
 
     monkeypatch.setattr(pathlib.Path, "write_text", _unwritable)
-    host_cli._mark_cycle_start(Layout.default(host="codex", base=tmp_path))
+    host_cli._mark_cycle_start(CODEX_SPEC, Layout.default(host="codex", base=tmp_path))
 
 
 # --------------------------------------------------------------------------- #
@@ -916,9 +1064,9 @@ def _prepare(tmp_path: pathlib.Path) -> list[str]:
     return ["prepare", "--session-dir", str(logs), "--base-dir", str(tmp_path / "work")]
 
 
-def _listing(events_seen: list[dict[str, Any]]) -> dict[str, Any]:
-    (event,) = [e for e in events_seen if e["properties"].get("action_name") == "memory_list"]
-    assert event["event_name"] == events.CORE_ACTION_COMPLETED
+def _listing(events_seen: list[dict[str, Any]], *, success: bool = True) -> dict[str, Any]:
+    want = events.MEMORY_LIST_SUCCEEDED if success else events.MEMORY_LIST_FAILED
+    (event,) = [e for e in events_seen if e["event_name"] == want]
     properties: dict[str, Any] = event["properties"]
     return properties
 
@@ -938,12 +1086,11 @@ def test_prepare_reports_the_whole_sweep_as_one_event_and_delivers_it(
 
     # Delivered, not merely spooled: `prepare` is one of the two flush points.
     properties = _listing(posted.events)
-    assert properties["success"] is True
     # Three listed, two mirrored — the unknown track has nowhere to live on disk,
     # but the store still returned it.
     assert properties["result_count"] == 3
     assert properties["latency_ms"] >= 0
-    event = next(e for e in posted.events if e["properties"].get("action_name") == "memory_list")
+    event = next(e for e in posted.events if e["event_name"] == events.MEMORY_LIST_SUCCEEDED)
     assert event["context"]["agent_platform"] == "claude_code", "the pipeline reports the host it ran for"
 
 
@@ -959,8 +1106,7 @@ def test_a_sweep_that_dies_midway_reports_how_far_it_got(
 
     assert run(CLAUDE_SPEC, _prepare(tmp_path)) == 1
 
-    properties = _listing(posted.events)
-    assert properties["success"] is False
+    properties = _listing(posted.events, success=False)
     assert properties["result_count"] == 1
     # The exception the CLI caught is reported beside it, from its own channel.
     assert events.CLI_ERROR in [e["event_name"] for e in posted.events]
@@ -982,7 +1128,6 @@ def test_list_files_reports_the_same_action_from_a_binary_with_no_host(
 
     assert posted.events == [], "nothing on this path flushes"
     properties = _listing(_spooled(reporting))
-    assert properties["success"] is True
     assert properties["result_count"] == 2
     (event,) = _spooled(reporting)
     assert event["context"]["agent_platform"] == "none", "the core binary has no host, and says so"
