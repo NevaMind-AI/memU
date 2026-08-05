@@ -12,16 +12,29 @@ Two rules shape everything here, and both are inherited rather than invented:
   below swallows every failure. A ``retrieve`` that cannot record an event is a
   successful ``retrieve``; nothing here may change a command's exit code, its
   output, or its latency in any way a user could notice.
-* **The per-turn hook must never fetch.** ``retrieve`` runs on every agent turn,
-  and ``_refresh_retrieval`` in :mod:`memu.hosts.host_cli` exists precisely
-  because of that. So recording an event *appends one line to a spool* and
-  returns; delivery happens later, from the low-frequency bridging pair.
+* **The per-turn hook must never drain the spool.** ``retrieve`` runs on every
+  agent turn. Recording an event ordinarily *appends one line to a spool* and
+  returns, with delivery happening later from the low-frequency bridging pair.
+  ``retrieve`` is the one exception, and a deliberately narrow one: it POSTs *its
+  own single envelope* inline (:func:`record` with ``deliver=True``) because the
+  backend asked for that event promptly and accepted the round trip it costs.
+  What it must not do is :func:`flush`, which drains everything spooled — one
+  event per POST, up to :data:`MAX_FLUSH_POSTS` of them, serially. That is an
+  unbounded blocking run on the hottest path in the product, and it is why
+  ``retrieve`` delivers one event rather than flushing.
+
+Delivering the current event ahead of older spooled ones means events can reach
+the backend out of order. Accepted knowingly: ``occurred_at`` carries when each
+event happened and ``event_id`` makes a replay idempotent, so arrival order is
+not load-bearing for any consumer.
 
 The spool is also what makes ``event_id`` mean anything. Client-generated ids buy
 idempotence *for a client that retries* — a fire-and-forget sender never
 double-delivers, so it would give the backend nothing to deduplicate. A spool
 that survives an offline laptop and re-POSTs on the next flush does. One
-decision, not two.
+decision, not two. It is why the inline delivery above still *falls back* to the
+spool rather than dropping what it could not send: a hook that fetched and forgot
+would lose exactly the events an offline laptop generates.
 
 What leaves the machine is counts, never content: no query text, no memory, no
 recall-file names, no store DSN, no absolute paths, no transcripts.
@@ -64,8 +77,41 @@ DEFAULT_EVENTS_URL = "https://api.memu.so/api/memu/analytics/events"
 """Override with ``MEMU_EVENTS_BASE_URL``; set it empty to switch reporting off
 entirely (air-gapped installs, offline CI, tests)."""
 
-CORE_ACTION_COMPLETED = "core_action_completed"
-"""Shared by retrieve, remember, and list; ``properties.action_name`` discriminates."""
+MEMORY_SEARCH_SUCCEEDED = "memory_search_succeeded"
+MEMORY_SEARCH_FAILED = "memory_search_failed"
+"""``retrieve``. Code-observed on both legs: the failure is an exception the command
+actually raised, which is emphatically *not* the silent-nothing failure an agent
+reports through ``--stage retrieve`` (ADR 0016 §4). Those must not share a name."""
+
+MEMORY_LIST_SUCCEEDED = "memory_list_succeeded"
+MEMORY_LIST_FAILED = "memory_list_failed"
+"""One whole-store sweep — ``prepare``'s mirror, or ``memu list-files``."""
+
+MEMORY_COMMIT_SUCCEEDED = "memory_commit_succeeded"
+MEMORY_COMMIT_FAILED = "memory_commit_failed"
+"""The ``commit`` store call, and only that call.
+
+This is what ``core_action_completed`` with ``action_name: memory_update`` used to
+mean. The name moved because :data:`MEMORY_UPDATE_SUCCEEDED` now names the bridging
+*cycle*, which is a different span — see there."""
+
+MEMORY_UPDATE_STARTED = "memory_update_started"
+MEMORY_UPDATE_SUCCEEDED = "memory_update_succeeded"
+MEMORY_UPDATE_FAILED = "memory_update_failed"
+"""The bridging cycle: ``prepare`` opens it, ``commit`` closes it, and the agent's
+self-evolve pass sits in between — two processes, minutes or hours apart, mostly not
+memU's own work. ``memory_commit_*`` above is the single store call inside it.
+
+Three things follow from the span being wider than one process, and each is
+load-bearing. ``_started`` is recorded by ``prepare``. ``_succeeded`` is recorded by
+``commit`` **only when the run marker exists**, so a ``BRIDGING_TASK.md`` LEFTOVERS
+commit — which runs on a crashed run's jobs with no preceding ``prepare`` — reports
+``memory_commit_succeeded`` and no cycle at all; without that gate one bridging run
+emits one start and two successes and ``started >= succeeded`` stops holding. And
+``_failed`` is *agent-reported*, because a cycle can die where no code is watching:
+the agent never reached ``commit``, or its self-evolve pass produced nothing. So
+``succeeded + failed`` does not equal ``started`` here, and ``context.reported_by``
+is what makes the mixture visible to a query."""
 
 CLI_INSTALL_STARTED = "cli_install_started"
 """An install *attempt*, recorded when a host prints its install guide — the
@@ -81,28 +127,40 @@ distinct machines. And ``deployment_mode`` here predates ``INSTALL.md`` Part 1.2
 backend choice, so it is a default rather than the mode the install lands on:
 never join a start to a completion on that field."""
 
-CLI_INSTALL_COMPLETED = "cli_install_completed"
-"""The agent reached the guide's final gate. Formerly ``client_installed``."""
+CLI_INSTALL_SUCCEEDED = "cli_install_succeeded"
+"""The agent reached the guide's final gate. Formerly ``cli_install_completed``,
+before ``cli_install_failed`` gave it a counterpart to be symmetrical with."""
 
-CLI_UNINSTALLED = "cli_uninstalled"
-"""The agent reached ``UNINSTALL.md``'s final gate — the uninstall counterpart to
-:data:`CLI_INSTALL_COMPLETED`, success-only for the same reason. Formerly
-``client_uninstalled``."""
+CLI_INSTALL_FAILED = "cli_install_failed"
+CLI_UNINSTALL_SUCCEEDED = "cli_uninstall_succeeded"
+CLI_UNINSTALL_FAILED = "cli_uninstall_failed"
+"""``report uninstall`` and ``report error --stage uninstall``. ``_succeeded`` was
+formerly ``cli_uninstalled``."""
 
-CORE_ACTION_FAILED = "core_action_failed"
-"""The agent-reported error — model-judged, free-form detail.
+AGENT_ERROR_REPORTED = "agent_error_reported"
+"""The agent-reported error — model-judged, free-form detail, the one home for
+``--detail`` on the wire.
 
-Named as the failure counterpart to :data:`CORE_ACTION_COMPLETED`, and carrying
-``properties.action_name`` for the same reason: one discriminator field, so a
-consumer slices both events the same way. That field mirrors ``--stage``
-exactly — see :func:`record_agent_error`, which is where the mirroring happens and
-where its one sharp edge is written down. Nothing user-facing gains a name: the
-flag, the prose, and every agent-facing instruction still say *stage*."""
+Formerly ``core_action_failed``, which asserted a symmetry that does not exist: it
+read as the failure leg of a core action, and it is an agent's bug report about the
+world, which may correspond to no core action that ran at all. It carried
+``properties.action_name`` to complete that symmetry; the field is gone with the
+name, since nothing read it back and under the split it would sit beside a real
+``memory_update_failed`` — two events an analyst would join, that must not be
+joined. ``stage`` remains as the only structured field, and nothing user-facing
+changes: the flag, the prose, and every agent-facing instruction still say
+*stage*.
+
+``_error_reported`` and not ``_report_error``: every other name in this vocabulary
+is subject-then-past-participle, because the outcome belongs in the name (ADR 0016
+§4). A verb-phrase name reads as the *command* that produced the event rather than
+the thing that happened, and one name shaped unlike its fifteen neighbours is the
+one a consumer misremembers."""
 
 CLI_ERROR = "cli_error"
 """The code-observed error, raised from the CLI's top-level handler.
 
-Deliberately *not* the same event as :data:`CORE_ACTION_FAILED`: one is an
+Deliberately *not* the same event as :data:`AGENT_ERROR_REPORTED`: one is an
 exception the CLI actually caught, the other is a model's judgement about the
 world. Same word, different provenance, so they must not share a name."""
 
@@ -183,37 +241,87 @@ validation at the point of entry, not a promise that the set is final.
 # anyway — while opening a second leak channel beside ``--detail`` for no present
 # gain. Adding a flag later is backward-compatible; retracting one is not.
 
+_READ_COUNTS = frozenset({"result_count", "latency_ms"})
+"""What a read action reports: what came back, and how long memU blocked for it."""
+
+_WRITE_COUNTS = frozenset({"recall_file_count", "resource_count", "session_count"})
+"""What a write produced. ``result_count`` is deliberately not among them — a read
+reports what came back, a write reports what it wrote, and the split is why
+``memory_search_*`` can no longer carry ``recall_file_count`` by accident."""
+
 _ALLOWED_PROPERTIES: dict[str, frozenset[str]] = {
-    CORE_ACTION_COMPLETED: frozenset({
-        "action_name",
-        "success",
-        "result_count",
-        # Two clocks, deliberately not one field. `latency_ms` is memU's own
-        # blocking work inside a single process; `duration_ms` is the whole
-        # prepare -> commit bridging cycle, which spans two of them and is mostly
-        # the agent's. See `_cycle_duration_ms` in `memu.hosts.host_cli`.
-        "latency_ms",
-        "duration_ms",
-        "recall_file_count",
-        "resource_count",
-        "session_count",
-    }),
-    # Success-only events (ADR 0016 §4), so there is nothing to say. A constant
-    # ``success: true`` would teach a consumer nothing while inviting someone to
-    # later "fix" it by sending ``false`` — quietly re-creating the second failure
-    # channel the success-only decision removed. The start event carries nothing
-    # for the same reason from the other end: it reports that an attempt began,
-    # and its existence is the entire signal.
+    MEMORY_SEARCH_SUCCEEDED: _READ_COUNTS,
+    MEMORY_SEARCH_FAILED: _READ_COUNTS,
+    MEMORY_LIST_SUCCEEDED: _READ_COUNTS,
+    MEMORY_LIST_FAILED: _READ_COUNTS,
+    # Two clocks, and now two events rather than two fields on one. `latency_ms`
+    # here is memU's own blocking work inside a single process — the store call
+    # `commit` makes. `duration_ms` below is the whole prepare -> commit cycle,
+    # which spans two processes and is mostly the agent's. Averaging them together
+    # was always meaningless; now it takes a deliberate join. See
+    # `_cycle_duration_ms` in `memu.hosts.host_cli`.
+    MEMORY_COMMIT_SUCCEEDED: _WRITE_COUNTS | {"latency_ms"},
+    MEMORY_COMMIT_FAILED: _WRITE_COUNTS | {"latency_ms"},
+    MEMORY_UPDATE_SUCCEEDED: _WRITE_COUNTS | {"duration_ms"},
+    # Empty, and every one of them for the same reason: the outcome is in the name
+    # (ADR 0016 §4), so any `success` field would be constant per name — teaching a
+    # consumer nothing while inviting someone to later "fix" it by sending the
+    # other value, quietly re-creating a second outcome channel that contradicts
+    # the name. The `_started` pair say only that an attempt began, and the
+    # agent-reported `_failed` events say only that one was reported; the prose
+    # that goes with the latter rides on `AGENT_ERROR_REPORTED` and nowhere else.
+    MEMORY_UPDATE_STARTED: frozenset(),
+    MEMORY_UPDATE_FAILED: frozenset(),
     CLI_INSTALL_STARTED: frozenset(),
-    CLI_INSTALL_COMPLETED: frozenset(),
-    CLI_UNINSTALLED: frozenset(),
-    CORE_ACTION_FAILED: frozenset({"stage", "action_name", "detail"}),
+    CLI_INSTALL_SUCCEEDED: frozenset(),
+    CLI_INSTALL_FAILED: frozenset(),
+    CLI_UNINSTALL_SUCCEEDED: frozenset(),
+    CLI_UNINSTALL_FAILED: frozenset(),
+    AGENT_ERROR_REPORTED: frozenset({"stage", "detail"}),
     CLI_ERROR: frozenset({"command", "error_type", "frames", "frames_truncated"}),
     CLI_EVENTS_DROPPED: frozenset({"dropped_count"}),
 }
 """Per event, the keys allowed out. Anything else is dropped rather than passed
 through — including anything an agent supplied. An allowlist, so adding a leak
 takes a deliberate edit."""
+
+REPORTED_BY_CODE = "code"
+REPORTED_BY_AGENT = "agent"
+
+_AGENT_REPORTED: frozenset[str] = frozenset({
+    CLI_INSTALL_SUCCEEDED,
+    CLI_INSTALL_FAILED,
+    CLI_UNINSTALL_SUCCEEDED,
+    CLI_UNINSTALL_FAILED,
+    MEMORY_UPDATE_FAILED,
+    AGENT_ERROR_REPORTED,
+})
+"""Events a model asserted, as against events the client observed itself.
+
+Derived from the event name in :func:`envelope` rather than passed in by a caller,
+because the name already determines the answer and a parameter is a thing a call
+site can get wrong. What it buys is on the consumer's side: three name families
+(``cli_install_*``, ``cli_uninstall_*``, ``memory_update_*``) mix an exact
+``_succeeded``/``_started`` with a voluntary, undercounting ``_failed``, so
+``succeeded + failed`` never sums to ``started`` there. ``context.reported_by``
+makes that one predicate away instead of a fact someone has to already know."""
+
+STAGE_FAILURE_EVENTS: dict[str, str] = {
+    "install": CLI_INSTALL_FAILED,
+    "uninstall": CLI_UNINSTALL_FAILED,
+    "remember": MEMORY_UPDATE_FAILED,
+}
+"""``--stage`` values that also emit a concrete failure event beside
+:data:`AGENT_ERROR_REPORTED` (ADR 0016 §4).
+
+Exactly the three stages an agent is actually taught to use — ``INSTALL.md``,
+``UNINSTALL.md``, and ``BRIDGING_TASK.md`` each name one. ``retrieve`` and ``other``
+are reachable but deliberately unmentioned, so a concrete event for either would be
+a name that is almost always zero; and for ``retrieve`` it would be worse than
+useless, because :data:`MEMORY_SEARCH_FAILED` means "the command raised" while an
+agent reporting that stage means "retrieval has been silently returning nothing for
+a week" — the failure this whole feature exists to surface. Adding an entry here is
+the same decision as writing the instruction that would reach it."""
 
 AGENT_PLATFORMS: dict[str, str] = {
     # `HostSpec.host` is also the on-disk directory name, so it is not free to
@@ -324,6 +432,17 @@ def client_instance_id() -> str:
     return env("MEMU_CLIENT_ID") or generated
 
 
+def reported_by(event_name: str) -> str:
+    """Whether the client observed this event or a model asserted it.
+
+    Defaults to :data:`REPORTED_BY_CODE` for an unknown name, which is the safe
+    direction only because unknown names cannot reach the wire: :func:`record` is
+    called with a module constant at every site, and :func:`_filter` strips an
+    unlisted event to empty properties regardless.
+    """
+    return REPORTED_BY_AGENT if event_name in _AGENT_REPORTED else REPORTED_BY_CODE
+
+
 def agent_platform(host: str | None) -> str:
     if not host:
         return "none"
@@ -370,24 +489,41 @@ def envelope(
     properties: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build one event. The single construction site, shared by both transports,
-    so :func:`record` and :func:`send_now` cannot drift into different shapes."""
+    so a spooled event and an inline-delivered one cannot drift into different
+    shapes — :func:`record` builds here whichever way it then sends.
+
+    ``client_version``, ``agent_platform``, ``os``, ``deployment_mode`` and
+    ``session_id`` live under ``context`` and not at the top level: the deployed
+    ingest schema no longer accepts them as top-level fields, and an envelope that
+    sends them there is a permanent 4xx — which :func:`_post` discards rather than
+    retries, losing the event outright. Same values from the same sources as
+    before; only their place in the envelope moved.
+
+    ``reported_by`` joins them there rather than sitting in ``properties``, because
+    it is a fact about how the envelope came to exist and not about the thing it
+    reports — so it costs one line here and no key in any event's allowlist. It is
+    derived from :data:`_AGENT_REPORTED`, never passed in.
+    """
     built: dict[str, Any] = {
         "event_id": str(uuid.uuid4()),
         "event_name": event_name,
         "client_type": CLIENT_TYPE,
         "client_instance_id": client_instance_id(),
-        "client_version": client_version(),
-        "agent_platform": agent_platform(host),
-        "os": _os_name(),
-        "deployment_mode": memory_mode(),
         "occurred_at": _now(),
-        "context": {},
+        "context": {
+            "client_version": client_version(),
+            "agent_platform": agent_platform(host),
+            "os": _os_name(),
+            "deployment_mode": memory_mode(),
+            "reported_by": reported_by(event_name),
+        },
         "properties": _filter(event_name, properties),
     }
     session_id = _session_id(session_id_env)
     if session_id:
-        # Omitted, never faked, when the host does not hand one over.
-        built["session_id"] = session_id
+        # Omitted, never faked, when the host does not hand one over — so the key
+        # is absent from `context` rather than present and empty.
+        built["context"]["session_id"] = session_id
     return built
 
 
@@ -397,22 +533,53 @@ def record(
     host: str = "",
     session_id_env: str = "",
     properties: dict[str, Any] | None = None,
+    deliver: bool = False,
 ) -> None:
-    """Append one event to the spool. Never sends, never raises.
+    """Record one event. Never raises.
 
-    The only cost on the per-turn ``retrieve`` path: one ``O_APPEND`` line, no
-    network, and no read of the existing spool. Keep it that way — anything that
-    makes recording read or rewrite the spool moves cost onto that path.
+    By default this appends one ``O_APPEND`` line to the spool and returns: no
+    network, and no read of the existing spool. Keep that the default — anything
+    that makes recording read or rewrite the spool moves cost onto the per-turn
+    path.
+
+    ``deliver=True`` POSTs *this envelope alone* first, spooling it only if that
+    does not settle it. It is emphatically not a :func:`flush`: nothing else
+    spooled is read, rewritten, or sent, so the cost is exactly one request no
+    matter how far behind this machine has fallen. That bound is the whole reason
+    the per-turn ``retrieve`` hook may use it at all — see the module docstring,
+    and :func:`_deliver` for what "settled" means.
+
+    The fallback is structural rather than remembered: there is one ``_append``
+    below, on the path every unsettled event takes, so a delivery that fails
+    cannot silently drop its event.
     """
     try:
         if not enabled():
             return
         built = envelope(event_name, host=host, session_id_env=session_id_env, properties=properties)
+        if deliver and _deliver(built):
+            return
         _append(json.dumps(built, ensure_ascii=False, default=str))
     except Exception:
         # Includes a broken MEMU_MEMORY_MODE, which `memory_mode()` raises on.
         # Reporting must not be the thing that surfaces a config error.
         return
+
+
+def _deliver(event: dict[str, Any]) -> bool:
+    """POST one event now. ``True`` when it is *settled* and needs no spooling.
+
+    Settled covers both :data:`ACCEPTED` and :data:`REJECTED`, for the same reason
+    :func:`_flush` stops holding either: a permanent 4xx means the server will
+    refuse this payload every time, so spooling it would only buy a second refusal
+    on the next flush. Only :data:`RETRY` — an unreachable endpoint, a 5xx, a 429
+    — returns ``False`` and sends the event to the spool, which is exactly the
+    case the spool exists for.
+    """
+    url = events_url()
+    if url is None:
+        return False
+    return _post(url, event) != RETRY
 
 
 def _filter(event_name: str, properties: dict[str, Any] | None) -> dict[str, Any]:
@@ -448,20 +615,33 @@ def _count_drop() -> None:
         counter.write_text(str(previous + 1), encoding="utf-8")
 
 
-def record_action(
-    action_name: str,
+def record_outcome(
+    succeeded: str,
+    failed: str,
     *,
     host: str = "",
     session_id_env: str = "",
     success: bool,
+    deliver: bool = False,
     **counts: Any,
 ) -> None:
-    """A ``core_action_completed`` — the shape retrieve and remember share."""
+    """Record one action under whichever of its two names the outcome calls for.
+
+    The outcome is in the event name now rather than in a ``success`` property (ADR
+    0016 §4), but every call site still *has* a boolean — it sits on the ``except``
+    leg of a try or the line after it. So the boolean stays in the signature and the
+    name choice happens here, once, instead of at each site where a hand-picked
+    constant could drift from the branch it is in.
+
+    ``deliver`` is passed straight through to :func:`record`; it is a keyword rather
+    than part of ``**counts`` so it can never be mistaken for a property and sent.
+    """
     record(
-        CORE_ACTION_COMPLETED,
+        succeeded if success else failed,
         host=host,
         session_id_env=session_id_env,
-        properties={"action_name": action_name, "success": success, **counts},
+        properties=counts,
+        deliver=deliver,
     )
 
 
@@ -473,29 +653,30 @@ def record_list(
     host: str = "",
     session_id_env: str = "",
 ) -> None:
-    """A ``memory_list`` core action — the one action with two call sites.
+    """A store sweep — the one action with two call sites.
 
-    ``memory_search`` and ``memory_update`` are each built where they happen, and
-    that is right for them. This one is recorded both by the bridging mirror
+    ``memory_search`` and the commit pair are each built where they happen, and that
+    is right for them. This one is recorded both by the bridging mirror
     (:func:`memu.hosts.bridging.pipeline.prepare`) and by ``memu list-files``, so
     its shape lives here rather than being written twice and drifting.
 
     ``started`` is a :func:`time.monotonic` reading taken before the first page,
     so ``latency_ms`` covers the **whole paginated sweep** — every page's store
     call and, in the bridging case, the disk mirroring between them. That is what
-    :data:`CORE_ACTION_COMPLETED` already means by the field (memU's own blocking
-    work inside one process), and it is deliberately *not* store latency: a slow
-    disk lands in this number.
+    the field means on every event carrying it (memU's own blocking work inside one
+    process), and it is deliberately *not* store latency: a slow disk lands in this
+    number.
 
     ``listed`` is what the store returned, not what the caller kept — the mirror
     drops files whose track has no directory on disk, and those were still
     listed — and it is reported on the failure path too, so a sweep that dies
     midway says how far it got instead of zero. It goes out as ``result_count``,
     the read actions' field, matching ``memory_search``; ``recall_file_count``
-    stays what ``memory_update`` *wrote*.
+    stays what a write *wrote*.
     """
-    record_action(
-        "memory_list",
+    record_outcome(
+        MEMORY_LIST_SUCCEEDED,
+        MEMORY_LIST_FAILED,
         host=host,
         session_id_env=session_id_env,
         success=success,
@@ -513,19 +694,20 @@ def record_agent_error(
 ) -> None:
     """The agent-reported error: a stage from :data:`STAGES` plus free-form prose.
 
-    In v1 this is *stage plus prose*, so consume it as a triage inbox read by
-    humans, not as a metric.
+    In v1 this is *stage plus prose*, so consume :data:`AGENT_ERROR_REPORTED` as a
+    triage inbox read by humans, not as a metric.
 
-    ``action_name`` is the same string as ``stage``, written at this one site so
-    :data:`CORE_ACTION_FAILED` carries the discriminator its ``completed``
-    counterpart does. The two fields are one value and stay one value: nothing
-    reads ``action_name`` back, and any future rule that would make them differ
-    belongs in a mapping here rather than in a caller. What they are *not* is one
-    vocabulary — :data:`STAGES` says ``remember``/``retrieve`` where
-    :data:`CORE_ACTION_COMPLETED` says ``memory_update``/``memory_search``, so the
-    two events do not join on this field as they stand. Deliberate: ``stage`` also
-    spans ``install``/``uninstall``/``other``, which name no core action at all,
-    and translating the two that do overlap would leave the rest lying.
+    **One report, projected twice.** Every valid stage records
+    :data:`AGENT_ERROR_REPORTED`; the three in :data:`STAGE_FAILURE_EVENTS` also record
+    a concrete ``*_failed``, which is the metric — a funnel counter that joins by
+    name to its ``_started`` and ``_succeeded`` siblings. That one carries no
+    properties at all, so ``detail`` has exactly one destination on the wire and
+    exactly one place to audit and truncate.
+
+    The two are one decision, not two, and the dedup below covers both: an agent in a
+    retry loop must file neither a duplicate counter nor a duplicate prose row, and a
+    gate that let one through would silently make the counter the less trustworthy of
+    the pair.
 
     Deduplicated on ``(stage, detail)`` for :data:`ERROR_DEDUP_SECONDS`, because an
     agent in a retry loop will otherwise file the same failure a dozen times. The
@@ -541,11 +723,14 @@ def record_agent_error(
         if not _claim_error(stage, clipped):
             return
         record(
-            CORE_ACTION_FAILED,
+            AGENT_ERROR_REPORTED,
             host=host,
             session_id_env=session_id_env,
-            properties={"stage": stage, "action_name": stage, "detail": clipped},
+            properties={"stage": stage, "detail": clipped},
         )
+        concrete = STAGE_FAILURE_EVENTS.get(stage)
+        if concrete:
+            record(concrete, host=host, session_id_env=session_id_env)
     except Exception:
         return
 
@@ -643,6 +828,13 @@ def flush() -> tuple[int, int]:
     ``report uninstall`` (which cannot wait — ``UNINSTALL.md`` Part 3 may remove
     the very binary that would flush later), the explicit ``report flush``, and
     the CLI's error handler.
+
+    **Never from ``retrieve``.** This drains the whole spool one POST at a time, so
+    its cost scales with how far behind the machine has fallen — bounded only by
+    :data:`MAX_FLUSH_POSTS`, which is 200 requests. That is fine on the bridging
+    pair and disqualifying on a per-turn hook, which instead delivers its own
+    single envelope through :func:`record` with ``deliver=True``. The distinction
+    is one event versus all of them, and it is the whole reason both exist.
 
     Never raises. A failed POST leaves its file in place for the next flush.
     """
@@ -841,37 +1033,6 @@ def _post(url: str, event: dict[str, Any]) -> str:
         return REJECTED if 400 <= exc.code < 500 and exc.code != 429 else RETRY
     except Exception:
         return RETRY
-
-
-def send_now(
-    event_name: str,
-    *,
-    host: str = "",
-    session_id_env: str = "",
-    properties: dict[str, Any] | None = None,
-) -> bool:
-    """Deliver one event immediately, bypassing the spool.
-
-    **Not in use.** No caller exists, by decision (ADR 0016 §2): the spool is the
-    active path, and ``report uninstall`` — the one event that cannot wait —
-    triggers an ordinary inline :func:`flush` rather than this.
-
-    It is written now so the transport seam is proven to admit both modes and
-    turning it on later stays a one-line change instead of a refactor. Enabling it
-    for a given event is a future decision that must state why that event cannot
-    tolerate spool latency; it blocks the calling command for up to
-    :data:`_TIMEOUT_SECONDS`, which is why ``retrieve`` will never be that event.
-    """
-    try:
-        if not enabled():
-            return False
-        url = events_url()
-        if url is None:
-            return False
-        built = envelope(event_name, host=host, session_id_env=session_id_env, properties=properties)
-        return _post(url, built) == ACCEPTED
-    except Exception:
-        return False
 
 
 def counts(result: dict[str, Any], layers: Iterable[str] = ("segments", "files", "resources")) -> int:
