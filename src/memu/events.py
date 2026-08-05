@@ -370,24 +370,34 @@ def envelope(
     properties: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build one event. The single construction site, shared by both transports,
-    so :func:`record` and :func:`send_now` cannot drift into different shapes."""
+    so :func:`record` and :func:`send_now` cannot drift into different shapes.
+
+    ``client_version``, ``agent_platform``, ``os``, ``deployment_mode`` and
+    ``session_id`` live under ``context`` and not at the top level: the deployed
+    ingest schema no longer accepts them as top-level fields, and an envelope that
+    sends them there is a permanent 4xx — which :func:`_post` discards rather than
+    retries, losing the event outright. Same values from the same sources as
+    before; only their place in the envelope moved.
+    """
     built: dict[str, Any] = {
         "event_id": str(uuid.uuid4()),
         "event_name": event_name,
         "client_type": CLIENT_TYPE,
         "client_instance_id": client_instance_id(),
-        "client_version": client_version(),
-        "agent_platform": agent_platform(host),
-        "os": _os_name(),
-        "deployment_mode": memory_mode(),
         "occurred_at": _now(),
-        "context": {},
+        "context": {
+            "client_version": client_version(),
+            "agent_platform": agent_platform(host),
+            "os": _os_name(),
+            "deployment_mode": memory_mode(),
+        },
         "properties": _filter(event_name, properties),
     }
     session_id = _session_id(session_id_env)
     if session_id:
-        # Omitted, never faked, when the host does not hand one over.
-        built["session_id"] = session_id
+        # Omitted, never faked, when the host does not hand one over — so the key
+        # is absent from `context` rather than present and empty.
+        built["context"]["session_id"] = session_id
     return built
 
 

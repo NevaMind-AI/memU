@@ -29,16 +29,25 @@ The backend wants a fixed event envelope, of which the CLI fills every field:
   "event_name": "core_action_completed",
   "client_type": "memu_cli",
   "client_instance_id": "7d2df95e-5f09-4db7-b70f-c1ea14095ba1",
-  "client_version": "2.0.0b0",
-  "session_id": "0ad71768-1599-4ac5-946f-a74b297113a9",
-  "agent_platform": "claude_code",
-  "os": "macos",
-  "deployment_mode": "local",
   "occurred_at": "2026-07-29T08:30:12.123Z",
-  "context": {},
+  "context": {
+    "client_version": "2.0.0b0",
+    "agent_platform": "claude_code",
+    "os": "macos",
+    "deployment_mode": "local",
+    "session_id": "0ad71768-1599-4ac5-946f-a74b297113a9"
+  },
   "properties": {"action_name": "memory_search", "success": true, "result_count": 8}
 }
 ```
+
+`context` carries the environment dimensions rather than being the reserved empty object it was
+at first writing: the deployed ingest schema stopped accepting `client_version`,
+`agent_platform`, `os`, `deployment_mode` and `session_id` as top-level fields, and an envelope
+that sends them there is rejected as a permanent 4xx — which the flush discards rather than
+retries (§2), so the events are lost outright. Same values, same sources; only their place in
+the envelope moved. `session_id` is still omitted rather than faked (§7), so the key is absent
+from `context` rather than present and empty.
 
 Six things are to be reported: install completed, uninstall, a bridging (remember) run
 finished, a retrieval, a listing of the store, and a fatal error.
@@ -75,13 +84,12 @@ Every envelope field has exactly one source, and none of them requires new plumb
 | `event_name` | Per §4's name list; the two error events per §5 |
 | `client_type` | Constant `"memu_cli"` |
 | `client_instance_id` | Per §6 |
-| `client_version` | Per §8 |
-| `session_id` | Per §7; omitted when unavailable |
-| `agent_platform` | `HostSpec.host`, normalised per §9 |
-| `os` | `platform.system()` mapped to `macos` / `windows` / `linux`, else `other` |
-| `deployment_mode` | `env.memory_mode()` — already returns exactly `local` / `cloud` |
 | `occurred_at` | RFC 3339 UTC with milliseconds, stamped when the event is *recorded*, not when it is sent |
-| `context` | `{}`; reserved, not populated by the CLI |
+| `context.session_id` | Per §7; omitted when unavailable |
+| `context.client_version` | Per §8 |
+| `context.agent_platform` | `HostSpec.host`, normalised per §9 |
+| `context.os` | `platform.system()` mapped to `macos` / `windows` / `linux`, else `other` |
+| `context.deployment_mode` | `env.memory_mode()` — already returns exactly `local` / `cloud` |
 | `properties` | Per §10 — an allowlist, never free-form |
 
 `occurred_at` and delivery time are deliberately decoupled (§2), so they will routinely differ

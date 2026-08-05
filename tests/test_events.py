@@ -83,6 +83,12 @@ class _Response:
 # The envelope
 # --------------------------------------------------------------------------- #
 
+_CONTEXT_FIELDS = frozenset({"client_version", "agent_platform", "os", "deployment_mode", "session_id"})
+"""Everything the ingest schema wants under ``context``. Asserted absent from the
+top level as well as present below it: sending one of these top-level is a
+permanent 4xx, which the flush discards rather than retries, so a regression here
+would lose events silently rather than fail loudly."""
+
 
 def test_envelope_carries_every_field_the_backend_expects(reporting: pathlib.Path) -> None:
     events.record(events.CLI_INSTALL_COMPLETED, host="claude-code")
@@ -93,17 +99,18 @@ def test_envelope_carries_every_field_the_backend_expects(reporting: pathlib.Pat
         "event_name",
         "client_type",
         "client_instance_id",
-        "client_version",
-        "agent_platform",
-        "os",
-        "deployment_mode",
         "occurred_at",
         "context",
         "properties",
     }
     assert event["client_type"] == "memu_cli"
-    assert event["deployment_mode"] == "local"
     assert event["occurred_at"].endswith("Z")
+    # The environment dimensions are nested, not top-level: the ingest schema
+    # rejects them at the top level, and a rejection is a permanent 4xx the flush
+    # discards rather than retries.
+    assert set(event["context"]) == {"client_version", "agent_platform", "os", "deployment_mode"}
+    assert event["context"]["deployment_mode"] == "local"
+    assert not _CONTEXT_FIELDS & set(event)
 
 
 def test_event_ids_are_unique_so_a_retry_can_be_deduplicated(reporting: pathlib.Path) -> None:
@@ -130,13 +137,14 @@ def test_session_id_is_omitted_rather_than_faked(reporting: pathlib.Path, monkey
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
     events.record(events.CLI_INSTALL_COMPLETED, host="claude-code", session_id_env="CLAUDE_CODE_SESSION_ID")
     (absent,) = _spooled(reporting)
-    assert "session_id" not in absent
+    assert "session_id" not in absent["context"]
 
     reporting.unlink()
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "abc-123")
     events.record(events.CLI_INSTALL_COMPLETED, host="claude-code", session_id_env="CLAUDE_CODE_SESSION_ID")
     (present,) = _spooled(reporting)
-    assert present["session_id"] == "abc-123"
+    assert present["context"]["session_id"] == "abc-123"
+    assert "session_id" not in present, "nested like the rest of the context, never top-level"
 
 
 def test_client_instance_id_persists_in_config_and_survives_a_reinstall(
@@ -531,7 +539,7 @@ def test_report_verbs_exist_on_every_host(reporting: pathlib.Path, capsys: pytes
     for spec in (CODEX_SPEC, CLAUDE_SPEC):
         assert run(spec, ["report", "install"]) == 0
     assert len(_spooled(reporting)) == 2
-    assert {event["agent_platform"] for event in _spooled(reporting)} == {"codex", "claude_code"}
+    assert {event["context"]["agent_platform"] for event in _spooled(reporting)} == {"codex", "claude_code"}
 
 
 def test_the_install_funnel_has_a_code_observed_start_and_a_reported_end(
@@ -936,7 +944,7 @@ def test_prepare_reports_the_whole_sweep_as_one_event_and_delivers_it(
     assert properties["result_count"] == 3
     assert properties["latency_ms"] >= 0
     event = next(e for e in posted.events if e["properties"].get("action_name") == "memory_list")
-    assert event["agent_platform"] == "claude_code", "the pipeline reports the host it ran for"
+    assert event["context"]["agent_platform"] == "claude_code", "the pipeline reports the host it ran for"
 
 
 def test_a_sweep_that_dies_midway_reports_how_far_it_got(
@@ -977,8 +985,8 @@ def test_list_files_reports_the_same_action_from_a_binary_with_no_host(
     assert properties["success"] is True
     assert properties["result_count"] == 2
     (event,) = _spooled(reporting)
-    assert event["agent_platform"] == "none", "the core binary has no host, and says so"
-    assert "session_id" not in event
+    assert event["context"]["agent_platform"] == "none", "the core binary has no host, and says so"
+    assert "session_id" not in event["context"]
 
 
 # --------------------------------------------------------------------------- #
