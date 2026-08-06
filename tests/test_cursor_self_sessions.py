@@ -68,8 +68,8 @@ async def test_only_an_os_marked_cursor_run_claims_its_session(
 
 
 def test_cursor_unix_wrapper_exports_the_bridging_marker() -> None:
-    doc = (
-        pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/cursor/BRIDGING_TASK.md"
-    ).read_text(encoding="utf-8")
+    doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/cursor/BRIDGING_TASK.md").read_text(
+        encoding="utf-8"
+    )
 
     assert f"export {self_sessions.BRIDGING_RUN_ENV}=1" in doc
