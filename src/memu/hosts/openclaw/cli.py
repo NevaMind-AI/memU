@@ -24,11 +24,10 @@ from memu.hosts.openclaw.sessions import SESSION_DIR, OpenClawTranscriptSource
 
 HOST = "openclaw"
 
-# Filled after a real OpenClaw cron turn confirms which environment variable
-# carries the current session id into shell-tool subprocesses. Empty is the safe
-# default: prepare keeps mining its own run rather than guessing and excluding a
-# real user conversation.
-SESSION_ID_ENV = ""
+# OpenClaw does not inject its current session id into shell-tool subprocesses.
+# The scheduled prompt obtains the concrete id from session_status and passes it
+# explicitly under this memU-owned variable before invoking prepare.
+SESSION_ID_ENV = "MEMU_BRIDGING_SESSION_ID"
 
 AGENTS_MD = "~/.openclaw/workspace/AGENTS.md"
 """OpenClaw's workspace instruction file — loaded at the start of every session,

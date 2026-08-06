@@ -74,13 +74,20 @@ skip a step even if the previous one looks like it produced nothing.
    exactly as step 3 describes, then run memu-openclaw commit — and only then
    continue.
 
-2. PREPARE. Run this exact command with the shell tool:
+2. PREPARE. First call `session_status` for the current session. Its `Session:`
+   line ends in `:run:<sessionId>` for this isolated cron turn. Copy only that
+   final `<sessionId>` value — the lowercase UUID after `:run:` — and run this
+   exact command with the shell tool, replacing the placeholder:
 
-     MEMU_BRIDGING_RUN=1 memu-openclaw prepare
+     MEMU_BRIDGING_RUN=1 MEMU_BRIDGING_SESSION_ID='<sessionId>' memu-openclaw prepare
 
-   The marker identifies this invocation as the scheduled bridging run; it does
-   not identify a session by transcript content. It regenerates
-   ~/.memu/hosts/openclaw/jobs/. If the command exits non-zero,
+   Do not derive the id from environment variables or by selecting the newest
+   database row: OpenClaw does not inject it into shell subprocesses, and a
+   newest-row query races concurrent sessions. The marker identifies this
+   invocation as the scheduled bridging run; the explicit id identifies its
+   transcript without inspecting transcript content. It regenerates
+   ~/.memu/hosts/openclaw/jobs/. If `session_status` does not return an isolated
+   cron key ending in `:run:<lowercase UUID>`, or if the command exits non-zero,
    stop and report the error — do not continue.
 
 3. SELF-EVOLVE. List ~/.memu/hosts/openclaw/jobs/*.txt and process them in
@@ -139,9 +146,13 @@ OpenClaw sessions since the last run.
 
 ## Notes
 
-- **Existing schedules need the updated prompt.** Re-register or edit an existing
-  OpenClaw cron job so its PREPARE command includes `MEMU_BRIDGING_RUN=1`; without
-  it, the run fails open and continues mining its own transcript.
+- **The prompt above already contains the complete identity handoff.** Only
+  schedules created from an older guide need migration: re-register or edit
+  their PREPARE step so it calls `session_status`, extracts the final
+  `:run:<sessionId>` UUID, and passes both `MEMU_BRIDGING_RUN=1` and
+  `MEMU_BRIDGING_SESSION_ID='<sessionId>'`. Supplying only the marker fails open
+  because it identifies a scheduled invocation but not which transcript is its
+  own.
 - **Leftovers run before prepare.** Job files already on disk when the run
   starts are unfinished work — a run that died mid-pipeline, or the install's
   own verify. `prepare` deletes unprocessed job files, and the cursor already

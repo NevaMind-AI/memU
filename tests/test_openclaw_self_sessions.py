@@ -15,12 +15,9 @@ from memu.hosts.openclaw.cli import SESSION_ID_ENV
 from memu.hosts.openclaw.cli import SPEC as OPENCLAW_SPEC
 from memu.hosts.openclaw.sessions import OpenClawTranscriptSource
 
-_TEST_SESSION_ID_ENV = "OPENCLAW_TEST_SESSION_ID"
 
-
-def test_openclaw_session_id_variable_awaits_a_field_survey() -> None:
-    """Replace this pin with the real name observed inside an OpenClaw turn."""
-    assert OPENCLAW_SPEC.session_id_env == SESSION_ID_ENV == ""
+def test_openclaw_declares_the_bridging_session_id_variable() -> None:
+    assert OPENCLAW_SPEC.session_id_env == SESSION_ID_ENV == "MEMU_BRIDGING_SESSION_ID"
 
 
 @pytest.mark.parametrize(
@@ -50,11 +47,7 @@ async def test_only_a_marked_openclaw_run_claims_its_session(
         def exists(self) -> bool:
             return True
 
-    spec = replace(
-        OPENCLAW_SPEC,
-        source_factory=ExistingOpenClawSource,
-        session_id_env=_TEST_SESSION_ID_ENV,
-    )
+    spec = replace(OPENCLAW_SPEC, source_factory=ExistingOpenClawSource)
 
     async def fake_prepare(*args: object, **kwargs: object) -> int:
         captured["skip_sessions"] = kwargs["skip_sessions"]
@@ -64,7 +57,7 @@ async def test_only_a_marked_openclaw_run_claims_its_session(
     monkeypatch.setattr(host_cli, "_refresh_retrieval", lambda spec: None)
     monkeypatch.setattr(host_cli.events, "flush", lambda: None)
     monkeypatch.setattr(host_cli.Path, "cwd", lambda: tmp_path / "project")
-    monkeypatch.setenv(_TEST_SESSION_ID_ENV, session_id)
+    monkeypatch.setenv(SESSION_ID_ENV, session_id)
     if marked:
         monkeypatch.setenv(self_sessions.BRIDGING_RUN_ENV, "1")
     else:
@@ -82,9 +75,13 @@ async def test_only_a_marked_openclaw_run_claims_its_session(
     assert self_sessions.load(Layout(base=base, host="openclaw").self_sessions) == expected
 
 
-def test_openclaw_scheduled_prompt_exports_the_bridging_marker() -> None:
+def test_openclaw_scheduled_prompt_captures_and_exports_the_session_id() -> None:
     doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
         encoding="utf-8"
     )
 
-    assert f"{self_sessions.BRIDGING_RUN_ENV}=1 memu-openclaw prepare" in doc
+    status = doc.index("session_status")
+    prepare = doc.index(f"{self_sessions.BRIDGING_RUN_ENV}=1 {SESSION_ID_ENV}='<sessionId>' memu-openclaw prepare")
+
+    assert status < prepare
+    assert ":run:<sessionId>" in doc
