@@ -104,6 +104,10 @@ the same shape: **the prompt lives in a file; the crontab line stays short.**
      fi
    fi
    trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
+   # Marks this invocation as the scheduled bridging run. The Cursor Agent
+   # supplies CURSOR_CONVERSATION_ID inside its shell tools; prepare combines
+   # the two signals to skip this run's own transcript.
+   export MEMU_BRIDGING_RUN=1
    # --trust scopes workspace trust to $DIR (memU's own tree), which is also
    # the working directory — headless cursor-agent dies without it.
    cd "$DIR" || exit 1
@@ -206,6 +210,10 @@ session manifest advanced.
 
 ## Notes
 
+- **Existing Unix schedules need the updated wrapper.** Re-copy `bridge.sh` (or
+  re-run the scheduling setup) so it exports `MEMU_BRIDGING_RUN=1`; without the
+  marker, `prepare` deliberately treats the run like a person's hand-run and
+  will not claim its Cursor session. Windows wrappers already export it.
 - **Leftovers run before prepare.** Job files already on disk when the run
   starts are unfinished work — a run that died mid-pipeline, or the install's
   own verify. `prepare` deletes unprocessed job files, and the cursor already
