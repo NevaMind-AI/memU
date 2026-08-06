@@ -94,6 +94,15 @@ class OpenClawTranscriptSource(TranscriptSource):
     def root(self) -> Path:
         return self._root
 
+    def session_id(self, path: Path) -> str:
+        """Return the id OpenClaw exposes to the session's tool subprocesses.
+
+        SQLite virtual paths and ordinary legacy files are named by the session
+        id. Legacy topic transcripts append ``-topic-<threadId>`` to that id;
+        the suffix identifies the topic, not a different host session.
+        """
+        return path.stem.split("-topic-", 1)[0]
+
     # ── containers ────────────────────────────────────────────────────────────
 
     def _databases(self) -> list[Path]:
