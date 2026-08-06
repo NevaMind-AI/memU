@@ -75,13 +75,28 @@ async def test_only_a_marked_openclaw_run_claims_its_session(
     assert self_sessions.load(Layout(base=base, host="openclaw").self_sessions) == expected
 
 
-def test_openclaw_scheduled_prompt_captures_and_exports_the_session_id() -> None:
+def test_openclaw_scheduled_prompt_passes_identity_with_cross_platform_exec_env() -> None:
     doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
         encoding="utf-8"
     )
 
     status = doc.index("session_status")
-    prepare = doc.index(f"{self_sessions.BRIDGING_RUN_ENV}=1 {SESSION_ID_ENV}='<sessionId>' memu-openclaw prepare")
+    prepare = doc.index('"command": "memu-openclaw prepare"')
+    marker = doc.index(f'"{self_sessions.BRIDGING_RUN_ENV}": "1"')
+    session = doc.index(f'"{SESSION_ID_ENV}": "<sessionId>"')
 
-    assert status < prepare
+    assert status < prepare < marker < session
+    assert "structured `sessionKey`" in doc
     assert ":run:<sessionId>" in doc
+    assert f"{self_sessions.BRIDGING_RUN_ENV}=1 {SESSION_ID_ENV}=" not in doc
+
+
+def test_openclaw_scheduled_task_uses_an_isolated_turn_and_portable_path_checks() -> None:
+    doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'sessionTarget="isolated"' in doc
+    assert "command -v memu-openclaw" in doc
+    assert "Get-Command memu-openclaw" in doc
+    assert "env -i PATH=/usr/bin:/bin /bin/sh" not in doc
