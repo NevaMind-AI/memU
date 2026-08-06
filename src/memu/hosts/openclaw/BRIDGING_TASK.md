@@ -76,9 +76,11 @@ skip a step even if the previous one looks like it produced nothing.
 
 2. PREPARE. Run this exact command with the shell tool:
 
-     memu-openclaw prepare
+     MEMU_BRIDGING_RUN=1 memu-openclaw prepare
 
-   It regenerates ~/.memu/hosts/openclaw/jobs/. If the command exits non-zero,
+   The marker identifies this invocation as the scheduled bridging run; it does
+   not identify a session by transcript content. It regenerates
+   ~/.memu/hosts/openclaw/jobs/. If the command exits non-zero,
    stop and report the error — do not continue.
 
 3. SELF-EVOLVE. List ~/.memu/hosts/openclaw/jobs/*.txt and process them in
@@ -137,6 +139,9 @@ OpenClaw sessions since the last run.
 
 ## Notes
 
+- **Existing schedules need the updated prompt.** Re-register or edit an existing
+  OpenClaw cron job so its PREPARE command includes `MEMU_BRIDGING_RUN=1`; without
+  it, the run fails open and continues mining its own transcript.
 - **Leftovers run before prepare.** Job files already on disk when the run
   starts are unfinished work — a run that died mid-pipeline, or the install's
   own verify. `prepare` deletes unprocessed job files, and the cursor already
