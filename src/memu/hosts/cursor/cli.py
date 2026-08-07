@@ -23,6 +23,7 @@ from memu.hosts.cursor.sessions import SESSION_DIR, CursorTranscriptSource
 from memu.hosts.host_cli import HostSpec, run
 
 HOST = "cursor"
+SESSION_ID_ENV = "CURSOR_CONVERSATION_ID"
 
 AGENTS_MD = "./AGENTS.md"
 """Cursor has no global user-level instruction *file* (User Rules are IDE
@@ -44,6 +45,11 @@ SPEC = HostSpec(
     # trust lands on the task's working tree (~/.memu/hosts/cursor), nowhere else.
     # Never --yolo — that is the blanket permission skip the guides reject.
     schedule_command="cursor-agent --trust -p {prompt}",
+    # Cursor Agent 2026.08.04 injects its current conversation id into shell
+    # tools under this name. Cursor names the transcript directory and JSONL
+    # file with that same id, so TranscriptSource.session_id()'s stem default
+    # maps the two sides exactly.
+    session_id_env=SESSION_ID_ENV,
     needs_headless_auth=True,
     install_hint=(
         "  Install the standalone Cursor Agent CLI:\n"
