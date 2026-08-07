@@ -74,6 +74,7 @@ SPEC = HostSpec(
     session_dir="",  # no universal location — detect finds it, prepare requires it
     session_help="The agent's session-log directory (find it with `memu-agent detect`)",
     instruction_path=AGENTS_MD,
+    schedule_backend="external",
     register_extra=_register_detect,
 )
 

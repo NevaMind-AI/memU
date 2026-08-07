@@ -54,6 +54,7 @@ SPEC = HostSpec(
     session_help="Codex session log",
     instruction_path=AGENTS_MD,
     skills_dir=SKILLS_DIR,
+    schedule_backend="native",
 )
 
 

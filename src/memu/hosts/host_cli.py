@@ -33,7 +33,7 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from memu import events
 from memu.hosts import instruction, retrieval, templates
@@ -41,6 +41,9 @@ from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging import Layout, commit, prepare, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
 from memu.hosts.bridging.resources import verify_resource_log
+
+ScheduleBackend = Literal["os", "native", "external"]
+"""The existing scheduler arrangement a host documents; informational only."""
 
 DOCS = {"install": "INSTALL.md", "task": "BRIDGING_TASK.md", "uninstall": "UNINSTALL.md"}
 
@@ -87,14 +90,21 @@ class HostSpec:
     """memU working tree. Empty means the per-host default ``~/.memu/hosts/<host>``;
     Codex overrides this with the pre-multi-host ``~/.memu`` it has always used."""
 
+    schedule_backend: ScheduleBackend = "external"
+    """The host's documented scheduler arrangement.
+
+    Informational metadata only: it never controls task registration, scheduler
+    invocation, or which CLI commands are available.
+    """
+
     schedule_command: str = ""
-    """The headless agent invocation the bridging task runs, as a template with a
-    ``{prompt}`` placeholder — ``claude -p {prompt}``, ``codex exec {prompt}``. The
-    Windows ``schedule`` helper turns this into the scheduled task's wrapper, and
-    treats the first token as the agent binary to resolve on ``PATH``. Empty means
-    the host has no Windows scheduling wired yet, so ``schedule`` refuses rather
-    than guess. Unix scheduling is unaffected — cron/launchd stay doc-driven and
-    never read this field."""
+    """The headless agent invocation the Windows Task Scheduler helper runs, as a
+    template with a ``{prompt}`` placeholder — ``claude -p {prompt}``. The helper
+    turns this into the scheduled task's wrapper, treats the first token as the
+    agent binary to resolve on ``PATH``, and exposes the ``schedule`` subcommand
+    only when it is set. Empty means that helper is not wired for this host; Unix
+    scheduling remains doc-driven and never reads this field.
+    """
 
     schedule_prepare_session_dir: bool = False
     """Bake this host's resolved ``session_dir`` into the scheduled PREPARE command.
@@ -589,12 +599,12 @@ def _report_install_started(spec: HostSpec) -> None:
 
 
 async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
-    """Register/inspect the bridging task on Windows Task Scheduler.
+    """Register/inspect the existing OS-scheduled bridging task on Windows Task Scheduler.
 
-    Only registered for hosts that set ``schedule_command`` (those that bridge via an
-    OS scheduler), so it never reaches a host that has its own. Windows-only by design
-    (memU#538/#539); on macOS/Linux it just points at the unchanged cron/launchd
-    registration in ``BRIDGING_TASK.md`` and touches neither.
+    The parser registers this handler only when ``schedule_command`` supplies an
+    invocation for the Windows helper. ``schedule_backend`` is informational and
+    does not affect this behavior. On macOS/Linux, this points at the existing
+    cron/launchd registration in ``BRIDGING_TASK.md`` and touches neither.
     """
     system = platform.system()
     if system != "Windows":
@@ -775,10 +785,9 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     )
     p.set_defaults(handler=bind(_cmd_docs))
 
-    # Windows-only automation of the bridging task's registration — registered only
-    # for hosts that bridge via an OS scheduler, which is exactly the ones that set
-    # `schedule_command`. Hosts with their own scheduler (Codex, OpenClaw, WorkBuddy)
-    # never set it, so they never advertise a `schedule` verb they couldn't honour.
+    # Windows-only automation of the bridging task's registration. The invocation
+    # template, not the informational scheduler label, is the capability gate: hosts
+    # without a Windows wrapper never advertise a `schedule` verb they cannot honour.
     if spec.schedule_command:
         p = with_base(
             sub.add_parser("schedule", help=f"Register the {spec.display} bridging task (Windows Task Scheduler)")

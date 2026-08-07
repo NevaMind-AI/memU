@@ -44,6 +44,7 @@ SPEC = HostSpec(
     # the template so both the auth gate and the scheduled run carry it, and the
     # trust lands on the task's working tree (~/.memu/hosts/cursor), nowhere else.
     # Never --yolo — that is the blanket permission skip the guides reject.
+    schedule_backend="os",
     schedule_command="cursor-agent --trust -p {prompt}",
     # Cursor Agent 2026.08.04 injects its current conversation id into shell
     # tools under this name. Cursor names the transcript directory and JSONL
