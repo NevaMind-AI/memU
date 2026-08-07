@@ -46,6 +46,13 @@ prompt must instruct the agent to do it, not shell out to a script.
 - **memU is installed and `memu-openclaw` is on `PATH`** for the environment the
   cron job's shell tool runs in. Verify with `memu-openclaw doctor`; if it
   fails, do `INSTALL.md` Part 1 first.
+- **The scheduled turn can execute on the gateway host.** If OpenClaw sandboxes
+  non-main sessions, an isolated cron turn's default shell tool may run inside
+  that sandbox, where the host's memU install and `~/.openclaw/agents` are not
+  visible. Do not create a schedule that can only run there: use an agent/runtime
+  whose policy permits unattended gateway-host exec, then verify the actual
+  scheduled run below. Never weaken an existing sandbox or approval policy
+  without the user's explicit approval.
 
 ## Step 1 — settle the schedule
 
@@ -54,16 +61,20 @@ hour**, cron `0 * * * *` (local time). Confirm before creating.
 
 ## Step 2 — create the cron job
 
-Create an OpenClaw cron job (e.g. named `memu-remember`) with the chosen
-schedule, and set its recurring prompt to this block **verbatim**:
+Create an OpenClaw cron job (e.g. named `memu-remember`) with an `agentTurn`
+payload and `sessionTarget="isolated"`, using the chosen schedule. Set its
+recurring prompt to this block **verbatim**. The isolated target is
+load-bearing: `session_status` must expose this run's dedicated transcript key,
+not the main conversation.
 
-**The scheduled turn runs in the gateway's environment, not your shell.** The
-gateway is a system service (launchd/systemd) with a bare `PATH` —
-`memu-openclaw` (pipx installs land in `~/.local/bin`) may not resolve there
-even though it resolves for you. Make it resolvable to the *gateway* before
-trusting the schedule: add a `PATH` entry under `env` in `openclaw.json`
-(include the directory `command -v memu-openclaw` prints), then restart the
-gateway.
+**The scheduled turn runs in the gateway's environment, not your interactive
+shell.** The gateway is a launchd/systemd/Windows service with a bare `PATH` —
+user-level Python installs may not resolve there even though they resolve for
+an interactive user. Find the executable with `command -v memu-openclaw` on
+macOS/Linux or `(Get-Command memu-openclaw).Source` on native Windows. Make that
+directory available to the gateway service, then restart the gateway. On
+Windows Hub's default WSL gateway, follow the Linux path; a Windows node is not
+the gateway unless exec is explicitly bound there.
 
 ```
 Run the memU bridging pipeline. Do the four steps strictly in order; do not
@@ -74,12 +85,31 @@ skip a step even if the previous one looks like it produced nothing.
    exactly as step 3 describes, then run memu-openclaw commit — and only then
    continue.
 
-2. PREPARE. Run this exact command with the shell tool:
+2. PREPARE. First call `session_status` with `sessionKey="current"`. Read its
+   structured `sessionKey` result, which ends in `:run:<sessionId>` for this
+   isolated cron turn. Copy only that final non-empty, colon-free `<sessionId>`
+   value after `:run:` — do not assume it will always be a UUID — then call the
+   shell tool with this exact input, replacing the placeholder:
 
-     memu-openclaw prepare
+     {
+       "command": "memu-openclaw prepare",
+       "env": {
+         "MEMU_BRIDGING_RUN": "1",
+         "MEMU_BRIDGING_SESSION_ID": "<sessionId>"
+       }
+     }
 
-   It regenerates ~/.memu/hosts/openclaw/jobs/. If the command exits non-zero,
-   stop and report the error — do not continue.
+   Pass the variables through the shell tool's structured `env` field, not
+   inline shell assignment: the latter works in macOS/Linux shells but not in
+   native Windows PowerShell. Do not derive the id from environment variables or
+   by selecting the newest database row: OpenClaw does not inject it into shell
+   subprocesses, and a newest-row query races concurrent sessions. The marker
+   identifies this invocation as the scheduled bridging run; the explicit id
+   identifies its transcript without inspecting transcript content. It
+   regenerates ~/.memu/hosts/openclaw/jobs/. If `session_status` does not return
+   an isolated cron key ending in exactly one non-empty `:run:<sessionId>`
+   segment, or if the command exits non-zero, stop and report the error — do not
+   continue.
 
 3. SELF-EVOLVE. List ~/.memu/hosts/openclaw/jobs/*.txt and process them in
    ascending numeric order (1.txt, then 2.txt, …). The count changes every run —
@@ -114,22 +144,24 @@ Finish with a one-line summary: how many jobs ran (leftovers included) and what 
 that there was nothing to commit).
 ```
 
-The prompt block is fixed; only the schedule is the user's choice. Nothing in it
-is machine-specific — the pipeline is invoked through `PATH` commands.
+The prompt block is fixed; only the schedule is the user's choice. Its shell
+commands are platform-neutral; invocation-specific variables use the shell
+tool's structured `env` field rather than shell syntax.
 
 ## Step 3 — confirm
 
-**Your shell's `PATH` proves nothing about the scheduler's.** Two checks that
-count:
+**Your interactive shell's `PATH` proves nothing about the scheduler's.** A
+local preflight (`command -v memu-openclaw` on macOS/Linux, or
+`Get-Command memu-openclaw` on native Windows) only tells you which directory
+the gateway needs.
 
-- `env -i PATH=/usr/bin:/bin /bin/sh -c 'command -v memu-openclaw'` — this
-  *failing* is exactly why the entry needs its `PATH` line; with that line in
-  place the command must resolve from the directories it names.
-- The hard check: trigger one run now with `openclaw cron run <job>`, then
-  verify **filesystem traces** — the session
-  cursor and `jobs/` timestamps moved — rather than trusting the run's own
-  summary. Field data, twice over: scheduled runs in bare environments have
-  reported "completed successfully" on a command-not-found.
+The hard check is cross-platform: trigger one run now with the OpenClaw cron
+runner, then inspect its tool result and verify **filesystem traces** on the
+gateway host — the self-session file contains that run's session id, the
+session cursor moved, and `jobs/` changed as expected. Do not trust the run's
+own prose summary; scheduled runs in bare or sandboxed environments have
+reported success after command-not-found or after operating on the wrong
+filesystem.
 
 Report back: the cron job's name and the schedule in words (e.g. "hourly at :00
 local time"). Mention that the first run only has work to do once there are new
@@ -137,6 +169,13 @@ OpenClaw sessions since the last run.
 
 ## Notes
 
+- **The prompt above already contains the complete identity handoff.** Only
+  schedules created from an older guide need migration: re-register or edit
+  their PREPARE step so it calls `session_status`, extracts the final
+  `:run:<sessionId>` segment, and passes `MEMU_BRIDGING_RUN=1` plus
+  `MEMU_BRIDGING_SESSION_ID=<sessionId>` through the shell tool's structured
+  `env` field. Supplying only the marker fails open because it identifies a
+  scheduled invocation but not which transcript is its own.
 - **Leftovers run before prepare.** Job files already on disk when the run
   starts are unfinished work — a run that died mid-pipeline, or the install's
   own verify. `prepare` deletes unprocessed job files, and the cursor already

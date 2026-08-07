@@ -24,6 +24,11 @@ from memu.hosts.openclaw.sessions import SESSION_DIR, OpenClawTranscriptSource
 
 HOST = "openclaw"
 
+# OpenClaw does not inject its current session id into shell-tool subprocesses.
+# The scheduled prompt obtains the concrete id from session_status and passes it
+# explicitly under this memU-owned variable before invoking prepare.
+SESSION_ID_ENV = "MEMU_BRIDGING_SESSION_ID"
+
 AGENTS_MD = "~/.openclaw/workspace/AGENTS.md"
 """OpenClaw's workspace instruction file — loaded at the start of every session,
 so the inject seam lands here. If the user runs a non-default workspace
@@ -43,6 +48,7 @@ SPEC = HostSpec(
     session_help="OpenClaw agents dir holding each agent's transcript store (SQLite, or legacy sessions/*.jsonl)",
     instruction_path=AGENTS_MD,
     skills_dir=SKILLS_DIR,
+    session_id_env=SESSION_ID_ENV,
 )
 
 
