@@ -23,10 +23,14 @@ import pytest
 from memu.hosts.bridging import Layout
 from memu.hosts.claude_code.cli import SPEC as CLAUDE
 from memu.hosts.codex.cli import SPEC as CODEX
+from memu.hosts.cola.cli import SPEC as COLA
 from memu.hosts.cursor.cli import SPEC as CURSOR
+from memu.hosts.generic.cli import SPEC as GENERIC
 from memu.hosts.hermes.cli import SPEC as HERMES
-from memu.hosts.host_cli import build_parser, run
+from memu.hosts.host_cli import ScheduleBackend, build_parser, run
+from memu.hosts.openclaw.cli import SPEC as OPENCLAW
 from memu.hosts.scheduling import prompt, windows
+from memu.hosts.workbuddy.cli import SPEC as WORKBUDDY
 
 # ---------------------------------------------------------------------------
 # Pure builders
@@ -160,15 +164,46 @@ def test_schedule_verb_is_wired() -> None:
             parser.parse_args(["schedule", "frobnicate"])
 
 
+def test_schedule_backends_describe_existing_host_arrangements() -> None:
+    assert {
+        spec.host: spec.schedule_backend
+        for spec in (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
+    } == {
+        "claude-code": "os",
+        "cursor": "os",
+        "hermes": "os",
+        "codex": "native",
+        "openclaw": "native",
+        "workbuddy": "native",
+        "cola": "native",
+        "agent": "external",
+    }
+
+
+@pytest.mark.parametrize("backend", ("os", "native", "external"))
+def test_schedule_backend_does_not_control_verb_wiring(backend: ScheduleBackend) -> None:
+    assert build_parser(dataclasses.replace(CLAUDE, schedule_backend=backend)).parse_args(
+        ["schedule", "status"]
+    ).action == "status"
+    with pytest.raises(SystemExit):
+        build_parser(dataclasses.replace(CLAUDE, schedule_command="", schedule_backend=backend)).parse_args(
+            ["schedule", "status"]
+        )
+
+
 def test_unwired_host_has_no_schedule_verb() -> None:
-    # A host with no schedule_command — e.g. one that uses its own scheduler (Codex,
-    # OpenClaw, WorkBuddy) — must not advertise a `schedule` verb at all, not even a
+    # Native and external hosts never advertise a `schedule` verb, not even a
     # refusing stub. argparse rejects it as an unknown command.
+    for spec in (CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC):
+        with pytest.raises(SystemExit):
+            build_parser(spec).parse_args(["schedule", "status"])
+    # ...while a wired host does have it.
+    assert build_parser(CLAUDE).parse_args(["schedule", "status"]).action == "status"
+
+    # An OS invocation remains the capability gate, independent of its label.
     unwired = dataclasses.replace(CLAUDE, schedule_command="")
     with pytest.raises(SystemExit):
         build_parser(unwired).parse_args(["schedule", "status"])
-    # ...while a wired host does have it.
-    assert build_parser(CLAUDE).parse_args(["schedule", "status"]).action == "status"
 
 
 def test_schedule_points_at_cron_off_windows(
