@@ -1,5 +1,70 @@
 # Changelog
 
+## [3.0.0-beta.0](https://github.com/NevaMind-AI/memU/compare/v2.0.0-beta.0...v3.0.0-beta.0) (2026-08-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* **events:** one event name per action and outcome, and inline retrieve delivery ([#621](https://github.com/NevaMind-AI/memU/issues/621))
+
+### Features
+
+* add cloud-backed memory behind existing CLI ([988ce32](https://github.com/NevaMind-AI/memU/commit/988ce32afd7f1f4baa1f453cedb966c5cf33c65c))
+* add Cola host adapter ([#590](https://github.com/NevaMind-AI/memU/issues/590)) ([599c2b4](https://github.com/NevaMind-AI/memU/commit/599c2b4741cba42680614ac92298539363f43eac))
+* **cursor:** wire the Windows Task Scheduler bridging helper ([#571](https://github.com/NevaMind-AI/memU/issues/571)) ([47aa4c9](https://github.com/NevaMind-AI/memU/commit/47aa4c9d1c23e9e85a84114f0e1d98b0a8ac64bc))
+* **events:** client lifecycle event reporting (ADR 0016) ([#614](https://github.com/NevaMind-AI/memU/issues/614)) ([c35060e](https://github.com/NevaMind-AI/memU/commit/c35060e2a6d35d6c4e155ffa1c6a97a92db964cb))
+* **events:** one event name per action and outcome, and inline retrieve delivery ([#621](https://github.com/NevaMind-AI/memU/issues/621)) ([a657cb0](https://github.com/NevaMind-AI/memU/commit/a657cb0dbf51c0998a01f13a885995e69cb78cff))
+* **hermes:** unify OS scheduling and self-session skipping ([#619](https://github.com/NevaMind-AI/memU/issues/619)) ([1c08a94](https://github.com/NevaMind-AI/memU/commit/1c08a94de358d68330a08c5ccd3076eed477b53c))
+* **hosts:** add a Windows Task Scheduler bridging helper ([#546](https://github.com/NevaMind-AI/memU/issues/546)) ([43488b5](https://github.com/NevaMind-AI/memU/commit/43488b5f60bf27f9cd97b4c492cd75dc73eb5fbd))
+* **hosts:** self-updating instruction templates and docs from the server (ADR 0013) ([#578](https://github.com/NevaMind-AI/memU/issues/578)) ([1bd0530](https://github.com/NevaMind-AI/memU/commit/1bd05301a5dec51bacb581214c03c39941db0f5c))
+* **memory:** paginate list_all_recall_files with a keyset cursor (ADR 0014) ([#580](https://github.com/NevaMind-AI/memU/issues/580)) ([bb013da](https://github.com/NevaMind-AI/memU/commit/bb013daa110422edb274c770668a602cb8b33f8e))
+* **retrieval:** shape progressive-retrieve output for the agent ([#540](https://github.com/NevaMind-AI/memU/issues/540)) ([f9d6d69](https://github.com/NevaMind-AI/memU/commit/f9d6d69d29530b4da47a604237ddb70493d084da))
+* scope uninstall to one host, clarify memu-cli removal, and remove the retrieval skill on uninstall ([#585](https://github.com/NevaMind-AI/memU/issues/585)) ([0f7a5d6](https://github.com/NevaMind-AI/memU/commit/0f7a5d63f1760a7ece0262bba745f8011ae44110))
+
+
+### Bug Fixes
+
+* **bridging:** clear job/session working files on commit; skip empty resource job ([#589](https://github.com/NevaMind-AI/memU/issues/589)) ([33e9a65](https://github.com/NevaMind-AI/memU/commit/33e9a6509507e39c472d8c22373c7ab6e5b34412))
+* **bridging:** skip the bridging run's own host session ([#607](https://github.com/NevaMind-AI/memU/issues/607)) ([53629f0](https://github.com/NevaMind-AI/memU/commit/53629f05c84848da57709d9fc71c7f589af70fea))
+* **commit:** update recall file description on recommit ([#548](https://github.com/NevaMind-AI/memU/issues/548)) ([59204a8](https://github.com/NevaMind-AI/memU/commit/59204a83afbef2fd11fca8d4a781dc36c0dcac9a))
+* **cursor:** skip OS-scheduled bridging sessions ([#622](https://github.com/NevaMind-AI/memU/issues/622)) ([3afdb10](https://github.com/NevaMind-AI/memU/commit/3afdb107837679f108ed3313f8dedd30073626d7))
+* **database:** backfill recall-file stubs consistently across backends ([#609](https://github.com/NevaMind-AI/memU/issues/609)) ([6bf49c0](https://github.com/NevaMind-AI/memU/commit/6bf49c026edab0aa34c1160561e1cd1183848cf5))
+* **hermes:** install the retrieve instruction inline, not as a skill pointer ([#567](https://github.com/NevaMind-AI/memU/issues/567)) ([25492e7](https://github.com/NevaMind-AI/memU/commit/25492e794ac52ffdc92e71ba9f8338e1a0194239))
+* **hosts:** isolate each host's write tree so concurrent memorize can't corrupt ([#544](https://github.com/NevaMind-AI/memU/issues/544)) ([#564](https://github.com/NevaMind-AI/memU/issues/564)) ([a1a02a7](https://github.com/NevaMind-AI/memU/commit/a1a02a7b9a34bd879d5f94e56d090059f0c80980))
+* **hosts:** never inline the bridging prompt in crontab — cron truncates ~1KB lines ([#594](https://github.com/NevaMind-AI/memU/issues/594)) ([25c49ee](https://github.com/NevaMind-AI/memU/commit/25c49eee33eb8c5177d04385187c82e406fe3551))
+* **openclaw:** read sessions from the per-agent SQLite store as well as JSONL ([#610](https://github.com/NevaMind-AI/memU/issues/610)) ([809c2b1](https://github.com/NevaMind-AI/memU/commit/809c2b18250c5700dabef52a0d19bd253ea44c82))
+* PostgresRecallFileSegmentRepo._cache_segment appends duplicate segments to cache on repeated queries ([#611](https://github.com/NevaMind-AI/memU/issues/611)) ([e28b751](https://github.com/NevaMind-AI/memU/commit/e28b7514cf77dee76445b15feb582408837ca773))
+* **scheduling:** pin UTF-8 for subprocess reads in Windows schedule install/verify ([#577](https://github.com/NevaMind-AI/memU/issues/577)) ([dfa4b94](https://github.com/NevaMind-AI/memU/commit/dfa4b940edc868bf99a9a3c828c5ec333f46d824))
+* **workbuddy:** install retrieval instruction in SOUL.md ([#579](https://github.com/NevaMind-AI/memU/issues/579)) ([5a3f2e6](https://github.com/NevaMind-AI/memU/commit/5a3f2e69b0b81c0933ab6fa53ab127c9acd32b7a))
+
+
+### Documentation
+
+* Add agent support section to README ([#596](https://github.com/NevaMind-AI/memU/issues/596)) ([4d1b733](https://github.com/NevaMind-AI/memU/commit/4d1b733b51e29c83607c8c4667d7327014abdfc8))
+* add memU Cloud install and memory viewer ([#553](https://github.com/NevaMind-AI/memU/issues/553)) ([d37013c](https://github.com/NevaMind-AI/memU/commit/d37013c5138f286b73869d73f06af2b80addad07))
+* add uninstall hint to install skill's completion report ([#593](https://github.com/NevaMind-AI/memU/issues/593)) ([512c22b](https://github.com/NevaMind-AI/memU/commit/512c22b4799b9b0d08a4647781223816272dbc4c))
+* add uninstall section ([9b2805f](https://github.com/NevaMind-AI/memU/commit/9b2805f8c87cdfccf59ced9183fc1b5b3c6d0d45))
+* align contributor setup with current requirements ([#612](https://github.com/NevaMind-AI/memU/issues/612)) ([af707d7](https://github.com/NevaMind-AI/memU/commit/af707d74f5792a66faa578377d20dc96ddb6c459))
+* clarify Cloud and self-hosted differences ([#557](https://github.com/NevaMind-AI/memU/issues/557)) ([60df32a](https://github.com/NevaMind-AI/memU/commit/60df32a26d95d21d5fba6e8ade23c662481c81e3))
+* clarify durable memory location ([#551](https://github.com/NevaMind-AI/memU/issues/551)) ([3616ceb](https://github.com/NevaMind-AI/memU/commit/3616cebf40ad559a60753c7ea3b7ee627ee8de88))
+* **claude-code:** make the standalone claude CLI an explicit bridging prerequisite ([#574](https://github.com/NevaMind-AI/memU/issues/574)) ([35e6aca](https://github.com/NevaMind-AI/memU/commit/35e6acad1b1a9c40d02fbae33d05d28e1d1d5cf0))
+* **cursor:** make the standalone cursor-agent CLI an explicit bridging prerequisite ([#568](https://github.com/NevaMind-AI/memU/issues/568)) ([a076523](https://github.com/NevaMind-AI/memU/commit/a076523ef16f56855b59c9d2d168d8c57c60391d))
+* explain automatic skill extraction ([#562](https://github.com/NevaMind-AI/memU/issues/562)) ([48fc3ef](https://github.com/NevaMind-AI/memU/commit/48fc3ef59d3fe10d86ad6e477a9eebcc319b00c1))
+* fix bridging task name in codex/openclaw uninstall guides ([#599](https://github.com/NevaMind-AI/memU/issues/599)) ([9eab56a](https://github.com/NevaMind-AI/memU/commit/9eab56ad503a03a8bb3711d2e213e6ed0107f43f))
+* make installation the quick start ([#555](https://github.com/NevaMind-AI/memU/issues/555)) ([e7f81ae](https://github.com/NevaMind-AI/memU/commit/e7f81aefd3ea9d804af3ebee337b5c5afd91520f))
+* mark memU Cloud as coming soon ([#554](https://github.com/NevaMind-AI/memU/issues/554)) ([2007b22](https://github.com/NevaMind-AI/memU/commit/2007b22606d249c1cf3c910fe66834e850bc1ff3))
+* recommend `uv tool install` for memu-cli in install skill ([#592](https://github.com/NevaMind-AI/memU/issues/592)) ([6263501](https://github.com/NevaMind-AI/memU/commit/62635019d30391f08baead5a768ff1587b27cfae))
+* refresh README architecture diagram ([#559](https://github.com/NevaMind-AI/memU/issues/559)) ([3b803a2](https://github.com/NevaMind-AI/memU/commit/3b803a2a065ad7d430f718ee77fdee71f3c7e297))
+* remove agent logos from architecture diagram ([#560](https://github.com/NevaMind-AI/memU/issues/560)) ([73f0ee9](https://github.com/NevaMind-AI/memU/commit/73f0ee974845cc964b6012d0c7b4f367b0a28107))
+* remove coming soon label ([977d219](https://github.com/NevaMind-AI/memU/commit/977d2194a5c90cb5b31fb59e630f2fab858cc014))
+* Revise agent support information in README ([#598](https://github.com/NevaMind-AI/memU/issues/598)) ([3a5a05e](https://github.com/NevaMind-AI/memU/commit/3a5a05ea7fa4e3eafe609c189f2f2ff046c5e87e))
+* separate cloud and self-hosted setup ([bbe6bf5](https://github.com/NevaMind-AI/memU/commit/bbe6bf5844ef42edef28efb7bfa0f930cf7cdf60))
+* simplify Quick start choices ([#558](https://github.com/NevaMind-AI/memU/issues/558)) ([f684b5b](https://github.com/NevaMind-AI/memU/commit/f684b5bbd4cd7a802b1118bed160666ca441307a))
+* streamline README positioning and quick start ([#550](https://github.com/NevaMind-AI/memU/issues/550)) ([118d02f](https://github.com/NevaMind-AI/memU/commit/118d02f34c881367d225018de1bc66de18d3fcca))
+* Update compatibility matrix for macOS, Windows, and Linux ([#597](https://github.com/NevaMind-AI/memU/issues/597)) ([2feb59e](https://github.com/NevaMind-AI/memU/commit/2feb59ed17d579c08849a8dfdde29b39e9cce31b))
+* Update README with partnership community information ([#604](https://github.com/NevaMind-AI/memU/issues/604)) ([bba0293](https://github.com/NevaMind-AI/memU/commit/bba029314b3c5de76b97898f4cd55a459c5099e8))
+* use official memU logo in README diagrams ([#565](https://github.com/NevaMind-AI/memU/issues/565)) ([2456d7d](https://github.com/NevaMind-AI/memU/commit/2456d7da4436397af07e63ba9d87007a43331a16))
+
 ## [2.0.0-beta.0](https://github.com/NevaMind-AI/memU/compare/v1.5.1...v2.0.0-beta.0) (2026-07-23)
 
 
