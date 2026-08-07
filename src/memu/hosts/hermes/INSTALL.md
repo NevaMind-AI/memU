@@ -140,16 +140,21 @@ reinvent this** — follow the packaged procedure:
 memu-hermes docs task
 ```
 
-In summary: settle a schedule with the user (default: every hour) and
-register a recurring headless Hermes run — via system cron invoking `hermes`
-non-interactively with the prompt that document gives you verbatim — that runs
-`memu-hermes prepare`, works through `~/.memu/hosts/hermes/jobs/*.txt` in order,
-then `memu-hermes commit`. Nothing in it is machine-specific.
+In summary: settle a schedule with the user (default: every hour) and register a
+recurring headless Hermes run through the **OS scheduler** — system cron on Unix,
+or `memu-hermes schedule install` on Windows — with the prompt that document
+gives you verbatim. It runs `memu-hermes prepare`, works through
+`~/.memu/hosts/hermes/jobs/*.txt` in order, then `memu-hermes commit`. Do not use
+Hermes's native `cronjob` for this task. The packaged task procedure first
+removes every exact-name job an older guide created, and must stop rather than
+add an OS task if that cleanup fails. Hermes already ships its CLI with the
+client, so there is no separate CLI installation or authentication step.
 
 ### ✅ Verify Part 2
 
-Confirm the cron entry exists, then dry-run: `memu-hermes prepare` (zero prepared
-sessions is fine and correct when nothing is new).
+Confirm the crontab entry (Unix) or `memu-hermes schedule status` (Windows), then
+dry-run: `memu-hermes prepare` (zero prepared sessions is fine and correct when
+nothing is new).
 
 ---
 

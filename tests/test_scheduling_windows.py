@@ -24,6 +24,7 @@ from memu.hosts.bridging import Layout
 from memu.hosts.claude_code.cli import SPEC as CLAUDE
 from memu.hosts.codex.cli import SPEC as CODEX
 from memu.hosts.cursor.cli import SPEC as CURSOR
+from memu.hosts.hermes.cli import SPEC as HERMES
 from memu.hosts.host_cli import build_parser, run
 from memu.hosts.scheduling import prompt, windows
 
@@ -90,6 +91,30 @@ def test_task_name_is_canonical_per_host() -> None:
     assert CLAUDE.task_name == "memu-bridging-claude-code"
     assert CODEX.task_name == "memu-bridging-codex"
     assert CURSOR.task_name == "memu-bridging-cursor"
+    assert HERMES.task_name == "memu-bridging-hermes"
+
+
+def test_hermes_template_uses_its_oneshot_flag_everywhere() -> None:
+    # Hermes ships its CLI with the client; the only host-specific invocation
+    # detail is its real one-shot flag. The old guide's copied `-p` never existed.
+    assert HERMES.schedule_command == "hermes -z {prompt}"
+    assert HERMES.schedule_prepare_session_dir is True
+    assert HERMES.needs_headless_auth is False
+    assert windows.agent_check_argv("C:\\hermes.exe", HERMES.schedule_command, "ping") == [
+        "C:\\hermes.exe",
+        "-z",
+        "ping",
+    ]
+    assert windows.powershell_invocation("C:\\hermes.exe", HERMES.schedule_command) == ("& 'C:\\hermes.exe' -z $prompt")
+
+
+def test_hermes_scheduled_prompt_bakes_in_its_session_store() -> None:
+    scheduled = prompt.bridging_pipeline_prompt(
+        HERMES,
+        prepare_session_dir="C:/Hermes Home/state.db",
+    )
+    assert "memu-hermes prepare --session-dir 'C:/Hermes Home/state.db'" in scheduled
+    assert "--session-dir" not in prompt.bridging_pipeline_prompt(CLAUDE)
 
 
 def test_cursor_template_carries_the_trust_flag_everywhere() -> None:
@@ -124,14 +149,15 @@ def test_pipeline_prompt_is_verbatim_but_parameterized() -> None:
 
 
 def test_schedule_verb_is_wired() -> None:
-    parser = build_parser(CLAUDE)
-    args = parser.parse_args(["schedule", "install"])
-    assert callable(args.handler)
-    assert args.action == "install"
-    assert args.interval == 60
-    assert parser.parse_args(["schedule", "install", "--interval", "30"]).interval == 30
-    with pytest.raises(SystemExit):
-        parser.parse_args(["schedule", "frobnicate"])
+    for spec in (CLAUDE, CURSOR, HERMES):
+        parser = build_parser(spec)
+        args = parser.parse_args(["schedule", "install"])
+        assert callable(args.handler)
+        assert args.action == "install"
+        assert args.interval == 60
+        assert parser.parse_args(["schedule", "install", "--interval", "30"]).interval == 30
+        with pytest.raises(SystemExit):
+            parser.parse_args(["schedule", "frobnicate"])
 
 
 def test_unwired_host_has_no_schedule_verb() -> None:
@@ -209,6 +235,16 @@ def test_cursor_pipeline_prompt_matches_the_bridging_doc() -> None:
     assert doc_prompt == prompt.bridging_pipeline_prompt(CURSOR)
 
 
+def test_hermes_pipeline_prompt_matches_the_bridging_doc() -> None:
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.hermes") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    doc_prompt = next(
+        line.strip() for line in doc.splitlines() if line.strip().startswith("Run the memU bridging pipeline.")
+    )
+    assert doc_prompt == prompt.bridging_pipeline_prompt(HERMES)
+
+
 @pytest.mark.parametrize("pkg", ["claude_code", "cursor", "hermes", "generic"])
 def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
     # The bug class behind memU#591: an inlined pipeline prompt pushed the guide's
@@ -223,6 +259,19 @@ def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
     assert cron_entries, f"{pkg} guide lost its cron entry example"
     for line in cron_entries:
         assert len(line) < 512, f"{pkg} cron entry is {len(line)} chars — cron truncates around 1KB: {line[:80]!r}"
+
+
+def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.hermes") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    migration = doc.index("hermes cron list --all")
+    unix_registration = doc.index("0 * * * * $HOME/.memu/hosts/hermes/bridge.sh")
+    windows_registration = doc.index("memu-hermes schedule install")
+    assert migration < unix_registration
+    assert migration < windows_registration
+    assert "hermes cron remove <job-id>" in doc
+    assert "If listing or removal fails, stop" in doc
 
 
 def test_install_rejects_nonpositive_interval(

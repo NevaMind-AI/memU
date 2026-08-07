@@ -17,21 +17,27 @@ in ``test_scheduling_windows.py`` asserts the two agree.
 
 from __future__ import annotations
 
+import shlex
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from memu.hosts.host_cli import HostSpec
 
 
-def bridging_pipeline_prompt(spec: HostSpec) -> str:
+def bridging_pipeline_prompt(spec: HostSpec, *, prepare_session_dir: str | Path | None = None) -> str:
     """The fixed pipeline prompt for ``spec``'s host, machine paths filled in.
 
-    Only two things vary per host: the working tree (``base``) and the binary the
-    pipeline's own steps call. Everything else — the ordering, the leftover-first
-    rule, the "do nothing is valid" caveat — is host-agnostic and stays verbatim.
+    The working tree and binary vary per host. A scheduler may also bake in a
+    resolved session-store path when the host's default moves with its runtime
+    home; quoting it here keeps the prompt's PREPARE command one shell-safe unit.
+    Everything else stays verbatim across hosts.
     """
     base = spec.default_base_dir
     binary = spec.binary
+    prepare = f"{binary} prepare"
+    if prepare_session_dir is not None:
+        prepare += f" --session-dir {shlex.quote(str(prepare_session_dir))}"
     return (
         "Run the memU bridging pipeline. Do the four steps strictly in order; do "
         "not skip a step even if the previous one looks like it produced nothing.  "
@@ -39,7 +45,7 @@ def bridging_pipeline_prompt(spec: HostSpec) -> str:
         "unfinished work from an earlier run (a crash, or the install itself) — "
         f"process them exactly as step 3 describes, then run:  {binary} commit  — "
         "and only then continue.  "
-        f"2. PREPARE. Run this exact command with bash:  {binary} prepare  — it "
+        f"2. PREPARE. Run this exact command with bash:  {prepare}  — it "
         f"regenerates {base}/jobs/. If the command exits non-zero, stop and report "
         "the error.  "
         f"3. SELF-EVOLVE. List {base}/jobs/*.txt and process them in ascending "

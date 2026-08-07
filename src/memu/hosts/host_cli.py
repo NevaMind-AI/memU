@@ -96,6 +96,13 @@ class HostSpec:
     than guess. Unix scheduling is unaffected — cron/launchd stay doc-driven and
     never read this field."""
 
+    schedule_prepare_session_dir: bool = False
+    """Bake this host's resolved ``session_dir`` into the scheduled PREPARE command.
+
+    Most hosts have one stable conventional path and need no explicit flag. Hosts
+    whose store moves with a runtime home (Hermes's ``HERMES_HOME``) opt in so the
+    S4U task is independent of which environment variables it inherits."""
+
     session_id_env: str = ""
     """Environment variable through which the host tells a tool subprocess which
     session it is running in (``CLAUDE_CODE_SESSION_ID``). It answers *which*

@@ -27,12 +27,25 @@ import datetime
 import json
 import os
 import sqlite3
+import sys
 from pathlib import Path
 from typing import ClassVar
 
 from memu.hosts.base import RecordKind, TranscriptSource
 
 STATE_DB = "~/.hermes/state.db"
+
+
+def state_db_path() -> Path:
+    """Resolve the active Hermes session store using Hermes's own precedence."""
+    if value := os.environ.get("HERMES_HOME", "").strip():
+        return Path(value) / "state.db"
+    if sys.platform == "win32":
+        local_appdata = os.environ.get("LOCALAPPDATA", "").strip()
+        root = Path(local_appdata) if local_appdata else Path.home() / "AppData" / "Local"
+        return root / "hermes" / "state.db"
+    return Path.home() / ".hermes" / "state.db"
+
 
 _MESSAGE_ROLES = ("user", "assistant")
 
@@ -51,8 +64,8 @@ class HermesTranscriptSource(TranscriptSource):
 
     name: ClassVar[str] = "hermes"
 
-    def __init__(self, state_db: str | Path = STATE_DB) -> None:
-        self._db = Path(os.path.expanduser(str(state_db)))
+    def __init__(self, state_db: str | Path | None = None) -> None:
+        self._db = Path(os.path.expanduser(str(state_db))) if state_db is not None else state_db_path()
 
     def root(self) -> Path:
         return self._db.parent
@@ -62,6 +75,10 @@ class HermesTranscriptSource(TranscriptSource):
 
     def key(self, path: Path) -> str:
         """Sessions have no path of their own — the cursor key is the session id."""
+        return path.name
+
+    def session_id(self, path: Path) -> str:
+        """The virtual path's full name is Hermes's session id."""
         return path.name
 
     def _connect(self) -> sqlite3.Connection:

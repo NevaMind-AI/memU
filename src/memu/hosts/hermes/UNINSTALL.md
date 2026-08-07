@@ -26,22 +26,37 @@ file exactly as they are.
 
 ## Part 1 — Unregister the bridging (record) task
 
-Find the cron entry that runs the memU bridging pipeline — it invokes
-`~/.memu/hosts/hermes/bridge.sh` (or, on installs predating the prompt-file
-layout, invokes Hermes headless with the inlined three-step prompt) — and
-delete **only that line**. Everything else in the user's crontab is theirs and
-stays, e.g.
-`crontab -l | grep -vE 'hosts/hermes/bridge\.sh|memU bridging pipeline' | crontab -`.
-If the memU line was the only reason a `PATH=` line was added, that line may go
-too — but only if nothing else in the crontab needs it. If nothing at all
-remains, `crontab -r` removes the now-empty crontab cleanly. The `bridge.sh`,
-`bridge-prompt.txt`, and `bridge.log` files live under
-`~/.memu/hosts/hermes/` and go with the host residue in the later cleanup part.
+Find the OS-scheduled entry that runs the memU bridging pipeline and remove only
+that entry:
+
+- **Unix (cron/launchd)** — the cron entry invokes
+  `~/.memu/hosts/hermes/bridge.sh` (or an older install invokes Hermes headless
+  with the inlined pipeline prompt). Everything else in the user's crontab is
+  theirs and stays, e.g.
+  `crontab -l | grep -vE 'hosts/hermes/bridge\.sh|memU bridging pipeline' | crontab -`.
+  If the memU line was the only reason a `PATH=` line was added, that line may go
+  too — but only if nothing else needs it. If nothing remains, `crontab -r`
+  removes the empty crontab. If launchd was explicitly chosen instead, remove
+  only its memU bridging plist.
+- **Windows (Task Scheduler)** — use the deterministic helper:
+
+  ```
+  memu-hermes schedule uninstall
+  ```
+
+Also sweep installs made by the older guide: list `hermes cron list --all`,
+remove every job whose name is exactly `memu-bridging-hermes` with
+`hermes cron remove <job-id>`, then confirm none remain. Current installs never
+create one. The generated `bridge.sh`/`memu-bridge.ps1`, `bridge-prompt.txt`, and
+`bridge.log` live under `~/.memu/hosts/hermes/` and go with the host residue in
+the later cleanup part.
 
 ### ✅ Verify Part 1
 
-`crontab -l` shows no memU bridging entry, and everything unrelated is still
-there.
+`crontab -l` (and launchd, if used) shows no memU bridging entry on Unix;
+`memu-hermes schedule status` reports not registered on Windows; and
+`hermes cron list --all` has no legacy `memu-bridging-hermes` job. Everything
+unrelated is still there.
 
 ---
 

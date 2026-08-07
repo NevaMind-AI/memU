@@ -268,18 +268,18 @@ def _auth_gate(spec: HostSpec, agent_path: str, workdir: Path) -> int:
 
 
 def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_INTERVAL_MINUTES) -> int:
-    """Register the bridging task, gating on a usable standalone CLI first."""
+    """Register the bridging task, gating on a usable CLI first."""
     _require_windows()
     if interval_minutes < 1:
         print(f"error: --interval must be a positive number of minutes (got {interval_minutes})", file=sys.stderr)
         return 2
     agent_path = _resolve_agent(spec)
     if agent_path is None:
-        hint = spec.install_hint or "  Install a standalone CLI (native installer / winget / npm)."
+        hint = spec.install_hint or f"  Install {spec.display} so its bundled `{_agent_binary(spec)}` CLI is on PATH."
         print(
             f"error: `{_agent_binary(spec)}` is not on PATH — {spec.display}'s scheduled run needs a "
-            "standalone CLI a bare process can find; a desktop-app bundle does not count "
-            f"(memU#538 Symptom A).\n{hint}\n"
+            "CLI a bare process can find (memU#538 Symptom A).\n"
+            f"{hint}\n"
             f"  Then re-run `{spec.binary} schedule install`.",
             file=sys.stderr,
         )
@@ -289,7 +289,11 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
         return rc
 
     wrapper, prompt_file, log_file, registry = _paths(layout)
-    prompt_file.write_text(bridging_pipeline_prompt(spec), encoding="utf-8")
+    prepare_session_dir = spec.session_dir if spec.schedule_prepare_session_dir else None
+    prompt_file.write_text(
+        bridging_pipeline_prompt(spec, prepare_session_dir=prepare_session_dir),
+        encoding="utf-8",
+    )
 
     path_dirs = [str(Path(agent_path).parent)]
     if (memu_path := shutil.which(spec.binary)) is not None:
@@ -349,10 +353,10 @@ def status(spec: HostSpec, layout: Layout) -> int:
 
 
 def verify(spec: HostSpec, layout: Layout) -> int:
-    """Prove the task can actually run — registered, and the agent authenticates.
+    """Prove one task is registered and its agent CLI can run headless.
 
     Deliberately does not trigger a full pipeline run (that would memorize real
-    sessions as a side effect); it checks the two things that silently break the
+    sessions as a side effect); it checks the things that silently break the
     record seam, then points at the filesystem traces to watch after the next real
     run — the same "trust traces, not the run's self-report" rule the cron guide uses.
     """
@@ -370,7 +374,9 @@ def verify(spec: HostSpec, layout: Layout) -> int:
     if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc
 
-    print(f"ok: '{TASK_PATH}{spec.task_name}' is registered and `{_agent_binary(spec)}` authenticates headless")
+    print(f"ok: '{TASK_PATH}{spec.task_name}' is registered and `{_agent_binary(spec)}` resolves")
+    if spec.needs_headless_auth:
+        print("  its headless-auth probe also passed; credentials must remain persistent for the S4U run")
     print(
         "  after the next scheduled run, confirm it did work by traces, not its summary:\n"
         f"    - {layout.jobs} timestamps advanced, and\n"
