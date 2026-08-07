@@ -166,8 +166,7 @@ def test_schedule_verb_is_wired() -> None:
 
 def test_schedule_backends_describe_existing_host_arrangements() -> None:
     assert {
-        spec.host: spec.schedule_backend
-        for spec in (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
+        spec.host: spec.schedule_backend for spec in (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
     } == {
         "claude-code": "os",
         "cursor": "os",
@@ -182,13 +181,15 @@ def test_schedule_backends_describe_existing_host_arrangements() -> None:
 
 @pytest.mark.parametrize("backend", ("os", "native", "external"))
 def test_schedule_backend_does_not_control_verb_wiring(backend: ScheduleBackend) -> None:
-    assert build_parser(dataclasses.replace(CLAUDE, schedule_backend=backend)).parse_args(
-        ["schedule", "status"]
-    ).action == "status"
+    assert (
+        build_parser(dataclasses.replace(CLAUDE, schedule_backend=backend)).parse_args(["schedule", "status"]).action
+        == "status"
+    )
     with pytest.raises(SystemExit):
-        build_parser(dataclasses.replace(CLAUDE, schedule_command="", schedule_backend=backend)).parse_args(
-            ["schedule", "status"]
-        )
+        build_parser(dataclasses.replace(CLAUDE, schedule_command="", schedule_backend=backend)).parse_args([
+            "schedule",
+            "status",
+        ])
 
 
 def test_unwired_host_has_no_schedule_verb() -> None:
