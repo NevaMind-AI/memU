@@ -20,6 +20,17 @@ def _cosine(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / denom)
 
 
+def _validate_embedding_dimension(_id: str, query_vec: list[float], stored_vec: list[float]) -> None:
+    query_dimension = len(query_vec)
+    stored_dimension = len(stored_vec)
+    if stored_dimension != query_dimension:
+        msg = (
+            f"Embedding dimension mismatch for {_id!r}: query has {query_dimension} dimensions, "
+            f"but stored vector has {stored_dimension}. Re-embed stored data with the active embedding model."
+        )
+        raise ValueError(msg)
+
+
 def cosine_topk(
     query_vec: list[float],
     corpus: Iterable[tuple[str, list[float] | None]],
@@ -33,6 +44,7 @@ def cosine_topk(
     vecs: list[list[float]] = []
     for _id, vec in corpus:
         if vec is not None:
+            _validate_embedding_dimension(_id, query_vec, vec)
             ids.append(_id)
             vecs.append(cast(list[float], vec))
 
