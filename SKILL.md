@@ -21,19 +21,24 @@ binary, print and follow its guide.
 ## Step 1 — install the package
 
 ```
-pip install memu-cli
+pip install --upgrade memu-cli
 ```
 
 `memu-cli` is the package memU ships to bridge your agent to its long-term
 memory service; it installs helper interfaces only and is harmless to run on a
 personal machine.
 
+**Keep the `--upgrade`.** A machine that already has an older `memu-cli` would
+otherwise keep it, and the steps below name subcommands that older builds do not
+have — the symptom is `invalid choice`. If you meet that error at any point, you
+are on a stale build: upgrade, then re-run the command that failed.
+
 This puts `memu` and every host-adapter binary on `PATH`. If `pip` is not the
 right tool for this machine (managed Python, uv-only), use the equivalent —
 what matters is that the binaries below resolve from a bare, non-interactive
-shell. With uv this means `uv tool install memu-cli`, **not** `uv pip install`:
-however it is installed, `memu-cli` is a cross-session bridging tool and must
-be callable everywhere, not scoped to one project venv.
+shell. With uv this means `uv tool install --upgrade memu-cli`, **not**
+`uv pip install`: however it is installed, `memu-cli` is a cross-session
+bridging tool and must be callable everywhere, not scoped to one project venv.
 
 ## Step 2 — pick your host binary
 
@@ -62,6 +67,16 @@ It probes this machine and reports, per agent, whether **memorization** works
 instruction file exists to patch) — and it will redirect you to a dedicated
 binary if your host turns out to have one.
 
+Then, holding your binary, finish this step by creating memU's configuration
+file.
+
+```
+<your-binary> init --cloud-api-key <the user's memU key>
+```
+
+If the user does not mention an API key, or would rather keep memory on this
+device, run bare `<your-binary> init` and Step 3's guide will set up local memory.
+
 ## Step 3 — print your guide and follow it
 
 ```
@@ -69,9 +84,10 @@ binary if your host turns out to have one.
 ```
 
 Read what it prints, top to bottom, and follow it exactly. Every guide has the
-same shape — select the local or cloud backend once in `~/.memu/config.env`, register the
-scheduled bridging task (record), patch your instruction file (inject) — and
-every part ends with a **verify gate**; do not proceed past a failing one.
+same shape — settle the local or cloud backend once with `<your-binary> config`,
+register the scheduled bridging task (record), patch your instruction file
+(inject) — and every part ends with a **verify gate**; do not proceed past a
+failing one.
 
 Three rules that hold for every host:
 
@@ -82,9 +98,10 @@ Three rules that hold for every host:
   fatal error, or a *required input with no default* (the backend choice and
   its API key, or a missing credential) — treat those like the fatal case, not
   as routine confirmations to solicit.
-- **One backend.** If `~/.memu/config.env` already exists (another agent on this
-  machine is already integrated), reuse it as is. A second mode or local store
-  would split record and retrieval so the two installs no longer share memory.
+- **One backend.** If `<your-binary> config show` reports a mode with a backend
+  behind it (another agent on this machine is already integrated), reuse it as
+  is. A second mode or local store would split record and retrieval so the two
+  installs no longer share memory.
 - **Report the outcome — with the exact template below.** After installation,
   run:
 
