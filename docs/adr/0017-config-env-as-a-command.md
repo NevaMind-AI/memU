@@ -78,9 +78,10 @@ function whose guard policy is a parameter. `init` is the inferring front door;
                         [--embed-base-url URL] [--embed-model M] [--force]
 ```
 
-`--force` is on `config` only. `init` has none, by construction: it is the verb
-that *infers*, so an inference it cannot justify must hand the decision back
-rather than offer a way to override a guard the caller never saw.
+`--force` is on `config` only, and `init` needs none: it never refuses, so there
+is nothing to override. That is not a weaker contract than `config`'s but a
+different one, and the reason is where each verb sits — see "`init` never
+refuses" below.
 
 The split is not cosmetic — the two verbs have different *policies*, and the
 place each is named is the reason:
@@ -100,16 +101,43 @@ place each is named is the reason:
 Zero or one flag, idempotent, safe to run on any machine in any state:
 
 - `init --cloud-api-key K` — the user provided a key, which *is* the choice of
-  cloud. Sets `MEMU_MEMORY_MODE=cloud` and persists the key.
+  cloud. Sets `MEMU_MEMORY_MODE=cloud` and persists the key, whatever the file
+  said before.
 - `init` — no key offered. If the file already declares `MEMU_MEMORY_MODE`,
   **keep it**: a re-install where the user did not re-supply a key must not flip
   cloud to local. If absent, set `local`.
 - In every case, generate and persist `MEMU_CLIENT_ID` if missing.
 
-Bare `init` cannot refuse — every branch it takes either keeps what is there or
-fills a vacuum. Only `init --cloud-api-key` can, and only on the one case the
-inference rules do not cover (below), where it prints the `config … --force` to
-run instead of offering a flag of its own.
+#### `init` never refuses
+
+Not "rarely" — never. Bare `init` has nothing to refuse *on*: every branch it
+takes either keeps what is there or fills a vacuum. `init --cloud-api-key` on a
+machine already configured for local with `MEMU_DB` set is the one case that
+looks like it should, and it does not either. Three reasons, in order of weight:
+
+- **A refusal there is terminal.** `init` has no `--force`, and it is the *first*
+  command on the install path — the one `SKILL.md` names before `docs install`.
+  Exiting non-zero does not redirect the agent to a better command so much as
+  stop the install, and every step after it, on a machine whose user has just
+  handed over their key.
+- **The signal is unambiguous.** Having a memU Cloud key in hand and passing it
+  is about as explicit as intent gets at this point in the flow. Treating it as
+  something the caller might not have meant reads the situation wrong.
+- **Nothing is destroyed.** The local store is not touched: `MEMU_DB` stays in
+  the file and the rows stay in the database, unread until the mode is switched
+  back with `config --local --force`. What the flip costs is that memories
+  written locally stop being retrieved, and new ones go to the key's cloud
+  account instead — real, reversible, and exactly the kind of consequence a
+  warning is for.
+
+So `init` says it, loudly, and proceeds: a `switched` row beside the mode, and a
+fuller `warning:` on stderr naming what happened and the command that undoes it.
+The guides carry the same consequence in prose where they ask for the key.
+
+This is the one place `init` and `config` are allowed to disagree about the same
+state test, and the asymmetry is the point: `config`'s caller named a backend and
+can be handed `--force`, so refusing them costs one re-run. `init`'s caller has
+no such second move.
 
 Writing `MEMU_MEMORY_MODE=local` explicitly, rather than relying on
 `memory_mode()`'s compatibility default, also retires the ambiguity `INSTALL.md`
@@ -154,7 +182,8 @@ flip. Once written, an *inferred* default is indistinguishable from a *chosen*
 one, and a declaration-based guard can only see the file.
 
 What the invariant actually protects is existing memory, not a string. So a mode
-change is refused only when the current mode has something to lose:
+change is refused only when the current mode has something to lose — and only on
+`config`, which is the verb that can offer the override:
 
 | Current state | `config --<other-mode>` |
 | --- | --- |
@@ -196,10 +225,10 @@ from prose into a gate.
 Two cases the inference rules do not cover on their own, settled here:
 
 - **`init --cloud-api-key K` when the file says `local`.** This is a mode flip by
-  inference. The state-based guard decides it: a vacuous local config flips
-  silently; a local config with `MEMU_DB` set refuses and prints the explicit
-  `config --cloud --cloud-api-key K --force` to run instead. That printed command
-  is what `init` has in place of a `--force` of its own.
+  inference, and `init` makes it in every case: a vacuous local config flips
+  silently, a local config with `MEMU_DB` set flips with the warning described
+  under "`init` never refuses". The same state test still decides *whether to
+  warn*; it just does not decide whether to act.
 - **`init --cloud-api-key K2` when `K1` is stored.** Replace it, and say so
   loudly ("replacing the stored memU Cloud key"). Refusing would block the
   legitimate rotated-key repair, and the client cannot distinguish a rotation
@@ -293,8 +322,11 @@ pointer that `docs install` will guide the rest. On Windows the `config` line
 reads `…\.memu\config.env (plaintext key; Windows ACLs inherited)` — see File
 mechanics.
 
-A refusal prints the same shape: what is on disk, why it is protected, and the
-exact `config … --force` to run if the change was meant.
+A `config` refusal prints the same shape: what is on disk, why it is protected,
+and the exact `config … --force` to run if the change was meant. An `init` that
+flipped a machine off a configured local store prints that shape too — a
+`switched` row in the block, then the consequence and the `config --local
+--force` that reverses it — but exits `0`, because it did the thing.
 
 ### On the host binaries, not `memu`
 
@@ -314,7 +346,9 @@ same module is acceptable, but the guides name only `<your-binary>`.
   ask the user for their memU API key, then run
   `<your-binary> init --cloud-api-key <key>`; no key → bare `<your-binary> init`.
   The prose stays minimal on purpose — everything that might change lives in the
-  command's own output.
+  command's own output — with one exception it must state, because the command
+  states it only *after* acting: passing a key on a machine already using local
+  memory switches it to the cloud, and the local memories stop being retrieved.
 - **`INSTALL.md` §1.2** collapses from ~70 lines of write-these-keys instruction
   to "if already configured, skip; otherwise `config --cloud|--local …`". The
   local-mode knobs and the no-embedding-key fallback survive as guidance for
@@ -358,6 +392,13 @@ Costs / limitations:
   exposed — but see Open issues.
 - One more command in a flow whose main failure mode is agents skipping steps.
   `init` is idempotent and cheap, which is the mitigation, not a guarantee.
+- `init --cloud-api-key` can strand a local store behind a warning nobody read.
+  This is the deliberate trade in "`init` never refuses", and it is the one place
+  where the safer behaviour was traded away for a flow that completes. The store
+  survives and one `config --local --force` restores it, so the cost is confusion
+  and a stretch of unretrieved memories rather than data loss — but the warning
+  is all that stands between the two, and warnings are read less often than exit
+  codes are.
 
 ## Open issues
 
