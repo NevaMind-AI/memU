@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from memu import events
-from memu.hosts import instruction, retrieval, templates
+from memu.hosts import config_cmd, instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging import Layout, commit, prepare, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
@@ -824,6 +824,13 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     # the instruction lands in and the binary it names are ours to fill in.
     retrieval.register(sub, host=spec.host, session_id_env=spec.session_id_env)
     _register_report(sub, bind(_cmd_report))
+    # `config.env` is host-irrelevant, so `memu` is the algorithmically correct
+    # home for these (ADR 0009) — and the wrong one for the install flow, whose
+    # ergonomic bet is that `SKILL.md` hands the agent exactly one binary name and
+    # every later step is `<that binary> …`. A second binary mid-flow adds a
+    # branch, a fresh "command not found", and a name likelier to be shadowed on
+    # PATH. `doctor` is just as host-irrelevant and lives here for the same reason.
+    config_cmd.register(sub, binary=spec.binary)
     instruction.register(
         sub,
         path=spec.instruction_path,
