@@ -64,7 +64,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from memu.env import CONFIG_ENV, env, env_declared, memory_mode, reload
+from memu import config_file
+from memu.env import env, env_declared, memory_mode, reload
 
 # --------------------------------------------------------------------------- #
 # The wire vocabulary: the endpoint, and every event name the client can emit.
@@ -377,10 +378,6 @@ def _spool_path() -> Path:
     return Path(os.path.expanduser(env("MEMU_EVENTS_SPOOL", SPOOL_PATH) or SPOOL_PATH))
 
 
-def _config_path() -> Path:
-    return Path(os.path.expanduser(os.environ.get("MEMU_CONFIG_ENV", CONFIG_ENV)))
-
-
 def client_version() -> str:
     """The installed ``memu-cli`` version.
 
@@ -406,19 +403,21 @@ def client_instance_id() -> str:
 
     Opaque and random: no hostname, no MAC, no user name. Nothing is derived, so
     nothing can be re-derived, and deleting the line is a complete reset.
+
+    Written through :func:`memu.config_file.write_values` rather than by appending
+    here, and that is not tidiness (ADR 0017). ``init`` now persists this same key,
+    and its writer is read-modify-write plus ``os.replace`` — which would silently
+    discard an append racing it. One writer, so the two cannot lose each other's
+    line; the fail-open ``except`` and the re-read below are this function's own
+    and survive the move.
     """
     existing = env("MEMU_CLIENT_ID")
     if existing:
         return existing
 
     generated = str(uuid.uuid4())
-    path = _config_path()
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        text = path.read_text(encoding="utf-8") if path.is_file() else ""
-        prefix = "" if (not text or text.endswith("\n")) else "\n"
-        with open(path, "a", encoding="utf-8") as handle:
-            handle.write(f"{prefix}MEMU_CLIENT_ID={generated}\n")
+        config_file.write_values({"MEMU_CLIENT_ID": generated})
     except OSError:
         # Unwritable config: still return an id so this run reports, it just will
         # not persist. A machine that cannot write its own config has a larger
