@@ -73,13 +73,17 @@ def _effective_mode(values: dict[str, str]) -> str:
 
 
 def _protection(values: dict[str, str]) -> str | None:
-    """Why the current backend must not be flipped, or ``None`` if it is vacuous.
+    """What the current backend has to lose, or ``None`` if it is vacuous.
 
     The state test ADR 0017 turns on: an *inferred* default is indistinguishable
     from a *chosen* one once written, so a guard that reads the declaration alone
     refuses the most ordinary first install (bare ``init`` lands ``local``, the
     guide then asks the question, the user says cloud). What the invariant
     protects is existing memory, so that is what gets asked about.
+
+    One question, two policies. ``config`` refuses on it, because its caller asked
+    for a specific backend and can be handed ``--force``; ``init`` only warns, and
+    the difference is that ``init`` has no override to hand back.
 
     Declaration of a store, not its contents: ``MEMU_DB`` spans a bare path, a
     ``sqlite://`` URL, a ``postgres://`` DSN and an in-memory sentinel, so "does
@@ -132,7 +136,9 @@ async def _cmd_init(args: argparse.Namespace) -> int:
     """Infer the backend from what the caller had to offer, and never lose a mode.
 
     The one command ``SKILL.md`` names, so it must be safe to run on any machine
-    in any state — including one another host already configured.
+    in any state — including one another host already configured. It never
+    refuses: it is the first step of the install, and a non-zero exit here with no
+    ``--force`` to offer strands every step after it.
     """
     values = config_file.read()
     declared = _declared_mode(values)
@@ -156,29 +162,43 @@ async def _cmd_init(args: argparse.Namespace) -> int:
         print(f"ready — continue with `{args.binary} docs install`")
         return 0
 
-    # A key *is* the choice of cloud, so this is a mode change by inference — the
-    # one thing `init` can refuse. It hands the decision back rather than growing a
-    # `--force` of its own: an override belongs on the verb whose caller was shown
-    # the guard, not on the one that inferred its way into it.
-    if _effective_mode(values) != "cloud":
-        why = _protection(values)
-        if why is not None:
-            print(f"error: {why}, so `init` will not switch this machine to cloud memory.", file=sys.stderr)
-            print("Run this instead if the switch is what you mean:", file=sys.stderr)
-            print(f"  {args.binary} config --cloud --cloud-api-key <key> --force", file=sys.stderr)
-            return REFUSED
+    # A key *is* the choice of cloud, and `init` acts on it even over a configured
+    # local store. `config`'s state guard (:func:`_refuse_flip`) is deliberately not
+    # applied here: `init` has no `--force`, so a refusal is terminal, and it is the
+    # first command on the install path — halting there halts everything after it.
+    # Having a key to hand is a strong enough statement of intent to honour, and
+    # nothing is destroyed by honouring it; the local store stays on disk, merely
+    # unread until the mode is switched back. So the cost is a warning, not a veto.
+    orphaned = _protection(values) if _effective_mode(values) != "cloud" else None
 
     stored = values.get("MEMU_CLOUD_API_KEY", "")
     replacing = bool(stored) and stored != args.cloud_api_key
     updates["MEMU_MEMORY_MODE"] = "cloud"
     updates["MEMU_CLOUD_API_KEY"] = args.cloud_api_key
     _row("mode", "cloud (from --cloud-api-key)")
+    if orphaned:
+        # Named on stdout beside the mode, because an agent that reads only the
+        # rows must still see that this run changed the backend out from under a
+        # store, and told in full below, because the user may not have meant it.
+        _row("switched", f"{orphaned} and is no longer read")
     # Loud, because the client cannot tell a rotated key from a different account.
     # Refusing would block the legitimate repair; saying nothing would hide the
     # case where it was not one.
     _row("key", "replaced — the previously stored memU Cloud key is gone" if replacing else "set")
     _row("client", f"{_short(client_id)}{' (generated)' if generated else ''}")
     _write(updates)
+    if orphaned:
+        # The only place this module writes to both streams in one run, so the only
+        # place ordering has to be forced: piped stdout is block-buffered and would
+        # otherwise flush *after* the warning, putting it above the block it follows.
+        sys.stdout.flush()
+        print(
+            "warning: this machine was in local mode with a store configured. Nothing was "
+            "deleted, but memories written there are not visible to cloud memory, and new "
+            "ones now go to the cloud account this key belongs to.",
+            file=sys.stderr,
+        )
+        print(f"To go back: `{args.binary} config --local --force`", file=sys.stderr)
     print(f"ready — continue with `{args.binary} docs install`")
     return 0
 

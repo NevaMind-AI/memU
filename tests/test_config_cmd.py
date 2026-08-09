@@ -162,26 +162,48 @@ def test_init_with_a_key_flips_a_vacuous_local_config(config: pathlib.Path) -> N
     assert config_file.read()["MEMU_MEMORY_MODE"] == "cloud"
 
 
-def test_init_with_a_key_refuses_a_local_config_with_a_store(
+def test_init_with_a_key_flips_a_local_config_with_a_store_and_warns(
     config: pathlib.Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """`init` has no ``--force``, so a refusal here is terminal and would halt the
+    install at its first step. A key in hand is intent enough, and the store is
+    not destroyed — only unread — so the cost is a warning."""
     _write(config, "MEMU_MEMORY_MODE=local\nMEMU_DB=/srv/db\n")
 
-    assert run(SPEC, ["init", "--cloud-api-key", "sk-1"]) == 2
+    assert run(SPEC, ["init", "--cloud-api-key", "sk-1"]) == 0
 
-    assert config_file.read()["MEMU_MEMORY_MODE"] == "local"
-    # Hands the decision back with the exact command, because `init` has no
-    # --force of its own: the override belongs on the verb whose caller saw the guard.
-    assert "config --cloud --cloud-api-key <key> --force" in capsys.readouterr().err
+    assert config_file.read()["MEMU_MEMORY_MODE"] == "cloud"
+    # Left alone: the switch is reversible precisely because the store survives it.
+    assert config_file.read()["MEMU_DB"] == "/srv/db"
+    captured = capsys.readouterr()
+    assert "no longer read" in captured.out
+    assert "config --local --force" in captured.err
 
 
-def test_init_never_echoes_the_key_in_its_refusal(config: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_init_never_echoes_the_key_in_its_warning(config: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
     """It is already in argv, and memU mines the transcript this prints into."""
     _write(config, "MEMU_MEMORY_MODE=local\nMEMU_DB=/srv/db\n")
 
     run(SPEC, ["init", "--cloud-api-key", "sk-secret"])
 
-    assert "sk-secret" not in capsys.readouterr().err
+    captured = capsys.readouterr()
+    assert "sk-secret" not in captured.err
+    assert "sk-secret" not in captured.out
+
+
+def test_init_with_a_key_does_not_warn_on_a_vacuous_config(
+    config: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The ordinary first install has nothing to lose, and a warning printed on
+    every one of them is a warning nobody reads on the run that matters."""
+    run(SPEC, ["init"])
+    capsys.readouterr()
+
+    assert run(SPEC, ["init", "--cloud-api-key", "sk-1"]) == 0
+
+    captured = capsys.readouterr()
+    assert "no longer read" not in captured.out
+    assert "warning" not in captured.err
 
 
 def test_init_replaces_a_stored_key_and_says_so(config: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
