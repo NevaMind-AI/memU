@@ -24,7 +24,7 @@ import sys
 import uuid
 from typing import Any
 
-from memu import config_file
+from memu import config_file, events
 from memu import env as env_module
 
 IDENTITY_KEYS = ("MEMU_DB", "MEMU_EMBED_PROVIDER", "MEMU_EMBED_MODEL")
@@ -132,6 +132,44 @@ def _write(updates: dict[str, str]) -> None:
     _row("config", f"{path} ({config_file.permission_note()})")
 
 
+def _report_install_started(args: argparse.Namespace) -> None:
+    """The install funnel's start (ADR 0016 §4, ADR 0017), recorded by ``init``.
+
+    ``SKILL.md`` Step 2 is the first command on the install path, so it is the
+    earliest point that proves ``memu-cli`` is installed and resolving — earlier
+    than ``docs install``, which now reports the narrower
+    :data:`memu.events.INSTALL_GUIDE_OPENED`.
+
+    **Called after :func:`_write`, never before**, and that is the whole reason
+    this is a function rather than a line at the top of ``init``. The id every
+    envelope carries comes from :func:`memu.events.client_instance_id`, which
+    reads ``MEMU_CLIENT_ID`` from the resolved environment — where the one
+    :func:`_client_id` just generated does not appear until ``_write`` has
+    persisted it and reloaded. Report first and the event generates and persists a
+    *second* id, which ``_write`` then overwrites: one machine reporting under two
+    identities, and the ``client`` row printed above naming neither. The same
+    ordering is what puts a ``--cloud-api-key`` into :func:`memu.events._headers`,
+    so the first event of an install is attributable rather than anonymous.
+
+    Nothing between :func:`_client_id` and here does I/O or can raise, so the
+    alternative — an extra ``_write`` early to bank the id against a later error —
+    buys no durability, costs a second read-modify-write, and prints the ``config``
+    row twice.
+
+    Flushed rather than left spooled, for the reason ``docs install`` flushes: an
+    install that stops before the bridging pair ever runs has no other flush point,
+    and that run is exactly the one the funnel exists to show. Both calls are
+    fail-open, so an unreachable endpoint costs this command its timeout and
+    nothing else — never its exit code, and never the file it just wrote.
+    """
+    events.record(
+        events.CLI_INSTALL_STARTED,
+        host=getattr(args, "host", ""),
+        session_id_env=getattr(args, "session_id_env", ""),
+    )
+    events.flush()
+
+
 async def _cmd_init(args: argparse.Namespace) -> int:
     """Infer the backend from what the caller had to offer, and never lose a mode.
 
@@ -159,6 +197,7 @@ async def _cmd_init(args: argparse.Namespace) -> int:
             _row("mode", "local (default; no store configured yet)")
         _row("client", f"{_short(client_id)}{' (generated)' if generated else ''}")
         _write(updates)
+        _report_install_started(args)
         print(f"ready — continue with `{args.binary} docs install`")
         return 0
 
@@ -199,6 +238,9 @@ async def _cmd_init(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         print(f"To go back: `{args.binary} config --local --force`", file=sys.stderr)
+    # Below the warning rather than beside the write, unlike the branch above:
+    # this one blocks on a POST, and the warning is the line a user has to read.
+    _report_install_started(args)
     print(f"ready — continue with `{args.binary} docs install`")
     return 0
 
@@ -373,13 +415,20 @@ def _show() -> int:
     return 0
 
 
-def register(sub: Any, *, binary: str) -> None:
+def register(sub: Any, *, binary: str, host: str = "", session_id_env: str = "") -> None:
     """Add ``init`` and ``config`` to a host CLI's subparsers.
 
     ``binary`` is the host adapter's own command name, carried on the parser
     defaults purely so the next-step lines name the binary the agent is already
     holding — ``SKILL.md``'s ergonomic bet is that one binary name serves the
     whole flow.
+
+    ``host`` and ``session_id_env`` ride the same way, and only ``init`` reads
+    them: they are the envelope context for the install-start event
+    (:func:`_report_install_started`), which is the one thing in this module that
+    is not host-irrelevant. Both default to empty, so a caller that has no host —
+    the core ``memu`` binary, were these ever registered there — gets commands
+    that work and an event that reports ``agent_platform: none``.
     """
     initialiser = sub.add_parser(
         "init",
@@ -390,7 +439,7 @@ def register(sub: Any, *, binary: str) -> None:
         default="",
         help="The user's memU Cloud key. Providing one selects cloud memory; omit it to keep or default the mode",
     )
-    initialiser.set_defaults(handler=_cmd_init, binary=binary)
+    initialiser.set_defaults(handler=_cmd_init, binary=binary, host=host, session_id_env=session_id_env)
 
     configure = sub.add_parser(
         "config",

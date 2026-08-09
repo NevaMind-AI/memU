@@ -659,41 +659,84 @@ def test_report_verbs_exist_on_every_host(reporting: pathlib.Path, capsys: pytes
 def test_the_install_funnel_has_a_code_observed_start_and_a_reported_end(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Printing the guide *is* the start signal, and it delivers on the spot.
+    """The two steps in are code-observed; only the completion needs a verb.
 
-    ``report install`` is prose-driven and undercounts by design. If the start
-    were too, the funnel could report more completions than attempts — so the
-    start is taken where code can see it, and only the completion needs a verb.
+    ``init`` is ``SKILL.md`` Step 2 and starts the funnel; printing the guide is
+    Step 3 and is its own, narrower row. ``report install`` is prose-driven and
+    undercounts by design — if a start did too, the funnel could report more
+    completions than attempts, so neither step is asked for in prose.
     """
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "")
     posted = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
+    assert run(CLAUDE_SPEC, ["init"]) == 0
     assert run(CLAUDE_SPEC, ["docs", "install"]) == 0
     assert capsys.readouterr().out.strip(), "the guide itself must still be what this command prints"
     assert run(CLAUDE_SPEC, ["report", "install"]) == 0
 
-    assert [event["event_name"] for event in posted.events] == [events.CLI_INSTALL_STARTED]
+    assert [event["event_name"] for event in posted.events] == [
+        events.CLI_INSTALL_STARTED,
+        events.INSTALL_GUIDE_OPENED,
+    ]
     # The completion keeps the ordinary treatment: spooled, carried by a bridging run.
     assert [event["event_name"] for event in _spooled(reporting)] == [events.CLI_INSTALL_SUCCEEDED]
     assert all(event["properties"] == {} for event in _spooled(reporting) + posted.events)
 
 
-def test_the_install_start_carries_the_backlog_off_a_machine_that_may_never_bridge(
-    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+def test_the_install_start_reports_the_client_id_init_just_wrote(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Why ``docs install`` flushes rather than only recording.
+    """Why the start is emitted *after* the write, not beside the client id.
 
-    An install that dies in Part 2 never reaches ``prepare`` or ``commit``, so
-    this is the only flush point its earlier events will ever see — and those are
-    exactly the events that explain why it died.
+    ``init`` mints ``MEMU_CLIENT_ID`` into ``config.env``, and an envelope built
+    before that lands would find none in the environment and persist a second one
+    — leaving the machine's first event reporting under an id its own config file
+    does not contain.
     """
-    monkeypatch.setenv("MEMU_DOCS_BASE_URL", "")
+    from memu import config_file
+
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert run(CLAUDE_SPEC, ["init"]) == 0
+
+    stored = config_file.read()["MEMU_CLIENT_ID"]
+    assert [event["client_instance_id"] for event in posted.events] == [stored]
+    assert stored[:4] in capsys.readouterr().out, "and it is the id the `client` row named"
+
+
+def test_the_install_start_is_attributed_when_init_was_given_a_key(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The ordering ADR 0017 was written for: the first event carries the account.
+
+    ``docs install`` fired the start before any key existed, so a first install
+    reported anonymously. ``init`` holds the key and writes it before reporting.
+    """
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert run(CLAUDE_SPEC, ["init", "--cloud-api-key", "sk-live-abc"]) == 0
+
+    sent = {key.title(): value for key, value in posted.headers[0].items()}
+    assert sent["Authorization"] == "Bearer sk-live-abc"
+
+
+def test_the_install_start_carries_the_backlog_off_a_machine_that_may_never_bridge(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Why ``init`` flushes rather than only recording.
+
+    An install that dies before the bridging pair ever runs never reaches
+    ``prepare`` or ``commit``, so this is the only flush point its earlier events
+    will ever see — and those are exactly the events that explain why it died.
+    """
     events.record_cli_error(RuntimeError("an earlier doctor"), command="doctor", host="claude-code")
     posted = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
-    assert run(CLAUDE_SPEC, ["docs", "install"]) == 0
+    assert run(CLAUDE_SPEC, ["init"]) == 0
 
     assert [event["event_name"] for event in posted.events] == [
         events.CLI_ERROR,
@@ -702,11 +745,11 @@ def test_the_install_start_carries_the_backlog_off_a_machine_that_may_never_brid
     assert not reporting.exists()
 
 
-def test_only_the_install_guide_reports_an_attempt(
+def test_only_the_install_guide_reports_being_opened(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # `docs task` runs on every scheduled-task repair and `docs uninstall` is the
-    # opposite intent; neither is an install attempt.
+    # opposite intent; neither is a step on the way in.
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "")
     assert run(CLAUDE_SPEC, ["docs", "task"]) == 0
     assert run(CLAUDE_SPEC, ["docs", "uninstall"]) == 0

@@ -115,18 +115,43 @@ the agent never reached ``commit``, or its self-evolve pass produced nothing. So
 is what makes the mixture visible to a query."""
 
 CLI_INSTALL_STARTED = "cli_install_started"
-"""An install *attempt*, recorded when a host prints its install guide — the
-first act on that path which proves ``memu-cli`` is installed and resolving on
-``PATH``.
+"""An install *attempt*, recorded by ``init`` once it has written ``config.env``.
 
-Code-observed rather than agent-reported, and that is the whole point: the
-completion below is prose-driven and undercounts (ADR 0016 §4), so a start that
-undercounted independently could report more completions than attempts. Two
-caveats for whoever reads these. A guide re-printed mid-run — a compaction, a
-restarted agent — counts twice, so the denominator is attempts-as-observed, not
-distinct machines. And ``deployment_mode`` here predates ``INSTALL.md`` Part 1.2's
-backend choice, so it is a default rather than the mode the install lands on:
-never join a start to a completion on that field."""
+``SKILL.md`` Step 2 — the first command on the install path, and the first act
+that proves ``memu-cli`` is installed and resolving on ``PATH``. Code-observed
+rather than agent-reported, and that is the whole point: the completion below is
+prose-driven and undercounts (ADR 0016 §4), so a start that undercounted
+independently could report more completions than attempts.
+
+Emitted *after* the write and never before, which is what makes it the funnel's
+first row rather than its first bug. ``init`` mints ``MEMU_CLIENT_ID`` into that
+same file (:func:`memu.hosts.config_cmd._client_id`), so an envelope built first
+would find no id in the environment and persist a second one of its own — one
+machine, two identities. The same ordering is what attaches an
+``init --cloud-api-key`` key to the header (ADR 0017), so the first event of an
+install is attributable to the account paying for it.
+
+Two caveats for whoever reads these. ``init`` is idempotent and gets re-run on
+repairs and on a second host, so this counts attempts-as-observed and is not a
+count of distinct machines — the same reading its predecessor at ``docs install``
+carried. And ``deployment_mode`` is the mode ``init`` inferred, which
+``INSTALL.md``'s own ``config`` step may still change: never join a start to a
+completion on that field."""
+
+INSTALL_GUIDE_OPENED = "install_guide_opened"
+"""A host printed its install guide — ``docs install``, ``SKILL.md`` Step 3.
+
+This is what ``cli_install_started`` used to mean. Renamed rather than dropped
+when the start moved one step earlier into ``init``: what it observes is
+unchanged and still worth a row, but it is the funnel's *second* step now, and a
+second name ending in ``_started`` beside the real one is the pair a consumer
+sums by accident.
+
+Between them, ``cli_install_started`` counts agents that got as far as writing a
+config and this counts the ones that went on to ask for the guide — so the gap is
+installs abandoned before they had begun. A guide re-printed mid-run — a
+compaction, a restarted agent — counts twice, so like the start it is
+attempts-as-observed."""
 
 CLI_INSTALL_SUCCEEDED = "cli_install_succeeded"
 """The agent reached the guide's final gate. Formerly ``cli_install_completed``,
@@ -274,6 +299,7 @@ _ALLOWED_PROPERTIES: dict[str, frozenset[str]] = {
     MEMORY_UPDATE_STARTED: frozenset(),
     MEMORY_UPDATE_FAILED: frozenset(),
     CLI_INSTALL_STARTED: frozenset(),
+    INSTALL_GUIDE_OPENED: frozenset(),
     CLI_INSTALL_SUCCEEDED: frozenset(),
     CLI_INSTALL_FAILED: frozenset(),
     CLI_UNINSTALL_SUCCEEDED: frozenset(),
