@@ -342,33 +342,52 @@ same module is acceptable, but the guides name only `<your-binary>`.
 
 ### Guide changes
 
-- **`SKILL.md`** gains a Step 2.5 between binary selection and `docs install`:
-  ask the user for their memU API key, then run
+- **`SKILL.md` Step 1** installs with `pip install --upgrade memu-cli` (and
+  `uv tool install --upgrade`), because the flag is what makes the rest of this
+  ADR reachable — see the stale-build note below.
+- **`SKILL.md` Step 2** ends by running `init`, rather than gaining the "Step
+  2.5" an earlier draft of this ADR called for. Asking for the key and creating
+  the file is the *finalization* of picking a binary — you cannot run
+  `<your-binary> init` before you have `<your-binary>` — and a numbered step
+  between two numbered steps reads as an afterthought on the one surface where
+  numbering is the structure. Ask the user for their memU API key, then
   `<your-binary> init --cloud-api-key <key>`; no key → bare `<your-binary> init`.
   The prose stays minimal on purpose — everything that might change lives in the
   command's own output — with one exception it must state, because the command
   states it only *after* acting: passing a key on a machine already using local
   memory switches it to the cloud, and the local memories stop being retrieved.
 - **`INSTALL.md` §1.2** collapses from ~70 lines of write-these-keys instruction
-  to "if already configured, skip; otherwise `config --cloud|--local …`". The
-  local-mode knobs and the no-embedding-key fallback survive as guidance for
-  *choosing arguments*, not for writing the file.
-- **Preflight** gains a cheaper probe: `<binary> config show` as the one-shot "is
-  the backend configured" question, replacing the file test and the
-  `MEMU_MEMORY_MODE` grep the preflight blocks do by hand today.
+  to "`config show`; if already configured, reuse; otherwise
+  `config --cloud|--local …`". The local-mode knobs and the no-embedding-key
+  fallback survive as guidance for *choosing arguments*, not for writing the
+  file, and the "repair the connection, never the identity" paragraph becomes
+  what it always described: a `config --embed-base-url` call for the connection,
+  and a guard that refuses the identity.
+- **§1.2 also names `init`**, hedged with "if you arrived from `SKILL.md` you
+  have already run this". An agent handed the guide directly — the user pasted
+  `<binary> docs install` output, or found the file — never passes through
+  `SKILL.md`, and `init` is idempotent, so the duplicated instruction costs a
+  no-op and the missing one costs a config file.
+- **The "is the backend already configured" probe** becomes `<binary> config
+  show` — one command, no file test, no `MEMU_MEMORY_MODE` grep. It opens §1.2
+  rather than joining Claude Code's Preflight block (the only host with one):
+  that block runs *before* Part 1 and exists to find out whether `memu-*`
+  resolves at all, so a probe that needs the binary cannot live in it.
 
-There are seven guides carrying this section, not one: six hosts head it
+There are eight guides carrying this section, not one: seven hosts head it
 `### 1.2 Configure the memory backend`, the generic adapter has it as its
-`## Part 1`, and Cola states it in prose with no heading. All seven change.
+`## Part 1`, and Cola states it in prose with no heading. All eight change.
 
 **The guides ship ahead of the code they name, and must not.** `docs install`
 prefers the *server's* copy of `INSTALL.md` over the packaged one
 (`templates.resolve_doc`, ADR 0013), so the moment this text is published
 server-side every machine still on an older `memu-cli` is handed a guide telling
 it to run a subcommand its binary does not have — argparse answers `invalid
-choice` at the first step of Part 1. The server-side publish is therefore gated
-on the release that carries the commands, and the new §1.2 keeps a line pointing
-an agent that hits that error at upgrading `memu-cli`.
+choice` at the first step of Part 1. Three things answer this, and the first two
+are the real fix: the install step in every guide carries `--upgrade`, so the
+ordinary path never *has* a stale binary; every guide names `invalid choice`
+explicitly as the stale-build symptom with "upgrade and re-run" as the cure; and
+the server-side publish is still gated on the release that carries the commands.
 
 ## Consequences
 
