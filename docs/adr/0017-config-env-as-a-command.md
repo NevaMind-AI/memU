@@ -40,11 +40,13 @@ retrieval block's text, so memU writes it; the guide's instruction is "do not
 hand-write this". `config.env` is a strictly harder file — merge semantics, a
 secret, a cross-host invariant — and has no such command.
 
-**The install-start event fires before the key exists.** `_report_install_started`
+**The install-start event fires before the key exists.** `cli_install_started`
 (ADR 0016 §4) is emitted from `docs install`, because printing the guide is the
 first act on the install path that proves `memu-cli` resolves. On a first install
 that happens in step 2, before step 3 has collected the memU Cloud key, so the
-event goes out with no `Authorization` header and lands unattributed.
+event goes out with no `Authorization` header and lands unattributed. (The
+emission has since moved into `init` — see Open issues, where that was left open
+and is now settled; `docs install` keeps its own event as `install_guide_opened`.)
 
 This second problem is **less severe than it first appears, and should not be the
 sole justification for this ADR.** Every envelope already carries
@@ -397,7 +399,9 @@ Positive:
   instead of by emphasis in a document.
 - Unrelated keys, comments, and another host's settings survive a re-install.
 - Permissions and atomicity stop depending on the agent remembering `chmod 600`.
-- The install-start event carries the key when the user had one to give.
+- The install-start event carries the key when the user had one to give — and now
+  fires from `init` itself, so it is the first event of an install rather than the
+  second, and attributed whenever `--cloud-api-key` was passed at all.
 - `MEMU_CLIENT_ID` exists before anything reports, rather than being appended by
   whichever event happened to fire first.
 - `SKILL.md`'s command surface becomes something we expect never to change.
@@ -430,18 +434,25 @@ Costs / limitations:
   is a separate question this ADR does not settle.
 - **Nothing checks the key until Part 1's gate.** Deferring verification (above)
   costs the earliest failure point: a garbled key now survives `init`, survives
-  `docs install` — whose install-start event it is attached to — and dies at
-  `doctor`, several steps and one wasted funnel event later. Accepted for now
+  `docs install`, and dies at `doctor` — several steps and one wasted funnel
+  event later, that event being the `init` start the key is attached to. Accepted for now
   because keys are copied, not typed, and because a re-`init` repairs one. When
   it is added: **before** the write, never after, for the guard-state reason
   given above, and reusing `doctor`'s call rather than inventing a second one.
-- **Where the install-start event belongs.** This ADR only reorders the existing
-  emission at `docs install`. Moving it into `init` — the first command on the
-  install path that knows both the host and the key — is defensible and would
-  make attribution unconditional, but `docs install` is the point that proves the
-  package resolves, and re-running `init` on an already-configured machine is a
-  weaker signal of "an attempt started". Left as is until the funnel data says
-  otherwise.
+- ~~**Where the install-start event belongs.**~~ **Settled: it belongs in `init`.**
+  This ADR shipped with the emission left at `docs install` and only reordered
+  relative to the write; the start has since moved into `init`, which is the first
+  command on the install path and knows both the host and the key, so attribution
+  is now unconditional rather than dependent on the user having configured cloud
+  before Step 3. The two objections were answered rather than overruled. `docs
+  install` still proves the package resolves — it keeps its own event under the
+  name `install_guide_opened`, so nothing that was observable stopped being
+  observable, and the funnel gained a step instead of trading one. And a re-run of
+  `init` being a weaker signal is the same property a re-printed guide already
+  had: both count attempts-as-observed, which §4 of ADR 0016 already said out
+  loud. The one thing the move made load-bearing is ordering *within* `init` — the
+  event must follow the write, or `client_instance_id()` mints and persists a
+  second id that the write then overwrites.
 - **Local mode's flag surface will grow.** Every new local knob is a new `config`
   flag. Acceptable while `INSTALL.md` is refreshable, but if the count keeps
   climbing, a `config set KEY=VALUE` form will be tempting — and would forfeit the

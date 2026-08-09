@@ -646,33 +646,36 @@ async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
     resolved = templates.resolve_doc(spec.host, filename, embedded)
     print(spec.render_doc(resolved))
     if args.doc == "install":
-        _report_install_started(spec)
+        _report_guide_opened(spec)
     return 0
 
 
-def _report_install_started(spec: HostSpec) -> None:
-    """The install funnel's entry point (ADR 0016 §4).
+def _report_guide_opened(spec: HostSpec) -> None:
+    """The install funnel's second step (ADR 0016 §4).
 
-    Printing this guide is the first act on the install path that *proves*
-    ``memu-cli`` is installed and resolving — `SKILL.md` Step 3, immediately after
-    the pip install — so the start is observed here rather than asked for in prose.
-    That is what makes ``started >= completed`` hold structurally: ``report
-    install`` is voluntary and undercounts, and a start that undercounted
-    independently of it could report more completions than attempts.
+    Formerly ``cli_install_started``, and only the name changed: the *start* now
+    sits one command earlier, at ``init`` — ``SKILL.md`` Step 2, which knows the
+    host and the key and writes the config this machine is identified by (ADR
+    0017). Printing the guide is Step 3, so what this observes is the narrower and
+    still worth-observing fact that an agent which configured memU went on to ask
+    for the guide.
 
-    ``install-instruction`` was rejected as a stand-in for *completion* precisely
-    because it also runs on re-runs and partial repairs. For a *start* that is the
-    correct reading: a re-run is a new attempt.
+    Code-observed on both legs, which is what makes ``started >= succeeded`` hold
+    structurally: ``report install`` is voluntary and undercounts, and a start
+    that undercounted independently of it could report more completions than
+    attempts. ``install-instruction`` was rejected as a stand-in for *completion*
+    precisely because it also runs on re-runs and partial repairs; for a step on
+    the way in, a re-run is a new attempt, which is the correct reading.
 
     Flushed, not merely recorded, and that is the load-bearing half. An install
     that dies in Part 2 never reaches ``prepare`` or ``commit`` — the ordinary
-    flush points — so without this its start, and every ``cli_error`` it collected
-    on the way down, would sit in the spool forever. That run is the exact one
-    this event exists to make visible. Affordable here because ``resolve_doc``
-    above has already blocked on a server GET: this is a guide-printing path, not
-    a hot one.
+    flush points — so without this its earlier events, and every ``cli_error`` it
+    collected on the way down, would sit in the spool forever. That run is the
+    exact one these events exist to make visible. Affordable here because
+    ``resolve_doc`` above has already blocked on a server GET: this is a
+    guide-printing path, not a hot one.
     """
-    events.record(events.CLI_INSTALL_STARTED, host=spec.host, session_id_env=spec.session_id_env)
+    events.record(events.INSTALL_GUIDE_OPENED, host=spec.host, session_id_env=spec.session_id_env)
     events.flush()
 
 
@@ -830,7 +833,7 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     # every later step is `<that binary> …`. A second binary mid-flow adds a
     # branch, a fresh "command not found", and a name likelier to be shadowed on
     # PATH. `doctor` is just as host-irrelevant and lives here for the same reason.
-    config_cmd.register(sub, binary=spec.binary)
+    config_cmd.register(sub, binary=spec.binary, host=spec.host, session_id_env=spec.session_id_env)
     instruction.register(
         sub,
         path=spec.instruction_path,

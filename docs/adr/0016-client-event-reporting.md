@@ -122,10 +122,12 @@ Flush points, all of them low-frequency and latency-tolerant:
 - `report uninstall` — **synchronously, before returning** (§4). Uninstall is the one event
   that cannot wait for a later flush, because `UNINSTALL.md` Part 3 may remove the very binary
   that would perform it.
-- `docs install` — which is also where `cli_install_started` is recorded (§4). A machine that
-  abandons the install never reaches `prepare` or `commit`, so this is the only flush its
-  events may ever get; the command has already contacted the docs server by then, so it costs
-  nothing new.
+- `init` and `docs install` — the two steps into the install funnel, where `cli_install_started`
+  and `install_guide_opened` are recorded (§4). A machine that abandons the install never
+  reaches `prepare` or `commit`, so these are the only flushes its events may ever get. `docs
+  install` has already contacted the docs server by then, so it costs nothing new; `init` is a
+  local command and pays one bounded, fail-open POST for being the earliest point the funnel
+  can be seen from.
 - `report error` — **synchronously, before returning** (§5), and for the same reason as
   `docs install` rather than as `report uninstall`: the runs that file an error are
   disproportionately the runs that never reach `prepare` or `commit`. A failed install, a
@@ -215,7 +217,8 @@ The dividing line is whether any code can observe the completion.
 | retrieve | `retrieval._cmd_retrieve` — one inline POST on success, spool-only on failure, never a flush (§2) |
 | remember finished | `host_cli._cmd_commit` — the terminal step of the record seam, which already holds the recall-file and resource counts |
 | `cli_error` | `host_cli.run`'s top-level `except` — see §5 |
-| `cli_install_started` | `host_cli._cmd_docs`, on `docs install` only — see below |
+| `cli_install_started` | `config_cmd._cmd_init`, after the config write — see below |
+| `install_guide_opened` | `host_cli._cmd_docs`, on `docs install` only — see below |
 
 **An explicit verb, registered once in `host_cli.build_parser` so every host inherits it:**
 
@@ -276,31 +279,50 @@ bury the rare signal inside the common one. Both stages therefore report through
 `agent_error_reported` alone, and gain a concrete event only if and when an instruction directs
 an agent to them.
 
-**Only the completion needs a verb; the start is observed.** `cli_install_started` is recorded
-by `docs install` itself, and flushed there. Printing the guide is the first act on the install
-path that *proves* `memu-cli` is installed and resolving — `SKILL.md` Step 3, immediately after
-the pip install — so the attempt can be seen without asking prose for it. The asymmetry with
-the completion is the point: `report install` is voluntary and undercounts, and a start that
-undercounted independently of it could report *more completions than attempts*, which is worse
-than no funnel at all. Taking the start in code makes `started >= completed` hold structurally,
-since the guides are only reachable through `docs install`.
+**Only the completion needs a verb; the way in is observed.** Two code-observed steps precede
+it, each flushed where it is recorded. `cli_install_started` is recorded by `init`, and
+`install_guide_opened` by `docs install`. The asymmetry with the completion is the point:
+`report install` is voluntary and undercounts, and a start that undercounted independently of
+it could report *more completions than attempts*, which is worse than no funnel at all. Taking
+both steps in code makes `started >= opened >= succeeded` hold structurally, since `SKILL.md`
+runs them in that order and the guides are reachable only through `docs install`.
 
 The `install-instruction` objection above does not carry over. It was rejected as a stand-in
-for *completion* because it also runs on re-runs and partial repairs; for a *start*, a re-run
-is a new attempt, which is the correct reading rather than a defect.
+for *completion* because it also runs on re-runs and partial repairs; for a step on the way
+*in*, a re-run is a new attempt, which is the correct reading rather than a defect.
 
-Flushing there, rather than recording only, is the load-bearing half. An install that dies in
-Part 2 never reaches `prepare` or `commit`, so without this flush its start — and every
+**Why the start sits at `init` and not at `docs install`.** It was originally at `docs install`,
+on the argument that printing the guide is the first act that *proves* `memu-cli` is installed
+and resolving. `init` (ADR 0017) is now `SKILL.md` Step 2 and proves the same thing one command
+earlier, while additionally holding the two facts the event most wants: the memU Cloud key, so
+the first envelope of an install is attributable rather than anonymous, and `MEMU_CLIENT_ID`,
+which it mints into `config.env` itself. The start is therefore emitted *after* the write —
+before it, `client_instance_id()` would find no id, generate a second one, persist it, and be
+overwritten, leaving the machine's first event reporting under an id its own config no longer
+contains. ADR 0017's open issue "where the install-start event belongs" is closed by this.
+
+`install_guide_opened` is the old emission, renamed rather than deleted: what it observes is
+unchanged and still worth a row, but it is now the funnel's *second* step, and a second name
+ending in `_started` beside the real one is the pair a consumer sums by accident. It carries no
+`cli_` prefix — the prefix marks what the client observed about *itself*, and this observes a
+document being asked for — and the gap between the two counts installs abandoned before they
+had begun.
+
+Flushing at both, rather than recording only, is the load-bearing half. An install that dies in
+Part 2 never reaches `prepare` or `commit`, so without these flushes its start — and every
 `cli_error` it accumulated on the way down — would sit in the spool until the cap ate it, and
-that run is precisely the one this event exists to make visible. The path affords a flush:
-`resolve_doc` has already blocked on a server GET by the time the guide is printed.
+that run is precisely the one these events exist to make visible. `docs install` affords a
+flush outright: `resolve_doc` has already blocked on a server GET by the time the guide is
+printed. `init` does not, and pays for it — one bounded POST on a local command, fail-open, so
+an unreachable endpoint costs the timeout rather than the write.
 
-The remaining costs are recorded rather than hidden. A guide re-printed mid-run — a compaction,
-a restarted agent — counts twice, so the start is *attempts as observed*, not distinct
-machines. A start event's `deployment_mode` predates Part 1.2's backend choice, so it is a
-default and must never be joined on. And failure *detail* still rests on an agent choosing to
-call `report error`, which is voluntary and model-judged: the funnel says that an install died,
-never why.
+The remaining costs are recorded rather than hidden. `init` is idempotent and gets re-run on
+repairs and on a second host, and a guide re-printed mid-run — a compaction, a restarted agent
+— counts twice, so both steps are *attempts as observed*, not distinct machines. A start
+event's `deployment_mode` is the mode `init` inferred, which Part 1.2's backend choice may
+still change, so it must never be joined on. And failure *detail* still rests on an agent
+choosing to call `report error`, which is voluntary and model-judged: the funnel says that an
+install died, never why.
 
 **The names on the wire**, settled with the backend and held as constants in one place so a
 later revision is one edit:
@@ -314,7 +336,8 @@ later revision is one edit:
 | `memory_commit_failed` | code | the `commit` store call raised |
 | `memory_search_succeeded` / `_failed` | code | `retrieve` |
 | `memory_list_succeeded` / `_failed` | code | a whole-store sweep — `prepare`'s mirror, or `memu list-files` |
-| `cli_install_started` | code | `docs install` printed the guide |
+| `cli_install_started` | code | `init` wrote `config.env` |
+| `install_guide_opened` | code | `docs install` printed the guide |
 | `cli_install_succeeded` | agent | `report install` |
 | `cli_install_failed` | agent | `report error --stage install` |
 | `cli_uninstall_succeeded` | agent | `report uninstall` |
@@ -325,7 +348,9 @@ later revision is one edit:
 
 The `cli_` prefix marks what the client observed about *itself* — its own install, its own
 uncaught exception, its own spool overflowing — against the `memory_` family, which reports on
-memU's actual work.
+memU's actual work. `install_guide_opened` is the one name outside both, and deliberately: it
+reports a *document* being asked for, which is neither the client's own lifecycle nor memU's
+work on memory.
 
 **One name per action and outcome, replacing `core_action_completed` and its
 `properties.action_name` discriminator.** The first writing put three actions and both outcomes
@@ -637,9 +662,10 @@ document.
   floor on install volume, not a census. The trustworthy denominator is the first `retrieve` or
   first `commit` seen from a `client_instance_id` — both code-observed — and dashboards should
   be built on those, with `cli_install_succeeded` read as a funnel signal rather than a total.
-  `cli_install_started` is code-observed and so does not share this bias, but it counts
-  attempts as observed rather than machines (§4), which makes it a numerator for "how many
-  installs finish", not a substitute denominator for "how many installs exist".
+  `cli_install_started` and `install_guide_opened` are code-observed and so do not share this
+  bias, but they count attempts as observed rather than machines (§4), which makes them
+  numerators for "how many installs finish", not substitute denominators for "how many installs
+  exist".
 - **`succeeded + failed` never equals `started`, wherever a `_failed` leg is agent-reported.**
   This holds for `cli_install_*`, `cli_uninstall_*`, and `memory_update_*` — the three families
   §4 fans an agent report out into. The `_failed` counts are a floor; the honest failure number
