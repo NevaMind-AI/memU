@@ -498,7 +498,7 @@ wheels = [
 
 [[package]]
 name = "memu-cli"
-version = "2.0.0b0"
+version = "0.11.0b0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
