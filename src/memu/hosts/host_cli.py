@@ -44,6 +44,19 @@ from memu.hosts.bridging.resources import verify_resource_log
 
 DOCS = {"install": "INSTALL.md", "task": "BRIDGING_TASK.md", "uninstall": "UNINSTALL.md"}
 
+GUIDE_EVENTS = {
+    "install": events.INSTALL_GUIDE_OPENED,
+    "uninstall": events.UNINSTALL_GUIDE_OPENED,
+}
+"""Which of :data:`DOCS` report being opened (:func:`_report_guide_opened`).
+
+The two lifecycle guides, and deliberately not ``task``: ``BRIDGING_TASK.md`` is
+printed by a scheduled run rather than by someone deciding something, so a row per
+printing would count the schedule's frequency and nothing else — and the bridging
+pair it describes is already the most thoroughly instrumented path in the product.
+A doc missing here simply prints, which is what keeps adding one to ``DOCS`` from
+silently owing an event."""
+
 
 @dataclass(frozen=True)
 class HostSpec:
@@ -557,37 +570,42 @@ async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
     filename = DOCS[args.doc]
     embedded = (files(spec.package) / filename).read_text(encoding="utf-8")
     print(templates.resolve_doc(spec.host, filename, embedded))
-    if args.doc == "install":
-        _report_guide_opened(spec)
+    event = GUIDE_EVENTS.get(args.doc)
+    if event:
+        _report_guide_opened(spec, event)
     return 0
 
 
-def _report_guide_opened(spec: HostSpec) -> None:
-    """The install funnel's second step (ADR 0016 §4).
+def _report_guide_opened(spec: HostSpec, event: str) -> None:
+    """A lifecycle guide was printed — the install funnel's second step (ADR 0016 §4),
+    or its counterpart on the way out.
 
-    Formerly ``cli_install_started``, and only the name changed: the *start* now
-    sits one command earlier, at ``init`` — ``SKILL.md`` Step 2, which knows the
-    host and the key and writes the config this machine is identified by (ADR
-    0017). Printing the guide is Step 3, so what this observes is the narrower and
-    still worth-observing fact that an agent which configured memU went on to ask
-    for the guide.
+    ``install_guide_opened`` was formerly ``cli_install_started``, and only the name
+    changed: the *start* now sits one command earlier, at ``init`` — ``SKILL.md``
+    Step 2, which knows the host and the key and writes the config this machine is
+    identified by (ADR 0017). Printing the guide is Step 3, so what this observes is
+    the narrower and still worth-observing fact that an agent which configured memU
+    went on to ask for the guide. ``uninstall_guide_opened`` is the same observation
+    on the way out, and the only code-observed step the removal path has.
 
-    Code-observed on both legs, which is what makes ``started >= succeeded`` hold
-    structurally: ``report install`` is voluntary and undercounts, and a start
-    that undercounted independently of it could report more completions than
-    attempts. ``install-instruction`` was rejected as a stand-in for *completion*
-    precisely because it also runs on re-runs and partial repairs; for a step on
-    the way in, a re-run is a new attempt, which is the correct reading.
+    Code-observed on both legs of the install funnel, which is what makes
+    ``started >= succeeded`` hold structurally: ``report install`` is voluntary and
+    undercounts, and a start that undercounted independently of it could report more
+    completions than attempts. ``install-instruction`` was rejected as a stand-in for
+    *completion* precisely because it also runs on re-runs and partial repairs; for a
+    step on the way in, a re-run is a new attempt, which is the correct reading.
 
-    Flushed, not merely recorded, and that is the load-bearing half. An install
-    that dies in Part 2 never reaches ``prepare`` or ``commit`` — the ordinary
-    flush points — so without this its earlier events, and every ``cli_error`` it
-    collected on the way down, would sit in the spool forever. That run is the
-    exact one these events exist to make visible. Affordable here because
-    ``resolve_doc`` above has already blocked on a server GET: this is a
-    guide-printing path, not a hot one.
+    Flushed, not merely recorded, and that is the load-bearing half. An install that
+    dies in Part 2 never reaches ``prepare`` or ``commit`` — the ordinary flush
+    points — so without this its earlier events, and every ``cli_error`` it collected
+    on the way down, would sit in the spool forever. That run is the exact one these
+    events exist to make visible. On the uninstall side the deadline is harder still:
+    ``UNINSTALL.md`` Part 3 removes the package, so anything left spooled loses the
+    binary that would have sent it — the same reason ``report uninstall`` flushes
+    inline. Affordable in both cases because ``resolve_doc`` above has already
+    blocked on a server GET: this is a guide-printing path, not a hot one.
     """
-    events.record(events.INSTALL_GUIDE_OPENED, host=spec.host, session_id_env=spec.session_id_env)
+    events.record(event, host=spec.host, session_id_env=spec.session_id_env)
     events.flush()
 
 
