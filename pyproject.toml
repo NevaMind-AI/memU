@@ -100,6 +100,12 @@ disable_error_code = ["attr-defined", "call-arg"]
 module = ["pgvector.*"]
 ignore_missing_imports = true
 
+[tool.deptry.per_rule_ignores]
+# memu.trust imports certifi only as a fallback, inside a try/except that
+# degrades when it is absent — so it is deliberately a transitive dependency
+# (via httpx) rather than one this package declares and would then require.
+DEP003 = ["certifi"]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 120
