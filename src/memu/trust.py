@@ -30,6 +30,22 @@ from __future__ import annotations
 
 import functools
 import ssl
+from typing import TypedDict
+
+
+class UrlopenKwargs(TypedDict, total=False):
+    """The keyword arguments :func:`urlopen_kwargs` may supply.
+
+    A ``TypedDict`` rather than a plain ``dict``, because the call sites splat it
+    — and a ``dict[str, SSLContext]`` splatted into ``urlopen`` is, to a type
+    checker, a claim about *every* parameter that could absorb a keyword,
+    including the ``data`` / ``cafile`` / ``cadefault`` ones typeshed still
+    carries for 3.11. Naming the single key it can hold is what lets the checker
+    see that ``context`` is the only one being passed. ``total=False`` is the
+    empty case: no key at all, which is the common machine.
+    """
+
+    context: ssl.SSLContext
 
 
 @functools.cache
@@ -60,7 +76,7 @@ def ssl_context() -> ssl.SSLContext | None:
         return None
 
 
-def urlopen_kwargs() -> dict[str, ssl.SSLContext]:
+def urlopen_kwargs() -> UrlopenKwargs:
     """``context=`` for ``urlopen``, or an empty dict when there is nothing to say.
 
     The empty case is the point. On every machine with a working trust store the
