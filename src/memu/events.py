@@ -64,7 +64,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from memu import config_file
+from memu import config_file, trust
 from memu.env import env, env_declared, memory_mode, reload
 
 # --------------------------------------------------------------------------- #
@@ -1045,11 +1045,15 @@ def _post(url: str, event: dict[str, Any]) -> str:
     Blocking, on a short timeout, using ``urllib`` for the same reason
     :mod:`memu.hosts.templates` does: this must not depend on the async stack or
     on an HTTP client's configuration to stay fail-open.
+
+    That choice costs one thing, and :func:`memu.trust.urlopen_kwargs` pays it: a
+    Python with no CA bundle fails verification here while the ``httpx`` paths
+    sail through, and this function's ``except`` reads that as ``RETRY`` forever.
     """
     body = json.dumps(event, ensure_ascii=False, default=str).encode("utf-8")
     request = urllib.request.Request(url, data=body, headers=_headers(), method="POST")  # noqa: S310
     try:
-        with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS, **trust.urlopen_kwargs()) as response:  # noqa: S310
             return ACCEPTED if 200 <= getattr(response, "status", 200) < 300 else RETRY
     except urllib.error.HTTPError as exc:
         # A permanent 4xx means the server will reject this payload every time;
