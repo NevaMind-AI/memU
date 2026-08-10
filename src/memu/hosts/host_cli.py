@@ -727,15 +727,25 @@ async def _cmd_report(spec: HostSpec, args: argparse.Namespace) -> int:
 
     if args.what == "install":
         events.record(events.CLI_INSTALL_SUCCEEDED, host=spec.host, session_id_env=spec.session_id_env)
+        # Flushed, which makes the whole funnel deliverable from the install itself:
+        # `init` and `docs install` already flush, and leaving only the terminal row
+        # spooled would put the event that asserts the install worked behind the
+        # bridging pair — machinery this event has not yet proven runs. The install
+        # whose schedule never registered is precisely the one a consumer must be
+        # able to see completing, and it is also the run least likely to flush later.
+        # Affordable for the same reason `report error` is: `INSTALL.md`'s last step
+        # is not a hot path, and fail-open means an unreachable endpoint costs the
+        # timeout, never the event.
+        events.flush()
         print(outcome)
         return 0
 
     if args.what == "uninstall":
         events.record(events.CLI_UNINSTALL_SUCCEEDED, host=spec.host, session_id_env=spec.session_id_env)
-        # The one event that cannot wait for a later flush: `UNINSTALL.md` Part 3
-        # may remove the very binary that would deliver it. A whole flush, not the
-        # single-event `deliver=True` path — what this needs is the spool *emptied*
-        # before the binary goes, not one envelope sent.
+        # The event with the hardest deadline: `UNINSTALL.md` Part 3 may remove the
+        # very binary that would deliver it, so there may be no later flush at all.
+        # A whole flush, not the single-event `deliver=True` path — what this needs
+        # is the spool *emptied* before the binary goes, not one envelope sent.
         events.flush()
         print(outcome)
         return 0
@@ -771,7 +781,9 @@ def _register_report(sub: Any, handler: Any) -> None:
     parser = sub.add_parser("report", help="Report a lifecycle event to memU")
     what = parser.add_subparsers(dest="what", required=True)
 
-    installed = what.add_parser("install", help="Record that installation completed successfully")
+    installed = what.add_parser(
+        "install", help="Record that installation completed successfully (delivers immediately)"
+    )
     installed.set_defaults(handler=handler)
 
     uninstalled = what.add_parser("uninstall", help="Record that memU was uninstalled (delivers immediately)")
@@ -926,9 +938,11 @@ def run(spec: HostSpec, argv: list[str] | None = None) -> int:
         #
         # Never for `retrieve`, though, and the exception is the whole point. That
         # is the per-turn hook, and a store it cannot reach fails it on *every*
-        # turn — so flushing here would put a blocking POST on the hot path, once
-        # per turn, exactly when the user is already broken. Its events wait for
-        # the bridging pair like any other.
+        # turn — so flushing here would drain the whole spool on the hot path, once
+        # per turn, exactly when the user is already broken. The distinction is one
+        # POST versus all of them, not reporting versus silence: `_cmd_retrieve` has
+        # already delivered its own `memory_search_failed` envelope by now, which is
+        # the bounded way to say the same thing. Only this `cli_error` waits.
         if command != "retrieve":
             events.flush()
         if os.environ.get("MEMU_DEBUG") == "1":

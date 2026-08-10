@@ -573,10 +573,12 @@ def test_a_flush_is_bounded_and_the_next_one_resumes_where_it_stopped(
 def test_only_retrieve_delivers_inline(reporting: pathlib.Path) -> None:
     """``deliver=True`` is the per-turn hook's alone (ADR 0016 section 2).
 
-    It puts a blocking POST on the calling command, which is affordable exactly
-    once, on the one path whose event the backend wants promptly. If this fails
-    someone wired it to a second call site — a decision that owes a reason, not an
-    accident.
+    It puts a blocking POST on the calling command, which is affordable only on the
+    path whose event the backend wants promptly — both of whose legs live in
+    ``retrieval.py``. If this fails someone wired it to a second *command*, a
+    decision that owes a reason rather than an accident. File-granular on purpose:
+    what the tripwire guards is which command may spend a POST per turn, not how
+    many branches of that command do.
     """
     root = pathlib.Path(events.__file__).parent
     callers = sorted(
@@ -649,11 +651,19 @@ def test_a_permanently_rejected_event_is_not_spooled_to_be_rejected_again(
 # --------------------------------------------------------------------------- #
 
 
-def test_report_verbs_exist_on_every_host(reporting: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_report_verbs_exist_on_every_host(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The endpoint is stubbed because `report install` now flushes: left real, this
+    # would resolve the fixture's `example.invalid` on every run, and the events it
+    # asserts on would sit in the rotated `.sending` file rather than the spool.
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
     for spec in (CODEX_SPEC, CLAUDE_SPEC):
         assert run(spec, ["report", "install"]) == 0
-    assert len(_spooled(reporting)) == 2
-    assert {event["context"]["agent_platform"] for event in _spooled(reporting)} == {"codex", "claude_code"}
+    assert len(posted.events) == 2
+    assert {event["context"]["agent_platform"] for event in posted.events} == {"codex", "claude_code"}
 
 
 def test_the_install_funnel_has_a_code_observed_start_and_a_reported_end(
@@ -665,6 +675,11 @@ def test_the_install_funnel_has_a_code_observed_start_and_a_reported_end(
     Step 3 and is its own, narrower row. ``report install`` is prose-driven and
     undercounts by design — if a start did too, the funnel could report more
     completions than attempts, so neither step is asked for in prose.
+
+    All three flush, so the whole funnel is deliverable from the install itself: a
+    machine that never gets a working bridging pair is exactly the one whose funnel
+    a consumer needs to see, and it is the completion — the row asserting the
+    install worked — that would otherwise be the only one waiting on it.
     """
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "")
     posted = _Posted()
@@ -678,10 +693,10 @@ def test_the_install_funnel_has_a_code_observed_start_and_a_reported_end(
     assert [event["event_name"] for event in posted.events] == [
         events.CLI_INSTALL_STARTED,
         events.INSTALL_GUIDE_OPENED,
+        events.CLI_INSTALL_SUCCEEDED,
     ]
-    # The completion keeps the ordinary treatment: spooled, carried by a bridging run.
-    assert [event["event_name"] for event in _spooled(reporting)] == [events.CLI_INSTALL_SUCCEEDED]
-    assert all(event["properties"] == {} for event in _spooled(reporting) + posted.events)
+    assert _spooled(reporting) == [], "every step of the funnel delivers; nothing is left for a later flush"
+    assert all(event["properties"] == {} for event in posted.events)
 
 
 def test_the_install_start_reports_the_client_id_init_just_wrote(
@@ -891,14 +906,21 @@ def test_a_retrieve_that_cannot_deliver_still_succeeds_and_keeps_its_event(
     assert event["event_name"] == events.MEMORY_SEARCH_SUCCEEDED
 
 
-def test_a_failing_retrieve_never_posts_from_the_per_turn_hook(
+def test_a_failing_retrieve_delivers_its_own_event_and_nothing_else(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The error path stays spool-only, even though the success path delivers.
+    """Both legs of the hook deliver; neither may flush.
 
-    A store the hook cannot reach fails ``retrieve`` on *every* turn. Delivering
-    here — or flushing from the CLI's error handler — would put a blocking POST on
-    the hot path once per turn, precisely when the user is already broken.
+    The failure leg reports the same way the success leg does, because a machine
+    whose retrieval is broken is the one these events exist to surface — and the
+    later flush it would otherwise wait for runs on the bridging pair, which a
+    broken store breaks too. So the event that says so must not depend on it.
+
+    What stays fixed is the bound, which is the whole content of the per-turn
+    constraint: ``deliver=True`` sends *one* envelope. The ``cli_error`` recorded
+    behind it is spooled, because the CLI's error handler still exempts
+    ``retrieve`` from its flush — a drain here would cost up to
+    :data:`MAX_FLUSH_POSTS` requests on every turn of an already-broken machine.
     """
     from memu.hosts import retrieval
 
@@ -910,10 +932,8 @@ def test_a_failing_retrieve_never_posts_from_the_per_turn_hook(
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
     assert run(CODEX_SPEC, ["retrieve", "anything"]) == 1
-    assert posted.events == []
-    # Recorded, just not delivered from here — the next successful retrieve carries
-    # these out ahead of its own event, as does the bridging pair.
-    assert len(_spooled(reporting)) == 2
+    assert [event["event_name"] for event in posted.events] == [events.MEMORY_SEARCH_FAILED]
+    assert [event["event_name"] for event in _spooled(reporting)] == [events.CLI_ERROR]
 
 
 def test_a_failing_bridging_run_does_flush_because_its_flush_point_is_what_broke(

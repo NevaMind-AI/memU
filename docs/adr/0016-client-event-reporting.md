@@ -60,11 +60,11 @@ Four facts about this codebase constrain the answer, and each one rules somethin
    body updates on the low-frequency `prepare` rather than on the per-turn hook (`host_cli.py`).
    As first written this constraint was "must never fetch", and the retrieve event was
    spool-only. **Amended:** the backend asked for that event promptly and accepted the round
-   trip, so `retrieve` now delivers *its own single envelope* inline — see §2. What the
-   amendment does not relax is the bound: a `flush()` there would drain the whole spool at one
-   POST per event, up to `MAX_FLUSH_POSTS`, which is a cost that grows with how far behind the
-   machine has fallen. One request per turn is a constant; a flush is not, and the difference is
-   the entire content of this constraint.
+   trip, so `retrieve` now delivers *its own single envelope* inline, on both its success and
+   its failure leg — see §2. What the amendment does not relax is the bound: a `flush()` there
+   would drain the whole spool at one POST per event, up to `MAX_FLUSH_POSTS`, which is a cost
+   that grows with how far behind the machine has fallen. One request per turn is a constant; a
+   flush is not, and the difference is the entire content of this constraint.
 2. **Install and uninstall are agent-driven prose, not commands.** `INSTALL.md` is a
    multi-part guide with verify gates; `UNINSTALL.md` likewise. No code path spans either, so
    no code path can *observe* that one succeeded.
@@ -122,12 +122,17 @@ Flush points, all of them low-frequency and latency-tolerant:
 - `report uninstall` — **synchronously, before returning** (§4). Uninstall is the one event
   that cannot wait for a later flush, because `UNINSTALL.md` Part 3 may remove the very binary
   that would perform it.
-- `init` and `docs install` — the two steps into the install funnel, where `cli_install_started`
-  and `install_guide_opened` are recorded (§4). A machine that abandons the install never
-  reaches `prepare` or `commit`, so these are the only flushes its events may ever get. `docs
-  install` has already contacted the docs server by then, so it costs nothing new; `init` is a
-  local command and pays one bounded, fail-open POST for being the earliest point the funnel
-  can be seen from.
+- `init`, `docs install`, and `report install` — **the whole install funnel** (§4). A machine
+  that abandons the install never reaches `prepare` or `commit`, so these are the only flushes
+  its events may ever get. `docs install` has already contacted the docs server by then, so it
+  costs nothing new; `init` is a local command and pays one bounded, fail-open POST for being
+  the earliest point the funnel can be seen from. **Amended:** `report install` was originally
+  spool-only, on the reasoning that an install which succeeded would go on to bridge and flush
+  there. That reasoning assumes the thing the event attests to. An install whose scheduled task
+  never registered still reaches `INSTALL.md`'s last step and still reports completing — and it
+  is exactly the run that never flushes, so the funnel would lose its terminal row on the
+  machines whose funnel matters most. Leaving one step of three spooled also made the
+  completion's delivery latency differ from its own siblings' for no gain a consumer could use.
 - `report error` — **synchronously, before returning** (§5), and for the same reason as
   `docs install` rather than as `report uninstall`: the runs that file an error are
   disproportionately the runs that never reach `prepare` or `commit`. A failed install, a
@@ -137,19 +142,20 @@ Flush points, all of them low-frequency and latency-tolerant:
   spent longer deciding than the POST takes, and fail-open means an unreachable endpoint costs
   the timeout, not the event, which stays spooled for the next attempt.
 - `report flush`, an explicit verb, for guides and for debugging.
-- **Not `retrieve`.** It delivers inline, but through the single-event path below rather than
-  a flush; the distinction is one POST versus all of them. See "the immediate path" below.
+- **Not `retrieve`.** It delivers inline on both legs, but through the single-event path below
+  rather than a flush; the distinction is one POST versus all of them. See "the immediate path"
+  below.
 - The CLI's top-level error handler — **except when the failing command is
   `retrieve`**. Flushing there is right for the bridging pair, where the thing that
   broke *is* the normal flush point, so waiting for it would mean waiting forever.
   It is wrong for the per-turn hook: a store the hook cannot reach fails it on
-  every turn, so the error path would put a blocking POST on the hot path once per
-  turn, precisely when the user is already broken. Caught by exercising a real
+  every turn, so a *drain* on that path would cost up to `MAX_FLUSH_POSTS` requests
+  per turn, precisely when the user is already broken. Caught by exercising a real
   install against a live endpoint, not by reasoning — constraint 1 alone does not
-  say that the error path is covered too. It still does not: the amendment to
-  constraint 1 lets a *successful* retrieve spend one POST, and deliberately leaves
-  the failing one spool-only, because "every turn" is exactly the multiplier the
-  failure path has and the success path does not.
+  say that the error path is covered too. This exemption is unchanged by the
+  amendment below: what it rules out is the unbounded drain, not reporting, and the
+  `memory_search_failed` envelope `retrieve` delivers for itself already says the
+  same thing at constant cost. Only the `cli_error` behind it waits.
 
 Mechanics, stated because they are what make a shared spool safe:
 
@@ -181,11 +187,17 @@ Two consequences are accepted rather than solved:
   spooled behind it. `occurred_at` says when each event happened and `event_id` makes a replay
   idempotent, so no consumer needs arrival order; a client that preserved it would have to
   drain the spool first, which is the cost this design exists to avoid.
-- **A failed `retrieve` still does not deliver.** The success leg reports inline; the failure
-  leg spools, for the same reason the CLI's error handler skips `retrieve` below — a store the
-  hook cannot reach fails it on *every* turn, and that is when a per-turn blocking POST is
-  least affordable. Nothing is stranded: the next successful retrieve carries the backlog out
-  ahead of its own event.
+- **A broken `retrieve` costs one POST per turn.** Both legs deliver. **Amended:** the failure
+  leg was originally spool-only, on the reasoning that a store the hook cannot reach fails it
+  on *every* turn, so that is when a per-turn blocking POST is least affordable. The reasoning
+  held for the cost and inverted the value. A machine whose retrieval is broken is the one this
+  whole feature exists to surface, and the later flush its event would wait for runs on the
+  bridging pair — which the same broken store breaks. Spooling made the least healthy machine
+  the quietest one, which is the failure mode §5 names as its motivation. So the cost is
+  accepted and named rather than avoided: a fully broken store adds up to `_TIMEOUT_SECONDS` to
+  each turn's hook until it is fixed. That is a constant, it is bounded by the timeout rather
+  than by the backlog, and it is the same constant the success leg already pays. What is *not*
+  accepted is a drain, which is why the error handler's `retrieve` exemption above stands.
 
 Note that `report uninstall` does *not* use this path — it triggers an ordinary flush inline,
 which is a spool operation, and it needs the whole spool gone rather than one event sent.
@@ -214,7 +226,7 @@ The dividing line is whether any code can observe the completion.
 
 | Event | Call site |
 | --- | --- |
-| retrieve | `retrieval._cmd_retrieve` — one inline POST on success, spool-only on failure, never a flush (§2) |
+| retrieve | `retrieval._cmd_retrieve` — one inline POST on either leg, never a flush (§2) |
 | remember finished | `host_cli._cmd_commit` — the terminal step of the record seam, which already holds the recall-file and resource counts |
 | `cli_error` | `host_cli.run`'s top-level `except` — see §5 |
 | `cli_install_started` | `config_cmd._cmd_init`, after the config write — see below |
@@ -280,8 +292,9 @@ bury the rare signal inside the common one. Both stages therefore report through
 an agent to them.
 
 **Only the completion needs a verb; the way in is observed.** Two code-observed steps precede
-it, each flushed where it is recorded. `cli_install_started` is recorded by `init`, and
-`install_guide_opened` by `docs install`. The asymmetry with the completion is the point:
+it. `cli_install_started` is recorded by `init`, and `install_guide_opened` by `docs install`.
+All three steps flush where they are recorded, so provenance is the only asymmetry left in the
+funnel and delivery is not one of them. The provenance asymmetry is the point:
 `report install` is voluntary and undercounts, and a start that undercounted independently of
 it could report *more completions than attempts*, which is worse than no funnel at all. Taking
 both steps in code makes `started >= opened >= succeeded` hold structurally, since `SKILL.md`
@@ -308,13 +321,15 @@ ending in `_started` beside the real one is the pair a consumer sums by accident
 document being asked for — and the gap between the two counts installs abandoned before they
 had begun.
 
-Flushing at both, rather than recording only, is the load-bearing half. An install that dies in
-Part 2 never reaches `prepare` or `commit`, so without these flushes its start — and every
-`cli_error` it accumulated on the way down — would sit in the spool until the cap ate it, and
-that run is precisely the one these events exist to make visible. `docs install` affords a
+Flushing at all three, rather than recording only, is the load-bearing half. An install that
+dies in Part 2 never reaches `prepare` or `commit`, so without these flushes its start — and
+every `cli_error` it accumulated on the way down — would sit in the spool until the cap ate it,
+and that run is precisely the one these events exist to make visible. `docs install` affords a
 flush outright: `resolve_doc` has already blocked on a server GET by the time the guide is
 printed. `init` does not, and pays for it — one bounded POST on a local command, fail-open, so
-an unreachable endpoint costs the timeout rather than the write.
+an unreachable endpoint costs the timeout rather than the write. `report install` was the last
+to join them, and the argument for exempting it — a completed install goes on to bridge, and
+will flush there — turned out to assume the very thing the event reports; see §2.
 
 The remaining costs are recorded rather than hidden. `init` is idempotent and gets re-run on
 repairs and on a second host, and a guide re-printed mid-run — a compaction, a restarted agent
@@ -680,14 +695,16 @@ document.
   broken, events accumulate to the cap and are then dropped. This is the correct failure — a
   broken bridging task is precisely a thing worth being unable to hide — but it means "no
   events from this install" has two causes, and reading it as "uninstalled" is wrong. Since §2,
-  a successful `retrieve` is the exception that partly covers this: it delivers its own event
-  and so keeps reporting from a machine whose bridging never runs, which also means the spool
-  reaches its cap far less often than originally expected.
-- **`retrieve` gains one blocking POST per successful turn.** Bounded to exactly one request,
-  taken after the result is already on stdout, and fail-open: an unreachable endpoint costs the
-  timeout and spools the event rather than losing it or failing the command. What must not
-  change is the *shape* — recording still neither parses nor rewrites the spool, and any future
-  work that makes it do either, or that turns this into a flush, re-opens constraint 1.
+  `retrieve` is the exception that largely covers this: it delivers its own event on either
+  leg, so a machine whose bridging never runs still reports every turn, and the spool reaches
+  its cap far less often than originally expected.
+- **`retrieve` gains one blocking POST per turn, successful or not.** Bounded to exactly one
+  request, taken after the result is already on stdout, and fail-open: an unreachable endpoint
+  costs the timeout and spools the event rather than losing it or failing the command. The
+  failure leg's share of this is the cost §2 names and accepts — a fully broken store adds the
+  timeout to every turn until it is fixed. What must not change is the *shape* — recording still
+  neither parses nor rewrites the spool, and any future work that makes it do either, or that
+  turns either leg into a flush, re-opens constraint 1.
 - **The spool is a new file under `~/.memu` that uninstall does not mention.** `UNINSTALL.md`
   Part 3 needs a line for it, and `report uninstall`'s flush should leave it empty anyway.
   It is not alone: `events.jsonl.*.sending`, the `events.dropped` counter, and §5's
