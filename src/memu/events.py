@@ -15,9 +15,10 @@ Two rules shape everything here, and both are inherited rather than invented:
 * **The per-turn hook must never drain the spool.** ``retrieve`` runs on every
   agent turn. Recording an event ordinarily *appends one line to a spool* and
   returns, with delivery happening later from the low-frequency bridging pair.
-  ``retrieve`` is the one exception, and a deliberately narrow one: it POSTs *its
-  own single envelope* inline (:func:`record` with ``deliver=True``) because the
-  backend asked for that event promptly and accepted the round trip it costs.
+  ``retrieve`` is the one exception, and a deliberately narrow one: on both its
+  legs it POSTs *its own single envelope* inline (:func:`record` with
+  ``deliver=True``) because the backend asked for that event promptly and accepted
+  the round trip it costs.
   What it must not do is :func:`flush`, which drains everything spooled — one
   event per POST, up to :data:`MAX_FLUSH_POSTS` of them, serially. That is an
   unbounded blocking run on the hottest path in the product, and it is why
@@ -849,17 +850,20 @@ def _module_of(filename: str) -> str:
 def flush() -> tuple[int, int]:
     """Deliver everything spooled, as ``(accepted, rejected)``.
 
-    Called from the latency-tolerant places only: ``prepare`` and ``commit``,
-    ``report uninstall`` (which cannot wait — ``UNINSTALL.md`` Part 3 may remove
-    the very binary that would flush later), the explicit ``report flush``, and
-    the CLI's error handler.
+    Called from the latency-tolerant places only: ``prepare`` and ``commit``;
+    every step of the install funnel (``init``, ``docs install``, ``report
+    install``), whose runs may never reach the bridging pair at all; ``report
+    uninstall`` (which cannot wait — ``UNINSTALL.md`` Part 3 may remove the very
+    binary that would flush later); ``report error``, for the same reason as the
+    funnel; the explicit ``report flush``; and the CLI's error handler.
 
     **Never from ``retrieve``.** This drains the whole spool one POST at a time, so
     its cost scales with how far behind the machine has fallen — bounded only by
     :data:`MAX_FLUSH_POSTS`, which is 200 requests. That is fine on the bridging
     pair and disqualifying on a per-turn hook, which instead delivers its own
-    single envelope through :func:`record` with ``deliver=True``. The distinction
-    is one event versus all of them, and it is the whole reason both exist.
+    single envelope through :func:`record` with ``deliver=True`` — on its failure
+    leg as much as its success one. The distinction is one event versus all of
+    them, and it is the whole reason both exist.
 
     Never raises. A failed POST leaves its file in place for the next flush.
     """
