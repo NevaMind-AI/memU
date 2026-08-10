@@ -159,6 +159,11 @@ CLI_INSTALL_SUCCEEDED = "cli_install_succeeded"
 before ``cli_install_failed`` gave it a counterpart to be symmetrical with."""
 
 CLI_INSTALL_FAILED = "cli_install_failed"
+
+UNINSTALL_GUIDE_OPENED = "uninstall_guide_opened"
+""":data:`INSTALL_GUIDE_OPENED`'s mirror on the way out — ``docs uninstall``
+printed ``UNINSTALL.md``"""
+
 CLI_UNINSTALL_SUCCEEDED = "cli_uninstall_succeeded"
 CLI_UNINSTALL_FAILED = "cli_uninstall_failed"
 """``report uninstall`` and ``report error --stage uninstall``. ``_succeeded`` was
@@ -303,6 +308,7 @@ _ALLOWED_PROPERTIES: dict[str, frozenset[str]] = {
     INSTALL_GUIDE_OPENED: frozenset(),
     CLI_INSTALL_SUCCEEDED: frozenset(),
     CLI_INSTALL_FAILED: frozenset(),
+    UNINSTALL_GUIDE_OPENED: frozenset(),
     CLI_UNINSTALL_SUCCEEDED: frozenset(),
     CLI_UNINSTALL_FAILED: frozenset(),
     AGENT_ERROR_REPORTED: frozenset({"stage", "detail"}),

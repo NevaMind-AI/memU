@@ -230,7 +230,7 @@ The dividing line is whether any code can observe the completion.
 | remember finished | `host_cli._cmd_commit` — the terminal step of the record seam, which already holds the recall-file and resource counts |
 | `cli_error` | `host_cli.run`'s top-level `except` — see §5 |
 | `cli_install_started` | `config_cmd._cmd_init`, after the config write — see below |
-| `install_guide_opened` | `host_cli._cmd_docs`, on `docs install` only — see below |
+| `install_guide_opened` / `uninstall_guide_opened` | `host_cli._cmd_docs`, on the two lifecycle guides and not on `docs task` — see below |
 
 **An explicit verb, registered once in `host_cli.build_parser` so every host inherits it:**
 
@@ -321,6 +321,15 @@ ending in `_started` beside the real one is the pair a consumer sums by accident
 document being asked for — and the gap between the two counts installs abandoned before they
 had begun.
 
+`uninstall_guide_opened` is that same observation on the way out, added later and for the gap
+rather than for symmetry. `cli_uninstall_succeeded` is agent-reported and undercounts like
+every other verb, and the removal path had no code-observed step at all to read it against, so
+an uninstall that was begun and abandoned was indistinguishable from one never begun. There is
+deliberately no `cli_uninstall_started` beside it: nothing on the way out corresponds to `init`,
+and inventing one would put a `_started` name next to this — the exact pair the rename above
+exists to avoid. `docs task` stays uninstrumented for a different reason: it is printed by a
+scheduled run rather than by anyone deciding anything, so it would count how often cron fires.
+
 Flushing at all three, rather than recording only, is the load-bearing half. An install that
 dies in Part 2 never reaches `prepare` or `commit`, so without these flushes its start — and
 every `cli_error` it accumulated on the way down — would sit in the spool until the cap ate it,
@@ -353,6 +362,7 @@ later revision is one edit:
 | `memory_list_succeeded` / `_failed` | code | a whole-store sweep — `prepare`'s mirror, or `memu list-files` |
 | `cli_install_started` | code | `init` wrote `config.env` |
 | `install_guide_opened` | code | `docs install` printed the guide |
+| `uninstall_guide_opened` | code | `docs uninstall` printed the guide |
 | `cli_install_succeeded` | agent | `report install` |
 | `cli_install_failed` | agent | `report error --stage install` |
 | `cli_uninstall_succeeded` | agent | `report uninstall` |
@@ -363,8 +373,8 @@ later revision is one edit:
 
 The `cli_` prefix marks what the client observed about *itself* — its own install, its own
 uncaught exception, its own spool overflowing — against the `memory_` family, which reports on
-memU's actual work. `install_guide_opened` is the one name outside both, and deliberately: it
-reports a *document* being asked for, which is neither the client's own lifecycle nor memU's
+memU's actual work. The `*_guide_opened` pair are the names outside both, and deliberately: they
+report a *document* being asked for, which is neither the client's own lifecycle nor memU's
 work on memory.
 
 **One name per action and outcome, replacing `core_action_completed` and its
@@ -677,10 +687,10 @@ document.
   floor on install volume, not a census. The trustworthy denominator is the first `retrieve` or
   first `commit` seen from a `client_instance_id` — both code-observed — and dashboards should
   be built on those, with `cli_install_succeeded` read as a funnel signal rather than a total.
-  `cli_install_started` and `install_guide_opened` are code-observed and so do not share this
-  bias, but they count attempts as observed rather than machines (§4), which makes them
-  numerators for "how many installs finish", not substitute denominators for "how many installs
-  exist".
+  `cli_install_started`, `install_guide_opened` and `uninstall_guide_opened` are code-observed
+  and so do not share this bias, but they count attempts as observed rather than machines (§4),
+  which makes them numerators for "how many installs finish", not substitute denominators for
+  "how many installs exist".
 - **`succeeded + failed` never equals `started`, wherever a `_failed` leg is agent-reported.**
   This holds for `cli_install_*`, `cli_uninstall_*`, and `memory_update_*` — the three families
   §4 fans an agent report out into. The `_failed` counts are a floor; the honest failure number

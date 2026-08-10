@@ -760,15 +760,31 @@ def test_the_install_start_carries_the_backlog_off_a_machine_that_may_never_brid
     assert not reporting.exists()
 
 
-def test_only_the_install_guide_reports_being_opened(
+def test_the_lifecycle_guides_report_being_opened_and_the_bridging_one_does_not(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # `docs task` runs on every scheduled-task repair and `docs uninstall` is the
-    # opposite intent; neither is a step on the way in.
+    """One row per guide someone *decided* to open — in and out, but not the schedule's.
+
+    ``docs task`` runs on every scheduled-task repair, so counting it would measure
+    how often cron fires and nothing about anyone's intent; the pair it describes is
+    instrumented end to end already.
+
+    Both lifecycle guides deliver inline rather than spooling, and on the way out
+    that is not symmetry for its own sake: ``UNINSTALL.md`` Part 3 removes the
+    package, so an event left in the spool loses the binary that would have sent it.
+    """
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "")
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
     assert run(CLAUDE_SPEC, ["docs", "task"]) == 0
     assert run(CLAUDE_SPEC, ["docs", "uninstall"]) == 0
-    assert _spooled(reporting) == []
+    assert capsys.readouterr().out.strip(), "the guides themselves must still be what the command prints"
+
+    assert [event["event_name"] for event in posted.events] == [events.UNINSTALL_GUIDE_OPENED]
+    assert posted.events[0]["context"]["reported_by"] == events.REPORTED_BY_CODE
+    assert posted.events[0]["properties"] == {}
+    assert _spooled(reporting) == [], "the guide that precedes package removal cannot wait for a later flush"
 
 
 def test_report_install_and_uninstall_take_no_failure_flag(reporting: pathlib.Path) -> None:
