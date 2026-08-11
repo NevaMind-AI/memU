@@ -5,94 +5,82 @@ description: Create an OpenClaw cron job that bridges recent OpenClaw sessions i
 
 # Create the memU bridging scheduled task (OpenClaw)
 
-Use this when the user asks to **set up (or change) the recurring memU
-"bridging" task** — the job that periodically turns what the agent recently did
-in its OpenClaw sessions into memU memory files, skills, and resource
-submissions.
+Use this when the user asks to set up or change the recurring memU bridging task.
+It creates an OpenClaw-native cron job; it does not run the pipeline now. This is
+also Part 2 of `memu-openclaw docs install`.
 
-Memory and skills are durable in both modes. In cloud mode, the current service
-accepts workspace resources from this unchanged pipeline but does not persist or
-retrieve them yet.
+The task has one pipeline on every supported OpenClaw release:
 
-Your goal is to **create an OpenClaw cron job** (OpenClaw schedules agent runs
-natively) whose recurring prompt runs the three-step pipeline below. You are not
-running the pipeline now; you are registering the schedule that will run it
-later.
-
-Part of the full setup in `INSTALL.md` (`memu-openclaw docs install`), but
-usable on its own.
-
-## What the bridging task does (context)
-
-1. **Prepare** — `memu-openclaw prepare` scans new turns under
-   `~/.openclaw/agents/*/sessions/` (one JSONL transcript per session, all
-   agents), mirrors the current memU recall files to
-   `~/.memu/hosts/openclaw/memory` and `~/.memu/hosts/openclaw/skill`, snapshots
-   them by content hash, and writes numbered **job-instruction files** to
-   `~/.memu/hosts/openclaw/jobs/` (`1.txt`, `2.txt`, …).
-2. **Self-evolve** — the agent opens each job file **in numeric order** and
-   follows it: mine a session into user **memory**, mine a session into a
-   **skill**, and **describe** the files the sessions touched. "Do nothing" is
-   an allowed, common outcome for any job.
-3. **Commit** — `memu-openclaw commit` diffs the tracked directories against the
-   step-1 snapshot and submits what the agent actually created or changed back
-   to memU.
-
-Only steps 1 and 3 are code. **Step 2 is real agent work**, so the cron job's
-prompt must instruct the agent to do it, not shell out to a script.
+1. `memu-openclaw prepare` slices new transcripts into numbered job files.
+2. The agent follows every job file in ascending numeric order. This is real
+   agent work; do not replace it with a shell script. A job may validly produce
+   nothing.
+3. `memu-openclaw commit` submits the memory, skill, and resource changes that
+   the jobs actually made.
 
 ## Prerequisites
 
-- **All currently supported OpenClaw releases can run bridging.** Structural
-  cron-session exclusion is an optional capability available in OpenClaw
-  `v2026.7.2-beta.4+`. Earlier releases, including the current stable line,
-  keep the legacy pipeline unchanged: do not block installation or require a
-  prerelease upgrade. They cannot exclude the bridging transcript and emit one
-  local compatibility warning instead. Upgrading to a prerelease is optional.
-- **memU is installed and `memu-openclaw` is on `PATH`** for the environment the
-  cron job's shell tool runs in. Verify with `memu-openclaw doctor`; if it
-  fails, do `INSTALL.md` Part 1 first.
-- **The scheduled turn can execute on the gateway host.** If OpenClaw sandboxes
-  non-main sessions, an isolated cron turn's default shell tool may run inside
-  that sandbox, where the host's memU install and `~/.openclaw/agents` are not
-  visible. Do not create a schedule that can only run there: use an agent/runtime
-  whose policy permits unattended gateway-host exec, then verify the actual
-  scheduled run below. Never weaken an existing sandbox or approval policy
+- `memu-openclaw doctor` succeeds in the gateway service environment.
+- The isolated scheduled turn can execute on the gateway host and see both the
+  memU install and `~/.openclaw/agents`. Do not weaken sandbox or approval policy
   without the user's explicit approval.
+- The gateway service can resolve `memu-openclaw`. Locate it with
+  `command -v memu-openclaw` on macOS/Linux or
+  `(Get-Command memu-openclaw).Source` on native Windows, expose that directory
+  to the gateway service if needed, then prove it through the scheduled run's
+  shell-tool result; the interactive lookup alone is not verification.
+
+## Compatibility behavior
+
+Registration is required for every installation. Do not branch on the OpenClaw
+version string. Do not block legacy installation. Do not add session identity
+to the recurring prompt.
+
+v2026.7.2-beta.4 is the first verified release with the required structural
+schema. Runtime behavior is selected by schema capability, not version
+comparison:
+
+```text
+Always
+  create isolated cron
+  -> register job ID + agent ID
+  -> run plain memu-openclaw prepare
+
+prepare detects
+  session_windows has session_id + session_key
+    -> resolve this registered job's run sessions
+    -> remember them as self-sessions
+    -> exclude only their transcripts
+
+  required schema unavailable
+    -> warn once, non-blocking
+    -> do not exclude the bridging transcript
+    -> continue PREPARE -> SELF-EVOLVE -> COMMIT unchanged
+```
+
+Upgrading to a prerelease is optional. A legacy registration remains useful: it
+starts filtering automatically after a later OpenClaw upgrade exposes the
+required schema.
 
 ## Step 1 — settle the schedule
 
-Ask the user for a schedule if the request doesn't include one. **Default: every
-hour**, cron `0 * * * *` (local time). Confirm before creating.
+Use the schedule the user requested. If none was supplied, ask; the default is
+hourly at `0 * * * *` in local time. Confirm before creating the external job.
 
-## Step 2 — create the cron job
+## Step 2 — create and register the cron job
 
-Create an OpenClaw cron job (e.g. named `memu-remember`) with an `agentTurn`
-payload and `sessionTarget="isolated"`, using the chosen schedule. Set its
-recurring prompt to the block below **verbatim**. The isolated target is
-load-bearing: OpenClaw gives every run a structural
-`agent:<agentId>:cron:<jobId>:run:<sessionId>` identity before the model starts.
+Create an OpenClaw cron job (for example `memu-remember`) with:
 
-After creation, copy the returned job ID and register it once on the gateway
-host, replacing both placeholders with the values used to create the job:
+- an `agentTurn` payload;
+- `sessionTarget="isolated"` — load-bearing because each run receives
+  `agent:<agentId>:cron:<jobId>:run:<sessionId>` before the model starts;
+- the selected schedule;
+- the recurring prompt below, verbatim.
+
+After creation, register the returned job ID and the agent that owns it on the
+gateway host:
 
     memu-openclaw register-cron-job --job-id <jobId> --agent-id <agentId>
-
-Registration is safe on every supported OpenClaw release. On
-`v2026.7.2-beta.4+`, `prepare` uses it with the structural session schema to
-exclude this job's exact run sessions. Earlier releases ignore it for filtering,
-keep the legacy pipeline unchanged, and emit one non-blocking compatibility
-warning. Do not put the job's session ID into its prompt; ordinary cron jobs
-remain mineable.
-
-**The scheduled turn runs in the gateway's environment, not your interactive
-shell.** The gateway is a launchd/systemd/Windows service with a bare `PATH` —
-user-level Python installs may not resolve there even though they resolve for
-an interactive user. Find the executable with `command -v memu-openclaw` on
-macOS/Linux or `(Get-Command memu-openclaw).Source` on native Windows. Make that
-directory available to the gateway service, then restart the gateway. On
-Windows Hub's default WSL gateway, follow the Linux path; a Windows node is not
-the gateway unless exec is explicitly bound there.
 
 ```
 Run the memU bridging pipeline. Do the four steps strictly in order; do not
@@ -100,23 +88,19 @@ skip a step even if the previous one looks like it produced nothing.
 
 1. LEFTOVERS. If ~/.memu/hosts/openclaw/jobs/ already contains job files, they are unfinished
    work from an earlier run (a crash, or the install itself). Process them
-   exactly as step 3 describes, then run memu-openclaw commit — and only then
-   continue.
+   exactly as step 3 describes, then run memu-openclaw commit. If this leftovers
+   commit exits non-zero, stop and follow ON FAILURE; only then continue.
 
 2. PREPARE. Run this exact command with the shell tool:
 
      memu-openclaw prepare
 
-   On capable OpenClaw versions, it resolves the registered cron job's sessions
-   from structural metadata and remembers them as self-sessions. On earlier
-   versions it emits one non-blocking compatibility warning and keeps the legacy
-   behavior. In either case it regenerates ~/.memu/hosts/openclaw/jobs/. If the
-   command exits non-zero, stop and report the error — do not continue.
+   It regenerates ~/.memu/hosts/openclaw/jobs/. If the command exits non-zero,
+   stop and report the error — do not continue.
 
-3. SELF-EVOLVE. List ~/.memu/hosts/openclaw/jobs/*.txt and process them in
-   ascending numeric order (1.txt, then 2.txt, …). The count changes every run —
-   always glob and sort; never assume a fixed number. If there are no job
-   files, skip to step 4.
+3. SELF-EVOLVE. List ~/.memu/hosts/openclaw/jobs/*.txt and sort by each filename's integer stem,
+   not lexically: 1.txt, 2.txt, …, 10.txt. The count changes every run; never
+   assume a fixed number. If there are no job files, skip to step 4.
 
    For each job file: read it and follow its instructions to the letter. Each
    job is self-contained and already carries the concrete paths it needs. Order
@@ -130,71 +114,58 @@ skip a step even if the previous one looks like it produced nothing.
    It commits whatever the jobs created or changed. If it exits non-zero,
    report the error.
 
-ON FAILURE. If step 2 or step 4 exited non-zero, run this once before you stop:
+ON FAILURE. If any PREPARE or COMMIT command exited non-zero, run this once before you stop:
 
      memu-openclaw report error --stage remember --detail "<a full account of what went wrong>"
 
-   That detail is all a memU engineer gets to work out what is broken on this
-   machine, so be generous: which step, what you ran, what happened instead,
-   what you already tried, and what you think the cause is. Write it as prose
-   for a human, not as a transcript — do not paste the traceback or raw command
-   output, which the CLI already reports on its own, and keep credentials,
-   absolute paths, and memory or transcript text out of it. Ignore any failure
-   of that command; it is never part of the run.
+   Explain which step failed, what ran, what happened, and the likely cause.
+   Do not paste raw output, credentials, absolute paths, memory, or transcript
+   text. Ignore a failure of the report command.
 
 Finish with a one-line summary: how many jobs ran (leftovers included) and what was committed (or
 that there was nothing to commit).
 ```
 
-The prompt block is fixed; only the schedule is the user's choice. Its shell
-commands are platform-neutral, and it carries no run or session identity.
+Only the schedule varies. The prompt carries no job, run, or session identity.
 
-## Step 3 — confirm
+## Step 3 — verify
 
-**Your interactive shell's `PATH` proves nothing about the scheduler's.** A
-local preflight (`command -v memu-openclaw` on macOS/Linux, or
-`Get-Command memu-openclaw` on native Windows) only tells you which directory
-the gateway needs.
+Trigger the created job once and inspect its tool result plus gateway-host
+filesystem traces; do not trust only its prose summary.
 
-The hard check is cross-platform: trigger the job once and inspect its tool
-result plus **filesystem traces** on the gateway host. `prepare` must run and
-move the pending session cursor or jobs timestamps. On a capable, registered
-store, the run ID must also appear in `.self_sessions.openclaw.json` and stay
-out of the pending manifest. On a legacy store, the one compatibility warning
-is expected and the ordinary prepare / self-evolve / commit pipeline must still
-complete. Do not trust the run's own prose summary; scheduled runs in bare or
-sandboxed environments have reported success after command-not-found or after
-operating on the wrong filesystem.
+Every version:
 
-Report back: the cron job's name and the schedule in words (e.g. "hourly at :00
-local time"). Mention that the first run only has work to do once there are new
-OpenClaw sessions since the last run.
+- the scheduled tool result must show `memu-openclaw prepare` resolved and ran on
+  the gateway host;
+- fresh job timestamps or the current cycle's pending cursor prove `prepare`
+  executed; the pipeline then reaches `commit`, or explicitly reports nothing
+  to commit.
 
-## Notes
+Structural schema:
 
-- **Registration is the identity handoff.** Existing schedules need no prompt
-  rewrite if PREPARE already runs plain `memu-openclaw prepare`; register their
-  exact job ID once. Legacy stores retain that registration for a later OpenClaw
-  upgrade but keep running without self-session filtering. Schedules created
-  from the older prompt-mediated guide should remove `session_status` and both
-  identity variables after registration. Never infer the newest database row or
-  match prompt text: concurrent sessions and recalled text make both unsafe.
-- **Leftovers run before prepare.** Job files already on disk when the run
-  starts are unfinished work — a run that died mid-pipeline, or the install's
-  own verify. `prepare` deletes unprocessed job files, and the cursor already
-  marks their sessions as seen, so anything skipped at that moment would never
-  be minable again; draining leftovers first turns a half-done cycle into
-  bounded re-work instead of silent loss.
-- **Idempotent and incremental.** `prepare` tracks a per-session cursor in
-  `~/.memu/hosts/openclaw/.session_manifest.openclaw.json`: JSONL sessions use
-  their line count, while SQLite sessions also record OpenClaw's rewrite
-  generation so a manual compact/replacement invalidates the old row offset.
-- **Ordering is load-bearing.** Memory jobs before skill jobs, the
-  resource-describe job last. Always ascending numeric order.
-- **The working tree is host-scoped.** Everything under
-  `~/.memu/hosts/openclaw/` is this adapter's run-scoped working state; other
-  memU host adapters never race with it. The durable store they all share is the
-  backend selected by `MEMU_MEMORY_MODE` in `~/.memu/config.env`; local mode
-  uses the `MEMU_DB` there.
-- **Failure handling.** Steps 1 and 3 are the only failure points that should
-  abort the run. A "do nothing" job in step 2 is normal, not an error.
+- take the session ID from that triggered run's scheduler result, not from an
+  older transcript or the newest database row;
+- that ID appears in
+  `~/.memu/hosts/openclaw/.self_sessions.openclaw.json`;
+- that ID is absent from
+  `~/.memu/hosts/openclaw/.session_manifest.openclaw.json.pending` when the
+  pending manifest exists.
+
+Legacy schema:
+
+- one non-blocking compatibility warning is expected;
+- ordinary JSONL sessions still produce jobs and the pipeline completes.
+
+Report the job name and schedule in words. The first run only has work after new
+OpenClaw session turns exist.
+
+## Load-bearing notes
+
+- Drain leftovers before `prepare`: prepare replaces unprocessed job files after
+  their session cursor has already advanced.
+- Always process jobs in ascending numeric order: memory before skill, resource
+  description last.
+- Existing schedules whose PREPARE step already runs plain
+  `memu-openclaw prepare` need no prompt rewrite; register their exact job ID.
+- Never infer the newest database row or match prompt text. Concurrent sessions
+  and recalled text make both unsafe identity signals.

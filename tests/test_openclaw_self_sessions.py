@@ -304,7 +304,45 @@ def test_openclaw_scheduled_task_keeps_legacy_installs_non_blocking() -> None:
         encoding="utf-8"
     )
 
-    assert "v2026.7.2-beta.4" in doc
-    assert "do not block installation" in doc
-    assert "Upgrading to a prerelease is optional" in doc
+    prose = " ".join(doc.split())
+    assert "v2026.7.2-beta.4 is the first verified release" in prose
+    assert "Runtime behavior is selected by schema capability, not version comparison" in prose
+    assert "Registration is required for every installation" in prose
+    assert "Do not branch on the OpenClaw version string" in prose
+    assert "Do not block legacy installation" in prose
+    assert "Do not add session identity to the recurring prompt" in prose
+    assert "continue PREPARE -> SELF-EVOLVE -> COMMIT unchanged" in prose
+    assert "Upgrading to a prerelease is optional" in prose
     assert "v2026.7.2-beta.1" not in doc
+
+
+def test_openclaw_task_documents_precise_verification_for_both_capabilities() -> None:
+    doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Every version:" in doc
+    assert "Structural schema:" in doc
+    assert "Legacy schema:" in doc
+    assert ".self_sessions.openclaw.json" in doc
+    assert ".session_manifest.openclaw.json.pending" in doc
+    assert "session ID from that triggered run's scheduler result" in doc
+    assert "ordinary JSONL sessions still produce jobs" in doc
+    assert "tool result must show `memu-openclaw prepare`" in doc
+
+
+def test_openclaw_task_preserves_execution_order_and_failure_boundaries() -> None:
+    doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
+        encoding="utf-8"
+    )
+    prompt_start = doc.index("```\nRun the memU bridging pipeline")
+    prompt_end = doc.index("\n```", prompt_start)
+    prompt = doc[prompt_start:prompt_end]
+
+    assert doc.index('sessionTarget="isolated"') < doc.index("memu-openclaw register-cron-job") < prompt_start
+    prompt_prose = " ".join(prompt.split())
+    assert "sort by each filename's integer stem" in prompt_prose
+    assert "If this leftovers commit exits non-zero, stop" in prompt_prose
+    assert "If any PREPARE or COMMIT command exited non-zero" in prompt_prose
+    assert "memu-openclaw register-cron-job" not in prompt
+    assert "session_status" not in prompt
