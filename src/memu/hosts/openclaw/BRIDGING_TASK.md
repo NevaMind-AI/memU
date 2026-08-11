@@ -64,26 +64,32 @@ required schema.
 
 ## Step 0 — reuse or migrate an existing job
 
-Inspect existing automations before creating anything, including disabled jobs.
-Never create a second bridging job when an existing one can be reused. Treat an
-`agentTurn` job as a candidate only when its prompt contains all three signals:
-`memu-openclaw prepare`, `memu-openclaw commit`, and
-`~/.memu/hosts/openclaw/jobs/`. The job name alone is not proof.
+Inspect existing automations before creating anything, including disabled jobs,
+using the first-class automation list/get surface. Never create a second
+bridging job when an existing one can be reused. For each `agentTurn` job,
+inspect its complete prompt and classify it:
 
-- **Exactly one candidate:** inspect its complete definition. Reuse and preserve
-  its job ID and schedule, plus its name, enabled state, owner, and delivery,
-  unless the user requested a change. If its payload is not isolated or its
-  prompt is not the verbatim block below, show the in-place update and confirm
-  before applying it; patch only the nonconforming fields and preserve all
-  unrelated payload settings. Do not create a replacement beside it. If the
+- **candidate:** the prompt contains all three signals: `memu-openclaw prepare`,
+  `memu-openclaw commit`, and `~/.memu/hosts/openclaw/jobs/`;
+- **near match:** the prompt contains one or two signals, uses an equivalent
+  absolute executable or jobs path, or its name resembles a memU bridging task;
+- otherwise it is unrelated. The job name alone is not proof of a candidate.
+
+Then apply exactly one branch:
+
+- **Exactly one candidate and zero unresolved near matches:** reuse and preserve
+  its job ID and schedule, plus its name, enabled state, owner, delivery, and
+  unrelated payload settings, unless the user requested a change. If its
+  payload is not isolated or its prompt is not the verbatim block below, show
+  the in-place patch and confirm before applying it by exact job ID. If the
   owning agent ID cannot be proved from the definition, stop rather than guess.
-- **No candidate:** continue to the creation path below.
-- **Multiple or ambiguous candidates:** stop without creating, deleting, or
-  guessing. Report their IDs and the ambiguity so the user can choose. Do not
-  modify working state under `~/.memu/hosts/openclaw/`.
+- **No candidate or near match:** continue to the creation path below.
+- **Multiple candidates or any near match:** stop without creating, deleting,
+  updating, registering, or guessing. Report IDs and matched signals so the
+  user can choose. Do not modify `~/.memu/hosts/openclaw/` working state.
 
 After any reuse, update, or creation, re-list automations and prove exactly one
-candidate remains before registration.
+selected bridging job and zero unresolved near matches before registration.
 
 ## Step 1 — settle the schedule
 
@@ -103,7 +109,7 @@ If Step 0 found no candidate, create an OpenClaw cron job (for example
 - the selected schedule;
 - the recurring prompt below, verbatim.
 
-After Step 0 selects or Step 2 creates the single job, register that exact job ID
+After Step 0 selects or Step 2 creates the single job, register that exact selected job ID
 and its owning agent on the gateway host:
 
     memu-openclaw register-cron-job --job-id <jobId> --agent-id <agentId>
@@ -156,7 +162,7 @@ Only the schedule varies. The prompt carries no job, run, or session identity.
 
 ## Step 3 — verify
 
-Trigger the created job once and inspect its tool result plus gateway-host
+Trigger the selected, updated, or created job once and inspect its tool result plus gateway-host
 filesystem traces; do not trust only its prose summary.
 
 Every version:

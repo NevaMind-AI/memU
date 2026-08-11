@@ -303,16 +303,15 @@ def test_openclaw_scheduled_task_keeps_legacy_installs_non_blocking() -> None:
     doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
         encoding="utf-8"
     )
+    compatibility = doc[doc.index("## Compatibility behavior") : doc.index("## Step 0")]
 
-    prose = " ".join(doc.split())
-    assert "v2026.7.2-beta.4 is the first verified release" in prose
-    assert "Runtime behavior is selected by schema capability, not version comparison" in prose
-    assert "Registration is required for every installation" in prose
-    assert "Do not branch on the OpenClaw version string" in prose
-    assert "Do not block legacy installation" in prose
-    assert "Do not add session identity to the recurring prompt" in prose
-    assert "continue PREPARE -> SELF-EVOLVE -> COMMIT unchanged" in prose
-    assert "Upgrading to a prerelease is optional" in prose
+    assert "v2026.7.2-beta.4" in compatibility
+    assert "session_windows" in compatibility
+    assert "session_id + session_key" in compatibility
+    assert "schema capability" in compatibility
+    assert "warn once, non-blocking" in compatibility
+    assert "continue PREPARE -> SELF-EVOLVE -> COMMIT unchanged" in compatibility
+    assert "Upgrading to a prerelease is optional" in compatibility
     assert "v2026.7.2-beta.1" not in doc
 
 
@@ -335,22 +334,27 @@ def test_openclaw_task_reuses_one_existing_bridging_job_before_creation() -> Non
     doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
         encoding="utf-8"
     )
-    prose = " ".join(doc.split())
-    inventory = doc.index("Inspect existing automations before creating anything")
+    step0 = doc[doc.index("## Step 0") : doc.index("## Step 1")]
+    prose = " ".join(step0.split())
     creation = doc.index("## Step 2 — create or update and register the cron job")
 
-    assert inventory < creation
-    assert "Never create a second bridging job when an existing one can be reused" in prose
-    assert "memu-openclaw prepare" in prose
-    assert "memu-openclaw commit" in prose
-    assert "~/.memu/hosts/openclaw/jobs/" in prose
-    assert "The job name alone is not proof" in prose
+    assert doc.index("## Step 0") < creation
+    for signal in ("memu-openclaw prepare", "memu-openclaw commit", "~/.memu/hosts/openclaw/jobs/"):
+        assert signal in step0
+    assert "all three signals" in prose
+    assert "one or two signals" in prose
+    assert "absolute executable or jobs path" in prose
+    assert "name resembles a memU bridging task" in prose
+    assert "zero unresolved near matches" in prose
     assert "Exactly one candidate" in prose
-    assert "No candidate" in prose
-    assert "Multiple or ambiguous candidates" in prose
-    assert "preserve its job ID and schedule" in prose
-    assert "stop without creating, deleting, or guessing" in prose
-    assert "re-list automations" in prose
+    assert "No candidate or near match" in prose
+    assert "Multiple candidates or any near match" in prose
+    for preserved in ("job ID", "schedule", "name", "enabled state", "owner", "delivery", "unrelated payload settings"):
+        assert preserved in prose
+    assert "show the in-place patch and confirm" in prose
+    assert "stop without creating, deleting, updating, registering, or guessing" in prose
+    assert "register that exact selected job ID" in doc
+    assert "owning agent" in doc
 
 
 def test_openclaw_task_preserves_execution_order_and_failure_boundaries() -> None:
