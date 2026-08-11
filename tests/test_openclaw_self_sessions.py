@@ -142,7 +142,7 @@ def test_unsupported_openclaw_store_warns_once_then_warns_again_after_recovery(
     assert caplog.text.count("requires OpenClaw v2026.7.2-beta.4 or newer") == 1
 
     _store(tmp_path / "agents", "main", [("run-1", "agent:main:cron:job-123:run:run-1")])
-    assert cron_identity.resolve_registered_sessions(source, layout) == ["run-1"]
+    assert cron_identity.resolve_registered_sessions(source, layout) == ["main/run-1"]
 
     (tmp_path / "agents" / "main" / "agent" / "openclaw-agent.sqlite").unlink()
     cron_identity.resolve_registered_sessions(source, layout)
