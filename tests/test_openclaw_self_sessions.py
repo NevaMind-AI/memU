@@ -331,6 +331,28 @@ def test_openclaw_task_documents_precise_verification_for_both_capabilities() ->
     assert "tool result must show `memu-openclaw prepare`" in doc
 
 
+def test_openclaw_task_reuses_one_existing_bridging_job_before_creation() -> None:
+    doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
+        encoding="utf-8"
+    )
+    prose = " ".join(doc.split())
+    inventory = doc.index("Inspect existing automations before creating anything")
+    creation = doc.index("## Step 2 — create or update and register the cron job")
+
+    assert inventory < creation
+    assert "Never create a second bridging job when an existing one can be reused" in prose
+    assert "memu-openclaw prepare" in prose
+    assert "memu-openclaw commit" in prose
+    assert "~/.memu/hosts/openclaw/jobs/" in prose
+    assert "The job name alone is not proof" in prose
+    assert "Exactly one candidate" in prose
+    assert "No candidate" in prose
+    assert "Multiple or ambiguous candidates" in prose
+    assert "preserve its job ID and schedule" in prose
+    assert "stop without creating, deleting, or guessing" in prose
+    assert "re-list automations" in prose
+
+
 def test_openclaw_task_preserves_execution_order_and_failure_boundaries() -> None:
     doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
         encoding="utf-8"

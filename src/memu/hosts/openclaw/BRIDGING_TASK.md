@@ -62,14 +62,40 @@ Upgrading to a prerelease is optional. A legacy registration remains useful: it
 starts filtering automatically after a later OpenClaw upgrade exposes the
 required schema.
 
+## Step 0 — reuse or migrate an existing job
+
+Inspect existing automations before creating anything, including disabled jobs.
+Never create a second bridging job when an existing one can be reused. Treat an
+`agentTurn` job as a candidate only when its prompt contains all three signals:
+`memu-openclaw prepare`, `memu-openclaw commit`, and
+`~/.memu/hosts/openclaw/jobs/`. The job name alone is not proof.
+
+- **Exactly one candidate:** inspect its complete definition. Reuse and preserve
+  its job ID and schedule, plus its name, enabled state, owner, and delivery,
+  unless the user requested a change. If its payload is not isolated or its
+  prompt is not the verbatim block below, show the in-place update and confirm
+  before applying it; patch only the nonconforming fields and preserve all
+  unrelated payload settings. Do not create a replacement beside it. If the
+  owning agent ID cannot be proved from the definition, stop rather than guess.
+- **No candidate:** continue to the creation path below.
+- **Multiple or ambiguous candidates:** stop without creating, deleting, or
+  guessing. Report their IDs and the ambiguity so the user can choose. Do not
+  modify working state under `~/.memu/hosts/openclaw/`.
+
+After any reuse, update, or creation, re-list automations and prove exactly one
+candidate remains before registration.
+
 ## Step 1 — settle the schedule
 
-Use the schedule the user requested. If none was supplied, ask; the default is
-hourly at `0 * * * *` in local time. Confirm before creating the external job.
+For a reused job, keep its schedule unless the user requested a change. For a
+new job, use the requested schedule; if none was supplied, ask, with hourly at
+`0 * * * *` local time as the default. Confirm before creating or changing the
+external job.
 
-## Step 2 — create and register the cron job
+## Step 2 — create or update and register the cron job
 
-Create an OpenClaw cron job (for example `memu-remember`) with:
+If Step 0 found no candidate, create an OpenClaw cron job (for example
+`memu-remember`) with:
 
 - an `agentTurn` payload;
 - `sessionTarget="isolated"` — load-bearing because each run receives
@@ -77,8 +103,8 @@ Create an OpenClaw cron job (for example `memu-remember`) with:
 - the selected schedule;
 - the recurring prompt below, verbatim.
 
-After creation, register the returned job ID and the agent that owns it on the
-gateway host:
+After Step 0 selects or Step 2 creates the single job, register that exact job ID
+and its owning agent on the gateway host:
 
     memu-openclaw register-cron-job --job-id <jobId> --agent-id <agentId>
 
