@@ -73,6 +73,16 @@ def resolve_session_ids(source: OpenClawTranscriptSource, registration: CronRegi
     return source.cron_run_session_ids(agent_id=registration.agent_id, job_id=registration.job_id)
 
 
+def _remember_all(path: Path, session_ids: list[str]) -> list[str]:
+    """Persist every structural id; OpenClaw archives can outlive active rows."""
+    remembered = self_sessions.load(path)
+    merged = list(dict.fromkeys([*remembered, *session_ids]))
+    if merged != remembered:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(merged, indent=2), encoding="utf-8")
+    return merged
+
+
 def resolve_registered_sessions(source: TranscriptSource, layout: Layout) -> list[str]:
     """Remember registered OpenClaw cron runs and return the complete skip set."""
     remembered = self_sessions.load(layout.self_sessions)
@@ -94,7 +104,4 @@ def resolve_registered_sessions(source: TranscriptSource, layout: Layout) -> lis
             registration.job_id,
             registration.agent_id,
         )
-    for session_id in resolved:
-        if session_id not in remembered:
-            remembered = self_sessions.remember(layout.self_sessions, session_id)
-    return remembered
+    return _remember_all(layout.self_sessions, resolved)

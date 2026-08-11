@@ -114,6 +114,20 @@ def test_resolver_selects_every_run_of_only_the_registered_job(tmp_path: pathlib
     assert cron_identity.resolve_session_ids(source, registration) == ["target-1", "target-2"]
 
 
+def test_structural_sessions_are_remembered_beyond_the_shared_launch_env_limit(tmp_path: pathlib.Path) -> None:
+    layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
+    registration = cron_identity.CronRegistration(agent_id="main", job_id="job-123")
+    cron_identity.save_registration(cron_identity.registration_path(layout.base), **registration.__dict__)
+    source = OpenClawTranscriptSource(tmp_path / "agents")
+    expected = [f"run-{index:04d}" for index in range(1001)]
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(cron_identity, "resolve_session_ids", lambda source, registration: expected)
+        assert cron_identity.resolve_registered_sessions(source, layout) == expected
+
+    assert load_self_sessions(layout.self_sessions) == expected
+
+
 def test_resolver_reads_the_registered_agent_store_only(tmp_path: pathlib.Path) -> None:
     _store(tmp_path, "main", [("main-run", "agent:main:cron:job-123:run:main-run")])
     _store(tmp_path, "other", [("other-run", "agent:other:cron:job-123:run:other-run")])
@@ -154,6 +168,12 @@ async def test_prepare_remembers_structurally_resolved_sessions_without_launch_e
     assert rc == 0
     assert captured["skip_sessions"] == ["run-1", "run-2"]
     assert load_self_sessions(Layout(base=base, host="openclaw").self_sessions) == ["run-1", "run-2"]
+
+
+def test_topic_like_legacy_filename_keeps_its_exact_session_id(tmp_path: pathlib.Path) -> None:
+    session = tmp_path / "main" / "sessions" / "real-topic-42.jsonl"
+
+    assert OpenClawTranscriptSource(tmp_path).session_id(session) == "real-topic-42"
 
 
 def test_openclaw_scheduled_prompt_registers_job_once_and_carries_no_session_identity() -> None:
