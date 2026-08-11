@@ -134,8 +134,9 @@ class OpenClawTranscriptSource(TranscriptSource):
                 continue
             try:
                 columns = self._query(db, "PRAGMA table_info(session_windows)")
-            except TranscriptReadError as exc:
-                logger.warning("could not inspect OpenClaw session schema in %s: %s", db, exc.cause)
+            except TranscriptReadError:
+                # The caller emits one persisted compatibility warning. Logging
+                # here would add an hourly warning outside that dedupe state.
                 continue
             names = {row[1] for row in columns if len(row) > 1 and isinstance(row[1], str)}
             if {"session_id", "session_key"} <= names:

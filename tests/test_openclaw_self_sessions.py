@@ -101,6 +101,22 @@ def test_missing_registration_warns_only_after_structural_capability_is_availabl
     assert caplog.text.count("no OpenClaw bridging cron job is registered") == 1
 
 
+def test_unreadable_agent_database_emits_only_the_deduplicated_compatibility_warning(
+    caplog: pytest.LogCaptureFixture, tmp_path: pathlib.Path
+) -> None:
+    layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
+    db = tmp_path / "agents" / "main" / "agent" / "openclaw-agent.sqlite"
+    db.parent.mkdir(parents=True)
+    db.write_text("not a database", encoding="utf-8")
+    source = OpenClawTranscriptSource(tmp_path / "agents")
+
+    assert cron_identity.resolve_registered_sessions(source, layout) == []
+    assert cron_identity.resolve_registered_sessions(source, layout) == []
+
+    assert caplog.text.count("requires OpenClaw v2026.7.2-beta.4 or newer") == 1
+    assert "could not inspect OpenClaw session schema" not in caplog.text
+
+
 def test_legacy_agent_database_without_session_windows_warns_once_and_fails_open(
     caplog: pytest.LogCaptureFixture, tmp_path: pathlib.Path
 ) -> None:
