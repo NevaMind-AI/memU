@@ -29,10 +29,10 @@ instruction file exactly as they are.
 Find the OpenClaw cron job that runs the memU bridging pipeline — it was
 created at install time (named e.g. `memu-remember`) through OpenClaw's native
 scheduler with the three-step prepare / self-evolve / commit prompt — and
-delete **that job only**, through the same scheduler surface. The name is only
-a hint (the user may have chosen another); the load-bearing signal is the
-prompt, which runs the memU bridging pipeline. Any other cron jobs the user has
-are theirs and stay.
+delete **that job only**, through the same scheduler surface. Its registered ID
+is in `~/.memu/hosts/openclaw/.cron_job.openclaw.json`; use that exact identity
+rather than matching a name or prompt. Any other cron jobs the user has are
+theirs and stay.
 
 ### ✅ Verify Part 1
 
@@ -95,7 +95,8 @@ Only one thing overrides a default: the user's own explicit words.
   user's request? Delete the cursor with it — a surviving cursor over an empty
   store marks history as already mined, and it would never be mined again.
 - **Remove this host's residue.** Everything else under
-  `~/.memu/hosts/openclaw/` — job files and mirrors, sparing the session
+  `~/.memu/hosts/openclaw/` — including the cron-job registration, job files,
+  and mirrors, while sparing the session
   cursor above; and `~/.openclaw/workspace/AGENTS.md` itself
   **if** Part 2 left it empty (it held only memU's block, so the install
   created it) — a file with the user's own content stays, of course.

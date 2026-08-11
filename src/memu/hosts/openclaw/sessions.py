@@ -135,6 +135,29 @@ class OpenClawTranscriptSource(TranscriptSource):
             # per agent to open on every scan.
             conn.close()
 
+    def cron_run_session_ids(self, *, agent_id: str, job_id: str) -> list[str]:
+        """Session ids structurally owned by one exact OpenClaw cron job.
+
+        The scheduler persists ``session_windows`` before the agent starts, so
+        this includes the currently running bridging session. Equality binds the
+        row's own session id into the canonical run key; neither prompt content
+        nor "newest row" inference participates.
+        """
+        db = self._root / agent_id / _STORE_SUBDIR / _STORE_NAME
+        if not db.is_file():
+            return []
+        base_key = f"agent:{agent_id}:cron:{job_id}:run:"
+        try:
+            rows = self._query(
+                db,
+                "SELECT session_id FROM session_windows WHERE session_key = ? || session_id ORDER BY session_id",
+                base_key,
+            )
+        except TranscriptReadError as exc:
+            logger.warning("could not resolve OpenClaw cron sessions from %s: %s", db, exc.cause)
+            return []
+        return [session_id for (session_id,) in rows if isinstance(session_id, str) and session_id]
+
     def _virtual_path(self, db: Path, session_id: str) -> Path:
         """Where a database-held session pretends to live.
 

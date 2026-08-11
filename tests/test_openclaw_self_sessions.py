@@ -1,53 +1,140 @@
-"""OpenClaw's scheduled bridging run must not mine its own transcript."""
+"""OpenClaw's memU cron job is identified from scheduler-owned session metadata."""
 
 from __future__ import annotations
 
+import json
 import pathlib
+import sqlite3
 from argparse import Namespace
 from dataclasses import replace
 
 import pytest
 
 from memu.hosts import host_cli
-from memu.hosts.bridging import self_sessions
 from memu.hosts.bridging.layout import Layout
-from memu.hosts.openclaw.cli import SESSION_ID_ENV
+from memu.hosts.bridging.self_sessions import load as load_self_sessions
+from memu.hosts.openclaw import cron_identity
 from memu.hosts.openclaw.cli import SPEC as OPENCLAW_SPEC
 from memu.hosts.openclaw.sessions import OpenClawTranscriptSource
 
 
-def test_openclaw_declares_the_bridging_session_id_variable() -> None:
-    assert OPENCLAW_SPEC.session_id_env == SESSION_ID_ENV == "MEMU_BRIDGING_SESSION_ID"
+def _store(root: pathlib.Path, agent_id: str, rows: list[tuple[str, str]]) -> pathlib.Path:
+    db = root / agent_id / "agent" / "openclaw-agent.sqlite"
+    db.parent.mkdir(parents=True)
+    conn = sqlite3.connect(db)
+    conn.executescript(
+        """
+        CREATE TABLE session_windows (
+          session_id TEXT PRIMARY KEY,
+          session_key TEXT NOT NULL
+        ) STRICT;
+        """
+    )
+    conn.executemany("INSERT INTO session_windows (session_id, session_key) VALUES (?, ?)", rows)
+    conn.commit()
+    conn.close()
+    return db
+
+
+def test_registration_round_trips_without_putting_identity_in_the_cron_prompt(tmp_path: pathlib.Path) -> None:
+    path = cron_identity.registration_path(tmp_path)
+
+    cron_identity.save_registration(path, agent_id="main", job_id="job-123")
+
+    assert cron_identity.load_registration(path) == cron_identity.CronRegistration(agent_id="main", job_id="job-123")
+    assert json.loads(path.read_text(encoding="utf-8")) == {"agent_id": "main", "job_id": "job-123"}
+
+
+def test_register_cron_job_cli_writes_the_prepare_registration(tmp_path: pathlib.Path) -> None:
+    assert OPENCLAW_SPEC.binary == "memu-openclaw"
+    assert (
+        host_cli.run(
+            OPENCLAW_SPEC,
+            [
+                "register-cron-job",
+                "--job-id",
+                "job-123",
+                "--agent-id",
+                "worker",
+                "--base-dir",
+                str(tmp_path),
+            ],
+        )
+        == 0
+    )
+
+    assert cron_identity.load_registration(cron_identity.registration_path(tmp_path)) == (
+        cron_identity.CronRegistration(agent_id="worker", job_id="job-123")
+    )
 
 
 @pytest.mark.parametrize(
-    ("filename", "expected"),
+    ("field", "invalid"),
     [
-        ("a83c9e20-072d-4708-902a-47c596b14d55.jsonl", "a83c9e20-072d-4708-902a-47c596b14d55"),
-        (
-            "a83c9e20-072d-4708-902a-47c596b14d55-topic-42.jsonl",
-            "a83c9e20-072d-4708-902a-47c596b14d55",
-        ),
+        ("agent_id", "bad:value"),
+        ("job_id", "bad:value"),
+        ("agent_id", "../other"),
+        ("job_id", "job/other"),
+        ("agent_id", ""),
     ],
 )
-def test_openclaw_transcript_name_maps_to_its_session_id(filename: str, expected: str, tmp_path: pathlib.Path) -> None:
-    transcript = tmp_path / "main" / "sessions" / filename
+def test_registration_rejects_invalid_session_key_segments(field: str, invalid: str, tmp_path: pathlib.Path) -> None:
+    values = {"agent_id": "main", "job_id": "job-123"}
+    values[field] = invalid
 
-    assert OpenClawTranscriptSource(tmp_path).session_id(transcript) == expected
+    with pytest.raises(ValueError, match=field):
+        cron_identity.save_registration(cron_identity.registration_path(tmp_path), **values)
 
 
-@pytest.mark.parametrize("marked", [False, True])
-async def test_only_a_marked_openclaw_run_claims_its_session(
-    marked: bool, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+def test_missing_registration_fails_open_to_existing_self_sessions(tmp_path: pathlib.Path) -> None:
+    layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
+    layout.self_sessions.parent.mkdir(parents=True)
+    layout.self_sessions.write_text('["already-known"]', encoding="utf-8")
+
+    assert cron_identity.resolve_registered_sessions(OpenClawTranscriptSource(tmp_path / "agents"), layout) == [
+        "already-known"
+    ]
+
+
+def test_resolver_selects_every_run_of_only_the_registered_job(tmp_path: pathlib.Path) -> None:
+    _store(
+        tmp_path,
+        "main",
+        [
+            ("target-1", "agent:main:cron:job-123:run:target-1"),
+            ("target-2", "agent:main:cron:job-123:run:target-2"),
+            ("control", "agent:main:cron:job-999:run:control"),
+            ("forged", "agent:main:cron:job-123:run:not-forged"),
+            ("descendant", "agent:main:cron:job-123:run:target-1:subagent:child"),
+        ],
+    )
+    source = OpenClawTranscriptSource(tmp_path)
+    registration = cron_identity.CronRegistration(agent_id="main", job_id="job-123")
+
+    assert cron_identity.resolve_session_ids(source, registration) == ["target-1", "target-2"]
+
+
+def test_resolver_reads_the_registered_agent_store_only(tmp_path: pathlib.Path) -> None:
+    _store(tmp_path, "main", [("main-run", "agent:main:cron:job-123:run:main-run")])
+    _store(tmp_path, "other", [("other-run", "agent:other:cron:job-123:run:other-run")])
+    source = OpenClawTranscriptSource(tmp_path)
+
+    assert cron_identity.resolve_session_ids(
+        source, cron_identity.CronRegistration(agent_id="other", job_id="job-123")
+    ) == ["other-run"]
+
+
+async def test_prepare_remembers_structurally_resolved_sessions_without_launch_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
-    session_id = "a83c9e20-072d-4708-902a-47c596b14d55"
     captured: dict[str, object] = {}
+    base = tmp_path / "memu-openclaw"
+    registration = cron_identity.CronRegistration(agent_id="main", job_id="job-123")
+    cron_identity.save_registration(cron_identity.registration_path(base), **registration.__dict__)
 
     class ExistingOpenClawSource(OpenClawTranscriptSource):
         def exists(self) -> bool:
             return True
-
-    spec = replace(OPENCLAW_SPEC, source_factory=ExistingOpenClawSource)
 
     async def fake_prepare(*args: object, **kwargs: object) -> int:
         captured["skip_sessions"] = kwargs["skip_sessions"]
@@ -56,39 +143,31 @@ async def test_only_a_marked_openclaw_run_claims_its_session(
     monkeypatch.setattr(host_cli, "prepare", fake_prepare)
     monkeypatch.setattr(host_cli, "_refresh_retrieval", lambda spec: None)
     monkeypatch.setattr(host_cli.events, "flush", lambda: None)
-    monkeypatch.setattr(host_cli.Path, "cwd", lambda: tmp_path / "project")
-    monkeypatch.setenv(SESSION_ID_ENV, session_id)
-    if marked:
-        monkeypatch.setenv(self_sessions.BRIDGING_RUN_ENV, "1")
-    else:
-        monkeypatch.delenv(self_sessions.BRIDGING_RUN_ENV, raising=False)
+    monkeypatch.setattr(cron_identity, "resolve_session_ids", lambda source, registration: ["run-1", "run-2"])
 
-    base = tmp_path / "memu-openclaw"
+    spec = replace(OPENCLAW_SPEC, source_factory=ExistingOpenClawSource)
     rc = await host_cli._cmd_prepare(
         spec,
         Namespace(session_dir=str(tmp_path / "agents"), base_dir=str(base), max_jobs=10),
     )
 
-    expected = [session_id] if marked else []
     assert rc == 0
-    assert captured["skip_sessions"] == expected
-    assert self_sessions.load(Layout(base=base, host="openclaw").self_sessions) == expected
+    assert captured["skip_sessions"] == ["run-1", "run-2"]
+    assert load_self_sessions(Layout(base=base, host="openclaw").self_sessions) == ["run-1", "run-2"]
 
 
-def test_openclaw_scheduled_prompt_passes_identity_with_cross_platform_exec_env() -> None:
+def test_openclaw_scheduled_prompt_registers_job_once_and_carries_no_session_identity() -> None:
     doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
         encoding="utf-8"
     )
+    prompt = doc[doc.index("```\nRun the memU bridging pipeline") : doc.index("\n```", doc.index("```\nRun"))]
 
-    status = doc.index("session_status")
-    prepare = doc.index('"command": "memu-openclaw prepare"')
-    marker = doc.index(f'"{self_sessions.BRIDGING_RUN_ENV}": "1"')
-    session = doc.index(f'"{SESSION_ID_ENV}": "<sessionId>"')
-
-    assert status < prepare < marker < session
-    assert "structured `sessionKey`" in doc
-    assert ":run:<sessionId>" in doc
-    assert f"{self_sessions.BRIDGING_RUN_ENV}=1 {SESSION_ID_ENV}=" not in doc
+    assert "memu-openclaw register-cron-job" in doc
+    assert "memu-openclaw prepare" in prompt
+    assert "session_status" not in prompt
+    assert "MEMU_BRIDGING_SESSION_ID" not in doc
+    assert "MEMU_BRIDGING_RUN" not in prompt
+    assert ":run:<sessionId>" not in prompt
 
 
 def test_openclaw_scheduled_task_uses_an_isolated_turn_and_portable_path_checks() -> None:

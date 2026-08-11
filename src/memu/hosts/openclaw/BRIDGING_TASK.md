@@ -63,9 +63,18 @@ hour**, cron `0 * * * *` (local time). Confirm before creating.
 
 Create an OpenClaw cron job (e.g. named `memu-remember`) with an `agentTurn`
 payload and `sessionTarget="isolated"`, using the chosen schedule. Set its
-recurring prompt to this block **verbatim**. The isolated target is
-load-bearing: `session_status` must expose this run's dedicated transcript key,
-not the main conversation.
+recurring prompt to the block below **verbatim**. The isolated target is
+load-bearing: OpenClaw gives every run a structural
+`agent:<agentId>:cron:<jobId>:run:<sessionId>` identity before the model starts.
+
+After creation, copy the returned job ID and register it once on the gateway
+host, replacing both placeholders with the values used to create the job:
+
+    memu-openclaw register-cron-job --job-id <jobId> --agent-id <agentId>
+
+Do not put the job's session ID into its prompt. `prepare` reads the registered
+job ID and resolves all of that job's exact run sessions directly from
+OpenClaw's session store; ordinary cron jobs remain mineable.
 
 **The scheduled turn runs in the gateway's environment, not your interactive
 shell.** The gateway is a launchd/systemd/Windows service with a bare `PATH` —
@@ -85,31 +94,14 @@ skip a step even if the previous one looks like it produced nothing.
    exactly as step 3 describes, then run memu-openclaw commit — and only then
    continue.
 
-2. PREPARE. First call `session_status` with `sessionKey="current"`. Read its
-   structured `sessionKey` result, which ends in `:run:<sessionId>` for this
-   isolated cron turn. Copy only that final non-empty, colon-free `<sessionId>`
-   value after `:run:` — do not assume it will always be a UUID — then call the
-   shell tool with this exact input, replacing the placeholder:
+2. PREPARE. Run this exact command with the shell tool:
 
-     {
-       "command": "memu-openclaw prepare",
-       "env": {
-         "MEMU_BRIDGING_RUN": "1",
-         "MEMU_BRIDGING_SESSION_ID": "<sessionId>"
-       }
-     }
+     memu-openclaw prepare
 
-   Pass the variables through the shell tool's structured `env` field, not
-   inline shell assignment: the latter works in macOS/Linux shells but not in
-   native Windows PowerShell. Do not derive the id from environment variables or
-   by selecting the newest database row: OpenClaw does not inject it into shell
-   subprocesses, and a newest-row query races concurrent sessions. The marker
-   identifies this invocation as the scheduled bridging run; the explicit id
-   identifies its transcript without inspecting transcript content. It
-   regenerates ~/.memu/hosts/openclaw/jobs/. If `session_status` does not return
-   an isolated cron key ending in exactly one non-empty `:run:<sessionId>`
-   segment, or if the command exits non-zero, stop and report the error — do not
-   continue.
+   It resolves this registered cron job's sessions from OpenClaw's structural
+   session metadata, remembers them as self-sessions, and regenerates
+   ~/.memu/hosts/openclaw/jobs/. If the command exits non-zero, stop and report
+   the error — do not continue.
 
 3. SELF-EVOLVE. List ~/.memu/hosts/openclaw/jobs/*.txt and process them in
    ascending numeric order (1.txt, then 2.txt, …). The count changes every run —
@@ -145,8 +137,7 @@ that there was nothing to commit).
 ```
 
 The prompt block is fixed; only the schedule is the user's choice. Its shell
-commands are platform-neutral; invocation-specific variables use the shell
-tool's structured `env` field rather than shell syntax.
+commands are platform-neutral, and it carries no run or session identity.
 
 ## Step 3 — confirm
 
@@ -155,13 +146,15 @@ local preflight (`command -v memu-openclaw` on macOS/Linux, or
 `Get-Command memu-openclaw` on native Windows) only tells you which directory
 the gateway needs.
 
-The hard check is cross-platform: trigger one run now with the OpenClaw cron
-runner, then inspect its tool result and verify **filesystem traces** on the
-gateway host — the self-session file contains that run's session id, the
-session cursor moved, and `jobs/` changed as expected. Do not trust the run's
-own prose summary; scheduled runs in bare or sandboxed environments have
-reported success after command-not-found or after operating on the wrong
-filesystem.
+The hard check is cross-platform: trigger the registered job twice, plus one
+ordinary isolated cron control. Then inspect its tool result and verify
+**filesystem traces** on the gateway host: both registered run IDs appear in
+`.self_sessions.openclaw.json`, neither appears in the pending manifest, and the
+control session does. Also inspect the registered run's conversation/tool
+records: no concrete session ID, `session_status`, or memU session-identity
+environment variable should appear. Do not trust the run's own prose summary;
+scheduled runs in bare or sandboxed environments have reported success after
+command-not-found or after operating on the wrong filesystem.
 
 Report back: the cron job's name and the schedule in words (e.g. "hourly at :00
 local time"). Mention that the first run only has work to do once there are new
@@ -169,13 +162,12 @@ OpenClaw sessions since the last run.
 
 ## Notes
 
-- **The prompt above already contains the complete identity handoff.** Only
-  schedules created from an older guide need migration: re-register or edit
-  their PREPARE step so it calls `session_status`, extracts the final
-  `:run:<sessionId>` segment, and passes `MEMU_BRIDGING_RUN=1` plus
-  `MEMU_BRIDGING_SESSION_ID=<sessionId>` through the shell tool's structured
-  `env` field. Supplying only the marker fails open because it identifies a
-  scheduled invocation but not which transcript is its own.
+- **The registration is the identity handoff.** Existing schedules need no
+  prompt rewrite if their PREPARE step already runs plain `memu-openclaw
+  prepare`; register their exact job ID once. Schedules created from the older
+  prompt-mediated guide should remove `session_status` and both identity
+  variables after registration. Never infer the newest database row or match
+  prompt text: concurrent sessions and recalled text make both unsafe.
 - **Leftovers run before prepare.** Job files already on disk when the run
   starts are unfinished work — a run that died mid-pipeline, or the install's
   own verify. `prepare` deletes unprocessed job files, and the cursor already
