@@ -43,7 +43,7 @@ comparison:
 ```text
 Always
   create isolated cron
-  -> register job ID + agent ID
+  -> register its stable job ID once
   -> run plain memu-openclaw prepare
 
 prepare detects
@@ -81,8 +81,7 @@ Then apply exactly one branch:
   its job ID and schedule, plus its name, enabled state, owner, delivery, and
   unrelated payload settings, unless the user requested a change. If its
   payload is not isolated or its prompt is not the verbatim block below, show
-  the in-place patch and confirm before applying it by exact job ID. If the
-  owning agent ID cannot be proved from the definition, stop rather than guess.
+  the in-place patch and confirm before applying it by exact job ID.
 - **No candidate or near match:** continue to the creation path below.
 - **Multiple candidates or any near match:** stop without creating, deleting,
   updating, registering, or guessing. Report IDs and matched signals so the
@@ -109,10 +108,14 @@ If Step 0 found no candidate, create an OpenClaw cron job (for example
 - the selected schedule;
 - the recurring prompt below, verbatim.
 
-After Step 0 selects or Step 2 creates the single job, register that exact selected job ID
-and its owning agent on the gateway host:
+After Step 0 selects or Step 2 creates the single job, register that exact
+selected job ID on the gateway host:
 
-    memu-openclaw register-cron-job --job-id <jobId> --agent-id <agentId>
+    memu-openclaw register-cron-job --job-id <jobId>
+
+The job ID is the durable identity. Do not persist the job's current agent or
+model: either may change. `prepare` searches every per-agent store and derives
+the agent segment from each store when matching the registered job.
 
 ```
 Run the memU bridging pipeline. Do the four steps strictly in order; do not

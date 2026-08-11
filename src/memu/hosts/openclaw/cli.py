@@ -41,10 +41,9 @@ pointer and the retrieval procedure itself is installed here as a skill."""
 async def _cmd_register_cron_job(args: argparse.Namespace) -> int:
     registration = cron_identity.save_registration(
         cron_identity.registration_path(args.base_dir),
-        agent_id=args.agent_id,
         job_id=args.job_id,
     )
-    print(f"registered OpenClaw cron job {registration.job_id} for agent {registration.agent_id}")
+    print(f"registered OpenClaw cron job {registration.job_id}")
     return 0
 
 
@@ -54,7 +53,6 @@ def _register_cron_job(sub: Any) -> None:
         help="Record the exact OpenClaw cron job whose sessions prepare must skip",
     )
     parser.add_argument("--job-id", required=True, help="OpenClaw cron job id returned at creation")
-    parser.add_argument("--agent-id", default="main", help="OpenClaw agent that runs the job (default: main)")
     parser.add_argument("--base-dir", default="~/.memu/hosts/openclaw", help=argparse.SUPPRESS)
     parser.set_defaults(handler=_cmd_register_cron_job)
 

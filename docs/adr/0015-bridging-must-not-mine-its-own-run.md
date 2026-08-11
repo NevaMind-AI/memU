@@ -110,8 +110,10 @@ free:
 - **The host records which scheduled job created the session.** Where this exists it is
   better than either. OpenClaw persists every isolated run under the exact structural key
   `agent:<agentId>:cron:<jobId>:run:<sessionId>` in `session_windows` before the model starts.
-  memU records its own job and agent ids once at install time, then accepts only rows whose
-  key equals that prefix plus the row's own session id. This needs neither marker nor
+  memU records the stable job id once at install time, then checks every per-agent store and
+  accepts only rows whose key equals that store's agent prefix plus the registered job id and
+  the row's own session id. This follows agent-owner changes without persisting mutable routing
+  state. It needs neither marker nor
   environment variable, does not select the newest row, and never puts the concrete session
   id into prompt or tool content. Preferred wherever a host offers it.
 
@@ -153,8 +155,8 @@ forced into one shape.
 - Upgrading an existing OS-scheduled install is not automatic. Unix users must re-copy the
   wrapper to pick up the marker; Windows tasks already pass `-WorkingDirectory`, so the
   directory signal covers them until `schedule install` is re-run. OpenClaw users instead
-  register the existing memU cron job and agent ids once; the recurring prompt then returns
-  to a plain `memu-openclaw prepare` call.
+  register the existing memU cron job id once; the recurring prompt then returns to a plain
+  `memu-openclaw prepare` call.
 
 ## Out of scope
 

@@ -36,13 +36,21 @@ def _store(root: pathlib.Path, agent_id: str, rows: list[tuple[str, str]]) -> pa
     return db
 
 
-def test_registration_round_trips_without_putting_identity_in_the_cron_prompt(tmp_path: pathlib.Path) -> None:
+def test_registration_round_trips_only_the_stable_job_identity(tmp_path: pathlib.Path) -> None:
     path = cron_identity.registration_path(tmp_path)
 
-    cron_identity.save_registration(path, agent_id="main", job_id="job-123")
+    cron_identity.save_registration(path, job_id="job-123")
 
-    assert cron_identity.load_registration(path) == cron_identity.CronRegistration(agent_id="main", job_id="job-123")
-    assert json.loads(path.read_text(encoding="utf-8")) == {"agent_id": "main", "job_id": "job-123"}
+    assert cron_identity.load_registration(path) == cron_identity.CronRegistration(job_id="job-123")
+    assert json.loads(path.read_text(encoding="utf-8")) == {"job_id": "job-123"}
+
+
+def test_registration_loads_the_intermediate_job_and_agent_format(tmp_path: pathlib.Path) -> None:
+    path = cron_identity.registration_path(tmp_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"agent_id":"main","job_id":"job-123"}', encoding="utf-8")
+
+    assert cron_identity.load_registration(path) == cron_identity.CronRegistration(job_id="job-123")
 
 
 def test_register_cron_job_cli_writes_the_prepare_registration(tmp_path: pathlib.Path) -> None:
@@ -54,8 +62,6 @@ def test_register_cron_job_cli_writes_the_prepare_registration(tmp_path: pathlib
                 "register-cron-job",
                 "--job-id",
                 "job-123",
-                "--agent-id",
-                "worker",
                 "--base-dir",
                 str(tmp_path),
             ],
@@ -64,26 +70,14 @@ def test_register_cron_job_cli_writes_the_prepare_registration(tmp_path: pathlib
     )
 
     assert cron_identity.load_registration(cron_identity.registration_path(tmp_path)) == (
-        cron_identity.CronRegistration(agent_id="worker", job_id="job-123")
+        cron_identity.CronRegistration(job_id="job-123")
     )
 
 
-@pytest.mark.parametrize(
-    ("field", "invalid"),
-    [
-        ("agent_id", "bad:value"),
-        ("job_id", "bad:value"),
-        ("agent_id", "../other"),
-        ("job_id", "job/other"),
-        ("agent_id", ""),
-    ],
-)
-def test_registration_rejects_invalid_session_key_segments(field: str, invalid: str, tmp_path: pathlib.Path) -> None:
-    values = {"agent_id": "main", "job_id": "job-123"}
-    values[field] = invalid
-
-    with pytest.raises(ValueError, match=field):
-        cron_identity.save_registration(cron_identity.registration_path(tmp_path), **values)
+@pytest.mark.parametrize("invalid", ["bad:value", "job/other", ""])
+def test_registration_rejects_invalid_job_ids(invalid: str, tmp_path: pathlib.Path) -> None:
+    with pytest.raises(ValueError, match="job_id"):
+        cron_identity.save_registration(cron_identity.registration_path(tmp_path), job_id=invalid)
 
 
 def test_missing_registration_warns_only_after_structural_capability_is_available(
@@ -139,7 +133,7 @@ def test_unsupported_openclaw_store_warns_once_then_warns_again_after_recovery(
     caplog: pytest.LogCaptureFixture, tmp_path: pathlib.Path
 ) -> None:
     layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
-    registration = cron_identity.CronRegistration(agent_id="main", job_id="job-123")
+    registration = cron_identity.CronRegistration(job_id="job-123")
     cron_identity.save_registration(cron_identity.registration_path(layout.base), **registration.__dict__)
     source = OpenClawTranscriptSource(tmp_path / "agents")
 
@@ -168,14 +162,14 @@ def test_resolver_selects_every_run_of_only_the_registered_job(tmp_path: pathlib
         ],
     )
     source = OpenClawTranscriptSource(tmp_path)
-    registration = cron_identity.CronRegistration(agent_id="main", job_id="job-123")
+    registration = cron_identity.CronRegistration(job_id="job-123")
 
-    assert cron_identity.resolve_session_ids(source, registration) == ["target-1", "target-2"]
+    assert cron_identity.resolve_session_ids(source, registration) == ["main/target-1", "main/target-2"]
 
 
 def test_structural_sessions_are_remembered_beyond_the_shared_launch_env_limit(tmp_path: pathlib.Path) -> None:
     layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
-    registration = cron_identity.CronRegistration(agent_id="main", job_id="job-123")
+    registration = cron_identity.CronRegistration(job_id="job-123")
     cron_identity.save_registration(cron_identity.registration_path(layout.base), **registration.__dict__)
     _store(tmp_path / "agents", "main", [])
     source = OpenClawTranscriptSource(tmp_path / "agents")
@@ -188,14 +182,31 @@ def test_structural_sessions_are_remembered_beyond_the_shared_launch_env_limit(t
     assert load_self_sessions(layout.self_sessions) == expected
 
 
-def test_resolver_reads_the_registered_agent_store_only(tmp_path: pathlib.Path) -> None:
+def test_resolver_follows_one_job_across_agent_owner_changes(tmp_path: pathlib.Path) -> None:
     _store(tmp_path, "main", [("main-run", "agent:main:cron:job-123:run:main-run")])
     _store(tmp_path, "other", [("other-run", "agent:other:cron:job-123:run:other-run")])
+    _store(tmp_path, "control", [("control-run", "agent:control:cron:job-999:run:control-run")])
     source = OpenClawTranscriptSource(tmp_path)
 
-    assert cron_identity.resolve_session_ids(
-        source, cron_identity.CronRegistration(agent_id="other", job_id="job-123")
-    ) == ["other-run"]
+    assert cron_identity.resolve_session_ids(source, cron_identity.CronRegistration(job_id="job-123")) == [
+        "main/main-run",
+        "other/other-run",
+    ]
+
+
+def test_resolver_silently_skips_legacy_agent_stores_in_a_mixed_install(
+    caplog: pytest.LogCaptureFixture, tmp_path: pathlib.Path
+) -> None:
+    legacy = tmp_path / "legacy" / "agent" / "openclaw-agent.sqlite"
+    legacy.parent.mkdir(parents=True)
+    sqlite3.connect(legacy).close()
+    _store(tmp_path, "current", [("run-1", "agent:current:cron:job-123:run:run-1")])
+    source = OpenClawTranscriptSource(tmp_path)
+
+    assert cron_identity.resolve_session_ids(source, cron_identity.CronRegistration(job_id="job-123")) == [
+        "current/run-1"
+    ]
+    assert "no such table: session_windows" not in caplog.text
 
 
 async def test_legacy_jsonl_prepare_still_creates_jobs_after_capability_warning(
@@ -238,14 +249,14 @@ async def test_prepare_remembers_structurally_resolved_sessions_without_launch_e
 ) -> None:
     captured: dict[str, object] = {}
     base = tmp_path / "memu-openclaw"
-    registration = cron_identity.CronRegistration(agent_id="main", job_id="job-123")
+    registration = cron_identity.CronRegistration(job_id="job-123")
     cron_identity.save_registration(cron_identity.registration_path(base), **registration.__dict__)
 
     class ExistingOpenClawSource(OpenClawTranscriptSource):
         def exists(self) -> bool:
             return True
 
-        def supports_cron_run_identity(self, *, agent_id: str | None = None) -> bool:
+        def supports_cron_run_identity(self) -> bool:
             return True
 
     async def fake_prepare(*args: object, **kwargs: object) -> int:
@@ -271,7 +282,7 @@ async def test_prepare_remembers_structurally_resolved_sessions_without_launch_e
 def test_topic_like_legacy_filename_keeps_its_exact_session_id(tmp_path: pathlib.Path) -> None:
     session = tmp_path / "main" / "sessions" / "real-topic-42.jsonl"
 
-    assert OpenClawTranscriptSource(tmp_path).session_id(session) == "real-topic-42"
+    assert OpenClawTranscriptSource(tmp_path).session_id(session) == "main/real-topic-42"
 
 
 def test_openclaw_scheduled_prompt_registers_job_once_and_carries_no_session_identity() -> None:
@@ -353,8 +364,11 @@ def test_openclaw_task_reuses_one_existing_bridging_job_before_creation() -> Non
         assert preserved in prose
     assert "show the in-place patch and confirm" in prose
     assert "stop without creating, deleting, updating, registering, or guessing" in prose
-    assert "register that exact selected job ID" in doc
-    assert "owning agent" in doc
+    doc_prose = " ".join(doc.split())
+    assert "register that exact selected job ID" in doc_prose
+    assert "--job-id <jobId>" in doc
+    assert "--agent-id" not in doc
+    assert "Do not persist the job's current agent or model" in doc_prose
 
 
 def test_openclaw_task_preserves_execution_order_and_failure_boundaries() -> None:

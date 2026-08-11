@@ -126,10 +126,9 @@ class OpenClawTranscriptSource(TranscriptSource):
             # per agent to open on every scan.
             conn.close()
 
-    def supports_cron_run_identity(self, *, agent_id: str | None = None) -> bool:
-        """Whether an agent store exposes the structural cron identity schema."""
-        databases = [self._root / agent_id / _STORE_SUBDIR / _STORE_NAME] if agent_id is not None else self._databases()
-        for db in databases:
+    def supports_cron_run_identity(self) -> bool:
+        """Whether any agent store exposes the structural cron identity schema."""
+        for db in self._databases():
             if not db.is_file():
                 continue
             try:
@@ -143,28 +142,43 @@ class OpenClawTranscriptSource(TranscriptSource):
                 return True
         return False
 
-    def cron_run_session_ids(self, *, agent_id: str, job_id: str) -> list[str]:
+    def session_id(self, path: Path) -> str:
+        """Agent-scoped identity; session ids are unique only inside one agent store."""
+        agent_id = path.relative_to(self._root).parts[0]
+        return f"{agent_id}/{path.stem}"
+
+    def cron_run_session_ids(self, *, job_id: str) -> list[str]:
         """Session ids structurally owned by one exact OpenClaw cron job.
 
         The scheduler persists ``session_windows`` before the agent starts, so
-        this includes the currently running bridging session. Equality binds the
-        row's own session id into the canonical run key; neither prompt content
-        nor "newest row" inference participates.
+        this includes the currently running bridging session. Each database's
+        parent directory supplies the agent segment; this follows one stable job
+        across agent-owner changes without accepting cross-job rows.
         """
-        db = self._root / agent_id / _STORE_SUBDIR / _STORE_NAME
-        if not db.is_file():
-            return []
-        base_key = f"agent:{agent_id}:cron:{job_id}:run:"
-        try:
-            rows = self._query(
-                db,
-                "SELECT session_id FROM session_windows WHERE session_key = ? || session_id ORDER BY session_id",
-                base_key,
+        session_ids: list[str] = []
+        for db in self._databases():
+            try:
+                columns = self._query(db, "PRAGMA table_info(session_windows)")
+            except TranscriptReadError:
+                continue
+            names = {row[1] for row in columns if len(row) > 1 and isinstance(row[1], str)}
+            if not {"session_id", "session_key"} <= names:
+                continue
+            agent_id = db.parent.parent.name
+            base_key = f"agent:{agent_id}:cron:{job_id}:run:"
+            try:
+                rows = self._query(
+                    db,
+                    "SELECT session_id FROM session_windows WHERE session_key = ? || session_id ORDER BY session_id",
+                    base_key,
+                )
+            except TranscriptReadError as exc:
+                logger.warning("could not resolve OpenClaw cron sessions from %s: %s", db, exc.cause)
+                continue
+            session_ids.extend(
+                f"{agent_id}/{session_id}" for (session_id,) in rows if isinstance(session_id, str) and session_id
             )
-        except TranscriptReadError as exc:
-            logger.warning("could not resolve OpenClaw cron sessions from %s: %s", db, exc.cause)
-            return []
-        return [session_id for (session_id,) in rows if isinstance(session_id, str) and session_id]
+        return list(dict.fromkeys(session_ids))
 
     def _virtual_path(self, db: Path, session_id: str) -> Path:
         """Where a database-held session pretends to live.
