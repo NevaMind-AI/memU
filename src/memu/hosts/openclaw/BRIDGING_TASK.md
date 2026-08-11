@@ -43,6 +43,9 @@ prompt must instruct the agent to do it, not shell out to a script.
 
 ## Prerequisites
 
+- **OpenClaw v2026.7.2-beta.1 or newer.** Earlier versions have no supported
+  structural cron-session identity seam. `prepare` fails open there and emits
+  one local warning per unresolved condition rather than repeating it hourly.
 - **memU is installed and `memu-openclaw` is on `PATH`** for the environment the
   cron job's shell tool runs in. Verify with `memu-openclaw doctor`; if it
   fails, do `INSTALL.md` Part 1 first.

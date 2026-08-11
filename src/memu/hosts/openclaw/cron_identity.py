@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
@@ -16,6 +17,8 @@ from memu.hosts.openclaw.sessions import OpenClawTranscriptSource
 logger = logging.getLogger(__name__)
 
 _REGISTRATION_FILE = ".cron_job.openclaw.json"
+_WARNING_STATE_FILE = ".cron_identity_warning.openclaw"
+_MIN_OPENCLAW_VERSION = "v2026.7.2-beta.1"
 
 
 @dataclass(frozen=True)
@@ -73,6 +76,32 @@ def resolve_session_ids(source: OpenClawTranscriptSource, registration: CronRegi
     return source.cron_run_session_ids(agent_id=registration.agent_id, job_id=registration.job_id)
 
 
+def _warning_path(layout: Layout) -> Path:
+    return layout.base / _WARNING_STATE_FILE
+
+
+def _warn_once(layout: Layout, kind: str, message: str) -> None:
+    path = _warning_path(layout)
+    try:
+        current = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        current = ""
+    if current == kind:
+        return
+    logger.warning(message)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(kind, encoding="utf-8")
+    except OSError:
+        # Warning deduplication is best-effort; it must never break prepare.
+        pass
+
+
+def _clear_warning(layout: Layout) -> None:
+    with contextlib.suppress(OSError):
+        _warning_path(layout).unlink()
+
+
 def _remember_all(path: Path, session_ids: list[str]) -> list[str]:
     """Persist every structural id; OpenClaw archives can outlive active rows."""
     remembered = self_sessions.load(path)
@@ -88,20 +117,36 @@ def resolve_registered_sessions(source: TranscriptSource, layout: Layout) -> lis
     remembered = self_sessions.load(layout.self_sessions)
     registration = load_registration(registration_path(layout.base))
     if registration is None:
-        logger.warning(
+        _warn_once(
+            layout,
+            "missing-registration",
             "no OpenClaw bridging cron job is registered; run "
-            "`memu-openclaw register-cron-job --job-id <jobId> --agent-id <agentId>` "
-            "or this run's transcript cannot be excluded"
+            "`memu-openclaw register-cron-job --job-id <jobId> --agent-id <agentId>`. "
+            "Prepare will continue, but this run's transcript cannot be excluded. "
+            "This warning is shown once until the condition recovers.",
         )
         return remembered
     if not isinstance(source, OpenClawTranscriptSource):
         return remembered
     resolved = resolve_session_ids(source, registration)
     if not resolved:
-        logger.warning(
-            "no sessions matched registered OpenClaw cron job %s for agent %s; "
-            "this run's transcript cannot be excluded",
-            registration.job_id,
-            registration.agent_id,
-        )
+        db = source.root() / registration.agent_id / "agent" / "openclaw-agent.sqlite"
+        if not db.is_file():
+            _warn_once(
+                layout,
+                "unsupported-store",
+                f"structured cron session exclusion requires OpenClaw {_MIN_OPENCLAW_VERSION} or newer "
+                f"and its per-agent SQLite store. Prepare will continue, but this run's transcript "
+                f"cannot be excluded. This warning is shown once until the condition recovers.",
+            )
+        else:
+            _warn_once(
+                layout,
+                "no-matching-sessions",
+                f"no sessions matched registered OpenClaw cron job {registration.job_id} for agent "
+                f"{registration.agent_id}. Prepare will continue, but this run's transcript cannot be "
+                f"excluded. This warning is shown once until the condition recovers.",
+            )
+        return remembered
+    _clear_warning(layout)
     return _remember_all(layout.self_sessions, resolved)

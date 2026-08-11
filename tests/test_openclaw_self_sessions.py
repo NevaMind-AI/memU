@@ -86,14 +86,38 @@ def test_registration_rejects_invalid_session_key_segments(field: str, invalid: 
         cron_identity.save_registration(cron_identity.registration_path(tmp_path), **values)
 
 
-def test_missing_registration_fails_open_to_existing_self_sessions(tmp_path: pathlib.Path) -> None:
+def test_missing_registration_warns_only_once_and_fails_open(
+    caplog: pytest.LogCaptureFixture, tmp_path: pathlib.Path
+) -> None:
     layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
     layout.self_sessions.parent.mkdir(parents=True)
     layout.self_sessions.write_text('["already-known"]', encoding="utf-8")
+    source = OpenClawTranscriptSource(tmp_path / "agents")
 
-    assert cron_identity.resolve_registered_sessions(OpenClawTranscriptSource(tmp_path / "agents"), layout) == [
-        "already-known"
-    ]
+    assert cron_identity.resolve_registered_sessions(source, layout) == ["already-known"]
+    assert cron_identity.resolve_registered_sessions(source, layout) == ["already-known"]
+
+    assert caplog.text.count("no OpenClaw bridging cron job is registered") == 1
+
+
+def test_unsupported_openclaw_store_warns_once_then_warns_again_after_recovery(
+    caplog: pytest.LogCaptureFixture, tmp_path: pathlib.Path
+) -> None:
+    layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
+    registration = cron_identity.CronRegistration(agent_id="main", job_id="job-123")
+    cron_identity.save_registration(cron_identity.registration_path(layout.base), **registration.__dict__)
+    source = OpenClawTranscriptSource(tmp_path / "agents")
+
+    cron_identity.resolve_registered_sessions(source, layout)
+    cron_identity.resolve_registered_sessions(source, layout)
+    assert caplog.text.count("requires OpenClaw v2026.7.2-beta.1 or newer") == 1
+
+    _store(tmp_path / "agents", "main", [("run-1", "agent:main:cron:job-123:run:run-1")])
+    assert cron_identity.resolve_registered_sessions(source, layout) == ["run-1"]
+
+    (tmp_path / "agents" / "main" / "agent" / "openclaw-agent.sqlite").unlink()
+    cron_identity.resolve_registered_sessions(source, layout)
+    assert caplog.text.count("requires OpenClaw v2026.7.2-beta.1 or newer") == 2
 
 
 def test_resolver_selects_every_run_of_only_the_registered_job(tmp_path: pathlib.Path) -> None:
