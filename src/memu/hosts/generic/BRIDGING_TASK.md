@@ -83,7 +83,7 @@ tick). This is the Unix sibling of the Windows `schtasks /TR` limit
 small `~/.memu/hosts/agent/bridge.sh` (`<agent-cli> <headless-flag> "$(cat
 ~/.memu/hosts/agent/bridge-prompt.txt)" >> ~/.memu/hosts/agent/bridge.log
 2>&1`, ideally with an atomic `mkdir`-based lock so an hourly tick can't race
-a still-running backlog run — see the claude-code host's `BRIDGING_TASK.md`
+a still-running backlog run — see the claude-code host's `BRIDGING_TASK.unix.md`
 for the full script), and keep the crontab entry to one short line:
 
 ```

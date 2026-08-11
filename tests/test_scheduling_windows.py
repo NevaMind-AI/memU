@@ -25,7 +25,7 @@ from memu.hosts.claude_code.cli import SPEC as CLAUDE
 from memu.hosts.codex.cli import SPEC as CODEX
 from memu.hosts.cursor.cli import SPEC as CURSOR
 from memu.hosts.hermes.cli import SPEC as HERMES
-from memu.hosts.host_cli import build_parser, run
+from memu.hosts.host_cli import HostSpec, build_parser, run
 from memu.hosts.scheduling import prompt, windows
 
 # ---------------------------------------------------------------------------
@@ -143,9 +143,46 @@ def test_pipeline_prompt_is_verbatim_but_parameterized() -> None:
     assert "memu-codex prepare" in prompt.bridging_pipeline_prompt(CODEX)
 
 
-# ---------------------------------------------------------------------------
-# Verb wiring + guards (no Task Scheduler touched)
-# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    ("spec", "system", "expected_filename", "included", "excluded"),
+    [
+        (CLAUDE, "Windows", "BRIDGING_TASK.windows.md", "Task Scheduler", "bridge.sh"),
+        (CURSOR, "Windows", "BRIDGING_TASK.windows.md", "Task Scheduler", "bridge.sh"),
+        (HERMES, "Windows", "BRIDGING_TASK.windows.md", "Task Scheduler", "bridge.sh"),
+        (CLAUDE, "Linux", "BRIDGING_TASK.unix.md", "bridge.sh", "Task Scheduler"),
+        (CURSOR, "Linux", "BRIDGING_TASK.unix.md", "bridge.sh", "Task Scheduler"),
+        (HERMES, "Darwin", "BRIDGING_TASK.unix.md", "bridge.sh", "Task Scheduler"),
+    ],
+)
+def test_docs_task_selects_the_current_os_guide(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    spec: HostSpec,
+    system: str,
+    expected_filename: str,
+    included: str,
+    excluded: str,
+) -> None:
+    import memu.hosts.host_cli as host_cli
+
+    resolved: list[str] = []
+
+    def resolve_doc(host: str, filename: str, embedded: str) -> str:
+        resolved.append(filename)
+        return embedded
+
+    monkeypatch.setattr(host_cli.platform, "system", lambda: system)
+    monkeypatch.setattr(host_cli.templates, "resolve_doc", resolve_doc)
+
+    assert run(spec, ["docs", "task"]) == 0
+    guide = capsys.readouterr().out
+    assert resolved == [expected_filename]
+    assert included in guide
+    assert excluded not in guide
+    if system == "Windows":
+        assert f"{spec.binary} schedule install" in guide
+    else:
+        assert "schedule install" not in guide
 
 
 def test_schedule_verb_is_wired() -> None:
@@ -210,43 +247,30 @@ def test_builders_escape_single_quotes_in_paths() -> None:
     )
 
 
-def test_pipeline_prompt_matches_the_bridging_doc() -> None:
+@pytest.mark.parametrize("spec", [CLAUDE, CURSOR, HERMES])
+def test_pipeline_prompt_matches_the_unix_bridging_doc(spec: HostSpec) -> None:
     # The prompt exists twice — this code builder and the doc's bridge-prompt.txt
     # block (the single-line fence the Unix registration step writes to disk) — and
     # they must stay verbatim. Lock it here: drift fails a test, not silently later.
     from importlib.resources import files
 
-    doc = (files("memu.hosts.claude_code") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    doc = (files(spec.package) / "BRIDGING_TASK.unix.md").read_text(encoding="utf-8")
     doc_prompt = next(
         line.strip() for line in doc.splitlines() if line.strip().startswith("Run the memU bridging pipeline.")
     )
-    assert doc_prompt == prompt.bridging_pipeline_prompt(CLAUDE)
+    assert doc_prompt == prompt.bridging_pipeline_prompt(spec)
 
 
-def test_cursor_pipeline_prompt_matches_the_bridging_doc() -> None:
-    # Wiring cursor makes bridging_pipeline_prompt(CURSOR) live on Windows; lock its
-    # guide's bridge-prompt.txt block to the canon the same way claude's is locked.
-    from importlib.resources import files
-
-    doc = (files("memu.hosts.cursor") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
-    doc_prompt = next(
-        line.strip() for line in doc.splitlines() if line.strip().startswith("Run the memU bridging pipeline.")
-    )
-    assert doc_prompt == prompt.bridging_pipeline_prompt(CURSOR)
-
-
-def test_hermes_pipeline_prompt_matches_the_bridging_doc() -> None:
-    from importlib.resources import files
-
-    doc = (files("memu.hosts.hermes") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
-    doc_prompt = next(
-        line.strip() for line in doc.splitlines() if line.strip().startswith("Run the memU bridging pipeline.")
-    )
-    assert doc_prompt == prompt.bridging_pipeline_prompt(HERMES)
-
-
-@pytest.mark.parametrize("pkg", ["claude_code", "cursor", "hermes", "generic"])
-def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
+@pytest.mark.parametrize(
+    ("pkg", "filename"),
+    [
+        ("claude_code", "BRIDGING_TASK.unix.md"),
+        ("cursor", "BRIDGING_TASK.unix.md"),
+        ("hermes", "BRIDGING_TASK.unix.md"),
+        ("generic", "BRIDGING_TASK.md"),
+    ],
+)
+def test_bridging_doc_cron_entries_stay_short(pkg: str, filename: str) -> None:
     # The bug class behind memU#591: an inlined pipeline prompt pushed the guide's
     # crontab entry past cron's ~1KB line buffer, so every tick died mid-quote
     # before the agent binary ever started. The prompt-lock tests above catch
@@ -254,7 +278,7 @@ def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
     # Unix guide tells the agent to write must stay far below the buffer.
     from importlib.resources import files
 
-    doc = (files(f"memu.hosts.{pkg}") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    doc = (files(f"memu.hosts.{pkg}") / filename).read_text(encoding="utf-8")
     cron_entries = [line for line in doc.splitlines() if line.lstrip().startswith("0 * * * * ")]
     assert cron_entries, f"{pkg} guide lost its cron entry example"
     for line in cron_entries:
@@ -264,11 +288,9 @@ def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
 def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
     from importlib.resources import files
 
-    doc = (files("memu.hosts.hermes") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    doc = (files("memu.hosts.hermes") / "BRIDGING_TASK.windows.md").read_text(encoding="utf-8")
     migration = doc.index("hermes cron list --all")
-    unix_registration = doc.index("0 * * * * $HOME/.memu/hosts/hermes/bridge.sh")
     windows_registration = doc.index("memu-hermes schedule install")
-    assert migration < unix_registration
     assert migration < windows_registration
     assert "hermes cron remove <job-id>" in doc
     assert "If listing or removal fails, stop" in doc

@@ -86,7 +86,7 @@ same shape: **the prompt lives in a file; the crontab line stays short.**
    #!/bin/sh
    # memU bridging for Hermes — invoked by cron.
    # The pipeline prompt lives in bridge-prompt.txt because cron truncates
-   # crontab lines around 1 KB (see BRIDGING_TASK.md).
+   # crontab lines around 1 KB (see BRIDGING_TASK.unix.md).
    DIR="$HOME/.memu/hosts/hermes"
    # Single-instance lock: an hourly tick can fire while a long backlog run is
    # still going; a second run would race it on jobs/ and double-commit.
@@ -156,32 +156,6 @@ count:
 Report back: where the schedule was registered, and the cron in words. Mention
 that the first run only has work to do once there are new Hermes sessions since
 the last run.
-
-## Windows (Task Scheduler)
-
-Steps 2–3 above are cron/launchd — Unix only. **On Windows, do not hand-write a
-`schtasks` entry and do not use Hermes's native `cronjob`.** Complete the legacy
-native-job removal at the start of Step 2, then use the shared helper:
-
-```
-memu-hermes schedule install     # register the hourly OS task
-memu-hermes schedule verify      # prove a resolvable CLI
-memu-hermes schedule status      # last run / next run
-memu-hermes schedule uninstall   # remove it
-```
-
-`install` writes the prompt plus a small PowerShell wrapper under
-`~/.memu/hosts/hermes`, resolves the bundled `hermes` CLI to an absolute path,
-and registers `\memU\memu-bridging-hermes` under an **S4U** principal — hidden,
-runs while logged out, and catches up a run missed while the machine was off.
-`--interval <minutes>` changes the cadence (default 60). The migration check
-above makes sure the pipeline has only the OS scheduler.
-Unlike Claude Code or Cursor, Hermes ships its client and CLI together and uses
-one runtime/configuration; there is no separate CLI install or headless-auth
-step.
-
-After a run, check filesystem traces rather than trusting its summary:
-`~/.memu/hosts/hermes/jobs/` timestamps and the session manifest must advance.
 
 ## Notes
 
