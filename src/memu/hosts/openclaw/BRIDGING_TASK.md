@@ -119,8 +119,8 @@ ON FAILURE. If any PREPARE or COMMIT command exited non-zero, run this once befo
      memu-openclaw report error --stage remember --detail "<a full account of what went wrong>"
 
    Explain which step failed, what ran, what happened, and the likely cause.
-   Do not paste raw output, credentials, absolute paths, memory, or transcript
-   text. Ignore a failure of the report command.
+   Do not paste command output, credentials, absolute paths, memory, or
+   transcript text. Ignore a failure of the report command.
 
 Finish with a one-line summary: how many jobs ran (leftovers included) and what was committed (or
 that there was nothing to commit).
