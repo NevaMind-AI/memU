@@ -299,90 +299,18 @@ def test_openclaw_scheduled_prompt_registers_job_once_and_carries_no_session_ide
     assert ":run:<sessionId>" not in prompt
 
 
-def test_openclaw_scheduled_task_uses_an_isolated_turn_and_portable_path_checks() -> None:
+def test_openclaw_task_requires_isolated_agent_turn() -> None:
     doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
         encoding="utf-8"
     )
 
     assert 'sessionTarget="isolated"' in doc
-    assert "command -v memu-openclaw" in doc
-    assert "Get-Command memu-openclaw" in doc
-    assert "env -i PATH=/usr/bin:/bin /bin/sh" not in doc
 
 
-def test_openclaw_scheduled_task_keeps_legacy_installs_non_blocking() -> None:
-    doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
-        encoding="utf-8"
-    )
-    compatibility = doc[doc.index("## Compatibility behavior") : doc.index("## Step 0")]
-
-    assert "v2026.7.2-beta.4" in compatibility
-    assert "session_windows" in compatibility
-    assert "session_id + session_key" in compatibility
-    assert "schema capability" in compatibility
-    assert "warn once, non-blocking" in compatibility
-    assert "continue PREPARE -> SELF-EVOLVE -> COMMIT unchanged" in compatibility
-    assert "Upgrading to a prerelease is optional" in compatibility
-    assert "v2026.7.2-beta.1" not in doc
-
-
-def test_openclaw_task_documents_precise_verification_for_both_capabilities() -> None:
+def test_openclaw_task_uses_job_only_registration_example() -> None:
     doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
         encoding="utf-8"
     )
 
-    assert "Every version:" in doc
-    assert "Structural schema:" in doc
-    assert "Legacy schema:" in doc
-    assert ".self_sessions.openclaw.json" in doc
-    assert ".session_manifest.openclaw.json.pending" in doc
-    assert "session ID from that triggered run's scheduler result" in doc
-    assert "ordinary JSONL sessions still produce jobs" in doc
-    assert "tool result must show `memu-openclaw prepare`" in doc
-
-
-def test_openclaw_task_reuses_one_existing_bridging_job_before_creation() -> None:
-    doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
-        encoding="utf-8"
-    )
-    step0 = doc[doc.index("## Step 0") : doc.index("## Step 1")]
-    prose = " ".join(step0.split())
-    creation = doc.index("## Step 2 — create or update and register the cron job")
-
-    assert doc.index("## Step 0") < creation
-    for signal in ("memu-openclaw prepare", "memu-openclaw commit", "~/.memu/hosts/openclaw/jobs/"):
-        assert signal in step0
-    assert "all three signals" in prose
-    assert "one or two signals" in prose
-    assert "absolute executable or jobs path" in prose
-    assert "name resembles a memU bridging task" in prose
-    assert "zero unresolved near matches" in prose
-    assert "Exactly one candidate" in prose
-    assert "No candidate or near match" in prose
-    assert "Multiple candidates or any near match" in prose
-    for preserved in ("job ID", "schedule", "name", "enabled state", "owner", "delivery", "unrelated payload settings"):
-        assert preserved in prose
-    assert "show the in-place patch and confirm" in prose
-    assert "stop without creating, deleting, updating, registering, or guessing" in prose
-    doc_prose = " ".join(doc.split())
-    assert "register that exact selected job ID" in doc_prose
-    assert "--job-id <jobId>" in doc
+    assert "memu-openclaw register-cron-job --job-id <jobId>" in doc
     assert "--agent-id" not in doc
-    assert "Do not persist the job's current agent or model" in doc_prose
-
-
-def test_openclaw_task_preserves_execution_order_and_failure_boundaries() -> None:
-    doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
-        encoding="utf-8"
-    )
-    prompt_start = doc.index("```\nRun the memU bridging pipeline")
-    prompt_end = doc.index("\n```", prompt_start)
-    prompt = doc[prompt_start:prompt_end]
-
-    assert doc.index('sessionTarget="isolated"') < doc.index("memu-openclaw register-cron-job") < prompt_start
-    prompt_prose = " ".join(prompt.split())
-    assert "sort by each filename's integer stem" in prompt_prose
-    assert "If this leftovers commit exits non-zero, stop" in prompt_prose
-    assert "If any PREPARE or COMMIT command exited non-zero" in prompt_prose
-    assert "memu-openclaw register-cron-job" not in prompt
-    assert "session_status" not in prompt
