@@ -86,18 +86,37 @@ def test_registration_rejects_invalid_session_key_segments(field: str, invalid: 
         cron_identity.save_registration(cron_identity.registration_path(tmp_path), **values)
 
 
-def test_missing_registration_warns_only_once_and_fails_open(
+def test_missing_registration_warns_only_after_structural_capability_is_available(
     caplog: pytest.LogCaptureFixture, tmp_path: pathlib.Path
 ) -> None:
     layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
     layout.self_sessions.parent.mkdir(parents=True)
     layout.self_sessions.write_text('["already-known"]', encoding="utf-8")
+    _store(tmp_path / "agents", "main", [])
     source = OpenClawTranscriptSource(tmp_path / "agents")
 
     assert cron_identity.resolve_registered_sessions(source, layout) == ["already-known"]
     assert cron_identity.resolve_registered_sessions(source, layout) == ["already-known"]
 
     assert caplog.text.count("no OpenClaw bridging cron job is registered") == 1
+
+
+def test_legacy_agent_database_without_session_windows_warns_once_and_fails_open(
+    caplog: pytest.LogCaptureFixture, tmp_path: pathlib.Path
+) -> None:
+    layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
+    layout.self_sessions.parent.mkdir(parents=True)
+    layout.self_sessions.write_text('["already-known"]', encoding="utf-8")
+    db = tmp_path / "agents" / "main" / "agent" / "openclaw-agent.sqlite"
+    db.parent.mkdir(parents=True)
+    sqlite3.connect(db).close()
+    source = OpenClawTranscriptSource(tmp_path / "agents")
+
+    assert cron_identity.resolve_registered_sessions(source, layout) == ["already-known"]
+    assert cron_identity.resolve_registered_sessions(source, layout) == ["already-known"]
+
+    assert caplog.text.count("requires OpenClaw v2026.7.2-beta.4 or newer") == 1
+    assert "no OpenClaw bridging cron job is registered" not in caplog.text
 
 
 def test_unsupported_openclaw_store_warns_once_then_warns_again_after_recovery(
@@ -110,14 +129,14 @@ def test_unsupported_openclaw_store_warns_once_then_warns_again_after_recovery(
 
     cron_identity.resolve_registered_sessions(source, layout)
     cron_identity.resolve_registered_sessions(source, layout)
-    assert caplog.text.count("requires OpenClaw v2026.7.2-beta.1 or newer") == 1
+    assert caplog.text.count("requires OpenClaw v2026.7.2-beta.4 or newer") == 1
 
     _store(tmp_path / "agents", "main", [("run-1", "agent:main:cron:job-123:run:run-1")])
     assert cron_identity.resolve_registered_sessions(source, layout) == ["run-1"]
 
     (tmp_path / "agents" / "main" / "agent" / "openclaw-agent.sqlite").unlink()
     cron_identity.resolve_registered_sessions(source, layout)
-    assert caplog.text.count("requires OpenClaw v2026.7.2-beta.1 or newer") == 2
+    assert caplog.text.count("requires OpenClaw v2026.7.2-beta.4 or newer") == 2
 
 
 def test_resolver_selects_every_run_of_only_the_registered_job(tmp_path: pathlib.Path) -> None:
@@ -142,6 +161,7 @@ def test_structural_sessions_are_remembered_beyond_the_shared_launch_env_limit(t
     layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
     registration = cron_identity.CronRegistration(agent_id="main", job_id="job-123")
     cron_identity.save_registration(cron_identity.registration_path(layout.base), **registration.__dict__)
+    _store(tmp_path / "agents", "main", [])
     source = OpenClawTranscriptSource(tmp_path / "agents")
     expected = [f"run-{index:04d}" for index in range(1001)]
 
@@ -162,6 +182,41 @@ def test_resolver_reads_the_registered_agent_store_only(tmp_path: pathlib.Path) 
     ) == ["other-run"]
 
 
+async def test_legacy_jsonl_prepare_still_creates_jobs_after_capability_warning(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    session = tmp_path / "agents" / "main" / "sessions" / "legacy-run.jsonl"
+    session.parent.mkdir(parents=True)
+    session.write_text(
+        "\n".join([
+            json.dumps({"type": "message", "message": {"role": "user", "content": "remember this"}}),
+            json.dumps({"type": "message", "message": {"role": "assistant", "content": "noted"}}),
+        ])
+        + "\n",
+        encoding="utf-8",
+    )
+
+    class EmptyRecallService:
+        async def list_all_recall_files(self, *args: object, **kwargs: object) -> dict[str, object]:
+            return {"recall_files": [], "next_cursor": None}
+
+    from memu.hosts.bridging import pipeline
+
+    monkeypatch.setattr(pipeline, "build_agentic_memory_backend_from_env", lambda: EmptyRecallService())
+    monkeypatch.setattr(host_cli, "_refresh_retrieval", lambda spec: None)
+    monkeypatch.setattr(host_cli.events, "flush", lambda: None)
+    base = tmp_path / "memu-openclaw"
+
+    rc = await host_cli._cmd_prepare(
+        OPENCLAW_SPEC,
+        Namespace(session_dir=str(tmp_path / "agents"), base_dir=str(base), max_jobs=10),
+    )
+
+    assert rc == 0
+    assert sorted(path.name for path in (base / "jobs").glob("*.txt")) == ["1.txt", "2.txt", "3.txt"]
+    assert caplog.text.count("requires OpenClaw v2026.7.2-beta.4 or newer") == 1
+
+
 async def test_prepare_remembers_structurally_resolved_sessions_without_launch_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
@@ -172,6 +227,9 @@ async def test_prepare_remembers_structurally_resolved_sessions_without_launch_e
 
     class ExistingOpenClawSource(OpenClawTranscriptSource):
         def exists(self) -> bool:
+            return True
+
+        def supports_cron_run_identity(self, *, agent_id: str | None = None) -> bool:
             return True
 
     async def fake_prepare(*args: object, **kwargs: object) -> int:
@@ -223,3 +281,14 @@ def test_openclaw_scheduled_task_uses_an_isolated_turn_and_portable_path_checks(
     assert "command -v memu-openclaw" in doc
     assert "Get-Command memu-openclaw" in doc
     assert "env -i PATH=/usr/bin:/bin /bin/sh" not in doc
+
+
+def test_openclaw_scheduled_task_keeps_legacy_installs_non_blocking() -> None:
+    doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "v2026.7.2-beta.4" in doc
+    assert "do not block installation" in doc
+    assert "Upgrading to a prerelease is optional" in doc
+    assert "v2026.7.2-beta.1" not in doc

@@ -43,9 +43,12 @@ prompt must instruct the agent to do it, not shell out to a script.
 
 ## Prerequisites
 
-- **OpenClaw v2026.7.2-beta.1 or newer.** Earlier versions have no supported
-  structural cron-session identity seam. `prepare` fails open there and emits
-  one local warning per unresolved condition rather than repeating it hourly.
+- **All currently supported OpenClaw releases can run bridging.** Structural
+  cron-session exclusion is an optional capability available in OpenClaw
+  `v2026.7.2-beta.4+`. Earlier releases, including the current stable line,
+  keep the legacy pipeline unchanged: do not block installation or require a
+  prerelease upgrade. They cannot exclude the bridging transcript and emit one
+  local compatibility warning instead. Upgrading to a prerelease is optional.
 - **memU is installed and `memu-openclaw` is on `PATH`** for the environment the
   cron job's shell tool runs in. Verify with `memu-openclaw doctor`; if it
   fails, do `INSTALL.md` Part 1 first.
@@ -75,9 +78,12 @@ host, replacing both placeholders with the values used to create the job:
 
     memu-openclaw register-cron-job --job-id <jobId> --agent-id <agentId>
 
-Do not put the job's session ID into its prompt. `prepare` reads the registered
-job ID and resolves all of that job's exact run sessions directly from
-OpenClaw's session store; ordinary cron jobs remain mineable.
+Registration is safe on every supported OpenClaw release. On
+`v2026.7.2-beta.4+`, `prepare` uses it with the structural session schema to
+exclude this job's exact run sessions. Earlier releases ignore it for filtering,
+keep the legacy pipeline unchanged, and emit one non-blocking compatibility
+warning. Do not put the job's session ID into its prompt; ordinary cron jobs
+remain mineable.
 
 **The scheduled turn runs in the gateway's environment, not your interactive
 shell.** The gateway is a launchd/systemd/Windows service with a bare `PATH` —
@@ -101,10 +107,11 @@ skip a step even if the previous one looks like it produced nothing.
 
      memu-openclaw prepare
 
-   It resolves this registered cron job's sessions from OpenClaw's structural
-   session metadata, remembers them as self-sessions, and regenerates
-   ~/.memu/hosts/openclaw/jobs/. If the command exits non-zero, stop and report
-   the error — do not continue.
+   On capable OpenClaw versions, it resolves the registered cron job's sessions
+   from structural metadata and remembers them as self-sessions. On earlier
+   versions it emits one non-blocking compatibility warning and keeps the legacy
+   behavior. In either case it regenerates ~/.memu/hosts/openclaw/jobs/. If the
+   command exits non-zero, stop and report the error — do not continue.
 
 3. SELF-EVOLVE. List ~/.memu/hosts/openclaw/jobs/*.txt and process them in
    ascending numeric order (1.txt, then 2.txt, …). The count changes every run —
@@ -149,15 +156,15 @@ local preflight (`command -v memu-openclaw` on macOS/Linux, or
 `Get-Command memu-openclaw` on native Windows) only tells you which directory
 the gateway needs.
 
-The hard check is cross-platform: trigger the registered job twice, plus one
-ordinary isolated cron control. Then inspect its tool result and verify
-**filesystem traces** on the gateway host: both registered run IDs appear in
-`.self_sessions.openclaw.json`, neither appears in the pending manifest, and the
-control session does. Also inspect the registered run's conversation/tool
-records: no concrete session ID, `session_status`, or memU session-identity
-environment variable should appear. Do not trust the run's own prose summary;
-scheduled runs in bare or sandboxed environments have reported success after
-command-not-found or after operating on the wrong filesystem.
+The hard check is cross-platform: trigger the job once and inspect its tool
+result plus **filesystem traces** on the gateway host. `prepare` must run and
+move the pending session cursor or jobs timestamps. On a capable, registered
+store, the run ID must also appear in `.self_sessions.openclaw.json` and stay
+out of the pending manifest. On a legacy store, the one compatibility warning
+is expected and the ordinary prepare / self-evolve / commit pipeline must still
+complete. Do not trust the run's own prose summary; scheduled runs in bare or
+sandboxed environments have reported success after command-not-found or after
+operating on the wrong filesystem.
 
 Report back: the cron job's name and the schedule in words (e.g. "hourly at :00
 local time"). Mention that the first run only has work to do once there are new
@@ -165,12 +172,13 @@ OpenClaw sessions since the last run.
 
 ## Notes
 
-- **The registration is the identity handoff.** Existing schedules need no
-  prompt rewrite if their PREPARE step already runs plain `memu-openclaw
-  prepare`; register their exact job ID once. Schedules created from the older
-  prompt-mediated guide should remove `session_status` and both identity
-  variables after registration. Never infer the newest database row or match
-  prompt text: concurrent sessions and recalled text make both unsafe.
+- **Registration is the identity handoff.** Existing schedules need no prompt
+  rewrite if PREPARE already runs plain `memu-openclaw prepare`; register their
+  exact job ID once. Legacy stores retain that registration for a later OpenClaw
+  upgrade but keep running without self-session filtering. Schedules created
+  from the older prompt-mediated guide should remove `session_status` and both
+  identity variables after registration. Never infer the newest database row or
+  match prompt text: concurrent sessions and recalled text make both unsafe.
 - **Leftovers run before prepare.** Job files already on disk when the run
   starts are unfinished work — a run that died mid-pipeline, or the install's
   own verify. `prepare` deletes unprocessed job files, and the cursor already

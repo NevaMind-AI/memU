@@ -126,6 +126,22 @@ class OpenClawTranscriptSource(TranscriptSource):
             # per agent to open on every scan.
             conn.close()
 
+    def supports_cron_run_identity(self, *, agent_id: str | None = None) -> bool:
+        """Whether an agent store exposes the structural cron identity schema."""
+        databases = [self._root / agent_id / _STORE_SUBDIR / _STORE_NAME] if agent_id is not None else self._databases()
+        for db in databases:
+            if not db.is_file():
+                continue
+            try:
+                columns = self._query(db, "PRAGMA table_info(session_windows)")
+            except TranscriptReadError as exc:
+                logger.warning("could not inspect OpenClaw session schema in %s: %s", db, exc.cause)
+                continue
+            names = {row[1] for row in columns if len(row) > 1 and isinstance(row[1], str)}
+            if {"session_id", "session_key"} <= names:
+                return True
+        return False
+
     def cron_run_session_ids(self, *, agent_id: str, job_id: str) -> list[str]:
         """Session ids structurally owned by one exact OpenClaw cron job.
 

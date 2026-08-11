@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 _REGISTRATION_FILE = ".cron_job.openclaw.json"
 _WARNING_STATE_FILE = ".cron_identity_warning.openclaw"
-_MIN_OPENCLAW_VERSION = "v2026.7.2-beta.1"
+_MIN_OPENCLAW_VERSION = "v2026.7.2-beta.4"
 
 
 @dataclass(frozen=True)
@@ -115,7 +115,20 @@ def _remember_all(path: Path, session_ids: list[str]) -> list[str]:
 def resolve_registered_sessions(source: TranscriptSource, layout: Layout) -> list[str]:
     """Remember registered OpenClaw cron runs and return the complete skip set."""
     remembered = self_sessions.load(layout.self_sessions)
+    if not isinstance(source, OpenClawTranscriptSource):
+        return remembered
     registration = load_registration(registration_path(layout.base))
+    agent_id = registration.agent_id if registration is not None else None
+    if not source.supports_cron_run_identity(agent_id=agent_id):
+        _warn_once(
+            layout,
+            "unsupported-store",
+            f"structured cron session exclusion requires OpenClaw {_MIN_OPENCLAW_VERSION} or newer. "
+            f"The ordinary bridging pipeline will continue unchanged, but this run's transcript "
+            f"cannot be excluded. Upgrading to a prerelease is optional. This warning is shown once "
+            f"until the condition recovers.",
+        )
+        return remembered
     if registration is None:
         _warn_once(
             layout,
@@ -126,27 +139,15 @@ def resolve_registered_sessions(source: TranscriptSource, layout: Layout) -> lis
             "This warning is shown once until the condition recovers.",
         )
         return remembered
-    if not isinstance(source, OpenClawTranscriptSource):
-        return remembered
     resolved = resolve_session_ids(source, registration)
     if not resolved:
-        db = source.root() / registration.agent_id / "agent" / "openclaw-agent.sqlite"
-        if not db.is_file():
-            _warn_once(
-                layout,
-                "unsupported-store",
-                f"structured cron session exclusion requires OpenClaw {_MIN_OPENCLAW_VERSION} or newer "
-                f"and its per-agent SQLite store. Prepare will continue, but this run's transcript "
-                f"cannot be excluded. This warning is shown once until the condition recovers.",
-            )
-        else:
-            _warn_once(
-                layout,
-                "no-matching-sessions",
-                f"no sessions matched registered OpenClaw cron job {registration.job_id} for agent "
-                f"{registration.agent_id}. Prepare will continue, but this run's transcript cannot be "
-                f"excluded. This warning is shown once until the condition recovers.",
-            )
+        _warn_once(
+            layout,
+            "no-matching-sessions",
+            f"no sessions matched registered OpenClaw cron job {registration.job_id} for agent "
+            f"{registration.agent_id}. Prepare will continue, but this run's transcript cannot be "
+            f"excluded. This warning is shown once until the condition recovers.",
+        )
         return remembered
     _clear_warning(layout)
     return _remember_all(layout.self_sessions, resolved)
