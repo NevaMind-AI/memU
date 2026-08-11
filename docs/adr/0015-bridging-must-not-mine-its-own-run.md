@@ -111,8 +111,9 @@ free:
   better than either. OpenClaw persists every isolated run under the exact structural key
   `agent:<agentId>:cron:<jobId>:run:<sessionId>` in `session_windows` before the model starts.
   memU records the stable job id once at install time, then checks every per-agent store and
-  accepts only rows whose key equals that store's agent prefix plus the registered job id and
-  the row's own session id. This follows agent-owner changes without persisting mutable routing
+  accepts only canonical cron-run rows containing that registered job id and the row's own
+  session id. The agent segment is ignored: it is mutable routing metadata, not bridging
+  identity. This follows agent-owner changes without persisting or comparing mutable routing
   state. It needs neither marker nor
   environment variable, does not select the newest row, and never puts the concrete session
   id into prompt or tool content. Preferred wherever a host offers it.

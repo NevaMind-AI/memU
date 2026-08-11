@@ -182,9 +182,9 @@ def test_structural_sessions_are_remembered_beyond_the_shared_launch_env_limit(t
     assert load_self_sessions(layout.self_sessions) == expected
 
 
-def test_resolver_follows_one_job_across_agent_owner_changes(tmp_path: pathlib.Path) -> None:
-    _store(tmp_path, "main", [("main-run", "agent:main:cron:job-123:run:main-run")])
-    _store(tmp_path, "other", [("other-run", "agent:other:cron:job-123:run:other-run")])
+def test_resolver_uses_only_job_id_across_agent_owner_changes(tmp_path: pathlib.Path) -> None:
+    _store(tmp_path, "main", [("main-run", "agent:former-owner:cron:job-123:run:main-run")])
+    _store(tmp_path, "other", [("other-run", "agent:another-owner:cron:job-123:run:other-run")])
     _store(tmp_path, "control", [("control-run", "agent:control:cron:job-999:run:control-run")])
     source = OpenClawTranscriptSource(tmp_path)
 

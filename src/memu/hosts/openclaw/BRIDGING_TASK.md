@@ -113,9 +113,10 @@ selected job ID on the gateway host:
 
     memu-openclaw register-cron-job --job-id <jobId>
 
-The job ID is the durable identity. Do not persist the job's current agent or
-model: either may change. `prepare` searches every per-agent store and derives
-the agent segment from each store when matching the registered job.
+The job ID is the durable identity and the only selector. Do not persist or
+compare the job's current agent or model: either may change. `prepare` searches
+every per-agent store and ignores the mutable agent segment in OpenClaw's
+canonical scheduler key.
 
 ```
 Run the memU bridging pipeline. Do the four steps strictly in order; do not

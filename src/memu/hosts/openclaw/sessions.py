@@ -35,6 +35,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import sqlite3
 from pathlib import Path
 from typing import ClassVar
@@ -151,11 +152,12 @@ class OpenClawTranscriptSource(TranscriptSource):
         """Session ids structurally owned by one exact OpenClaw cron job.
 
         The scheduler persists ``session_windows`` before the agent starts, so
-        this includes the currently running bridging session. Each database's
-        parent directory supplies the agent segment; this follows one stable job
-        across agent-owner changes without accepting cross-job rows.
+        this includes the currently running bridging session. The registered job
+        id is the only selector; the agent segment in OpenClaw's canonical key is
+        parsed but deliberately ignored because job ownership can change.
         """
         session_ids: list[str] = []
+        job_key = re.escape(job_id)
         for db in self._databases():
             try:
                 columns = self._query(db, "PRAGMA table_info(session_windows)")
@@ -164,19 +166,24 @@ class OpenClawTranscriptSource(TranscriptSource):
             names = {row[1] for row in columns if len(row) > 1 and isinstance(row[1], str)}
             if not {"session_id", "session_key"} <= names:
                 continue
-            agent_id = db.parent.parent.name
-            base_key = f"agent:{agent_id}:cron:{job_id}:run:"
             try:
                 rows = self._query(
                     db,
-                    "SELECT session_id FROM session_windows WHERE session_key = ? || session_id ORDER BY session_id",
-                    base_key,
+                    "SELECT session_id, session_key FROM session_windows "
+                    "WHERE session_key GLOB 'agent:*:cron:' || ? || ':run:*' ORDER BY session_id",
+                    job_id,
                 )
             except TranscriptReadError as exc:
                 logger.warning("could not resolve OpenClaw cron sessions from %s: %s", db, exc.cause)
                 continue
+            store_id = db.parent.parent.name
             session_ids.extend(
-                f"{agent_id}/{session_id}" for (session_id,) in rows if isinstance(session_id, str) and session_id
+                f"{store_id}/{session_id}"
+                for session_id, session_key in rows
+                if isinstance(session_id, str)
+                and session_id
+                and isinstance(session_key, str)
+                and re.fullmatch(rf"agent:[^:]+:cron:{job_key}:run:{re.escape(session_id)}", session_key)
             )
         return list(dict.fromkeys(session_ids))
 
