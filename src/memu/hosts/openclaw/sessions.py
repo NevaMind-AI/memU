@@ -144,9 +144,9 @@ class OpenClawTranscriptSource(TranscriptSource):
         return False
 
     def session_id(self, path: Path) -> str:
-        """Agent-scoped identity; session ids are unique only inside one agent store."""
-        agent_id = path.relative_to(self._root).parts[0]
-        return f"{agent_id}/{path.stem}"
+        """Store-scoped identity; session ids are unique only inside one store."""
+        store_id = path.relative_to(self._root).parts[0]
+        return f"{store_id}/{path.stem}"
 
     def cron_run_session_ids(self, *, job_id: str) -> list[str]:
         """Session ids structurally owned by one exact OpenClaw cron job.

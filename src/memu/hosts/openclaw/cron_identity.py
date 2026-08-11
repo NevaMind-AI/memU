@@ -56,9 +56,6 @@ def load_registration(path: Path) -> CronRegistration | None:
         value = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(value, dict):
             return None
-        # The intermediate #625 format also stored ``agent_id``. Ignore that
-        # extra field: job ownership can change, while the scheduler job ID is
-        # stable and resolves across every per-agent store.
         return CronRegistration(job_id=_session_key_segment("job_id", value.get("job_id", "")))
     except (OSError, json.JSONDecodeError, ValueError):
         return None

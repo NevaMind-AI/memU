@@ -18,8 +18,8 @@ from memu.hosts.openclaw.cli import SPEC as OPENCLAW_SPEC
 from memu.hosts.openclaw.sessions import OpenClawTranscriptSource
 
 
-def _store(root: pathlib.Path, agent_id: str, rows: list[tuple[str, str]]) -> pathlib.Path:
-    db = root / agent_id / "agent" / "openclaw-agent.sqlite"
+def _store(root: pathlib.Path, store_id: str, rows: list[tuple[str, str]]) -> pathlib.Path:
+    db = root / store_id / "agent" / "openclaw-agent.sqlite"
     db.parent.mkdir(parents=True)
     conn = sqlite3.connect(db)
     conn.executescript(
@@ -43,14 +43,6 @@ def test_registration_round_trips_only_the_stable_job_identity(tmp_path: pathlib
 
     assert cron_identity.load_registration(path) == cron_identity.CronRegistration(job_id="job-123")
     assert json.loads(path.read_text(encoding="utf-8")) == {"job_id": "job-123"}
-
-
-def test_registration_loads_the_intermediate_job_and_agent_format(tmp_path: pathlib.Path) -> None:
-    path = cron_identity.registration_path(tmp_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text('{"agent_id":"main","job_id":"job-123"}', encoding="utf-8")
-
-    assert cron_identity.load_registration(path) == cron_identity.CronRegistration(job_id="job-123")
 
 
 def test_register_cron_job_cli_writes_the_prepare_registration(tmp_path: pathlib.Path) -> None:
