@@ -78,8 +78,8 @@ def test_missing_registration_warns_only_after_structural_capability_is_availabl
     layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
     layout.self_sessions.parent.mkdir(parents=True)
     layout.self_sessions.write_text('["already-known"]', encoding="utf-8")
-    _store(tmp_path / "agents", "main", [])
-    source = OpenClawTranscriptSource(tmp_path / "agents")
+    _store(tmp_path, "main", [])
+    source = OpenClawTranscriptSource(tmp_path)
 
     assert cron_identity.resolve_registered_sessions(source, layout) == ["already-known"]
     assert cron_identity.resolve_registered_sessions(source, layout) == ["already-known"]
@@ -87,14 +87,14 @@ def test_missing_registration_warns_only_after_structural_capability_is_availabl
     assert caplog.text.count("no OpenClaw bridging cron job is registered") == 1
 
 
-def test_unreadable_agent_database_emits_only_the_deduplicated_compatibility_warning(
+def test_unreadable_store_database_emits_only_the_deduplicated_compatibility_warning(
     caplog: pytest.LogCaptureFixture, tmp_path: pathlib.Path
 ) -> None:
     layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
-    db = tmp_path / "agents" / "main" / "agent" / "openclaw-agent.sqlite"
+    db = tmp_path / "main" / "agent" / "openclaw-agent.sqlite"
     db.parent.mkdir(parents=True)
     db.write_text("not a database", encoding="utf-8")
-    source = OpenClawTranscriptSource(tmp_path / "agents")
+    source = OpenClawTranscriptSource(tmp_path)
 
     assert cron_identity.resolve_registered_sessions(source, layout) == []
     assert cron_identity.resolve_registered_sessions(source, layout) == []
@@ -103,16 +103,16 @@ def test_unreadable_agent_database_emits_only_the_deduplicated_compatibility_war
     assert "could not inspect OpenClaw session schema" not in caplog.text
 
 
-def test_legacy_agent_database_without_session_windows_warns_once_and_fails_open(
+def test_legacy_store_database_without_session_windows_warns_once_and_fails_open(
     caplog: pytest.LogCaptureFixture, tmp_path: pathlib.Path
 ) -> None:
     layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
     layout.self_sessions.parent.mkdir(parents=True)
     layout.self_sessions.write_text('["already-known"]', encoding="utf-8")
-    db = tmp_path / "agents" / "main" / "agent" / "openclaw-agent.sqlite"
+    db = tmp_path / "main" / "agent" / "openclaw-agent.sqlite"
     db.parent.mkdir(parents=True)
     sqlite3.connect(db).close()
-    source = OpenClawTranscriptSource(tmp_path / "agents")
+    source = OpenClawTranscriptSource(tmp_path)
 
     assert cron_identity.resolve_registered_sessions(source, layout) == ["already-known"]
     assert cron_identity.resolve_registered_sessions(source, layout) == ["already-known"]
@@ -127,16 +127,16 @@ def test_unsupported_openclaw_store_warns_once_then_warns_again_after_recovery(
     layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
     registration = cron_identity.CronRegistration(job_id="job-123")
     cron_identity.save_registration(cron_identity.registration_path(layout.base), **registration.__dict__)
-    source = OpenClawTranscriptSource(tmp_path / "agents")
+    source = OpenClawTranscriptSource(tmp_path)
 
     cron_identity.resolve_registered_sessions(source, layout)
     cron_identity.resolve_registered_sessions(source, layout)
     assert caplog.text.count("requires OpenClaw v2026.7.2-beta.4 or newer") == 1
 
-    _store(tmp_path / "agents", "main", [("run-1", "agent:main:cron:job-123:run:run-1")])
+    _store(tmp_path, "main", [("run-1", "agent:main:cron:job-123:run:run-1")])
     assert cron_identity.resolve_registered_sessions(source, layout) == ["main/run-1"]
 
-    (tmp_path / "agents" / "main" / "agent" / "openclaw-agent.sqlite").unlink()
+    (tmp_path / "main" / "agent" / "openclaw-agent.sqlite").unlink()
     cron_identity.resolve_registered_sessions(source, layout)
     assert caplog.text.count("requires OpenClaw v2026.7.2-beta.4 or newer") == 2
 
@@ -163,8 +163,8 @@ def test_structural_sessions_are_remembered_beyond_the_shared_launch_env_limit(t
     layout = Layout(base=tmp_path / "memu-openclaw", host="openclaw")
     registration = cron_identity.CronRegistration(job_id="job-123")
     cron_identity.save_registration(cron_identity.registration_path(layout.base), **registration.__dict__)
-    _store(tmp_path / "agents", "main", [])
-    source = OpenClawTranscriptSource(tmp_path / "agents")
+    _store(tmp_path, "main", [])
+    source = OpenClawTranscriptSource(tmp_path)
     expected = [f"run-{index:04d}" for index in range(1001)]
 
     with pytest.MonkeyPatch.context() as monkeypatch:
@@ -204,7 +204,7 @@ def test_resolver_silently_skips_legacy_agent_stores_in_a_mixed_install(
 async def test_legacy_jsonl_prepare_still_creates_jobs_after_capability_warning(
     caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
 ) -> None:
-    session = tmp_path / "agents" / "main" / "sessions" / "legacy-run.jsonl"
+    session = tmp_path / "main" / "sessions" / "legacy-run.jsonl"
     session.parent.mkdir(parents=True)
     session.write_text(
         "\n".join([
@@ -228,7 +228,7 @@ async def test_legacy_jsonl_prepare_still_creates_jobs_after_capability_warning(
 
     rc = await host_cli._cmd_prepare(
         OPENCLAW_SPEC,
-        Namespace(session_dir=str(tmp_path / "agents"), base_dir=str(base), max_jobs=10),
+        Namespace(session_dir=str(tmp_path), base_dir=str(base), max_jobs=10),
     )
 
     assert rc == 0
@@ -263,7 +263,7 @@ async def test_prepare_remembers_structurally_resolved_sessions_without_launch_e
     spec = replace(OPENCLAW_SPEC, source_factory=ExistingOpenClawSource)
     rc = await host_cli._cmd_prepare(
         spec,
-        Namespace(session_dir=str(tmp_path / "agents"), base_dir=str(base), max_jobs=10),
+        Namespace(session_dir=str(tmp_path), base_dir=str(base), max_jobs=10),
     )
 
     assert rc == 0
