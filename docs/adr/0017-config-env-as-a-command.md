@@ -238,10 +238,12 @@ Two cases the inference rules do not cover on their own, settled here:
 
 ### File mechanics
 
-Merge, never rewrite. Parse the existing file, set only the named keys, leave
-every other line and comment byte-identical, write to a temp file and
-`os.replace`, `mkdir(0700)` the directory and `chmod 600` the file, then
-`env.reload()`.
+Merge, never replace the document. Parse the existing file, set only the named
+keys, and preserve every other logical line's text, order, and comments. Writes
+use canonical UTF-8; a legacy encoding is normalized on its first write, line
+endings follow the host text convention, and a missing final newline is added.
+Write to a temp file and `os.replace`, `mkdir(0700)` the directory and `chmod
+600` the file, then `env.reload()`.
 
 **One writer, for every key — including `MEMU_CLIENT_ID`.** `events.client_instance_id()`
 already writes that key today, by appending to the file with no atomicity and no

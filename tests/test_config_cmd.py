@@ -47,7 +47,7 @@ def _write(path: pathlib.Path, text: str) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_merge_leaves_every_other_line_untouched(config: pathlib.Path) -> None:
+def test_merge_preserves_every_other_logical_line(config: pathlib.Path) -> None:
     """The field failure this command exists to end: a rewrite that takes
     another host's settings, and the user's comments, with it."""
     _write(

@@ -10,10 +10,11 @@ producers inside memU either.
 
 Three rules, and every caller gets all three for free:
 
-* **Merge, never rewrite.** Only the named keys change. Every other line —
-  another host's settings, the user's comments, a key this release has never
-  heard of — survives byte-identical. The one exception is a missing final
-  newline, which is added.
+* **Merge, never replace the document.** Only the named keys change. Every
+  other logical line — another host's settings, the user's comments, a key this
+  release has never heard of — keeps its text, order, and comments. Writes use
+  canonical UTF-8; a legacy encoding is normalized on its first write, line
+  endings follow the host text convention, and a missing final newline is added.
 * **Atomic.** The new text lands in a temp file beside the target and replaces
   it with :func:`os.replace`, so a crash or a full disk leaves the old file
   intact rather than a half-written one that no longer parses.
