@@ -152,6 +152,14 @@ class HostSpec:
     """Optional hook adding host-specific subcommands (the generic adapter's
     ``detect``). Called with the subparsers object after the shared verbs."""
 
+    resolve_self_sessions: Callable[[TranscriptSource, Layout], list[str]] | None = None
+    """Optional native-scheduler identity resolver.
+
+    OS-scheduled hosts use ``session_id_env`` plus the shared launch marker.
+    Native schedulers can instead resolve their registered task from structural
+    host metadata, without asking the model to carry identity.
+    """
+
     @property
     def binary(self) -> str:
         return f"memu-{self.host}"
@@ -210,7 +218,11 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
     # about to look. Remember it now — before the scan — so it is skipped by this
     # run and every later one (#606).
     own_session = os.environ.get(spec.session_id_env, "").strip() if spec.session_id_env else ""
-    skip_sessions = self_sessions.load(layout.self_sessions)
+    skip_sessions = (
+        spec.resolve_self_sessions(source, layout)
+        if spec.resolve_self_sessions is not None
+        else self_sessions.load(layout.self_sessions)
+    )
     # Only the *scheduled* run may claim a session. A person running prepare by
     # hand is asking for the current conversation to be mined, so claiming it
     # there would deliver the exact opposite, permanently.

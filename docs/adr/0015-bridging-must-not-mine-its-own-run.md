@@ -108,20 +108,28 @@ free:
   it depends on the agent reproducing the command, and #591 is the evidence that prompts
   drift. Weaker, and it fails open.
 - **The host records which scheduled job created the session.** Where this exists it is
-  better than either: OpenClaw's `session_nodes` carries `created_via` and
-  `created_actor_id`, so if the latter holds the cron job's id, memU can record its own job
-  identity at install time and match on it — exact, structural, needing neither marker nor
-  environment variable. Preferred wherever a host offers it.
+  better than either. OpenClaw persists every isolated run under the exact structural key
+  `agent:<agentId>:cron:<jobId>:run:<sessionId>` in `session_windows` before the model starts.
+  memU records the stable job id once at install time, then checks every per-agent store and
+  accepts only canonical cron-run rows containing that registered job id and the row's own
+  session id. The agent segment is ignored: it is mutable routing metadata, not bridging
+  identity. This follows agent-owner changes without persisting or comparing mutable routing
+  state. It needs neither marker nor
+  environment variable, does not select the newest row, and never puts the concrete session
+  id into prompt or tool content. Preferred wherever a host offers it.
 
 A host's grade is not a fixed property of the host — it follows from what its guide tells the
 user to register. `codex` sits in the second grade because its guide creates a native Codex
 scheduled task; registering `codex exec` under an OS scheduler instead would move it to the
 first. So the grade is something a guide can improve, not something to accept.
 
-So each new host adapter owes three things: the variable name (surveyed on a real install,
-on Unix — Windows `os.environ` is case-insensitive and will hide a casing error), a
-`session_id()` that returns what that variable holds, and a launch-side marker in whichever
-of the three grades applies.
+So each new host adapter owes one exact identity seam appropriate to its launcher. An
+OS-scheduled host supplies the variable name (surveyed on a real install, on Unix — Windows
+`os.environ` is case-insensitive and will hide a casing error), a `session_id()` that returns
+what it holds, and a launch-side marker. A native-scheduled host may instead register the
+exact task identity and resolve sessions from structural scheduler metadata. Both feed the
+same remembered self-session list and `continue` filter; their identity sources need not be
+forced into one shape.
 
 ## Consequences
 
@@ -130,10 +138,11 @@ of the three grades applies.
   name), and Hermes is verified to export `HERMES_SESSION_ID` to tool subprocesses during a
   one-shot run, matching its SQLite session id. Hosts with `session_id_env` empty keep the
   pre-#606 behaviour, which is why the default is empty rather than guessed.
-- Two adapters still need `session_id()` overrides before they can be wired at all: `codex`
-  (`rollout-<ts>-<uuid>.jsonl` — the stem is not the id) and `openclaw`
-  (`<sessionId>-topic-<threadId>.jsonl`). Hermes's virtual paths now return `path.name`, matching
-  the SQLite id without truncating ids that contain a dot.
+- Codex still needs a `session_id()` override before an environment seam can be wired
+  (`rollout-<ts>-<uuid>.jsonl` — the stem is not the id). OpenClaw instead uses its native
+  scheduler metadata and therefore does not ask the run to report its own id. Hermes's
+  virtual paths now return `path.name`, matching the SQLite id without truncating ids that
+  contain a dot.
 - Subagent transcripts must be attributed to the session that spawned them, not to their own
   file name: a run that spawns a subagent produces bookkeeping under a different name. Claude
   Code nests them two ways (`<sessionId>/subagents/…` and
@@ -144,9 +153,11 @@ of the three grades applies.
 - Claiming a session is permanent and therefore announced: `prepare` prints the id and the
   file to remove. The one remaining false positive is a person running `prepare` from inside
   the host's memU tree, which is visible and reversible.
-- Upgrading an existing install is not automatic. Unix users must re-copy the wrapper to pick
-  up the marker; Windows tasks already pass `-WorkingDirectory`, so the directory signal
-  covers them until `schedule install` is re-run.
+- Upgrading an existing OS-scheduled install is not automatic. Unix users must re-copy the
+  wrapper to pick up the marker; Windows tasks already pass `-WorkingDirectory`, so the
+  directory signal covers them until `schedule install` is re-run. OpenClaw users instead
+  register the existing memU cron job id once; the recurring prompt then returns to a plain
+  `memu-openclaw prepare` call.
 
 ## Out of scope
 

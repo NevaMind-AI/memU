@@ -35,6 +35,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import sqlite3
 from pathlib import Path
 from typing import ClassVar
@@ -125,6 +126,66 @@ class OpenClawTranscriptSource(TranscriptSource):
             # transaction but leaves the handle open, and there is one database
             # per agent to open on every scan.
             conn.close()
+
+    def supports_cron_run_identity(self) -> bool:
+        """Whether any agent store exposes the structural cron identity schema."""
+        for db in self._databases():
+            if not db.is_file():
+                continue
+            try:
+                columns = self._query(db, "PRAGMA table_info(session_windows)")
+            except TranscriptReadError:
+                # The caller emits one persisted compatibility warning. Logging
+                # here would add an hourly warning outside that dedupe state.
+                continue
+            names = {row[1] for row in columns if len(row) > 1 and isinstance(row[1], str)}
+            if {"session_id", "session_key"} <= names:
+                return True
+        return False
+
+    def session_id(self, path: Path) -> str:
+        """Store-scoped identity; session ids are unique only inside one store."""
+        store_id = path.relative_to(self._root).parts[0]
+        return f"{store_id}/{path.stem}"
+
+    def cron_run_session_ids(self, *, job_id: str) -> list[str]:
+        """Session ids structurally owned by one exact OpenClaw cron job.
+
+        The scheduler persists ``session_windows`` before the agent starts, so
+        this includes the currently running bridging session. The registered job
+        id is the only selector; the agent segment in OpenClaw's canonical key is
+        parsed but deliberately ignored because job ownership can change.
+        """
+        session_ids: list[str] = []
+        job_key = re.escape(job_id)
+        for db in self._databases():
+            try:
+                columns = self._query(db, "PRAGMA table_info(session_windows)")
+            except TranscriptReadError:
+                continue
+            names = {row[1] for row in columns if len(row) > 1 and isinstance(row[1], str)}
+            if not {"session_id", "session_key"} <= names:
+                continue
+            try:
+                rows = self._query(
+                    db,
+                    "SELECT session_id, session_key FROM session_windows "
+                    "WHERE session_key GLOB 'agent:*:cron:' || ? || ':run:*' ORDER BY session_id",
+                    job_id,
+                )
+            except TranscriptReadError as exc:
+                logger.warning("could not resolve OpenClaw cron sessions from %s: %s", db, exc.cause)
+                continue
+            store_id = db.parent.parent.name
+            session_ids.extend(
+                f"{store_id}/{session_id}"
+                for session_id, session_key in rows
+                if isinstance(session_id, str)
+                and session_id
+                and isinstance(session_key, str)
+                and re.fullmatch(rf"agent:[^:]+:cron:{job_key}:run:{re.escape(session_id)}", session_key)
+            )
+        return list(dict.fromkeys(session_ids))
 
     def _virtual_path(self, db: Path, session_id: str) -> Path:
         """Where a database-held session pretends to live.
