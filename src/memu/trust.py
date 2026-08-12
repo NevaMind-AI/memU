@@ -5,16 +5,18 @@
 are fail-open paths that must not depend on the async stack to stay silent about
 their own failures. That choice has one sharp edge, and this module is it.
 
-``urllib`` verifies against whatever trust store OpenSSL was pointed at. A
-python.org framework build whose bundled ``Install Certificates.command`` was
-never run is pointed at *nothing* — ``ssl.get_default_verify_paths()`` reports no
-``cafile`` and no ``capath`` — so every HTTPS call raises
-``CERTIFICATE_VERIFY_FAILED``. On a fail-open path that is not an error a user
-ever sees: events spool forever and never deliver, templates silently fall back
-to their embedded copies, and the machine looks identical to one that simply has
-nothing to report. ``httpx`` carries :mod:`certifi` and is unaffected, which is
-why ``retrieve`` keeps working on exactly the machine where ``report flush``
-delivers zero — the divergence that made this take an afternoon to find.
+``urllib`` verifies against the platform's default trust. A python.org
+framework build whose bundled ``Install Certificates.command`` was never run is
+pointed at *nothing* — ``ssl.get_default_verify_paths()`` reports no ``cafile``
+and no ``capath``, and its default context carries no CAs — so every HTTPS call
+raises ``CERTIFICATE_VERIFY_FAILED``. The second check matters on Windows, where
+the same paths are empty but the default context loads the OS certificate store.
+On a fail-open path that is not an error a user ever sees: events spool forever
+and never deliver, templates silently fall back to their embedded copies, and the
+machine looks identical to one that simply has nothing to report. ``httpx``
+carries :mod:`certifi` and is unaffected, which is why ``retrieve`` keeps working
+on exactly the machine where ``report flush`` delivers zero — the divergence
+that made this take an afternoon to find.
 
 **Why a fallback and not a pin.** Handing ``certifi`` to these two call sites
 unconditionally would fix that machine and break the opposite one: a corporate
@@ -48,6 +50,11 @@ class UrlopenKwargs(TypedDict, total=False):
     context: ssl.SSLContext
 
 
+def _default_context_has_cas() -> bool:
+    """Whether the platform's default context loaded any CA certificates."""
+    return bool(ssl.create_default_context().get_ca_certs())
+
+
 @functools.cache
 def ssl_context() -> ssl.SSLContext | None:
     """A verifying context for ``urlopen``, or ``None`` to use urllib's default.
@@ -63,8 +70,14 @@ def ssl_context() -> ssl.SSLContext | None:
     try:
         paths = ssl.get_default_verify_paths()
         if paths.cafile or paths.capath:
-            # A trust store exists. Use it, MITM proxies and corporate CAs and
-            # all — this function's job is a vacuum, not a preference.
+            # A file-backed trust store exists. Use it, MITM proxies and
+            # corporate CAs and all — this function's job is a vacuum, not a
+            # preference.
+            return None
+        if _default_context_has_cas():
+            # Windows loads its OS certificate store into the default context
+            # without exposing a cafile or capath. Preserve that store rather
+            # than replacing its corporate roots with certifi's public bundle.
             return None
         import certifi
 
