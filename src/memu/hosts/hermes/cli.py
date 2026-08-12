@@ -56,6 +56,7 @@ SPEC = HostSpec(
     session_dir=str(state_db_path()),
     session_help="Hermes SQLite session store (state.db under HERMES_HOME)",
     instruction_path=SOUL_MD,
+    schedule_backend="os",
     schedule_command="hermes -z {prompt}",
     schedule_prepare_session_dir=True,
     session_id_env=SESSION_ID_ENV,

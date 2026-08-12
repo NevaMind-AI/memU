@@ -68,6 +68,7 @@ SPEC = HostSpec(
     skills_dir=SKILLS_DIR,
     register_extra=_register_cron_job,
     resolve_self_sessions=cron_identity.resolve_registered_sessions,
+    schedule_backend="native",
 )
 
 

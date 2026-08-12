@@ -42,6 +42,7 @@ SPEC = HostSpec(
     session_help="WorkBuddy session log (one project dir per escaped cwd)",
     instruction_path=SOUL_MD,
     legacy_instruction_paths=(MEMORY_MD,),
+    schedule_backend="native",
 )
 
 
