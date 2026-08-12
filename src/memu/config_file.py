@@ -35,7 +35,7 @@ import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
-from memu.env import CONFIG_ENV
+from memu.env import CONFIG_ENV, read_config
 
 
 def config_path() -> Path:
@@ -58,7 +58,7 @@ def read() -> dict[str, str]:
     resolves cannot disagree.
     """
     try:
-        text = config_path().read_text(encoding="utf-8")
+        text, _ = read_config(config_path())
     except OSError:
         return {}
     values: dict[str, str] = {}
@@ -83,11 +83,11 @@ def write_values(updates: Mapping[str, str]) -> tuple[Path, bool]:
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
-        text = path.read_text(encoding="utf-8")
+        text, canonical = read_config(path)
     except FileNotFoundError:
-        text = ""
+        text, canonical = "", True
     merged = _merged(text, dict(updates))
-    if merged == text and path.is_file():
+    if merged == text and canonical and path.is_file():
         _restrict(path)
         return path, False
 
