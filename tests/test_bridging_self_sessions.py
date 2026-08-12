@@ -243,7 +243,7 @@ def test_claude_code_attributes_a_subagent_transcript_to_its_parent(tmp_path: pa
 
 @pytest.mark.parametrize("host", ["claude_code", "hermes"])
 def test_os_scheduled_unix_wrappers_export_the_marker(host: str) -> None:
-    doc = (pathlib.Path(__file__).resolve().parents[1] / f"src/memu/hosts/{host}/BRIDGING_TASK.md").read_text(
+    doc = (pathlib.Path(__file__).resolve().parents[1] / f"src/memu/hosts/{host}/BRIDGING_TASK.unix.md").read_text(
         encoding="utf-8"
     )
     assert f"export {self_sessions.BRIDGING_RUN_ENV}=1" in doc

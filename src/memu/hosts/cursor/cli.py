@@ -39,6 +39,7 @@ SPEC = HostSpec(
     session_dir=SESSION_DIR,
     session_help="Cursor agent-transcript root (one project dir per escaped cwd)",
     instruction_path=AGENTS_MD,
+    platform_task_docs=True,
     # --trust: cursor-agent refuses to run headless in an untrusted directory
     # (field-verified: exit 1 with "Workspace Trust Required"). The flag rides in
     # the template so both the auth gate and the scheduled run carry it, and the

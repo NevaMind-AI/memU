@@ -47,8 +47,7 @@ run's prompt must instruct the agent to do it, not shell out to a script.
 - **A standalone, headless-authenticated `claude` is on `PATH`.** The Desktop
   app cannot serve a scheduled run — its binary is off-`PATH` and its login is
   invisible to the CLI (memU#538). `INSTALL.md` Part 2.0 is the install +
-  bare-environment verify procedure; on Windows, `schedule install` runs the
-  same gate and refuses with guidance if it fails.
+  bare-environment verify procedure.
 - **A headless run can execute the pipeline.** The scheduled run invokes
   `claude -p` non-interactively, so the commands and paths the pipeline touches
   must be pre-authorized in `~/.claude/settings.json` permissions with exactly
@@ -90,7 +89,7 @@ the same shape: **the prompt lives in a file; the crontab line stays short.**
    #!/bin/sh
    # memU bridging for Claude Code — invoked by cron.
    # The pipeline prompt lives in bridge-prompt.txt because cron truncates
-   # crontab lines around 1 KB (see BRIDGING_TASK.md).
+   # crontab lines around 1 KB (see BRIDGING_TASK.unix.md).
    DIR="$HOME/.memu/hosts/claude-code"
    # Single-instance lock: an hourly tick can fire while a long backlog run is
    # still going; a second run would race it on jobs/ and double-commit.
@@ -165,55 +164,6 @@ count:
 Report back: where the schedule was registered (crontab/launchd), and the cron in
 words (e.g. "hourly at :00 local time"). Mention that the first run only has
 work to do once there are new Claude Code sessions since the last run.
-
-## Windows (Task Scheduler)
-
-Steps 2–3 above are cron/launchd — Unix only. **On Windows, do not hand-write a
-`schtasks` entry.** The pipeline prompt is ~1000 quoted characters and `schtasks
-/TR` splits it on the first space (memU#539); a bare scheduled process also can't
-authenticate a desktop-only `claude` (memU#538). Run the helper instead — it does
-the whole registration deterministically, so every install is identical and
-removable by name:
-
-```
-memu-claude-code schedule install     # register the hourly task
-memu-claude-code schedule verify      # prove it resolves + authenticates
-memu-claude-code schedule status      # last run / next run
-memu-claude-code schedule uninstall   # remove it
-```
-
-`install` writes the prompt to a file plus a small PowerShell wrapper that reads
-it (nothing long ever touches the command line), bakes in the absolute path to
-`claude`, and registers a task named `\memU\memu-remember-claude-code` under an
-**S4U** principal — it runs whether or not you're logged in, windowless, and
-catches up a run missed while the machine was off. `--interval <minutes>` changes
-the cadence (default 60).
-
-Because the scheduled run needs a standalone, headless-authenticated `claude`,
-`install` **refuses with guidance** if `claude` isn't on `PATH` or can't
-authenticate without a browser. That is the memU#538 verify gate: better to fail at
-install than to register a task that reports success and never runs.
-
-> **The credential must be persistent.** The task runs headless under an S4U
-> principal (session 0) and inherits only persistent user/machine environment and
-> your user profile — **not** a session-only `$env:` export. Either option
-> from `INSTALL.md` Part 2.0 works — exactly two, "skip" is not one: **Web
-> auth** (recommended; `claude setup-token`, subscription — interactive; run
-> it start-to-finish per Part 2.0, never in a background shell; the
-> credential lands in the profile) or an **Anthropic API key** (persist with
-> `setx`). A token exported only in the
-> install-time check yet leaves the task stuck on "Not logged in" — the one
-> false-positive the gate can't catch by itself.
-
-Confirm the same way Step 3 does — by filesystem traces, not the run's own
-summary: after a run, check that `~/.memu/hosts/claude-code/jobs/` timestamps and
-the session cursor advanced.
-
-> Prior art: [jshchnz/claude-code-scheduler](https://github.com/jshchnz/claude-code-scheduler),
-> the established Claude Code scheduler (per-OS backends over schtasks/launchd/cron,
-> every task namespaced under a scheduler folder). memU diverges for bridging:
-> `Register-ScheduledTask` + S4U (windowless, runs logged-out) and a prompt file,
-> since the pipeline prompt is too long for the command line.
 
 ## Notes
 

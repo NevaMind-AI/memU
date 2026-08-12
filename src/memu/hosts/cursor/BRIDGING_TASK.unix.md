@@ -84,7 +84,7 @@ the same shape: **the prompt lives in a file; the crontab line stays short.**
    #!/bin/sh
    # memU bridging for Cursor — invoked by cron.
    # The pipeline prompt lives in bridge-prompt.txt because cron truncates
-   # crontab lines around 1 KB (see BRIDGING_TASK.md).
+   # crontab lines around 1 KB (see BRIDGING_TASK.unix.md).
    DIR="$HOME/.memu/hosts/cursor"
    # Single-instance lock: an hourly tick can fire while a long backlog run is
    # still going; a second run would race it on jobs/ and double-commit.
@@ -161,52 +161,6 @@ count:
 Report back: where the schedule was registered, and the cron in words. Mention
 that the first run only has work to do once there are new Cursor agent sessions
 since the last run.
-
-## Windows (Task Scheduler)
-
-Steps 2–3 above are cron/launchd — Unix only. **On Windows, do not hand-write a
-`schtasks` entry.** The pipeline prompt is ~1000 quoted characters and `schtasks
-/TR` splits it on the first space (memU#539); a bare scheduled process also
-resolves and authenticates differently than your shell (memU#538). Run the
-helper instead — every install identical, removable by name:
-
-```
-memu-cursor schedule install     # register the hourly task
-memu-cursor schedule verify      # prove it resolves + authenticates
-memu-cursor schedule status      # last run / next run
-memu-cursor schedule uninstall   # remove it
-```
-
-`install` writes the prompt to a file plus a small PowerShell wrapper that reads
-it (nothing long ever touches the command line), bakes in the absolute path to
-`cursor-agent`, and registers a task named `\memU\memu-bridging-cursor` under an
-**S4U** principal — windowless, runs whether or not you're logged in, catches up
-a run missed while the machine was off. `--interval <minutes>` changes the
-cadence (default 60).
-
-Cursor-specific facts, all field-verified on real Windows 11:
-
-- **Run `schedule install` from a terminal opened *after* installing
-  `cursor-agent`.** The installer updates the registry user `PATH`; a shell (or
-  IDE) started earlier keeps its launch-time environment and the helper will
-  refuse with "not on PATH" (`INSTALL.md` Part 2.0's stale-environment trap).
-- **The invocation carries `--trust`.** `cursor-agent` refuses headless runs in
-  an untrusted directory ("Workspace Trust Required", exit 1) — invisible in
-  session 0. The helper's template bakes `--trust` into both the install-time
-  auth probe and the scheduled run, and sets the task's working directory to
-  `~/.memu/hosts/cursor`, so trust lands on memU's own working tree — never on
-  `System32` (the scheduler's default CWD) or wherever install was run. Do not
-  substitute `--yolo`; that is the blanket permission skip this guide rejects.
-- **The credential is the Cursor account session.** With the IDE signed in on
-  this machine, the CLI reuses that session — profile-backed, and verified to
-  survive into an S4U session-0 run. Custom-provider (BYOK) models do **not**
-  work in the CLI: scheduled runs bill the account's plan, and a free plan will
-  starve on quota even though `schedule verify` shows green — the one
-  entitlement failure the gate cannot see.
-
-Confirm the same way Step 3 does — by filesystem traces, not the run's own
-summary: after a run, check that `~/.memu/hosts/cursor/jobs/` timestamps and the
-session manifest advanced.
 
 ## Notes
 

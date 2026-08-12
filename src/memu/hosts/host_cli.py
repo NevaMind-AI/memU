@@ -87,6 +87,12 @@ class HostSpec:
     """memU working tree. Empty means the per-host default ``~/.memu/hosts/<host>``;
     Codex overrides this with the pre-multi-host ``~/.memu`` it has always used."""
 
+    platform_task_docs: bool = False
+    """Whether ``docs task`` selects an OS-specific task-guide resource.
+
+    Only OS-scheduled hosts opt in, so native-scheduler and generic hosts keep
+    their existing ``BRIDGING_TASK.md`` guide on every platform."""
+
     schedule_command: str = ""
     """The headless agent invocation the bridging task runs, as a template with a
     ``{prompt}`` placeholder — ``claude -p {prompt}``, ``codex exec {prompt}``. The
@@ -548,13 +554,19 @@ async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
     return 0
 
 
+def _doc_filename(spec: HostSpec, doc: str, system: str | None = None) -> str:
+    if doc == "task" and spec.platform_task_docs:
+        suffix = "windows" if (system or platform.system()) == "Windows" else "unix"
+        return f"BRIDGING_TASK.{suffix}.md"
+    return DOCS[doc]
+
+
 async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
     # Server-first, then last-good cache, then the embedded floor — the same
     # self-updating shape ADR 0013 gives the instruction templates, applied to the
-    # host guides. `docs task` prints the guide named BRIDGING_TASK.md; the doc key
-    # ("task") and its filename differ, and both the URL and cache key off the
-    # filename so the server layout mirrors the package layout.
-    filename = DOCS[args.doc]
+    # host guides. An OS-specific task-guide filename drives the package resource,
+    # server URL, and cache key together.
+    filename = _doc_filename(spec, args.doc)
     embedded = (files(spec.package) / filename).read_text(encoding="utf-8")
     print(templates.resolve_doc(spec.host, filename, embedded))
     if args.doc == "install":
