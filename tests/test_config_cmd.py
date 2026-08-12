@@ -10,6 +10,7 @@ variable, is the failure this replaced.
 
 from __future__ import annotations
 
+import os
 import pathlib
 
 import pytest
@@ -87,6 +88,7 @@ def test_duplicate_assignments_all_collapse_to_the_new_value(config: pathlib.Pat
     assert config_file.read()["MEMU_CLIENT_ID"] == "three"
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits only")
 def test_file_is_owner_only(config: pathlib.Path) -> None:
     config_file.write_values({"MEMU_CLOUD_API_KEY": "sk-secret"})
 
@@ -94,6 +96,7 @@ def test_file_is_owner_only(config: pathlib.Path) -> None:
     assert config.parent.stat().st_mode & 0o077 == 0
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits only")
 def test_nothing_to_set_still_restricts_an_existing_file(config: pathlib.Path) -> None:
     _write(config, "MEMU_DB=/srv/db\n")
     config.chmod(0o644)
@@ -102,6 +105,19 @@ def test_nothing_to_set_still_restricts_an_existing_file(config: pathlib.Path) -
 
     assert changed is False
     assert config.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows permission behavior only")
+def test_windows_write_inherits_acls_without_chmod(config: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    chmod_calls: list[int] = []
+    monkeypatch.setattr(pathlib.Path, "chmod", lambda _path, mode: chmod_calls.append(mode))
+
+    path, changed = config_file.write_values({"MEMU_CLOUD_API_KEY": "sk-secret"})
+
+    assert (path, changed) == (config, True)
+    assert config_file.read()["MEMU_CLOUD_API_KEY"] == "sk-secret"
+    assert chmod_calls == []
+    assert config_file.permission_note() == "plaintext key; Windows ACLs inherited"
 
 
 def test_read_is_blind_to_the_process_environment(config: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
