@@ -43,6 +43,7 @@ SPEC = HostSpec(
     session_help="OpenClaw agents dir holding each agent's transcript store (SQLite, or legacy sessions/*.jsonl)",
     instruction_path=AGENTS_MD,
     skills_dir=SKILLS_DIR,
+    schedule_backend="native",
 )
 
 

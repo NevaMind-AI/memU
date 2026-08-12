@@ -24,6 +24,7 @@ SPEC = HostSpec(
     session_help="Cola JSONL session directory (one directory per session scope)",
     instruction_path=MEMORY_MD,
     skills_dir=SKILLS_DIR,
+    schedule_backend="native",
 )
 
 
