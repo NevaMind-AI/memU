@@ -10,12 +10,15 @@ variable, is the failure this replaced.
 
 from __future__ import annotations
 
+import codecs
+import locale
 import os
 import pathlib
 
 import pytest
 
 from memu import config_file
+from memu import env as env_module
 from memu.hosts.claude_code.cli import SPEC
 from memu.hosts.host_cli import run
 
@@ -127,6 +130,52 @@ def test_read_is_blind_to_the_process_environment(config: pathlib.Path, monkeypa
     monkeypatch.setenv("MEMU_CLOUD_API_KEY", "sk-from-the-shell")
 
     assert "MEMU_CLOUD_API_KEY" not in config_file.read()
+
+
+@pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16-le", "utf-16-be"])
+def test_init_migrates_a_bom_encoded_config_to_utf8(config: pathlib.Path, encoding: str) -> None:
+    text = "# 用户配置\nMEMU_DB=C:/用户/memu.sqlite3\n"
+    codecs_by_encoding = {
+        "utf-8-sig": codecs.BOM_UTF8 + text.encode("utf-8"),
+        "utf-16-le": codecs.BOM_UTF16_LE + text.encode("utf-16-le"),
+        "utf-16-be": codecs.BOM_UTF16_BE + text.encode("utf-16-be"),
+    }
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_bytes(codecs_by_encoding[encoding])
+    env_module.reload()
+
+    assert env_module.env("MEMU_DB") == "C:/用户/memu.sqlite3"
+    assert run(SPEC, ["init"]) == 0
+
+    migrated = config.read_bytes()
+    assert not migrated.startswith((codecs.BOM_UTF8, codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE))
+    assert migrated.decode("utf-8").splitlines()[:2] == text.splitlines()
+    assert config_file.read()["MEMU_DB"] == "C:/用户/memu.sqlite3"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows ANSI code page only")
+def test_init_migrates_a_windows_ansi_config_to_utf8(config: pathlib.Path) -> None:
+    text = "# 用户配置\nMEMU_DB=C:/用户/memu.sqlite3\n"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_bytes(text.encode(locale.getencoding()))
+    env_module.reload()
+
+    assert env_module.env("MEMU_DB") == "C:/用户/memu.sqlite3"
+    assert run(SPEC, ["init"]) == 0
+
+    assert config.read_bytes().decode("utf-8").splitlines()[:2] == text.splitlines()
+    assert config_file.read()["MEMU_DB"] == "C:/用户/memu.sqlite3"
+
+
+def test_no_logical_update_still_migrates_legacy_encoding(config: pathlib.Path) -> None:
+    text = "MEMU_MEMORY_MODE=local\nMEMU_CLIENT_ID=existing\n"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_bytes(codecs.BOM_UTF16_LE + text.encode("utf-16-le"))
+
+    path, changed = config_file.write_values({})
+
+    assert (path, changed) == (config, True)
+    assert config.read_bytes().decode("utf-8").splitlines() == text.splitlines()
 
 
 # --------------------------------------------------------------------------- #

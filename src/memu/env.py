@@ -26,6 +26,8 @@ and finds nothing, which is the exact failure this module exists to prevent.
 
 from __future__ import annotations
 
+import codecs
+import locale
 import os
 from functools import cache
 from pathlib import Path
@@ -61,6 +63,27 @@ from the environment and knows nothing of memU's config. Narrow allowlist on
 purpose; ``setdefault`` only, so a value already in the environment wins."""
 
 
+def read_config(path: Path) -> tuple[str, bool]:
+    """Return config text and whether its bytes are canonical UTF-8.
+
+    BOMs identify UTF-8 or UTF-16 files written by Windows PowerShell. A strict
+    fallback to the Windows ANSI code page takes care of legacy text writers
+    without making invalid UTF-8 silently acceptable on other platforms. Writers use the boolean to migrate a legacy file even when no
+    logical setting changed.
+    """
+    data = path.read_bytes()
+    if data.startswith(codecs.BOM_UTF8):
+        return data.decode("utf-8-sig"), False
+    if data.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return data.decode("utf-16"), False
+    try:
+        return data.decode("utf-8"), True
+    except UnicodeDecodeError:
+        if os.name != "nt":
+            raise
+        return data.decode(locale.getencoding()), False
+
+
 @cache
 def _file_values() -> dict[str, str]:
     """Parse the dotenv. Cached: entrypoint processes are short-lived.
@@ -75,7 +98,8 @@ def _file_values() -> dict[str, str]:
         return {}
 
     values: dict[str, str] = {}
-    for raw in path.read_text(encoding="utf-8").splitlines():
+    text, _ = read_config(path)
+    for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
