@@ -54,7 +54,8 @@ SPEC = HostSpec(
     session_help="Codex session log",
     instruction_path=AGENTS_MD,
     skills_dir=SKILLS_DIR,
-    schedule_backend="native",
+    schedule_backend="os",
+    schedule_command=("codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check {prompt}"),
 )
 
 

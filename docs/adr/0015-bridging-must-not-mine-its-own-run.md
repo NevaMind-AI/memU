@@ -99,11 +99,11 @@ there would hide every real session beneath them. They are passed over instead.
 Hosts differ in *who* schedules the run, and this is the part that does not generalise for
 free:
 
-- **memU writes the invocation** (`claude_code`, `cursor`, `hermes` — crontab, launchd, Task
-  Scheduler). The wrapper exports the marker. Strong: no prose, no compliance.
+- **memU writes the invocation** (`claude_code`, `cursor`, `hermes`, `codex` — crontab,
+  launchd, Task Scheduler). The wrapper exports the marker. Strong: no prose, no compliance.
 - **The host schedules it natively and the payload is a prompt** (`openclaw`'s `openclaw
-  cron`, `codex`, `workbuddy`, `cola`'s native task UI). There is no wrapper to write, so the
-  marker can only ride in the documented command inside the prompt. It is still read from the
+  cron`, `workbuddy`, `cola`'s native task UI). There is no wrapper to write, so the marker
+  can only ride in the documented command inside the prompt. It is still read from the
   process environment rather than matched against a transcript, so it cannot be forged — but
   it depends on the agent reproducing the command, and #591 is the evidence that prompts
   drift. Weaker, and it fails open.
@@ -119,9 +119,10 @@ free:
   id into prompt or tool content. Preferred wherever a host offers it.
 
 A host's grade is not a fixed property of the host — it follows from what its guide tells the
-user to register. `codex` sits in the second grade because its guide creates a native Codex
-scheduled task; registering `codex exec` under an OS scheduler instead would move it to the
-first. So the grade is something a guide can improve, not something to accept.
+user to register. `codex` moved from the second grade to the first when its guide replaced the
+native Codex scheduled task with `codex exec` under an OS scheduler. That improves the
+launch-side signal but does not by itself supply Codex's session id; the identity seam remains
+a separate survey. So the grade is something a guide can improve, not something to accept.
 
 So each new host adapter owes one exact identity seam appropriate to its launcher. An
 OS-scheduled host supplies the variable name (surveyed on a real install, on Unix — Windows

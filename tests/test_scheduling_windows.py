@@ -41,8 +41,11 @@ def test_powershell_invocation_maps_prompt_placeholder() -> None:
     assert windows.powershell_invocation("C:\\bin\\claude.exe", "claude -p {prompt}") == (
         "& 'C:\\bin\\claude.exe' -p $prompt"
     )
-    # The per-host bit is data: a different binary/flag just flows through.
-    assert windows.powershell_invocation("/x/codex", "codex exec {prompt}") == "& '/x/codex' exec $prompt"
+    # The per-host bit is data: Codex's unattended-run flags flow through the
+    # shared builder, with the file-backed prompt kept as one PowerShell value.
+    assert windows.powershell_invocation("/x/codex", CODEX.schedule_command) == (
+        "& '/x/codex' exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check $prompt"
+    )
 
 
 def test_agent_check_argv_substitutes_probe_prompt() -> None:
@@ -96,6 +99,24 @@ def test_task_name_is_canonical_per_host() -> None:
     assert CODEX.task_name == "memu-bridging-codex"
     assert CURSOR.task_name == "memu-bridging-cursor"
     assert HERMES.task_name == "memu-bridging-hermes"
+
+
+def test_codex_template_uses_the_unattended_host_access_flags() -> None:
+    assert CODEX.schedule_command == (
+        "codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check {prompt}"
+    )
+    assert "--ephemeral" not in CODEX.schedule_command
+    assert CODEX.needs_headless_auth is False
+    # Session identity/self-skip is deliberately a later host survey, not part
+    # of the native -> OS scheduler migration.
+    assert CODEX.session_id_env == ""
+    assert windows.agent_check_argv("C:\\codex.exe", CODEX.schedule_command, "ping") == [
+        "C:\\codex.exe",
+        "exec",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--skip-git-repo-check",
+        "ping",
+    ]
 
 
 def test_hermes_template_uses_its_oneshot_flag_everywhere() -> None:
@@ -153,7 +174,7 @@ def test_pipeline_prompt_is_verbatim_but_parameterized() -> None:
 
 
 def test_schedule_verb_is_wired() -> None:
-    for spec in (CLAUDE, CURSOR, HERMES):
+    for spec in (CLAUDE, CURSOR, HERMES, CODEX):
         parser = build_parser(spec)
         args = parser.parse_args(["schedule", "install"])
         assert callable(args.handler)
@@ -171,7 +192,7 @@ def test_schedule_backends_describe_existing_host_arrangements() -> None:
         "claude-code": "os",
         "cursor": "os",
         "hermes": "os",
-        "codex": "native",
+        "codex": "os",
         "openclaw": "native",
         "workbuddy": "native",
         "cola": "native",
@@ -195,7 +216,7 @@ def test_schedule_backend_does_not_control_verb_wiring(backend: ScheduleBackend)
 def test_unwired_host_has_no_schedule_verb() -> None:
     # Native and external hosts never advertise a `schedule` verb, not even a
     # refusing stub. argparse rejects it as an unknown command.
-    for spec in (CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC):
+    for spec in (OPENCLAW, WORKBUDDY, COLA, GENERIC):
         with pytest.raises(SystemExit):
             build_parser(spec).parse_args(["schedule", "status"])
     # ...while a wired host does have it.
@@ -259,6 +280,16 @@ def test_pipeline_prompt_matches_the_bridging_doc() -> None:
     assert doc_prompt == prompt.bridging_pipeline_prompt(CLAUDE)
 
 
+def test_codex_pipeline_prompt_matches_the_bridging_doc() -> None:
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.codex") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    doc_prompt = next(
+        line.strip() for line in doc.splitlines() if line.strip().startswith("Run the memU bridging pipeline.")
+    )
+    assert doc_prompt == prompt.bridging_pipeline_prompt(CODEX)
+
+
 def test_cursor_pipeline_prompt_matches_the_bridging_doc() -> None:
     # Wiring cursor makes bridging_pipeline_prompt(CURSOR) live on Windows; lock its
     # guide's bridge-prompt.txt block to the canon the same way claude's is locked.
@@ -281,7 +312,7 @@ def test_hermes_pipeline_prompt_matches_the_bridging_doc() -> None:
     assert doc_prompt == prompt.bridging_pipeline_prompt(HERMES)
 
 
-@pytest.mark.parametrize("pkg", ["claude_code", "cursor", "hermes", "generic"])
+@pytest.mark.parametrize("pkg", ["claude_code", "codex", "cursor", "hermes", "generic"])
 def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
     # The bug class behind memU#591: an inlined pipeline prompt pushed the guide's
     # crontab entry past cron's ~1KB line buffer, so every tick died mid-quote
@@ -295,6 +326,29 @@ def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
     assert cron_entries, f"{pkg} guide lost its cron entry example"
     for line in cron_entries:
         assert len(line) < 512, f"{pkg} cron entry is {len(line)} chars — cron truncates around 1KB: {line[:80]!r}"
+
+
+def test_codex_guide_migrates_native_task_before_os_registration() -> None:
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.codex") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    migration = doc.index("Legacy native-task migration")
+    unix_registration = doc.index("0 * * * * $HOME/.memu/hosts/codex/bridge.sh")
+    windows_registration = doc.index("memu-codex schedule install")
+    assert migration < unix_registration
+    assert migration < windows_registration
+    assert "MEMU_BRIDGING_TASK_ID=memu:bridging:codex:v1" in doc
+    assert all(
+        signature in doc
+        for signature in (
+            "Run the memU bridging pipeline",
+            "memu-codex prepare",
+            "memu-codex commit",
+            "~/.memu/hosts/codex/jobs",
+        )
+    )
+    assert "If listing, deletion, classification, or verification fails, stop" in doc
+    assert "Do not create the OS task" in doc
 
 
 def test_hermes_guide_migrates_native_job_before_os_registration() -> None:

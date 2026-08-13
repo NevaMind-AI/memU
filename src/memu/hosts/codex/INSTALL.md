@@ -168,37 +168,46 @@ on this working, and both fail *silently* if it is wrong.
 
 ## Part 2 — Register the bridging (record) task
 
-The *record* seam: a Codex scheduled task that periodically mines recent
-`~/.codex/sessions` into memU memory, skills, and resources. In cloud mode,
-workspace resources are submitted but are not currently persisted.
+The *record* seam: an OS-scheduled, non-interactive `codex exec` run that
+periodically mines recent `~/.codex/sessions` into memU memory, skills, and
+resources. In cloud mode, workspace resources are submitted but are not
+currently persisted.
 
-**Do not reinvent this.** Follow the packaged procedure:
+**Do not reinvent this and do not create a ChatGPT/Codex native task.** Follow
+the packaged procedure:
 
 ```
 memu-codex docs task
 ```
 
-It is authoritative. In summary, you will settle a cron schedule with the user
-(default: every hour, `0 * * * *`) and create a Codex scheduled task whose
-recurring prompt is the three-step block that document gives you verbatim —
-`memu-codex prepare`, then the agent works through `~/.memu/hosts/codex/jobs/*.txt` in order,
-then `memu-codex commit`.
+It is authoritative. It first migrates any task created by the legacy native
+scheduler guide, using Codex Desktop's task-management surface and stopping on
+any ambiguous listing or deletion. Only after that gate passes does it register
+the replacement with cron/launchd on Unix or the shared
+`memu-codex schedule` helper on Windows. The OS wrapper keeps the prompt in a
+file, runs `codex exec` with the fixed unattended-automation flags, and appends
+stdout/stderr to `~/.memu/hosts/codex/bridge.log`.
 
-Nothing in that prompt is machine-specific. If you find yourself substituting an
-absolute path into it, you are doing it wrong.
+This is a scheduling migration, not an uninstall. Pending jobs, session
+manifests, memory/skill mirrors, the retrieval instruction, configuration, and
+the store all stay in place for the first OS run to continue.
 
 ### ✅ Verify Part 2
 
-Confirm the scheduled task exists with the expected name and cron. Then dry-run
-the first step by hand:
+Confirm **both** sides of the migration:
 
-```
-memu-codex prepare
-```
+1. Codex Desktop's native scheduled-task list has no approved legacy memU
+   bridging task. If it could not be enumerated or removed unambiguously, Part 2
+   has failed and no OS task should exist.
+2. The OS scheduler has exactly one canonical Codex bridging task: the wrapper
+   entry documented by `memu-codex docs task` on Unix, or
+   `\memU\memu-bridging-codex` (`memu-codex schedule status`) on Windows.
 
-It should report how many sessions it prepared (zero, if there is nothing new
-since the cursor — that is fine and correct). Report the task name and schedule
-back to the user.
+Then run one task through the scheduler itself. Verify `bridge.log` grew and
+that the session manifest / `jobs/` timestamps moved; an interactive
+`memu-codex prepare` is not a substitute for the scheduler's account, sparse
+environment, and working directory. Report the scheduler, task identity,
+schedule, legacy migration outcome, and first-run evidence back to the user.
 
 ---
 
