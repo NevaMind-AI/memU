@@ -49,7 +49,9 @@ class CoworkTranscriptSource(TranscriptSource):
 
     def __init__(self, roots: Iterable[str | Path] | None = None) -> None:
         selected = windows_data_roots() if roots is None else [Path(root) for root in roots]
-        self._roots = tuple(sorted((root.resolve() for root in selected if root.is_dir()), key=lambda root: str(root).lower()))
+        self._roots = tuple(
+            sorted((root.resolve() for root in selected if root.is_dir()), key=lambda root: str(root).lower())
+        )
 
     def root(self) -> Path:
         return self._roots[0] if self._roots else Path.home() / "AppData" / "Local" / "Claude-3p"
