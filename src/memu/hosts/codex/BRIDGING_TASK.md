@@ -194,6 +194,14 @@ while the machine was off. `--interval <minutes>` changes the cadence (default
 60). The wrapper restores `PATH`, uses the Codex flags documented above, appends
 stdout/stderr to `bridge.log`, and propagates the CLI exit code.
 
+Run `schedule install` on every install or reinstall, even when `schedule status`
+already finds the canonical task. It regenerates the prompt and wrapper from the
+currently installed memU version, then `Register-ScheduledTask -Force` updates the
+same task in place. Do not uninstall it first: replacement is the upgrade path,
+avoids an unnecessary scheduling gap, and leaves any registration failure visible
+for diagnosis. An existing task is never evidence that its generated wrapper is
+current.
+
 ## Step 4 — verify and report
 
 **Your interactive shell proves less than the scheduler's actual account and

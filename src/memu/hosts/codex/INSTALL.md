@@ -213,6 +213,13 @@ that gate passes it registers the replacement with cron/launchd on Unix or the s
 file, runs `codex exec` with the fixed unattended-automation flags, and appends
 stdout/stderr to `~/.memu/hosts/codex/bridge.log`.
 
+On Windows this step is unconditional on both first install and reinstall. Run
+`memu-codex schedule install` even if the canonical OS task already exists: it
+regenerates the prompt/wrapper artifacts from the installed version and updates
+the same task in place with `Register-ScheduledTask -Force`. Do not delete the OS task first and
+do not reuse it merely because `schedule status` can see it; presence does not
+prove its generated files came from the current memU version.
+
 This is a scheduling migration, not an uninstall. Pending jobs, session
 manifests, memory/skill mirrors, the retrieval instruction, configuration, and
 the store all stay in place for the first OS run to continue.

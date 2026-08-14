@@ -107,6 +107,12 @@ def wrapper_script(
     shell's), reads the prompt from a file, and runs the agent. Absolute paths are
     baked in at install time — the #530 "the scheduler's PATH is not your shell's"
     capture, ported to Windows.
+
+    Preparation stays fail-fast, but the native agent call must run under
+    ``Continue``. Windows PowerShell 5.1 promotes any native stderr line to a
+    ``NativeCommandError``; under ``Stop`` that aborts the wrapper before output is
+    logged or ``LASTEXITCODE`` is propagated. The default exit code protects the
+    command-not-found case, while a real native launch overwrites it.
     """
     path_prefix = ";".join(path_dirs)
     return "\n".join([
@@ -120,8 +126,12 @@ def wrapper_script(
         f"$env:{BRIDGING_RUN_ENV} = '1'",
         f"$env:Path = {_ps_quote(path_prefix + ';')} + $env:Path",
         f"$prompt = Get-Content -Raw -Encoding UTF8 -LiteralPath {_ps_quote(str(prompt_file))}",
+        "$LASTEXITCODE = 1",
+        "$ErrorActionPreference = 'Continue'",
         f"{powershell_invocation(agent_path, schedule_command)} *>> {_ps_quote(str(log_file))}",
-        "exit $LASTEXITCODE",
+        "$agentExitCode = $LASTEXITCODE",
+        "$ErrorActionPreference = 'Stop'",
+        "exit $agentExitCode",
         "",
     ])
 
@@ -268,7 +278,7 @@ def _auth_gate(spec: HostSpec, agent_path: str, workdir: Path) -> int:
 
 
 def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_INTERVAL_MINUTES) -> int:
-    """Register the bridging task, gating on a usable CLI first."""
+    """Register or replace the bridging task, gating on a usable CLI first."""
     _require_windows()
     if interval_minutes < 1:
         print(f"error: --interval must be a positive number of minutes (got {interval_minutes})", file=sys.stderr)
@@ -317,7 +327,10 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
         ),
         encoding="utf-8",
     )
-    print(f"registered '{TASK_PATH}{spec.task_name}' — runs every {interval_minutes} min, hidden, catches up if missed")
+    print(
+        f"registered/updated '{TASK_PATH}{spec.task_name}' — runs every {interval_minutes} min, "
+        "hidden, catches up if missed"
+    )
     print(f"  wrapper: {wrapper}")
     print(f"  verify it can actually run:  {spec.binary} schedule verify")
     return 0

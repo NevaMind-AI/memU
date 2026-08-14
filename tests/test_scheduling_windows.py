@@ -1,21 +1,26 @@
 """The Windows Task Scheduler bridging helper (memU#538/#539).
 
-Two things are proven here without touching Task Scheduler or PowerShell — so the
-suite is identical on the Windows dev box and a Linux CI runner:
+The pure builders are proven without touching Task Scheduler or PowerShell, so
+those checks are identical on the Windows dev box and a Linux CI runner:
 
 1. the pure builders emit the right scripts (canonical name, S4U, prompt kept off
    the command line), and
 2. the ``schedule`` verb is wired in, refuses a host that hasn't opted in, and on
    a non-Windows OS points at cron/launchd instead of touching them.
 
-The OS-executing paths (`install`/`uninstall`/`status`/`verify`) are only reached
-behind a ``platform.system() == "Windows"`` gate, exercised here by patching that
-gate — never by really registering a task.
+One Windows-only regression test runs a generated wrapper under Windows
+PowerShell 5.1 to cover its native-stderr behavior. The OS-executing paths
+(`install`/`uninstall`/`status`/`verify`) are still reached only behind a
+``platform.system() == "Windows"`` gate, exercised here by patching that gate —
+never by really registering a task.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import os
+import platform
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -69,6 +74,42 @@ def test_wrapper_keeps_prompt_off_the_command_line(tmp_path: Path) -> None:
     assert "& 'C:\\bin\\claude.exe' -p $prompt" in text
     # PATH is re-established for the scheduler's bare environment (#530, ported).
     assert "$env:Path = 'C:\\bin;C:\\memu;' + $env:Path" in text
+    # PowerShell 5.1 turns native stderr into NativeCommandError. Preparation is
+    # still fail-fast, but the agent call must continue long enough to log stderr
+    # and preserve the native process's real exit code.
+    invocation = "& 'C:\\bin\\claude.exe' -p $prompt"
+    assert text.index("$ErrorActionPreference = 'Stop'") < text.index("Get-Content -Raw")
+    assert text.index("$LASTEXITCODE = 1") < text.index("$ErrorActionPreference = 'Continue'")
+    assert text.index("$ErrorActionPreference = 'Continue'") < text.index(invocation)
+    assert text.index(invocation) < text.index("$agentExitCode = $LASTEXITCODE")
+    assert "exit $agentExitCode" in text
+    assert "exit $LASTEXITCODE" not in text
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="requires Windows PowerShell 5.1")
+@pytest.mark.parametrize("agent_exit_code", [0, 7])
+def test_wrapper_logs_native_stderr_and_propagates_exit_code(tmp_path: Path, agent_exit_code: int) -> None:
+    prompt_file = tmp_path / "bridge-prompt.txt"
+    log = tmp_path / "bridge.log"
+    agent = tmp_path / "agent.cmd"
+    wrapper = tmp_path / "memu-bridge.ps1"
+    prompt_file.write_text("prompt", encoding="utf-8")
+    agent.write_text(f"@echo native warning 1>&2\r\n@exit /b {agent_exit_code}\r\n", encoding="ascii")
+    wrapper.write_text(
+        windows.wrapper_script(str(agent), "agent {prompt}", prompt_file, log, []),
+        encoding="utf-8-sig",
+    )
+
+    powershell = Path(os.environ["SYSTEMROOT"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    proc = subprocess.run(  # noqa: S603
+        [str(powershell), "-NoProfile", "-NonInteractive", "-File", str(wrapper)],
+        capture_output=True,
+        check=False,
+    )
+
+    assert proc.returncode == agent_exit_code
+    logged = log.read_bytes()
+    assert b"native warning" in logged or "native warning".encode("utf-16-le") in logged
 
 
 def test_register_script_is_canonical_and_hardened() -> None:
@@ -81,6 +122,7 @@ def test_register_script_is_canonical_and_hardened() -> None:
     # workspace-trust CLI (cursor-agent --trust) would then be trusting.
     assert "-WorkingDirectory 'C:\\w'" in script
     assert "New-TimeSpan -Minutes 60" in script
+    assert "-Force" in script  # reinstall updates the canonical task in place
     assert (
         "-RepetitionDuration (New-TimeSpan -Days 3650)" in script
     )  # ~forever; MaxValue is out-of-range on Win11 (#539)
