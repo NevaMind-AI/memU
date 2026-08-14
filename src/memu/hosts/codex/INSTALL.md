@@ -173,6 +173,26 @@ periodically mines recent `~/.codex/sessions` into memU memory, skills, and
 resources. In cloud mode, workspace resources are submitted but are not
 currently persisted.
 
+### 2.0 Prerequisite — a standalone `codex` CLI
+
+The scheduled run invokes `codex exec` from a bare, non-interactive
+environment. Check that `codex` resolves on `PATH` before registering anything.
+If it does not, **do not ask which installer to use**: announce what you are
+about to run, then install the official CLI:
+
+```
+npm install -g @openai/codex
+```
+
+Open a new terminal after the install, since the current shell's `PATH` may
+predate it, then continue only when `codex --version` succeeds. Do not offer a
+skip: without the CLI the record seam cannot run.
+
+Codex CLI reuses the existing profile authentication (normally
+`~/.codex/auth.json`), including authentication established through Codex
+Desktop. There is no separate headless-token setup step here. If that profile is
+not signed in, use the normal Codex sign-in flow before continuing.
+
 **Do not reinvent this and do not create a ChatGPT/Codex native task.** Follow
 the packaged procedure:
 

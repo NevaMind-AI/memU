@@ -56,6 +56,11 @@ SPEC = HostSpec(
     skills_dir=SKILLS_DIR,
     schedule_backend="os",
     schedule_command=("codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check {prompt}"),
+    install_hint=(
+        "  Install the standalone Codex CLI:\n"
+        "    npm install -g @openai/codex\n"
+        "  Then re-run from a NEW terminal - this shell's PATH may predate the install."
+    ),
 )
 
 

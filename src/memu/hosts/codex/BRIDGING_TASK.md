@@ -45,10 +45,14 @@ run's prompt must instruct Codex to do it, not shell out to a pipeline script.
 
 - **memU is installed and `memu-codex` is on `PATH`.** Verify with
   `memu-codex doctor`; if it fails, do `INSTALL.md` Part 1 first.
-- **The standalone `codex` CLI resolves and is already authenticated** for the
-  same OS account the scheduler will use. Codex reads its profile authentication
-  (normally `~/.codex/auth.json`); there is no separate Desktop-to-CLI token
-  setup in this guide.
+- **The standalone `codex` CLI resolves** for the same OS account the scheduler
+  will use. If it does not, announce the action and run
+  `npm install -g @openai/codex`; then open a new terminal and confirm
+  `codex --version` succeeds before continuing. Do not offer to skip this
+  prerequisite.
+- **Codex is already signed in for that account.** The CLI reuses profile
+  authentication (normally `~/.codex/auth.json`), including an existing Codex
+  Desktop login; there is no separate headless-token setup in this guide.
 - The scheduled invocation deliberately uses
   `--dangerously-bypass-approvals-and-sandbox`. That removes **Codex's** approval
   prompts and sandbox for this controlled, fixed automation prompt. It does not
