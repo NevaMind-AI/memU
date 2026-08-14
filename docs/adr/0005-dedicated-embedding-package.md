@@ -35,7 +35,7 @@ chat clients entirely.
 Package layout (`memu.embedding`):
 
 - `backends/`: per-provider request/response shapes — `openai`, `jina`, `voyage`,
-  `doubao` (incl. multimodal), `openrouter`; the HTTP client falls back to an
+  `doubao` (incl. multimodal), `openrouter`, `orcarouter`; the HTTP client falls back to an
   OpenAI-compatible backend for any other provider.
 - `http_client` / `openai_sdk`: transport clients; `embed()` returns
   `(vectors, raw_response)` so usage metadata is preserved.

@@ -14,6 +14,7 @@ EMBEDDING_PROVIDER_DEFAULTS: dict[str, str] = {
     "voyage": "voyage-3.5",
     "doubao": "doubao-embedding-large-text-250515",
     "openrouter": "openai/text-embedding-3-small",
+    "orcarouter": "openai/text-embedding-3-small",
 }
 
 # base_url + API key env per provider. OpenAI is absent because its endpoint is
@@ -23,6 +24,7 @@ EMBEDDING_PROVIDER_ENDPOINTS: dict[str, tuple[str, str]] = {
     "voyage": ("https://api.voyageai.com/v1", "VOYAGE_API_KEY"),
     "doubao": ("https://ark.cn-beijing.volces.com", "ARK_API_KEY"),
     "openrouter": ("https://openrouter.ai", "OPENROUTER_API_KEY"),
+    "orcarouter": ("https://api.orcarouter.ai", "ORCAROUTER_API_KEY"),
 }
 
 

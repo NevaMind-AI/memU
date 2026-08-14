@@ -2,7 +2,7 @@
 
 These pin the embedding module's contract:
 
-- per-provider backends (openai/jina/voyage/openrouter/doubao) build the right
+- per-provider backends (openai/jina/voyage/openrouter/orcarouter/doubao) build the right
   payload/endpoint and parse the ``data[].embedding`` response shape.
 - the HTTP client falls back to an OpenAI-compatible backend for unknown
   providers and returns ``(vectors, raw_response)``.
@@ -26,6 +26,7 @@ from memu.embedding.backends import (  # noqa: E402
     JinaEmbeddingBackend,
     OpenAIEmbeddingBackend,
     OpenRouterEmbeddingBackend,
+    OrcaRouterEmbeddingBackend,
     VoyageEmbeddingBackend,
 )
 from memu.embedding.gateway import build_embedding_client  # noqa: E402
@@ -40,6 +41,7 @@ from memu.embedding.openai_sdk import OpenAIEmbeddingSDKClient  # noqa: E402
         (JinaEmbeddingBackend(), "/embeddings"),
         (VoyageEmbeddingBackend(), "/embeddings"),
         (OpenRouterEmbeddingBackend(), "/api/v1/embeddings"),
+        (OrcaRouterEmbeddingBackend(), "/v1/embeddings"),
     ],
 )
 def test_backend_payload_and_parse(backend, endpoint):
@@ -62,6 +64,17 @@ def test_http_client_unknown_provider_falls_back_to_openai():
 def test_http_client_selects_registered_backend():
     client = HTTPEmbeddingClient(base_url="https://api.jina.ai/v1", api_key="k", embed_model="m", provider="jina")
     assert isinstance(client.backend, JinaEmbeddingBackend)
+
+
+def test_http_client_selects_orcarouter_backend():
+    client = HTTPEmbeddingClient(
+        base_url="https://api.orcarouter.ai",
+        api_key="sk-orca-k",
+        embed_model="openai/text-embedding-3-small",
+        provider="orcarouter",
+    )
+    assert isinstance(client.backend, OrcaRouterEmbeddingBackend)
+    assert client.embedding_endpoint == "v1/embeddings"  # leading slash stripped
 
 
 async def test_http_client_embed_returns_vectors_and_raw(monkeypatch):
@@ -130,6 +143,11 @@ def test_embedding_config_provider_defaults():
     assert voyage.base_url == "https://api.voyageai.com/v1"
     assert voyage.api_key == "VOYAGE_API_KEY"
     assert voyage.embed_model == "voyage-3.5"
+
+    orcarouter = EmbeddingConfig(provider="orcarouter")
+    assert orcarouter.base_url == "https://api.orcarouter.ai"
+    assert orcarouter.api_key == "ORCAROUTER_API_KEY"
+    assert orcarouter.embed_model == "openai/text-embedding-3-small"
 
     # Explicit values always survive the provider-default merge.
     explicit = EmbeddingConfig(provider="jina", base_url="https://proxy/v1", api_key="real", embed_model="custom")
