@@ -92,12 +92,18 @@ as the source of truth:
      prompt contains **all four** strings: `Run the memU bridging pipeline`,
      `memu-codex prepare`, `memu-codex commit`, and
      `~/.memu/hosts/codex/jobs`.
-   - Leave every other task unchanged. Show every unmarked legacy candidate to
-     the user and obtain explicit confirmation before deleting it.
-3. Delete only approved candidates, by native task id, through the Desktop
-   task-management surface. Never edit the scheduler's storage files directly.
-4. List native tasks again. Continue only when no owned task and no approved
-   legacy candidate remains. **If listing, deletion, classification, or verification fails, stop.**
+   - The four-string match is the ownership proof for releases that predate the
+     marker. Migrate it automatically; being unmarked is not by itself a reason
+     to interrupt the user.
+   - Leave every other task unchanged. An incomplete or conflicting match is
+     ambiguous: stop and report it instead of deleting or asking the user to
+     approve a guess.
+3. Delete every owned or four-string legacy candidate, by native task id,
+   through the Desktop task-management surface. Never edit the scheduler's
+   storage files directly. This migration is part of the requested installation,
+   so it needs no separate confirmation.
+4. List native tasks again. Continue only when no owned or four-string legacy
+   candidate remains. **If listing, deletion, classification, or verification fails, stop.**
    **Do not create the OS task.** Report the blocker so two schedulers can never
    process the same jobs concurrently.
 

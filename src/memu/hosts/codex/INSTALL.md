@@ -205,9 +205,10 @@ memu-codex docs task
 ```
 
 It is authoritative. It first migrates any task created by the legacy native
-scheduler guide, using Codex Desktop's task-management surface and stopping on
-any ambiguous listing or deletion. Only after that gate passes does it register
-the replacement with cron/launchd on Unix or the shared
+scheduler guide, using Codex Desktop's task-management surface. A marked task or
+a legacy prompt matching the complete memU signature is migrated automatically;
+only an ambiguous listing, classification, or deletion stops the flow. After
+that gate passes it registers the replacement with cron/launchd on Unix or the shared
 `memu-codex schedule` helper on Windows. The OS wrapper keeps the prompt in a
 file, runs `codex exec` with the fixed unattended-automation flags, and appends
 stdout/stderr to `~/.memu/hosts/codex/bridge.log`.
@@ -220,8 +221,8 @@ the store all stay in place for the first OS run to continue.
 
 Confirm **both** sides of the migration:
 
-1. Codex Desktop's native scheduled-task list has no approved legacy memU
-   bridging task. If it could not be enumerated or removed unambiguously, Part 2
+1. Codex Desktop's native scheduled-task list has no owned or complete-signature
+   legacy memU bridging task. If it could not be enumerated or removed unambiguously, Part 2
    has failed and no OS task should exist.
 2. The OS scheduler has exactly one canonical Codex bridging task: the wrapper
    entry documented by `memu-codex docs task` on Unix, or

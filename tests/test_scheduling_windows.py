@@ -347,6 +347,9 @@ def test_codex_guide_migrates_native_task_before_os_registration() -> None:
             "~/.memu/hosts/codex/jobs",
         )
     )
+    assert "Migrate it automatically" in doc
+    assert "needs no separate confirmation" in doc
+    assert "obtain explicit confirmation" not in doc
     assert "If listing, deletion, classification, or verification fails, stop" in doc
     assert "Do not create the OS task" in doc
 

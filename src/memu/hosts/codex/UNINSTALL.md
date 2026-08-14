@@ -55,8 +55,8 @@ removing another task.
 ### ✅ Verify Part 1
 
 The OS scheduler no longer lists the canonical Codex memU task, and Codex
-Desktop's shared native task list contains no approved legacy memU bridging
-task. No unrelated OS or native task changed.
+Desktop's shared native task list contains no owned or complete-signature legacy
+memU bridging task. No unrelated OS or native task changed.
 
 ---
 
