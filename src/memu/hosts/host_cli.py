@@ -100,10 +100,11 @@ class HostSpec:
     schedule_command: str = ""
     """The headless agent invocation the Windows Task Scheduler helper runs, as a
     template with a ``{prompt}`` placeholder — ``claude -p {prompt}``. The helper
-    turns this into the scheduled task's wrapper, treats the first token as the
-    agent binary to resolve on ``PATH``, and exposes the ``schedule`` subcommand
-    only when it is set. Empty means that helper is not wired for this host; Unix
-    scheduling remains doc-driven and never reads this field.
+    turns this into the scheduled task's wrapper, asks Windows PowerShell itself
+    to resolve the first token exactly as it does for the user, and exposes the
+    ``schedule`` subcommand only when it is set. Empty means that helper is not
+    wired for this host; Unix scheduling remains doc-driven and never reads this
+    field.
     """
 
     schedule_prepare_session_dir: bool = False
@@ -112,6 +113,17 @@ class HostSpec:
     Most hosts have one stable conventional path and need no explicit flag. Hosts
     whose store moves with a runtime home (Hermes's ``HERMES_HOME``) opt in so the
     S4U task is independent of which environment variables it inherits."""
+
+    schedule_prompt_stdin: bool = False
+    """Pipe the scheduled prompt to the agent's stdin and replace ``{prompt}``
+    with ``-`` in the argv.
+
+    This is host capability data, not a shell workaround guessed by the shared
+    scheduler. Codex documents ``-`` as "read instructions from stdin", which
+    avoids Windows PowerShell 5.1 re-splitting a long prompt when an npm ``.ps1``
+    shim forwards its argument list. Hosts whose one-shot command requires a
+    prompt argument keep the default.
+    """
 
     session_id_env: str = ""
     """Environment variable through which the host tells a tool subprocess which

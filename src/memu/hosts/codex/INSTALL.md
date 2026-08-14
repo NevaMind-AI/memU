@@ -196,6 +196,13 @@ environment. Two checks, in order, before you register anything:
 Open a new terminal after the install, since the current shell's `PATH` may
 predate it, then continue only when `codex --version` succeeds.
 
+On Windows, the command is the contract: inspect `(Get-Command codex).Source`
+and run `codex --version` in the same PowerShell that will run
+`memu-codex schedule install`. The helper uses PowerShell's own resolution and
+embeds that exact file-backed command; it does not guess from installation
+directories or substitute another Codex executable merely because one exists.
+If the command selected by PowerShell cannot launch, installation fails here.
+
 
 **Do not reinvent this and do not create a ChatGPT/Codex native task.** Follow
 the packaged procedure:

@@ -48,9 +48,9 @@ def test_powershell_invocation_maps_prompt_placeholder() -> None:
     )
     # The per-host bit is data: Codex's unattended-run flags flow through the
     # shared builder, with the file-backed prompt kept as one PowerShell value.
-    assert windows.powershell_invocation("/x/codex", CODEX.schedule_command) == (
-        "& '/x/codex' exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check $prompt"
-    )
+    assert windows.powershell_invocation(
+        "/x/codex", CODEX.schedule_command, prompt_stdin=CODEX.schedule_prompt_stdin
+    ) == ("$prompt | & '/x/codex' exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -")
 
 
 def test_agent_check_argv_substitutes_probe_prompt() -> None:
@@ -59,6 +59,42 @@ def test_agent_check_argv_substitutes_probe_prompt() -> None:
         "-p",
         "ping",
     ]
+
+
+def test_agent_resolution_uses_powershell_command_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str] = []
+
+    def fake_powershell(script: str, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.append(script)
+        return subprocess.CompletedProcess([], 0, stdout="C:\\bin\\codex.ps1", stderr="")
+
+    monkeypatch.setattr(windows, "_run_powershell", fake_powershell)
+
+    assert windows._resolve_agent(CODEX) == "C:\\bin\\codex.ps1"
+    assert "Get-Command -Name 'codex'" in seen[0]
+    assert "Application" in seen[0] and "ExternalScript" in seen[0]
+
+
+def test_agent_launch_uses_the_exact_powershell_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen: list[tuple[str, Path | None, float | None]] = []
+
+    def fake_powershell(
+        script: str,
+        *,
+        cwd: Path | None = None,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        seen.append((script, cwd, timeout))
+        return subprocess.CompletedProcess([], 0, stdout="codex-cli 1.0", stderr="")
+
+    monkeypatch.setattr(windows, "_run_powershell", fake_powershell)
+
+    ok, _detail = windows._launches("C:\\bin\\codex.ps1", tmp_path)
+    assert ok is True
+    script, cwd, timeout = seen[0]
+    assert "& 'C:\\bin\\codex.ps1' '--version'" in script
+    assert cwd == tmp_path
+    assert timeout == 30
 
 
 def test_wrapper_keeps_prompt_off_the_command_line(tmp_path: Path) -> None:
@@ -86,6 +122,23 @@ def test_wrapper_keeps_prompt_off_the_command_line(tmp_path: Path) -> None:
     assert "exit $LASTEXITCODE" not in text
 
 
+def test_codex_wrapper_pipes_the_long_prompt_to_stdin(tmp_path: Path) -> None:
+    text = windows.wrapper_script(
+        "C:\\bin\\codex.ps1",
+        CODEX.schedule_command,
+        tmp_path / "bridge-prompt.txt",
+        tmp_path / "bridge.log",
+        ["C:\\bin"],
+        prompt_stdin=CODEX.schedule_prompt_stdin,
+    )
+
+    assert CODEX.schedule_prompt_stdin is True
+    assert (
+        "$prompt | & 'C:\\bin\\codex.ps1' exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -"
+    ) in text
+    assert "--skip-git-repo-check $prompt" not in text
+
+
 @pytest.mark.skipif(platform.system() != "Windows", reason="requires Windows PowerShell 5.1")
 @pytest.mark.parametrize("agent_exit_code", [0, 7])
 def test_wrapper_logs_native_stderr_and_propagates_exit_code(tmp_path: Path, agent_exit_code: int) -> None:
@@ -110,6 +163,47 @@ def test_wrapper_logs_native_stderr_and_propagates_exit_code(tmp_path: Path, age
     assert proc.returncode == agent_exit_code
     logged = log.read_bytes()
     assert b"native warning" in logged or "native warning".encode("utf-16-le") in logged
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="requires Windows PowerShell 5.1")
+def test_wrapper_keeps_stdin_prompt_whole_through_a_powershell_shim(tmp_path: Path) -> None:
+    prompt_file = tmp_path / "bridge-prompt.txt"
+    log = tmp_path / "bridge.log"
+    agent = tmp_path / "agent.ps1"
+    wrapper = tmp_path / "memu-bridge.ps1"
+    prompt_file.write_text("one full prompt", encoding="utf-8")
+    agent.write_text(
+        'Write-Output "argc=$($args.Count)"\n'
+        'Write-Output "last=$($args[-1])"\n'
+        '$body = @($input) -join "`n"\n'
+        'Write-Output "stdin=$body"\n'
+        "exit 0\n",
+        encoding="utf-8-sig",
+    )
+    wrapper.write_text(
+        windows.wrapper_script(
+            str(agent),
+            "agent exec {prompt}",
+            prompt_file,
+            log,
+            [],
+            prompt_stdin=True,
+        ),
+        encoding="utf-8-sig",
+    )
+
+    powershell = Path(os.environ["SYSTEMROOT"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    proc = subprocess.run(  # noqa: S603
+        [str(powershell), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(wrapper)],
+        capture_output=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0
+    logged = log.read_bytes()
+    assert b"argc=2" in logged or "argc=2".encode("utf-16-le") in logged
+    assert b"last=-" in logged or "last=-".encode("utf-16-le") in logged
+    assert b"stdin=one full prompt" in logged or "stdin=one full prompt".encode("utf-16-le") in logged
 
 
 def test_register_script_is_canonical_and_hardened() -> None:
@@ -148,6 +242,7 @@ def test_codex_template_uses_the_unattended_host_access_flags() -> None:
         "codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check {prompt}"
     )
     assert "--ephemeral" not in CODEX.schedule_command
+    assert CODEX.schedule_prompt_stdin is True
     assert CODEX.needs_headless_auth is False
     # Session identity/self-skip is deliberately a later host survey, not part
     # of the native -> OS scheduler migration.
@@ -428,6 +523,17 @@ def test_auth_gate_warns_that_credential_must_persist(
     monkeypatch.setattr(windows, "_authenticates", lambda spec, path, workdir: (True, ""))
     assert windows._auth_gate(CLAUDE, "C:\\claude.exe", tmp_path) == 0
     assert "PERSISTENT" in capsys.readouterr().err
+
+
+def test_launch_gate_rejects_a_command_that_only_resolves(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(windows, "_launches", lambda path, workdir: (False, "Access is denied"))
+
+    assert windows._launch_gate(CODEX, "C:\\desktop\\codex.exe", tmp_path) == 1
+    err = capsys.readouterr().err
+    assert "exact command failed" in err
+    assert "Access is denied" in err
 
 
 def test_auth_gate_aborts_when_unauthenticated(

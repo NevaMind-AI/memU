@@ -181,18 +181,23 @@ shared deterministic helper:
 
 ```
 memu-codex schedule install     # register the hourly OS task
-memu-codex schedule verify      # prove a resolvable Codex CLI
+memu-codex schedule verify      # preflight the exact PowerShell Codex command
 memu-codex schedule status      # last run / next run
 memu-codex schedule uninstall   # remove it
 ```
 
 `install` writes `bridge-prompt.txt` and a PowerShell wrapper under
-`~/.memu/hosts/codex`, resolves `codex` to an absolute path, and registers
+`~/.memu/hosts/codex`, resolves `codex` with Windows PowerShell's own
+`Get-Command` semantics, proves that exact command can run `codex --version`,
+embeds its file-backed source in the wrapper, and registers
 `\memU\memu-bridging-codex` under an S4U principal — hidden, limited rather than
 administrator, runnable while logged out, and able to catch up a run missed
 while the machine was off. `--interval <minutes>` changes the cadence (default
 60). The wrapper restores `PATH`, uses the Codex flags documented above, appends
-stdout/stderr to `bridge.log`, and propagates the CLI exit code.
+stdout/stderr to `bridge.log`, and propagates the CLI exit code. It pipes the
+file-backed prompt to `codex exec ... -` on stdin, Codex's documented stdin
+form, so Windows PowerShell 5.1 cannot split the long prompt while forwarding
+through a file-backed command such as an npm `.ps1` shim.
 
 Run `schedule install` on every install or reinstall, even when `schedule status`
 already finds the canonical task. It regenerates the prompt and wrapper from the
@@ -201,6 +206,11 @@ same task in place. Do not uninstall it first: replacement is the upgrade path,
 avoids an unnecessary scheduling gap, and leaves any registration failure visible
 for diagnosis. An existing task is never evidence that its generated wrapper is
 current.
+
+`schedule verify` repeats that exact-command launch as a preflight. It cannot
+prove that the separate S4U identity has equivalent filesystem, network, and
+credential access, so it must not be reported as end-to-end success. The real
+Task Scheduler trigger and filesystem/log traces in Step 4 remain the final gate.
 
 ## Step 4 — verify and report
 

@@ -56,6 +56,7 @@ SPEC = HostSpec(
     skills_dir=SKILLS_DIR,
     schedule_backend="os",
     schedule_command=("codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check {prompt}"),
+    schedule_prompt_stdin=True,
     install_hint=(
         "  Install the standalone Codex CLI:\n"
         "    irm https://chatgpt.com/codex/install.ps1 | iex\n"

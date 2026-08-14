@@ -77,15 +77,17 @@ def _ps_quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
-def powershell_invocation(agent_path: str, schedule_command: str) -> str:
+def powershell_invocation(agent_path: str, schedule_command: str, *, prompt_stdin: bool = False) -> str:
     """The wrapper's agent call, e.g. ``& 'C:\\...\\claude.exe' -p $prompt``.
 
     ``$prompt`` is the wrapper variable holding the prompt file's contents, so the
     long text is passed as one argument by PowerShell and never touches a shell
     that would split it on spaces — the whole point of the file indirection.
     """
-    rest = ["$prompt" if t == "{prompt}" else t for t in _invocation_args(schedule_command)]
-    return " ".join([f"& {_ps_quote(agent_path)}", *rest])
+    prompt_token = "-" if prompt_stdin else "$prompt"
+    rest = [prompt_token if t == "{prompt}" else t for t in _invocation_args(schedule_command)]
+    invocation = " ".join([f"& {_ps_quote(agent_path)}", *rest])
+    return f"$prompt | {invocation}" if prompt_stdin else invocation
 
 
 def agent_check_argv(agent_path: str, schedule_command: str, prompt: str) -> list[str]:
@@ -100,6 +102,8 @@ def wrapper_script(
     prompt_file: Path,
     log_file: Path,
     path_dirs: list[str],
+    *,
+    prompt_stdin: bool = False,
 ) -> str:
     """The PowerShell wrapper the scheduled task runs.
 
@@ -128,7 +132,8 @@ def wrapper_script(
         f"$prompt = Get-Content -Raw -Encoding UTF8 -LiteralPath {_ps_quote(str(prompt_file))}",
         "$LASTEXITCODE = 1",
         "$ErrorActionPreference = 'Continue'",
-        f"{powershell_invocation(agent_path, schedule_command)} *>> {_ps_quote(str(log_file))}",
+        f"{powershell_invocation(agent_path, schedule_command, prompt_stdin=prompt_stdin)} "
+        f"*>> {_ps_quote(str(log_file))}",
         "$agentExitCode = $LASTEXITCODE",
         "$ErrorActionPreference = 'Stop'",
         "exit $agentExitCode",
@@ -193,14 +198,27 @@ def _require_windows() -> None:
         raise RuntimeError(msg)
 
 
-def _run_powershell(script: str) -> subprocess.CompletedProcess[str]:
+def _run_powershell(
+    script: str,
+    *,
+    cwd: Path | None = None,
+    timeout: float | None = None,
+) -> subprocess.CompletedProcess[str]:
     # powershell.exe is a fixed Windows system binary (resolved from System32) and
     # `script` is generated here, never user input — the bandit process checks don't apply.
     argv = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script]
     # encoding/errors pinned: PowerShell's own output follows the console code page
     # (gbk on zh-CN Windows), but text piped through it (e.g. an agent CLI's UTF-8
     # reply) is not re-encoded, so a locale-default decode can crash on it (memU#512).
-    return subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace")  # noqa: S603
+    return subprocess.run(  # noqa: S603
+        argv,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=cwd,
+        timeout=timeout,
+    )
 
 
 def _agent_binary(spec: HostSpec) -> str:
@@ -208,9 +226,69 @@ def _agent_binary(spec: HostSpec) -> str:
 
 
 def _resolve_agent(spec: HostSpec) -> str | None:
-    """Absolute path to the host's agent CLI, or ``None`` if it is not on ``PATH``
-    (memU#538 Symptom A — a desktop-only bundle is not a standalone CLI)."""
-    return shutil.which(_agent_binary(spec))
+    """The file-backed command Windows PowerShell itself resolves for the agent.
+
+    ``shutil.which`` does not implement PowerShell's command precedence: on the
+    same PATH it can choose an ``.exe`` that PowerShell would put behind a
+    ``.ps1`` shim. The scheduled wrapper is PowerShell, so resolve with
+    ``Get-Command`` and embed exactly what the user sees there. Aliases and
+    functions are deliberately rejected because an S4U process cannot inherit
+    definitions from the installer's interactive session.
+    """
+    binary = _agent_binary(spec)
+    script = "\n".join([
+        f"$command = Get-Command -Name {_ps_quote(binary)} -ErrorAction SilentlyContinue",
+        "if ($null -eq $command) { exit 1 }",
+        "if ($command.CommandType -notin @('Application', 'ExternalScript')) { exit 2 }",
+        "[Console]::Out.Write($command.Source)",
+    ])
+    proc = _run_powershell(script)
+    source = proc.stdout.strip()
+    return source if proc.returncode == 0 and source else None
+
+
+def _run_agent(
+    agent_path: str,
+    args: list[str],
+    workdir: Path,
+    *,
+    timeout: float,
+) -> subprocess.CompletedProcess[str]:
+    """Run the exact resolved command under the same PowerShell as the wrapper."""
+    invocation = " ".join(["&", _ps_quote(agent_path), *(_ps_quote(arg) for arg in args)])
+    script = "\n".join([
+        "$ErrorActionPreference = 'Continue'",
+        "$LASTEXITCODE = 1",
+        invocation,
+        "$agentExitCode = $LASTEXITCODE",
+        "exit $agentExitCode",
+    ])
+    return _run_powershell(script, cwd=workdir, timeout=timeout)
+
+
+def _launches(agent_path: str, workdir: Path) -> tuple[bool, str]:
+    """Can PowerShell execute the exact selected command at all?"""
+    try:
+        proc = _run_agent(agent_path, ["--version"], workdir, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, str(exc)
+    return proc.returncode == 0, (proc.stderr or proc.stdout).strip()
+
+
+def _launch_gate(spec: HostSpec, agent_path: str, workdir: Path) -> int:
+    ok, detail = _launches(agent_path, workdir)
+    if ok:
+        print(f"  PowerShell selected and launched: {agent_path}")
+        return 0
+    hint = spec.install_hint or f"  Install {spec.display} so `{_agent_binary(spec)}` works in PowerShell."
+    print(
+        f"error: PowerShell resolves `{_agent_binary(spec)}` to {agent_path}, but that exact command "
+        f"failed `{_agent_binary(spec)} --version` ({detail or 'no output'}).\n"
+        "  Fix the command in this PowerShell environment, then re-run schedule install.\n"
+        f"{hint}",
+        file=sys.stderr,
+    )
+    return 1
 
 
 def _authenticates(spec: HostSpec, agent_path: str, workdir: Path) -> tuple[bool, str]:
@@ -226,12 +304,7 @@ def _authenticates(spec: HostSpec, agent_path: str, workdir: Path) -> tuple[bool
     """
     argv = agent_check_argv(agent_path, spec.schedule_command, "ping")
     try:
-        # encoding/errors pinned: the agent CLI's reply is UTF-8 regardless of the
-        # system locale codec (gbk on zh-CN Windows), which otherwise crashes the
-        # reader thread on a non-ASCII byte (memU#512) instead of returning a result.
-        proc = subprocess.run(  # noqa: S603
-            argv, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120, cwd=workdir
-        )
+        proc = _run_agent(agent_path, argv[1:], workdir, timeout=120)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return False, str(exc)
     return proc.returncode == 0, (proc.stderr or proc.stdout).strip()
@@ -287,14 +360,16 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
     if agent_path is None:
         hint = spec.install_hint or f"  Install {spec.display} so its bundled `{_agent_binary(spec)}` CLI is on PATH."
         print(
-            f"error: `{_agent_binary(spec)}` is not on PATH — {spec.display}'s scheduled run needs a "
-            "CLI a bare process can find (memU#538 Symptom A).\n"
+            f"error: `{_agent_binary(spec)}` is not a file-backed PowerShell command — "
+            f"{spec.display}'s scheduled run needs one a bare process can launch (memU#538 Symptom A).\n"
             f"{hint}\n"
             f"  Then re-run `{spec.binary} schedule install`.",
             file=sys.stderr,
         )
         return 1
     layout.base.mkdir(parents=True, exist_ok=True)
+    if (rc := _launch_gate(spec, agent_path, layout.base)) != 0:
+        return rc
     if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc
 
@@ -312,7 +387,15 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
     # unless it sees a BOM, which would mangle a non-ASCII path (e.g. a CJK username)
     # baked into the wrapper. The BOM makes both 5.1 and 7 decode it as UTF-8.
     wrapper.write_text(
-        wrapper_script(agent_path, spec.schedule_command, prompt_file, log_file, path_dirs), encoding="utf-8-sig"
+        wrapper_script(
+            agent_path,
+            spec.schedule_command,
+            prompt_file,
+            log_file,
+            path_dirs,
+            prompt_stdin=spec.schedule_prompt_stdin,
+        ),
+        encoding="utf-8-sig",
     )
 
     proc = _run_powershell(register_script(spec.task_name, wrapper, interval_minutes, layout.base))
@@ -381,17 +464,25 @@ def verify(spec: HostSpec, layout: Layout) -> int:
 
     agent_path = _resolve_agent(spec)
     if agent_path is None:
-        print(f"error: `{_agent_binary(spec)}` is no longer on PATH (memU#538 Symptom A)", file=sys.stderr)
+        print(
+            f"error: `{_agent_binary(spec)}` is no longer a file-backed PowerShell command (memU#538 Symptom A)",
+            file=sys.stderr,
+        )
         return 1
     layout.base.mkdir(parents=True, exist_ok=True)
+    if (rc := _launch_gate(spec, agent_path, layout.base)) != 0:
+        return rc
     if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc
 
-    print(f"ok: '{TASK_PATH}{spec.task_name}' is registered and `{_agent_binary(spec)}` resolves")
+    print(
+        f"preflight ok: '{TASK_PATH}{spec.task_name}' is registered and the exact PowerShell "
+        f"command for `{_agent_binary(spec)}` launches"
+    )
     if spec.needs_headless_auth:
         print("  its headless-auth probe also passed; credentials must remain persistent for the S4U run")
     print(
-        "  after the next scheduled run, confirm it did work by traces, not its summary:\n"
+        "  this does not prove the S4U identity can run it; trigger the registered task, then confirm by traces:\n"
         f"    - {layout.jobs} timestamps advanced, and\n"
         f"    - {layout.session_manifest} moved"
     )
