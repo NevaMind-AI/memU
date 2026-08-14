@@ -176,22 +176,26 @@ currently persisted.
 ### 2.0 Prerequisite — a standalone `codex` CLI
 
 The scheduled run invokes `codex exec` from a bare, non-interactive
-environment. Check that `codex` resolves on `PATH` before registering anything.
-If it does not, **do not ask which installer to use**: announce what you are
-about to run, then install the official CLI:
+environment. Two checks, in order, before you register anything:
 
-```
-npm install -g @openai/codex
-```
+1. **`codex` resolves on `PATH`.** If it does not, install it — **do not ask
+   which installer**: announce what you are about to run, then run the official
+   install script (it lands in `~/.local/bin`, needs no elevation and no Node):
+   - Windows: `irm https://chatgpt.com/codex/install.ps1 | iex`
+   - macOS / Linux: `curl -fsSL https://chatgpt.com/codex/install.sh | bash`
+
+   `npm install -g @openai/codex` is a fallback — for when the script fails, or
+   the user has already stated a preference. Never install silently as a side
+   effect of scheduling, and never offer "skip": an unregistered record seam is
+   a failed install, not an outcome to pick from a menu.
+2. **It is signed in for that account.** Codex CLI reuses profile authentication
+   (normally `~/.codex/auth.json`), including authentication established through
+   Codex Desktop. There is no separate headless-token setup step here. If that
+   profile is not signed in, use the normal Codex sign-in flow before continuing.
 
 Open a new terminal after the install, since the current shell's `PATH` may
-predate it, then continue only when `codex --version` succeeds. Do not offer a
-skip: without the CLI the record seam cannot run.
+predate it, then continue only when `codex --version` succeeds.
 
-Codex CLI reuses the existing profile authentication (normally
-`~/.codex/auth.json`), including authentication established through Codex
-Desktop. There is no separate headless-token setup step here. If that profile is
-not signed in, use the normal Codex sign-in flow before continuing.
 
 **Do not reinvent this and do not create a ChatGPT/Codex native task.** Follow
 the packaged procedure:

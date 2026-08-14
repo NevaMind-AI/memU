@@ -46,10 +46,13 @@ run's prompt must instruct Codex to do it, not shell out to a pipeline script.
 - **memU is installed and `memu-codex` is on `PATH`.** Verify with
   `memu-codex doctor`; if it fails, do `INSTALL.md` Part 1 first.
 - **The standalone `codex` CLI resolves** for the same OS account the scheduler
-  will use. If it does not, announce the action and run
-  `npm install -g @openai/codex`; then open a new terminal and confirm
-  `codex --version` succeeds before continuing. Do not offer to skip this
-  prerequisite.
+  will use. If it does not, announce the action and run the official installer:
+  Windows: `irm https://chatgpt.com/codex/install.ps1 | iex`; macOS / Linux:
+  `curl -fsSL https://chatgpt.com/codex/install.sh | bash`. It needs no Node or
+  elevation. `npm install -g @openai/codex` is only a fallback if the script
+  fails or the user prefers it. Never install silently as a side effect of
+  scheduling and never offer to skip this prerequisite; then open a new terminal
+  and confirm `codex --version` succeeds before continuing.
 - **Codex is already signed in for that account.** The CLI reuses profile
   authentication (normally `~/.codex/auth.json`), including an existing Codex
   Desktop login; there is no separate headless-token setup in this guide.

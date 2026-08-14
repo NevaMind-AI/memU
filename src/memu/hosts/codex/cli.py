@@ -58,7 +58,8 @@ SPEC = HostSpec(
     schedule_command=("codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check {prompt}"),
     install_hint=(
         "  Install the standalone Codex CLI:\n"
-        "    npm install -g @openai/codex\n"
+        "    irm https://chatgpt.com/codex/install.ps1 | iex\n"
+        "    # fallback:  npm install -g @openai/codex\n"
         "  Then re-run from a NEW terminal - this shell's PATH may predate the install."
     ),
 )
