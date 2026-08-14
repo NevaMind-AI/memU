@@ -128,6 +128,15 @@ class TranscriptSource(ABC):
         """The cursor-file key for a session — its path relative to :meth:`root`."""
         return path.relative_to(self.root()).as_posix()
 
+    def scan_region(self, path: Path) -> str:
+        """The independently newest-first discovery region containing ``path``.
+
+        Ordinary file-backed sources have one region. Composite sources override
+        this so an unchanged session in one root does not hide newer history in
+        another root.
+        """
+        return "default"
+
     def session_id(self, path: Path) -> str:
         """The host's own id for this session — what it reports in the environment.
 

@@ -19,7 +19,8 @@ from __future__ import annotations
 
 import sys
 
-from memu.hosts.claude_code.sessions import SESSION_DIR, ClaudeCodeTranscriptSource
+from memu.hosts.claude_code.desktop_sessions import ClaudeDesktopTranscriptSource
+from memu.hosts.claude_code.sessions import SESSION_DIR
 from memu.hosts.host_cli import HostSpec, run
 
 HOST = "claude-code"
@@ -44,7 +45,7 @@ SPEC = HostSpec(
     host=HOST,
     display="Claude Code",
     package="memu.hosts.claude_code",
-    source_factory=ClaudeCodeTranscriptSource,
+    source_factory=ClaudeDesktopTranscriptSource,
     session_dir=SESSION_DIR,
     session_help="Claude Code session log (one project dir per escaped cwd)",
     instruction_path=CLAUDE_MD,

@@ -72,7 +72,11 @@ def prepare_transcripts(
     skip = set(skip_sessions)
 
     pending: list[tuple[str, TranscriptRead]] = []
+    stopped_regions: set[str] = set()
     for path in source.discover():
+        region = source.scan_region(path)
+        if region in stopped_regions:
+            continue
         if source.session_id(path) in skip:
             continue
         key = source.key(path)
@@ -86,8 +90,8 @@ def prepare_transcripts(
         if read.changed:
             pending.append((key, read))
         elif previous is not None:
-            # Already recorded and unchanged; older files cannot be newer either.
-            break
+            # Already recorded and unchanged; older sessions in this region cannot be newer.
+            stopped_regions.add(region)
 
     # Keep the latest max_jobs, then emit oldest-first so idx counts up with mtime.
     selected = pending[:max_jobs]

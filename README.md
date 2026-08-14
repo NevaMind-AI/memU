@@ -60,7 +60,8 @@ This matrix lists the currently tested memU integrations by operating system.
 | ChatGPT | ChatGPT(Work mode), codex and VS Code extension | ✅ | ✅ | |
 | ChatGPT | Chat | ❌ | ❌ | Chat mode is not currently supported. Please use Work mode. |
 | Claude Code | Desktop and CLI | ✅ | ✅ | If the selected model declines the setup steps, retry with **Opus** or another model. Sonnet 5 can occasionally do this. |
-| Claude | Chat and Cowork | ❌ | ❌ | |
+| Claude | Chat | ❌ | ❌ | |
+| Claude | Cowork | ✅ | ❌ | Cowork audits are mined by the Claude Code bridge; retrieval uses the shared store from an already-integrated host. |
 | Cursor | — | ✅ | ✅ | |
 | OpenClaw | — | ✅ | ✅ | |
 | Hermes Agent | — | ✅ | ⚠️ | Use a memU version with Windows `HERMES_HOME` support; older versions may retrieve from the wrong files. |
@@ -121,7 +122,7 @@ memU runs as a sidecar to a desktop agent, one binary per host. Each binds two s
 | Host | Binary | Session log it mines | Instruction file it patches |
 | --- | --- | --- | --- |
 | Codex | `memu-codex` | `~/.codex/sessions/**/*.jsonl` | `~/.codex/AGENTS.md` |
-| Claude Code | `memu-claude-code` | `~/.claude/projects/<project>/<session>.jsonl` | `~/.claude/CLAUDE.md` |
+| Claude Code | `memu-claude-code` | `~/.claude/projects/<project>/<session>.jsonl` + Windows Cowork `audit.jsonl` | `~/.claude/CLAUDE.md` |
 | Cursor (Agent/CLI) | `memu-cursor` | `~/.cursor/projects/<project>/agent-transcripts/**.jsonl` | `./AGENTS.md` (per project) |
 | OpenClaw | `memu-openclaw` | `~/.openclaw/agents/<agentId>/agent/openclaw-agent.sqlite` (SQLite, read-only) + legacy `<agentId>/sessions/*.jsonl` | `~/.openclaw/workspace/AGENTS.md` |
 | Hermes Agent | `memu-hermes` | `~/.hermes/state.db` (SQLite, read-only) | `~/.hermes/SOUL.md` |
