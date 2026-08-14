@@ -66,8 +66,9 @@ run's prompt must instruct Codex to do it, not shell out to a pipeline script.
 
 ## Step 1 — settle the schedule
 
-Ask the user for a schedule if the request doesn't include one. **Default: every
-hour**, cron `0 * * * *` (local time). Confirm before creating.
+If the request includes a schedule, use it. Otherwise proceed without asking
+with the default: **every hour**, cron `0 * * * *` (local time). The default is
+part of this procedure, so it does not need a separate confirmation.
 
 ## Step 2 — Legacy native-task migration
 
