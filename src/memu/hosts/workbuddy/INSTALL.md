@@ -122,9 +122,9 @@ The *record* seam: a scheduled job that periodically mines recent sessions under
 workspace resources are submitted but are not currently persisted.
 
 **Refresh an existing bridging registration before continuing.** Inspect
-WorkBuddy's automation list as in `UNINSTALL.md` Part 1. If an automation whose
-name or prompt identifies the memU bridging pipeline exists, record its current
-RRULE, remove **only that automation** through WorkBuddy's automation management,
+WorkBuddy's automation list. If an automation whose name or prompt identifies
+the memU bridging pipeline exists, record its current RRULE and remove **only
+that automation** through WorkBuddy's automation management. Re-list automations
 and verify it no longer appears. Leave the store, session cursor, working tree,
 and retrieval instruction untouched. An absent automation is the normal
 first-install case. Reuse the recorded RRULE below unless the user requested a

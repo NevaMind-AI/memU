@@ -341,15 +341,21 @@ On Windows, `schedule install` (reached through `docs task` below) runs this
 gate for you and refuses with install guidance when either check fails. Do
 not continue until the gate passes.
 
-**Refresh an existing bridging registration before continuing.** Inspect the
-scheduler surfaces from `UNINSTALL.md` Part 1. If a memU bridging entry exists,
-record its current cadence, remove **only that entry**, and verify it is gone:
-for cron, match only `hosts/claude-code/bridge\.sh|memU bridging pipeline`; for
-launchd, boot out and delete only its memU plist; on Windows run
-`memu-claude-code schedule uninstall` and confirm `schedule status` reports not
-registered. Leave the store, session cursor, working tree, and retrieval
-instruction untouched. An absent entry is the normal first-install case. Reuse
-the recorded cadence below unless the user requested a change.
+**Refresh an existing bridging registration before continuing.** If a memU
+bridging entry exists, record its current cadence and remove **only that entry**.
+On Unix, identify the cron or launchd entry by
+`~/.memu/hosts/claude-code/bridge.sh` or an old inline
+`claude -p 'Run the memU bridging pipeline. …'` prompt. Rewrite cron with
+`crontab -l | grep -vE 'hosts/claude-code/bridge\.sh|memU bridging pipeline' | crontab -`;
+remove its `PATH=` line only if nothing else needs it, and use `crontab -r` only
+when no lines remain. For launchd, run `launchctl bootout gui/$(id -u)/<label>`
+and delete only its memU plist. On Windows run
+`memu-claude-code schedule uninstall`. Verify `crontab -l` (and
+`ls ~/Library/LaunchAgents`, if launchd was used) shows no memU bridging entry
+while unrelated entries remain; on Windows, `memu-claude-code schedule status`
+must report not registered. Leave the store, session cursor, working tree, and
+retrieval instruction untouched. An absent entry is the normal first-install
+case. Reuse the recorded cadence below unless the user requested a change.
 
 **Do not reinvent this.** Follow the packaged procedure:
 

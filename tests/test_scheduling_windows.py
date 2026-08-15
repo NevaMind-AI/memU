@@ -98,6 +98,13 @@ def test_task_name_is_canonical_per_host() -> None:
     assert HERMES.task_name == "memu-bridging-hermes"
 
 
+def test_claude_task_guide_uses_the_canonical_windows_name() -> None:
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.claude_code") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    assert "\\memU\\memu-bridging-claude-code" in doc
+
+
 def test_hermes_template_uses_its_oneshot_flag_everywhere() -> None:
     # Hermes ships its CLI with the client; the only host-specific invocation
     # detail is its real one-shot flag. The old guide's copied `-p` never existed.
@@ -330,14 +337,54 @@ def test_install_refreshes_existing_bridge_before_registration(pkg: str, binary:
     doc = (files(f"memu.hosts.{pkg}") / "INSTALL.md").read_text(encoding="utf-8")
     normalized = " ".join(doc.replace("**", "").split())
     refresh = normalized.index("Refresh an existing bridging registration before continuing.")
-    registration = normalized.index(f"{binary} docs task")
+    registration = normalized.index(f"{binary} docs task", refresh)
     refresh_step = normalized[refresh:registration]
 
-    assert refresh < registration
     assert identity in refresh_step
     assert " only " in refresh_step and ("remove " in refresh_step or "delete " in refresh_step)
+    assert "verify" in refresh_step.lower()
     assert "normal first-install case" in refresh_step
     assert "unless the user requested a change" in refresh_step
+    assert "UNINSTALL.md" not in refresh_step
+
+
+def test_cursor_uninstall_documents_windows_schedule_removal() -> None:
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.cursor") / "UNINSTALL.md").read_text(encoding="utf-8")
+    assert "memu-cursor schedule uninstall" in doc
+    assert "memu-cursor schedule status" in doc
+    assert "Get-ScheduledTask -TaskPath '\\memU\\'" in doc
+
+
+def test_cola_task_recreates_existing_bridge() -> None:
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.cola") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    normalized = " ".join(doc.split())
+    existing = normalized.index("If task ID `memu-bridging` already exists")
+    create = normalized.index("Set its prompt")
+    refresh = normalized[existing:create]
+
+    assert "remove only that task" in refresh
+    assert "verify it no longer appears" in refresh
+    assert "update it rather than" not in normalized
+
+
+def test_openclaw_task_recreates_confirmed_bridge() -> None:
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.openclaw") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    normalized = " ".join(doc.split())
+    candidate = normalized.index("Exactly one candidate and zero unresolved near matches")
+    create = normalized.index("## Step 2 — create and register the cron job")
+    refresh = normalized[candidate:create]
+
+    assert "delete only that exact job ID" in refresh
+    assert "verify it no longer appears" in refresh
+    assert "reuse and preserve" not in normalized
+    assert "in-place patch" not in normalized
+    assert "selected, updated, or created" not in normalized
 
 
 def test_claude_preflight_never_treats_task_presence_as_current() -> None:

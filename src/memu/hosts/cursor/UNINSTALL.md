@@ -26,22 +26,31 @@ file exactly as they are.
 
 ## Part 1 — Unregister the bridging (record) task
 
-Find the cron entry that runs the memU bridging pipeline — it invokes
-`~/.memu/hosts/cursor/bridge.sh` (or, on installs predating the prompt-file
-layout, inlines `cursor-agent -p 'Run the memU bridging pipeline. …'`
-directly) — and delete **only that line**. Everything else in the user's
-crontab is theirs and stays, e.g.
-`crontab -l | grep -vE 'hosts/cursor/bridge\.sh|memU bridging pipeline' | crontab -`.
-If the memU line was the only reason a `PATH=` line was added, that line may go
-too — but only if nothing else in the crontab needs it. If nothing at all
-remains, `crontab -r` removes the now-empty crontab cleanly. The `bridge.sh`,
-`bridge-prompt.txt`, and `bridge.log` files live under
+Find the scheduled entry that runs the memU bridging pipeline and remove only
+that entry:
+
+- **Unix (cron)** — the entry invokes `~/.memu/hosts/cursor/bridge.sh` (or, on
+  installs predating the prompt-file layout, inlines
+  `cursor-agent -p 'Run the memU bridging pipeline. …'` directly). Everything
+  else in the user's crontab is theirs and stays, e.g.
+  `crontab -l | grep -vE 'hosts/cursor/bridge\.sh|memU bridging pipeline' | crontab -`.
+  If the memU line was the only reason a `PATH=` line was added, that line may
+  go too — but only if nothing else in the crontab needs it. If nothing at all
+  remains, `crontab -r` removes the now-empty crontab cleanly.
+- **Windows (Task Scheduler)** — use the deterministic helper:
+
+  ```
+  memu-cursor schedule uninstall
+  ```
+
+The `bridge.sh`, `bridge-prompt.txt`, and `bridge.log` files live under
 `~/.memu/hosts/cursor/` and go with the host residue in the later cleanup part.
 
 ### ✅ Verify Part 1
 
-`crontab -l` shows no memU bridging entry, and everything unrelated is still
-there.
+`crontab -l` shows no memU bridging entry and everything unrelated is still
+there on Unix. On Windows, `memu-cursor schedule status` reports not registered
+(equivalently, `Get-ScheduledTask -TaskPath '\memU\'` finds nothing).
 
 ---
 

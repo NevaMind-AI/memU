@@ -151,15 +151,18 @@ Register the bridging task against the session directory detect found. In
 cloud mode, workspace resources are submitted by the same pipeline but are not
 currently persisted.
 
-**Refresh an existing bridging registration before continuing.** Inspect the
-scheduler surface from `UNINSTALL.md` Part 1. If a native job or cron entry for
-this generic adapter exists, record its current cadence, remove **only that
-entry**, and verify it is gone. A cron entry is identified by this adapter's
-`hosts/agent/bridge\.sh|memU bridging pipeline` selector; a native job is the one
-whose prompt runs `memu-agent prepare --session-dir …`, its jobs, then
-`memu-agent commit`. Leave the store, session cursor, working tree, and
-retrieval instruction untouched. An absent entry is the normal first-install
-case. Reuse the recorded cadence below unless the user requested a change.
+**Refresh an existing bridging registration before continuing.** If a native
+job or cron entry for this generic adapter exists, record its current cadence and
+remove **only that entry**. A cron entry invokes
+`~/.memu/hosts/agent/bridge.sh` or an old inline pipeline prompt; rewrite it with
+`crontab -l | grep -vE 'hosts/agent/bridge\.sh|memU bridging pipeline' | crontab -`,
+and use `crontab -r` only when no lines remain. Remove a native job only when
+its prompt runs `memu-agent prepare --session-dir …`, its jobs, then
+`memu-agent commit`. Verify the crontab or native scheduler no longer lists a
+memU bridging entry while unrelated entries remain. Leave the store, session
+cursor, working tree, and retrieval instruction untouched. An absent entry is
+the normal first-install case. Reuse the recorded cadence below unless the user
+requested a change.
 
 Follow the current packaged procedure:
 

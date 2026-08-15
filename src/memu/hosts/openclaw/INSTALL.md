@@ -138,14 +138,14 @@ The *record* seam: a scheduled job that mines recent transcripts under
 cloud mode, workspace resources are submitted but are not currently persisted.
 
 **Refresh an existing bridging registration before continuing.** Inspect
-OpenClaw's cron jobs as in `UNINSTALL.md` Part 1. If
-`~/.memu/hosts/openclaw/.cron_job.openclaw.json` registers a job ID, record that
-job's current schedule, delete **only that exact job ID** through OpenClaw's
-scheduler surface, and verify it no longer appears. Leave the registration file,
-store, session cursor, remaining working tree, and retrieval instruction
-untouched; the current task procedure overwrites the registered ID after it
-creates the replacement. No registered job is the normal first-install case.
-Reuse the recorded schedule below unless the user requested a change.
+OpenClaw's cron jobs. If `~/.memu/hosts/openclaw/.cron_job.openclaw.json`
+registers a job ID, record that job's current schedule, delete **only that exact
+job ID** through OpenClaw's scheduler surface, and re-list jobs to verify it no
+longer appears. Leave the registration file, store, session cursor, remaining
+working tree, and retrieval instruction untouched; the current task procedure
+overwrites the registered ID after it creates the replacement. No registered job
+is the normal first-install case. Reuse the recorded schedule below unless the
+user requested a change.
 
 **Do not reinvent this** — follow the packaged procedure:
 

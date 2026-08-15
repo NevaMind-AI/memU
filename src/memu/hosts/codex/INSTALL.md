@@ -173,12 +173,12 @@ The *record* seam: a Codex scheduled task that periodically mines recent
 workspace resources are submitted but are not currently persisted.
 
 **Refresh an existing bridging registration before continuing.** Inspect
-Codex's scheduled-task surface as in `UNINSTALL.md` Part 1. If a task whose
-prompt runs the memU prepare / self-evolve / commit pipeline exists, record its
-current cadence, delete **only that task** through the same surface, and verify
-it no longer appears. The name is only a hint; the pipeline prompt is the
-load-bearing identity. Leave the store, session cursor, working tree, and
-retrieval instruction untouched. An absent task is the normal first-install
+Codex's scheduled-task surface. If a task whose prompt runs the memU prepare /
+self-evolve / commit pipeline exists, record its current cadence and delete
+**only that task** through that surface. The name is only a hint; the complete
+pipeline prompt is the load-bearing identity. Re-list scheduled tasks and verify
+no memU bridging task remains. Leave the store, session cursor, working tree,
+and retrieval instruction untouched. An absent task is the normal first-install
 case. Reuse the recorded cadence below unless the user requested a change.
 
 **Do not reinvent this.** Follow the packaged procedure:

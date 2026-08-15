@@ -135,16 +135,21 @@ The *record* seam: a scheduled job that mines recent sessions out of
 `~/.hermes/state.db` into memU memory, skills, and resources. In cloud mode,
 workspace resources are submitted but are not currently persisted.
 
-**Refresh an existing bridging registration before continuing.** Inspect the
-scheduler surfaces from `UNINSTALL.md` Part 1. If an OS-scheduled memU bridging
-entry exists, record its current cadence, remove **only that entry**, and verify
-it is gone: on Unix match only `hosts/hermes/bridge\.sh|memU bridging pipeline`;
-on Windows run `memu-hermes schedule uninstall` and confirm `schedule status`
-reports not registered. Also remove every exact-name legacy native job
-`memu-bridging-hermes` as that Part requires. Leave the store, session cursor,
-working tree, and retrieval instruction untouched. An absent entry is the
-normal first-install case. Reuse the recorded cadence below unless the user
-requested a change.
+**Refresh an existing bridging registration before continuing.** If an
+OS-scheduled memU bridging entry exists, record its current cadence and remove
+**only that entry**. On Unix, identify it by
+`~/.memu/hosts/hermes/bridge.sh` or an old inline pipeline prompt, then rewrite
+cron with `crontab -l | grep -vE 'hosts/hermes/bridge\.sh|memU bridging pipeline' | crontab -`.
+Remove its `PATH=` line only if nothing else needs it, use `crontab -r` only when
+no lines remain, and delete only the memU launchd plist when launchd was chosen.
+On Windows run `memu-hermes schedule uninstall`. Also list
+`hermes cron list --all` and remove every exact-name legacy native job
+`memu-bridging-hermes` with `hermes cron remove <job-id>`. Verify `crontab -l`
+(and launchd, if used) has no memU bridging entry while unrelated entries remain,
+`memu-hermes schedule status` reports not registered on Windows, and the Hermes
+list has no legacy job. Leave the store, session cursor, working tree, and
+retrieval instruction untouched. An absent entry is the normal first-install
+case. Reuse the recorded cadence below unless the user requested a change.
 
 **Do not reinvent this** — follow the packaged procedure:
 

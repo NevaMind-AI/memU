@@ -1,18 +1,18 @@
 ---
 name: create-memu-cola-bridging-task
-description: Create or update Cola's hourly memU bridging task for the desktop:local session.
+description: Create Cola's hourly memU bridging task for the desktop:local session.
 ---
 
 # Create the memU bridging task (Cola)
 
-Use Cola's native scheduled-task UI to create or update the task named
-**`memU 记忆桥接`**. Do not edit `~/.cola/crons.json` by hand: it is Cola-owned
-runtime state.
+Use Cola's native scheduled-task UI to create the task named **`memU 记忆桥接`**.
+Do not edit `~/.cola/crons.json` by hand: it is Cola-owned runtime state.
 
 The target scope is `desktop:local`. The default schedule is hourly
-(`0 * * * *`); ask the user before choosing a different schedule. If a task
-with ID `memu-bridging` already exists, update it rather than creating a second
-copy.
+(`0 * * * *`); ask the user before choosing a different schedule. If task ID
+`memu-bridging` already exists, record its cadence, disable and remove only that
+task through the UI, and verify it no longer appears before creating its
+replacement. Reuse the recorded cadence unless the user requested a change.
 
 Set its prompt to the following block verbatim:
 
