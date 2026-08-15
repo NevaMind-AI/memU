@@ -34,9 +34,12 @@ full text inline and no skill folder, because for it there is nowhere to put one
 from __future__ import annotations
 
 import argparse
+import contextlib
 import difflib
+import os
 import re
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -219,7 +222,17 @@ def _write(path: Path, updated: str, *, backup: bool, dry_run: bool) -> tuple[bo
     path.parent.mkdir(parents=True, exist_ok=True)
     if backup and current:
         shutil.copyfile(path, path.with_suffix(path.suffix + ".bak"))
-    path.write_text(updated, encoding="utf-8")
+    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=path.suffix)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(updated)
+        if path.exists():
+            shutil.copymode(path, temporary)
+        os.replace(temporary, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(temporary)
+        raise
     return True, diff
 
 
