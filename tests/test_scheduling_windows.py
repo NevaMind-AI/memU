@@ -16,6 +16,7 @@ gate — never by really registering a task.
 from __future__ import annotations
 
 import dataclasses
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -93,16 +94,121 @@ def test_uninstall_and_status_address_the_same_name() -> None:
 
 def test_task_name_is_canonical_per_host() -> None:
     assert CLAUDE.task_name == "memu-bridging-claude-code"
-    assert CODEX.task_name == "memu-bridging-codex"
+    assert CLAUDE.legacy_task_names == ("memu-remember-claude-code",)
     assert CURSOR.task_name == "memu-bridging-cursor"
+    assert CURSOR.legacy_task_names == ()
     assert HERMES.task_name == "memu-bridging-hermes"
+    assert HERMES.legacy_task_names == ()
 
 
 def test_claude_task_guide_uses_the_canonical_windows_name() -> None:
     from importlib.resources import files
 
     doc = (files("memu.hosts.claude_code") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    install = (files("memu.hosts.claude_code") / "INSTALL.md").read_text(encoding="utf-8")
     assert "\\memU\\memu-bridging-claude-code" in doc
+    assert "memu-remember-claude-code" not in doc
+    assert "current=" in install and "legacy=" in install
+    assert "memu-bridging-claude-code" in install
+    assert "memu-remember-claude-code" in install
+
+
+def test_legacy_task_script_is_limited_to_the_given_task() -> None:
+    script = windows.unregister_if_present_script("memu-remember-claude-code")
+    assert "memu-remember-claude-code" in script
+    assert "memu-bridging-claude-code" not in script
+    assert windows.TASK_PATH in script
+    assert "Get-ScheduledTask" in script
+    assert "Unregister-ScheduledTask" in script
+
+
+def test_claude_install_migrates_the_legacy_task_before_registering(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    scripts: list[str] = []
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(windows, "_resolve_agent", lambda spec: "C:\\bin\\claude.exe")
+    monkeypatch.setattr(windows, "_auth_gate", lambda spec, path, workdir: 0)
+    monkeypatch.setattr(windows.shutil, "which", lambda binary: None)
+    monkeypatch.setattr(
+        windows,
+        "_run_powershell",
+        lambda script: scripts.append(script) or subprocess.CompletedProcess([], 0, "", ""),
+    )
+
+    assert windows.install(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 0
+    assert "memu-remember-claude-code" in scripts[0]
+    assert "memu-bridging-claude-code" in scripts[1]
+    assert len(scripts) == 2
+
+
+@pytest.mark.parametrize(
+    ("canonical", "legacy", "expected"),
+    [
+        (False, False, "not registered"),
+        (False, True, "legacy registration"),
+        (True, False, "current"),
+        (True, True, "duplicate registrations"),
+    ],
+)
+def test_claude_status_reports_migration_states(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    canonical: bool,
+    legacy: bool,
+    expected: str,
+) -> None:
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+
+    def run(script: str) -> subprocess.CompletedProcess[str]:
+        registered = "memu-bridging-claude-code" in script and canonical
+        legacy_registered = "memu-remember-claude-code" in script and legacy
+        return subprocess.CompletedProcess([], 0 if registered or legacy_registered else 1, "current", "")
+
+    monkeypatch.setattr(windows, "_run_powershell", run)
+    assert windows.status(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 0
+    assert expected in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("canonical", "legacy"),
+    [(False, False), (False, True), (True, True)],
+)
+def test_claude_verify_rejects_missing_or_legacy_registration(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    canonical: bool,
+    legacy: bool,
+) -> None:
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+
+    def run(script: str) -> subprocess.CompletedProcess[str]:
+        registered = "memu-bridging-claude-code" in script and canonical
+        legacy_registered = "memu-remember-claude-code" in script and legacy
+        return subprocess.CompletedProcess([], 0 if registered or legacy_registered else 1, "", "")
+
+    monkeypatch.setattr(windows, "_run_powershell", run)
+    assert windows.verify(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 1
+    assert "schedule install" in capsys.readouterr().err
+
+
+def test_claude_uninstall_removes_only_known_identities(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    scripts: list[str] = []
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        windows,
+        "_run_powershell",
+        lambda script: scripts.append(script) or subprocess.CompletedProcess([], 0, "", ""),
+    )
+
+    assert windows.uninstall(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 0
+    assert len(scripts) == 2
+    assert "memu-remember-claude-code" in scripts[0]
+    assert "memu-bridging-claude-code" in scripts[1]
 
 
 def test_hermes_template_uses_its_oneshot_flag_everywhere() -> None:
@@ -385,6 +491,66 @@ def test_openclaw_task_recreates_confirmed_bridge() -> None:
     assert "reuse and preserve" not in normalized
     assert "in-place patch" not in normalized
     assert "selected, updated, or created" not in normalized
+
+
+@pytest.mark.parametrize(
+    ("pkg", "task_doc_signals", "uninstall_signals"),
+    [
+        (
+            "claude_code",
+            ("$HOME/.memu/hosts/claude-code/bridge.sh", "\\memU\\memu-bridging-claude-code"),
+            ("hosts/claude-code/bridge\\.sh|memU bridging pipeline", "schedule uninstall"),
+        ),
+        (
+            "cursor",
+            ("$HOME/.memu/hosts/cursor/bridge.sh", "\\memU\\memu-bridging-cursor"),
+            ("hosts/cursor/bridge\\.sh|memU bridging pipeline", "schedule uninstall"),
+        ),
+        (
+            "hermes",
+            ("$HOME/.memu/hosts/hermes/bridge.sh", "\\memU\\memu-bridging-hermes", "memu-bridging-hermes"),
+            ("hosts/hermes/bridge\\.sh|memU bridging pipeline", "hermes cron remove <job-id>"),
+        ),
+        (
+            "generic",
+            ("$HOME/.memu/hosts/agent/bridge.sh", "memu-agent prepare --session-dir <SESSION_DIR>", "memu-agent commit"),
+            ("hosts/agent/bridge\\.sh|memU bridging pipeline", "memu-agent prepare --session-dir …"),
+        ),
+    ],
+)
+def test_os_scheduler_identity_docs_stay_aligned(
+    pkg: str, task_doc_signals: tuple[str, ...], uninstall_signals: tuple[str, ...]
+) -> None:
+    from importlib.resources import files
+
+    package = files(f"memu.hosts.{pkg}")
+    task_doc = (package / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    uninstall_doc = (package / "UNINSTALL.md").read_text(encoding="utf-8")
+
+    for signal in task_doc_signals:
+        assert signal in task_doc
+    for signal in uninstall_signals:
+        assert signal in uninstall_doc
+
+
+def test_native_scheduler_identity_docs_stay_explicit() -> None:
+    from importlib.resources import files
+
+    cola = " ".join((files("memu.hosts.cola") / "BRIDGING_TASK.md").read_text(encoding="utf-8").split())
+    assert "task ID `memu-bridging`" in cola
+    assert "memU 记忆桥接" in cola
+    assert "desktop:local" in cola
+
+    codex = " ".join((files("memu.hosts.codex") / "BRIDGING_TASK.md").read_text(encoding="utf-8").split())
+    codex_uninstall = " ".join((files("memu.hosts.codex") / "UNINSTALL.md").read_text(encoding="utf-8").split())
+    assert "named e.g. `memu-remember`" in codex
+    assert "The name is only a hint" in codex_uninstall
+    assert "prepare / self-evolve / commit prompt" in codex_uninstall
+
+    workbuddy = (files("memu.hosts.workbuddy") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    workbuddy_uninstall = (files("memu.hosts.workbuddy") / "UNINSTALL.md").read_text(encoding="utf-8")
+    assert "automation was created (its id)" in workbuddy
+    assert "by name or by the prompt content" in workbuddy_uninstall
 
 
 def test_claude_preflight_never_treats_task_presence_as_current() -> None:

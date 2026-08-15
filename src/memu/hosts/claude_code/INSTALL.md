@@ -39,7 +39,7 @@ $c = Get-Command claude -ErrorAction SilentlyContinue
 "claude:     " + $(if ($c) { $c.Source } else { "NOT FOUND; landing dir has it: $(Test-Path "$env:USERPROFILE\.local\bin\claude.exe") (True = stale PATH - prepend the landing dir to PATH for the next commands)" })
 "memu:       " + $(if (Get-Command memu-claude-code -ErrorAction SilentlyContinue) { "ok" } else { "NOT FOUND - do Part 1" })
 "credential: token=" + [bool][Environment]::GetEnvironmentVariable('CLAUDE_CODE_OAUTH_TOKEN','User') + " apikey=" + [bool][Environment]::GetEnvironmentVariable('ANTHROPIC_API_KEY','User') + " file=" + (Test-Path "$env:USERPROFILE\.claude\.credentials.json")
-"sched task: " + [bool](Get-ScheduledTask -TaskPath '\memU\' -TaskName 'memu-bridging-claude-code' -ErrorAction SilentlyContinue)
+"sched task: current=" + [bool](Get-ScheduledTask -TaskPath '\memU\' -TaskName 'memu-bridging-claude-code' -ErrorAction SilentlyContinue) + " legacy=" + [bool](Get-ScheduledTask -TaskPath '\memU\' -TaskName 'memu-remember-claude-code' -ErrorAction SilentlyContinue)
 "inject:     " + [bool](Select-String -Path "$env:USERPROFILE\.claude\CLAUDE.md" -Pattern 'memu' -Quiet -ErrorAction SilentlyContinue)
 ```
 
@@ -353,8 +353,8 @@ and delete only its memU plist. On Windows run
 `memu-claude-code schedule uninstall`. Verify `crontab -l` (and
 `ls ~/Library/LaunchAgents`, if launchd was used) shows no memU bridging entry
 while unrelated entries remain; on Windows, `memu-claude-code schedule status`
-must report not registered. Leave the store, session cursor, working tree, and
-retrieval instruction untouched. An absent entry is the normal first-install
+must report neither the current nor legacy task registered. Leave the store,
+session cursor, working tree, and retrieval instruction untouched. An absent entry is the normal first-install
 case. Reuse the recorded cadence below unless the user requested a change.
 
 **Do not reinvent this.** Follow the packaged procedure:

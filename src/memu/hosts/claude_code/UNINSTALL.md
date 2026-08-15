@@ -43,8 +43,9 @@ and stays.
   `~/.memu/hosts/claude-code/` and go with the host residue in Part 3.
 - **launchd** — `launchctl bootout gui/$(id -u)/<label>` and delete the plist
   under `~/Library/LaunchAgents`.
-- **Windows (Task Scheduler)** — the task was registered by the helper, so remove
-  it the same way; it also deletes the generated wrapper and prompt file:
+- **Windows (Task Scheduler)** — the helper removes both the current bridging
+  task and the recognized legacy remember task, then deletes the generated wrapper
+  and prompt file:
 
   ```
   memu-claude-code schedule uninstall

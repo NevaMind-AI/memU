@@ -180,6 +180,13 @@ class HostSpec:
         existing crontab/launchd identity untouched."""
         return f"memu-bridging-{self.host}"
 
+    @property
+    def legacy_task_names(self) -> tuple[str, ...]:
+        """Known older Windows task names that install migrates to ``task_name``."""
+        if self.host == "claude-code":
+            return ("memu-remember-claude-code",)
+        return ()
+
 
 def _layout(spec: HostSpec, args: argparse.Namespace) -> Layout:
     return Layout.default(host=spec.host, base=args.base_dir)

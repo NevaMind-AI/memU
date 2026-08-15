@@ -41,8 +41,20 @@ def test_registration_round_trips_only_the_stable_job_identity(tmp_path: pathlib
 
     cron_identity.save_registration(path, job_id="job-123")
 
+    assert path.name == ".cron_job.openclaw.json"
     assert cron_identity.load_registration(path) == cron_identity.CronRegistration(job_id="job-123")
     assert json.loads(path.read_text(encoding="utf-8")) == {"job_id": "job-123"}
+
+
+def test_openclaw_task_docs_pin_job_id_as_the_only_identity() -> None:
+    doc = (pathlib.Path(__file__).resolve().parents[1] / "src/memu/hosts/openclaw/BRIDGING_TASK.md").read_text(
+        encoding="utf-8"
+    )
+
+    normalized = " ".join(doc.split())
+    assert "memu-openclaw register-cron-job --job-id <jobId>" in normalized
+    assert "job ID is the durable identity and the only selector" in normalized
+    assert "Do not persist or compare the job's current agent or model" in normalized
 
 
 def test_register_cron_job_cli_writes_the_prepare_registration(tmp_path: pathlib.Path) -> None:

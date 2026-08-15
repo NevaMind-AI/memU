@@ -165,6 +165,15 @@ def unregister_script(task_name: str) -> str:
     return f"Unregister-ScheduledTask -TaskName {_ps_quote(task_name)} -TaskPath {_ps_quote(TASK_PATH)} -Confirm:$false"
 
 
+def unregister_if_present_script(task_name: str) -> str:
+    quoted_name = _ps_quote(task_name)
+    quoted_path = _ps_quote(TASK_PATH)
+    return (
+        f"if (Get-ScheduledTask -TaskName {quoted_name} -TaskPath {quoted_path} -ErrorAction SilentlyContinue) "
+        f"{{ Unregister-ScheduledTask -TaskName {quoted_name} -TaskPath {quoted_path} -Confirm:$false }}"
+    )
+
+
 def status_script(task_name: str) -> str:
     return (
         f"Get-ScheduledTaskInfo -TaskName {_ps_quote(task_name)} -TaskPath {_ps_quote(TASK_PATH)} | "
@@ -289,6 +298,12 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
         return rc
 
     wrapper, prompt_file, log_file, registry = _paths(layout)
+    for legacy_name in spec.legacy_task_names:
+        proc = _run_powershell(unregister_if_present_script(legacy_name))
+        if proc.returncode != 0:
+            print(f"error: could not remove legacy task '{TASK_PATH}{legacy_name}': {proc.stderr.strip()}", file=sys.stderr)
+            return 1
+
     prepare_session_dir = spec.session_dir if spec.schedule_prepare_session_dir else None
     prompt_file.write_text(
         bridging_pipeline_prompt(spec, prepare_session_dir=prepare_session_dir),
@@ -324,15 +339,14 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
 
 
 def uninstall(spec: HostSpec, layout: Layout) -> int:
-    """Remove the task by its canonical name and clean up generated artifacts."""
+    """Remove the canonical task and known legacy names, then clean generated artifacts."""
     _require_windows()
-    proc = _run_powershell(unregister_script(spec.task_name))
-    if proc.returncode == 0:
-        print(f"removed '{TASK_PATH}{spec.task_name}'")
-    else:
-        # Idempotent: an absent task is a warning, not a failure — uninstall should
-        # succeed whether or not install ever did.
-        print(f"warning: could not remove '{TASK_PATH}{spec.task_name}': {proc.stderr.strip()}", file=sys.stderr)
+    for task_name in (*spec.legacy_task_names, spec.task_name):
+        proc = _run_powershell(unregister_if_present_script(task_name))
+        if proc.returncode == 0:
+            print(f"removed '{TASK_PATH}{task_name}'")
+        else:
+            print(f"warning: could not remove '{TASK_PATH}{task_name}': {proc.stderr.strip()}", file=sys.stderr)
 
     wrapper, prompt_file, _log, registry = _paths(layout)
     for artifact in (wrapper, prompt_file, registry):
@@ -341,12 +355,30 @@ def uninstall(spec: HostSpec, layout: Layout) -> int:
     return 0
 
 
+def _legacy_registered(spec: HostSpec) -> str | None:
+    for task_name in spec.legacy_task_names:
+        if _run_powershell(status_script(task_name)).returncode == 0:
+            return task_name
+    return None
+
+
 def status(spec: HostSpec, layout: Layout) -> int:
-    """Print whether the task is registered and its last/next run."""
+    """Print whether the canonical task is registered or migration is needed."""
     _require_windows()
     proc = _run_powershell(status_script(spec.task_name))
-    if proc.returncode == 0:
+    legacy_name = _legacy_registered(spec)
+    if proc.returncode == 0 and legacy_name is None:
         print(proc.stdout.strip())
+    elif proc.returncode == 0:
+        print(
+            f"duplicate registrations: '{TASK_PATH}{spec.task_name}' and '{TASK_PATH}{legacy_name}' "
+            f"(run `{spec.binary} schedule install` to remove the legacy task)"
+        )
+    elif legacy_name is not None:
+        print(
+            f"legacy registration: '{TASK_PATH}{legacy_name}' "
+            f"(run `{spec.binary} schedule install` to migrate it to '{TASK_PATH}{spec.task_name}')"
+        )
     else:
         print(f"not registered: '{TASK_PATH}{spec.task_name}' (run `{spec.binary} schedule install`)")
     return 0
@@ -362,8 +394,22 @@ def verify(spec: HostSpec, layout: Layout) -> int:
     """
     _require_windows()
     registered = _run_powershell(status_script(spec.task_name)).returncode == 0
-    if not registered:
-        print(f"not registered: '{TASK_PATH}{spec.task_name}' (run `{spec.binary} schedule install`)", file=sys.stderr)
+    legacy_name = _legacy_registered(spec)
+    if not registered or legacy_name is not None:
+        if registered:
+            print(
+                f"duplicate registrations: '{TASK_PATH}{spec.task_name}' and '{TASK_PATH}{legacy_name}' "
+                f"(run `{spec.binary} schedule install` to remove the legacy task)",
+                file=sys.stderr,
+            )
+        elif legacy_name is not None:
+            print(
+                f"legacy registration: '{TASK_PATH}{legacy_name}' must be migrated to "
+                f"'{TASK_PATH}{spec.task_name}' (run `{spec.binary} schedule install`)",
+                file=sys.stderr,
+            )
+        else:
+            print(f"not registered: '{TASK_PATH}{spec.task_name}' (run `{spec.binary} schedule install`)", file=sys.stderr)
         return 1
 
     agent_path = _resolve_agent(spec)
