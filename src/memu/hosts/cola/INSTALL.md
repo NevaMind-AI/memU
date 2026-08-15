@@ -38,16 +38,23 @@ Cola stores transcripts at `~/.cola/sessions/<scope>/*.jsonl`. `memu-cola`
 reads user and assistant text plus tool calls, and ignores session headers and
 model/thinking metadata.
 
-Do not edit `~/.cola/crons.json` yourself. Ask Cola to follow its packaged task
-procedure:
+Do not edit `~/.cola/crons.json` yourself. **Refresh an existing bridging
+registration before continuing.** Inspect Cola's scheduled-task UI as in
+`UNINSTALL.md` step 1. If task ID `memu-bridging` exists, record its current
+cadence, disable and remove **only that task** through the UI, and verify it no
+longer appears. Leave the store, session cursor, working tree, and retrieval
+instruction untouched. An absent task is the normal first-install case. Reuse
+the recorded cadence unless the user requested a change.
+
+Then ask Cola to follow its current packaged task procedure:
 
 ```sh
 memu-cola docs task
 ```
 
-On this machine the task is named `memU 记忆桥接`, has ID `memu-bridging`, runs
-on `desktop:local`, and defaults to `0 * * * *` (hourly). Reuse and update that
-task if it already exists; do not duplicate it.
+The recreated task is named `memU 记忆桥接`, has ID `memu-bridging`, runs on
+`desktop:local`, and defaults to `0 * * * *` (hourly) when there was no prior
+cadence and the user did not choose another one.
 
 ### Verify Part 2
 

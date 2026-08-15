@@ -216,6 +216,15 @@ shell started before the CLI install keeps a stale `PATH` (the trap above).
 
 Do not continue until the gate passes.
 
+**Refresh an existing bridging registration before continuing.** Inspect the
+scheduler surfaces from `UNINSTALL.md` Part 1. If a memU bridging entry exists,
+record its current cadence, remove **only that entry**, and verify it is gone:
+for cron, match only `hosts/cursor/bridge\.sh|memU bridging pipeline`; on
+Windows run `memu-cursor schedule uninstall` and confirm `schedule status`
+reports not registered. Leave the store, session cursor, working tree, and
+retrieval instruction untouched. An absent entry is the normal first-install
+case. Reuse the recorded cadence below unless the user requested a change.
+
 **Do not reinvent this** — follow the packaged procedure:
 
 ```

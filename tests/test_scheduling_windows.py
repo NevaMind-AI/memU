@@ -310,6 +310,44 @@ def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
     assert "If listing or removal fails, stop" in doc
 
 
+@pytest.mark.parametrize(
+    ("pkg", "binary", "identity"),
+    [
+        ("claude_code", "memu-claude-code", r"hosts/claude-code/bridge\.sh|memU bridging pipeline"),
+        ("cursor", "memu-cursor", r"hosts/cursor/bridge\.sh|memU bridging pipeline"),
+        ("hermes", "memu-hermes", r"hosts/hermes/bridge\.sh|memU bridging pipeline"),
+        ("generic", "memu-agent", r"hosts/agent/bridge\.sh|memU bridging pipeline"),
+        ("codex", "memu-codex", "load-bearing identity"),
+        ("openclaw", "memu-openclaw", ".cron_job.openclaw.json"),
+        ("workbuddy", "memu-workbuddy", "WorkBuddy's automation list"),
+        ("cola", "memu-cola", "task ID `memu-bridging`"),
+    ],
+)
+def test_install_refreshes_existing_bridge_before_registration(pkg: str, binary: str, identity: str) -> None:
+    """An upgrade removes only the old registration before applying today's task guide (#640)."""
+    from importlib.resources import files
+
+    doc = (files(f"memu.hosts.{pkg}") / "INSTALL.md").read_text(encoding="utf-8")
+    normalized = " ".join(doc.replace("**", "").split())
+    refresh = normalized.index("Refresh an existing bridging registration before continuing.")
+    registration = normalized.index(f"{binary} docs task")
+    refresh_step = normalized[refresh:registration]
+
+    assert refresh < registration
+    assert identity in refresh_step
+    assert " only " in refresh_step and ("remove " in refresh_step or "delete " in refresh_step)
+    assert "normal first-install case" in refresh_step
+    assert "unless the user requested a change" in refresh_step
+
+
+def test_claude_preflight_never_treats_task_presence_as_current() -> None:
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.claude_code") / "INSTALL.md").read_text(encoding="utf-8")
+    assert "there is nothing to install" not in doc
+    assert "Part 2 always runs once its prerequisites pass" in doc
+
+
 def test_install_rejects_nonpositive_interval(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

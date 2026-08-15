@@ -133,8 +133,20 @@ backend.
 
 The *record* seam: a scheduled job that mines recent sessions out of
 `~/.hermes/state.db` into memU memory, skills, and resources. In cloud mode,
-workspace resources are submitted but are not currently persisted. **Do not
-reinvent this** — follow the packaged procedure:
+workspace resources are submitted but are not currently persisted.
+
+**Refresh an existing bridging registration before continuing.** Inspect the
+scheduler surfaces from `UNINSTALL.md` Part 1. If an OS-scheduled memU bridging
+entry exists, record its current cadence, remove **only that entry**, and verify
+it is gone: on Unix match only `hosts/hermes/bridge\.sh|memU bridging pipeline`;
+on Windows run `memu-hermes schedule uninstall` and confirm `schedule status`
+reports not registered. Also remove every exact-name legacy native job
+`memu-bridging-hermes` as that Part requires. Leave the store, session cursor,
+working tree, and retrieval instruction untouched. An absent entry is the
+normal first-install case. Reuse the recorded cadence below unless the user
+requested a change.
+
+**Do not reinvent this** — follow the packaged procedure:
 
 ```
 memu-hermes docs task

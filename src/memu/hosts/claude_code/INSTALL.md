@@ -55,9 +55,10 @@ grep -q memu ~/.claude/CLAUDE.md 2>/dev/null && echo "inject: yes" || echo "inje
 ```
 
 Reading the answers: `memu` missing → Part 1. `claude` missing → Part 2.0
-step 1. No credential anywhere → Part 2.0 step 2. No task / cron entry →
-Part 2 registration. `inject` false → Part 3. Everything present → verify
-gates only; there is nothing to install.
+step 1. No credential anywhere → Part 2.0 step 2. `inject` false → Part 3.
+Part 2 always runs once its prerequisites pass: an existing task / cron entry
+must be removed and recreated from the current packaged procedure, not treated
+as proof that its prompt and wrapper are current.
 
 ---
 
@@ -339,6 +340,16 @@ probe does not replace that line.
 On Windows, `schedule install` (reached through `docs task` below) runs this
 gate for you and refuses with install guidance when either check fails. Do
 not continue until the gate passes.
+
+**Refresh an existing bridging registration before continuing.** Inspect the
+scheduler surfaces from `UNINSTALL.md` Part 1. If a memU bridging entry exists,
+record its current cadence, remove **only that entry**, and verify it is gone:
+for cron, match only `hosts/claude-code/bridge\.sh|memU bridging pipeline`; for
+launchd, boot out and delete only its memU plist; on Windows run
+`memu-claude-code schedule uninstall` and confirm `schedule status` reports not
+registered. Leave the store, session cursor, working tree, and retrieval
+instruction untouched. An absent entry is the normal first-install case. Reuse
+the recorded cadence below unless the user requested a change.
 
 **Do not reinvent this.** Follow the packaged procedure:
 

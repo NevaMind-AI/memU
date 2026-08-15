@@ -147,9 +147,21 @@ backend.
 
 ## Part 2 — Memorization (only if detect said it works)
 
-Register the bridging task against the session directory detect found. Follow
-the packaged procedure. In cloud mode, workspace resources are submitted by the
-same pipeline but are not currently persisted:
+Register the bridging task against the session directory detect found. In
+cloud mode, workspace resources are submitted by the same pipeline but are not
+currently persisted.
+
+**Refresh an existing bridging registration before continuing.** Inspect the
+scheduler surface from `UNINSTALL.md` Part 1. If a native job or cron entry for
+this generic adapter exists, record its current cadence, remove **only that
+entry**, and verify it is gone. A cron entry is identified by this adapter's
+`hosts/agent/bridge\.sh|memU bridging pipeline` selector; a native job is the one
+whose prompt runs `memu-agent prepare --session-dir …`, its jobs, then
+`memu-agent commit`. Leave the store, session cursor, working tree, and
+retrieval instruction untouched. An absent entry is the normal first-install
+case. Reuse the recorded cadence below unless the user requested a change.
+
+Follow the current packaged procedure:
 
 ```
 memu-agent docs task
