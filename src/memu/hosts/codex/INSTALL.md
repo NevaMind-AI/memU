@@ -216,9 +216,11 @@ scheduler guide, using Codex Desktop's task-management surface. A marked task or
 a legacy prompt matching the complete memU signature is migrated automatically;
 only an ambiguous listing, classification, or deletion stops the flow. After
 that gate passes it registers the replacement with cron/launchd on Unix or the shared
-`memu-codex schedule` helper on Windows. The OS wrapper keeps the prompt in a
-file, runs `codex exec` with the fixed unattended-automation flags, and appends
-stdout/stderr to `~/.memu/hosts/codex/bridge.log`.
+`memu-codex schedule` helper on Windows. The Windows wrapper runs prepare and
+commit directly, uses `codex exec` only for numbered jobs, requires a per-run
+completion handshake, and appends every stage's output to
+`~/.memu/hosts/codex/bridge.log`. This prevents both Bash/WSL assumptions and a
+zero Codex exit from masking a failed pipeline.
 
 On Windows this step is unconditional on both first install and reinstall. Run
 `memu-codex schedule install` even if the canonical OS task already exists: it
@@ -242,8 +244,9 @@ Confirm **both** sides of the migration:
    entry documented by `memu-codex docs task` on Unix, or
    `\memU\memu-bridging-codex` (`memu-codex schedule status`) on Windows.
 
-Then run one task through the scheduler itself. Verify `bridge.log` grew and
-that the session manifest / `jobs/` timestamps moved; an interactive
+Then run one task through the scheduler itself. On Windows require
+`LastTaskResult` 0 as well as a growing `bridge.log` and the expected session
+manifest / `jobs/` movement; an interactive
 `memu-codex prepare` is not a substitute for the scheduler's account, sparse
 environment, and working directory. Report the scheduler, task identity,
 schedule, legacy migration outcome, and first-run evidence back to the user.

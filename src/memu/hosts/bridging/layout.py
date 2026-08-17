@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 BASE_DIR = "~/.memu"
+JOB_COMPLETION_NONCE_ENV = "MEMU_JOB_COMPLETION_TOKEN"
+"""Per-agent-run nonce required by the Windows scheduler completion handshake."""
 
 TRACK_DIRS: dict[str, str] = {"memory": "memory", "skill": "skill"}
 """RecallFile ``track`` -> the subdirectory its files are mirrored into."""
@@ -37,6 +39,19 @@ class Layout:
     def jobs(self) -> Path:
         """The numbered job-instruction files the agent works through."""
         return self.base / "jobs"
+
+    @property
+    def job_completion_marker(self) -> Path:
+        """Proof that the scheduled agent finished every job it was given.
+
+        ``codex exec`` and similar one-shot agents may exit zero after merely
+        *reporting* that a requested workflow failed.  The Windows wrapper gives
+        each invocation a fresh nonce and accepts this marker only when the agent
+        writes that inherited nonce through the internal ``complete-jobs`` CLI.
+        Host-scoping prevents two adapters sharing a base directory from accepting
+        each other's completion.
+        """
+        return self.base / f".jobs_complete.{self.host}"
 
     @property
     def memory(self) -> Path:

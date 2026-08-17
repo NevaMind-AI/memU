@@ -2,8 +2,8 @@ r"""Register the memU bridging task with Windows Task Scheduler.
 
 Unix hosts schedule bridging by pasting the pipeline prompt into a crontab or a
 launchd plist (see each host's ``BRIDGING_TASK.md``). Windows can't take that
-path — Task Scheduler's ``schtasks /TR`` re-parses the ~1000-character quoted
-prompt and dies on the spaces (memU#539), and a bare scheduled process can't find
+path — Task Scheduler's ``schtasks /TR`` re-parses a long quoted prompt and dies
+on the spaces (memU#539), and a bare scheduled process can't find
 a desktop-only ``claude`` (memU#538). This backend sidesteps both: it writes the
 prompt to a file and a small PowerShell wrapper that reads it, then registers a
 Task Scheduler entry that runs *only* the wrapper, under a canonical task name.
@@ -13,8 +13,9 @@ Code scheduler, with per-OS backends over schtasks/launchd/cron and every task
 namespaced under a scheduler folder (``\ClaudeScheduler\<id>``; ours is the same
 shape, ``\memU\<name>``, so uninstall is deterministic). We diverge for the
 bridging case: ``Register-ScheduledTask`` under an S4U principal, so the run is
-windowless and works while logged out, plus the prompt-file indirection below
-because the pipeline prompt is too long to sit on the command line.
+windowless and works while logged out; the wrapper directly owns prepare/commit
+and uses the agent only for jobs, with prompt-file indirection because the job
+prompt is too long to sit on the command line.
 
 Windows-only: every entry point raises on other platforms. Nothing here touches
 the cron or launchd code paths, so their long-standing behavior is unchanged.
@@ -24,14 +25,14 @@ from __future__ import annotations
 
 import json
 import platform
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from memu.hosts.bridging.layout import JOB_COMPLETION_NONCE_ENV
 from memu.hosts.bridging.self_sessions import BRIDGING_RUN_ENV
-from memu.hosts.scheduling.prompt import bridging_pipeline_prompt
+from memu.hosts.scheduling.prompt import bridging_jobs_prompt
 
 if TYPE_CHECKING:
     from memu.hosts.bridging import Layout
@@ -45,6 +46,7 @@ DEFAULT_INTERVAL_MINUTES = 60
 WRAPPER_NAME = "memu-bridge.ps1"
 PROMPT_NAME = "bridge-prompt.txt"
 LOG_NAME = "bridge.log"
+AGENT_PROMPT_ENV = "MEMU_SCHEDULE_AGENT_PROMPT"
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +79,18 @@ def _ps_quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+def _ps_native_invocation(command_path: str, arguments: list[str]) -> str:
+    """Invoke a resolved command without letting a ``.ps1`` shim exit our wrapper."""
+    quoted_args = " ".join(arguments)
+    if Path(command_path).suffix.casefold() == ".ps1":
+        prefix = (
+            f"& 'powershell.exe' -NoProfile -NonInteractive -ExecutionPolicy Bypass -File {_ps_quote(command_path)}"
+        )
+    else:
+        prefix = f"& {_ps_quote(command_path)}"
+    return f"{prefix} {quoted_args}".rstrip()
+
+
 def powershell_invocation(agent_path: str, schedule_command: str, *, prompt_stdin: bool = False) -> str:
     """The wrapper's agent call, e.g. ``& 'C:\\...\\claude.exe' -p $prompt``.
 
@@ -86,7 +100,16 @@ def powershell_invocation(agent_path: str, schedule_command: str, *, prompt_stdi
     """
     prompt_token = "-" if prompt_stdin else "$prompt"
     rest = [prompt_token if t == "{prompt}" else t for t in _invocation_args(schedule_command)]
-    invocation = " ".join([f"& {_ps_quote(agent_path)}", *rest])
+    if prompt_stdin and Path(agent_path).suffix.casefold() == ".ps1":
+        # Windows PowerShell's `-File script.ps1 ... -` rejects the bare `-` as
+        # an invalid named parameter. `-Command` forwards it through `$args`, and
+        # piping the inherited env value *inside* that child preserves stdin too.
+        child_command = f"$env:{AGENT_PROMPT_ENV} | & {_ps_quote(agent_path)} @args"
+        prefix = (
+            f"& 'powershell.exe' -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command {_ps_quote(child_command)}"
+        )
+        return " ".join([prefix, *rest])
+    invocation = _ps_native_invocation(agent_path, rest)
     return f"$prompt | {invocation}" if prompt_stdin else invocation
 
 
@@ -98,27 +121,43 @@ def agent_check_argv(agent_path: str, schedule_command: str, prompt: str) -> lis
 
 def wrapper_script(
     agent_path: str,
+    memu_path: str,
     schedule_command: str,
     prompt_file: Path,
     log_file: Path,
+    jobs_dir: Path,
+    completion_marker: Path,
+    base_dir: Path,
     path_dirs: list[str],
     *,
+    prepare_session_dir: str | Path | None = None,
     prompt_stdin: bool = False,
 ) -> str:
     """The PowerShell wrapper the scheduled task runs.
 
     It re-establishes ``PATH`` (Task Scheduler does not inherit the interactive
-    shell's), reads the prompt from a file, and runs the agent. Absolute paths are
-    baked in at install time — the #530 "the scheduler's PATH is not your shell's"
-    capture, ported to Windows.
+    shell's), drains leftover jobs, prepares a new batch, and commits it.  Only
+    the judgement-heavy job processing belongs to the agent; direct memU process
+    exit codes own the state-changing stages and reach Task Scheduler.
 
-    Preparation stays fail-fast, but the native agent call must run under
-    ``Continue``. Windows PowerShell 5.1 promotes any native stderr line to a
-    ``NativeCommandError``; under ``Stop`` that aborts the wrapper before output is
-    logged or ``LASTEXITCODE`` is propagated. The default exit code protects the
-    command-not-found case, while a real native launch overwrites it.
+    Every native call runs briefly under ``Continue``. Windows PowerShell 5.1
+    promotes any native stderr line to ``NativeCommandError``; under ``Stop`` it
+    would abort before output is logged or ``LASTEXITCODE`` is propagated.
+
+    A zero agent exit is necessary but not sufficient. ``Invoke-AgentJobs`` gives
+    the child a fresh nonce and accepts the run only when ``complete-jobs`` writes
+    that exact nonce to the host-scoped marker.
     """
     path_prefix = ";".join(path_dirs)
+    prepare_args = ["prepare", "--base-dir", str(base_dir)]
+    if prepare_session_dir is not None:
+        prepare_args.extend(["--session-dir", str(prepare_session_dir)])
+    commit_args = ["commit", "--base-dir", str(base_dir)]
+
+    def ps_array(values: list[str]) -> str:
+        return "@(" + ", ".join(_ps_quote(value) for value in values) + ")"
+
+    invocation = powershell_invocation(agent_path, schedule_command, prompt_stdin=prompt_stdin)
     return "\n".join([
         "# memU bridging wrapper (generated by `schedule install`; do not edit -",
         "# re-run install to regenerate). Prior art: jshchnz/claude-code-scheduler.",
@@ -129,14 +168,65 @@ def wrapper_script(
         # directory first cannot lose it.
         f"$env:{BRIDGING_RUN_ENV} = '1'",
         f"$env:Path = {_ps_quote(path_prefix + ';')} + $env:Path",
+        f"Remove-Item -LiteralPath {_ps_quote(str(completion_marker))} -Force -ErrorAction SilentlyContinue",
         f"$prompt = Get-Content -Raw -Encoding UTF8 -LiteralPath {_ps_quote(str(prompt_file))}",
-        "$LASTEXITCODE = 1",
-        "$ErrorActionPreference = 'Continue'",
-        f"{powershell_invocation(agent_path, schedule_command, prompt_stdin=prompt_stdin)} "
-        f"*>> {_ps_quote(str(log_file))}",
-        "$agentExitCode = $LASTEXITCODE",
-        "$ErrorActionPreference = 'Stop'",
-        "exit $agentExitCode",
+        f"$env:{AGENT_PROMPT_ENV} = $prompt",
+        f"$prepareArgs = {ps_array(prepare_args)}",
+        f"$commitArgs = {ps_array(commit_args)}",
+        "function Invoke-Memu([string[]]$Arguments) {",
+        "    $script:memuExitCode = 1",
+        "    $global:LASTEXITCODE = 1",
+        "    $ErrorActionPreference = 'Continue'",
+        f"    {_ps_native_invocation(memu_path, ['@Arguments'])} 2>&1 | "
+        f"Out-File -FilePath {_ps_quote(str(log_file))} -Append -Encoding utf8",
+        "    $script:memuExitCode = $global:LASTEXITCODE",
+        "    $ErrorActionPreference = 'Stop'",
+        "}",
+        "function Invoke-AgentJobs {",
+        "    $script:agentExitCode = 0",
+        f"    $jobs = @(Get-ChildItem -LiteralPath {_ps_quote(str(jobs_dir))} -Filter '*.txt' "
+        "-File -ErrorAction SilentlyContinue)",
+        "    if ($jobs.Count -eq 0) { return }",
+        "    $token = [guid]::NewGuid().ToString('N')",
+        f"    $env:{JOB_COMPLETION_NONCE_ENV} = $token",
+        f"    Remove-Item -LiteralPath {_ps_quote(str(completion_marker))} -Force -ErrorAction SilentlyContinue",
+        "    $global:LASTEXITCODE = 1",
+        "    $ErrorActionPreference = 'Continue'",
+        f"    {invocation} 2>&1 | Out-File -FilePath {_ps_quote(str(log_file))} -Append -Encoding utf8",
+        "    $code = $global:LASTEXITCODE",
+        "    $ErrorActionPreference = 'Stop'",
+        "    if ($code -ne 0) { $script:agentExitCode = $code; return }",
+        f"    if (-not (Test-Path -LiteralPath {_ps_quote(str(completion_marker))} -PathType Leaf)) {{",
+        f"        Add-Content -LiteralPath {_ps_quote(str(log_file))} "
+        "-Value 'memU scheduler: agent exited zero without completing every job'",
+        "        $script:agentExitCode = 70",
+        "        return",
+        "    }",
+        f"    $completed = (Get-Content -Raw -LiteralPath {_ps_quote(str(completion_marker))}).Trim()",
+        f"    Remove-Item -LiteralPath {_ps_quote(str(completion_marker))} -Force -ErrorAction SilentlyContinue",
+        "    if ($completed -cne $token) {",
+        f"        Add-Content -LiteralPath {_ps_quote(str(log_file))} "
+        "-Value 'memU scheduler: rejected a stale or mismatched job completion marker'",
+        "        $script:agentExitCode = 71",
+        "        return",
+        "    }",
+        "}",
+        "# Drain crash leftovers before prepare, which regenerates jobs/.",
+        f"$leftovers = @(Get-ChildItem -LiteralPath {_ps_quote(str(jobs_dir))} -Filter '*.txt' "
+        "-File -ErrorAction SilentlyContinue)",
+        "if ($leftovers.Count -gt 0) {",
+        "    Invoke-AgentJobs",
+        "    if ($script:agentExitCode -ne 0) { exit $script:agentExitCode }",
+        "    Invoke-Memu $commitArgs",
+        "    if ($script:memuExitCode -ne 0) { exit $script:memuExitCode }",
+        "}",
+        "Invoke-Memu $prepareArgs",
+        "if ($script:memuExitCode -ne 0) { exit $script:memuExitCode }",
+        "Invoke-AgentJobs",
+        "if ($script:agentExitCode -ne 0) { exit $script:agentExitCode }",
+        "# Commit even when prepare emitted no jobs: it promotes pending cursor state.",
+        "Invoke-Memu $commitArgs",
+        "exit $script:memuExitCode",
         "",
     ])
 
@@ -225,17 +315,16 @@ def _agent_binary(spec: HostSpec) -> str:
     return spec.schedule_command.split()[0]
 
 
-def _resolve_agent(spec: HostSpec) -> str | None:
-    """The file-backed command Windows PowerShell itself resolves for the agent.
+def _resolve_command(binary: str) -> str | None:
+    """The file-backed command Windows PowerShell itself resolves for ``binary``.
 
-    ``shutil.which`` does not implement PowerShell's command precedence: on the
+    Python's ordinary PATH lookup does not implement PowerShell's command precedence: on the
     same PATH it can choose an ``.exe`` that PowerShell would put behind a
     ``.ps1`` shim. The scheduled wrapper is PowerShell, so resolve with
     ``Get-Command`` and embed exactly what the user sees there. Aliases and
     functions are deliberately rejected because an S4U process cannot inherit
     definitions from the installer's interactive session.
     """
-    binary = _agent_binary(spec)
     script = "\n".join([
         f"$command = Get-Command -Name {_ps_quote(binary)} -ErrorAction SilentlyContinue",
         "if ($null -eq $command) { exit 1 }",
@@ -247,6 +336,10 @@ def _resolve_agent(spec: HostSpec) -> str | None:
     return source if proc.returncode == 0 and source else None
 
 
+def _resolve_agent(spec: HostSpec) -> str | None:
+    return _resolve_command(_agent_binary(spec))
+
+
 def _run_agent(
     agent_path: str,
     args: list[str],
@@ -255,7 +348,7 @@ def _run_agent(
     timeout: float,
 ) -> subprocess.CompletedProcess[str]:
     """Run the exact resolved command under the same PowerShell as the wrapper."""
-    invocation = " ".join(["&", _ps_quote(agent_path), *(_ps_quote(arg) for arg in args)])
+    invocation = _ps_native_invocation(agent_path, [_ps_quote(arg) for arg in args])
     script = "\n".join([
         "$ErrorActionPreference = 'Continue'",
         "$LASTEXITCODE = 1",
@@ -286,6 +379,26 @@ def _launch_gate(spec: HostSpec, agent_path: str, workdir: Path) -> int:
         f"failed `{_agent_binary(spec)} --version` ({detail or 'no output'}).\n"
         "  Fix the command in this PowerShell environment, then re-run schedule install.\n"
         f"{hint}",
+        file=sys.stderr,
+    )
+    return 1
+
+
+def _memu_launch_gate(spec: HostSpec, memu_path: str, workdir: Path) -> int:
+    """Prove PowerShell can launch the exact host adapter embedded in the wrapper."""
+    try:
+        proc = _run_agent(memu_path, ["--help"], workdir, timeout=30)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        detail = str(exc)
+    else:
+        if proc.returncode == 0:
+            print(f"  PowerShell selected and launched: {memu_path}")
+            return 0
+        detail = (proc.stderr or proc.stdout).strip()
+    print(
+        f"error: PowerShell resolves `{spec.binary}` to {memu_path}, but that exact command failed "
+        f"`{spec.binary} --help` ({detail or 'no output'}).\n"
+        "  Fix the command in this PowerShell environment, then re-run schedule install.",
         file=sys.stderr,
     )
     return 1
@@ -367,32 +480,44 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
             file=sys.stderr,
         )
         return 1
+    memu_path = _resolve_command(spec.binary)
+    if memu_path is None:
+        print(
+            f"error: `{spec.binary}` is not a file-backed PowerShell command. Fix it in this PowerShell "
+            "environment, then re-run schedule install.",
+            file=sys.stderr,
+        )
+        return 1
     layout.base.mkdir(parents=True, exist_ok=True)
     if (rc := _launch_gate(spec, agent_path, layout.base)) != 0:
+        return rc
+    if (rc := _memu_launch_gate(spec, memu_path, layout.base)) != 0:
         return rc
     if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc
 
     wrapper, prompt_file, log_file, registry = _paths(layout)
-    prepare_session_dir = spec.session_dir if spec.schedule_prepare_session_dir else None
     prompt_file.write_text(
-        bridging_pipeline_prompt(spec, prepare_session_dir=prepare_session_dir),
+        bridging_jobs_prompt(spec, job_dir=layout.jobs, base_dir=layout.base),
         encoding="utf-8",
     )
 
-    path_dirs = [str(Path(agent_path).parent)]
-    if (memu_path := shutil.which(spec.binary)) is not None:
-        path_dirs.append(str(Path(memu_path).parent))
+    path_dirs = list(dict.fromkeys([str(Path(agent_path).parent), str(Path(memu_path).parent)]))
     # utf-8-sig: Windows PowerShell 5.1 runs a `-File` script in the ANSI code page
     # unless it sees a BOM, which would mangle a non-ASCII path (e.g. a CJK username)
     # baked into the wrapper. The BOM makes both 5.1 and 7 decode it as UTF-8.
     wrapper.write_text(
         wrapper_script(
             agent_path,
+            memu_path,
             spec.schedule_command,
             prompt_file,
             log_file,
+            layout.jobs,
+            layout.job_completion_marker,
+            layout.base,
             path_dirs,
+            prepare_session_dir=spec.session_dir if spec.schedule_prepare_session_dir else None,
             prompt_stdin=spec.schedule_prompt_stdin,
         ),
         encoding="utf-8-sig",
@@ -405,7 +530,14 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
 
     registry.write_text(
         json.dumps(
-            {"task_name": spec.task_name, "task_path": TASK_PATH, "wrapper": str(wrapper), "prompt": str(prompt_file)},
+            {
+                "task_name": spec.task_name,
+                "task_path": TASK_PATH,
+                "wrapper": str(wrapper),
+                "prompt": str(prompt_file),
+                "agent_command": agent_path,
+                "memu_command": memu_path,
+            },
             indent=2,
         ),
         encoding="utf-8",
@@ -472,12 +604,18 @@ def verify(spec: HostSpec, layout: Layout) -> int:
     layout.base.mkdir(parents=True, exist_ok=True)
     if (rc := _launch_gate(spec, agent_path, layout.base)) != 0:
         return rc
+    memu_path = _resolve_command(spec.binary)
+    if memu_path is None:
+        print(f"error: `{spec.binary}` is no longer a file-backed PowerShell command", file=sys.stderr)
+        return 1
+    if (rc := _memu_launch_gate(spec, memu_path, layout.base)) != 0:
+        return rc
     if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc
 
     print(
         f"preflight ok: '{TASK_PATH}{spec.task_name}' is registered and the exact PowerShell "
-        f"command for `{_agent_binary(spec)}` launches"
+        f"commands for `{_agent_binary(spec)}` and `{spec.binary}` launch"
     )
     if spec.needs_headless_auth:
         print("  its headless-auth probe also passed; credentials must remain persistent for the S4U run")

@@ -26,7 +26,8 @@ The transcript (the user/assistant messages of the session) is at:
 
     {input_path}
 
-Read it with `bash` (e.g. `cat`).
+Read it with the platform's native shell (for example, `cat` on Unix or
+`Get-Content` in PowerShell). Do not start WSL merely to read it.
 
 ## Step 1 — read what already exists
 
@@ -81,7 +82,8 @@ is at:
 
     {input_path}
 
-Read it with `bash` (e.g. `cat`).
+Read it with the platform's native shell (for example, `cat` on Unix or
+`Get-Content` in PowerShell). Do not start WSL merely to read it.
 
 ## Step 1 — read what already exists
 
@@ -136,10 +138,14 @@ For each such file, append its full path as one line to this log:
 
     {resource_log}
 
-Append only — never overwrite or reorder it. One path per line. The simplest
-way is a shell append, e.g.:
+Append only — never overwrite or reorder it. One path per line. For example,
+use this on Unix:
 
     echo "<full path>" >> {resource_log}
+
+Or this in PowerShell:
+
+    Add-Content -LiteralPath "{resource_log}" -Value "<full path>"
 
 If the session created or updated no files, leave the log untouched.
 """

@@ -38,8 +38,10 @@ Each run walks a fixed pipeline that bridges raw session history into memU:
    step-1 snapshot and submits what the agent actually created or changed back
    to memU.
 
-Only steps 1 and 3 are code. **Step 2 is real agent work**, so the scheduled
-run's prompt must instruct Codex to do it, not shell out to a pipeline script.
+Only steps 1 and 3 are code. **Step 2 is real agent work.** On Unix the scheduled
+prompt coordinates all three stages. On Windows the PowerShell wrapper runs steps
+1 and 3 directly and asks Codex to do only step 2, so Task Scheduler receives the
+real prepare/commit exit codes.
 
 ## Prerequisites
 
@@ -62,7 +64,9 @@ run's prompt must instruct Codex to do it, not shell out to a pipeline script.
   grant administrator/root privileges or bypass the OS scheduler account,
   Windows S4U restrictions, cron's sparse environment, macOS TCC/Keychain,
   firewall/VPN/proxy/CA policy, enterprise policy, or Codex login. Never adapt
-  this wrapper to run an untrusted or user-supplied prompt.
+  this wrapper to run an untrusted or user-supplied prompt. Treat the scheduler's
+  OS account, a VM, or a container as the actual outer security boundary; do not
+  give a bypassed run an administrator account with unrestricted host access.
 
 ## Step 1 — settle the schedule
 
@@ -186,18 +190,25 @@ memu-codex schedule status      # last run / next run
 memu-codex schedule uninstall   # remove it
 ```
 
-`install` writes `bridge-prompt.txt` and a PowerShell wrapper under
-`~/.memu/hosts/codex`, resolves `codex` with Windows PowerShell's own
-`Get-Command` semantics, proves that exact command can run `codex --version`,
-embeds its file-backed source in the wrapper, and registers
+`install` writes a job-only `bridge-prompt.txt` and a PowerShell wrapper under
+`~/.memu/hosts/codex`. It resolves both `codex` and `memu-codex` with Windows
+PowerShell's own `Get-Command` semantics, proves those exact commands launch,
+embeds their file-backed sources in the wrapper, and registers
 `\memU\memu-bridging-codex` under an S4U principal — hidden, limited rather than
 administrator, runnable while logged out, and able to catch up a run missed
 while the machine was off. `--interval <minutes>` changes the cadence (default
-60). The wrapper restores `PATH`, uses the Codex flags documented above, appends
-stdout/stderr to `bridge.log`, and propagates the CLI exit code. It pipes the
-file-backed prompt to `codex exec ... -` on stdin, Codex's documented stdin
-form, so Windows PowerShell 5.1 cannot split the long prompt while forwarding
-through a file-backed command such as an npm `.ps1` shim.
+60).
+
+The wrapper drains leftover jobs before `prepare`, runs `memu-codex prepare`
+directly, invokes Codex only when numbered jobs exist, then runs `memu-codex
+commit` directly. Prepare and commit output is appended to `bridge.log`, and any
+nonzero exit reaches Task Scheduler. A fresh per-invocation nonce plus the
+internal `complete-jobs` handshake also rejects an agent that exits zero after
+merely reporting failure; only a batch that reached the end of every job may be
+committed. The job prompt explicitly uses PowerShell on Windows and never starts
+Bash/WSL merely to run memU commands. For Codex, the wrapper passes the
+file-backed prompt to `codex exec ... -` on stdin, so Windows PowerShell 5.1
+cannot split it through a file-backed command such as an npm `.ps1` shim.
 
 Run `schedule install` on every install or reinstall, even when `schedule status`
 already finds the canonical task. It regenerates the prompt and wrapper from the
@@ -223,8 +234,10 @@ in the current terminal:
   its sparse environment, then check that `bridge.log` grew and the session
   manifest / `jobs/` timestamps moved.
 - Windows: run `memu-codex schedule verify` and `memu-codex schedule status`, then
-  trigger the canonical Task Scheduler task once. Check `LastTaskResult`, log
-  growth, and filesystem traces under `~/.memu/hosts/codex/`.
+  trigger the canonical Task Scheduler task once. Require `LastTaskResult` 0,
+  log growth, no leftover completion marker, and the expected filesystem traces
+  under `~/.memu/hosts/codex/`. Missing/mismatched job completion or a failed
+  prepare/commit now makes the task nonzero.
 - A successful interactive `codex exec` does not establish S4U/cron parity. If a
   scheduled run fails, compare its account, `HOME`, `PATH`, proxy/CA environment,
   Codex path, and login state with the intended user environment.
