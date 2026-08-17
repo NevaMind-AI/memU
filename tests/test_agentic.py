@@ -201,3 +201,33 @@ async def test_where_scope_filters_and_rejects_unknown_fields(service: MemorySer
 async def test_progressive_retrieve_rejects_empty_query(service: MemoryService) -> None:
     with pytest.raises(ValueError, match="empty_query"):
         await service.progressive_retrieve("   ")
+
+
+class FlakyEmbeddingClient(FakeEmbeddingClient):
+    """Raises on the Nth ``embed`` call, succeeding on every other one."""
+
+    def __init__(self, fail_on_call: int) -> None:
+        self.fail_on_call = fail_on_call
+        self.calls = 0
+
+    async def embed(self, inputs: list[str]) -> tuple[list[list[float]], None]:
+        self.calls += 1
+        if self.calls == self.fail_on_call:
+            raise TimeoutError("timeout")
+        return await super().embed(inputs)
+
+
+async def test_recommit_resource_survives_embed_failure(service: MemoryService) -> None:
+    # Create-or-update is delete-then-create; a re-caption embed call that raises must not
+    # take the existing resource down with it (it has nothing to replace it with).
+    flaky = FlakyEmbeddingClient(fail_on_call=2)
+    service._embedding_pool._cache["default"] = flaky
+    service._embedding_pool._cache["embedding"] = flaky
+
+    await service.commit_results(resource=[{"path": "/workspace/notes.md", "description": "meeting notes"}])
+
+    with pytest.raises(TimeoutError):
+        await service.commit_results(resource=[{"path": "/workspace/notes.md", "description": "revised notes"}])
+
+    result = await service.progressive_retrieve("notes")
+    assert [(r["url"], r["caption"]) for r in result["resources"]] == [("/workspace/notes.md", "meeting notes")]

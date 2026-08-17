@@ -269,6 +269,8 @@ class AgenticMixin:
 
         ``ResourceRepo`` has no in-place update, so an "update" is a delete-then-create:
         any existing resource sharing this url is dropped before the fresh record is created.
+        The embedding is computed first so a failing embed call leaves the prior resource
+        in place instead of deleting it with nothing to replace it.
         """
         where = user_scope or None
         committed: list[Resource] = []
@@ -278,12 +280,13 @@ class AgenticMixin:
                 continue
             caption = (item.get("description") or "").strip() or None
 
+            caption_embedding = await _embed_one(embed_client, caption) if caption else None
+
             # Create-or-update keyed by url: drop any prior resource for this url first.
             stale = [res for res in store.resource_repo.list_resources(where=where).values() if res.url == url]
             for res in stale:
                 store.resource_repo.delete_resource(res.id)
 
-            caption_embedding = await _embed_one(embed_client, caption) if caption else None
             res = store.resource_repo.create_resource(
                 url=url,
                 local_path=url,
