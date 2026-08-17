@@ -130,6 +130,7 @@ def test_claude_install_migrates_the_legacy_task_before_registering(
     monkeypatch.setattr(windows, "_resolve_agent", lambda spec: "C:\\bin\\claude.exe")
     monkeypatch.setattr(windows, "_auth_gate", lambda spec, path, workdir: 0)
     monkeypatch.setattr(windows.shutil, "which", lambda binary: None)
+
     def run(script: str) -> subprocess.CompletedProcess[str]:
         scripts.append(script)
         return subprocess.CompletedProcess([], 0, "", "")
@@ -194,11 +195,10 @@ def test_claude_verify_rejects_missing_or_legacy_registration(
     assert "schedule install" in capsys.readouterr().err
 
 
-def test_claude_uninstall_removes_only_known_identities(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_claude_uninstall_removes_only_known_identities(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     scripts: list[str] = []
     monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+
     def run(script: str) -> subprocess.CompletedProcess[str]:
         scripts.append(script)
         return subprocess.CompletedProcess([], 0, "", "")
@@ -513,7 +513,11 @@ def test_openclaw_task_recreates_confirmed_bridge() -> None:
         ),
         (
             "generic",
-            ("$HOME/.memu/hosts/agent/bridge.sh", "memu-agent prepare --session-dir <SESSION_DIR>", "memu-agent commit"),
+            (
+                "$HOME/.memu/hosts/agent/bridge.sh",
+                "memu-agent prepare --session-dir <SESSION_DIR>",
+                "memu-agent commit",
+            ),
             ("hosts/agent/bridge\\.sh|memU bridging pipeline", "memu-agent prepare --session-dir …"),
         ),
     ],
@@ -548,17 +552,13 @@ def test_native_scheduler_identity_docs_stay_explicit() -> None:
     assert "prepare / self-evolve / commit" in codex_uninstall
 
     openclaw = " ".join((files("memu.hosts.openclaw") / "BRIDGING_TASK.md").read_text(encoding="utf-8").split())
-    openclaw_uninstall = " ".join(
-        (files("memu.hosts.openclaw") / "UNINSTALL.md").read_text(encoding="utf-8").split()
-    )
+    openclaw_uninstall = " ".join((files("memu.hosts.openclaw") / "UNINSTALL.md").read_text(encoding="utf-8").split())
     assert "named `memu-bridging-openclaw`" in openclaw
     assert "registered ID" in openclaw_uninstall
     assert "use that exact identity" in openclaw_uninstall
 
     workbuddy = " ".join((files("memu.hosts.workbuddy") / "BRIDGING_TASK.md").read_text(encoding="utf-8").split())
-    workbuddy_uninstall = " ".join(
-        (files("memu.hosts.workbuddy") / "UNINSTALL.md").read_text(encoding="utf-8").split()
-    )
+    workbuddy_uninstall = " ".join((files("memu.hosts.workbuddy") / "UNINSTALL.md").read_text(encoding="utf-8").split())
     assert "does not establish a separate name field" in workbuddy
     assert "automation ID is its durable identity" in workbuddy
     assert "automation was created (its id)" in workbuddy

@@ -301,7 +301,10 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
     for legacy_name in spec.legacy_task_names:
         proc = _run_powershell(unregister_if_present_script(legacy_name))
         if proc.returncode != 0:
-            print(f"error: could not remove legacy task '{TASK_PATH}{legacy_name}': {proc.stderr.strip()}", file=sys.stderr)
+            print(
+                f"error: could not remove legacy task '{TASK_PATH}{legacy_name}': {proc.stderr.strip()}",
+                file=sys.stderr,
+            )
             return 1
 
     prepare_session_dir = spec.session_dir if spec.schedule_prepare_session_dir else None
@@ -409,7 +412,9 @@ def verify(spec: HostSpec, layout: Layout) -> int:
                 file=sys.stderr,
             )
         else:
-            print(f"not registered: '{TASK_PATH}{spec.task_name}' (run `{spec.binary} schedule install`)", file=sys.stderr)
+            print(
+                f"not registered: '{TASK_PATH}{spec.task_name}' (run `{spec.binary} schedule install`)", file=sys.stderr
+            )
         return 1
 
     agent_path = _resolve_agent(spec)
