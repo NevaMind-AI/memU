@@ -92,7 +92,7 @@ local time as the default. Confirm before creating the external job.
 
 ## Step 2 — create and register the cron job
 
-Create an OpenClaw cron job (for example `memu-remember`) with:
+Create an OpenClaw cron job named `memu-bridging-openclaw` with:
 
 - an `agentTurn` payload;
 - `sessionTarget="isolated"` — load-bearing because each run receives

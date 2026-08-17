@@ -60,6 +60,10 @@ them.
 
 Register the automation with:
 
+WorkBuddy's documented automation surface does not establish a separate name
+field. Do not invent one: the automation ID is its durable identity, while the
+task text below identifies the memU bridging pipeline.
+
 - **task** — the pipeline prompt below (verbatim)
 - **scheduleType** — `recurring`
 - **rrule** — the user's chosen rule (default: `FREQ=HOURLY;INTERVAL=1`)

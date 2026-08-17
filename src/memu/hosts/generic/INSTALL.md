@@ -152,8 +152,10 @@ cloud mode, workspace resources are submitted by the same pipeline but are not
 currently persisted.
 
 **Refresh an existing bridging registration before continuing.** If a native
-job or cron entry for this generic adapter exists, record its current cadence and
-remove **only that entry**. A cron entry invokes
+job named `memu-bridging-agent` (or `memu-bridging-<name>` for a named generic
+integration), an older native job with the bridging pipeline prompt, or a cron
+entry for this generic adapter exists, record its current cadence and remove
+**only that entry**. A cron entry invokes
 `~/.memu/hosts/agent/bridge.sh` or an old inline pipeline prompt; rewrite it with
 `crontab -l | grep -vE 'hosts/agent/bridge\.sh|memU bridging pipeline' | crontab -`,
 and use `crontab -r` only when no lines remain. Remove a native job only when

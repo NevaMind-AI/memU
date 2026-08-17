@@ -69,7 +69,12 @@ The machine-specific fact lives in the crontab, where machine facts belong —
 the pipeline prompt itself stays verbatim.
 
 Default to a system cron entry invoking the agent headless; use the agent's
-own scheduler instead only if the user prefers it.
+own scheduler instead only if the user prefers it. When the native scheduler
+accepts a name, use `memu-bridging-agent` for one default generic integration.
+For multiple or named integrations, use `memu-bridging-<name>`, matching each
+integration's `--base-dir ~/.memu/hosts/<name>`, so their labels do not collide.
+The name is a human-facing label; the pipeline prompt remains the load-bearing
+identity.
 
 **Never inline the pipeline prompt in the crontab entry.** The quoted prompt
 is over 1 KB, and cron truncates a crontab line at roughly 1 KB before handing

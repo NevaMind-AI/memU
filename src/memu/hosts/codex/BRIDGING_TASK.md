@@ -67,8 +67,8 @@ before creating the task.
 
 ## Step 2 — create the scheduled task
 
-Create a Codex scheduled task with the chosen cron, named e.g. `memu-remember`,
-and set its recurring prompt to this block **verbatim**:
+Create a Codex scheduled task with the chosen cron, named
+`memu-bridging-codex`, and set its recurring prompt to this block **verbatim**:
 
 ```
 Run the memU bridging pipeline. Do the four steps strictly in order; do not

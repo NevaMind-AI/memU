@@ -130,11 +130,11 @@ def test_claude_install_migrates_the_legacy_task_before_registering(
     monkeypatch.setattr(windows, "_resolve_agent", lambda spec: "C:\\bin\\claude.exe")
     monkeypatch.setattr(windows, "_auth_gate", lambda spec, path, workdir: 0)
     monkeypatch.setattr(windows.shutil, "which", lambda binary: None)
-    monkeypatch.setattr(
-        windows,
-        "_run_powershell",
-        lambda script: scripts.append(script) or subprocess.CompletedProcess([], 0, "", ""),
-    )
+    def run(script: str) -> subprocess.CompletedProcess[str]:
+        scripts.append(script)
+        return subprocess.CompletedProcess([], 0, "", "")
+
+    monkeypatch.setattr(windows, "_run_powershell", run)
 
     assert windows.install(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 0
     assert "memu-remember-claude-code" in scripts[0]
@@ -199,11 +199,11 @@ def test_claude_uninstall_removes_only_known_identities(
 ) -> None:
     scripts: list[str] = []
     monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
-    monkeypatch.setattr(
-        windows,
-        "_run_powershell",
-        lambda script: scripts.append(script) or subprocess.CompletedProcess([], 0, "", ""),
-    )
+    def run(script: str) -> subprocess.CompletedProcess[str]:
+        scripts.append(script)
+        return subprocess.CompletedProcess([], 0, "", "")
+
+    monkeypatch.setattr(windows, "_run_powershell", run)
 
     assert windows.uninstall(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 0
     assert len(scripts) == 2
@@ -543,14 +543,34 @@ def test_native_scheduler_identity_docs_stay_explicit() -> None:
 
     codex = " ".join((files("memu.hosts.codex") / "BRIDGING_TASK.md").read_text(encoding="utf-8").split())
     codex_uninstall = " ".join((files("memu.hosts.codex") / "UNINSTALL.md").read_text(encoding="utf-8").split())
-    assert "named e.g. `memu-remember`" in codex
+    assert "named `memu-bridging-codex`" in codex
     assert "The name is only a hint" in codex_uninstall
-    assert "prepare / self-evolve / commit prompt" in codex_uninstall
+    assert "prepare / self-evolve / commit" in codex_uninstall
 
-    workbuddy = (files("memu.hosts.workbuddy") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
-    workbuddy_uninstall = (files("memu.hosts.workbuddy") / "UNINSTALL.md").read_text(encoding="utf-8")
+    openclaw = " ".join((files("memu.hosts.openclaw") / "BRIDGING_TASK.md").read_text(encoding="utf-8").split())
+    openclaw_uninstall = " ".join(
+        (files("memu.hosts.openclaw") / "UNINSTALL.md").read_text(encoding="utf-8").split()
+    )
+    assert "named `memu-bridging-openclaw`" in openclaw
+    assert "registered ID" in openclaw_uninstall
+    assert "use that exact identity" in openclaw_uninstall
+
+    workbuddy = " ".join((files("memu.hosts.workbuddy") / "BRIDGING_TASK.md").read_text(encoding="utf-8").split())
+    workbuddy_uninstall = " ".join(
+        (files("memu.hosts.workbuddy") / "UNINSTALL.md").read_text(encoding="utf-8").split()
+    )
+    assert "does not establish a separate name field" in workbuddy
+    assert "automation ID is its durable identity" in workbuddy
     assert "automation was created (its id)" in workbuddy
     assert "by name or by the prompt content" in workbuddy_uninstall
+
+    generic = (files("memu.hosts.generic") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    generic_uninstall = (files("memu.hosts.generic") / "UNINSTALL.md").read_text(encoding="utf-8")
+    assert "use `memu-bridging-agent`" in generic
+    assert "use `memu-bridging-<name>`" in generic
+    assert "matching each" in generic and "--base-dir ~/.memu/hosts/<name>" in generic
+    assert "pipeline prompt remains the load-bearing" in generic
+    assert "confirm the pipeline prompt" in generic_uninstall
 
 
 def test_claude_preflight_never_treats_task_presence_as_current() -> None:

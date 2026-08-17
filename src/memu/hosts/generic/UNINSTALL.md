@@ -32,12 +32,15 @@ and its instruction file exactly as they are.
 
 Find where the bridging run was scheduled at install time — the agent's own
 scheduler if it has one, otherwise a system cron entry — and delete **that
-entry only**. A cron entry invokes `~/.memu/hosts/agent/bridge.sh` (or, on
-installs predating the prompt-file layout, inlines the pipeline prompt
-directly); a native-scheduler prompt is recognizable as the three-step block
-running `memu-agent prepare --session-dir …`, the job files, then
-`memu-agent commit`. Everything else in the scheduler is the user's and stays;
-for cron:
+entry only**. Current native-scheduler installs use `memu-bridging-agent` for
+the default integration or `memu-bridging-<name>` for a named one; for older
+installs, confirm the pipeline prompt before deleting because the name may
+differ. A cron entry invokes
+`~/.memu/hosts/agent/bridge.sh` (or, on installs predating the prompt-file
+layout, inlines the pipeline prompt directly); a native-scheduler prompt is
+recognizable as the three-step block running
+`memu-agent prepare --session-dir …`, the job files, then `memu-agent commit`.
+Everything else in the scheduler is the user's and stays; for cron:
 `crontab -l | grep -vE 'hosts/agent/bridge\.sh|memU bridging pipeline' | crontab -`.
 If nothing at all remains, `crontab -r` removes the now-empty crontab cleanly.
 The `bridge.sh`, `bridge-prompt.txt`, and `bridge.log` files live under
