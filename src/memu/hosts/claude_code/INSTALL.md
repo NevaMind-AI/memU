@@ -1,5 +1,11 @@
 # Install memU for Claude Code
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** A user will point you at this file ("follow this guide
 > to install memU"). Work top to bottom. Each part ends with a **verify** gate —
 > do not proceed until the current one passes.
@@ -39,7 +45,7 @@ $c = Get-Command claude -ErrorAction SilentlyContinue
 "claude:     " + $(if ($c) { $c.Source } else { "NOT FOUND; landing dir has it: $(Test-Path "$env:USERPROFILE\.local\bin\claude.exe") (True = stale PATH - prepend the landing dir to PATH for the next commands)" })
 "memu:       " + $(if (Get-Command memu-claude-code -ErrorAction SilentlyContinue) { "ok" } else { "NOT FOUND - do Part 1" })
 "credential: token=" + [bool][Environment]::GetEnvironmentVariable('CLAUDE_CODE_OAUTH_TOKEN','User') + " apikey=" + [bool][Environment]::GetEnvironmentVariable('ANTHROPIC_API_KEY','User') + " file=" + (Test-Path "$env:USERPROFILE\.claude\.credentials.json")
-"sched task: current=" + [bool](Get-ScheduledTask -TaskPath '\memU\' -TaskName 'memu-bridging-claude-code' -ErrorAction SilentlyContinue) + " legacy=" + [bool](Get-ScheduledTask -TaskPath '\memU\' -TaskName 'memu-remember-claude-code' -ErrorAction SilentlyContinue)
+if (Get-Command memu-claude-code -ErrorAction SilentlyContinue) { memu-claude-code schedule status } else { "sched task: check after Part 1" }
 "inject:     " + [bool](Select-String -Path "$env:USERPROFILE\.claude\CLAUDE.md" -Pattern 'memu' -Quiet -ErrorAction SilentlyContinue)
 ```
 
@@ -50,7 +56,7 @@ command -v claude || echo "claude NOT FOUND (landing dir: $(ls ~/.local/bin/clau
 command -v memu-claude-code || echo "memu NOT FOUND - do Part 1"
 [ -f ~/.claude/.credentials.json ] && echo "cred file: yes" || echo "cred file: no"
 crontab -l 2>/dev/null | grep -qE 'ANTHROPIC|CLAUDE_CODE' && echo "cron env: set" || echo "cron env: none"
-crontab -l 2>/dev/null | grep -qE 'hosts/claude-code/bridge\.sh|memU bridging pipeline' && echo "cron entry: yes" || echo "cron entry: no"
+crontab -l 2>/dev/null | grep -qE '{{task_name_pattern}}|hosts/claude-code/bridge\.sh|memU bridging pipeline' && echo "cron entry: yes" || echo "cron entry: no"
 grep -q memu ~/.claude/CLAUDE.md 2>/dev/null && echo "inject: yes" || echo "inject: no"
 ```
 
@@ -346,9 +352,9 @@ bridging entry exists, record its current cadence and remove **only that entry**
 On Unix, identify the cron or launchd entry by
 `~/.memu/hosts/claude-code/bridge.sh` or an old inline
 `claude -p 'Run the memU bridging pipeline. …'` prompt. Rewrite cron with
-`crontab -l | grep -vE 'hosts/claude-code/bridge\.sh|memU bridging pipeline' | crontab -`;
+`crontab -l | grep -vE '{{task_name_pattern}}|hosts/claude-code/bridge\.sh|memU bridging pipeline' | crontab -`;
 remove its `PATH=` line only if nothing else needs it, and use `crontab -r` only
-when no lines remain. For launchd, run `launchctl bootout gui/$(id -u)/<label>`
+when no lines remain. For launchd, run `launchctl bootout gui/$(id -u)/{{task_name}}`
 and delete only its memU plist. On Windows run
 `memu-claude-code schedule uninstall`. Verify `crontab -l` (and
 `ls ~/Library/LaunchAgents`, if launchd was used) shows no memU bridging entry

@@ -33,6 +33,20 @@ from memu.hosts.openclaw.cli import SPEC as OPENCLAW
 from memu.hosts.scheduling import prompt, windows
 from memu.hosts.workbuddy.cli import SPEC as WORKBUDDY
 
+SPECS = (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
+
+EXPECTED_TASK_NAMES = {
+    "claude-code": ("memu-bridging-claude-code", ("memu-remember-claude-code",)),
+    "cursor": ("memu-bridging-cursor", ()),
+    "hermes": ("memu-bridging-hermes", ()),
+    "codex": ("memu-bridging-codex", ("memu-remember", "memu-bridging")),
+    "openclaw": ("memu-bridging-openclaw", ("memu-remember", "memu-bridging")),
+    "workbuddy": ("memu-bridging-workbuddy", ()),
+    "cola": ("memu-bridging-cola", ("memu-bridging", "memU 记忆桥接")),
+    "agent": ("memu-bridging-agent", ()),
+}
+
+
 # ---------------------------------------------------------------------------
 # Pure builders
 # ---------------------------------------------------------------------------
@@ -92,25 +106,36 @@ def test_uninstall_and_status_address_the_same_name() -> None:
     assert name in windows.status_script(name)
 
 
-def test_task_name_is_canonical_per_host() -> None:
-    assert CLAUDE.task_name == "memu-bridging-claude-code"
-    assert CLAUDE.legacy_task_names == ("memu-remember-claude-code",)
-    assert CURSOR.task_name == "memu-bridging-cursor"
-    assert CURSOR.legacy_task_names == ()
-    assert HERMES.task_name == "memu-bridging-hermes"
-    assert HERMES.legacy_task_names == ()
+def test_task_names_are_declared_once_per_host() -> None:
+    assert {spec.host: (spec.task_name, spec.former_task_names) for spec in SPECS} == EXPECTED_TASK_NAMES
+    for spec in SPECS:
+        assert spec.all_task_names == (spec.task_name, *spec.former_task_names)
+        assert spec.task_doc_name == f"create-{spec.task_name}-task"
+        assert len(set(spec.all_task_names)) == len(spec.all_task_names)
 
 
-def test_claude_task_guide_uses_the_canonical_windows_name() -> None:
+def test_host_spec_rejects_invalid_task_names() -> None:
+    with pytest.raises(ValueError, match="invalid task_name"):
+        dataclasses.replace(CLAUDE, task_name="memu remember claude")
+    with pytest.raises(ValueError, match="must not also appear"):
+        dataclasses.replace(CLAUDE, former_task_names=(CLAUDE.task_name,))
+    with pytest.raises(ValueError, match="duplicates"):
+        dataclasses.replace(CLAUDE, former_task_names=("old", "old"))
+
+
+def test_claude_task_guide_uses_host_spec_tokens() -> None:
     from importlib.resources import files
 
-    doc = (files("memu.hosts.claude_code") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
-    install = (files("memu.hosts.claude_code") / "INSTALL.md").read_text(encoding="utf-8")
-    assert "\\memU\\memu-bridging-claude-code" in doc
-    assert "memu-remember-claude-code" not in doc
-    assert "current=" in install and "legacy=" in install
-    assert "memu-bridging-claude-code" in install
-    assert "memu-remember-claude-code" in install
+    task_source = (files("memu.hosts.claude_code") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    install_source = (files("memu.hosts.claude_code") / "INSTALL.md").read_text(encoding="utf-8")
+    task_doc = CLAUDE.render_doc(task_source)
+    install_doc = CLAUDE.render_doc(install_source)
+
+    assert f"name: {CLAUDE.task_doc_name}" in task_doc
+    assert CLAUDE.task_name in task_doc and CLAUDE.task_name in install_doc
+    assert all(name in task_doc and name in install_doc for name in CLAUDE.former_task_names)
+    assert windows.TASK_PATH not in task_doc and windows.TASK_PATH not in install_doc
+    assert "{{" not in task_doc and "{{" not in install_doc
 
 
 def test_legacy_task_script_is_limited_to_the_given_task() -> None:
@@ -147,7 +172,7 @@ def test_claude_install_migrates_the_legacy_task_before_registering(
     ("canonical", "legacy", "expected"),
     [
         (False, False, "not registered"),
-        (False, True, "legacy registration"),
+        (False, True, "former registration"),
         (True, False, "current"),
         (True, True, "duplicate registrations"),
     ],
@@ -209,6 +234,31 @@ def test_claude_uninstall_removes_only_known_identities(monkeypatch: pytest.Monk
     assert len(scripts) == 2
     assert "memu-remember-claude-code" in scripts[0]
     assert "memu-bridging-claude-code" in scripts[1]
+
+
+def test_windows_lifecycle_checks_every_former_name(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spec = dataclasses.replace(CLAUDE, former_task_names=("memu-old-one", "memu-old-two"))
+    scripts: list[str] = []
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+
+    def run(script: str) -> subprocess.CompletedProcess[str]:
+        scripts.append(script)
+        registered = any(name in script for name in spec.former_task_names)
+        return subprocess.CompletedProcess([], 0 if registered else 1, "", "")
+
+    monkeypatch.setattr(windows, "_run_powershell", run)
+
+    assert windows.status(spec, Layout.default(host=spec.host, base=tmp_path)) == 0
+    output = capsys.readouterr().out
+    assert all(name in output for name in spec.former_task_names)
+    assert all(any(name in script for script in scripts) for name in spec.former_task_names)
+
+    scripts.clear()
+    assert windows.uninstall(spec, Layout.default(host=spec.host, base=tmp_path)) == 0
+    assert len(scripts) == len(spec.all_task_names)
+    assert all(any(name in script for script in scripts) for name in spec.all_task_names)
 
 
 def test_hermes_template_uses_its_oneshot_flag_everywhere() -> None:
@@ -430,10 +480,10 @@ def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
         ("cursor", "memu-cursor", r"hosts/cursor/bridge\.sh|memU bridging pipeline"),
         ("hermes", "memu-hermes", r"hosts/hermes/bridge\.sh|memU bridging pipeline"),
         ("generic", "memu-agent", r"hosts/agent/bridge\.sh|memU bridging pipeline"),
-        ("codex", "memu-codex", "load-bearing identity"),
+        ("codex", "memu-codex", "load-bearing deletion identity"),
         ("openclaw", "memu-openclaw", ".cron_job.openclaw.json"),
         ("workbuddy", "memu-workbuddy", "WorkBuddy's automation list"),
-        ("cola", "memu-cola", "task ID `memu-bridging`"),
+        ("cola", "memu-cola", "{{all_task_names}}"),
     ],
 )
 def test_install_refreshes_existing_bridge_before_registration(pkg: str, binary: str, identity: str) -> None:
@@ -460,7 +510,7 @@ def test_cursor_uninstall_documents_windows_schedule_removal() -> None:
     doc = (files("memu.hosts.cursor") / "UNINSTALL.md").read_text(encoding="utf-8")
     assert "memu-cursor schedule uninstall" in doc
     assert "memu-cursor schedule status" in doc
-    assert "Get-ScheduledTask -TaskPath '\\memU\\'" in doc
+    assert "Get-ScheduledTask -TaskPath" not in doc
 
 
 def test_cola_task_recreates_existing_bridge() -> None:
@@ -468,7 +518,7 @@ def test_cola_task_recreates_existing_bridge() -> None:
 
     doc = (files("memu.hosts.cola") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
     normalized = " ".join(doc.split())
-    existing = normalized.index("If task ID `memu-bridging` already exists")
+    existing = normalized.index("If any task whose name is in {{all_task_names}} already exists")
     create = normalized.index("Set its prompt")
     refresh = normalized[existing:create]
 
@@ -498,17 +548,17 @@ def test_openclaw_task_recreates_confirmed_bridge() -> None:
     [
         (
             "claude_code",
-            ("$HOME/.memu/hosts/claude-code/bridge.sh", "\\memU\\memu-bridging-claude-code"),
+            ("$HOME/.memu/hosts/claude-code/bridge.sh", "{{task_name}}"),
             ("hosts/claude-code/bridge\\.sh|memU bridging pipeline", "schedule uninstall"),
         ),
         (
             "cursor",
-            ("$HOME/.memu/hosts/cursor/bridge.sh", "\\memU\\memu-bridging-cursor"),
+            ("$HOME/.memu/hosts/cursor/bridge.sh", "{{task_name}}"),
             ("hosts/cursor/bridge\\.sh|memU bridging pipeline", "schedule uninstall"),
         ),
         (
             "hermes",
-            ("$HOME/.memu/hosts/hermes/bridge.sh", "\\memU\\memu-bridging-hermes", "memu-bridging-hermes"),
+            ("$HOME/.memu/hosts/hermes/bridge.sh", "{{task_name}}", "hermes cron remove <job-id>"),
             ("hosts/hermes/bridge\\.sh|memU bridging pipeline", "hermes cron remove <job-id>"),
         ),
         (
@@ -540,34 +590,44 @@ def test_os_scheduler_identity_docs_stay_aligned(
 def test_native_scheduler_identity_docs_stay_explicit() -> None:
     from importlib.resources import files
 
-    cola = " ".join((files("memu.hosts.cola") / "BRIDGING_TASK.md").read_text(encoding="utf-8").split())
-    assert "task ID `memu-bridging`" in cola
-    assert "memU 记忆桥接" in cola
+    cola_source = (files("memu.hosts.cola") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    cola = " ".join(COLA.render_doc(cola_source).split())
+    assert COLA.task_name in cola
+    assert all(name in cola for name in COLA.former_task_names)
     assert "desktop:local" in cola
 
-    codex = " ".join((files("memu.hosts.codex") / "BRIDGING_TASK.md").read_text(encoding="utf-8").split())
-    codex_uninstall = " ".join((files("memu.hosts.codex") / "UNINSTALL.md").read_text(encoding="utf-8").split())
-    assert "named `memu-bridging-codex`" in codex
-    assert "The name is only a hint" in codex_uninstall
+    codex_source = (files("memu.hosts.codex") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    codex_uninstall_source = (files("memu.hosts.codex") / "UNINSTALL.md").read_text(encoding="utf-8")
+    codex = " ".join(CODEX.render_doc(codex_source).split())
+    codex_uninstall = " ".join(CODEX.render_doc(codex_uninstall_source).split())
+    assert f"named `{CODEX.task_name}`" in codex
+    assert "name is only a hint" in codex_uninstall
     assert "prepare / self-evolve / commit" in codex_uninstall
 
-    openclaw = " ".join((files("memu.hosts.openclaw") / "BRIDGING_TASK.md").read_text(encoding="utf-8").split())
-    openclaw_uninstall = " ".join((files("memu.hosts.openclaw") / "UNINSTALL.md").read_text(encoding="utf-8").split())
-    assert "named `memu-bridging-openclaw`" in openclaw
+    openclaw_source = (files("memu.hosts.openclaw") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    openclaw_uninstall_source = (files("memu.hosts.openclaw") / "UNINSTALL.md").read_text(encoding="utf-8")
+    openclaw = " ".join(OPENCLAW.render_doc(openclaw_source).split())
+    openclaw_uninstall = " ".join(OPENCLAW.render_doc(openclaw_uninstall_source).split())
+    assert f"named `{OPENCLAW.task_name}`" in openclaw
     assert "registered ID" in openclaw_uninstall
     assert "use that exact identity" in openclaw_uninstall
 
-    workbuddy = " ".join((files("memu.hosts.workbuddy") / "BRIDGING_TASK.md").read_text(encoding="utf-8").split())
-    workbuddy_uninstall = " ".join((files("memu.hosts.workbuddy") / "UNINSTALL.md").read_text(encoding="utf-8").split())
-    assert "does not establish a separate name field" in workbuddy
-    assert "automation ID is its durable identity" in workbuddy
-    assert "automation was created (its id)" in workbuddy
-    assert "by name or by the prompt content" in workbuddy_uninstall
+    workbuddy_source = (files("memu.hosts.workbuddy") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    workbuddy_uninstall_source = (files("memu.hosts.workbuddy") / "UNINSTALL.md").read_text(encoding="utf-8")
+    workbuddy = " ".join(WORKBUDDY.render_doc(workbuddy_source).split())
+    workbuddy_uninstall = " ".join(WORKBUDDY.render_doc(workbuddy_uninstall_source).split())
+    assert WORKBUDDY.task_name in workbuddy
+    assert "no separate name field" in workbuddy
+    assert "automation ID plus complete pipeline" in workbuddy
+    assert "exact automation ID" in workbuddy_uninstall
+    assert "name alone is never enough" in workbuddy_uninstall
 
-    generic = (files("memu.hosts.generic") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
-    generic_uninstall = (files("memu.hosts.generic") / "UNINSTALL.md").read_text(encoding="utf-8")
-    assert "use `memu-bridging-agent`" in generic
-    assert "use `memu-bridging-<name>`" in generic
+    generic_source = (files("memu.hosts.generic") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    generic_uninstall_source = (files("memu.hosts.generic") / "UNINSTALL.md").read_text(encoding="utf-8")
+    generic = GENERIC.render_doc(generic_source)
+    generic_uninstall = GENERIC.render_doc(generic_uninstall_source)
+    assert f"use `{GENERIC.task_name}`" in generic
+    assert "replace the final `agent`" in generic
     assert "matching each" in generic and "--base-dir ~/.memu/hosts/<name>" in generic
     assert "pipeline prompt remains the load-bearing" in generic
     assert "confirm the pipeline prompt" in generic_uninstall

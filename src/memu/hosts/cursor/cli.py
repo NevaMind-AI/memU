@@ -35,6 +35,7 @@ SPEC = HostSpec(
     host=HOST,
     display="Cursor",
     package="memu.hosts.cursor",
+    task_name="memu-bridging-cursor",
     source_factory=CursorTranscriptSource,
     session_dir=SESSION_DIR,
     session_help="Cursor agent-transcript root (one project dir per escaped cwd)",

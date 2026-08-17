@@ -1,5 +1,11 @@
 # Install memU for Cursor
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** A user will point you at this file ("follow this guide
 > to install memU"). Work top to bottom. Each part ends with a **verify** gate —
 > do not proceed until the current one passes.
@@ -220,7 +226,7 @@ Do not continue until the gate passes.
 bridging entry exists, record its current cadence and remove **only that entry**.
 On Unix, identify it by `~/.memu/hosts/cursor/bridge.sh` or an old inline
 `cursor-agent -p 'Run the memU bridging pipeline. …'` prompt, then rewrite cron
-with `crontab -l | grep -vE 'hosts/cursor/bridge\.sh|memU bridging pipeline' | crontab -`.
+with `crontab -l | grep -vE '{{task_name_pattern}}|hosts/cursor/bridge\.sh|memU bridging pipeline' | crontab -`.
 Remove its `PATH=` line only if nothing else needs it, and use `crontab -r` only
 when no lines remain. On Windows run `memu-cursor schedule uninstall`. Verify
 `crontab -l` has no memU bridging entry while unrelated entries remain; on

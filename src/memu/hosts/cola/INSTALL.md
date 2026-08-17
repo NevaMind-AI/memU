@@ -1,5 +1,11 @@
 # Install memU for Cola
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** Work top to bottom. Each verify gate must pass
 > before continuing.
 >
@@ -39,9 +45,9 @@ reads user and assistant text plus tool calls, and ignores session headers and
 model/thinking metadata.
 
 Do not edit `~/.cola/crons.json` yourself. **Refresh an existing bridging
-registration before continuing.** Inspect Cola's scheduled-task UI. If task ID
-`memu-bridging` exists, record its current cadence, disable and remove **only
-that task** through the UI, then verify it no longer appears. Leave the store,
+registration before continuing.** Inspect Cola's scheduled-task UI. If any task
+whose name is in {{all_task_names}} exists, record its current cadence, disable
+and remove **only that task** through the UI, then verify it no longer appears. Leave the store,
 session cursor, working tree, and retrieval instruction untouched. An absent
 task is the normal first-install case. Reuse the recorded cadence unless the
 user requested a change.
@@ -52,9 +58,10 @@ Then ask Cola to follow its current packaged task procedure:
 memu-cola docs task
 ```
 
-The recreated task is named `memU 记忆桥接`, has ID `memu-bridging`, runs on
-`desktop:local`, and defaults to `0 * * * *` (hourly) when there was no prior
-cadence and the user did not choose another one.
+The recreated task uses `{{task_name}}` for its name and, when the UI exposes
+one separately, its ID. It runs on `desktop:local` and defaults to
+`0 * * * *` (hourly) when there was no prior cadence and the user did not choose
+another one.
 
 ### Verify Part 2
 

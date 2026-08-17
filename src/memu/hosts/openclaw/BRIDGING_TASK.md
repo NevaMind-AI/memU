@@ -1,9 +1,15 @@
 ---
-name: create-memu-bridging-task
+name: {{task_doc_name}}
 description: Create an OpenClaw cron job that bridges recent OpenClaw sessions into memU memory, skills, and resource submissions. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task (OpenClaw)
+
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
 
 Use this when the user asks to set up or change the recurring memU bridging task.
 It creates an OpenClaw-native cron job; it does not run the pipeline now. This is
@@ -92,7 +98,7 @@ local time as the default. Confirm before creating the external job.
 
 ## Step 2 — create and register the cron job
 
-Create an OpenClaw cron job named `memu-bridging-openclaw` with:
+Create an OpenClaw cron job named `{{task_name}}` with:
 
 - an `agentTurn` payload;
 - `sessionTarget="isolated"` — load-bearing because each run receives

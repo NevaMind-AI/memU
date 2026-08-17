@@ -1,5 +1,11 @@
 # Install memU for WorkBuddy
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** A user will point you at this file ("follow this guide
 > to install memU"). Work top to bottom. Each part ends with a **verify** gate —
 > do not proceed until the current one passes.
@@ -122,9 +128,10 @@ The *record* seam: a scheduled job that periodically mines recent sessions under
 workspace resources are submitted but are not currently persisted.
 
 **Refresh an existing bridging registration before continuing.** Inspect
-WorkBuddy's automation list. If an automation whose name or prompt identifies
-the memU bridging pipeline exists, record its current RRULE and remove **only
-that automation** through WorkBuddy's automation management. Re-list automations
+WorkBuddy's automation list. Match the current marker `{{task_name}}`, every
+former name in {{former_task_names}}, or the complete memU bridging pipeline
+prompt. Record its current RRULE and remove **only that confirmed automation**
+through WorkBuddy's automation management. Re-list automations
 and verify it no longer appears. Leave the store, session cursor, working tree,
 and retrieval instruction untouched. An absent automation is the normal
 first-install case. Reuse the recorded RRULE below unless the user requested a

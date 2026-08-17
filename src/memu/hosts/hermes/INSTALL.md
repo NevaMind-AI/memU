@@ -1,5 +1,11 @@
 # Install memU for Hermes Agent
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** A user will point you at this file ("follow this guide
 > to install memU"). Work top to bottom. Each part ends with a **verify** gate —
 > do not proceed until the current one passes.
@@ -139,12 +145,12 @@ workspace resources are submitted but are not currently persisted.
 OS-scheduled memU bridging entry exists, record its current cadence and remove
 **only that entry**. On Unix, identify it by
 `~/.memu/hosts/hermes/bridge.sh` or an old inline pipeline prompt, then rewrite
-cron with `crontab -l | grep -vE 'hosts/hermes/bridge\.sh|memU bridging pipeline' | crontab -`.
+cron with `crontab -l | grep -vE '{{task_name_pattern}}|hosts/hermes/bridge\.sh|memU bridging pipeline' | crontab -`.
 Remove its `PATH=` line only if nothing else needs it, use `crontab -r` only when
-no lines remain, and delete only the memU launchd plist when launchd was chosen.
+no lines remain, and delete only the launchd plist whose Label is `{{task_name}}` when launchd was chosen.
 On Windows run `memu-hermes schedule uninstall`. Also list
 `hermes cron list --all` and remove every exact-name legacy native job
-`memu-bridging-hermes` with `hermes cron remove <job-id>`. Verify `crontab -l`
+`{{task_name}}` with `hermes cron remove <job-id>`. Verify `crontab -l`
 (and launchd, if used) has no memU bridging entry while unrelated entries remain,
 `memu-hermes schedule status` reports not registered on Windows, and the Hermes
 list has no legacy job. Leave the store, session cursor, working tree, and

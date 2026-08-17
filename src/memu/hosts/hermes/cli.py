@@ -52,6 +52,7 @@ SPEC = HostSpec(
     host=HOST,
     display="Hermes",
     package="memu.hosts.hermes",
+    task_name="memu-bridging-hermes",
     source_factory=HermesTranscriptSource,
     session_dir=str(state_db_path()),
     session_help="Hermes SQLite session store (state.db under HERMES_HOME)",

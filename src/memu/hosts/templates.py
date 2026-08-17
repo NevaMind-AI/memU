@@ -39,6 +39,7 @@ tracked as the open issue in ADR 0013.
 from __future__ import annotations
 
 import os
+import re
 import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
@@ -192,11 +193,9 @@ def resolve(name: str, embedded: str) -> str:
 #     and cache carry a ``<host>`` segment: ``<base>/<host>/<filename>`` and
 #     ``~/.memu/cache/docs/<host>/<filename>``. (The templates share one flat
 #     namespace precisely because they are host-agnostic.)
-#   * **Printed, not executed.** ``docs`` prints the guide to a human's terminal;
-#     the text is never ``.format()``-ed or fed to an agent. So there is no
-#     ``{placeholder}`` contract to enforce — the trust check is just "non-empty,
-#     decodes, under the size cap", which ``_get`` already covers. See
-#     :func:`_valid_doc`.
+#   * **Rendered after selection.** Host guides carry a closed ``{{token}}``
+#     naming contract. The resolver validates that contract but leaves rendering
+#     to ``HostSpec``, the sole source of current and former task names.
 #
 # Duty cycle is interactive and one-off (like ``install-instruction``), and a user
 # may re-run ``docs`` offline, so this keeps the cached :func:`resolve`-style
@@ -222,14 +221,26 @@ def _docs_cache_dir(host: str) -> Path:
     return Path(os.path.expanduser(BASE_DIR)) / "cache" / "docs" / host
 
 
-def _valid_doc(text: str) -> bool:
-    """True if the doc is worth trusting. Unlike a template it is only printed for
-    a human, so there is no placeholder contract — non-empty is the whole check.
+DOC_REQUIRED_TOKENS = frozenset({"task_name", "former_task_names", "all_task_names"})
+_DOC_TOKEN_RE = re.compile(r"\{\{([a-z_]+)\}\}")
+_DOC_ALLOWED_TOKENS = DOC_REQUIRED_TOKENS | {"task_doc_name", "task_name_pattern"}
 
-    TODO(review): consider a light sanity marker (e.g. a leading ``#`` heading) so
-    an accidentally-served error page or redirect body is rejected as well.
+
+def _valid_doc(text: str) -> bool:
+    """True when a host guide keeps the closed scheduler-name contract.
+
+    Server and cache copies without these tokens predate the single naming source
+    and are rejected, preventing an old hard-coded task name from overriding the
+    SDK's current ``HostSpec`` declaration.
     """
-    return bool(text.strip())
+    if not text.strip():
+        return False
+    matches = list(_DOC_TOKEN_RE.finditer(text))
+    tokens = {match.group(1) for match in matches}
+    if not DOC_REQUIRED_TOKENS.issubset(tokens) or not tokens.issubset(_DOC_ALLOWED_TOKENS):
+        return False
+    stripped = _DOC_TOKEN_RE.sub("", text)
+    return "{{" not in stripped and "}}" not in stripped
 
 
 def fetch_doc(host: str, filename: str) -> str | None:
