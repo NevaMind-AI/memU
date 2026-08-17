@@ -34,7 +34,6 @@ full text inline and no skill folder, because for it there is nowhere to put one
 from __future__ import annotations
 
 import argparse
-import contextlib
 import difflib
 import os
 import re
@@ -219,20 +218,20 @@ def _write(path: Path, updated: str, *, backup: bool, dry_run: bool) -> tuple[bo
     if updated == current or dry_run:
         return False, diff
 
-    path.parent.mkdir(parents=True, exist_ok=True)
+    target = path.resolve() if path.is_symlink() else path
+    target.parent.mkdir(parents=True, exist_ok=True)
     if backup and current:
         shutil.copyfile(path, path.with_suffix(path.suffix + ".bak"))
-    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=path.suffix)
+    fd, temporary_name = tempfile.mkstemp(dir=target.parent, prefix=".tmp-", suffix=target.suffix)
+    temporary = Path(temporary_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(updated)
-        if path.exists():
-            shutil.copymode(path, temporary)
-        os.replace(temporary, path)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.unlink(temporary)
-        raise
+        if target.exists():
+            shutil.copymode(target, temporary)
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
     return True, diff
 
 

@@ -134,6 +134,19 @@ def test_rewrite_failure_leaves_the_instruction_file_intact(monkeypatch, tmp_pat
     assert not list(tmp_path.glob(".tmp-*"))
 
 
+def test_rewrite_preserves_an_instruction_symlink(tmp_path: pathlib.Path) -> None:
+    target = tmp_path / "dotfiles" / "AGENTS.md"
+    target.parent.mkdir()
+    target.write_text("# My rules\n", encoding="utf-8")
+    path = tmp_path / "AGENTS.md"
+    path.symlink_to(target)
+
+    instruction.install(path, BINARY)
+
+    assert path.is_symlink()
+    assert instruction.instruction(BINARY) in target.read_text(encoding="utf-8")
+
+
 def test_cli_defaults_to_the_codex_instruction_file() -> None:
     args = build_parser().parse_args(["install-instruction"])
     assert args.path == AGENTS_MD
