@@ -27,6 +27,10 @@ dependencies = [
     "sqlmodel>=0.0.27",
     "alembic>=1.14.0",
     "pendulum>=3.1.0",
+    # Instrumentation depends on the API only (no-op unless an SDK is installed
+    # and wired via memu.observability.init_telemetry — the standard library
+    # pattern). The SDK + OTLP exporters live in the `observability` extra.
+    "opentelemetry-api>=1.30.0",
 ]
 
 [build-system]
@@ -56,6 +60,12 @@ test = [
 
 [project.optional-dependencies]
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
+# Turn instrumentation into exported telemetry: the SDK plus the OTLP exporters
+# used by init_telemetry to ship spans/metrics/logs to a collector.
+observability = [
+    "opentelemetry-sdk>=1.30.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.30.0",
+]
 
 [project.scripts]
 memu = "memu.cli:main"
@@ -147,6 +157,9 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
+# semconv is nothing but string constants; names containing "token" trip S105's
+# hardcoded-password heuristic (false positives on the metric/attribute names).
+"src/memu/observability/semconv.py" = ["S105"]
 
 [tool.ruff.format]
 preview = true

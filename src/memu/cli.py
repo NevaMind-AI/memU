@@ -30,6 +30,7 @@ from typing import Any
 from memu import events
 from memu.agentic_backend import AgenticMemoryBackend
 from memu.env import build_agentic_memory_backend_from_env, embedding_provider, env
+from memu.observability.entrypoint import cli_telemetry
 
 
 def _env(name: str, default: str) -> str:
@@ -201,7 +202,11 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     handler: Callable[[argparse.Namespace], Coroutine[Any, Any, int]] = args.handler
     try:
-        return asyncio.run(handler(args))
+        # A SERVER span for the whole invocation, parented to the caller's trace
+        # (TRACEPARENT) when present, so the memory.* spans join one end-to-end
+        # agent → memory trace. No-op unless an OTLP endpoint is configured.
+        with cli_telemetry(args.command):
+            return asyncio.run(handler(args))
     except KeyboardInterrupt:
         return 130
     except Exception as exc:
