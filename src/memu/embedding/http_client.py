@@ -90,6 +90,7 @@ class HTTPEmbeddingClient:
         provider: str = "openai",
         endpoint_overrides: dict[str, str] | None = None,
         timeout: int = 60,
+        embed_batch_size: int = 64,
     ):
         # Ensure base_url ends with "/" so httpx doesn't discard the path
         # component when joining with endpoint paths.
@@ -109,6 +110,7 @@ class HTTPEmbeddingClient:
         # Strip leading "/" so httpx resolves relative to base_url
         self.embedding_endpoint = raw_embedding_ep.lstrip("/")
         self.timeout = timeout
+        self.embed_batch_size = max(1, embed_batch_size)
         self.proxy = _load_proxy(self.base_url)
         # httpx falls back to env proxies even when proxy=None, so a loopback
         # target explicitly unmounts them (host-specifically — see
@@ -126,17 +128,30 @@ class HTTPEmbeddingClient:
         Returns:
             Tuple of (list of embedding vectors, raw response dict). The raw
             response carries provider ``usage`` so callers/interceptors can
-            track token consumption.
+            track token consumption. Inputs beyond ``embed_batch_size`` are sent
+            as several sequential requests, in which case only the last raw
+            response is returned (the same contract as the SDK client).
         """
-        payload = self.backend.build_embedding_payload(inputs=inputs, embed_model=self.embed_model)
+        if not inputs:
+            return [], {}
+
+        vectors: list[list[float]] = []
+        data: dict[str, Any] = {}
+        # One client for every batch: each request otherwise pays its own TLS
+        # handshake, which on a many-segment commit dominates the wall clock.
         async with httpx.AsyncClient(
             base_url=self.base_url, timeout=self.timeout, proxy=self.proxy, mounts=self.mounts
         ) as client:
-            resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers())
-            resp.raise_for_status()
-            data = resp.json()
-        logger.debug("HTTP embedding response: %s", data)
-        return self.backend.parse_embedding_response(data), data
+            for start in range(0, len(inputs), self.embed_batch_size):
+                payload = self.backend.build_embedding_payload(
+                    inputs=inputs[start : start + self.embed_batch_size], embed_model=self.embed_model
+                )
+                resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers())
+                resp.raise_for_status()
+                data = resp.json()
+                logger.debug("HTTP embedding response: %s", data)
+                vectors.extend(self.backend.parse_embedding_response(data))
+        return vectors, data
 
     async def embed_multimodal(
         self,

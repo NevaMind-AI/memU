@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class OpenAIEmbeddingSDKClient:
     """OpenAI embedding client that relies on the official Python SDK."""
 
-    def __init__(self, *, base_url: str, api_key: str, embed_model: str, batch_size: int = 1):
+    def __init__(self, *, base_url: str, api_key: str, embed_model: str, batch_size: int = 64):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key or ""
         self.embed_model = embed_model

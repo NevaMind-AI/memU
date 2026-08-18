@@ -20,6 +20,7 @@ if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
 import pytest  # noqa: E402
+from pydantic import ValidationError  # noqa: E402
 
 from memu.app.settings import EmbeddingConfig  # noqa: E402
 from memu.embedding.backends import (  # noqa: E402
@@ -104,6 +105,80 @@ async def test_http_client_embed_returns_vectors_and_raw(monkeypatch):
     assert captured["endpoint"] == "embeddings"  # leading slash stripped
     assert captured["headers"] == {"Authorization": "Bearer key"}
     assert captured["json"] == {"model": "voyage-3.5", "input": ["hello"]}
+
+
+async def test_http_client_splits_inputs_into_batches(monkeypatch):
+    """A list longer than ``embed_batch_size`` becomes several requests, one client."""
+    posted: list[list[str]] = []
+    clients: list[object] = []
+
+    class _FakeResponse:
+        def __init__(self, count: int):
+            self._count = count
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": [{"embedding": [float(i)]} for i in range(self._count)]}
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            clients.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, endpoint, json, headers):
+            posted.append(json["input"])
+            return _FakeResponse(len(json["input"]))
+
+    import memu.embedding.http_client as http_mod
+
+    monkeypatch.setattr(http_mod.httpx, "AsyncClient", _FakeAsyncClient)
+
+    client = HTTPEmbeddingClient(base_url="https://x/v1", api_key="k", embed_model="m", embed_batch_size=2)
+    vectors, _ = await client.embed(["a", "b", "c", "d", "e"])
+
+    assert posted == [["a", "b"], ["c", "d"], ["e"]]
+    assert len(vectors) == 5
+    assert len(clients) == 1  # every batch shares one connection pool
+
+
+async def test_http_client_embed_of_nothing_makes_no_request(monkeypatch):
+    """An empty commit must not post an empty ``input`` the provider would reject."""
+
+    built = False
+
+    class _RecordingAsyncClient:
+        def __init__(self, *args, **kwargs):
+            nonlocal built
+            built = True
+
+    import memu.embedding.http_client as http_mod
+
+    monkeypatch.setattr(http_mod.httpx, "AsyncClient", _RecordingAsyncClient)
+
+    client = HTTPEmbeddingClient(base_url="https://x/v1", api_key="k", embed_model="m")
+    assert await client.embed([]) == ([], {})
+    assert not built
+
+
+def test_embed_batch_size_defaults_to_batching_and_is_plumbed_to_both_backends():
+    # A default of 1 silently turned each batched call into N sequential requests.
+    assert EmbeddingConfig().embed_batch_size == 64
+
+    httpx_client = build_embedding_client(EmbeddingConfig(client_backend="httpx", embed_batch_size=8))
+    assert httpx_client.embed_batch_size == 8
+
+    sdk = build_embedding_client(EmbeddingConfig(client_backend="sdk", embed_batch_size=8))
+    assert sdk.batch_size == 8
+
+    with pytest.raises(ValidationError):
+        EmbeddingConfig(embed_batch_size=0)
 
 
 def test_gateway_builds_sdk_and_httpx_clients():

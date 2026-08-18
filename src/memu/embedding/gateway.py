@@ -34,6 +34,7 @@ def _build_httpx_client(cfg: EmbeddingConfig) -> Any:
         embed_model=cfg.embed_model,
         provider=cfg.provider,
         endpoint_overrides=cfg.endpoint_overrides,
+        embed_batch_size=cfg.embed_batch_size,
     )
 
 
