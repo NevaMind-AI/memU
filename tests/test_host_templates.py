@@ -87,9 +87,9 @@ def test_fetch_is_off_when_base_url_is_blank() -> None:
 @pytest.mark.parametrize(
     "body, status",
     [
-        (f"server {MEMORY_KEYS}".encode(), 404),  # non-200
-        (b"x" * (templates._MAX_BYTES + 1), 200),  # oversize
-        (b"missing the placeholders", 200),  # malformed
+        pytest.param(f"server {MEMORY_KEYS}".encode(), 404, id="non-200"),
+        pytest.param(b"x" * (templates._MAX_BYTES + 1), 200, id="oversize"),
+        pytest.param(b"missing the placeholders", 200, id="malformed"),
     ],
 )
 def test_fetch_rejects_bad_responses_without_caching(monkeypatch: pytest.MonkeyPatch, body: bytes, status: int) -> None:
