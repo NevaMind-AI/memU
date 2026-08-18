@@ -243,6 +243,10 @@ class AgenticMixin:
           with the same track-specific segment (re)generation as the workspace path.
         """
         store = self._get_database()
+        unknown_scope_fields = sorted(set(user or {}) - set(self.user_model.model_fields))
+        if unknown_scope_fields:
+            msg = f"Unknown user scope field(s): {', '.join(unknown_scope_fields)}"
+            raise ValueError(msg)
         user_scope = self.user_model(**user).model_dump() if user is not None else None
         embed_client = self._get_embedding_client("embedding")
 

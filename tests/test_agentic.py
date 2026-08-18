@@ -198,6 +198,14 @@ async def test_where_scope_filters_and_rejects_unknown_fields(service: MemorySer
         await service.list_all_recall_files(where={"nope": "x"})
 
 
+async def test_commit_rejects_unknown_user_scope_fields(service: MemoryService) -> None:
+    with pytest.raises(ValueError, match="Unknown user scope field"):
+        await service.commit_results(
+            recall_files=[{"name": "A", "track": "memory", "description": "d", "content": "alpha"}],
+            user={"user_idd": "u1"},
+        )
+
+
 async def test_progressive_retrieve_rejects_empty_query(service: MemoryService) -> None:
     with pytest.raises(ValueError, match="empty_query"):
         await service.progressive_retrieve("   ")
