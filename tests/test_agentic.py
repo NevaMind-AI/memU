@@ -105,6 +105,17 @@ async def test_list_all_recall_files_paginates_by_track_name_id(service: MemoryS
     assert pages == 3  # 8 files / page size 3 -> 3,3,2
 
 
+async def test_list_all_recall_files_rejects_nonpositive_limit(service: MemoryService) -> None:
+    with pytest.raises(ValueError, match="limit must be greater than zero"):
+        await service.list_all_recall_files(limit=0)
+
+
+@pytest.mark.parametrize("cursor", ["not-a-cursor", "WyJ0b28iLCAic2hvcnQiXQ==", "WzEsIDIsIDNd"])
+async def test_list_all_recall_files_rejects_malformed_cursor(service: MemoryService, cursor: str) -> None:
+    with pytest.raises(ValueError, match="invalid cursor"):
+        await service.list_all_recall_files(cursor=cursor)
+
+
 async def test_progressive_retrieve_ranks_all_three_layers(service: MemoryService) -> None:
     await _seed(service)
     result = await service.progressive_retrieve("coffee")
