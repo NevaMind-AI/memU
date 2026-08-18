@@ -1,5 +1,11 @@
 # Install memU for any agent (`memu-agent`)
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** A user will point you at this file ("follow this guide
 > to install memU"). Work top to bottom. Each part ends with a **verify** gate —
 > do not proceed until the current one passes.
@@ -147,9 +153,26 @@ backend.
 
 ## Part 2 — Memorization (only if detect said it works)
 
-Register the bridging task against the session directory detect found. Follow
-the packaged procedure. In cloud mode, workspace resources are submitted by the
-same pipeline but are not currently persisted:
+Register the bridging task against the session directory detect found. In
+cloud mode, workspace resources are submitted by the same pipeline but are not
+currently persisted.
+
+**Refresh an existing bridging registration before continuing.** If a native
+job named `{{task_name}}` (or the corresponding name-derived variant for a
+named generic integration), an older native job with the bridging pipeline prompt, or a cron
+entry for this generic adapter exists, record its current cadence and remove
+**only that entry**. A cron entry invokes
+`~/.memu/hosts/agent/bridge.sh` or an old inline pipeline prompt; rewrite it with
+`crontab -l | grep -vE '{{task_name_pattern}}|hosts/agent/bridge\.sh|memU bridging pipeline' | crontab -`,
+and use `crontab -r` only when no lines remain. Remove a native job only when
+its prompt runs `memu-agent prepare --session-dir …`, its jobs, then
+`memu-agent commit`. Verify the crontab or native scheduler no longer lists a
+memU bridging entry while unrelated entries remain. Leave the store, session
+cursor, working tree, and retrieval instruction untouched. An absent entry is
+the normal first-install case. Reuse the recorded cadence below unless the user
+requested a change.
+
+Follow the current packaged procedure:
 
 ```
 memu-agent docs task

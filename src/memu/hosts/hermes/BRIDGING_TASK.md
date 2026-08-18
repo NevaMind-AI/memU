@@ -1,9 +1,15 @@
 ---
-name: create-memu-bridging-task
+name: {{task_doc_name}}
 description: Register a scheduled job that bridges recent Hermes sessions into memU memory, skills, and resource submissions. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task (Hermes)
+
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
 
 Use this when the user asks to **set up (or change) the recurring memU
 "bridging" task** — the job that periodically turns what the agent recently did
@@ -57,7 +63,7 @@ hour**, cron `0 * * * *` (local time). Confirm before creating.
 **Do not use Hermes's native `cronjob` for memU bridging.** Use the OS
 scheduler described here. First migrate any install made by the older guide:
 run `hermes cron list --all`; for every job whose name is exactly
-`memu-bridging-hermes`, run `hermes cron remove <job-id>`, then list again and
+`{{task_name}}`, run `hermes cron remove <job-id>`, then list again and
 confirm none remain. If listing or removal fails, stop — never add the OS task
 beside a native copy.
 
@@ -128,8 +134,10 @@ field, but it does run the line through `/bin/sh`, so `$HOME` works; a literal
 absolute path is equally fine):
 
 ```
-0 * * * * $HOME/.memu/hosts/hermes/bridge.sh
+0 * * * * $HOME/.memu/hosts/hermes/bridge.sh # {{task_name}}
 ```
+
+If launchd is explicitly chosen, set its Label to `{{task_name}}`.
 
 The prompt block is fixed; only the cron expression is the user's choice.
 Nothing machine-specific leaks into the prompt — the pipeline is invoked
@@ -172,7 +180,7 @@ memu-hermes schedule uninstall   # remove it
 
 `install` writes the prompt plus a small PowerShell wrapper under
 `~/.memu/hosts/hermes`, resolves the bundled `hermes` CLI to an absolute path,
-and registers `\memU\memu-bridging-hermes` under an **S4U** principal — hidden,
+and registers the task `{{task_name}}` under an **S4U** principal — hidden,
 runs while logged out, and catches up a run missed while the machine was off.
 `--interval <minutes>` changes the cadence (default 60). The migration check
 above makes sure the pipeline has only the OS scheduler.

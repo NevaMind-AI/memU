@@ -1,5 +1,11 @@
 # Install memU for Codex
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** A user will point you at this file ("follow this guide
 > to install memU"). Work top to bottom. Each part ends with a **verify** gate —
 > do not proceed until the current one passes.
@@ -171,6 +177,16 @@ on this working, and both fail *silently* if it is wrong.
 The *record* seam: a Codex scheduled task that periodically mines recent
 `~/.codex/sessions` into memU memory, skills, and resources. In cloud mode,
 workspace resources are submitted but are not currently persisted.
+
+**Refresh an existing bridging registration before continuing.** Inspect
+Codex's scheduled-task surface. Check every recognized name in
+{{all_task_names}}, then confirm the task's prompt runs the memU prepare /
+self-evolve / commit pipeline. Record its current cadence and delete **only that
+confirmed task** through the same surface. A name narrows the search; the
+complete pipeline prompt remains the load-bearing deletion identity. Re-list scheduled tasks and verify
+no memU bridging task remains. Leave the store, session cursor, working tree,
+and retrieval instruction untouched. An absent task is the normal first-install
+case. Reuse the recorded cadence below unless the user requested a change.
 
 **Do not reinvent this.** Follow the packaged procedure:
 

@@ -1,9 +1,15 @@
 ---
-name: create-memu-bridging-task
+name: {{task_doc_name}}
 description: Register a scheduled job that bridges recent sessions into memU memory, skills, and resource submissions via the generic adapter. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task (generic `memu-agent`)
+
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
 
 Use this when the user asks to **set up (or change) the recurring memU
 "bridging" task** for an agent that has no dedicated memU adapter — the job
@@ -69,7 +75,13 @@ The machine-specific fact lives in the crontab, where machine facts belong —
 the pipeline prompt itself stays verbatim.
 
 Default to a system cron entry invoking the agent headless; use the agent's
-own scheduler instead only if the user prefers it.
+own scheduler instead only if the user prefers it. When the native scheduler
+accepts a name, use `{{task_name}}` for one default generic integration.
+For multiple or named integrations, replace the final `agent` with the integration
+name, matching each
+integration's `--base-dir ~/.memu/hosts/<name>`, so their labels do not collide.
+The name is a human-facing label; the pipeline prompt remains the load-bearing
+identity.
 
 **Never inline the pipeline prompt in the crontab entry.** The quoted prompt
 is over 1 KB, and cron truncates a crontab line at roughly 1 KB before handing
@@ -87,7 +99,7 @@ a still-running backlog run — see the claude-code host's `BRIDGING_TASK.md`
 for the full script), and keep the crontab entry to one short line:
 
 ```
-0 * * * * $HOME/.memu/hosts/agent/bridge.sh
+0 * * * * $HOME/.memu/hosts/agent/bridge.sh # {{task_name}}
 ```
 
 The recurring prompt, with `<SESSION_DIR>` filled in, **verbatim**:

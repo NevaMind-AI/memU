@@ -25,7 +25,9 @@ from memu.hosts import templates
 @pytest.fixture(autouse=True)
 def _offline_templates(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
     monkeypatch.setenv("MEMU_TEMPLATE_BASE_URL", "")
+    monkeypatch.setenv("MEMU_DOCS_BASE_URL", "")
     monkeypatch.setattr(templates, "_cache_dir", lambda: tmp_path / "template-cache")
+    monkeypatch.setattr(templates, "_docs_cache_dir", lambda host: tmp_path / "docs-cache" / host)
 
 
 @pytest.fixture(autouse=True)

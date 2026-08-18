@@ -1,18 +1,26 @@
 ---
-name: create-memu-cola-bridging-task
-description: Create or update Cola's hourly memU bridging task for the desktop:local session.
+name: {{task_doc_name}}
+description: Create Cola's hourly memU bridging task for the desktop:local session.
 ---
 
 # Create the memU bridging task (Cola)
 
-Use Cola's native scheduled-task UI to create or update the task named
-**`memU 记忆桥接`**. Do not edit `~/.cola/crons.json` by hand: it is Cola-owned
-runtime state.
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
+Use Cola's native scheduled-task UI to create the task named **`{{task_name}}`**.
+If the UI exposes separate name and ID fields, use `{{task_name}}` for both.
+Do not edit `~/.cola/crons.json` by hand: it is Cola-owned runtime state.
 
 The target scope is `desktop:local`. The default schedule is hourly
-(`0 * * * *`); ask the user before choosing a different schedule. If a task
-with ID `memu-bridging` already exists, update it rather than creating a second
-copy.
+(`0 * * * *`); ask the user before choosing a different schedule. If any task
+whose name is in {{all_task_names}} already exists, record its cadence, disable
+and remove only that task through the UI, and verify it no longer appears before
+creating its replacement. Reuse the recorded cadence unless the user requested
+a change.
 
 Set its prompt to the following block verbatim:
 
@@ -41,4 +49,4 @@ Finish with a one-line summary of jobs processed and recall files committed.
 
 Confirm the task is enabled, attached to `desktop:local`, and scheduled at the
 agreed cadence. A successful task run creates its own transcript below
-`~/.cola/sessions/desktop-local-subagent-cron-memu-bridging-*/`.
+`~/.cola/sessions/desktop-local-subagent-cron-{{task_name}}-*/`.

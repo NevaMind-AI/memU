@@ -91,6 +91,7 @@ def test_fetch_is_off_when_base_url_is_blank() -> None:
         (b"x" * (templates._MAX_BYTES + 1), 200),  # oversize
         (b"missing the placeholders", 200),  # malformed
     ],
+    ids=("non-200", "oversize", "malformed"),
 )
 def test_fetch_rejects_bad_responses_without_caching(monkeypatch: pytest.MonkeyPatch, body: bytes, status: int) -> None:
     _serve(monkeypatch, body, status)

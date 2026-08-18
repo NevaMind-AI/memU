@@ -1,9 +1,15 @@
 ---
-name: create-memu-bridging-task
+name: {{task_doc_name}}
 description: Register a scheduled automation that bridges recent WorkBuddy sessions into memU memory, skills, and resource submissions. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task (WorkBuddy)
+
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
 
 Use this when the user asks to **set up (or change) the recurring memU
 "bridging" task** — the automation that periodically turns what the agent
@@ -58,9 +64,13 @@ Create a WorkBuddy automation that runs the bridging pipeline. The prompt
 describes the three steps; the agent that picks up this automation will execute
 them.
 
-Register the automation with:
+WorkBuddy's documented automation surface has no separate name field. Register
+the automation with:
 
-- **task** — the pipeline prompt below (verbatim)
+- **task** — begin with the line `{{task_name}}`, then append the pipeline prompt
+  below verbatim. WorkBuddy has no separate name field, so the marker makes the
+  cross-platform name visible while the automation ID plus complete pipeline
+  content remain the deletion authority.
 - **scheduleType** — `recurring`
 - **rrule** — the user's chosen rule (default: `FREQ=HOURLY;INTERVAL=1`)
 - **cwd** — the user's home directory or primary working directory

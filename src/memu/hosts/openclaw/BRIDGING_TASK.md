@@ -1,9 +1,15 @@
 ---
-name: create-memu-bridging-task
+name: {{task_doc_name}}
 description: Create an OpenClaw cron job that bridges recent OpenClaw sessions into memU memory, skills, and resource submissions. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task (OpenClaw)
+
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
 
 Use this when the user asks to set up or change the recurring memU bridging task.
 It creates an OpenClaw-native cron job; it does not run the pipeline now. This is
@@ -62,11 +68,10 @@ Upgrading to a prerelease is optional. A legacy registration remains useful: it
 starts filtering automatically after a later OpenClaw upgrade exposes the
 required schema.
 
-## Step 0 — reuse or migrate an existing job
+## Step 0 — identify and remove an existing job
 
 Inspect existing automations before creating anything, including disabled jobs,
-using the first-class automation list/get surface. Never create a second
-bridging job when an existing one can be reused. For each `agentTurn` job,
+using the first-class automation list/get surface. For each `agentTurn` job,
 inspect its complete prompt and classify it:
 
 - **candidate:** the prompt contains all three signals: `memu-openclaw prepare`,
@@ -77,30 +82,23 @@ inspect its complete prompt and classify it:
 
 Then apply exactly one branch:
 
-- **Exactly one candidate and zero unresolved near matches:** reuse and preserve
-  its job ID and schedule, plus its name, enabled state, owner, delivery, and
-  unrelated payload settings, unless the user requested a change. If its
-  payload is not isolated or its prompt is not the verbatim block below, show
-  the in-place patch and confirm before applying it by exact job ID.
+- **Exactly one candidate and zero unresolved near matches:** record its
+  schedule, delete only that exact job ID, then re-list automations and verify
+  it no longer appears.
 - **No candidate or near match:** continue to the creation path below.
 - **Multiple candidates or any near match:** stop without creating, deleting,
-  updating, registering, or guessing. Report IDs and matched signals so the
-  user can choose. Do not modify `~/.memu/hosts/openclaw/` working state.
-
-After any reuse, update, or creation, re-list automations and prove exactly one
-selected bridging job and zero unresolved near matches before registration.
+  registering, or guessing. Report IDs and matched signals so the user can
+  choose. Do not modify `~/.memu/hosts/openclaw/` working state.
 
 ## Step 1 — settle the schedule
 
-For a reused job, keep its schedule unless the user requested a change. For a
-new job, use the requested schedule; if none was supplied, ask, with hourly at
-`0 * * * *` local time as the default. Confirm before creating or changing the
-external job.
+Reuse the recorded schedule unless the user requested a change. Otherwise use
+the requested schedule; if none was supplied, ask, with hourly at `0 * * * *`
+local time as the default. Confirm before creating the external job.
 
-## Step 2 — create or update and register the cron job
+## Step 2 — create and register the cron job
 
-If Step 0 found no candidate, create an OpenClaw cron job (for example
-`memu-remember`) with:
+Create an OpenClaw cron job named `{{task_name}}` with:
 
 - an `agentTurn` payload;
 - `sessionTarget="isolated"` — load-bearing because each run receives
@@ -108,8 +106,7 @@ If Step 0 found no candidate, create an OpenClaw cron job (for example
 - the selected schedule;
 - the recurring prompt below, verbatim.
 
-After Step 0 selects or Step 2 creates the single job, register that exact
-selected job ID on the gateway host:
+After creating the job, register its exact new job ID on the gateway host:
 
     memu-openclaw register-cron-job --job-id <jobId>
 
@@ -166,7 +163,7 @@ Only the schedule varies. The prompt carries no job, run, or session identity.
 
 ## Step 3 — verify
 
-Trigger the selected, updated, or created job once and inspect its tool result plus gateway-host
+Trigger the created job once and inspect its tool result plus gateway-host
 filesystem traces; do not trust only its prose summary.
 
 Every version:

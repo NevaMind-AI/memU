@@ -37,6 +37,7 @@ SPEC = HostSpec(
     host=HOST,
     display="WorkBuddy",
     package="memu.hosts.workbuddy",
+    task_name="memu-bridging-workbuddy",
     source_factory=WorkBuddyTranscriptSource,
     session_dir=SESSION_DIR,
     session_help="WorkBuddy session log (one project dir per escaped cwd)",

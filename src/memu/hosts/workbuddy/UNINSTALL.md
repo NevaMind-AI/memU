@@ -1,5 +1,11 @@
 # Uninstall memU for WorkBuddy
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** A user has pointed you at this file ("follow this
 > guide to uninstall memU"). Work top to bottom. Each part ends with a
 > **verify** gate — do not proceed until the current one passes.
@@ -26,9 +32,10 @@ instruction file exactly as they are.
 
 ## Part 1 — Unregister the bridging (record) task
 
-Find the WorkBuddy automation that runs the memU bridging pipeline and delete
-it. You can find it by name or by the prompt content mentioning "memU bridging
-pipeline". Use WorkBuddy's automation management to remove it.
+Find the WorkBuddy automation whose task text carries a recognized name from
+{{all_task_names}} and the "memU bridging pipeline" prompt, then delete only its
+exact automation ID through WorkBuddy's automation management. The name alone
+is never enough to delete.
 
 ### ✅ Verify Part 1
 

@@ -1,5 +1,11 @@
 # Uninstall memU for OpenClaw
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** A user has pointed you at this file ("follow this
 > guide to uninstall memU"). Work top to bottom. Each part ends with a
 > **verify** gate — do not proceed until the current one passes.
@@ -26,13 +32,12 @@ instruction file exactly as they are.
 
 ## Part 1 — Unregister the bridging (record) task
 
-Find the OpenClaw cron job that runs the memU bridging pipeline — it was
-created at install time (named e.g. `memu-remember`) through OpenClaw's native
-scheduler with the three-step prepare / self-evolve / commit prompt — and
-delete **that job only**, through the same scheduler surface. Its registered ID
-is in `~/.memu/hosts/openclaw/.cron_job.openclaw.json`; use that exact identity
-rather than matching a name or prompt. Any other cron jobs the user has are
-theirs and stay.
+Find the OpenClaw cron job that runs the memU bridging pipeline — current installs name it `{{task_name}}`; older installs may use a name in
+{{former_task_names}} or another name — and delete **that job only**, through
+OpenClaw's native scheduler. Its registered ID is in
+`~/.memu/hosts/openclaw/.cron_job.openclaw.json`; use that exact identity rather
+than matching a name or prompt. Any other cron jobs the user has are theirs and
+stay.
 
 ### ✅ Verify Part 1
 

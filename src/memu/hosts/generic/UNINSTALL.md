@@ -1,5 +1,11 @@
 # Uninstall memU (generic `memu-agent`)
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** A user has pointed you at this file ("follow this
 > guide to uninstall memU"). Work top to bottom. Each part ends with a
 > **verify** gate — do not proceed until the current one passes.
@@ -32,13 +38,16 @@ and its instruction file exactly as they are.
 
 Find where the bridging run was scheduled at install time — the agent's own
 scheduler if it has one, otherwise a system cron entry — and delete **that
-entry only**. A cron entry invokes `~/.memu/hosts/agent/bridge.sh` (or, on
-installs predating the prompt-file layout, inlines the pipeline prompt
-directly); a native-scheduler prompt is recognizable as the three-step block
-running `memu-agent prepare --session-dir …`, the job files, then
-`memu-agent commit`. Everything else in the scheduler is the user's and stays;
-for cron:
-`crontab -l | grep -vE 'hosts/agent/bridge\.sh|memU bridging pipeline' | crontab -`.
+entry only**. Current native-scheduler installs use `{{task_name}}` for
+the default integration or its name-derived variant for a named one; for older
+installs, confirm the pipeline prompt before deleting because the name may
+differ. A cron entry invokes
+`~/.memu/hosts/agent/bridge.sh` (or, on installs predating the prompt-file
+layout, inlines the pipeline prompt directly); a native-scheduler prompt is
+recognizable as the three-step block running
+`memu-agent prepare --session-dir …`, the job files, then `memu-agent commit`.
+Everything else in the scheduler is the user's and stays; for cron:
+`crontab -l | grep -vE '{{task_name_pattern}}|hosts/agent/bridge\.sh|memU bridging pipeline' | crontab -`.
 If nothing at all remains, `crontab -r` removes the now-empty crontab cleanly.
 The `bridge.sh`, `bridge-prompt.txt`, and `bridge.log` files live under
 `~/.memu/hosts/agent/` and go with the host residue in the later cleanup part.

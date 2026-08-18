@@ -1,5 +1,11 @@
 # Install memU for OpenClaw
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** A user will point you at this file ("follow this guide
 > to install memU"). Work top to bottom. Each part ends with a **verify** gate —
 > do not proceed until the current one passes.
@@ -136,6 +142,18 @@ backend.
 The *record* seam: a scheduled job that mines recent transcripts under
 `~/.openclaw/agents/*/sessions/` into memU memory, skills, and resources. In
 cloud mode, workspace resources are submitted but are not currently persisted.
+
+**Refresh an existing bridging registration before continuing.** Inspect
+OpenClaw's cron jobs. Check every recognized name in {{all_task_names}}. If
+`~/.memu/hosts/openclaw/.cron_job.openclaw.json` registers a job ID, confirm it
+is the memU bridging job, record that job's current schedule, delete **only that
+exact job ID** through OpenClaw's scheduler surface, and re-list jobs to verify
+it no longer appears. Leave the registration file, store, session cursor, remaining
+working tree, and retrieval instruction untouched; the current task procedure
+overwrites the registered ID after it creates the replacement. No registered job
+is the normal first-install case. Reuse the recorded schedule below unless the
+user requested a change.
+
 **Do not reinvent this** — follow the packaged procedure:
 
 ```

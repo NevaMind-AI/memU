@@ -26,6 +26,7 @@ import contextlib
 import json
 import os
 import platform
+import re
 import sys
 import time
 import urllib.request
@@ -47,6 +48,18 @@ ScheduleBackend = Literal["os", "native", "external"]
 
 DOCS = {"install": "INSTALL.md", "task": "BRIDGING_TASK.md", "uninstall": "UNINSTALL.md"}
 
+_TASK_NAME_RE = re.compile(r"memu-bridging-[a-z0-9]+(?:-[a-z0-9]+)*\Z")
+_DOC_TOKEN_RE = re.compile(r"\{\{([a-z_]+)\}\}")
+_DOC_TOKENS = frozenset({"task_name", "former_task_names", "all_task_names", "task_name_pattern", "task_doc_name"})
+
+
+def _task_names_text(names: tuple[str, ...]) -> str:
+    return ", ".join(f"`{name}`" for name in names) if names else "none"
+
+
+def _task_name_pattern(names: tuple[str, ...]) -> str:
+    return "|".join(re.escape(name) for name in names)
+
 
 @dataclass(frozen=True)
 class HostSpec:
@@ -60,6 +73,14 @@ class HostSpec:
 
     package: str
     """Dotted package holding the host's ``INSTALL.md`` / ``BRIDGING_TASK.md``."""
+
+    task_name: str
+    """Current cross-platform name for this host's recurring bridging task.
+
+    Every scheduler surface that supports a name uses this exact value. Guides
+    receive it through the controlled ``{{task_name}}`` token rather than copying
+    the literal, so registration code and prose cannot drift independently.
+    """
 
     source_factory: Callable[[str], TranscriptSource]
     """Builds the host's :class:`TranscriptSource` from the ``--session-dir`` value."""
@@ -78,6 +99,14 @@ class HostSpec:
     target, and to inspect during uninstall. Only used when the CLI's default
     ``--path`` is in effect, so an explicit custom target never rewrites unrelated
     files. This is an upgrade seam, not a second active instruction location."""
+
+    former_task_names: tuple[str, ...] = ()
+    """Historical scheduler task names recognized during install and uninstall.
+
+    These are aliases for this same bridging pipeline, not alternate current
+    names. Scheduler-specific structural checks (prompt, job ID, wrapper) remain
+    authoritative where a name alone is not safe enough to delete by.
+    """
 
     skills_dir: str = ""
     """The host's skills directory, for hosts that have skills (``~/.codex/skills``,
@@ -160,6 +189,20 @@ class HostSpec:
     host metadata, without asking the model to carry identity.
     """
 
+    def __post_init__(self) -> None:
+        if not _TASK_NAME_RE.fullmatch(self.task_name):
+            msg = f"invalid task_name: {self.task_name!r}"
+            raise ValueError(msg)
+        if self.task_name in self.former_task_names:
+            msg = "task_name must not also appear in former_task_names"
+            raise ValueError(msg)
+        if len(set(self.former_task_names)) != len(self.former_task_names):
+            msg = "former_task_names must not contain duplicates"
+            raise ValueError(msg)
+        if any(not name.strip() for name in self.former_task_names):
+            msg = "former_task_names must not contain empty names"
+            raise ValueError(msg)
+
     @property
     def binary(self) -> str:
         return f"memu-{self.host}"
@@ -174,11 +217,33 @@ class HostSpec:
         return self.base_dir or f"~/.memu/hosts/{self.host}"
 
     @property
-    def task_name(self) -> str:
-        """Canonical scheduled-task name — stable across install/uninstall so the
-        task is addressable by name (memU#539). Windows only today; Unix keeps its
-        existing crontab/launchd identity untouched."""
-        return f"memu-bridging-{self.host}"
+    def all_task_names(self) -> tuple[str, ...]:
+        """Current task name followed by every recognized historical alias."""
+        return (self.task_name, *self.former_task_names)
+
+    @property
+    def task_doc_name(self) -> str:
+        """Agent-skill identifier rendered into ``BRIDGING_TASK.md`` frontmatter."""
+        return f"create-{self.task_name}-task"
+
+    def render_doc(self, text: str) -> str:
+        """Render the small, closed naming vocabulary used by host guides."""
+        values = {
+            "task_name": self.task_name,
+            "former_task_names": _task_names_text(self.former_task_names),
+            "all_task_names": _task_names_text(self.all_task_names),
+            "task_name_pattern": _task_name_pattern(self.all_task_names),
+            "task_doc_name": self.task_doc_name,
+        }
+        unknown = set(_DOC_TOKEN_RE.findall(text)) - _DOC_TOKENS
+        if unknown:
+            msg = f"unknown host-doc token(s): {', '.join(sorted(unknown))}"
+            raise ValueError(msg)
+        rendered = _DOC_TOKEN_RE.sub(lambda match: values[match.group(1)], text)
+        if "{{" in rendered or "}}" in rendered:
+            msg = "unresolved host-doc token"
+            raise ValueError(msg)
+        return rendered
 
 
 def _layout(spec: HostSpec, args: argparse.Namespace) -> Layout:
@@ -578,7 +643,8 @@ async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
     # filename so the server layout mirrors the package layout.
     filename = DOCS[args.doc]
     embedded = (files(spec.package) / filename).read_text(encoding="utf-8")
-    print(templates.resolve_doc(spec.host, filename, embedded))
+    resolved = templates.resolve_doc(spec.host, filename, embedded)
+    print(spec.render_doc(resolved))
     if args.doc == "install":
         _report_install_started(spec)
     return 0
