@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import logging
 import os
@@ -15,6 +16,7 @@ from memu.embedding.backends.jina import JinaEmbeddingBackend
 from memu.embedding.backends.openai import OpenAIEmbeddingBackend
 from memu.embedding.backends.openrouter import OpenRouterEmbeddingBackend
 from memu.embedding.backends.voyage import VoyageEmbeddingBackend
+from memu.retry import DEFAULT_MAX_ATTEMPTS, RETRYABLE_STATUS_CODES, retry_delay
 
 
 def is_loopback_url(url: str) -> bool:
@@ -67,6 +69,10 @@ def _load_proxy(base_url: str) -> str | None:
 
 logger = logging.getLogger(__name__)
 
+# The retry loop always returns or raises on its final attempt; this only exists
+# so the fall-through is a loud failure rather than an implicit ``None``.
+_UNREACHABLE_RETRY = "embedding retry loop exited without a response"
+
 # Providers with a non-OpenAI endpoint/payload are registered explicitly; any
 # other provider is treated as OpenAI-compatible (see ``_load_backend``).
 EMBEDDING_BACKENDS: dict[str, Callable[[], EmbeddingBackend]] = {
@@ -91,6 +97,7 @@ class HTTPEmbeddingClient:
         endpoint_overrides: dict[str, str] | None = None,
         timeout: int = 60,
         embed_batch_size: int = 64,
+        max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     ):
         # Ensure base_url ends with "/" so httpx doesn't discard the path
         # component when joining with endpoint paths.
@@ -111,6 +118,7 @@ class HTTPEmbeddingClient:
         self.embedding_endpoint = raw_embedding_ep.lstrip("/")
         self.timeout = timeout
         self.embed_batch_size = max(1, embed_batch_size)
+        self.max_attempts = max(1, max_attempts)
         self.proxy = _load_proxy(self.base_url)
         # httpx falls back to env proxies even when proxy=None, so a loopback
         # target explicitly unmounts them (host-specifically — see
@@ -143,15 +151,42 @@ class HTTPEmbeddingClient:
             base_url=self.base_url, timeout=self.timeout, proxy=self.proxy, mounts=self.mounts
         ) as client:
             for start in range(0, len(inputs), self.embed_batch_size):
-                payload = self.backend.build_embedding_payload(
-                    inputs=inputs[start : start + self.embed_batch_size], embed_model=self.embed_model
-                )
-                resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers())
-                resp.raise_for_status()
-                data = resp.json()
+                batch = inputs[start : start + self.embed_batch_size]
+                data = await self._post_embeddings(client, batch)
                 logger.debug("HTTP embedding response: %s", data)
                 vectors.extend(self.backend.parse_embedding_response(data))
         return vectors, data
+
+    async def _post_embeddings(self, client: httpx.AsyncClient, batch: list[str]) -> dict[str, Any]:
+        """POST one batch, retrying the failures a retry can actually fix.
+
+        Rate limits and provider 5xx are transient by nature, and an embedding
+        call sits on the critical path of a commit that has already done work —
+        letting a single 429 abort the whole thing wastes every embedding
+        already paid for. Terminal failures (401, unknown model) still surface
+        on the first attempt via ``raise_for_status``.
+        """
+        payload = self.backend.build_embedding_payload(inputs=batch, embed_model=self.embed_model)
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                resp = await client.post(self.embedding_endpoint, json=payload, headers=self._headers())
+            except httpx.TransportError:
+                # Connection resets, DNS failures and timeouts alike
+                # (TimeoutException is a TransportError).
+                if attempt == self.max_attempts:
+                    raise
+                await asyncio.sleep(retry_delay(attempt))
+                continue
+            if resp.status_code in RETRYABLE_STATUS_CODES and attempt < self.max_attempts:
+                logger.debug("embedding request returned %s; retry %s/%s", resp.status_code, attempt, self.max_attempts)
+                await asyncio.sleep(retry_delay(attempt, resp))
+                continue
+            # The last attempt falls through here whatever its status, so an
+            # exhausted retry still raises the provider's real error.
+            resp.raise_for_status()
+            json_data: dict[str, Any] = resp.json()
+            return json_data
+        raise AssertionError(_UNREACHABLE_RETRY)
 
     async def embed_multimodal(
         self,

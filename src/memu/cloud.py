@@ -2,18 +2,17 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
-from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
 
 from memu.embedding.http_client import proxy_bypass_mounts
 from memu.env import env
+from memu.retry import RETRYABLE_STATUS_CODES, retry_delay
 
 DEFAULT_CLOUD_BASE_URL = "https://api.memu.so/api/v4/memory/"
 DEFAULT_SCOPE = "default"
 
-_RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 _USER_FIELDS = {"user_id", "agent_id", "user_name", "agent_name"}
 _WHERE_FIELDS = {"user_id", "agent_id"}
 
@@ -218,12 +217,12 @@ class CloudMemoryClient:
                     response = await client.request(method, request_target, params=params, json=json)
                 except (httpx.TimeoutException, httpx.TransportError) as exc:
                     if attempt < self.max_attempts:
-                        await asyncio.sleep(self._retry_delay(attempt))
+                        await asyncio.sleep(retry_delay(attempt))
                         continue
                     raise CloudTransportError.from_transport(exc) from exc
 
-                if response.status_code in _RETRYABLE_STATUS_CODES and attempt < self.max_attempts:
-                    await asyncio.sleep(self._retry_delay(attempt, response))
+                if response.status_code in RETRYABLE_STATUS_CODES and attempt < self.max_attempts:
+                    await asyncio.sleep(retry_delay(attempt, response))
                     continue
                 if response.is_error:
                     raise self._response_error(response)
@@ -236,22 +235,6 @@ class CloudMemoryClient:
                 return data
 
         raise CloudServiceError.unreachable_retry_state()
-
-    @staticmethod
-    def _retry_delay(attempt: int, response: httpx.Response | None = None) -> float:
-        if response is not None:
-            retry_after = response.headers.get("Retry-After")
-            if retry_after:
-                try:
-                    return min(max(float(retry_after), 0.0), 30.0)
-                except ValueError:
-                    try:
-                        retry_at = parsedate_to_datetime(retry_after)
-                        now = parsedate_to_datetime(response.headers.get("Date", ""))
-                        return float(min(max((retry_at - now).total_seconds(), 0.0), 30.0))
-                    except (TypeError, ValueError, OverflowError):
-                        pass
-        return float(min(0.25 * (2 ** (attempt - 1)), 2.0))
 
     @staticmethod
     def _response_error(response: httpx.Response) -> CloudMemoryError:
