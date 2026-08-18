@@ -21,6 +21,9 @@ class InMemoryFileSegmentRepository(RecallFileSegmentRepo):
             return list(self.segments)
         return [seg for seg in self.segments if matches_where(seg, where)]
 
+    # ``vector_search_segments`` is the protocol's Python scan, which is already
+    # exactly what an in-memory store would do by hand.
+
     def list_segments_for_file(self, recall_file_id: str) -> list[RecallFileSegment]:
         return [seg for seg in self.segments if seg.recall_file_id == recall_file_id]
 

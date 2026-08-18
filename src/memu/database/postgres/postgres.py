@@ -84,6 +84,10 @@ class PostgresStore(Database):
             sqla_models=self._sqla_models,
             sessions=self._sessions,
             scope_fields=self._scope_fields,
+            # Honour an explicit non-pgvector ``vector_index.provider``: the column
+            # type is ``VECTOR`` regardless, but a deployment that asked for
+            # brute force gets brute force.
+            use_vector=self._use_vector_type,
         )
 
         self.resources = self._state.resources

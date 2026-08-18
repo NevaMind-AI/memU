@@ -67,6 +67,9 @@ class SQLiteRecallFileSegmentRepo(SQLiteRepoBase, RecallFileSegmentRepo):
                 self.segments.append(seg)
         return result
 
+    # ``vector_search_segments`` is the protocol's Python scan: SQLite has no
+    # vector index to rank with, so there is nothing to override it with.
+
     def list_segments_for_file(self, recall_file_id: str) -> list[RecallFileSegment]:
         return self.list_segments({"recall_file_id": recall_file_id})
 

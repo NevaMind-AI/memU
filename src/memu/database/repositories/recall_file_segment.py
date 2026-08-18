@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from typing import Any, Protocol, runtime_checkable
 
 from memu.database.models import RecallFileSegment
+from memu.vector import cosine_topk
 
 
 @runtime_checkable
@@ -13,6 +14,29 @@ class RecallFileSegmentRepo(Protocol):
     segments: list[RecallFileSegment]
 
     def list_segments(self, where: Mapping[str, Any] | None = None) -> list[RecallFileSegment]: ...
+
+    def vector_search_segments(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+    ) -> list[tuple[RecallFileSegment, float]]:
+        """Rank segments by cosine similarity of their stored embeddings.
+
+        Returns ``(segment, score)`` pairs ordered by descending score, at most
+        ``top_k`` of them.
+
+        The segments themselves come back, not their ids.
+
+        This default scans the scoped pool in Python. It is the fallback every
+        backend gets for free; a backend whose store can rank natively should
+        override it, and may call back here via ``super()`` when its index is
+        unavailable.
+        """
+        pool = self.list_segments(where)
+        by_id = {seg.id: seg for seg in pool}
+        ranked = cosine_topk(query_vec, [(seg.id, seg.embedding) for seg in pool], k=top_k)
+        return [(by_id[seg_id], score) for seg_id, score in ranked]
 
     def list_segments_for_file(self, recall_file_id: str) -> list[RecallFileSegment]:
         """Return all segments belonging to a given file."""
