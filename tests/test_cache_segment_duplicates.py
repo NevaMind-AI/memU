@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -64,17 +65,14 @@ def test_postgres_list_segments_deduplicates_cache() -> None:
     """Test PostgresRecallFileSegmentRepo list_segments deduplication logic directly with a stub session."""
     pytest.importorskip("pgvector")
 
-    from memu.database.postgres.models import RecallFileSegment as SQLARecallFileSegment
     from memu.database.postgres.repositories.recall_file_segment_repo import PostgresRecallFileSegmentRepo
-    from memu.database.postgres.schema import SQLAModels
+    from memu.database.postgres.schema import get_sqlalchemy_models
     from memu.database.state import DatabaseState
 
     state = DatabaseState()
-    sqla_models = SQLAModels(
-        Resource=MagicMock(),
-        RecallFile=MagicMock(),
-        RecallFileSegment=SQLARecallFileSegment,
-    )
+    sqla_models = get_sqlalchemy_models(scope_model=DefaultUserModel)
+
+    stamp = datetime(2026, 1, 1, tzinfo=UTC)
 
     row1 = MagicMock()
     row1.id = "seg-1"
@@ -82,8 +80,7 @@ def test_postgres_list_segments_deduplicates_cache() -> None:
     row1.track = "memory"
     row1.text = "text 1"
     row1.embedding = [0.1, 0.2]
-    row1.created_at = None
-    row1.updated_at = None
+    row1.created_at = row1.updated_at = stamp
 
     row2 = MagicMock()
     row2.id = "seg-2"
@@ -91,15 +88,14 @@ def test_postgres_list_segments_deduplicates_cache() -> None:
     row2.track = "memory"
     row2.text = "text 2"
     row2.embedding = [0.3, 0.4]
-    row2.created_at = None
-    row2.updated_at = None
+    row2.created_at = row2.updated_at = stamp
 
     canned_rows = [row1, row2]
     sessions = StubSessionManager(canned_rows)
 
     repo = PostgresRecallFileSegmentRepo(
         state=state,
-        recall_file_segment_model=MagicMock(),
+        recall_file_segment_model=sqla_models.RecallFileSegment,
         sqla_models=sqla_models,
         sessions=sessions,  # type: ignore[arg-type]
         scope_fields=[],
