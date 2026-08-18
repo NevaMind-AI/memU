@@ -19,8 +19,15 @@ class PostgresRecallFileSegmentRepo(PostgresRepoBase, RecallFileSegmentRepo):
         sqla_models: Any,
         sessions: SessionManager,
         scope_fields: list[str],
+        use_vector: bool = True,
     ) -> None:
-        super().__init__(state=state, sqla_models=sqla_models, sessions=sessions, scope_fields=scope_fields)
+        super().__init__(
+            state=state,
+            sqla_models=sqla_models,
+            sessions=sessions,
+            scope_fields=scope_fields,
+            use_vector=use_vector,
+        )
         self._recall_file_segment_model = recall_file_segment_model
         self.segments: list[RecallFileSegment] = self._state.segments
 
@@ -52,6 +59,41 @@ class PostgresRecallFileSegmentRepo(PostgresRepoBase, RecallFileSegmentRepo):
 
     def list_segments_for_file(self, recall_file_id: str) -> list[RecallFileSegment]:
         return self.list_segments({"recall_file_id": recall_file_id})
+
+    def vector_search_segments(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+    ) -> list[tuple[RecallFileSegment, float]]:
+        """Rank segments with pgvector, inside the database.
+
+        Postgres does the ordering and the truncation, so only ``top_k`` rows
+        cross the wire instead of every segment in scope — the one thing the
+        inherited Python scan cannot do.
+
+        A deployment that asked for a non-pgvector index (``vector_index.provider``)
+        gets the inherited scan instead, even though the column type is ``VECTOR``
+        either way.
+        """
+        if top_k <= 0:
+            return []
+        if not self._use_vector:
+            return super().vector_search_segments(query_vec, top_k, where)
+
+        from sqlmodel import select
+
+        model = self._sqla_models.RecallFileSegment
+        # ``<=>`` yields cosine *distance*; the contract is similarity, hence
+        # ``1 - distance`` below. Rows without an embedding are filtered out
+        # rather than left to sort to whichever end NULLs land on.
+        distance = model.embedding.cosine_distance(query_vec)
+        filters = [*self._build_filters(model, where), model.embedding.is_not(None)]
+        with self._sessions.session() as session:
+            rows = session.exec(
+                select(model, distance.label("distance")).where(*filters).order_by(distance).limit(top_k)
+            ).all()
+            return [(self._cache_segment(row), 1.0 - float(dist)) for row, dist in rows]
 
     def create_segment(
         self,

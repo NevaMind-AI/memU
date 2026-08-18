@@ -8,6 +8,7 @@ from memu.database.inmemory.repositories.filter import matches_where
 from memu.database.inmemory.state import InMemoryState
 from memu.database.models import RecallFileSegment
 from memu.database.repositories.recall_file_segment import RecallFileSegmentRepo
+from memu.vector import cosine_topk
 
 
 class InMemoryFileSegmentRepository(RecallFileSegmentRepo):
@@ -20,6 +21,17 @@ class InMemoryFileSegmentRepository(RecallFileSegmentRepo):
         if not where:
             return list(self.segments)
         return [seg for seg in self.segments if matches_where(seg, where)]
+
+    def vector_search_segments(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+    ) -> list[tuple[RecallFileSegment, float]]:
+        pool = self.list_segments(where)
+        by_id = {seg.id: seg for seg in pool}
+        ranked = cosine_topk(query_vec, [(seg.id, seg.embedding) for seg in pool], k=top_k)
+        return [(by_id[seg_id], score) for seg_id, score in ranked]
 
     def list_segments_for_file(self, recall_file_id: str) -> list[RecallFileSegment]:
         return [seg for seg in self.segments if seg.recall_file_id == recall_file_id]

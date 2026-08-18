@@ -7,8 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from memu.vector import cosine_topk
-
 if TYPE_CHECKING:
     from memu.app.settings import ProgressiveRetrieveConfig
     from memu.database.interfaces import Database
@@ -137,9 +135,15 @@ class AgenticMixin:
     ) -> tuple[list[tuple[str, float]], dict[str, Any]]:
         """Rank :class:`RecallFileSegment` slices by embedding similarity.
 
-        The segment repo has no vector search, so the stored segment embeddings
-        are ranked directly, optionally scoped to the configured tracks via the
-        denormalized ``track``.
+        The ranking belongs to the repo (:meth:`RecallFileSegmentRepo.vector_search_segments`),
+        which is what lets a backend with a native vector index answer from one
+        indexed query; backends without one inherit a brute-force scan of the
+        same scope. Either way the scope is optionally narrowed to the
+        configured tracks via the denormalized ``track``.
+
+        The returned pool holds only the hits — everything downstream
+        (:meth:`_collect_files`, :meth:`_materialize_hits`) looks up hit ids and
+        nothing else, so there is no reason to carry the full corpus along.
         """
         if not enabled:
             return [], {}
@@ -148,13 +152,12 @@ class AgenticMixin:
         tracks = self.progressive_retrieve_config.file.tracks
         if tracks:
             segment_where["track__in"] = list(tracks)
-        segment_pool = {seg.id: seg for seg in store.recall_file_segment_repo.list_segments(segment_where)}
-        segment_hits = cosine_topk(
+        hits = store.recall_file_segment_repo.vector_search_segments(
             query_vector,
-            [(sid, seg.embedding) for sid, seg in segment_pool.items()],
-            k=self.progressive_retrieve_config.file.top_k,
+            self.progressive_retrieve_config.file.top_k,
+            where=segment_where,
         )
-        return segment_hits, segment_pool
+        return [(seg.id, score) for seg, score in hits], {seg.id: seg for seg, _ in hits}
 
     def _collect_files(
         self,

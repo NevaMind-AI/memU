@@ -14,6 +14,7 @@ from memu.database.sqlite.repositories.base import SQLiteRepoBase
 from memu.database.sqlite.schema import SQLiteSQLAModels
 from memu.database.sqlite.session import SQLiteSessionManager
 from memu.database.state import DatabaseState
+from memu.vector import cosine_topk
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,17 @@ class SQLiteRecallFileSegmentRepo(SQLiteRepoBase, RecallFileSegmentRepo):
             if not any(s.id == seg.id for s in self.segments):
                 self.segments.append(seg)
         return result
+
+    def vector_search_segments(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+    ) -> list[tuple[RecallFileSegment, float]]:
+        pool = self.list_segments(where)
+        by_id = {seg.id: seg for seg in pool}
+        ranked = cosine_topk(query_vec, [(seg.id, seg.embedding) for seg in pool], k=top_k)
+        return [(by_id[seg_id], score) for seg_id, score in ranked]
 
     def list_segments_for_file(self, recall_file_id: str) -> list[RecallFileSegment]:
         return self.list_segments({"recall_file_id": recall_file_id})
