@@ -60,11 +60,11 @@ Four facts about this codebase constrain the answer, and each one rules somethin
    body updates on the low-frequency `prepare` rather than on the per-turn hook (`host_cli.py`).
    As first written this constraint was "must never fetch", and the retrieve event was
    spool-only. **Amended:** the backend asked for that event promptly and accepted the round
-   trip, so `retrieve` now delivers *its own single envelope* inline — see §2. What the
-   amendment does not relax is the bound: a `flush()` there would drain the whole spool at one
-   POST per event, up to `MAX_FLUSH_POSTS`, which is a cost that grows with how far behind the
-   machine has fallen. One request per turn is a constant; a flush is not, and the difference is
-   the entire content of this constraint.
+   trip, so `retrieve` now delivers *its own single envelope* inline, on both its success and
+   its failure leg — see §2. What the amendment does not relax is the bound: a `flush()` there
+   would drain the whole spool at one POST per event, up to `MAX_FLUSH_POSTS`, which is a cost
+   that grows with how far behind the machine has fallen. One request per turn is a constant; a
+   flush is not, and the difference is the entire content of this constraint.
 2. **Install and uninstall are agent-driven prose, not commands.** `INSTALL.md` is a
    multi-part guide with verify gates; `UNINSTALL.md` likewise. No code path spans either, so
    no code path can *observe* that one succeeded.
@@ -122,10 +122,17 @@ Flush points, all of them low-frequency and latency-tolerant:
 - `report uninstall` — **synchronously, before returning** (§4). Uninstall is the one event
   that cannot wait for a later flush, because `UNINSTALL.md` Part 3 may remove the very binary
   that would perform it.
-- `docs install` — which is also where `cli_install_started` is recorded (§4). A machine that
-  abandons the install never reaches `prepare` or `commit`, so this is the only flush its
-  events may ever get; the command has already contacted the docs server by then, so it costs
-  nothing new.
+- `init`, `docs install`, and `report install` — **the whole install funnel** (§4). A machine
+  that abandons the install never reaches `prepare` or `commit`, so these are the only flushes
+  its events may ever get. `docs install` has already contacted the docs server by then, so it
+  costs nothing new; `init` is a local command and pays one bounded, fail-open POST for being
+  the earliest point the funnel can be seen from. **Amended:** `report install` was originally
+  spool-only, on the reasoning that an install which succeeded would go on to bridge and flush
+  there. That reasoning assumes the thing the event attests to. An install whose scheduled task
+  never registered still reaches `INSTALL.md`'s last step and still reports completing — and it
+  is exactly the run that never flushes, so the funnel would lose its terminal row on the
+  machines whose funnel matters most. Leaving one step of three spooled also made the
+  completion's delivery latency differ from its own siblings' for no gain a consumer could use.
 - `report error` — **synchronously, before returning** (§5), and for the same reason as
   `docs install` rather than as `report uninstall`: the runs that file an error are
   disproportionately the runs that never reach `prepare` or `commit`. A failed install, a
@@ -135,19 +142,20 @@ Flush points, all of them low-frequency and latency-tolerant:
   spent longer deciding than the POST takes, and fail-open means an unreachable endpoint costs
   the timeout, not the event, which stays spooled for the next attempt.
 - `report flush`, an explicit verb, for guides and for debugging.
-- **Not `retrieve`.** It delivers inline, but through the single-event path below rather than
-  a flush; the distinction is one POST versus all of them. See "the immediate path" below.
+- **Not `retrieve`.** It delivers inline on both legs, but through the single-event path below
+  rather than a flush; the distinction is one POST versus all of them. See "the immediate path"
+  below.
 - The CLI's top-level error handler — **except when the failing command is
   `retrieve`**. Flushing there is right for the bridging pair, where the thing that
   broke *is* the normal flush point, so waiting for it would mean waiting forever.
   It is wrong for the per-turn hook: a store the hook cannot reach fails it on
-  every turn, so the error path would put a blocking POST on the hot path once per
-  turn, precisely when the user is already broken. Caught by exercising a real
+  every turn, so a *drain* on that path would cost up to `MAX_FLUSH_POSTS` requests
+  per turn, precisely when the user is already broken. Caught by exercising a real
   install against a live endpoint, not by reasoning — constraint 1 alone does not
-  say that the error path is covered too. It still does not: the amendment to
-  constraint 1 lets a *successful* retrieve spend one POST, and deliberately leaves
-  the failing one spool-only, because "every turn" is exactly the multiplier the
-  failure path has and the success path does not.
+  say that the error path is covered too. This exemption is unchanged by the
+  amendment below: what it rules out is the unbounded drain, not reporting, and the
+  `memory_search_failed` envelope `retrieve` delivers for itself already says the
+  same thing at constant cost. Only the `cli_error` behind it waits.
 
 Mechanics, stated because they are what make a shared spool safe:
 
@@ -179,11 +187,17 @@ Two consequences are accepted rather than solved:
   spooled behind it. `occurred_at` says when each event happened and `event_id` makes a replay
   idempotent, so no consumer needs arrival order; a client that preserved it would have to
   drain the spool first, which is the cost this design exists to avoid.
-- **A failed `retrieve` still does not deliver.** The success leg reports inline; the failure
-  leg spools, for the same reason the CLI's error handler skips `retrieve` below — a store the
-  hook cannot reach fails it on *every* turn, and that is when a per-turn blocking POST is
-  least affordable. Nothing is stranded: the next successful retrieve carries the backlog out
-  ahead of its own event.
+- **A broken `retrieve` costs one POST per turn.** Both legs deliver. **Amended:** the failure
+  leg was originally spool-only, on the reasoning that a store the hook cannot reach fails it
+  on *every* turn, so that is when a per-turn blocking POST is least affordable. The reasoning
+  held for the cost and inverted the value. A machine whose retrieval is broken is the one this
+  whole feature exists to surface, and the later flush its event would wait for runs on the
+  bridging pair — which the same broken store breaks. Spooling made the least healthy machine
+  the quietest one, which is the failure mode §5 names as its motivation. So the cost is
+  accepted and named rather than avoided: a fully broken store adds up to `_TIMEOUT_SECONDS` to
+  each turn's hook until it is fixed. That is a constant, it is bounded by the timeout rather
+  than by the backlog, and it is the same constant the success leg already pays. What is *not*
+  accepted is a drain, which is why the error handler's `retrieve` exemption above stands.
 
 Note that `report uninstall` does *not* use this path — it triggers an ordinary flush inline,
 which is a spool operation, and it needs the whole spool gone rather than one event sent.
@@ -212,10 +226,11 @@ The dividing line is whether any code can observe the completion.
 
 | Event | Call site |
 | --- | --- |
-| retrieve | `retrieval._cmd_retrieve` — one inline POST on success, spool-only on failure, never a flush (§2) |
+| retrieve | `retrieval._cmd_retrieve` — one inline POST on either leg, never a flush (§2) |
 | remember finished | `host_cli._cmd_commit` — the terminal step of the record seam, which already holds the recall-file and resource counts |
 | `cli_error` | `host_cli.run`'s top-level `except` — see §5 |
-| `cli_install_started` | `host_cli._cmd_docs`, on `docs install` only — see below |
+| `cli_install_started` | `config_cmd._cmd_init`, after the config write — see below |
+| `install_guide_opened` / `uninstall_guide_opened` | `host_cli._cmd_docs`, on the two lifecycle guides and not on `docs task` — see below |
 
 **An explicit verb, registered once in `host_cli.build_parser` so every host inherits it:**
 
@@ -276,31 +291,62 @@ bury the rare signal inside the common one. Both stages therefore report through
 `agent_error_reported` alone, and gain a concrete event only if and when an instruction directs
 an agent to them.
 
-**Only the completion needs a verb; the start is observed.** `cli_install_started` is recorded
-by `docs install` itself, and flushed there. Printing the guide is the first act on the install
-path that *proves* `memu-cli` is installed and resolving — `SKILL.md` Step 3, immediately after
-the pip install — so the attempt can be seen without asking prose for it. The asymmetry with
-the completion is the point: `report install` is voluntary and undercounts, and a start that
-undercounted independently of it could report *more completions than attempts*, which is worse
-than no funnel at all. Taking the start in code makes `started >= completed` hold structurally,
-since the guides are only reachable through `docs install`.
+**Only the completion needs a verb; the way in is observed.** Two code-observed steps precede
+it. `cli_install_started` is recorded by `init`, and `install_guide_opened` by `docs install`.
+All three steps flush where they are recorded, so provenance is the only asymmetry left in the
+funnel and delivery is not one of them. The provenance asymmetry is the point:
+`report install` is voluntary and undercounts, and a start that undercounted independently of
+it could report *more completions than attempts*, which is worse than no funnel at all. Taking
+both steps in code makes `started >= opened >= succeeded` hold structurally, since `SKILL.md`
+runs them in that order and the guides are reachable only through `docs install`.
 
 The `install-instruction` objection above does not carry over. It was rejected as a stand-in
-for *completion* because it also runs on re-runs and partial repairs; for a *start*, a re-run
-is a new attempt, which is the correct reading rather than a defect.
+for *completion* because it also runs on re-runs and partial repairs; for a step on the way
+*in*, a re-run is a new attempt, which is the correct reading rather than a defect.
 
-Flushing there, rather than recording only, is the load-bearing half. An install that dies in
-Part 2 never reaches `prepare` or `commit`, so without this flush its start — and every
-`cli_error` it accumulated on the way down — would sit in the spool until the cap ate it, and
-that run is precisely the one this event exists to make visible. The path affords a flush:
-`resolve_doc` has already blocked on a server GET by the time the guide is printed.
+**Why the start sits at `init` and not at `docs install`.** It was originally at `docs install`,
+on the argument that printing the guide is the first act that *proves* `memu-cli` is installed
+and resolving. `init` (ADR 0017) is now `SKILL.md` Step 2 and proves the same thing one command
+earlier, while additionally holding the two facts the event most wants: the memU Cloud key, so
+the first envelope of an install is attributable rather than anonymous, and `MEMU_CLIENT_ID`,
+which it mints into `config.env` itself. The start is therefore emitted *after* the write —
+before it, `client_instance_id()` would find no id, generate a second one, persist it, and be
+overwritten, leaving the machine's first event reporting under an id its own config no longer
+contains. ADR 0017's open issue "where the install-start event belongs" is closed by this.
 
-The remaining costs are recorded rather than hidden. A guide re-printed mid-run — a compaction,
-a restarted agent — counts twice, so the start is *attempts as observed*, not distinct
-machines. A start event's `deployment_mode` predates Part 1.2's backend choice, so it is a
-default and must never be joined on. And failure *detail* still rests on an agent choosing to
-call `report error`, which is voluntary and model-judged: the funnel says that an install died,
-never why.
+`install_guide_opened` is the old emission, renamed rather than deleted: what it observes is
+unchanged and still worth a row, but it is now the funnel's *second* step, and a second name
+ending in `_started` beside the real one is the pair a consumer sums by accident. It carries no
+`cli_` prefix — the prefix marks what the client observed about *itself*, and this observes a
+document being asked for — and the gap between the two counts installs abandoned before they
+had begun.
+
+`uninstall_guide_opened` is that same observation on the way out, added later and for the gap
+rather than for symmetry. `cli_uninstall_succeeded` is agent-reported and undercounts like
+every other verb, and the removal path had no code-observed step at all to read it against, so
+an uninstall that was begun and abandoned was indistinguishable from one never begun. There is
+deliberately no `cli_uninstall_started` beside it: nothing on the way out corresponds to `init`,
+and inventing one would put a `_started` name next to this — the exact pair the rename above
+exists to avoid. `docs task` stays uninstrumented for a different reason: it is printed by a
+scheduled run rather than by anyone deciding anything, so it would count how often cron fires.
+
+Flushing at all three, rather than recording only, is the load-bearing half. An install that
+dies in Part 2 never reaches `prepare` or `commit`, so without these flushes its start — and
+every `cli_error` it accumulated on the way down — would sit in the spool until the cap ate it,
+and that run is precisely the one these events exist to make visible. `docs install` affords a
+flush outright: `resolve_doc` has already blocked on a server GET by the time the guide is
+printed. `init` does not, and pays for it — one bounded POST on a local command, fail-open, so
+an unreachable endpoint costs the timeout rather than the write. `report install` was the last
+to join them, and the argument for exempting it — a completed install goes on to bridge, and
+will flush there — turned out to assume the very thing the event reports; see §2.
+
+The remaining costs are recorded rather than hidden. `init` is idempotent and gets re-run on
+repairs and on a second host, and a guide re-printed mid-run — a compaction, a restarted agent
+— counts twice, so both steps are *attempts as observed*, not distinct machines. A start
+event's `deployment_mode` is the mode `init` inferred, which Part 1.2's backend choice may
+still change, so it must never be joined on. And failure *detail* still rests on an agent
+choosing to call `report error`, which is voluntary and model-judged: the funnel says that an
+install died, never why.
 
 **The names on the wire**, settled with the backend and held as constants in one place so a
 later revision is one edit:
@@ -314,7 +360,9 @@ later revision is one edit:
 | `memory_commit_failed` | code | the `commit` store call raised |
 | `memory_search_succeeded` / `_failed` | code | `retrieve` |
 | `memory_list_succeeded` / `_failed` | code | a whole-store sweep — `prepare`'s mirror, or `memu list-files` |
-| `cli_install_started` | code | `docs install` printed the guide |
+| `cli_install_started` | code | `init` wrote `config.env` |
+| `install_guide_opened` | code | `docs install` printed the guide |
+| `uninstall_guide_opened` | code | `docs uninstall` printed the guide |
 | `cli_install_succeeded` | agent | `report install` |
 | `cli_install_failed` | agent | `report error --stage install` |
 | `cli_uninstall_succeeded` | agent | `report uninstall` |
@@ -325,7 +373,9 @@ later revision is one edit:
 
 The `cli_` prefix marks what the client observed about *itself* — its own install, its own
 uncaught exception, its own spool overflowing — against the `memory_` family, which reports on
-memU's actual work.
+memU's actual work. The `*_guide_opened` pair are the names outside both, and deliberately: they
+report a *document* being asked for, which is neither the client's own lifecycle nor memU's
+work on memory.
 
 **One name per action and outcome, replacing `core_action_completed` and its
 `properties.action_name` discriminator.** The first writing put three actions and both outcomes
@@ -637,9 +687,10 @@ document.
   floor on install volume, not a census. The trustworthy denominator is the first `retrieve` or
   first `commit` seen from a `client_instance_id` — both code-observed — and dashboards should
   be built on those, with `cli_install_succeeded` read as a funnel signal rather than a total.
-  `cli_install_started` is code-observed and so does not share this bias, but it counts
-  attempts as observed rather than machines (§4), which makes it a numerator for "how many
-  installs finish", not a substitute denominator for "how many installs exist".
+  `cli_install_started`, `install_guide_opened` and `uninstall_guide_opened` are code-observed
+  and so do not share this bias, but they count attempts as observed rather than machines (§4),
+  which makes them numerators for "how many installs finish", not substitute denominators for
+  "how many installs exist".
 - **`succeeded + failed` never equals `started`, wherever a `_failed` leg is agent-reported.**
   This holds for `cli_install_*`, `cli_uninstall_*`, and `memory_update_*` — the three families
   §4 fans an agent report out into. The `_failed` counts are a floor; the honest failure number
@@ -654,14 +705,16 @@ document.
   broken, events accumulate to the cap and are then dropped. This is the correct failure — a
   broken bridging task is precisely a thing worth being unable to hide — but it means "no
   events from this install" has two causes, and reading it as "uninstalled" is wrong. Since §2,
-  a successful `retrieve` is the exception that partly covers this: it delivers its own event
-  and so keeps reporting from a machine whose bridging never runs, which also means the spool
-  reaches its cap far less often than originally expected.
-- **`retrieve` gains one blocking POST per successful turn.** Bounded to exactly one request,
-  taken after the result is already on stdout, and fail-open: an unreachable endpoint costs the
-  timeout and spools the event rather than losing it or failing the command. What must not
-  change is the *shape* — recording still neither parses nor rewrites the spool, and any future
-  work that makes it do either, or that turns this into a flush, re-opens constraint 1.
+  `retrieve` is the exception that largely covers this: it delivers its own event on either
+  leg, so a machine whose bridging never runs still reports every turn, and the spool reaches
+  its cap far less often than originally expected.
+- **`retrieve` gains one blocking POST per turn, successful or not.** Bounded to exactly one
+  request, taken after the result is already on stdout, and fail-open: an unreachable endpoint
+  costs the timeout and spools the event rather than losing it or failing the command. The
+  failure leg's share of this is the cost §2 names and accepts — a fully broken store adds the
+  timeout to every turn until it is fixed. What must not change is the *shape* — recording still
+  neither parses nor rewrites the spool, and any future work that makes it do either, or that
+  turns either leg into a flush, re-opens constraint 1.
 - **The spool is a new file under `~/.memu` that uninstall does not mention.** `UNINSTALL.md`
   Part 3 needs a line for it, and `report uninstall`'s flush should leave it empty anyway.
   It is not alone: `events.jsonl.*.sending`, the `events.dropped` counter, and §5's

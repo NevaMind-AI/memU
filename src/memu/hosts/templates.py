@@ -44,6 +44,7 @@ import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
 
+from memu import trust
 from memu.hosts.bridging.layout import BASE_DIR
 
 DEFAULT_BASE_URL = "https://memu.pro/sdk/instructions"
@@ -110,10 +111,14 @@ def _get(url: str) -> str | None:
     both templates and docs. ``None`` on offline, non-200, oversize, or
     undecodable; content trust is the *caller's* job, applied to what this returns.
 
-    Never raises.
+    Never raises — which is exactly why it needs
+    :func:`memu.trust.urlopen_kwargs`. A Python with no CA bundle fails
+    verification on every call, and the ``except`` below turns that into a
+    permanent, invisible "the server is unreachable": this machine would never
+    see a template update again and would never say so.
     """
     try:
-        with urllib.request.urlopen(url, timeout=_TIMEOUT_SECONDS) as resp:  # noqa: S310
+        with urllib.request.urlopen(url, timeout=_TIMEOUT_SECONDS, **trust.urlopen_kwargs()) as resp:  # noqa: S310
             if getattr(resp, "status", 200) != 200:
                 return None
             # Read one byte past the cap so an exactly-cap body is still accepted

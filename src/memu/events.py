@@ -15,9 +15,10 @@ Two rules shape everything here, and both are inherited rather than invented:
 * **The per-turn hook must never drain the spool.** ``retrieve`` runs on every
   agent turn. Recording an event ordinarily *appends one line to a spool* and
   returns, with delivery happening later from the low-frequency bridging pair.
-  ``retrieve`` is the one exception, and a deliberately narrow one: it POSTs *its
-  own single envelope* inline (:func:`record` with ``deliver=True``) because the
-  backend asked for that event promptly and accepted the round trip it costs.
+  ``retrieve`` is the one exception, and a deliberately narrow one: on both its
+  legs it POSTs *its own single envelope* inline (:func:`record` with
+  ``deliver=True``) because the backend asked for that event promptly and accepted
+  the round trip it costs.
   What it must not do is :func:`flush`, which drains everything spooled — one
   event per POST, up to :data:`MAX_FLUSH_POSTS` of them, serially. That is an
   unbounded blocking run on the hottest path in the product, and it is why
@@ -64,7 +65,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from memu.env import CONFIG_ENV, env, env_declared, memory_mode, reload
+from memu import config_file, trust
+from memu.env import env, env_declared, memory_mode, reload
 
 # --------------------------------------------------------------------------- #
 # The wire vocabulary: the endpoint, and every event name the client can emit.
@@ -114,24 +116,54 @@ the agent never reached ``commit``, or its self-evolve pass produced nothing. So
 is what makes the mixture visible to a query."""
 
 CLI_INSTALL_STARTED = "cli_install_started"
-"""An install *attempt*, recorded when a host prints its install guide — the
-first act on that path which proves ``memu-cli`` is installed and resolving on
-``PATH``.
+"""An install *attempt*, recorded by ``init`` once it has written ``config.env``.
 
-Code-observed rather than agent-reported, and that is the whole point: the
-completion below is prose-driven and undercounts (ADR 0016 §4), so a start that
-undercounted independently could report more completions than attempts. Two
-caveats for whoever reads these. A guide re-printed mid-run — a compaction, a
-restarted agent — counts twice, so the denominator is attempts-as-observed, not
-distinct machines. And ``deployment_mode`` here predates ``INSTALL.md`` Part 1.2's
-backend choice, so it is a default rather than the mode the install lands on:
-never join a start to a completion on that field."""
+``SKILL.md`` Step 2 — the first command on the install path, and the first act
+that proves ``memu-cli`` is installed and resolving on ``PATH``. Code-observed
+rather than agent-reported, and that is the whole point: the completion below is
+prose-driven and undercounts (ADR 0016 §4), so a start that undercounted
+independently could report more completions than attempts.
+
+Emitted *after* the write and never before, which is what makes it the funnel's
+first row rather than its first bug. ``init`` mints ``MEMU_CLIENT_ID`` into that
+same file (:func:`memu.hosts.config_cmd._client_id`), so an envelope built first
+would find no id in the environment and persist a second one of its own — one
+machine, two identities. The same ordering is what attaches an
+``init --cloud-api-key`` key to the header (ADR 0017), so the first event of an
+install is attributable to the account paying for it.
+
+Two caveats for whoever reads these. ``init`` is idempotent and gets re-run on
+repairs and on a second host, so this counts attempts-as-observed and is not a
+count of distinct machines — the same reading its predecessor at ``docs install``
+carried. And ``deployment_mode`` is the mode ``init`` inferred, which
+``INSTALL.md``'s own ``config`` step may still change: never join a start to a
+completion on that field."""
+
+INSTALL_GUIDE_OPENED = "install_guide_opened"
+"""A host printed its install guide — ``docs install``, ``SKILL.md`` Step 3.
+
+This is what ``cli_install_started`` used to mean. Renamed rather than dropped
+when the start moved one step earlier into ``init``: what it observes is
+unchanged and still worth a row, but it is the funnel's *second* step now, and a
+second name ending in ``_started`` beside the real one is the pair a consumer
+sums by accident.
+
+Between them, ``cli_install_started`` counts agents that got as far as writing a
+config and this counts the ones that went on to ask for the guide — so the gap is
+installs abandoned before they had begun. A guide re-printed mid-run — a
+compaction, a restarted agent — counts twice, so like the start it is
+attempts-as-observed."""
 
 CLI_INSTALL_SUCCEEDED = "cli_install_succeeded"
 """The agent reached the guide's final gate. Formerly ``cli_install_completed``,
 before ``cli_install_failed`` gave it a counterpart to be symmetrical with."""
 
 CLI_INSTALL_FAILED = "cli_install_failed"
+
+UNINSTALL_GUIDE_OPENED = "uninstall_guide_opened"
+""":data:`INSTALL_GUIDE_OPENED`'s mirror on the way out — ``docs uninstall``
+printed ``UNINSTALL.md``"""
+
 CLI_UNINSTALL_SUCCEEDED = "cli_uninstall_succeeded"
 CLI_UNINSTALL_FAILED = "cli_uninstall_failed"
 """``report uninstall`` and ``report error --stage uninstall``. ``_succeeded`` was
@@ -273,8 +305,10 @@ _ALLOWED_PROPERTIES: dict[str, frozenset[str]] = {
     MEMORY_UPDATE_STARTED: frozenset(),
     MEMORY_UPDATE_FAILED: frozenset(),
     CLI_INSTALL_STARTED: frozenset(),
+    INSTALL_GUIDE_OPENED: frozenset(),
     CLI_INSTALL_SUCCEEDED: frozenset(),
     CLI_INSTALL_FAILED: frozenset(),
+    UNINSTALL_GUIDE_OPENED: frozenset(),
     CLI_UNINSTALL_SUCCEEDED: frozenset(),
     CLI_UNINSTALL_FAILED: frozenset(),
     AGENT_ERROR_REPORTED: frozenset({"stage", "detail"}),
@@ -377,10 +411,6 @@ def _spool_path() -> Path:
     return Path(os.path.expanduser(env("MEMU_EVENTS_SPOOL", SPOOL_PATH) or SPOOL_PATH))
 
 
-def _config_path() -> Path:
-    return Path(os.path.expanduser(os.environ.get("MEMU_CONFIG_ENV", CONFIG_ENV)))
-
-
 def client_version() -> str:
     """The installed ``memu-cli`` version.
 
@@ -406,19 +436,21 @@ def client_instance_id() -> str:
 
     Opaque and random: no hostname, no MAC, no user name. Nothing is derived, so
     nothing can be re-derived, and deleting the line is a complete reset.
+
+    Written through :func:`memu.config_file.write_values` rather than by appending
+    here, and that is not tidiness (ADR 0017). ``init`` now persists this same key,
+    and its writer is read-modify-write plus ``os.replace`` — which would silently
+    discard an append racing it. One writer, so the two cannot lose each other's
+    line; the fail-open ``except`` and the re-read below are this function's own
+    and survive the move.
     """
     existing = env("MEMU_CLIENT_ID")
     if existing:
         return existing
 
     generated = str(uuid.uuid4())
-    path = _config_path()
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        text = path.read_text(encoding="utf-8") if path.is_file() else ""
-        prefix = "" if (not text or text.endswith("\n")) else "\n"
-        with open(path, "a", encoding="utf-8") as handle:
-            handle.write(f"{prefix}MEMU_CLIENT_ID={generated}\n")
+        config_file.write_values({"MEMU_CLIENT_ID": generated})
     except OSError:
         # Unwritable config: still return an id so this run reports, it just will
         # not persist. A machine that cannot write its own config has a larger
@@ -824,17 +856,20 @@ def _module_of(filename: str) -> str:
 def flush() -> tuple[int, int]:
     """Deliver everything spooled, as ``(accepted, rejected)``.
 
-    Called from the latency-tolerant places only: ``prepare`` and ``commit``,
-    ``report uninstall`` (which cannot wait — ``UNINSTALL.md`` Part 3 may remove
-    the very binary that would flush later), the explicit ``report flush``, and
-    the CLI's error handler.
+    Called from the latency-tolerant places only: ``prepare`` and ``commit``;
+    every step of the install funnel (``init``, ``docs install``, ``report
+    install``), whose runs may never reach the bridging pair at all; ``report
+    uninstall`` (which cannot wait — ``UNINSTALL.md`` Part 3 may remove the very
+    binary that would flush later); ``report error``, for the same reason as the
+    funnel; the explicit ``report flush``; and the CLI's error handler.
 
     **Never from ``retrieve``.** This drains the whole spool one POST at a time, so
     its cost scales with how far behind the machine has fallen — bounded only by
     :data:`MAX_FLUSH_POSTS`, which is 200 requests. That is fine on the bridging
     pair and disqualifying on a per-turn hook, which instead delivers its own
-    single envelope through :func:`record` with ``deliver=True``. The distinction
-    is one event versus all of them, and it is the whole reason both exist.
+    single envelope through :func:`record` with ``deliver=True`` — on its failure
+    leg as much as its success one. The distinction is one event versus all of
+    them, and it is the whole reason both exist.
 
     Never raises. A failed POST leaves its file in place for the next flush.
     """
@@ -1020,11 +1055,15 @@ def _post(url: str, event: dict[str, Any]) -> str:
     Blocking, on a short timeout, using ``urllib`` for the same reason
     :mod:`memu.hosts.templates` does: this must not depend on the async stack or
     on an HTTP client's configuration to stay fail-open.
+
+    That choice costs one thing, and :func:`memu.trust.urlopen_kwargs` pays it: a
+    Python with no CA bundle fails verification here while the ``httpx`` paths
+    sail through, and this function's ``except`` reads that as ``RETRY`` forever.
     """
     body = json.dumps(event, ensure_ascii=False, default=str).encode("utf-8")
     request = urllib.request.Request(url, data=body, headers=_headers(), method="POST")  # noqa: S310
     try:
-        with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS, **trust.urlopen_kwargs()) as response:  # noqa: S310
             return ACCEPTED if 200 <= getattr(response, "status", 200) < 300 else RETRY
     except urllib.error.HTTPError as exc:
         # A permanent 4xx means the server will reject this payload every time;

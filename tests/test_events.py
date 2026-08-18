@@ -573,10 +573,12 @@ def test_a_flush_is_bounded_and_the_next_one_resumes_where_it_stopped(
 def test_only_retrieve_delivers_inline(reporting: pathlib.Path) -> None:
     """``deliver=True`` is the per-turn hook's alone (ADR 0016 section 2).
 
-    It puts a blocking POST on the calling command, which is affordable exactly
-    once, on the one path whose event the backend wants promptly. If this fails
-    someone wired it to a second call site — a decision that owes a reason, not an
-    accident.
+    It puts a blocking POST on the calling command, which is affordable only on the
+    path whose event the backend wants promptly — both of whose legs live in
+    ``retrieval.py``. If this fails someone wired it to a second *command*, a
+    decision that owes a reason rather than an accident. File-granular on purpose:
+    what the tripwire guards is which command may spend a POST per turn, not how
+    many branches of that command do.
     """
     root = pathlib.Path(events.__file__).parent
     callers = sorted(
@@ -649,51 +651,107 @@ def test_a_permanently_rejected_event_is_not_spooled_to_be_rejected_again(
 # --------------------------------------------------------------------------- #
 
 
-def test_report_verbs_exist_on_every_host(reporting: pathlib.Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_report_verbs_exist_on_every_host(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The endpoint is stubbed because `report install` now flushes: left real, this
+    # would resolve the fixture's `example.invalid` on every run, and the events it
+    # asserts on would sit in the rotated `.sending` file rather than the spool.
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
     for spec in (CODEX_SPEC, CLAUDE_SPEC):
         assert run(spec, ["report", "install"]) == 0
-    assert len(_spooled(reporting)) == 2
-    assert {event["context"]["agent_platform"] for event in _spooled(reporting)} == {"codex", "claude_code"}
+    assert len(posted.events) == 2
+    assert {event["context"]["agent_platform"] for event in posted.events} == {"codex", "claude_code"}
 
 
 def test_the_install_funnel_has_a_code_observed_start_and_a_reported_end(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Printing the guide *is* the start signal, and it delivers on the spot.
+    """The two steps in are code-observed; only the completion needs a verb.
 
-    ``report install`` is prose-driven and undercounts by design. If the start
-    were too, the funnel could report more completions than attempts — so the
-    start is taken where code can see it, and only the completion needs a verb.
+    ``init`` is ``SKILL.md`` Step 2 and starts the funnel; printing the guide is
+    Step 3 and is its own, narrower row. ``report install`` is prose-driven and
+    undercounts by design — if a start did too, the funnel could report more
+    completions than attempts, so neither step is asked for in prose.
+
+    All three flush, so the whole funnel is deliverable from the install itself: a
+    machine that never gets a working bridging pair is exactly the one whose funnel
+    a consumer needs to see, and it is the completion — the row asserting the
+    install worked — that would otherwise be the only one waiting on it.
     """
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "")
     posted = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
+    assert run(CLAUDE_SPEC, ["init"]) == 0
     assert run(CLAUDE_SPEC, ["docs", "install"]) == 0
     assert capsys.readouterr().out.strip(), "the guide itself must still be what this command prints"
     assert run(CLAUDE_SPEC, ["report", "install"]) == 0
 
-    assert [event["event_name"] for event in posted.events] == [events.CLI_INSTALL_STARTED]
-    # The completion keeps the ordinary treatment: spooled, carried by a bridging run.
-    assert [event["event_name"] for event in _spooled(reporting)] == [events.CLI_INSTALL_SUCCEEDED]
-    assert all(event["properties"] == {} for event in _spooled(reporting) + posted.events)
+    assert [event["event_name"] for event in posted.events] == [
+        events.CLI_INSTALL_STARTED,
+        events.INSTALL_GUIDE_OPENED,
+        events.CLI_INSTALL_SUCCEEDED,
+    ]
+    assert _spooled(reporting) == [], "every step of the funnel delivers; nothing is left for a later flush"
+    assert all(event["properties"] == {} for event in posted.events)
+
+
+def test_the_install_start_reports_the_client_id_init_just_wrote(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Why the start is emitted *after* the write, not beside the client id.
+
+    ``init`` mints ``MEMU_CLIENT_ID`` into ``config.env``, and an envelope built
+    before that lands would find none in the environment and persist a second one
+    — leaving the machine's first event reporting under an id its own config file
+    does not contain.
+    """
+    from memu import config_file
+
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert run(CLAUDE_SPEC, ["init"]) == 0
+
+    stored = config_file.read()["MEMU_CLIENT_ID"]
+    assert [event["client_instance_id"] for event in posted.events] == [stored]
+    assert stored[:4] in capsys.readouterr().out, "and it is the id the `client` row named"
+
+
+def test_the_install_start_is_attributed_when_init_was_given_a_key(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The ordering ADR 0017 was written for: the first event carries the account.
+
+    ``docs install`` fired the start before any key existed, so a first install
+    reported anonymously. ``init`` holds the key and writes it before reporting.
+    """
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert run(CLAUDE_SPEC, ["init", "--cloud-api-key", "sk-live-abc"]) == 0
+
+    sent = {key.title(): value for key, value in posted.headers[0].items()}
+    assert sent["Authorization"] == "Bearer sk-live-abc"
 
 
 def test_the_install_start_carries_the_backlog_off_a_machine_that_may_never_bridge(
-    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Why ``docs install`` flushes rather than only recording.
+    """Why ``init`` flushes rather than only recording.
 
-    An install that dies in Part 2 never reaches ``prepare`` or ``commit``, so
-    this is the only flush point its earlier events will ever see — and those are
-    exactly the events that explain why it died.
+    An install that dies before the bridging pair ever runs never reaches
+    ``prepare`` or ``commit``, so this is the only flush point its earlier events
+    will ever see — and those are exactly the events that explain why it died.
     """
-    monkeypatch.setenv("MEMU_DOCS_BASE_URL", "")
     events.record_cli_error(RuntimeError("an earlier doctor"), command="doctor", host="claude-code")
     posted = _Posted()
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
-    assert run(CLAUDE_SPEC, ["docs", "install"]) == 0
+    assert run(CLAUDE_SPEC, ["init"]) == 0
 
     assert [event["event_name"] for event in posted.events] == [
         events.CLI_ERROR,
@@ -702,15 +760,31 @@ def test_the_install_start_carries_the_backlog_off_a_machine_that_may_never_brid
     assert not reporting.exists()
 
 
-def test_only_the_install_guide_reports_an_attempt(
+def test_the_lifecycle_guides_report_being_opened_and_the_bridging_one_does_not(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # `docs task` runs on every scheduled-task repair and `docs uninstall` is the
-    # opposite intent; neither is an install attempt.
+    """One row per guide someone *decided* to open — in and out, but not the schedule's.
+
+    ``docs task`` runs on every scheduled-task repair, so counting it would measure
+    how often cron fires and nothing about anyone's intent; the pair it describes is
+    instrumented end to end already.
+
+    Both lifecycle guides deliver inline rather than spooling, and on the way out
+    that is not symmetry for its own sake: ``UNINSTALL.md`` Part 3 removes the
+    package, so an event left in the spool loses the binary that would have sent it.
+    """
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "")
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
     assert run(CLAUDE_SPEC, ["docs", "task"]) == 0
     assert run(CLAUDE_SPEC, ["docs", "uninstall"]) == 0
-    assert _spooled(reporting) == []
+    assert capsys.readouterr().out.strip(), "the guides themselves must still be what the command prints"
+
+    assert [event["event_name"] for event in posted.events] == [events.UNINSTALL_GUIDE_OPENED]
+    assert posted.events[0]["context"]["reported_by"] == events.REPORTED_BY_CODE
+    assert posted.events[0]["properties"] == {}
+    assert _spooled(reporting) == [], "the guide that precedes package removal cannot wait for a later flush"
 
 
 def test_report_install_and_uninstall_take_no_failure_flag(reporting: pathlib.Path) -> None:
@@ -848,14 +922,21 @@ def test_a_retrieve_that_cannot_deliver_still_succeeds_and_keeps_its_event(
     assert event["event_name"] == events.MEMORY_SEARCH_SUCCEEDED
 
 
-def test_a_failing_retrieve_never_posts_from_the_per_turn_hook(
+def test_a_failing_retrieve_delivers_its_own_event_and_nothing_else(
     reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The error path stays spool-only, even though the success path delivers.
+    """Both legs of the hook deliver; neither may flush.
 
-    A store the hook cannot reach fails ``retrieve`` on *every* turn. Delivering
-    here — or flushing from the CLI's error handler — would put a blocking POST on
-    the hot path once per turn, precisely when the user is already broken.
+    The failure leg reports the same way the success leg does, because a machine
+    whose retrieval is broken is the one these events exist to surface — and the
+    later flush it would otherwise wait for runs on the bridging pair, which a
+    broken store breaks too. So the event that says so must not depend on it.
+
+    What stays fixed is the bound, which is the whole content of the per-turn
+    constraint: ``deliver=True`` sends *one* envelope. The ``cli_error`` recorded
+    behind it is spooled, because the CLI's error handler still exempts
+    ``retrieve`` from its flush — a drain here would cost up to
+    :data:`MAX_FLUSH_POSTS` requests on every turn of an already-broken machine.
     """
     from memu.hosts import retrieval
 
@@ -867,10 +948,8 @@ def test_a_failing_retrieve_never_posts_from_the_per_turn_hook(
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
     assert run(CODEX_SPEC, ["retrieve", "anything"]) == 1
-    assert posted.events == []
-    # Recorded, just not delivered from here — the next successful retrieve carries
-    # these out ahead of its own event, as does the bridging pair.
-    assert len(_spooled(reporting)) == 2
+    assert [event["event_name"] for event in posted.events] == [events.MEMORY_SEARCH_FAILED]
+    assert [event["event_name"] for event in _spooled(reporting)] == [events.CLI_ERROR]
 
 
 def test_a_failing_bridging_run_does_flush_because_its_flush_point_is_what_broke(
