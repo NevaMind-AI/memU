@@ -1,26 +1,32 @@
 """The Windows Task Scheduler bridging helper (memU#538/#539).
 
-Two things are proven here without touching Task Scheduler or PowerShell — so the
-suite is identical on the Windows dev box and a Linux CI runner:
+The pure builders are proven without touching Task Scheduler or PowerShell, so
+those checks are identical on the Windows dev box and a Linux CI runner:
 
 1. the pure builders emit the right scripts (canonical name, S4U, prompt kept off
    the command line), and
 2. the ``schedule`` verb is wired in, refuses a host that hasn't opted in, and on
    a non-Windows OS points at cron/launchd instead of touching them.
 
-The OS-executing paths (`install`/`uninstall`/`status`/`verify`) are only reached
-behind a ``platform.system() == "Windows"`` gate, exercised here by patching that
-gate — never by really registering a task.
+One Windows-only regression test runs a generated wrapper under Windows
+PowerShell 5.1 to cover its native-stderr behavior. The OS-executing paths
+(`install`/`uninstall`/`status`/`verify`) are still reached only behind a
+``platform.system() == "Windows"`` gate, exercised here by patching that gate —
+never by really registering a task.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import os
+import platform
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from memu.hosts.bridging import Layout
+from memu.hosts.bridging.layout import JOB_COMPLETION_NONCE_ENV
 from memu.hosts.claude_code.cli import SPEC as CLAUDE
 from memu.hosts.codex.cli import SPEC as CODEX
 from memu.hosts.cola.cli import SPEC as COLA
@@ -37,12 +43,38 @@ from memu.hosts.workbuddy.cli import SPEC as WORKBUDDY
 # ---------------------------------------------------------------------------
 
 
+def _wrapper(
+    tmp_path: Path,
+    agent: str,
+    memu: str,
+    *,
+    schedule_command: str = "agent {prompt}",
+    prompt_stdin: bool = False,
+    path_dirs: list[str] | None = None,
+) -> str:
+    return windows.wrapper_script(
+        agent,
+        memu,
+        schedule_command,
+        tmp_path / "bridge-prompt.txt",
+        tmp_path / "bridge.log",
+        tmp_path / "jobs",
+        tmp_path / ".jobs_complete.test",
+        tmp_path,
+        path_dirs or [],
+        prompt_stdin=prompt_stdin,
+    )
+
+
 def test_powershell_invocation_maps_prompt_placeholder() -> None:
     assert windows.powershell_invocation("C:\\bin\\claude.exe", "claude -p {prompt}") == (
         "& 'C:\\bin\\claude.exe' -p $prompt"
     )
-    # The per-host bit is data: a different binary/flag just flows through.
-    assert windows.powershell_invocation("/x/codex", "codex exec {prompt}") == "& '/x/codex' exec $prompt"
+    # The per-host bit is data: Codex's unattended-run flags flow through the
+    # shared builder, with the file-backed prompt kept as one PowerShell value.
+    assert windows.powershell_invocation(
+        "/x/codex", CODEX.schedule_command, prompt_stdin=CODEX.schedule_prompt_stdin
+    ) == ("$prompt | & '/x/codex' exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -")
 
 
 def test_agent_check_argv_substitutes_probe_prompt() -> None:
@@ -53,11 +85,50 @@ def test_agent_check_argv_substitutes_probe_prompt() -> None:
     ]
 
 
+def test_agent_resolution_uses_powershell_command_precedence(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[str] = []
+
+    def fake_powershell(script: str, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen.append(script)
+        return subprocess.CompletedProcess([], 0, stdout="C:\\bin\\codex.ps1", stderr="")
+
+    monkeypatch.setattr(windows, "_run_powershell", fake_powershell)
+
+    assert windows._resolve_agent(CODEX) == "C:\\bin\\codex.ps1"
+    assert "Get-Command -Name 'codex'" in seen[0]
+    assert "Application" in seen[0] and "ExternalScript" in seen[0]
+
+
+def test_agent_launch_uses_the_exact_powershell_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen: list[tuple[str, Path | None, float | None]] = []
+
+    def fake_powershell(
+        script: str,
+        *,
+        cwd: Path | None = None,
+        timeout: float | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        seen.append((script, cwd, timeout))
+        return subprocess.CompletedProcess([], 0, stdout="codex-cli 1.0", stderr="")
+
+    monkeypatch.setattr(windows, "_run_powershell", fake_powershell)
+
+    ok, _detail = windows._launches("C:\\bin\\codex.ps1", tmp_path)
+    assert ok is True
+    script, cwd, timeout = seen[0]
+    assert "-File 'C:\\bin\\codex.ps1' '--version'" in script
+    assert cwd == tmp_path
+    assert timeout == 30
+
+
 def test_wrapper_keeps_prompt_off_the_command_line(tmp_path: Path) -> None:
     prompt_file = tmp_path / "bridge-prompt.txt"
-    log = tmp_path / "bridge.log"
-    text = windows.wrapper_script(
-        "C:\\bin\\claude.exe", "claude -p {prompt}", prompt_file, log, ["C:\\bin", "C:\\memu"]
+    text = _wrapper(
+        tmp_path,
+        "C:\\bin\\claude.exe",
+        "C:\\memu\\memu-claude-code.exe",
+        schedule_command="claude -p {prompt}",
+        path_dirs=["C:\\bin", "C:\\memu"],
     )
     # The prompt is read from the file into $prompt, then passed as one argument —
     # this is the whole point (memU#539): nothing long ever hits the command line.
@@ -66,6 +137,227 @@ def test_wrapper_keeps_prompt_off_the_command_line(tmp_path: Path) -> None:
     assert "& 'C:\\bin\\claude.exe' -p $prompt" in text
     # PATH is re-established for the scheduler's bare environment (#530, ported).
     assert "$env:Path = 'C:\\bin;C:\\memu;' + $env:Path" in text
+    # PowerShell 5.1 turns native stderr into NativeCommandError. Every native
+    # call must continue long enough to log stderr and preserve the real code.
+    invocation = "& 'C:\\bin\\claude.exe' -p $prompt"
+    assert text.index("$ErrorActionPreference = 'Stop'") < text.index("Get-Content -Raw")
+    assert "$prepareArgs = @('prepare', '--base-dir'" in text
+    assert "& 'C:\\memu\\memu-claude-code.exe' @Arguments" in text
+    assert text.index("Invoke-AgentJobs") < text.index("Invoke-Memu $prepareArgs")
+    assert invocation in text
+    assert "agent exited zero without completing every job" in text
+    assert "rejected a stale or mismatched job completion marker" in text
+
+
+def test_codex_wrapper_pipes_the_long_prompt_to_stdin(tmp_path: Path) -> None:
+    text = _wrapper(
+        tmp_path,
+        "C:\\bin\\codex.ps1",
+        "C:\\bin\\memu-codex.exe",
+        schedule_command=CODEX.schedule_command,
+        prompt_stdin=CODEX.schedule_prompt_stdin,
+        path_dirs=["C:\\bin"],
+    )
+
+    assert CODEX.schedule_prompt_stdin is True
+    assert (
+        "& 'powershell.exe' -NoProfile -NonInteractive -ExecutionPolicy Bypass "
+        "-Command '$env:MEMU_SCHEDULE_AGENT_PROMPT | & ''C:\\bin\\codex.ps1'' @args' exec "
+        "--dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -"
+    ) in text
+    assert "--skip-git-repo-check $prompt" not in text
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="requires Windows PowerShell 5.1")
+@pytest.mark.parametrize("prepare_exit_code", [3, 7])
+def test_wrapper_logs_native_stderr_and_propagates_prepare_exit_code(tmp_path: Path, prepare_exit_code: int) -> None:
+    prompt_file = tmp_path / "bridge-prompt.txt"
+    log = tmp_path / "bridge.log"
+    agent = tmp_path / "agent.ps1"
+    memu = tmp_path / "memu.ps1"
+    wrapper = tmp_path / "memu-bridge.ps1"
+    prompt_file.write_text("prompt", encoding="utf-8")
+    agent.write_text("exit 0\n", encoding="utf-8-sig")
+    memu.write_text(
+        f'[Console]::Error.WriteLine("native warning")\nexit {prepare_exit_code}\n',
+        encoding="utf-8-sig",
+    )
+    wrapper.write_text(
+        _wrapper(tmp_path, str(agent), str(memu)),
+        encoding="utf-8-sig",
+    )
+
+    powershell = Path(os.environ["SYSTEMROOT"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    proc = subprocess.run(  # noqa: S603
+        [str(powershell), "-NoProfile", "-NonInteractive", "-File", str(wrapper)],
+        capture_output=True,
+        check=False,
+    )
+
+    assert proc.returncode == prepare_exit_code
+    logged = log.read_bytes()
+    assert b"native warning" in logged or "native warning".encode("utf-16-le") in logged
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="requires Windows PowerShell 5.1")
+def test_wrapper_skips_agent_without_jobs_and_propagates_commit_exit_code(tmp_path: Path) -> None:
+    prompt_file = tmp_path / "bridge-prompt.txt"
+    agent = tmp_path / "agent.ps1"
+    memu = tmp_path / "memu.ps1"
+    wrapper = tmp_path / "memu-bridge.ps1"
+    prompt_file.write_text("prompt", encoding="utf-8")
+    agent.write_text("exit 9\n", encoding="utf-8-sig")
+    memu.write_text("if ($args[0] -eq 'commit') { exit 11 }\nexit 0\n", encoding="utf-8-sig")
+    wrapper.write_text(_wrapper(tmp_path, str(agent), str(memu)), encoding="utf-8-sig")
+
+    powershell = Path(os.environ["SYSTEMROOT"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    proc = subprocess.run(  # noqa: S603
+        [str(powershell), "-NoProfile", "-NonInteractive", "-File", str(wrapper)],
+        capture_output=True,
+        check=False,
+    )
+
+    assert proc.returncode == 11
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="requires Windows PowerShell 5.1")
+def test_wrapper_keeps_stdin_prompt_whole_through_a_powershell_shim(tmp_path: Path) -> None:
+    prompt_file = tmp_path / "bridge-prompt.txt"
+    log = tmp_path / "bridge.log"
+    agent = tmp_path / "agent.ps1"
+    memu = tmp_path / "memu.ps1"
+    jobs = tmp_path / "jobs"
+    marker = tmp_path / ".jobs_complete.test"
+    wrapper = tmp_path / "memu-bridge.ps1"
+    prompt_file.write_text("one full prompt", encoding="utf-8")
+    jobs.mkdir()
+    (jobs / "1.txt").write_text("job", encoding="utf-8")
+    agent.write_text(
+        'Write-Output "argc=$($args.Count)"\n'
+        'Write-Output "last=$($args[-1])"\n'
+        '$body = @($input) -join "`n"\n'
+        'Write-Output "stdin=$body"\n'
+        f"Set-Content -NoNewline -LiteralPath '{marker}' -Value $env:{JOB_COMPLETION_NONCE_ENV}\n"
+        "exit 0\n",
+        encoding="utf-8-sig",
+    )
+    memu.write_text(
+        f"if ($args[0] -eq 'commit') {{ Remove-Item -LiteralPath '{jobs}\\1.txt' -ErrorAction SilentlyContinue }}\n"
+        "exit 0\n",
+        encoding="utf-8-sig",
+    )
+    wrapper.write_text(
+        _wrapper(
+            tmp_path,
+            str(agent),
+            str(memu),
+            schedule_command="agent exec {prompt}",
+            prompt_stdin=True,
+        ),
+        encoding="utf-8-sig",
+    )
+
+    powershell = Path(os.environ["SYSTEMROOT"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    proc = subprocess.run(  # noqa: S603
+        [str(powershell), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", str(wrapper)],
+        capture_output=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0
+    logged = log.read_bytes()
+    assert b"argc=2" in logged or "argc=2".encode("utf-16-le") in logged
+    assert b"last=-" in logged or "last=-".encode("utf-16-le") in logged
+    assert b"stdin=one full prompt" in logged or "stdin=one full prompt".encode("utf-16-le") in logged
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="requires Windows PowerShell 5.1")
+@pytest.mark.parametrize(("marker_value", "expected"), [(None, 70), ("stale", 71)])
+def test_wrapper_rejects_zero_exit_without_current_completion_nonce(
+    tmp_path: Path, marker_value: str | None, expected: int
+) -> None:
+    prompt_file = tmp_path / "bridge-prompt.txt"
+    jobs = tmp_path / "jobs"
+    marker = tmp_path / ".jobs_complete.test"
+    agent = tmp_path / "agent.ps1"
+    memu = tmp_path / "memu.ps1"
+    wrapper = tmp_path / "memu-bridge.ps1"
+    prompt_file.write_text("prompt", encoding="utf-8")
+    jobs.mkdir()
+    (jobs / "1.txt").write_text("job", encoding="utf-8")
+    marker_line = f"Set-Content -NoNewline -LiteralPath '{marker}' -Value '{marker_value}'\n" if marker_value else ""
+    agent.write_text(marker_line + "exit 0\n", encoding="utf-8-sig")
+    memu.write_text("exit 0\n", encoding="utf-8-sig")
+    wrapper.write_text(_wrapper(tmp_path, str(agent), str(memu)), encoding="utf-8-sig")
+
+    powershell = Path(os.environ["SYSTEMROOT"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    proc = subprocess.run(  # noqa: S603
+        [str(powershell), "-NoProfile", "-NonInteractive", "-File", str(wrapper)],
+        capture_output=True,
+        check=False,
+    )
+
+    assert proc.returncode == expected
+    logged = (tmp_path / "bridge.log").read_bytes()
+    assert b"memU scheduler" in logged or "memU scheduler".encode("utf-16-le") in logged
+
+
+@pytest.mark.skipif(platform.system() != "Windows", reason="requires Windows PowerShell 5.1")
+def test_wrapper_drains_leftovers_before_prepare_then_processes_the_new_batch(tmp_path: Path) -> None:
+    prompt_file = tmp_path / "bridge-prompt.txt"
+    jobs = tmp_path / "jobs"
+    marker = tmp_path / ".jobs_complete.test"
+    trace = tmp_path / "trace.txt"
+    agent = tmp_path / "agent.ps1"
+    memu = tmp_path / "memu.ps1"
+    wrapper = tmp_path / "memu-bridge.ps1"
+    prompt_file.write_text("prompt", encoding="utf-8")
+    jobs.mkdir()
+    (jobs / "1.txt").write_text("leftover", encoding="utf-8")
+    agent.write_text(
+        f"Add-Content -LiteralPath '{trace}' -Value 'agent'\n"
+        f"Set-Content -NoNewline -LiteralPath '{marker}' -Value $env:{JOB_COMPLETION_NONCE_ENV}\n"
+        "exit 0\n",
+        encoding="utf-8-sig",
+    )
+    memu.write_text(
+        f"Add-Content -LiteralPath '{trace}' -Value \"memu $($args[0])\"\n"
+        f"if ($args[0] -eq 'commit') {{ Remove-Item -Path '{jobs}\\*.txt' -Force -ErrorAction SilentlyContinue }}\n"
+        f"if ($args[0] -eq 'prepare') {{ Set-Content -LiteralPath '{jobs}\\2.txt' -Value 'new' }}\n"
+        "exit 0\n",
+        encoding="utf-8-sig",
+    )
+    wrapper.write_text(_wrapper(tmp_path, str(agent), str(memu)), encoding="utf-8-sig")
+
+    powershell = Path(os.environ["SYSTEMROOT"]) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    proc = subprocess.run(  # noqa: S603
+        [str(powershell), "-NoProfile", "-NonInteractive", "-File", str(wrapper)],
+        capture_output=True,
+        check=False,
+    )
+
+    assert proc.returncode == 0
+    assert trace.read_text(encoding="utf-8-sig").splitlines() == [
+        "agent",
+        "memu commit",
+        "memu prepare",
+        "agent",
+        "memu commit",
+    ]
+
+
+def test_complete_jobs_requires_and_records_the_inherited_nonce(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    marker = Layout.default(host=CODEX.host, base=tmp_path).job_completion_marker
+    monkeypatch.delenv(JOB_COMPLETION_NONCE_ENV, raising=False)
+    assert run(CODEX, ["complete-jobs", "--base-dir", str(tmp_path)]) == 2
+    assert not marker.exists()
+    assert "scheduled job run" in capsys.readouterr().err
+
+    monkeypatch.setenv(JOB_COMPLETION_NONCE_ENV, "current-nonce")
+    assert run(CODEX, ["complete-jobs", "--base-dir", str(tmp_path)]) == 0
+    assert marker.read_text(encoding="utf-8") == "current-nonce"
 
 
 def test_register_script_is_canonical_and_hardened() -> None:
@@ -78,6 +370,7 @@ def test_register_script_is_canonical_and_hardened() -> None:
     # workspace-trust CLI (cursor-agent --trust) would then be trusting.
     assert "-WorkingDirectory 'C:\\w'" in script
     assert "New-TimeSpan -Minutes 60" in script
+    assert "-Force" in script  # reinstall updates the canonical task in place
     assert (
         "-RepetitionDuration (New-TimeSpan -Days 3650)" in script
     )  # ~forever; MaxValue is out-of-range on Win11 (#539)
@@ -96,6 +389,25 @@ def test_task_name_is_canonical_per_host() -> None:
     assert CODEX.task_name == "memu-bridging-codex"
     assert CURSOR.task_name == "memu-bridging-cursor"
     assert HERMES.task_name == "memu-bridging-hermes"
+
+
+def test_codex_template_uses_the_unattended_host_access_flags() -> None:
+    assert CODEX.schedule_command == (
+        "codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check {prompt}"
+    )
+    assert "--ephemeral" not in CODEX.schedule_command
+    assert CODEX.schedule_prompt_stdin is True
+    assert CODEX.needs_headless_auth is False
+    # Session identity/self-skip is deliberately a later host survey, not part
+    # of the native -> OS scheduler migration.
+    assert CODEX.session_id_env == ""
+    assert windows.agent_check_argv("C:\\codex.exe", CODEX.schedule_command, "ping") == [
+        "C:\\codex.exe",
+        "exec",
+        "--dangerously-bypass-approvals-and-sandbox",
+        "--skip-git-repo-check",
+        "ping",
+    ]
 
 
 def test_hermes_template_uses_its_oneshot_flag_everywhere() -> None:
@@ -147,13 +459,22 @@ def test_pipeline_prompt_is_verbatim_but_parameterized() -> None:
     assert "memu-codex prepare" in prompt.bridging_pipeline_prompt(CODEX)
 
 
+def test_windows_jobs_prompt_is_native_shell_only_and_has_a_completion_handshake(tmp_path: Path) -> None:
+    text = prompt.bridging_jobs_prompt(CODEX, job_dir=tmp_path / "jobs", base_dir=tmp_path)
+    assert "PowerShell" in text
+    assert "do not invoke bash or WSL" in text
+    assert "complete-jobs" in text
+    assert "Do not run prepare or commit" in text
+    assert "Run this exact command with bash" not in text
+
+
 # ---------------------------------------------------------------------------
 # Verb wiring + guards (no Task Scheduler touched)
 # ---------------------------------------------------------------------------
 
 
 def test_schedule_verb_is_wired() -> None:
-    for spec in (CLAUDE, CURSOR, HERMES):
+    for spec in (CLAUDE, CURSOR, HERMES, CODEX):
         parser = build_parser(spec)
         args = parser.parse_args(["schedule", "install"])
         assert callable(args.handler)
@@ -171,7 +492,7 @@ def test_schedule_backends_describe_existing_host_arrangements() -> None:
         "claude-code": "os",
         "cursor": "os",
         "hermes": "os",
-        "codex": "native",
+        "codex": "os",
         "openclaw": "native",
         "workbuddy": "native",
         "cola": "native",
@@ -195,7 +516,7 @@ def test_schedule_backend_does_not_control_verb_wiring(backend: ScheduleBackend)
 def test_unwired_host_has_no_schedule_verb() -> None:
     # Native and external hosts never advertise a `schedule` verb, not even a
     # refusing stub. argparse rejects it as an unknown command.
-    for spec in (CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC):
+    for spec in (OPENCLAW, WORKBUDDY, COLA, GENERIC):
         with pytest.raises(SystemExit):
             build_parser(spec).parse_args(["schedule", "status"])
     # ...while a wired host does have it.
@@ -239,9 +560,13 @@ def test_builders_escape_single_quotes_in_paths() -> None:
     assert "O''Brien" in windows.register_script("t", Path("C:\\O'Brien\\memu-bridge.ps1"), 60, Path("C:\\O'Brien"))
     assert "O''Brien" in windows.wrapper_script(
         "C:\\O'Brien\\c.exe",
+        "C:\\O'Brien\\memu.exe",
         "claude -p {prompt}",
         Path("C:\\O'Brien\\p.txt"),
         Path("C:\\O'Brien\\l.log"),
+        Path("C:\\O'Brien\\jobs"),
+        Path("C:\\O'Brien\\marker"),
+        Path("C:\\O'Brien"),
         ["C:\\O'Brien"],
     )
 
@@ -257,6 +582,16 @@ def test_pipeline_prompt_matches_the_bridging_doc() -> None:
         line.strip() for line in doc.splitlines() if line.strip().startswith("Run the memU bridging pipeline.")
     )
     assert doc_prompt == prompt.bridging_pipeline_prompt(CLAUDE)
+
+
+def test_codex_pipeline_prompt_matches_the_bridging_doc() -> None:
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.codex") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    doc_prompt = next(
+        line.strip() for line in doc.splitlines() if line.strip().startswith("Run the memU bridging pipeline.")
+    )
+    assert doc_prompt == prompt.bridging_pipeline_prompt(CODEX)
 
 
 def test_cursor_pipeline_prompt_matches_the_bridging_doc() -> None:
@@ -281,7 +616,7 @@ def test_hermes_pipeline_prompt_matches_the_bridging_doc() -> None:
     assert doc_prompt == prompt.bridging_pipeline_prompt(HERMES)
 
 
-@pytest.mark.parametrize("pkg", ["claude_code", "cursor", "hermes", "generic"])
+@pytest.mark.parametrize("pkg", ["claude_code", "codex", "cursor", "hermes", "generic"])
 def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
     # The bug class behind memU#591: an inlined pipeline prompt pushed the guide's
     # crontab entry past cron's ~1KB line buffer, so every tick died mid-quote
@@ -295,6 +630,32 @@ def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
     assert cron_entries, f"{pkg} guide lost its cron entry example"
     for line in cron_entries:
         assert len(line) < 512, f"{pkg} cron entry is {len(line)} chars — cron truncates around 1KB: {line[:80]!r}"
+
+
+def test_codex_guide_migrates_native_task_before_os_registration() -> None:
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.codex") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    migration = doc.index("Legacy native-task migration")
+    unix_registration = doc.index("0 * * * * $HOME/.memu/hosts/codex/bridge.sh")
+    windows_registration = doc.index("memu-codex schedule install")
+    assert migration < unix_registration
+    assert migration < windows_registration
+    assert "MEMU_BRIDGING_TASK_ID=memu:bridging:codex:v1" in doc
+    assert all(
+        signature in doc
+        for signature in (
+            "Run the memU bridging pipeline",
+            "memu-codex prepare",
+            "memu-codex commit",
+            "~/.memu/hosts/codex/jobs",
+        )
+    )
+    assert "Migrate it automatically" in doc
+    assert "needs no separate confirmation" in doc
+    assert "obtain explicit confirmation" not in doc
+    assert "If listing, deletion, classification, or verification fails, stop" in doc
+    assert "Do not create the OS task" in doc
 
 
 def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
@@ -329,6 +690,17 @@ def test_auth_gate_warns_that_credential_must_persist(
     monkeypatch.setattr(windows, "_authenticates", lambda spec, path, workdir: (True, ""))
     assert windows._auth_gate(CLAUDE, "C:\\claude.exe", tmp_path) == 0
     assert "PERSISTENT" in capsys.readouterr().err
+
+
+def test_launch_gate_rejects_a_command_that_only_resolves(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(windows, "_launches", lambda path, workdir: (False, "Access is denied"))
+
+    assert windows._launch_gate(CODEX, "C:\\desktop\\codex.exe", tmp_path) == 1
+    err = capsys.readouterr().err
+    assert "exact command failed" in err
+    assert "Access is denied" in err
 
 
 def test_auth_gate_aborts_when_unauthenticated(

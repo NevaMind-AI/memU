@@ -199,9 +199,13 @@ def test_the_windows_wrapper_exports_the_marker() -> None:
 
     script = wrapper_script(
         agent_path="C:/agents/claude.exe",
+        memu_path="C:/bin/memu-claude-code.exe",
         schedule_command="claude -p {prompt}",
         prompt_file=pathlib.Path("C:/memu/bridge-prompt.txt"),
         log_file=pathlib.Path("C:/memu/bridge.log"),
+        jobs_dir=pathlib.Path("C:/memu/jobs"),
+        completion_marker=pathlib.Path("C:/memu/.jobs_complete.claude-code"),
+        base_dir=pathlib.Path("C:/memu"),
         path_dirs=["C:/bin"],
     )
     assert f"$env:{self_sessions.BRIDGING_RUN_ENV} = '1'" in script

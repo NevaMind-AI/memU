@@ -1,4 +1,4 @@
-"""The bridging pipeline prompt, as data.
+"""The bridging prompts, as data.
 
 The scheduled bridging task is a headless agent run whose prompt is the four-step
 prepare -> self-evolve -> commit pipeline. Neither scheduler can carry the
@@ -6,8 +6,9 @@ prepare -> self-evolve -> commit pipeline. Neither scheduler can carry the
 around 1 KB, and Task Scheduler's ``/TR`` splits on the first space — so on both
 platforms the prompt lives in a file the scheduled wrapper reads (Unix:
 ``bridge-prompt.txt`` + ``bridge.sh``, see each host's ``BRIDGING_TASK.md``;
-Windows: the ``schedule`` helper writes it) — which means the prompt has to exist
-as a value here, not only inside the guide.
+Windows: the ``schedule`` helper writes a job-only prompt and owns prepare/commit
+itself) — which means both prompts have to exist as values here, not only inside
+the guide.
 
 Parameterized by :class:`~memu.hosts.host_cli.HostSpec` (working tree + binary) so
 one text serves every host. It mirrors the canonical prompt in each host's
@@ -69,4 +70,30 @@ def bridging_pipeline_prompt(spec: HostSpec, *, prepare_session_dir: str | Path 
         "command; it is never part of the run.  "
         "Finish with a one-line summary: how many jobs ran (leftovers included) "
         "and what was committed."
+    )
+
+
+def bridging_jobs_prompt(spec: HostSpec, *, job_dir: str | Path, base_dir: str | Path) -> str:
+    """Windows agent prompt for only the judgement-heavy job-processing stage.
+
+    The PowerShell wrapper owns ``prepare`` and ``commit`` so their real process
+    exit codes reach Task Scheduler.  A fresh completion nonce in the environment
+    makes an agent exit code insufficient on its own: the final command records
+    proof that the agent reached the end of every numbered job.
+    """
+    return (
+        "Process the existing memU self-evolve job files. "
+        f"List {job_dir}/*.txt and process every file in ascending numeric order "
+        "(1.txt, then 2.txt, and so on); always discover the current set instead "
+        "of assuming a count. Read each file and follow its instructions to the "
+        "letter. Each job is self-contained and already contains the concrete "
+        "paths it needs. Emitting no files for a job is a valid outcome; do not "
+        "invent content. Use the current platform's native shell and commands. "
+        "On Windows use PowerShell; do not invoke bash or WSL merely to translate "
+        "a shell example. Do not run prepare or commit; the scheduler owns those "
+        "stages. If any job fails, stop, explain the failure, and do not mark the "
+        "batch complete. Only after every numbered job succeeds, run this exact "
+        f'PowerShell command:  {spec.binary} complete-jobs --base-dir "{base_dir}"  '
+        "The completion command must be last. Finish with a one-line summary of "
+        "how many jobs ran."
     )

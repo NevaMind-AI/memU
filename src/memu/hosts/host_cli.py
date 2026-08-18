@@ -39,6 +39,7 @@ from memu import events
 from memu.hosts import instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging import Layout, commit, prepare, self_sessions
+from memu.hosts.bridging.layout import JOB_COMPLETION_NONCE_ENV
 from memu.hosts.bridging.pipeline import MAX_JOBS
 from memu.hosts.bridging.resources import verify_resource_log
 
@@ -100,10 +101,11 @@ class HostSpec:
     schedule_command: str = ""
     """The headless agent invocation the Windows Task Scheduler helper runs, as a
     template with a ``{prompt}`` placeholder — ``claude -p {prompt}``. The helper
-    turns this into the scheduled task's wrapper, treats the first token as the
-    agent binary to resolve on ``PATH``, and exposes the ``schedule`` subcommand
-    only when it is set. Empty means that helper is not wired for this host; Unix
-    scheduling remains doc-driven and never reads this field.
+    turns this into the scheduled task's wrapper, asks Windows PowerShell itself
+    to resolve the first token exactly as it does for the user, and exposes the
+    ``schedule`` subcommand only when it is set. Empty means that helper is not
+    wired for this host; Unix scheduling remains doc-driven and never reads this
+    field.
     """
 
     schedule_prepare_session_dir: bool = False
@@ -112,6 +114,17 @@ class HostSpec:
     Most hosts have one stable conventional path and need no explicit flag. Hosts
     whose store moves with a runtime home (Hermes's ``HERMES_HOME``) opt in so the
     S4U task is independent of which environment variables it inherits."""
+
+    schedule_prompt_stdin: bool = False
+    """Pipe the scheduled prompt to the agent's stdin and replace ``{prompt}``
+    with ``-`` in the argv.
+
+    This is host capability data, not a shell workaround guessed by the shared
+    scheduler. Codex documents ``-`` as "read instructions from stdin", which
+    avoids Windows PowerShell 5.1 re-splitting a long prompt when an npm ``.ps1``
+    shim forwards its argument list. Hosts whose one-shot command requires a
+    prompt argument keep the default.
+    """
 
     session_id_env: str = ""
     """Environment variable through which the host tells a tool subprocess which
@@ -312,6 +325,25 @@ async def _cmd_commit(spec: HostSpec, args: argparse.Namespace) -> int:
     print(f"committed {len(recall_files)} recall file(s) and {len(resources)} resource(s)")
     for recall_file in recall_files:
         print(f"  - {recall_file.get('track')}/{recall_file.get('name')}")
+    return 0
+
+
+async def _cmd_complete_jobs(spec: HostSpec, args: argparse.Namespace) -> int:
+    """Record the scheduler's per-invocation nonce after all jobs succeeded.
+
+    This is an internal agent-to-wrapper handshake, not a claim inferred from the
+    one-shot agent's exit code.  A person invoking it outside the generated
+    wrapper has no nonce and therefore cannot leave a marker that a later run
+    would accept.
+    """
+    token = os.environ.get(JOB_COMPLETION_NONCE_ENV, "").strip()
+    if not token:
+        print("error: complete-jobs is only valid inside a scheduled job run", file=sys.stderr)
+        return 2
+    layout = _layout(spec, args)
+    layout.job_completion_marker.parent.mkdir(parents=True, exist_ok=True)
+    layout.job_completion_marker.write_text(token, encoding="utf-8")
+    print("marked the current job batch complete")
     return 0
 
 
@@ -780,6 +812,9 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
 
     p = with_base(sub.add_parser("commit", help="Submit what the self-evolve jobs produced back into memU"))
     p.set_defaults(handler=bind(_cmd_commit))
+
+    p = with_base(sub.add_parser("complete-jobs", help="Mark a scheduled job batch complete (internal)"))
+    p.set_defaults(handler=bind(_cmd_complete_jobs))
 
     p = with_base(
         sub.add_parser("verify-resources", help="Filter the touched-file log into the describe-me resource file")

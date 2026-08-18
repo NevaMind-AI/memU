@@ -168,37 +168,88 @@ on this working, and both fail *silently* if it is wrong.
 
 ## Part 2 — Register the bridging (record) task
 
-The *record* seam: a Codex scheduled task that periodically mines recent
-`~/.codex/sessions` into memU memory, skills, and resources. In cloud mode,
-workspace resources are submitted but are not currently persisted.
+The *record* seam: an OS-scheduled, non-interactive `codex exec` run that
+periodically mines recent `~/.codex/sessions` into memU memory, skills, and
+resources. In cloud mode, workspace resources are submitted but are not
+currently persisted.
 
-**Do not reinvent this.** Follow the packaged procedure:
+### 2.0 Prerequisite — a standalone `codex` CLI
+
+The scheduled run invokes `codex exec` from a bare, non-interactive
+environment. Two checks, in order, before you register anything:
+
+1. **`codex` resolves on `PATH`.** If it does not, install it — **do not ask
+   which installer**: announce what you are about to run, then run the official
+   install script (it lands in `~/.local/bin`, needs no elevation and no Node):
+   - Windows: `irm https://chatgpt.com/codex/install.ps1 | iex`
+   - macOS / Linux: `curl -fsSL https://chatgpt.com/codex/install.sh | bash`
+
+   `npm install -g @openai/codex` is a fallback — for when the script fails, or
+   the user has already stated a preference. Never install silently as a side
+   effect of scheduling, and never offer "skip": an unregistered record seam is
+   a failed install, not an outcome to pick from a menu.
+2. **It is signed in for that account.** Codex CLI reuses profile authentication
+   (normally `~/.codex/auth.json`), including authentication established through
+   Codex Desktop. There is no separate headless-token setup step here. If that
+   profile is not signed in, use the normal Codex sign-in flow before continuing.
+
+Open a new terminal after the install, since the current shell's `PATH` may
+predate it, then continue only when `codex --version` succeeds.
+
+On Windows, the command is the contract: inspect `(Get-Command codex).Source`
+and run `codex --version` in the same PowerShell that will run
+`memu-codex schedule install`. The helper uses PowerShell's own resolution and
+embeds that exact file-backed command; it does not guess from installation
+directories or substitute another Codex executable merely because one exists.
+If the command selected by PowerShell cannot launch, installation fails here.
+
+
+**Do not reinvent this and do not create a ChatGPT/Codex native task.** Follow
+the packaged procedure:
 
 ```
 memu-codex docs task
 ```
 
-It is authoritative. In summary, you will settle a cron schedule with the user
-(default: every hour, `0 * * * *`) and create a Codex scheduled task whose
-recurring prompt is the three-step block that document gives you verbatim —
-`memu-codex prepare`, then the agent works through `~/.memu/hosts/codex/jobs/*.txt` in order,
-then `memu-codex commit`.
+It is authoritative. It first migrates any task created by the legacy native
+scheduler guide, using Codex Desktop's task-management surface. A marked task or
+a legacy prompt matching the complete memU signature is migrated automatically;
+only an ambiguous listing, classification, or deletion stops the flow. After
+that gate passes it registers the replacement with cron/launchd on Unix or the shared
+`memu-codex schedule` helper on Windows. The Windows wrapper runs prepare and
+commit directly, uses `codex exec` only for numbered jobs, requires a per-run
+completion handshake, and appends every stage's output to
+`~/.memu/hosts/codex/bridge.log`. This prevents both Bash/WSL assumptions and a
+zero Codex exit from masking a failed pipeline.
 
-Nothing in that prompt is machine-specific. If you find yourself substituting an
-absolute path into it, you are doing it wrong.
+On Windows this step is unconditional on both first install and reinstall. Run
+`memu-codex schedule install` even if the canonical OS task already exists: it
+regenerates the prompt/wrapper artifacts from the installed version and updates
+the same task in place with `Register-ScheduledTask -Force`. Do not delete the OS task first and
+do not reuse it merely because `schedule status` can see it; presence does not
+prove its generated files came from the current memU version.
+
+This is a scheduling migration, not an uninstall. Pending jobs, session
+manifests, memory/skill mirrors, the retrieval instruction, configuration, and
+the store all stay in place for the first OS run to continue.
 
 ### ✅ Verify Part 2
 
-Confirm the scheduled task exists with the expected name and cron. Then dry-run
-the first step by hand:
+Confirm **both** sides of the migration:
 
-```
-memu-codex prepare
-```
+1. Codex Desktop's native scheduled-task list has no owned or complete-signature
+   legacy memU bridging task. If it could not be enumerated or removed unambiguously, Part 2
+   has failed and no OS task should exist.
+2. The OS scheduler has exactly one canonical Codex bridging task: the wrapper
+   entry documented by `memu-codex docs task` on Unix, or
+   `\memU\memu-bridging-codex` (`memu-codex schedule status`) on Windows.
 
-It should report how many sessions it prepared (zero, if there is nothing new
-since the cursor — that is fine and correct). Report the task name and schedule
-back to the user.
+Then run one task through the scheduler itself. On Windows require
+`LastTaskResult` 0 as well as a growing `bridge.log` and the expected session
+manifest / `jobs/` movement; an interactive
+`memu-codex prepare` is not a substitute for the scheduler's account, sparse
+environment, and working directory. Report the scheduler, task identity,
+schedule, legacy migration outcome, and first-run evidence back to the user.
 
 ---
 

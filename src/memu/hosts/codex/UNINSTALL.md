@@ -26,17 +26,37 @@ instruction file exactly as they are.
 
 ## Part 1 — Unregister the bridging (record) task
 
-Find the Codex scheduled task that runs the memU bridging pipeline — it was
-created at install time (named e.g. `memu-remember`) with the three-step
-prepare / self-evolve / commit prompt — and delete **that task only**, through
-the same scheduled-task surface Codex used to create it. The name is only a
-hint (the user may have chosen another); the load-bearing signal is the prompt,
-which runs the memU bridging pipeline. Any other scheduled tasks the user has
-are theirs and stay.
+Remove the canonical OS-scheduled task first, so nothing fires mid-teardown:
+
+- **Windows:** run `memu-codex schedule uninstall`, then
+  `memu-codex schedule status`; `\memU\memu-bridging-codex` must report as not
+  registered. The helper removes only that canonical task and its generated
+  wrapper metadata.
+- **Unix (cron/launchd):** inspect the active OS scheduler and remove only the
+  entry that invokes `~/.memu/hosts/codex/bridge.sh` (or its launchd equivalent).
+  Everything else belongs to the user. Re-list the scheduler and confirm no
+  Codex memU wrapper entry remains. The generated `bridge.sh`/
+  `memu-bridge.ps1`, `bridge-prompt.txt`, `bridge.log`, and `.bridge.lock` live
+  under `~/.memu/hosts/codex/` and go with the host residue in Part 3.
+
+### Legacy native-task check
+
+An older memU release may also have created a ChatGPT/Codex native scheduled
+task. The OS helper cannot manage that separate control plane. In Codex Desktop,
+list native tasks and identify a memU task by prompt content, never by name
+alone: an ownership marker
+`MEMU_BRIDGING_TASK_ID=memu:bridging:codex:v1`, or all four legacy strings
+`Run the memU bridging pipeline`, `memu-codex prepare`, `memu-codex commit`, and
+`~/.memu/hosts/codex/jobs`. Show an unmarked candidate and get explicit user
+confirmation before deleting it by native task id through Desktop. Do not edit
+native scheduler storage directly, and stop on any ambiguity rather than risk
+removing another task.
 
 ### ✅ Verify Part 1
 
-Codex's scheduled-task list no longer shows a memU bridging task.
+The OS scheduler no longer lists the canonical Codex memU task, and Codex
+Desktop's shared native task list contains no owned or complete-signature legacy
+memU bridging task. No unrelated OS or native task changed.
 
 ---
 
@@ -90,7 +110,9 @@ Only one thing overrides a default: the user's own explicit words.
   user's request? Delete the cursor with it — a surviving cursor over an empty
   store marks history as already mined, and it would never be mined again.
 - **Remove this host's residue.** Codex's run-scoped working tree is
-  `~/.memu/hosts/codex/`: the `jobs/`, `sessions/`, `memory/`, and `skill/`
+  `~/.memu/hosts/codex/`: the generated scheduler files (`bridge.sh` or
+  `memu-bridge.ps1`, `bridge-prompt.txt`, `bridge.log`, `.bridge.lock`, and
+  `.schedule.codex.json`), plus the `jobs/`, `sessions/`, `memory/`, and `skill/`
   directories and `resources.md` — but **not** the `.session_manifest*` cursor
   files there (see above), unless the store is going too. The shared
   `~/.memu/config.env` and the store file sit at the `~/.memu/` root, outside
