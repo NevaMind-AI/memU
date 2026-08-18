@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
@@ -46,6 +47,90 @@ async def _embed_one(embed_client: Any, text: str) -> list[float]:
     vectors: list[list[float]]
     vectors, _ = await embed_client.embed([text])
     return vectors[0]
+
+
+_UNRESOLVED_TICKET = "embedding ticket redeemed without a planned vector"
+_VECTOR_COUNT_MISMATCH = "embedding provider returned the wrong number of vectors"
+
+
+class _EmbeddingBatch:
+    """Collects every text a commit needs vectorized, then resolves them at once.
+
+    Planning registers a text and gets back a ticket; the write phase redeems
+    the ticket for a vector. That indirection is what lets a commit do all of
+    its embedding in a single provider round-trip, before it has written
+    anything — see :meth:`AgenticMixin.commit_results`. Identical texts share a
+    ticket, so a line repeated across files is paid for once.
+    """
+
+    def __init__(self) -> None:
+        self._tickets: dict[str, int] = {}
+        self._texts: list[str] = []
+        self._vectors: list[list[float]] = []
+
+    def request(self, text: str) -> int:
+        ticket = self._tickets.get(text)
+        if ticket is None:
+            ticket = len(self._texts)
+            self._tickets[text] = ticket
+            self._texts.append(text)
+        return ticket
+
+    async def resolve(self, embed_client: Any) -> None:
+        """Embed every registered text — the one fallible step of a commit.
+
+        A commit with nothing to embed (a re-commit whose descriptions and
+        content are all unchanged) must not call the provider at all.
+        """
+        if not self._texts:
+            return
+        vectors, _ = await embed_client.embed(self._texts)
+        if len(vectors) != len(self._texts):
+            raise ValueError(_VECTOR_COUNT_MISMATCH)
+        self._vectors = vectors
+
+    def vector(self, ticket: int | None) -> list[float]:
+        """Redeem a ticket. ``None`` means planning and writing disagree."""
+        if ticket is None:
+            raise ValueError(_UNRESOLVED_TICKET)
+        return self._vectors[ticket]
+
+
+@dataclass
+class _ResourcePlan:
+    """One resource's pending write, its caption vector already requested."""
+
+    url: str
+    caption: str | None
+    caption_ticket: int | None
+    stale_ids: list[str]
+
+
+@dataclass
+class _SegmentPlan:
+    """One file's segment reconciliation: which to drop, which to insert."""
+
+    stale_ids: list[str]
+    additions: list[tuple[str, int]]
+
+
+@dataclass
+class _RecallFilePlan:
+    """One recall file's pending write.
+
+    ``create_ticket`` is set exactly when the file is new (it carries the
+    file-level vector the row is created with); ``description_ticket`` exactly
+    when an existing file's description changed and needs re-embedding.
+    """
+
+    name: str
+    track: str
+    description: str
+    content: str
+    existing: RecallFile | None
+    create_ticket: int | None
+    description_ticket: int | None
+    segments: _SegmentPlan
 
 
 class AgenticMixin:
@@ -241,169 +326,272 @@ class AgenticMixin:
         - ``recall_files`` — a list of ``{name, track, description, content}`` records. Each
           is a :class:`RecallFile` keyed by ``name`` within its ``track`` (``memory``/``skill``),
           with the same track-specific segment (re)generation as the workspace path.
+
+        A commit that cannot reach the embedding provider writes nothing at all, so
+        callers may retry it wholesale — which is what makes the bridging pipeline's
+        "advance state on durable success, not intent" (#518) hold. Storage failures
+        carry no such guarantee; only the embedding step is hoisted clear of the writes.
         """
         store = self._get_database()
         user_scope = self.user_model(**user).model_dump() if user is not None else None
         embed_client = self._get_embedding_client("embedding")
+        user_data = dict(user_scope or {})
 
-        committed_resources = await self._commit_resources(
-            resource or [], store=store, user_scope=user_scope, embed_client=embed_client
-        )
-        committed_files = await self._commit_recall_files(
-            recall_files or [], store=store, user_scope=user_scope, embed_client=embed_client
-        )
+        # Plan, embed, write — strictly in that order, never interleaved. Each
+        # repo call commits its own transaction, so there is no rollback to fall
+        # back on: anything written before a failure stays written. Embedding is
+        # the only step here that can fail (a rate limit, a dead provider), so
+        # hoisting all of it ahead of the first write is what makes a failed
+        # commit a no-op rather than a half-applied one. Planning reads freely —
+        # reads leave nothing behind.
+        batch = _EmbeddingBatch()
+        resource_plans = self._plan_resources(resource or [], store=store, user_scope=user_scope, batch=batch)
+        file_plans = self._plan_recall_files(recall_files or [], store=store, user_data=user_data, batch=batch)
+
+        await batch.resolve(embed_client)
+
+        committed_resources = self._write_resources(resource_plans, store=store, user_data=user_data, batch=batch)
+        committed_files = self._write_recall_files(file_plans, store=store, user_data=user_data, batch=batch)
         return {
             "resources": [self._model_dump_without_embeddings(r) for r in committed_resources],
             "recall_files": [self._model_dump_without_embeddings(f) for f in committed_files],
         }
 
-    async def _commit_resources(
+    def _plan_resources(
         self,
         resources: list[dict[str, Any]],
         *,
         store: Database,
         user_scope: dict[str, Any] | None,
-        embed_client: Any,
+        batch: _EmbeddingBatch,
+    ) -> list[_ResourcePlan]:
+        """Resolve each ``{path, description}`` against the store and request its vector.
+
+        Reads and requests only — see :meth:`commit_results` for why no write
+        may happen here. Repeated paths within one payload collapse to their
+        last occurrence: every plan is built against the same pre-commit
+        snapshot, so two plans for one url would each miss the other's write and
+        leave a duplicate behind.
+        """
+        deduped: dict[str, dict[str, Any]] = {}
+        for item in resources:
+            url = (item.get("path") or "").strip()
+            if url:
+                deduped[url] = item
+        if not deduped:
+            return []
+
+        # One listing for the whole payload; this used to be re-read per item.
+        existing = list(store.resource_repo.list_resources(where=user_scope or None).values())
+        plans: list[_ResourcePlan] = []
+        for url, item in deduped.items():
+            caption = (item.get("description") or "").strip() or None
+            plans.append(
+                _ResourcePlan(
+                    url=url,
+                    caption=caption,
+                    caption_ticket=batch.request(caption) if caption else None,
+                    stale_ids=[res.id for res in existing if res.url == url],
+                )
+            )
+        return plans
+
+    def _write_resources(
+        self,
+        plans: list[_ResourcePlan],
+        *,
+        store: Database,
+        user_data: dict[str, Any],
+        batch: _EmbeddingBatch,
     ) -> list[Resource]:
-        """Create-or-update each ``{path, description}`` as a ``Resource`` keyed by url.
+        """Apply the planned resource writes, every vector already in hand.
 
         ``ResourceRepo`` has no in-place update, so an "update" is a delete-then-create:
         any existing resource sharing this url is dropped before the fresh record is created.
         """
-        where = user_scope or None
         committed: list[Resource] = []
-        for item in resources:
-            url = (item.get("path") or "").strip()
-            if not url:
-                continue
-            caption = (item.get("description") or "").strip() or None
-
-            # Create-or-update keyed by url: drop any prior resource for this url first.
-            stale = [res for res in store.resource_repo.list_resources(where=where).values() if res.url == url]
-            for res in stale:
-                store.resource_repo.delete_resource(res.id)
-
-            caption_embedding = await _embed_one(embed_client, caption) if caption else None
-            res = store.resource_repo.create_resource(
-                url=url,
-                local_path=url,
-                caption=caption,
-                embedding=caption_embedding,
-                user_data=dict(user_scope or {}),
-                # progressive_retrieve's resource layer filters on track="workspace";
-                # commit is now the only resource writer, so tag it accordingly.
-                track="workspace",
+        for plan in plans:
+            for stale_id in plan.stale_ids:
+                store.resource_repo.delete_resource(stale_id)
+            committed.append(
+                store.resource_repo.create_resource(
+                    url=plan.url,
+                    local_path=plan.url,
+                    caption=plan.caption,
+                    embedding=batch.vector(plan.caption_ticket) if plan.caption_ticket is not None else None,
+                    user_data=dict(user_data),
+                    # progressive_retrieve's resource layer filters on track="workspace";
+                    # commit is now the only resource writer, so tag it accordingly.
+                    track="workspace",
+                )
             )
-            committed.append(res)
         return committed
 
-    async def _commit_recall_files(
+    def _plan_recall_files(
         self,
         recall_files: list[dict[str, Any]],
         *,
         store: Database,
-        user_scope: dict[str, Any] | None,
-        embed_client: Any,
-    ) -> list[RecallFile]:
-        """Create-or-update each ``{name, track, description, content}`` as a ``RecallFile``.
+        user_data: dict[str, Any],
+        batch: _EmbeddingBatch,
+    ) -> list[_RecallFilePlan]:
+        """Resolve each ``{name, track, description, content}`` and request its vectors.
 
         Keyed by ``name`` within the record's ``track`` (``memory``/``skill``). New files embed
         their ``name: description`` for file-level recall. Existing files always take the new
         content and re-embed only when the description actually changed — commit always carries
-        a description (read from the local file), but it's usually unchanged. Segments are then
-        reconciled per track.
+        a description (read from the local file), but it's usually unchanged.
+
+        Reads and requests only (see :meth:`commit_results`). Repeated ``(track, name)`` pairs
+        collapse to their last occurrence, for the same reason paths do in
+        :meth:`_plan_resources`.
         """
-        user_data = dict(user_scope or {})
-        committed: list[RecallFile] = []
+        deduped: dict[tuple[str, str], dict[str, Any]] = {}
         for item in recall_files:
             name = (item.get("name") or "").strip()
-            if not name:
-                continue
-            file_track = item.get("track") or "memory"
+            if name:
+                deduped[(item.get("track") or "memory", name)] = item
+
+        # One listing per distinct track; this used to be re-read per file.
+        existing_by_track: dict[str, dict[str, RecallFile]] = {
+            track: {
+                f.name: f
+                for f in store.recall_file_repo.list_recall_files(where={**user_data, "track": track}).values()
+            }
+            for track in {track for track, _ in deduped}
+        }
+
+        plans: list[_RecallFilePlan] = []
+        for (track, name), item in deduped.items():
             description = (item.get("description") or "").strip()
             content = (item.get("content") or "").strip()
+            existing = existing_by_track[track].get(name)
 
-            existing = store.recall_file_repo.list_recall_files(where={**user_data, "track": file_track})
-            file = {f.name: f for f in existing.values()}.get(name)
-            if file is None:
-                emb_text = f"{name}: {description}" if description else name
-                embedding = await _embed_one(embed_client, emb_text)
-                file = store.recall_file_repo.get_or_create_recall_file(
+            create_ticket = None
+            description_ticket = None
+            if existing is None:
+                create_ticket = batch.request(f"{name}: {description}" if description else name)
+            elif description and description != existing.description:
+                description_ticket = batch.request(f"{name}: {description}")
+
+            # The description the row will hold *after* the write — which is what the
+            # skill track builds its segment text from, so it must be resolved here
+            # rather than read back off a freshly-updated file.
+            # ``description_ticket is not None``, never a truthiness test: ticket 0 is
+            # a perfectly good ticket and the first one every commit hands out.
+            settled_description = (
+                description if existing is None or description_ticket is not None else existing.description
+            )
+            plans.append(
+                _RecallFilePlan(
                     name=name,
+                    track=track,
                     description=description,
-                    embedding=embedding,
-                    user_data=user_data,
-                    track=file_track,
+                    content=content,
+                    existing=existing,
+                    create_ticket=create_ticket,
+                    description_ticket=description_ticket,
+                    segments=self._plan_segments(
+                        name=name,
+                        description=settled_description,
+                        content=content,
+                        file_track=track,
+                        existing=existing,
+                        store=store,
+                        batch=batch,
+                    ),
                 )
-            # Commit always carries a description (read from the local file), so re-embed the
-            # file-level ``name: description`` vector only when it actually changed; otherwise
-            # leave the description/embedding untouched and just take the new content.
-            description_changed = bool(description) and description != file.description
-            new_embedding = await _embed_one(embed_client, f"{name}: {description}") if description_changed else None
+            )
+        return plans
+
+    def _plan_segments(
+        self,
+        *,
+        name: str,
+        description: str,
+        content: str,
+        file_track: str,
+        existing: RecallFile | None,
+        store: Database,
+        batch: _EmbeddingBatch,
+    ) -> _SegmentPlan:
+        """Diff a file's stored segments against the texts it will have after the write.
+
+        Drop-and-add on the difference only: segments whose text disappeared are deleted and
+        only genuinely new texts are embedded and inserted, so unchanged lines keep their
+        embedding.
+        """
+        new_texts = self._commit_segment_texts_for_file(
+            name=name, description=description, content=content, file_track=file_track
+        )
+        # A file that does not exist yet cannot have stored segments, so it needs no read.
+        stored = store.recall_file_segment_repo.list_segments_for_file(existing.id) if existing else []
+        stored_texts = {seg.text for seg in stored}
+        new_set = set(new_texts)
+        return _SegmentPlan(
+            stale_ids=[seg.id for seg in stored if seg.text not in new_set],
+            additions=[(text, batch.request(text)) for text in new_texts if text not in stored_texts],
+        )
+
+    def _write_recall_files(
+        self,
+        plans: list[_RecallFilePlan],
+        *,
+        store: Database,
+        user_data: dict[str, Any],
+        batch: _EmbeddingBatch,
+    ) -> list[RecallFile]:
+        """Apply the planned recall-file and segment writes, every vector already in hand."""
+        committed: list[RecallFile] = []
+        for plan in plans:
+            file = plan.existing
+            if file is None:
+                file = store.recall_file_repo.get_or_create_recall_file(
+                    name=plan.name,
+                    description=plan.description,
+                    embedding=batch.vector(plan.create_ticket),
+                    user_data=user_data,
+                    track=plan.track,
+                )
+            redescribed = plan.description_ticket is not None
             file = store.recall_file_repo.update_recall_file(
                 recall_file_id=file.id,
-                description=description if description_changed else None,
-                embedding=new_embedding,
-                content=content,
+                description=plan.description if redescribed else None,
+                embedding=batch.vector(plan.description_ticket) if redescribed else None,
+                content=plan.content,
             )
-            await self._commit_sync_file_segments(
-                file=file,
-                file_track=file_track,
-                store=store,
-                user_scope=user_data,
-                embed_client=embed_client,
-            )
+            for stale_id in plan.segments.stale_ids:
+                store.recall_file_segment_repo.delete_segment(stale_id)
+            for text, ticket in plan.segments.additions:
+                store.recall_file_segment_repo.create_segment(
+                    recall_file_id=file.id,
+                    track=plan.track,
+                    text=text,
+                    embedding=batch.vector(ticket),
+                    user_data=dict(user_data),
+                )
             committed.append(file)
         return committed
 
     @staticmethod
-    def _commit_segment_texts_for_file(file: RecallFile, file_track: str) -> list[str]:
+    def _commit_segment_texts_for_file(*, name: str, description: str, content: str, file_track: str) -> list[str]:
         """Compute a file's searchable segment texts (ADR 0007 L2 items), track-specific.
+
+        Takes the values the file will hold once written rather than a persisted
+        :class:`RecallFile`, so the texts — and their embeddings — can be settled before
+        anything is written.
 
         - ``skill``: a single ``name: ...\\ndescription: ...`` segment for the whole skill.
         - ``memory``: one segment per content line, skipping blank lines and markdown
           headings, de-duplicated while preserving order.
         """
         if file_track == "skill":
-            return [f"name: {file.name}\ndescription: {file.description}"]
+            return [f"name: {name}\ndescription: {description}"]
 
         texts: list[str] = []
-        for line in (file.content or "").split("\n"):
+        for line in (content or "").split("\n"):
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
             texts.append(stripped)
         return list(dict.fromkeys(texts))
-
-    async def _commit_sync_file_segments(
-        self,
-        *,
-        file: RecallFile,
-        file_track: str,
-        store: Database,
-        user_scope: dict[str, Any],
-        embed_client: Any,
-    ) -> None:
-        """Reconcile a file's stored segments with its freshly computed segment texts.
-
-        Drop-and-add on the difference only: segments whose text disappeared are deleted and
-        only genuinely new texts are embedded and inserted, so unchanged lines keep their
-        embedding.
-        """
-        new_texts = self._commit_segment_texts_for_file(file, file_track)
-        existing = store.recall_file_segment_repo.list_segments_for_file(file.id)
-        existing_texts = {seg.text for seg in existing}
-        new_set = set(new_texts)
-
-        for seg in existing:
-            if seg.text not in new_set:
-                store.recall_file_segment_repo.delete_segment(seg.id)
-
-        to_add = [text for text in new_texts if text not in existing_texts]
-        if not to_add:
-            return
-        vecs, _ = await embed_client.embed(to_add)
-        for text, vec in zip(to_add, vecs, strict=True):
-            store.recall_file_segment_repo.create_segment(
-                recall_file_id=file.id, track=file_track, text=text, embedding=vec, user_data=dict(user_scope)
-            )
