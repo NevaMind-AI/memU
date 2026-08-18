@@ -11,6 +11,7 @@ already has a trust store.
 
 from __future__ import annotations
 
+import os
 import pathlib
 import ssl
 import sys
@@ -34,6 +35,10 @@ def _uncached() -> Any:
 
 def _verify_paths(monkeypatch: pytest.MonkeyPatch, *, cafile: str | None, capath: str | None) -> None:
     monkeypatch.setattr(ssl, "get_default_verify_paths", lambda: types.SimpleNamespace(cafile=cafile, capath=capath))
+
+
+def _default_context_has_cas(monkeypatch: pytest.MonkeyPatch, answer: bool) -> None:
+    monkeypatch.setattr(trust, "_default_context_has_cas", lambda: answer)
 
 
 # --- the machine that already works must not change at all ---
@@ -68,11 +73,28 @@ def test_no_context_argument_is_passed_when_the_store_is_healthy(monkeypatch: py
     assert trust.urlopen_kwargs() == {}
 
 
+def test_a_pathless_platform_store_is_left_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Windows loads OS roots without exposing a cafile or capath."""
+    _verify_paths(monkeypatch, cafile=None, capath=None)
+    _default_context_has_cas(monkeypatch, True)
+
+    assert trust.ssl_context() is None
+    assert trust.urlopen_kwargs() == {}
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows certificate store only")
+def test_the_real_windows_store_is_left_alone() -> None:
+    assert ssl.create_default_context().get_ca_certs()
+    assert trust.ssl_context() is None
+    assert trust.urlopen_kwargs() == {}
+
+
 # --- the machine with no trust store at all ---
 
 
 def test_certifi_fills_a_vacuum(monkeypatch: pytest.MonkeyPatch) -> None:
     _verify_paths(monkeypatch, cafile=None, capath=None)
+    _default_context_has_cas(monkeypatch, False)
 
     context = trust.ssl_context()
 
@@ -94,6 +116,7 @@ def test_a_missing_certifi_degrades_instead_of_raising(monkeypatch: pytest.Monke
     that they cannot be the thing that breaks a command.
     """
     _verify_paths(monkeypatch, cafile=None, capath=None)
+    _default_context_has_cas(monkeypatch, False)
     monkeypatch.setitem(sys.modules, "certifi", None)
 
     assert trust.ssl_context() is None
@@ -104,6 +127,7 @@ def test_the_answer_is_cached_across_calls(monkeypatch: pytest.MonkeyPatch) -> N
     """A flush may POST `MAX_FLUSH_POSTS` times and each miss parses certifi's
     whole PEM bundle, so the same context must come back rather than be rebuilt."""
     _verify_paths(monkeypatch, cafile=None, capath=None)
+    _default_context_has_cas(monkeypatch, False)
 
     assert trust.ssl_context() is trust.ssl_context()
 
@@ -135,6 +159,7 @@ class _Recorder:
 
 def test_event_delivery_verifies_against_the_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     _verify_paths(monkeypatch, cafile=None, capath=None)
+    _default_context_has_cas(monkeypatch, False)
     recorder = _Recorder()
     monkeypatch.setattr(events.urllib.request, "urlopen", recorder)
 
@@ -148,6 +173,7 @@ def test_template_refresh_verifies_against_the_fallback(
     """The second call site, and the reason the fix is one decision rather than two:
     a silent template fallback is the same failure wearing different clothes."""
     _verify_paths(monkeypatch, cafile=None, capath=None)
+    _default_context_has_cas(monkeypatch, False)
     recorder = _Recorder()
     monkeypatch.setattr(templates.urllib.request, "urlopen", recorder)
 

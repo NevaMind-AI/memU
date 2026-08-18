@@ -10,11 +10,15 @@ variable, is the failure this replaced.
 
 from __future__ import annotations
 
+import codecs
+import locale
+import os
 import pathlib
 
 import pytest
 
 from memu import config_file
+from memu import env as env_module
 from memu.hosts.claude_code.cli import SPEC
 from memu.hosts.host_cli import run
 
@@ -43,7 +47,7 @@ def _write(path: pathlib.Path, text: str) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_merge_leaves_every_other_line_untouched(config: pathlib.Path) -> None:
+def test_merge_preserves_every_other_logical_line(config: pathlib.Path) -> None:
     """The field failure this command exists to end: a rewrite that takes
     another host's settings, and the user's comments, with it."""
     _write(
@@ -87,6 +91,7 @@ def test_duplicate_assignments_all_collapse_to_the_new_value(config: pathlib.Pat
     assert config_file.read()["MEMU_CLIENT_ID"] == "three"
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits only")
 def test_file_is_owner_only(config: pathlib.Path) -> None:
     config_file.write_values({"MEMU_CLOUD_API_KEY": "sk-secret"})
 
@@ -94,6 +99,7 @@ def test_file_is_owner_only(config: pathlib.Path) -> None:
     assert config.parent.stat().st_mode & 0o077 == 0
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits only")
 def test_nothing_to_set_still_restricts_an_existing_file(config: pathlib.Path) -> None:
     _write(config, "MEMU_DB=/srv/db\n")
     config.chmod(0o644)
@@ -104,6 +110,19 @@ def test_nothing_to_set_still_restricts_an_existing_file(config: pathlib.Path) -
     assert config.stat().st_mode & 0o777 == 0o600
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows permission behavior only")
+def test_windows_write_inherits_acls_without_chmod(config: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    chmod_calls: list[int] = []
+    monkeypatch.setattr(pathlib.Path, "chmod", lambda _path, mode: chmod_calls.append(mode))
+
+    path, changed = config_file.write_values({"MEMU_CLOUD_API_KEY": "sk-secret"})
+
+    assert (path, changed) == (config, True)
+    assert config_file.read()["MEMU_CLOUD_API_KEY"] == "sk-secret"
+    assert chmod_calls == []
+    assert config_file.permission_note() == "plaintext key; Windows ACLs inherited"
+
+
 def test_read_is_blind_to_the_process_environment(config: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The distinction the whole guard rests on. ``env.env()`` resolves the shell
     first — correct for "what is this run using", wrong for "what is on disk"."""
@@ -111,6 +130,52 @@ def test_read_is_blind_to_the_process_environment(config: pathlib.Path, monkeypa
     monkeypatch.setenv("MEMU_CLOUD_API_KEY", "sk-from-the-shell")
 
     assert "MEMU_CLOUD_API_KEY" not in config_file.read()
+
+
+@pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16-le", "utf-16-be"])
+def test_init_migrates_a_bom_encoded_config_to_utf8(config: pathlib.Path, encoding: str) -> None:
+    text = "# 用户配置\nMEMU_DB=C:/用户/memu.sqlite3\n"
+    codecs_by_encoding = {
+        "utf-8-sig": codecs.BOM_UTF8 + text.encode("utf-8"),
+        "utf-16-le": codecs.BOM_UTF16_LE + text.encode("utf-16-le"),
+        "utf-16-be": codecs.BOM_UTF16_BE + text.encode("utf-16-be"),
+    }
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_bytes(codecs_by_encoding[encoding])
+    env_module.reload()
+
+    assert env_module.env("MEMU_DB") == "C:/用户/memu.sqlite3"
+    assert run(SPEC, ["init"]) == 0
+
+    migrated = config.read_bytes()
+    assert not migrated.startswith((codecs.BOM_UTF8, codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE))
+    assert migrated.decode("utf-8").splitlines()[:2] == text.splitlines()
+    assert config_file.read()["MEMU_DB"] == "C:/用户/memu.sqlite3"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows ANSI code page only")
+def test_init_migrates_a_windows_ansi_config_to_utf8(config: pathlib.Path) -> None:
+    text = "# 用户配置\nMEMU_DB=C:/用户/memu.sqlite3\n"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_bytes(text.encode(locale.getencoding()))
+    env_module.reload()
+
+    assert env_module.env("MEMU_DB") == "C:/用户/memu.sqlite3"
+    assert run(SPEC, ["init"]) == 0
+
+    assert config.read_bytes().decode("utf-8").splitlines()[:2] == text.splitlines()
+    assert config_file.read()["MEMU_DB"] == "C:/用户/memu.sqlite3"
+
+
+def test_no_logical_update_still_migrates_legacy_encoding(config: pathlib.Path) -> None:
+    text = "MEMU_MEMORY_MODE=local\nMEMU_CLIENT_ID=existing\n"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    config.write_bytes(codecs.BOM_UTF16_LE + text.encode("utf-16-le"))
+
+    path, changed = config_file.write_values({})
+
+    assert (path, changed) == (config, True)
+    assert config.read_bytes().decode("utf-8").splitlines() == text.splitlines()
 
 
 # --------------------------------------------------------------------------- #

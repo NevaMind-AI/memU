@@ -10,10 +10,11 @@ producers inside memU either.
 
 Three rules, and every caller gets all three for free:
 
-* **Merge, never rewrite.** Only the named keys change. Every other line —
-  another host's settings, the user's comments, a key this release has never
-  heard of — survives byte-identical. The one exception is a missing final
-  newline, which is added.
+* **Merge, never replace the document.** Only the named keys change. Every
+  other logical line — another host's settings, the user's comments, a key this
+  release has never heard of — keeps its text, order, and comments. Writes use
+  canonical UTF-8; a legacy encoding is normalized on its first write, line
+  endings follow the host text convention, and a missing final newline is added.
 * **Atomic.** The new text lands in a temp file beside the target and replaces
   it with :func:`os.replace`, so a crash or a full disk leaves the old file
   intact rather than a half-written one that no longer parses.
@@ -35,7 +36,7 @@ import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 
-from memu.env import CONFIG_ENV
+from memu.env import CONFIG_ENV, read_config
 
 
 def config_path() -> Path:
@@ -58,7 +59,7 @@ def read() -> dict[str, str]:
     resolves cannot disagree.
     """
     try:
-        text = config_path().read_text(encoding="utf-8")
+        text, _ = read_config(config_path())
     except OSError:
         return {}
     values: dict[str, str] = {}
@@ -83,11 +84,11 @@ def write_values(updates: Mapping[str, str]) -> tuple[Path, bool]:
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
-        text = path.read_text(encoding="utf-8")
+        text, canonical = read_config(path)
     except FileNotFoundError:
-        text = ""
+        text, canonical = "", True
     merged = _merged(text, dict(updates))
-    if merged == text and path.is_file():
+    if merged == text and canonical and path.is_file():
         _restrict(path)
         return path, False
 
