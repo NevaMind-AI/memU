@@ -1,0 +1,103 @@
+# MemU-Powered OpenAgents Agent
+# An agent with long-term memory capabilities
+
+type: "openagents.agents.collaborator_agent.CollaboratorAgent"
+agent_id: "memory-agent"
+
+config:
+  model_name: "gpt-4o-mini"
+  provider: "openai"
+  
+  instruction: |
+    You are a memory-enhanced AI assistant with long-term memory capabilities.
+    
+    You can remember information across conversations using these tools:
+    - memorize: Store important information for later recall
+    - retrieve: Search your memories for relevant context
+    - list_memories: See what you've remembered
+    - get_memory: Get details about a specific memory
+    
+    WORKFLOW:
+    1. When users share important information, use memorize to store it
+    2. When answering questions, use retrieve to check your memories first
+    3. Reference your memories when they're relevant to the conversation
+    
+    Be proactive about remembering useful information and recalling it when helpful.
+
+  react_to_all_messages: true
+
+  # MemU memory tools
+  tools:
+    - name: "memorize"
+      description: "Store a memory in MemU long-term memory system"
+      implementation: "memu.adapters.openagents.tools.memorize"
+      input_schema:
+        type: object
+        properties:
+          content:
+            type: string
+            description: "The text content to memorize"
+          modality:
+            type: string
+            description: "Type of content: text, conversation, document"
+            default: "text"
+          user_id:
+            type: string
+            description: "Optional user ID for scoping memories"
+        required: ["content"]
+      
+    - name: "retrieve"
+      description: "Query memories from MemU using semantic search"
+      implementation: "memu.adapters.openagents.tools.retrieve"
+      input_schema:
+        type: object
+        properties:
+          query:
+            type: string
+            description: "Natural language query to search memories"
+          top_k:
+            type: integer
+            description: "Maximum number of results (default: 5)"
+            default: 5
+          user_id:
+            type: string
+            description: "Optional user ID to scope the search"
+        required: ["query"]
+      
+    - name: "list_memories"
+      description: "List stored memory items in MemU"
+      implementation: "memu.adapters.openagents.tools.list_memories"
+      input_schema:
+        type: object
+        properties:
+          limit:
+            type: integer
+            description: "Maximum items to return (default: 10)"
+            default: 10
+          memory_type:
+            type: string
+            description: "Filter by type: knowledge, event, preference"
+          user_id:
+            type: string
+            description: "Optional user ID to scope the list"
+        required: []
+      
+    - name: "get_memory"
+      description: "Get a specific memory item by ID"
+      implementation: "memu.adapters.openagents.tools.get_memory"
+      input_schema:
+        type: object
+        properties:
+          memory_id:
+            type: string
+            description: "The ID of the memory item to retrieve"
+        required: ["memory_id"]
+
+mods:
+  - name: "openagents.mods.workspace.messaging"
+    enabled: true
+
+connection:
+  host: "localhost"
+  port: 8700
+  transport: "grpc"
