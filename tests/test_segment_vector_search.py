@@ -228,6 +228,26 @@ def test_postgres_caches_hits_like_a_listing() -> None:
     assert [seg.id for seg in repo.segments] == ["seg-1"]
 
 
+def test_postgres_without_pgvector_falls_back_to_the_python_scan() -> None:
+    """``use_vector=False`` must still answer, via the protocol's scan."""
+    # The ORM models carry a ``VECTOR`` column either way, so building the repo
+    # needs pgvector even on the path that never ranks with it.
+    pytest.importorskip("pgvector")
+
+    repo, sessions = _postgres_repo(
+        [_row("seg-1", "north", [0.0, 1.0]), _row("seg-2", "east", [1.0, 0.0])], use_vector=False
+    )
+
+    hits = repo.vector_search_segments([1.0, 0.0], 2)
+
+    assert [seg.text for seg, _ in hits] == ["east", "north"]
+    assert hits[0][1] == pytest.approx(1.0, abs=1e-3)
+    # Ranking happened in Python, so no ordering or truncation went to the database.
+    sql = str(sessions.seen[0])
+    assert "<=>" not in sql
+    assert "LIMIT" not in sql
+
+
 def test_postgres_native_path_honours_nonpositive_top_k() -> None:
     pytest.importorskip("pgvector")
 
