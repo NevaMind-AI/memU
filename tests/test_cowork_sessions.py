@@ -73,23 +73,25 @@ def test_windows_roots_enumerate_desktop_and_msix_locations(monkeypatch, tmp_pat
 
 def test_platform_roots_select_only_the_current_platform(monkeypatch, tmp_path: Path) -> None:
     home = tmp_path / "home"
-    macos = home / "Library" / "Application Support" / "Claude"
-    linux = tmp_path / "xdg" / "Claude"
+    support = home / "Library" / "Application Support"
+    xdg = tmp_path / "xdg"
+    macos = (support / "Claude", support / "Claude-3p")
+    linux = (xdg / "Claude", xdg / "Claude-3p")
     windows = tmp_path / "Roaming" / "Claude"
-    for root in (macos, linux, windows):
+    for root in (*macos, *linux, windows):
         root.mkdir(parents=True)
     monkeypatch.setattr("memu.hosts.cowork.sessions.Path.home", lambda: home)
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
     monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
 
     monkeypatch.setattr("memu.hosts.cowork.sessions.sys.platform", "darwin")
-    assert platform_data_roots() == [macos.resolve()]
-    assert macos_data_roots() == [macos.resolve()]
+    assert platform_data_roots() == [root.resolve() for root in macos]
+    assert macos_data_roots() == [root.resolve() for root in macos]
 
     monkeypatch.setattr("memu.hosts.cowork.sessions.sys.platform", "linux")
-    assert platform_data_roots() == [linux.resolve()]
-    assert linux_data_roots() == [linux.resolve()]
+    assert platform_data_roots() == [root.resolve() for root in linux]
+    assert linux_data_roots() == [root.resolve() for root in linux]
 
     monkeypatch.setattr("memu.hosts.cowork.sessions.sys.platform", "win32")
     assert platform_data_roots() == [windows.resolve()]

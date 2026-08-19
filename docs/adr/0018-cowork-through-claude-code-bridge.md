@@ -19,9 +19,9 @@ Cowork is a distinct read-only `CoworkTranscriptSource`, composed into the exist
 
 Discovery is platform-specific rather than one mixed list. Windows checks existing
 Claude Desktop roots under `%APPDATA%\Claude`, `%LOCALAPPDATA%\Claude-3p`, and
-MSIX `Claude_*` roaming roots. macOS checks
-`~/Library/Application Support/Claude`; Linux checks
-`${XDG_CONFIG_HOME:-~/.config}/Claude`. These conventional macOS/Linux roots are
+MSIX `Claude_*` roaming roots. macOS checks both `Claude` and `Claude-3p` under
+`~/Library/Application Support`; Linux checks both under
+`${XDG_CONFIG_HOME:-~/.config}`. These conventional macOS/Linux roots are
 enabled for staging and remain subject to correction from real-machine field
 reports.
 

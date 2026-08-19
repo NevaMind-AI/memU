@@ -65,14 +65,15 @@ def windows_data_roots() -> list[Path]:
 
 def macos_data_roots() -> list[Path]:
     """Return conventional Claude Desktop data roots that exist on this Mac."""
-    return _existing_roots([Path.home() / "Library" / "Application Support" / "Claude"])
+    support = Path.home() / "Library" / "Application Support"
+    return _existing_roots([support / "Claude", support / "Claude-3p"])
 
 
 def linux_data_roots() -> list[Path]:
     """Return conventional Claude Desktop data roots that exist on this Linux host."""
     config_home_value = os.environ.get("XDG_CONFIG_HOME", "").strip()
     config_home = Path(config_home_value) if config_home_value else Path.home() / ".config"
-    return _existing_roots([config_home / "Claude"])
+    return _existing_roots([config_home / "Claude", config_home / "Claude-3p"])
 
 
 def platform_data_roots() -> list[Path]:
