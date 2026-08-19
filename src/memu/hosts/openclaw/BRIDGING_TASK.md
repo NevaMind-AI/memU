@@ -104,7 +104,9 @@ Create an OpenClaw cron job named `{{task_name}}` with:
 - `sessionTarget="isolated"` — load-bearing because each run receives
   `agent:<agentId>:cron:<jobId>:run:<sessionId>` before the model starts;
 - the selected schedule;
-- the recurring prompt below, verbatim.
+- the recurring prompt below. Use it verbatim for the default OpenClaw state
+  directory. For a non-default `OPENCLAW_STATE_DIR`, change only the PREPARE
+  command to `memu-openclaw prepare --session-dir <state-dir>/agents`.
 
 After creating the job, register its exact new job ID on the gateway host:
 
@@ -159,7 +161,9 @@ Finish with a one-line summary: how many jobs ran (leftovers included) and what 
 that there was nothing to commit).
 ```
 
-Only the schedule varies. The prompt carries no job, run, or session identity.
+Only the schedule varies on a default installation. The prompt carries no job,
+run, or session identity. A non-default state directory changes only the PREPARE
+command described above.
 
 ## Step 3 — verify
 
