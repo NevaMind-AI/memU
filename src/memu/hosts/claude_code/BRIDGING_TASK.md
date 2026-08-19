@@ -29,9 +29,9 @@ usable on its own.
 
 ## What the bridging task does (context)
 
-1. **Prepare** — `memu-claude-code prepare` scans new turns under
-   `~/.claude/projects` (one JSONL file per session, one directory per project)
-   and, on Windows, discovered Claude Cowork `local_*/audit.jsonl` workspaces.
+1. **Prepare** — `memu-claude-code prepare` scans new turns from Claude Code
+   sessions and any discovered Cowork workspaces. It handles source discovery
+   automatically; the scheduled task does not need to know their paths.
    It mirrors the current memU recall files to `~/.memu/hosts/claude-code/memory`
    and `~/.memu/hosts/claude-code/skill`, snapshots them by content hash, and
    writes numbered **job-instruction files** to
