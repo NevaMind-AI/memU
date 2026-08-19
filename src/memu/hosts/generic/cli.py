@@ -70,6 +70,7 @@ SPEC = HostSpec(
     host=HOST,
     display="agent",
     package="memu.hosts.generic",
+    task_name="memu-bridging-agent",
     source_factory=GenericTranscriptSource,
     session_dir="",  # no universal location — detect finds it, prepare requires it
     session_help="The agent's session-log directory (find it with `memu-agent detect`)",

@@ -1,5 +1,11 @@
 # Uninstall memU for Hermes Agent
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** A user has pointed you at this file ("follow this
 > guide to uninstall memU"). Work top to bottom. Each part ends with a
 > **verify** gate — do not proceed until the current one passes.
@@ -33,11 +39,11 @@ that entry:
   `~/.memu/hosts/hermes/bridge.sh` (or an older install invokes Hermes headless
   with the inlined pipeline prompt). Everything else in the user's crontab is
   theirs and stays, e.g.
-  `crontab -l | grep -vE 'hosts/hermes/bridge\.sh|memU bridging pipeline' | crontab -`.
+  `crontab -l | grep -vE '{{task_name_pattern}}|hosts/hermes/bridge\.sh|memU bridging pipeline' | crontab -`.
   If the memU line was the only reason a `PATH=` line was added, that line may go
   too — but only if nothing else needs it. If nothing remains, `crontab -r`
   removes the empty crontab. If launchd was explicitly chosen instead, remove
-  only its memU bridging plist.
+  only the plist whose Label is `{{task_name}}`.
 - **Windows (Task Scheduler)** — use the deterministic helper:
 
   ```
@@ -45,7 +51,7 @@ that entry:
   ```
 
 Also sweep installs made by the older guide: list `hermes cron list --all`,
-remove every job whose name is exactly `memu-bridging-hermes` with
+remove every job whose name is exactly `{{task_name}}` with
 `hermes cron remove <job-id>`, then confirm none remain. Current installs never
 create one. The generated `bridge.sh`/`memu-bridge.ps1`, `bridge-prompt.txt`, and
 `bridge.log` live under `~/.memu/hosts/hermes/` and go with the host residue in
@@ -55,7 +61,7 @@ the later cleanup part.
 
 `crontab -l` (and launchd, if used) shows no memU bridging entry on Unix;
 `memu-hermes schedule status` reports not registered on Windows; and
-`hermes cron list --all` has no legacy `memu-bridging-hermes` job. Everything
+`hermes cron list --all` has no legacy `{{task_name}}` job. Everything
 unrelated is still there.
 
 ---

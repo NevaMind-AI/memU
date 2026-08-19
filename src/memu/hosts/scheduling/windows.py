@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 # Task Scheduler folder that namespaces every memU task, so `\memU\<name>` never
 # collides with an unrelated task and a whole-folder query lists only ours.
 TASK_PATH = "\\memU\\"
+"""Internal Task Scheduler namespace; user-facing output shows only task names."""
 DEFAULT_INTERVAL_MINUTES = 60
 
 WRAPPER_NAME = "memu-bridge.ps1"
@@ -163,6 +164,15 @@ def register_script(task_name: str, wrapper_path: Path, interval_minutes: int, w
 
 def unregister_script(task_name: str) -> str:
     return f"Unregister-ScheduledTask -TaskName {_ps_quote(task_name)} -TaskPath {_ps_quote(TASK_PATH)} -Confirm:$false"
+
+
+def unregister_if_present_script(task_name: str) -> str:
+    quoted_name = _ps_quote(task_name)
+    quoted_path = _ps_quote(TASK_PATH)
+    return (
+        f"if (Get-ScheduledTask -TaskName {quoted_name} -TaskPath {quoted_path} -ErrorAction SilentlyContinue) "
+        f"{{ Unregister-ScheduledTask -TaskName {quoted_name} -TaskPath {quoted_path} -Confirm:$false }}"
+    )
 
 
 def status_script(task_name: str) -> str:
@@ -289,6 +299,15 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
         return rc
 
     wrapper, prompt_file, log_file, registry = _paths(layout)
+    for former_name in spec.former_task_names:
+        proc = _run_powershell(unregister_if_present_script(former_name))
+        if proc.returncode != 0:
+            print(
+                f"error: could not remove former task '{former_name}': {proc.stderr.strip()}",
+                file=sys.stderr,
+            )
+            return 1
+
     prepare_session_dir = spec.session_dir if spec.schedule_prepare_session_dir else None
     prompt_file.write_text(
         bridging_pipeline_prompt(spec, prepare_session_dir=prepare_session_dir),
@@ -317,22 +336,21 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
         ),
         encoding="utf-8",
     )
-    print(f"registered '{TASK_PATH}{spec.task_name}' — runs every {interval_minutes} min, hidden, catches up if missed")
+    print(f"registered '{spec.task_name}' — runs every {interval_minutes} min, hidden, catches up if missed")
     print(f"  wrapper: {wrapper}")
     print(f"  verify it can actually run:  {spec.binary} schedule verify")
     return 0
 
 
 def uninstall(spec: HostSpec, layout: Layout) -> int:
-    """Remove the task by its canonical name and clean up generated artifacts."""
+    """Remove the current task and recognized former names, then clean generated artifacts."""
     _require_windows()
-    proc = _run_powershell(unregister_script(spec.task_name))
-    if proc.returncode == 0:
-        print(f"removed '{TASK_PATH}{spec.task_name}'")
-    else:
-        # Idempotent: an absent task is a warning, not a failure — uninstall should
-        # succeed whether or not install ever did.
-        print(f"warning: could not remove '{TASK_PATH}{spec.task_name}': {proc.stderr.strip()}", file=sys.stderr)
+    for task_name in (*spec.former_task_names, spec.task_name):
+        proc = _run_powershell(unregister_if_present_script(task_name))
+        if proc.returncode == 0:
+            print(f"removed '{task_name}'")
+        else:
+            print(f"warning: could not remove '{task_name}': {proc.stderr.strip()}", file=sys.stderr)
 
     wrapper, prompt_file, _log, registry = _paths(layout)
     for artifact in (wrapper, prompt_file, registry):
@@ -341,14 +359,35 @@ def uninstall(spec: HostSpec, layout: Layout) -> int:
     return 0
 
 
+def _former_registrations(spec: HostSpec) -> tuple[str, ...]:
+    return tuple(
+        task_name for task_name in spec.former_task_names if _run_powershell(status_script(task_name)).returncode == 0
+    )
+
+
+def _display_names(names: tuple[str, ...]) -> str:
+    return ", ".join(f"'{name}'" for name in names)
+
+
 def status(spec: HostSpec, layout: Layout) -> int:
-    """Print whether the task is registered and its last/next run."""
+    """Print whether the current task is registered or migration is needed."""
     _require_windows()
     proc = _run_powershell(status_script(spec.task_name))
-    if proc.returncode == 0:
+    former_names = _former_registrations(spec)
+    if proc.returncode == 0 and not former_names:
         print(proc.stdout.strip())
+    elif proc.returncode == 0:
+        print(
+            f"duplicate registrations: '{spec.task_name}' and {_display_names(former_names)} "
+            f"(run `{spec.binary} schedule install` to remove former tasks)"
+        )
+    elif former_names:
+        print(
+            f"former registration(s): {_display_names(former_names)} "
+            f"(run `{spec.binary} schedule install` to migrate to '{spec.task_name}')"
+        )
     else:
-        print(f"not registered: '{TASK_PATH}{spec.task_name}' (run `{spec.binary} schedule install`)")
+        print(f"not registered: '{spec.task_name}' (run `{spec.binary} schedule install`)")
     return 0
 
 
@@ -362,8 +401,22 @@ def verify(spec: HostSpec, layout: Layout) -> int:
     """
     _require_windows()
     registered = _run_powershell(status_script(spec.task_name)).returncode == 0
-    if not registered:
-        print(f"not registered: '{TASK_PATH}{spec.task_name}' (run `{spec.binary} schedule install`)", file=sys.stderr)
+    former_names = _former_registrations(spec)
+    if not registered or former_names:
+        if registered:
+            print(
+                f"duplicate registrations: '{spec.task_name}' and {_display_names(former_names)} "
+                f"(run `{spec.binary} schedule install` to remove former tasks)",
+                file=sys.stderr,
+            )
+        elif former_names:
+            print(
+                f"former registration(s): {_display_names(former_names)} must be migrated to "
+                f"'{spec.task_name}' (run `{spec.binary} schedule install`)",
+                file=sys.stderr,
+            )
+        else:
+            print(f"not registered: '{spec.task_name}' (run `{spec.binary} schedule install`)", file=sys.stderr)
         return 1
 
     agent_path = _resolve_agent(spec)
@@ -374,7 +427,7 @@ def verify(spec: HostSpec, layout: Layout) -> int:
     if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc
 
-    print(f"ok: '{TASK_PATH}{spec.task_name}' is registered and `{_agent_binary(spec)}` resolves")
+    print(f"ok: '{spec.task_name}' is registered and `{_agent_binary(spec)}` resolves")
     if spec.needs_headless_auth:
         print("  its headless-auth probe also passed; credentials must remain persistent for the S4U run")
     print(

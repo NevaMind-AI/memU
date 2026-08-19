@@ -1,9 +1,15 @@
 ---
-name: create-memu-bridging-task
+name: {{task_doc_name}}
 description: Register a scheduled job that bridges recent Claude Code sessions into memU memory, skills, and resource submissions. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task (Claude Code)
+
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
 
 Use this when the user asks to **set up (or change) the recurring memU
 "bridging" task** — the job that periodically turns what the agent recently did
@@ -138,8 +144,10 @@ command field, but it does run the line through `/bin/sh`, so `$HOME` works; a
 literal absolute path is equally fine):
 
 ```
-0 * * * * $HOME/.memu/hosts/claude-code/bridge.sh
+0 * * * * $HOME/.memu/hosts/claude-code/bridge.sh # {{task_name}}
 ```
+
+If launchd is explicitly chosen, set its Label to `{{task_name}}`.
 
 The prompt block is fixed; only the cron expression is the user's choice.
 Nothing machine-specific leaks into the prompt — the pipeline is invoked
@@ -185,7 +193,7 @@ memu-claude-code schedule uninstall   # remove it
 
 `install` writes the prompt to a file plus a small PowerShell wrapper that reads
 it (nothing long ever touches the command line), bakes in the absolute path to
-`claude`, and registers a task named `\memU\memu-remember-claude-code` under an
+`claude`, and registers the task named `{{task_name}}` under an
 **S4U** principal — it runs whether or not you're logged in, windowless, and
 catches up a run missed while the machine was off. `--interval <minutes>` changes
 the cadence (default 60).

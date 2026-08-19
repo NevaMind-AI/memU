@@ -1,4 +1,4 @@
-# ADR 0017: Mine Claude Cowork Through the Claude Code Bridge
+# ADR 0018: Mine Claude Cowork Through the Claude Code Bridge
 
 - Status: Accepted
 - Date: 2026-08-14

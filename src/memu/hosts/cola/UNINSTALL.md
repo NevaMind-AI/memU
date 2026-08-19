@@ -1,6 +1,13 @@
 # Uninstall memU for Cola
 
-1. In Cola's scheduled-task UI, disable and remove the `memu-bridging` task.
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
+1. In Cola's scheduled-task UI, disable and remove every confirmed memU task
+   whose name is in {{all_task_names}}.
    Do not edit `~/.cola/crons.json` directly.
 2. Run `memu-cola remove-instruction`. This removes only memU's managed block
    from `~/.cola/memory-bank/MEMORY.md`; existing memory remains intact.

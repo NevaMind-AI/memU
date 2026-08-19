@@ -26,6 +26,7 @@ import contextlib
 import json
 import os
 import platform
+import re
 import sys
 import time
 import urllib.request
@@ -36,7 +37,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from memu import events
-from memu.hosts import instruction, retrieval, templates
+from memu.hosts import config_cmd, instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging import Layout, commit, prepare, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
@@ -46,6 +47,32 @@ ScheduleBackend = Literal["os", "native", "external"]
 """The existing scheduler arrangement a host documents; informational only."""
 
 DOCS = {"install": "INSTALL.md", "task": "BRIDGING_TASK.md", "uninstall": "UNINSTALL.md"}
+
+_TASK_NAME_RE = re.compile(r"memu-bridging-[a-z0-9]+(?:-[a-z0-9]+)*\Z")
+_DOC_TOKEN_RE = re.compile(r"\{\{([a-z_]+)\}\}")
+_DOC_TOKENS = frozenset({"task_name", "former_task_names", "all_task_names", "task_name_pattern", "task_doc_name"})
+
+
+def _task_names_text(names: tuple[str, ...]) -> str:
+    return ", ".join(f"`{name}`" for name in names) if names else "none"
+
+
+def _task_name_pattern(names: tuple[str, ...]) -> str:
+    return "|".join(re.escape(name) for name in names)
+
+
+GUIDE_EVENTS = {
+    "install": events.INSTALL_GUIDE_OPENED,
+    "uninstall": events.UNINSTALL_GUIDE_OPENED,
+}
+"""Which of :data:`DOCS` report being opened (:func:`_report_guide_opened`).
+
+The two lifecycle guides, and deliberately not ``task``: ``BRIDGING_TASK.md`` is
+printed by a scheduled run rather than by someone deciding something, so a row per
+printing would count the schedule's frequency and nothing else — and the bridging
+pair it describes is already the most thoroughly instrumented path in the product.
+A doc missing here simply prints, which is what keeps adding one to ``DOCS`` from
+silently owing an event."""
 
 
 @dataclass(frozen=True)
@@ -60,6 +87,14 @@ class HostSpec:
 
     package: str
     """Dotted package holding the host's ``INSTALL.md`` / ``BRIDGING_TASK.md``."""
+
+    task_name: str
+    """Current cross-platform name for this host's recurring bridging task.
+
+    Every scheduler surface that supports a name uses this exact value. Guides
+    receive it through the controlled ``{{task_name}}`` token rather than copying
+    the literal, so registration code and prose cannot drift independently.
+    """
 
     source_factory: Callable[[str], TranscriptSource]
     """Builds the host's :class:`TranscriptSource` from the ``--session-dir`` value."""
@@ -78,6 +113,14 @@ class HostSpec:
     target, and to inspect during uninstall. Only used when the CLI's default
     ``--path`` is in effect, so an explicit custom target never rewrites unrelated
     files. This is an upgrade seam, not a second active instruction location."""
+
+    former_task_names: tuple[str, ...] = ()
+    """Historical scheduler task names recognized during install and uninstall.
+
+    These are aliases for this same bridging pipeline, not alternate current
+    names. Scheduler-specific structural checks (prompt, job ID, wrapper) remain
+    authoritative where a name alone is not safe enough to delete by.
+    """
 
     skills_dir: str = ""
     """The host's skills directory, for hosts that have skills (``~/.codex/skills``,
@@ -160,6 +203,20 @@ class HostSpec:
     host metadata, without asking the model to carry identity.
     """
 
+    def __post_init__(self) -> None:
+        if not _TASK_NAME_RE.fullmatch(self.task_name):
+            msg = f"invalid task_name: {self.task_name!r}"
+            raise ValueError(msg)
+        if self.task_name in self.former_task_names:
+            msg = "task_name must not also appear in former_task_names"
+            raise ValueError(msg)
+        if len(set(self.former_task_names)) != len(self.former_task_names):
+            msg = "former_task_names must not contain duplicates"
+            raise ValueError(msg)
+        if any(not name.strip() for name in self.former_task_names):
+            msg = "former_task_names must not contain empty names"
+            raise ValueError(msg)
+
     @property
     def binary(self) -> str:
         return f"memu-{self.host}"
@@ -174,11 +231,33 @@ class HostSpec:
         return self.base_dir or f"~/.memu/hosts/{self.host}"
 
     @property
-    def task_name(self) -> str:
-        """Canonical scheduled-task name — stable across install/uninstall so the
-        task is addressable by name (memU#539). Windows only today; Unix keeps its
-        existing crontab/launchd identity untouched."""
-        return f"memu-bridging-{self.host}"
+    def all_task_names(self) -> tuple[str, ...]:
+        """Current task name followed by every recognized historical alias."""
+        return (self.task_name, *self.former_task_names)
+
+    @property
+    def task_doc_name(self) -> str:
+        """Agent-skill identifier rendered into ``BRIDGING_TASK.md`` frontmatter."""
+        return f"create-{self.task_name}-task"
+
+    def render_doc(self, text: str) -> str:
+        """Render the small, closed naming vocabulary used by host guides."""
+        values = {
+            "task_name": self.task_name,
+            "former_task_names": _task_names_text(self.former_task_names),
+            "all_task_names": _task_names_text(self.all_task_names),
+            "task_name_pattern": _task_name_pattern(self.all_task_names),
+            "task_doc_name": self.task_doc_name,
+        }
+        unknown = set(_DOC_TOKEN_RE.findall(text)) - _DOC_TOKENS
+        if unknown:
+            msg = f"unknown host-doc token(s): {', '.join(sorted(unknown))}"
+            raise ValueError(msg)
+        rendered = _DOC_TOKEN_RE.sub(lambda match: values[match.group(1)], text)
+        if "{{" in rendered or "}}" in rendered:
+            msg = "unresolved host-doc token"
+            raise ValueError(msg)
+        return rendered
 
 
 def _layout(spec: HostSpec, args: argparse.Namespace) -> Layout:
@@ -578,35 +657,44 @@ async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
     # filename so the server layout mirrors the package layout.
     filename = DOCS[args.doc]
     embedded = (files(spec.package) / filename).read_text(encoding="utf-8")
-    print(templates.resolve_doc(spec.host, filename, embedded))
-    if args.doc == "install":
-        _report_install_started(spec)
+    resolved = templates.resolve_doc(spec.host, filename, embedded)
+    print(spec.render_doc(resolved))
+    event = GUIDE_EVENTS.get(args.doc)
+    if event:
+        _report_guide_opened(spec, event)
     return 0
 
 
-def _report_install_started(spec: HostSpec) -> None:
-    """The install funnel's entry point (ADR 0016 §4).
+def _report_guide_opened(spec: HostSpec, event: str) -> None:
+    """A lifecycle guide was printed — the install funnel's second step (ADR 0016 §4),
+    or its counterpart on the way out.
 
-    Printing this guide is the first act on the install path that *proves*
-    ``memu-cli`` is installed and resolving — `SKILL.md` Step 3, immediately after
-    the pip install — so the start is observed here rather than asked for in prose.
-    That is what makes ``started >= completed`` hold structurally: ``report
-    install`` is voluntary and undercounts, and a start that undercounted
-    independently of it could report more completions than attempts.
+    ``install_guide_opened`` was formerly ``cli_install_started``, and only the name
+    changed: the *start* now sits one command earlier, at ``init`` — ``SKILL.md``
+    Step 2, which knows the host and the key and writes the config this machine is
+    identified by (ADR 0017). Printing the guide is Step 3, so what this observes is
+    the narrower and still worth-observing fact that an agent which configured memU
+    went on to ask for the guide. ``uninstall_guide_opened`` is the same observation
+    on the way out, and the only code-observed step the removal path has.
 
-    ``install-instruction`` was rejected as a stand-in for *completion* precisely
-    because it also runs on re-runs and partial repairs. For a *start* that is the
-    correct reading: a re-run is a new attempt.
+    Code-observed on both legs of the install funnel, which is what makes
+    ``started >= succeeded`` hold structurally: ``report install`` is voluntary and
+    undercounts, and a start that undercounted independently of it could report more
+    completions than attempts. ``install-instruction`` was rejected as a stand-in for
+    *completion* precisely because it also runs on re-runs and partial repairs; for a
+    step on the way in, a re-run is a new attempt, which is the correct reading.
 
-    Flushed, not merely recorded, and that is the load-bearing half. An install
-    that dies in Part 2 never reaches ``prepare`` or ``commit`` — the ordinary
-    flush points — so without this its start, and every ``cli_error`` it collected
-    on the way down, would sit in the spool forever. That run is the exact one
-    this event exists to make visible. Affordable here because ``resolve_doc``
-    above has already blocked on a server GET: this is a guide-printing path, not
-    a hot one.
+    Flushed, not merely recorded, and that is the load-bearing half. An install that
+    dies in Part 2 never reaches ``prepare`` or ``commit`` — the ordinary flush
+    points — so without this its earlier events, and every ``cli_error`` it collected
+    on the way down, would sit in the spool forever. That run is the exact one these
+    events exist to make visible. On the uninstall side the deadline is harder still:
+    ``UNINSTALL.md`` Part 3 removes the package, so anything left spooled loses the
+    binary that would have sent it — the same reason ``report uninstall`` flushes
+    inline. Affordable in both cases because ``resolve_doc`` above has already
+    blocked on a server GET: this is a guide-printing path, not a hot one.
     """
-    events.record(events.CLI_INSTALL_STARTED, host=spec.host, session_id_env=spec.session_id_env)
+    events.record(event, host=spec.host, session_id_env=spec.session_id_env)
     events.flush()
 
 
@@ -658,15 +746,25 @@ async def _cmd_report(spec: HostSpec, args: argparse.Namespace) -> int:
 
     if args.what == "install":
         events.record(events.CLI_INSTALL_SUCCEEDED, host=spec.host, session_id_env=spec.session_id_env)
+        # Flushed, which makes the whole funnel deliverable from the install itself:
+        # `init` and `docs install` already flush, and leaving only the terminal row
+        # spooled would put the event that asserts the install worked behind the
+        # bridging pair — machinery this event has not yet proven runs. The install
+        # whose schedule never registered is precisely the one a consumer must be
+        # able to see completing, and it is also the run least likely to flush later.
+        # Affordable for the same reason `report error` is: `INSTALL.md`'s last step
+        # is not a hot path, and fail-open means an unreachable endpoint costs the
+        # timeout, never the event.
+        events.flush()
         print(outcome)
         return 0
 
     if args.what == "uninstall":
         events.record(events.CLI_UNINSTALL_SUCCEEDED, host=spec.host, session_id_env=spec.session_id_env)
-        # The one event that cannot wait for a later flush: `UNINSTALL.md` Part 3
-        # may remove the very binary that would deliver it. A whole flush, not the
-        # single-event `deliver=True` path — what this needs is the spool *emptied*
-        # before the binary goes, not one envelope sent.
+        # The event with the hardest deadline: `UNINSTALL.md` Part 3 may remove the
+        # very binary that would deliver it, so there may be no later flush at all.
+        # A whole flush, not the single-event `deliver=True` path — what this needs
+        # is the spool *emptied* before the binary goes, not one envelope sent.
         events.flush()
         print(outcome)
         return 0
@@ -702,7 +800,9 @@ def _register_report(sub: Any, handler: Any) -> None:
     parser = sub.add_parser("report", help="Report a lifecycle event to memU")
     what = parser.add_subparsers(dest="what", required=True)
 
-    installed = what.add_parser("install", help="Record that installation completed successfully")
+    installed = what.add_parser(
+        "install", help="Record that installation completed successfully (delivers immediately)"
+    )
     installed.set_defaults(handler=handler)
 
     uninstalled = what.add_parser("uninstall", help="Record that memU was uninstalled (delivers immediately)")
@@ -758,6 +858,13 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     # the instruction lands in and the binary it names are ours to fill in.
     retrieval.register(sub, host=spec.host, session_id_env=spec.session_id_env)
     _register_report(sub, bind(_cmd_report))
+    # `config.env` is host-irrelevant, so `memu` is the algorithmically correct
+    # home for these (ADR 0009) — and the wrong one for the install flow, whose
+    # ergonomic bet is that `SKILL.md` hands the agent exactly one binary name and
+    # every later step is `<that binary> …`. A second binary mid-flow adds a
+    # branch, a fresh "command not found", and a name likelier to be shadowed on
+    # PATH. `doctor` is just as host-irrelevant and lives here for the same reason.
+    config_cmd.register(sub, binary=spec.binary, host=spec.host, session_id_env=spec.session_id_env)
     instruction.register(
         sub,
         path=spec.instruction_path,
@@ -850,9 +957,11 @@ def run(spec: HostSpec, argv: list[str] | None = None) -> int:
         #
         # Never for `retrieve`, though, and the exception is the whole point. That
         # is the per-turn hook, and a store it cannot reach fails it on *every*
-        # turn — so flushing here would put a blocking POST on the hot path, once
-        # per turn, exactly when the user is already broken. Its events wait for
-        # the bridging pair like any other.
+        # turn — so flushing here would drain the whole spool on the hot path, once
+        # per turn, exactly when the user is already broken. The distinction is one
+        # POST versus all of them, not reporting versus silence: `_cmd_retrieve` has
+        # already delivered its own `memory_search_failed` envelope by now, which is
+        # the bounded way to say the same thing. Only this `cli_error` waits.
         if command != "retrieve":
             events.flush()
         if os.environ.get("MEMU_DEBUG") == "1":

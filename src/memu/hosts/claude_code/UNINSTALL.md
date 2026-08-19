@@ -1,5 +1,11 @@
 # Uninstall memU for Claude Code
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** A user has pointed you at this file ("follow this
 > guide to uninstall memU"). Work top to bottom. Each part ends with a
 > **verify** gate — do not proceed until the current one passes.
@@ -35,16 +41,17 @@ and stays.
 
 - **cron** — `crontab -l` to find the line, then rewrite the crontab without
   it, e.g.
-  `crontab -l | grep -vE 'hosts/claude-code/bridge\.sh|memU bridging pipeline' | crontab -`.
+  `crontab -l | grep -vE '{{task_name_pattern}}|hosts/claude-code/bridge\.sh|memU bridging pipeline' | crontab -`.
   If the memU line was the only reason a `PATH=` line was added, that line may
   go too — but only if nothing else in the crontab needs it. If nothing at all
   remains, `crontab -r` removes the now-empty crontab cleanly. The `bridge.sh`,
   `bridge-prompt.txt`, and `bridge.log` files live under
   `~/.memu/hosts/claude-code/` and go with the host residue in Part 3.
-- **launchd** — `launchctl bootout gui/$(id -u)/<label>` and delete the plist
+- **launchd** — `launchctl bootout gui/$(id -u)/{{task_name}}` and delete the plist
   under `~/Library/LaunchAgents`.
-- **Windows (Task Scheduler)** — the task was registered by the helper, so remove
-  it the same way; it also deletes the generated wrapper and prompt file:
+- **Windows (Task Scheduler)** — the helper removes both the current bridging
+  task and the recognized legacy remember task, then deletes the generated wrapper
+  and prompt file:
 
   ```
   memu-claude-code schedule uninstall
@@ -54,8 +61,7 @@ and stays.
 
 `crontab -l` (and `ls ~/Library/LaunchAgents`, if launchd was used) shows no
 memU bridging entry, and everything unrelated is still there. On Windows,
-`memu-claude-code schedule status` reports not-registered (equivalently,
-`Get-ScheduledTask -TaskPath '\memU\'` finds nothing).
+`memu-claude-code schedule status` reports not-registered.
 
 ---
 

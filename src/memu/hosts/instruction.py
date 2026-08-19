@@ -35,8 +35,10 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import os
 import re
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -216,10 +218,20 @@ def _write(path: Path, updated: str, *, backup: bool, dry_run: bool) -> tuple[bo
     if updated == current or dry_run:
         return False, diff
 
-    path.parent.mkdir(parents=True, exist_ok=True)
+    target = path.resolve() if path.is_symlink() else path
+    target.parent.mkdir(parents=True, exist_ok=True)
     if backup and current:
         shutil.copyfile(path, path.with_suffix(path.suffix + ".bak"))
-    path.write_text(updated, encoding="utf-8")
+    fd, temporary_name = tempfile.mkstemp(dir=target.parent, prefix=".tmp-", suffix=target.suffix)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(updated)
+        if target.exists():
+            shutil.copymode(target, temporary)
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
     return True, diff
 
 

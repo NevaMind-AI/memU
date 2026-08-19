@@ -1,9 +1,15 @@
 ---
-name: create-memu-bridging-task
+name: {{task_doc_name}}
 description: Create a Codex scheduled task that bridges recent Codex sessions into memU memory, skills, and resource submissions. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
 ---
 
 # Create the memU bridging scheduled task
+
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
 
 Use this when the user asks to **set up (or change) the recurring memU "bridging"
 task** — the job that periodically turns what the agent recently did in its Codex
@@ -67,8 +73,8 @@ before creating the task.
 
 ## Step 2 — create the scheduled task
 
-Create a Codex scheduled task with the chosen cron, named e.g. `memu-remember`,
-and set its recurring prompt to this block **verbatim**:
+Create a Codex scheduled task with the chosen cron, named
+`{{task_name}}`, and set its recurring prompt to this block **verbatim**:
 
 ```
 Run the memU bridging pipeline. Do the four steps strictly in order; do not

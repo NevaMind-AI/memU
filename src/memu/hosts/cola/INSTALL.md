@@ -1,5 +1,11 @@
 # Install memU for Cola
 
+## Task identity
+
+- Current task name: `{{task_name}}`
+- Former task names: {{former_task_names}}
+- Names recognized during migration and removal: {{all_task_names}}
+
 > **Audience: the agent.** Work top to bottom. Each verify gate must pass
 > before continuing.
 >
@@ -13,14 +19,40 @@ skill plus its memory-bank pointer.
 ## Part 1 — Install and configure memU
 
 ```sh
-pip install memu-cli
+pip install --upgrade memu-cli
 memu-cola --help
 ```
 
-Reuse `~/.memu/config.env` if another memU host already configured it. Otherwise
-ask the user to choose MemU Cloud or this device, write the chosen `MEMU_*`
-settings to that file, use an absolute local `MEMU_DB`, and protect it with
-`chmod 600 ~/.memu/config.env`. Never put these settings only in a shell profile:
+`--upgrade` is not optional: an older `memu-cli` already on the machine would
+otherwise stay, and the subcommands below (`init`, `config`) do not exist on it
+— the symptom is `invalid choice`. If you meet that error anywhere, upgrade and
+re-run the command.
+
+Then create the configuration file. If you came from memU's `SKILL.md` this is
+already done and re-running is harmless (`init` is idempotent and keeps a mode
+it finds):
+
+```sh
+memu-cola init --cloud-api-key <the user's memU key>
+```
+
+Bare `memu-cola init` if the user has no key or wants memory on this device.
+Passing a key selects cloud memory, and on a machine already using local memory
+that is a switch — nothing is deleted, but memories written locally stop being
+retrieved; `init` warns and proceeds.
+
+**Never write `~/.memu/config.env` by hand** — `memu-cola config` owns it. It
+merges rather than rewrites, sets the file's permissions, and refuses the edits
+that break retrieval silently. Read the state with `memu-cola config show`; if
+another memU host already configured a backend, reuse it as is. Otherwise ask
+the user to choose once, and write the choice with one command:
+
+```sh
+memu-cola config --cloud --cloud-api-key <memu-api-key>
+memu-cola config --local --db /absolute/path/memu.sqlite3 --embed-provider openai --embed-api-key <key>
+```
+
+Give `--db` an absolute path. Never put these settings only in a shell profile:
 Cola's scheduled task does not inherit an interactive shell.
 
 ### Verify Part 1
@@ -38,16 +70,24 @@ Cola stores transcripts at `~/.cola/sessions/<scope>/*.jsonl`. `memu-cola`
 reads user and assistant text plus tool calls, and ignores session headers and
 model/thinking metadata.
 
-Do not edit `~/.cola/crons.json` yourself. Ask Cola to follow its packaged task
-procedure:
+Do not edit `~/.cola/crons.json` yourself. **Refresh an existing bridging
+registration before continuing.** Inspect Cola's scheduled-task UI. If any task
+whose name is in {{all_task_names}} exists, record its current cadence, disable
+and remove **only that task** through the UI, then verify it no longer appears. Leave the store,
+session cursor, working tree, and retrieval instruction untouched. An absent
+task is the normal first-install case. Reuse the recorded cadence unless the
+user requested a change.
+
+Then ask Cola to follow its current packaged task procedure:
 
 ```sh
 memu-cola docs task
 ```
 
-On this machine the task is named `memU 记忆桥接`, has ID `memu-bridging`, runs
-on `desktop:local`, and defaults to `0 * * * *` (hourly). Reuse and update that
-task if it already exists; do not duplicate it.
+The recreated task uses `{{task_name}}` for its name and, when the UI exposes
+one separately, its ID. It runs on `desktop:local` and defaults to
+`0 * * * *` (hourly) when there was no prior cadence and the user did not choose
+another one.
 
 ### Verify Part 2
 
