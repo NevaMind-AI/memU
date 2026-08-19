@@ -27,9 +27,9 @@ The task has one pipeline on every supported OpenClaw release:
 ## Prerequisites
 
 - `memu-openclaw doctor` succeeds in the gateway service environment.
-- The isolated scheduled turn can execute on the gateway host and see both the
-  memU install and `~/.openclaw/agents`. Do not weaken sandbox or approval policy
-  without the user's explicit approval.
+- The isolated scheduled turn can execute on the gateway host and access both
+  the memU install and OpenClaw session data. Do not weaken sandbox or approval
+  policy without the user's explicit approval.
 - The gateway service can resolve `memu-openclaw`. Locate it with
   `command -v memu-openclaw` on macOS/Linux or
   `(Get-Command memu-openclaw).Source` on native Windows, expose that directory
@@ -187,7 +187,7 @@ Structural schema:
 Legacy schema:
 
 - one non-blocking compatibility warning is expected;
-- ordinary JSONL sessions still produce jobs and the pipeline completes.
+- sessions from legacy releases still produce jobs and the pipeline completes.
 
 Report the job name and schedule in words. The first run only has work after new
 OpenClaw session turns exist.

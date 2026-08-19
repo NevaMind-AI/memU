@@ -28,11 +28,10 @@ Parts 2 and 3 must share one configured mode. In local mode they must also share
 one store and embedding space, or retrieval silently returns nothing. Part 1 is
 what makes them agree.
 
-**Scope note.** This adapter reads Hermes's SQLite session store —
-`~/.hermes/state.db` (the `sessions` and `messages` tables), opened read-only so
-it never contends with the gateway's writer. If this install runs a non-default
-home (`HERMES_HOME`, or a profile), pass `--session-dir <home>/state.db` to
-`prepare`. The manual snapshots under `~/.hermes/sessions/saved/` are not mined.
+**Scope note.** This adapter reads Hermes sessions without modifying Hermes
+data. If this install runs a non-default home (`HERMES_HOME`, or a profile),
+pass `--session-dir <home>/state.db` to `prepare`. Manually saved session
+snapshots are not mined.
 
 ---
 
@@ -193,9 +192,9 @@ backend.
 
 ## Part 2 — Register the bridging (record) task
 
-The *record* seam: a scheduled job that mines recent sessions out of
-`~/.hermes/state.db` into memU memory, skills, and resources. In cloud mode,
-workspace resources are submitted but are not currently persisted.
+The *record* seam: a scheduled job that mines recent Hermes sessions into memU
+memory, skills, and resources. In cloud mode, workspace resources are submitted
+but are not currently persisted.
 
 **Refresh an existing bridging registration before continuing.** If an
 OS-scheduled memU bridging entry exists, record its current cadence and remove

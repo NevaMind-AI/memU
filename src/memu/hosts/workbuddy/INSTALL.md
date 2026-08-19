@@ -188,9 +188,9 @@ must exit cleanly. **Zero hits is the expected result** on a new store.
 
 ## Part 2 — Register the bridging (record) task
 
-The *record* seam: a scheduled job that periodically mines recent sessions under
-`~/.workbuddy/projects` into memU memory, skills, and resources. In cloud mode,
-workspace resources are submitted but are not currently persisted.
+The *record* seam: a scheduled job that periodically mines recent WorkBuddy
+sessions into memU memory, skills, and resources. In cloud mode, workspace
+resources are submitted but are not currently persisted.
 
 **Refresh an existing bridging registration before continuing.** Inspect
 WorkBuddy's automation list. Match the current marker `{{task_name}}`, every

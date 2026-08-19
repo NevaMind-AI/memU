@@ -66,9 +66,8 @@ for a new store.
 
 ## Part 2 — Register the record bridge
 
-Cola stores transcripts at `~/.cola/sessions/<scope>/*.jsonl`. `memu-cola`
-reads user and assistant text plus tool calls, and ignores session headers and
-model/thinking metadata.
+`memu-cola` mines user and assistant text plus tool calls from Cola
+conversations, while ignoring session headers and model/thinking metadata.
 
 Do not edit `~/.cola/crons.json` yourself. **Refresh an existing bridging
 registration before continuing.** Inspect Cola's scheduled-task UI. If any task

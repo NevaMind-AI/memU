@@ -31,7 +31,7 @@ installed.
 
 Each run walks a fixed pipeline that bridges raw session history into memU:
 
-1. **Prepare** — `memu-codex prepare` scans new turns under `~/.codex/sessions`,
+1. **Prepare** — `memu-codex prepare` scans new turns from Codex sessions,
    mirrors the current memU recall files to `~/.memu/hosts/codex/memory` and `~/.memu/hosts/codex/skill`,
    snapshots them by content hash, and writes a set of numbered **job-instruction
    files** to `~/.memu/hosts/codex/jobs/` (`1.txt`, `2.txt`, …). Each job is a self-contained
