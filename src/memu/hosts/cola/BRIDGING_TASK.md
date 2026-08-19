@@ -48,5 +48,4 @@ Finish with a one-line summary of jobs processed and recall files committed.
 ```
 
 Confirm the task is enabled, attached to `desktop:local`, and scheduled at the
-agreed cadence. A successful task run creates its own transcript below
-`~/.cola/sessions/desktop-local-subagent-cron-{{task_name}}-*/`.
+agreed cadence. A successful task run produces a Cola conversation for that run.

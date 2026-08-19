@@ -28,10 +28,9 @@ Parts 2 and 3 must share one configured mode. In local mode they must also share
 one store and embedding space, or retrieval silently returns nothing. Part 1 is
 what makes them agree.
 
-**Scope note.** This adapter reads the **Cursor Agent** transcripts under
-`~/.cursor/projects/` — the CLI (`cursor-agent`) and background agents. The IDE's
-Composer chat history lives inside the editor's own SQLite state (`state.vscdb`)
-and is not mined.
+**Scope note.** This adapter reads conversations produced by **Cursor Agent** —
+the standalone CLI (`cursor-agent`) and background agents. The IDE's Composer
+chat history is not mined.
 
 ---
 
@@ -192,10 +191,9 @@ backend.
 
 ## Part 2 — Register the bridging (record) task
 
-The *record* seam: a scheduled job that mines recent transcripts under
-`~/.cursor/projects/*/agent-transcripts/` into memU memory, skills, and
-resources. In cloud mode, workspace resources are submitted but are not
-currently persisted.
+The *record* seam: a scheduled job that mines recent Cursor Agent sessions into
+memU memory, skills, and resources. In cloud mode, workspace resources are
+submitted but are not currently persisted.
 
 ### 2.0 Prerequisite — the standalone `cursor-agent` CLI
 

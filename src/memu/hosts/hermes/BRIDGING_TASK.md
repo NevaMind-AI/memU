@@ -27,8 +27,7 @@ on its own.
 
 ## What the bridging task does (context)
 
-1. **Prepare** — `memu-hermes prepare` scans new message rows in
-   `~/.hermes/state.db` (read-only; sessions ordered by recent activity),
+1. **Prepare** — `memu-hermes prepare` scans new activity from Hermes sessions,
    mirrors the current memU recall files to `~/.memu/hosts/hermes/memory` and
    `~/.memu/hosts/hermes/skill`, snapshots them by content hash, and writes
    numbered **job-instruction files** to `~/.memu/hosts/hermes/jobs/` (`1.txt`,

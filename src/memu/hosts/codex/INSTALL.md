@@ -214,9 +214,9 @@ on this working, and both fail *silently* if it is wrong.
 
 ## Part 2 — Register the bridging (record) task
 
-The *record* seam: a Codex scheduled task that periodically mines recent
-`~/.codex/sessions` into memU memory, skills, and resources. In cloud mode,
-workspace resources are submitted but are not currently persisted.
+The *record* seam: a Codex scheduled task that periodically mines recent Codex
+sessions into memU memory, skills, and resources. In cloud mode, workspace
+resources are submitted but are not currently persisted.
 
 **Refresh an existing bridging registration before continuing.** Inspect
 Codex's scheduled-task surface. Check every recognized name in
