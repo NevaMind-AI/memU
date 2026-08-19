@@ -7,10 +7,18 @@ import os
 import shutil
 from pathlib import Path
 
+import pytest
+
 from memu.hosts.base import RecordKind
 from memu.hosts.bridging.transcripts import prepare_transcripts
 from memu.hosts.claude_code.desktop_sessions import ClaudeDesktopTranscriptSource
-from memu.hosts.cowork.sessions import CoworkTranscriptSource, windows_data_roots
+from memu.hosts.cowork.sessions import (
+    CoworkTranscriptSource,
+    linux_data_roots,
+    macos_data_roots,
+    platform_data_roots,
+    windows_data_roots,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "cowork" / "audit.jsonl"
 
@@ -49,26 +57,104 @@ def test_cowork_discovers_outer_workspace_and_normalizes_records(tmp_path: Path)
 def test_windows_roots_enumerate_desktop_and_msix_locations(monkeypatch, tmp_path: Path) -> None:
     appdata = tmp_path / "Roaming"
     local = tmp_path / "Local"
-    for root in (
+    roots = (
         appdata / "Claude",
         local / "Claude-3p",
         local / "Packages" / "Claude_123" / "LocalCache" / "Roaming" / "Claude",
-    ):
+        local / "Packages" / "Claude_456" / "LocalCache" / "Roaming" / "Claude",
+    )
+    for root in roots:
         root.mkdir(parents=True)
-    monkeypatch.setattr("memu.hosts.cowork.sessions.sys.platform", "win32")
     monkeypatch.setenv("APPDATA", str(appdata))
     monkeypatch.setenv("LOCALAPPDATA", str(local))
 
-    assert windows_data_roots() == [
-        (appdata / "Claude").resolve(),
-        (local / "Claude-3p").resolve(),
-        (local / "Packages" / "Claude_123" / "LocalCache" / "Roaming" / "Claude").resolve(),
-    ]
+    assert windows_data_roots() == sorted((root.resolve() for root in roots), key=lambda root: str(root).lower())
 
 
-def test_cowork_is_disabled_without_a_verified_platform(monkeypatch) -> None:
+def test_platform_roots_select_only_the_current_platform(monkeypatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    macos = home / "Library" / "Application Support" / "Claude"
+    linux = tmp_path / "xdg" / "Claude"
+    windows = tmp_path / "Roaming" / "Claude"
+    for root in (macos, linux, windows):
+        root.mkdir(parents=True)
+    monkeypatch.setattr("memu.hosts.cowork.sessions.Path.home", lambda: home)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+
+    monkeypatch.setattr("memu.hosts.cowork.sessions.sys.platform", "darwin")
+    assert platform_data_roots() == [macos.resolve()]
+    assert macos_data_roots() == [macos.resolve()]
+
     monkeypatch.setattr("memu.hosts.cowork.sessions.sys.platform", "linux")
-    assert windows_data_roots() == []
+    assert platform_data_roots() == [linux.resolve()]
+    assert linux_data_roots() == [linux.resolve()]
+
+    monkeypatch.setattr("memu.hosts.cowork.sessions.sys.platform", "win32")
+    assert platform_data_roots() == [windows.resolve()]
+
+
+def test_linux_root_defaults_to_home_config(monkeypatch, tmp_path: Path) -> None:
+    root = tmp_path / ".config" / "Claude"
+    root.mkdir(parents=True)
+    monkeypatch.setattr("memu.hosts.cowork.sessions.Path.home", lambda: tmp_path)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+
+    assert linux_data_roots() == [root.resolve()]
+
+
+def test_cowork_roots_override_replaces_platform_discovery(monkeypatch, tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    automatic = tmp_path / "automatic" / "Claude"
+    for root in (first, second, automatic):
+        root.mkdir(parents=True)
+    monkeypatch.setattr("memu.hosts.cowork.sessions.sys.platform", "linux")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "automatic"))
+    monkeypatch.setenv("MEMU_COWORK_ROOTS", os.pathsep.join((str(second), "", str(first), str(first))))
+
+    expected = tuple(sorted((first.resolve(), second.resolve()), key=lambda root: str(root).lower()))
+    assert tuple(platform_data_roots()) == expected
+    assert CoworkTranscriptSource().roots == expected
+
+
+def test_cowork_roots_override_rejects_missing_directories(monkeypatch, tmp_path: Path) -> None:
+    missing = tmp_path / "missing"
+    monkeypatch.setenv("MEMU_COWORK_ROOTS", str(missing))
+
+    with pytest.raises(ValueError, match="MEMU_COWORK_ROOTS entries are not directories"):
+        platform_data_roots()
+
+
+def test_empty_cowork_roots_override_disables_discovery(monkeypatch, tmp_path: Path) -> None:
+    automatic = tmp_path / "Claude"
+    automatic.mkdir()
+    monkeypatch.setattr("memu.hosts.cowork.sessions.sys.platform", "linux")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("MEMU_COWORK_ROOTS", "")
+
+    source = CoworkTranscriptSource()
+    assert platform_data_roots() == []
+    assert not source.exists()
+    assert source.root() == automatic
+
+
+def test_constructor_roots_take_priority_over_environment(monkeypatch, tmp_path: Path) -> None:
+    explicit = tmp_path / "explicit"
+    overridden = tmp_path / "overridden"
+    explicit.mkdir()
+    overridden.mkdir()
+    monkeypatch.setenv("MEMU_COWORK_ROOTS", str(overridden))
+
+    assert CoworkTranscriptSource([explicit]).roots == (explicit.resolve(),)
+
+
+def test_unknown_platform_has_no_automatic_cowork_roots(monkeypatch) -> None:
+    monkeypatch.setattr("memu.hosts.cowork.sessions.sys.platform", "freebsd")
+    monkeypatch.delenv("MEMU_COWORK_ROOTS", raising=False)
+
+    assert platform_data_roots() == []
 
 
 def test_combined_source_keeps_regions_independent(tmp_path: Path) -> None:
@@ -95,6 +181,31 @@ def test_combined_source_keeps_regions_independent(tmp_path: Path) -> None:
     staged = json.loads((tmp_path / "pending.json").read_text(encoding="utf-8"))
     assert source.key(old_code) in staged
     assert source.key(cowork) in staged
+
+
+def test_combined_source_keeps_cowork_roots_independent(tmp_path: Path) -> None:
+    code = tmp_path / "code"
+    code.mkdir()
+    first = _audit(tmp_path / "cowork-a", "settled")
+    second = _audit(tmp_path / "cowork-b", "pending")
+    os.utime(first, (200, 200))
+    os.utime(second, (100, 100))
+    source = ClaudeDesktopTranscriptSource(code, [tmp_path / "cowork-a", tmp_path / "cowork-b"])
+
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({source.key(first): {"lines": 4}}), encoding="utf-8")
+    written = prepare_transcripts(
+        source,
+        out_dir=tmp_path / "out",
+        manifest_path=manifest,
+        max_jobs=10,
+        pending_path=tmp_path / "pending.json",
+    )
+
+    assert written == 1
+    staged = json.loads((tmp_path / "pending.json").read_text(encoding="utf-8"))
+    assert source.key(first) in staged
+    assert source.key(second) in staged
 
 
 def test_combined_source_preserves_code_self_skip_identity(tmp_path: Path) -> None:

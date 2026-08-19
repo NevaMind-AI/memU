@@ -1,4 +1,4 @@
-"""Claude Cowork audit logs stored by Claude Desktop on Windows."""
+"""Claude Cowork audit logs stored by Claude Desktop."""
 
 from __future__ import annotations
 
@@ -14,32 +14,93 @@ from memu.hosts.base import RecordKind, TranscriptReadError, TranscriptSource
 from memu.hosts.claude_records import classify_claude_record
 
 _AUDIT_DIR = "local-agent-mode-sessions"
+_ROOTS_ENV = "MEMU_COWORK_ROOTS"
+
+
+def _existing_roots(candidates: Iterable[str | Path]) -> list[Path]:
+    """Resolve, deduplicate, and sort existing Claude Desktop data roots."""
+    roots: set[Path] = set()
+    for candidate in candidates:
+        try:
+            resolved = Path(candidate).expanduser().resolve()
+        except OSError:
+            continue
+        if resolved.is_dir():
+            roots.add(resolved)
+    return sorted(roots, key=lambda root: str(root).lower())
+
+
+def _override_roots(value: str) -> list[Path]:
+    """Resolve a declared root list strictly so staging typos cannot fail silently."""
+    candidates = [root.strip() for root in value.split(os.pathsep) if root.strip()]
+    roots = _existing_roots(candidates)
+    missing = []
+    for candidate in candidates:
+        try:
+            resolved = Path(candidate).expanduser().resolve()
+        except OSError:
+            missing.append(candidate)
+            continue
+        if not resolved.is_dir():
+            missing.append(candidate)
+    if missing:
+        msg = f"{_ROOTS_ENV} entries are not directories: {', '.join(missing)}"
+        raise ValueError(msg)
+    return roots
 
 
 def windows_data_roots() -> list[Path]:
     """Return known Claude Desktop data roots that exist on this Windows install."""
-    if sys.platform != "win32":
-        return []
-
     home = Path.home()
-    appdata = Path(os.environ.get("APPDATA", home / "AppData" / "Roaming"))
-    local_appdata = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local"))
-    candidates = [
+    appdata_value = os.environ.get("APPDATA", "").strip()
+    local_appdata_value = os.environ.get("LOCALAPPDATA", "").strip()
+    appdata = Path(appdata_value) if appdata_value else home / "AppData" / "Roaming"
+    local_appdata = Path(local_appdata_value) if local_appdata_value else home / "AppData" / "Local"
+    return _existing_roots([
         appdata / "Claude",
         local_appdata / "Claude-3p",
         *local_appdata.glob("Packages/Claude_*/LocalCache/Roaming/Claude"),
-    ]
-    seen: set[Path] = set()
-    roots: list[Path] = []
-    for candidate in candidates:
-        try:
-            resolved = candidate.resolve()
-        except OSError:
-            continue
-        if resolved.is_dir() and resolved not in seen:
-            seen.add(resolved)
-            roots.append(resolved)
-    return roots
+    ])
+
+
+def macos_data_roots() -> list[Path]:
+    """Return conventional Claude Desktop data roots that exist on this Mac."""
+    return _existing_roots([Path.home() / "Library" / "Application Support" / "Claude"])
+
+
+def linux_data_roots() -> list[Path]:
+    """Return conventional Claude Desktop data roots that exist on this Linux host."""
+    config_home_value = os.environ.get("XDG_CONFIG_HOME", "").strip()
+    config_home = Path(config_home_value) if config_home_value else Path.home() / ".config"
+    return _existing_roots([config_home / "Claude"])
+
+
+def platform_data_roots() -> list[Path]:
+    """Return existing Cowork data roots for this platform, or an explicit override."""
+    if _ROOTS_ENV in os.environ:
+        return _override_roots(os.environ[_ROOTS_ENV])
+    if sys.platform == "win32":
+        return windows_data_roots()
+    if sys.platform == "darwin":
+        return macos_data_roots()
+    if sys.platform.startswith("linux"):
+        return linux_data_roots()
+    return []
+
+
+def _default_root() -> Path:
+    """Return this platform's conventional data root for diagnostics."""
+    if sys.platform == "win32":
+        appdata_value = os.environ.get("APPDATA", "").strip()
+        appdata = Path(appdata_value) if appdata_value else Path.home() / "AppData" / "Roaming"
+        return appdata / "Claude"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "Claude"
+    if sys.platform.startswith("linux"):
+        config_home_value = os.environ.get("XDG_CONFIG_HOME", "").strip()
+        config_home = Path(config_home_value) if config_home_value else Path.home() / ".config"
+        return config_home / "Claude"
+    return Path.home()
 
 
 class CoworkTranscriptSource(TranscriptSource):
@@ -48,13 +109,11 @@ class CoworkTranscriptSource(TranscriptSource):
     name: ClassVar[str] = "cowork"
 
     def __init__(self, roots: Iterable[str | Path] | None = None) -> None:
-        selected = windows_data_roots() if roots is None else [Path(root) for root in roots]
-        self._roots = tuple(
-            sorted((root.resolve() for root in selected if root.is_dir()), key=lambda root: str(root).lower())
-        )
+        selected = platform_data_roots() if roots is None else roots
+        self._roots = tuple(_existing_roots(selected))
 
     def root(self) -> Path:
-        return self._roots[0] if self._roots else Path.home() / "AppData" / "Local" / "Claude-3p"
+        return self._roots[0] if self._roots else _default_root()
 
     @property
     def roots(self) -> tuple[Path, ...]:

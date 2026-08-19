@@ -17,11 +17,21 @@ history. Windows field evidence confirms Cowork's audit directory is separate.
 Cowork is a distinct read-only `CoworkTranscriptSource`, composed into the existing
 `memu-claude-code` bridge rather than exposed as a second binary or schedule.
 
-On Windows it discovers existing Claude Desktop roots under `%APPDATA%\Claude`,
-`%LOCALAPPDATA%\Claude-3p`, and MSIX `Claude_*` roaming roots. Each root is an
-independent scan region. An unchanged session ends only its own newest-first
-region, so a known Code transcript cannot hide Cowork history or another Desktop
-root.
+Discovery is platform-specific rather than one mixed list. Windows checks existing
+Claude Desktop roots under `%APPDATA%\Claude`, `%LOCALAPPDATA%\Claude-3p`, and
+MSIX `Claude_*` roaming roots. macOS checks
+`~/Library/Application Support/Claude`; Linux checks
+`${XDG_CONFIG_HOME:-~/.config}/Claude`. These conventional macOS/Linux roots are
+enabled for staging and remain subject to correction from real-machine field
+reports.
+
+`MEMU_COWORK_ROOTS` is the staging and nonstandard-install escape hatch: a
+platform-path-separator-delimited list of Claude Desktop data roots. A declared
+value replaces automatic discovery, nonexistent entries fail visibly, and an
+empty value disables discovery. Constructor
+roots remain the highest-priority test seam. Every selected root is an independent
+scan region, so an unchanged session ends only its own newest-first region and
+cannot hide Code history or another Desktop root.
 
 The outer `local_<id>` directory is the session boundary and session identity.
 Record-level IDs are execution details and never split the session. The source
@@ -39,5 +49,7 @@ unverified environment identity contract.
 - Cowork memories are available through the shared store to all integrated hosts.
 - Cowork parsing is isolated from Claude Code parsing, so protocol drift is pinned
   by fixture tests without widening the existing reader.
-- macOS/Linux root providers remain disabled until real-machine field evidence and
-  sanitized fixtures establish their locations and layout.
+- Platform providers keep unrelated OS paths out of the scan; staging feedback can
+  refine one provider without changing the reader or bridge.
+- Explicit roots let testers and nonstandard installations run immediately without
+  patching Python or mixing staged data with automatically discovered history.
