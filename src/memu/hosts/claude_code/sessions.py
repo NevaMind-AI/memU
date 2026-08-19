@@ -12,12 +12,12 @@ glob.
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import ClassVar
 
 from memu.hosts.base import RecordKind, TranscriptSource
+from memu.hosts.claude_records import classify_claude_record
 
 SESSION_DIR = "~/.claude/projects"
 
@@ -66,28 +66,4 @@ class ClaudeCodeTranscriptSource(TranscriptSource):
         return parts[1] if len(parts) > 2 else path.stem
 
     def classify(self, record: str) -> RecordKind:
-        try:
-            entry = json.loads(record)
-        except json.JSONDecodeError:
-            return RecordKind.OTHER
-        if not isinstance(entry, dict) or entry.get("type") not in ("user", "assistant"):
-            return RecordKind.OTHER
-
-        message = entry.get("message")
-        if not isinstance(message, dict):
-            return RecordKind.OTHER
-
-        content = message.get("content")
-        if isinstance(content, str):
-            # A raw-string user message is the user actually typing; meta records
-            # are harness-injected context wearing the user role.
-            return RecordKind.OTHER if entry.get("isMeta") else RecordKind.MESSAGE
-
-        kinds = (
-            {block.get("type") for block in content if isinstance(block, dict)} if isinstance(content, list) else set()
-        )
-        if "text" in kinds:
-            return RecordKind.OTHER if entry.get("isMeta") else RecordKind.MESSAGE
-        if kinds & {"tool_use", "tool_result"}:
-            return RecordKind.TOOL
-        return RecordKind.OTHER
+        return classify_claude_record(record)
