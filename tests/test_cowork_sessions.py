@@ -51,7 +51,25 @@ def test_cowork_discovers_outer_workspace_and_normalizes_records(tmp_path: Path)
     parsed = [json.loads(record) for record in records]
     assert all(entry["source"] == {"surface": "cowork", "container": "cowork_audit_jsonl"} for entry in parsed)
     assert all("session_id" not in entry and "_audit_hmac" not in entry for entry in parsed)
+    assert parsed[0]["timestamp"] == "2026-08-14T09:00:00Z"
     assert key.read_text(encoding="utf-8") == "never read"
+
+
+def test_cowork_uses_audit_timestamp_when_message_timestamp_is_missing(tmp_path: Path) -> None:
+    audit = _audit(tmp_path, "outer-session")
+    audit.write_text(
+        json.dumps({
+            "type": "user",
+            "_audit_timestamp": "2026-08-20T07:00:00.000Z",
+            "message": {"role": "user", "content": "hello"},
+        })
+        + "\n",
+        encoding="utf-8",
+    )
+
+    [record] = CoworkTranscriptSource([tmp_path]).read_records(audit)
+
+    assert json.loads(record)["timestamp"] == "2026-08-20T07:00:00.000Z"
 
 
 def test_windows_roots_enumerate_desktop_and_msix_locations(monkeypatch, tmp_path: Path) -> None:

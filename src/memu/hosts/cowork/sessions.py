@@ -174,7 +174,7 @@ class CoworkTranscriptSource(TranscriptSource):
             return None
         normalized = {
             "type": entry["type"],
-            "timestamp": entry.get("timestamp"),
+            "timestamp": entry.get("timestamp") or entry.get("_audit_timestamp"),
             "message": {"role": message.get("role"), "content": message["content"]},
             "source": {"surface": "cowork", "container": "cowork_audit_jsonl"},
         }
