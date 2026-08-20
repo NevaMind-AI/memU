@@ -79,8 +79,8 @@ class _EmbeddingBatch:
     async def resolve(self, embed_client: Any) -> None:
         """Embed every registered text — the one fallible step of a commit.
 
-        A commit with nothing to embed (a re-commit whose descriptions and
-        content are all unchanged) must not call the provider at all.
+        A commit with nothing to embed (a re-commit whose descriptions, captions
+        and content are all unchanged) must not call the provider at all.
         """
         if not self._texts:
             return
@@ -98,11 +98,19 @@ class _EmbeddingBatch:
 
 @dataclass
 class _ResourcePlan:
-    """One resource's pending write, its caption vector already requested."""
+    """One resource's pending write, its caption vector already requested.
+
+    ``existing`` is the row the write updates in place, ``None`` for a url the
+    store has never seen. ``caption_ticket`` is set only when a vector actually
+    has to be fetched, so an unchanged caption keeps the one already stored.
+    ``stale_ids`` are surplus rows for the same url, dropped after the survivor
+    is written.
+    """
 
     url: str
     caption: str | None
     caption_ticket: int | None
+    existing: Resource | None
     stale_ids: list[str]
 
 
@@ -367,6 +375,11 @@ class AgenticMixin:
     ) -> list[_ResourcePlan]:
         """Resolve each ``{path, description}`` against the store and request its vector.
 
+        A url the store already holds is planned as an in-place update, and its caption
+        re-embedded only when it actually changed — the same rule the recall-file path
+        applies to descriptions. A row that somehow carries a caption but no vector is
+        re-embedded regardless, so a legacy or half-written row heals on recommit.
+
         Reads and requests only — see :meth:`commit_results` for why no write
         may happen here. Repeated paths within one payload collapse to their
         last occurrence: every plan is built against the same pre-commit
@@ -386,12 +399,22 @@ class AgenticMixin:
         plans: list[_ResourcePlan] = []
         for url, item in deduped.items():
             caption = (item.get("description") or "").strip() or None
+            # The first row for this url is the one the write keeps; any others are
+            # duplicates an older commit path left behind.
+            matches = [res for res in existing if res.url == url]
+            current = matches[0] if matches else None
+
+            caption_ticket = None
+            if caption is not None and (current is None or current.caption != caption or not current.embedding):
+                caption_ticket = batch.request(caption)
+
             plans.append(
                 _ResourcePlan(
                     url=url,
                     caption=caption,
-                    caption_ticket=batch.request(caption) if caption else None,
-                    stale_ids=[res.id for res in existing if res.url == url],
+                    caption_ticket=caption_ticket,
+                    existing=current,
+                    stale_ids=[res.id for res in matches[1:]],
                 )
             )
         return plans
@@ -406,25 +429,48 @@ class AgenticMixin:
     ) -> list[Resource]:
         """Apply the planned resource writes, every vector already in hand.
 
-        ``ResourceRepo`` has no in-place update, so an "update" is a delete-then-create:
-        any existing resource sharing this url is dropped before the fresh record is created.
+        A url the store already holds is updated in place, so its ``id`` and
+        ``created_at`` survive a recommit the way a recall file's do; only a genuinely
+        new url creates a row. Nothing is deleted to make room for a write — surplus
+        duplicates go after the survivor is written, so no failure can leave a url with
+        no row at all.
         """
         committed: list[Resource] = []
         for plan in plans:
-            for stale_id in plan.stale_ids:
-                store.resource_repo.delete_resource(stale_id)
-            committed.append(
-                store.resource_repo.create_resource(
+            embedding: list[float] | None
+            if plan.caption_ticket is not None:
+                embedding = batch.vector(plan.caption_ticket)
+            elif plan.caption and plan.existing is not None:
+                # Caption unchanged, so no vector was fetched: carry the stored one over.
+                embedding = plan.existing.embedding
+            else:
+                # No caption, nothing to rank on. Clears whatever the row held.
+                embedding = None
+
+            if plan.existing is None:
+                written = store.resource_repo.create_resource(
                     url=plan.url,
                     local_path=plan.url,
                     caption=plan.caption,
-                    embedding=batch.vector(plan.caption_ticket) if plan.caption_ticket is not None else None,
+                    embedding=embedding,
                     user_data=dict(user_data),
                     # progressive_retrieve's resource layer filters on track="workspace";
                     # commit is now the only resource writer, so tag it accordingly.
                     track="workspace",
                 )
-            )
+            else:
+                written = store.resource_repo.update_resource(
+                    resource_id=plan.existing.id,
+                    local_path=plan.url,
+                    caption=plan.caption,
+                    embedding=embedding,
+                    # Re-tagged on every write, not only on create: a row an earlier
+                    # writer left on another track has to become findable again.
+                    track="workspace",
+                )
+            for stale_id in plan.stale_ids:
+                store.resource_repo.delete_resource(stale_id)
+            committed.append(written)
         return committed
 
     def _plan_recall_files(

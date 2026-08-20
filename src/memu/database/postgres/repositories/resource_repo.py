@@ -100,6 +100,38 @@ class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
 
         return self._cache_resource(res)
 
+    def update_resource(
+        self,
+        *,
+        resource_id: str,
+        local_path: str,
+        caption: str | None,
+        embedding: list[float] | None,
+        track: str | None = None,
+    ) -> Resource:
+        """Overwrite an existing resource's mutable fields (see :class:`ResourceRepo`)."""
+        from sqlmodel import select
+
+        with self._sessions.session() as session:
+            row = session.scalars(
+                select(self._sqla_models.Resource).where(self._sqla_models.Resource.id == resource_id)
+            ).first()
+            if row is None:
+                msg = f"Resource with id {resource_id} not found"
+                raise KeyError(msg)
+
+            row.local_path = local_path
+            row.caption = caption
+            row.embedding = self._prepare_embedding(embedding)
+            row.track = track
+            row.updated_at = self._now()
+
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+            row.embedding = self._normalize_embedding(row.embedding)
+            return self._cache_resource(row)
+
     def vector_search_resources(
         self,
         query_vec: list[float],

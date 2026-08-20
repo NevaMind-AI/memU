@@ -195,6 +195,62 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
         self.resources[row.id] = res
         return res
 
+    def update_resource(
+        self,
+        *,
+        resource_id: str,
+        local_path: str,
+        caption: str | None,
+        embedding: list[float] | None,
+        track: str | None = None,
+    ) -> Resource:
+        """Overwrite an existing resource's mutable fields (see :class:`ResourceRepo`).
+
+        Args:
+            resource_id: ID of the resource to update.
+            local_path: Local file path.
+            caption: Caption text, or ``None`` to clear it.
+            embedding: Embedding vector, or ``None`` to clear it.
+            track: Workspace track to (re)tag the row with.
+
+        Returns:
+            Updated Resource object.
+
+        Raises:
+            KeyError: If no resource has that id.
+        """
+        with self._sessions.session() as session:
+            stmt = select(self._resource_model).where(self._resource_model.id == resource_id)
+            row = session.exec(stmt).first()
+
+            if row is None:
+                msg = f"Resource with id {resource_id} not found"
+                raise KeyError(msg)
+
+            row.local_path = local_path
+            row.caption = caption
+            row.embedding = self._prepare_embedding(embedding)
+            row.track = track
+            row.updated_at = self._now()
+
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+
+        res = Resource(
+            id=row.id,
+            url=row.url,
+            local_path=row.local_path,
+            caption=row.caption,
+            embedding=embedding,
+            track=row.track,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            **self._scope_kwargs_from(row),
+        )
+        self.resources[row.id] = res
+        return res
+
     def vector_search_resources(
         self,
         query_vec: list[float],

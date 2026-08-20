@@ -264,6 +264,42 @@ async def test_repeated_path_in_one_payload_commits_once(service: MemoryService)
     assert [r["caption"] for r in found["resources"]] == ["second"]
 
 
+async def test_recommit_updates_the_resource_row_in_place(service: MemoryService) -> None:
+    """A url keeps its row across recommits, and an unchanged caption is not re-embedded.
+
+    Delete-then-create churned the id and created_at on every commit — unlike the
+    recall-file path, which updates in place — and paid the provider for a caption
+    vector each time, because a recreated row has no stored vector to keep.
+    """
+    counter = CountingEmbeddingClient()
+    service._embedding_pool._cache["embedding"] = counter
+
+    record = {"path": "/workspace/notes.md", "description": "meeting notes"}
+    original = (await service.commit_results(resource=[record]))["resources"][0]
+
+    counter.calls = 0
+    again = (await service.commit_results(resource=[dict(record)]))["resources"][0]
+    assert counter.calls == 0
+    assert again["id"] == original["id"]
+    assert again["created_at"] == original["created_at"]
+
+    # A changed caption is re-embedded, and lands on that same row.
+    counter.calls = 0
+    changed = (await service.commit_results(resource=[{**record, "description": "deploy notes"}]))["resources"][0]
+    assert counter.calls == 1
+    assert changed["id"] == original["id"]
+    assert changed["caption"] == "deploy notes"
+    found = await service.progressive_retrieve("deploy notes")
+    assert [r["url"] for r in found["resources"]] == ["/workspace/notes.md"]
+
+    # A record with no description clears the caption and its vector: the commit
+    # payload is authoritative for a resource, and an unranked row cannot be recalled.
+    cleared = (await service.commit_results(resource=[{"path": "/workspace/notes.md"}]))["resources"][0]
+    assert cleared["id"] == original["id"]
+    assert cleared["caption"] is None
+    assert (await service.progressive_retrieve("deploy notes"))["resources"] == []
+
+
 async def test_where_scope_filters_and_rejects_unknown_fields(service: MemoryService) -> None:
     await service.commit_results(
         recall_files=[{"name": "A", "track": "memory", "description": "d", "content": "alpha"}],

@@ -4,6 +4,8 @@ import uuid
 from collections.abc import Mapping
 from typing import Any
 
+import pendulum
+
 from memu.database.inmemory.repositories.filter import matches_where
 from memu.database.inmemory.state import InMemoryState
 from memu.database.models import Resource
@@ -56,6 +58,28 @@ class InMemoryResourceRepository(ResourceRepoProtocol):
             **user_data,
         )
         self.resources[rid] = res
+        return res
+
+    def update_resource(
+        self,
+        *,
+        resource_id: str,
+        local_path: str,
+        caption: str | None,
+        embedding: list[float] | None,
+        track: str | None = None,
+    ) -> Resource:
+        """Overwrite an existing resource's mutable fields (see :class:`ResourceRepo`)."""
+        res = self.resources.get(resource_id)
+        if res is None:
+            msg = f"Resource with id {resource_id} not found"
+            raise KeyError(msg)
+
+        res.local_path = local_path
+        res.caption = caption
+        res.embedding = embedding
+        res.track = track
+        res.updated_at = pendulum.now("UTC")
         return res
 
     def vector_search_resources(
