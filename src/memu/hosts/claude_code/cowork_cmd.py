@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
 from dataclasses import dataclass
 from enum import IntEnum
@@ -74,7 +75,7 @@ def _fingerprints(source: TranscriptSource, records_by_path: dict[Path, list[str
             try:
                 canonical = json.dumps(
                     [timestamp, role, content],
-                    ensure_ascii=False,
+                    ensure_ascii=True,
                     sort_keys=True,
                     separators=(",", ":"),
                 )
@@ -179,7 +180,7 @@ def _timeline_check(
     try:
         composite = source.discover()
         resolved = [path.resolve() for path in composite]
-        mtimes = [path.stat().st_mtime_ns for path in composite]
+        mtimes = [path.stat().st_mtime for path in composite]
     except Exception:
         return _Check(
             "File timeline",
@@ -240,7 +241,7 @@ def _render(
 
 
 async def _cmd_verify(args: argparse.Namespace) -> int:
-    mode = "explicit" if args.root is not None else "automatic"
+    mode = "explicit" if args.root is not None else "environment" if "MEMU_COWORK_ROOTS" in os.environ else "automatic"
     try:
         cowork = CoworkTranscriptSource(args.root)
         code = ClaudeCodeTranscriptSource(SESSION_DIR)

@@ -75,11 +75,25 @@ def test_automatic_zero_roots_is_a_successful_warning(
     assert main(["cowork", "verify"]) == 0
 
     output = capsys.readouterr().out
-    assert "mode                       automatic" in output
+    assert "mode                       environment" in output
     assert "Cowork sessions            0" in output
     assert "[WARN] Readable" in output
     assert "[WARN] Separation" in output
     assert "[WARN] File timeline" in output
+    assert output.rstrip().endswith("RESULT WARN")
+
+
+def test_automatic_mode_uses_platform_discovery(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("MEMU_COWORK_ROOTS", raising=False)
+    monkeypatch.setattr(cowork_cmd, "SESSION_DIR", str(tmp_path / "no-code"))
+    monkeypatch.setattr("memu.hosts.cowork.sessions.platform_data_roots", lambda: [])
+
+    assert main(["cowork", "verify"]) == 0
+
+    output = capsys.readouterr().out
+    assert "mode                       automatic" in output
     assert output.rstrip().endswith("RESULT WARN")
 
 
@@ -127,6 +141,29 @@ def test_clean_mixed_sources_pass_all_dimensions_without_writes(
     assert "Code/Cowork transitions    1" in output
     assert output.rstrip().endswith("RESULT PASS")
     assert _files(tmp_path) == before
+
+
+def test_sub_float_precision_mtime_ties_follow_the_composite_contract(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code_root = tmp_path / "code"
+    cowork_root = tmp_path / "cowork"
+    code = _code_session(code_root, "code-session", timestamp="2026-08-14T08:00:00Z", content="code only")
+    audit = _audit(cowork_root, "cowork-session")
+    base = 1_775_000_000_000_000_000
+    os.utime(code, ns=(base, base))
+    os.utime(audit, ns=(base + 100, base + 100))
+    code_mtime = code.stat()
+    audit_mtime = audit.stat()
+    if code_mtime.st_mtime_ns == audit_mtime.st_mtime_ns or code_mtime.st_mtime != audit_mtime.st_mtime:
+        pytest.skip("filesystem does not expose a sub-float-precision mtime tie")
+    monkeypatch.setattr(cowork_cmd, "SESSION_DIR", str(code_root))
+
+    assert main(["cowork", "verify", "--root", str(cowork_root)]) == 0
+
+    output = capsys.readouterr().out
+    assert "mtime order                non-increasing" in output
+    assert output.rstrip().endswith("RESULT PASS")
 
 
 def test_overlap_warns_without_printing_content_or_digests(
