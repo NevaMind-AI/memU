@@ -29,6 +29,27 @@ class ResourceRepo(Protocol):
         track: str | None = None,
     ) -> Resource: ...
 
+    def update_resource(
+        self,
+        *,
+        resource_id: str,
+        local_path: str,
+        caption: str | None,
+        embedding: list[float] | None,
+        track: str | None = None,
+    ) -> Resource:
+        """Overwrite a resource's mutable fields in place, keeping ``id`` and ``created_at``.
+
+        Unlike :meth:`RecallFileRepo.update_recall_file`, every field is written as
+        given: ``None`` clears the column rather than leaving it alone. A resource is
+        wholly defined by the record that carries it, so a record with no description
+        drops the stored caption along with its vector.
+
+        Raises:
+            KeyError: If no resource has that id.
+        """
+        ...
+
     def vector_search_resources(
         self,
         query_vec: list[float],

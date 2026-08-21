@@ -181,6 +181,125 @@ async def test_recommit_updates_skill_description_and_segment(service: MemorySer
     assert "name: deploy-checklist\ndescription: how to deploy" not in seg_texts
 
 
+class EmbeddingProviderDown(RuntimeError):
+    """What a rate limit or a dead provider looks like to ``commit_results``."""
+
+
+class FailingEmbeddingClient(FakeEmbeddingClient):
+    """Fails the way a rate-limited or unreachable provider does."""
+
+    def __init__(self, *, fail_on_call: int = 1) -> None:
+        self.calls = 0
+        self._fail_on_call = fail_on_call
+
+    async def embed(self, inputs: list[str]) -> tuple[list[list[float]], None]:
+        self.calls += 1
+        if self.calls == self._fail_on_call:
+            raise EmbeddingProviderDown
+        return await super().embed(inputs)
+
+
+async def test_failed_embedding_leaves_the_store_untouched(service: MemoryService) -> None:
+    """A commit that cannot embed must write nothing — not even the items before the failure.
+
+    Each repo call commits its own transaction, so a write reached before the
+    failing embed would be permanent. This is the guarantee that makes a failed
+    commit safe to simply retry.
+    """
+    await _seed(service)
+    before = await service.list_all_recall_files()
+    baseline = await service.progressive_retrieve("coffee")
+
+    service._embedding_pool._cache["embedding"] = FailingEmbeddingClient()
+    with pytest.raises(EmbeddingProviderDown):
+        await service.commit_results(
+            recall_files=[
+                {"name": "Profile", "track": "memory", "description": "changed", "content": "# P\nlikes tea"},
+                {"name": "brand-new", "track": "memory", "description": "new", "content": "unseen line"},
+            ],
+            resource=[{"path": "/workspace/notes.md", "description": "rewritten caption"}],
+        )
+
+    after = await service.list_all_recall_files()
+    assert after["recall_files"] == before["recall_files"]
+
+    # The pre-existing resource survived: its caption embed failed, and the old
+    # record must not have been dropped in anticipation of a replacement.
+    service._embedding_pool._cache["embedding"] = FakeEmbeddingClient()
+    assert await service.progressive_retrieve("coffee") == baseline
+
+
+async def test_commit_embeds_everything_in_one_batched_call(service: MemoryService) -> None:
+    """Files, resources and segments share a single provider round-trip."""
+    counter = CountingEmbeddingClient()
+    service._embedding_pool._cache["embedding"] = counter
+
+    await service.commit_results(
+        recall_files=[
+            {"name": "A", "track": "memory", "description": "d", "content": "one\ntwo"},
+            {"name": "B", "track": "skill", "description": "e", "content": "step"},
+        ],
+        resource=[{"path": "/w/a.md", "description": "cap a"}, {"path": "/w/b.md", "description": "cap b"}],
+    )
+    assert counter.calls == 1
+
+
+async def test_repeated_path_in_one_payload_commits_once(service: MemoryService) -> None:
+    """Two records for one url collapse to one, in the response as well as the store.
+
+    The store always ended up with a single row, but the returned list used to
+    carry the superseded record too — so ``memu commit`` printed an inflated
+    count and filed it to telemetry.
+    """
+    committed = await service.commit_results(
+        resource=[
+            {"path": "/workspace/dup.md", "description": "first"},
+            {"path": "/workspace/dup.md", "description": "second"},
+        ]
+    )
+    assert len(committed["resources"]) == 1
+
+    found = await service.progressive_retrieve("second")
+    assert [r["url"] for r in found["resources"]] == ["/workspace/dup.md"]
+    assert [r["caption"] for r in found["resources"]] == ["second"]
+
+
+async def test_recommit_updates_the_resource_row_in_place(service: MemoryService) -> None:
+    """A url keeps its row across recommits, and an unchanged caption is not re-embedded.
+
+    Delete-then-create churned the id and created_at on every commit — unlike the
+    recall-file path, which updates in place — and paid the provider for a caption
+    vector each time, because a recreated row has no stored vector to keep.
+    """
+    counter = CountingEmbeddingClient()
+    service._embedding_pool._cache["embedding"] = counter
+
+    record = {"path": "/workspace/notes.md", "description": "meeting notes"}
+    original = (await service.commit_results(resource=[record]))["resources"][0]
+
+    counter.calls = 0
+    again = (await service.commit_results(resource=[dict(record)]))["resources"][0]
+    assert counter.calls == 0
+    assert again["id"] == original["id"]
+    assert again["created_at"] == original["created_at"]
+
+    # A changed caption is re-embedded, and lands on that same row.
+    counter.calls = 0
+    changed = (await service.commit_results(resource=[{**record, "description": "deploy notes"}]))["resources"][0]
+    assert counter.calls == 1
+    assert changed["id"] == original["id"]
+    assert changed["caption"] == "deploy notes"
+    found = await service.progressive_retrieve("deploy notes")
+    assert [r["url"] for r in found["resources"]] == ["/workspace/notes.md"]
+
+    # A record with no description clears the caption and its vector: the commit
+    # payload is authoritative for a resource, and an unranked row cannot be recalled.
+    cleared = (await service.commit_results(resource=[{"path": "/workspace/notes.md"}]))["resources"][0]
+    assert cleared["id"] == original["id"]
+    assert cleared["caption"] is None
+    assert (await service.progressive_retrieve("deploy notes"))["resources"] == []
+
+
 async def test_where_scope_filters_and_rejects_unknown_fields(service: MemoryService) -> None:
     await service.commit_results(
         recall_files=[{"name": "A", "track": "memory", "description": "d", "content": "alpha"}],

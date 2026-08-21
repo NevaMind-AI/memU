@@ -31,8 +31,13 @@ class EmbeddingConfig(BaseModel):
         description="Embedding model used for vectorization.",
     )
     embed_batch_size: int = Field(
-        default=1,
-        description="Maximum batch size for embedding API calls (used by the SDK client backend).",
+        default=64,
+        ge=1,
+        description=(
+            "Maximum number of texts per embedding request. Longer input lists are split into "
+            "that many sequential requests. 64 is well under every supported provider's input "
+            "limit (OpenAI/Jina 2048, Voyage 128); lower it only for a provider that rejects it."
+        ),
     )
     client_backend: str = Field(
         default="sdk",
