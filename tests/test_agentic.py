@@ -320,3 +320,29 @@ async def test_where_scope_filters_and_rejects_unknown_fields(service: MemorySer
 async def test_progressive_retrieve_rejects_empty_query(service: MemoryService) -> None:
     with pytest.raises(ValueError, match="empty_query"):
         await service.progressive_retrieve("   ")
+
+
+async def test_sqlite_resource_commit_sees_writes_from_another_instance(tmp_path: Any) -> None:
+    """Two SQLiteStore instances on the same DB file share ground truth, matching
+    PostgresResourceRepo's always-fresh reads: an unfiltered ``list_resources`` must
+    not shortcut to a per-instance cache once that cache is non-empty, or a sibling
+    instance's later write becomes invisible and a same-url recommit duplicates it.
+    """
+    dsn = f"sqlite:///{tmp_path}/memu.sqlite3"
+    service_a = make_service({"metadata_store": {"provider": "sqlite", "dsn": dsn}})
+    service_b = make_service({"metadata_store": {"provider": "sqlite", "dsn": dsn}})
+
+    await service_a.commit_results(resource=[{"path": "/workspace/notes.md", "description": "v1"}])
+    # First unfiltered read on a fresh instance always hits the DB, so this warms
+    # service_b's cache with notes.md too.
+    await service_b.commit_results(resource=[{"path": "/workspace/other.md", "description": "other"}])
+
+    await service_a.commit_results(resource=[{"path": "/workspace/extra.md", "description": "a's version"}])
+    committed = await service_b.commit_results(resource=[{"path": "/workspace/extra.md", "description": "b's version"}])
+    assert len(committed["resources"]) == 1
+
+    fresh = make_service({"metadata_store": {"provider": "sqlite", "dsn": dsn}})
+    rows = fresh._get_database().resource_repo.list_resources()
+    matches = [r for r in rows.values() if r.url == "/workspace/extra.md"]
+    assert len(matches) == 1
+    assert matches[0].caption == "b's version"

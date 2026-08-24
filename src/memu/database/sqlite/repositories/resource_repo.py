@@ -58,10 +58,6 @@ class SQLiteResourceRepo(SQLiteRepoBase, ResourceRepo):
         Returns:
             Dictionary of resource ID to Resource mapping.
         """
-        # Prefer cached data if available and no filter
-        if not where and self.resources:
-            return dict(self.resources)
-
         with self._sessions.session() as session:
             stmt = select(self._resource_model)
             filters = self._build_filters(self._resource_model, where)
