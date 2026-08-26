@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -30,8 +31,15 @@ def _decode_cursor(cursor: str | None) -> tuple[str, str, str] | None:
     """Inverse of :func:`_encode_cursor`; a blank/absent cursor starts at the top."""
     if not cursor:
         return None
-    track, name, _id = json.loads(base64.urlsafe_b64decode(cursor.encode()))
-    return (track, name, _id)
+    try:
+        decoded = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+    except (binascii.Error, ValueError) as exc:
+        msg = "invalid cursor"
+        raise ValueError(msg) from exc
+    if not isinstance(decoded, list) or len(decoded) != 3 or not all(isinstance(value, str) for value in decoded):
+        msg = "invalid cursor"
+        raise ValueError(msg)
+    return (decoded[0], decoded[1], decoded[2])
 
 
 async def _embed_one(embed_client: Any, text: str) -> list[float]:
@@ -165,6 +173,9 @@ class AgenticMixin:
         within a scope, immutable under commit) is what makes that walk skip- and
         duplicate-free.
         """
+        if limit < 1:
+            msg = "limit must be greater than zero"
+            raise ValueError(msg)
         store = self._get_database()
         where_filters = self._normalize_where(where)
         recall_files, next_after = store.recall_file_repo.list_recall_files_page(
