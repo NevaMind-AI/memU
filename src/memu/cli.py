@@ -13,6 +13,8 @@ Usage:
     memu retrieve "What are this user's launch preferences?"
     memu list-files
     memu commit results.json
+    memu memorize prepare session.json
+    memu memorize commit
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import asyncio
 import json
 import os
 import pathlib
+import shlex
 import sys
 import time
 from collections.abc import Callable, Coroutine
@@ -29,7 +32,12 @@ from typing import Any
 
 from memu import events
 from memu.agentic_backend import AgenticMemoryBackend
+from memu.app.memorize.input import MemorizeInput
+from memu.app.memorize.lifecycle import MemorizeWorkspace, commit_memorize, prepare_memorize
 from memu.env import build_agentic_memory_backend_from_env, embedding_provider, env
+from memu.hosts.bridging.resources import verify_resource_log
+
+MEMORIZE_WORKSPACE = "~/.memu/developer"
 
 
 def _env(name: str, default: str) -> str:
@@ -155,6 +163,94 @@ async def _cmd_commit(args: argparse.Namespace) -> int:
     return 0
 
 
+def _memorize_workspace(args: argparse.Namespace) -> MemorizeWorkspace:
+    return MemorizeWorkspace(pathlib.Path(args.workspace).expanduser())
+
+
+def _memorize_commit_command(args: argparse.Namespace, workspace: MemorizeWorkspace) -> str:
+    command = "memu memorize commit"
+    if args.workspace != MEMORIZE_WORKSPACE:
+        command += f" --workspace {shlex.quote(str(workspace.base))}"
+    return command
+
+
+def _read_memorize_input(payload: str) -> MemorizeInput:
+    if payload == "-":
+        data = json.load(sys.stdin)
+    else:
+        path = pathlib.Path(payload).expanduser()
+        if not path.exists():
+            msg = f"no such file: {path}"
+            raise FileNotFoundError(msg)
+        data = json.loads(path.read_text(encoding="utf-8"))
+    return MemorizeInput.model_validate(data)
+
+
+async def _cmd_memorize_prepare(args: argparse.Namespace) -> int:
+    if args.payload != "-":
+        path = pathlib.Path(args.payload).expanduser()
+        if not path.exists():
+            print(f"error: no such file: {path}", file=sys.stderr)
+            return 2
+    memorize_input = _read_memorize_input(args.payload)
+    workspace = _memorize_workspace(args)
+    verify_command = f"memu memorize verify-resources --workspace {shlex.quote(str(workspace.base))}"
+    prepared = await prepare_memorize(
+        memorize_input,
+        workspace,
+        _build_backend(args),
+        verify_command=verify_command,
+    )
+
+    if args.json:
+        _print_json({
+            "workspace": str(workspace.base),
+            "transcript": {
+                "memory_path": str(prepared.transcript.memory_path),
+                "skill_path": str(prepared.transcript.skill_path),
+            },
+            "jobs": [str(path) for path in prepared.jobs],
+            "next_command": _memorize_commit_command(args, workspace),
+        })
+        return 0
+
+    print("prepared developer session")
+    print(f"  {len(prepared.jobs)} job(s)")
+    print(f"  workspace: {workspace.base}")
+    print("process the jobs in numeric order, then run:")
+    print(f"  {_memorize_commit_command(args, workspace)}")
+    return 0
+
+
+async def _cmd_memorize_commit(args: argparse.Namespace) -> int:
+    result = await commit_memorize(_memorize_workspace(args), _build_backend(args))
+    if args.json:
+        _print_json(result)
+        return 0
+
+    recall_files = result.get("recall_files", [])
+    resources = result.get("resources", [])
+    print(f"committed {len(recall_files)} recall file(s) and {len(resources)} resource(s)")
+    for recall_file in recall_files:
+        print(f"  - {recall_file.get('track')}/{recall_file.get('name')}")
+    return 0
+
+
+async def _cmd_memorize_verify_resources(args: argparse.Namespace) -> int:
+    workspace = _memorize_workspace(args)
+    kept = verify_resource_log(workspace.resource_log, workspace.resources)
+    print(f"verified {kept} resource(s)")
+    return 0
+
+
+def _add_memorize_workspace(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--workspace",
+        default=MEMORIZE_WORKSPACE,
+        help=f"Developer self-evolve workspace (default: {MEMORIZE_WORKSPACE})",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="memu",
@@ -185,6 +281,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_common_options(p)
     p.set_defaults(handler=_cmd_commit)
+
+    memorize = sub.add_parser(
+        "memorize",
+        help="Turn developer-supplied conversations into external self-evolve jobs",
+    )
+    memorize_actions = memorize.add_subparsers(dest="memorize_action", required=True)
+
+    p = memorize_actions.add_parser("prepare", help="Prepare self-evolve jobs from a conversation batch")
+    p.add_argument("payload", help='MemorizeInput JSON file, or "-" for stdin')
+    _add_memorize_workspace(p)
+    _add_common_options(p)
+    p.set_defaults(handler=_cmd_memorize_prepare)
+
+    p = memorize_actions.add_parser("commit", help="Commit the active self-evolve run")
+    _add_memorize_workspace(p)
+    _add_common_options(p)
+    p.set_defaults(handler=_cmd_memorize_commit)
+
+    p = memorize_actions.add_parser(
+        "verify-resources",
+        help="Internal: verify files logged by generated skill jobs",
+    )
+    _add_memorize_workspace(p)
+    p.set_defaults(handler=_cmd_memorize_verify_resources)
 
     return parser
 
