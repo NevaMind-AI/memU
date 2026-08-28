@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from pydantic import BaseModel
@@ -53,10 +54,15 @@ class InMemoryStore(Database):
             state=self.state, recall_file_model=recall_file_model
         )
         self._vector_index = vector_index
+        self._vector_scope_id = str(uuid.uuid4())
         self.recall_file_segment_repo = InMemoryFileSegmentRepository(
-            state=self.state, recall_file_segment_model=recall_file_segment_model, vector_index=vector_index
+            state=self.state,
+            recall_file_segment_model=recall_file_segment_model,
+            vector_index=vector_index,
+            vector_scope_id=self._vector_scope_id,
         )
 
     def close(self) -> None:
         if self._vector_index is not None:
+            self._vector_index.delete_many(segment.id for segment in self.segments)
             self._vector_index.close()

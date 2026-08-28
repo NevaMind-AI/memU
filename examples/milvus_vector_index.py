@@ -39,35 +39,38 @@ async def main() -> None:
         },
     )
 
-    print("[memU + Milvus] Committing recall files...")
-    await service.commit_results(
-        recall_files=[
-            {
-                "name": "Profile",
-                "track": "memory",
-                "description": "user preferences",
-                "content": "# Profile\nprefers espresso\nships releases on Fridays",
-            },
-            {
-                "name": "release-checklist",
-                "track": "skill",
-                "description": "release steps",
-                "content": "run tests\nbuild package\npush tag",
-            },
-        ],
-        resource=[{"path": os.path.abspath("README.md"), "description": "project overview and usage notes"}],
-        user={"user_id": "demo-user"},
-    )
+    try:
+        print("[memU + Milvus] Committing recall files...")
+        await service.commit_results(
+            recall_files=[
+                {
+                    "name": "Profile",
+                    "track": "memory",
+                    "description": "user preferences",
+                    "content": "# Profile\nprefers espresso\nships releases on Fridays",
+                },
+                {
+                    "name": "release-checklist",
+                    "track": "skill",
+                    "description": "release steps",
+                    "content": "run tests\nbuild package\npush tag",
+                },
+            ],
+            resource=[{"path": os.path.abspath("README.md"), "description": "project overview and usage notes"}],
+            user={"user_id": "demo-user"},
+        )
 
-    result = await service.progressive_retrieve("What does the user prefer?", where={"user_id": "demo-user"})
+        result = await service.progressive_retrieve("What does the user prefer?", where={"user_id": "demo-user"})
 
-    print("\n[memU + Milvus] Retrieved segments:")
-    for segment in result.get("segments", [])[:5]:
-        print(f"  - [{segment.get('track')}] {segment.get('text')} (score={segment.get('score'):.3f})")
+        print("\n[memU + Milvus] Retrieved segments:")
+        for segment in result.get("segments", [])[:5]:
+            print(f"  - [{segment.get('track')}] {segment.get('text')} (score={segment.get('score'):.3f})")
 
-    print("\n[memU + Milvus] Retrieved files:")
-    for file in result.get("files", [])[:5]:
-        print(f"  - [{file.get('track')}] {file.get('name')}")
+        print("\n[memU + Milvus] Retrieved files:")
+        for file in result.get("files", [])[:5]:
+            print(f"  - [{file.get('track')}] {file.get('name')}")
+    finally:
+        service.database.close()
 
 
 if __name__ == "__main__":

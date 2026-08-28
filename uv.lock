@@ -753,7 +753,6 @@ dependencies = [
 milvus = [
     { name = "milvus-lite" },
     { name = "pymilvus" },
-    { name = "setuptools", marker = "python_full_version >= '3.13'" },
 ]
 postgres = [
     { name = "pgvector" },
@@ -788,14 +787,13 @@ test = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.14.0" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "milvus-lite", marker = "extra == 'milvus'", specifier = ">=3.0,<4.0" },
+    { name = "milvus-lite", marker = "extra == 'milvus'", specifier = ">=3.1.1,<4.0" },
     { name = "numpy", specifier = ">=2.3.4" },
     { name = "openai", specifier = ">=2.8.0" },
     { name = "pendulum", specifier = ">=3.1.0" },
     { name = "pgvector", marker = "extra == 'postgres'", specifier = ">=0.3.4" },
     { name = "pydantic", specifier = ">=2.12.4" },
-    { name = "pymilvus", marker = "extra == 'milvus'", specifier = ">=3.0.0,<4.0.0" },
-    { name = "setuptools", marker = "python_full_version >= '3.13' and extra == 'milvus'", specifier = "<81" },
+    { name = "pymilvus", marker = "extra == 'milvus'", specifier = ">=3.0.1,<4.0.0" },
     { name = "sqlalchemy", extras = ["postgresql-psycopgbinary"], marker = "extra == 'postgres'", specifier = ">=2.0.36" },
     { name = "sqlmodel", specifier = ">=0.0.27" },
 ]
@@ -1668,15 +1666,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/54/1a/a49f071f04c42345c793d22f6cf5e0920095e286119ee53a64a3a3004825/ruff-0.14.4-py3-none-win32.whl", hash = "sha256:643b69cb63cd996f1fc7229da726d07ac307eae442dd8974dbc7cf22c1e18fff", size = 12493429, upload-time = "2025-11-06T22:07:38.43Z" },
     { url = "https://files.pythonhosted.org/packages/bc/22/e58c43e641145a2b670328fb98bc384e20679b5774258b1e540207580266/ruff-0.14.4-py3-none-win_amd64.whl", hash = "sha256:26673da283b96fe35fa0c939bf8411abec47111644aa9f7cfbd3c573fb125d2c", size = 13635380, upload-time = "2025-11-06T22:07:40.496Z" },
     { url = "https://files.pythonhosted.org/packages/30/bd/4168a751ddbbf43e86544b4de8b5c3b7be8d7167a2a5cb977d274e04f0a1/ruff-0.14.4-py3-none-win_arm64.whl", hash = "sha256:dd09c292479596b0e6fec8cd95c65c3a6dc68e9ad17b8f2382130f87ff6a75bb", size = 12663065, upload-time = "2025-11-06T22:07:42.603Z" },
-]
-
-[[package]]
-name = "setuptools"
-version = "80.10.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/76/95/faf61eb8363f26aa7e1d762267a8d602a1b26d4f3a1e758e92cb3cb8b054/setuptools-80.10.2.tar.gz", hash = "sha256:8b0e9d10c784bf7d262c4e5ec5d4ec94127ce206e8738f29a437945fbc219b70", size = 1200343, upload-time = "2026-01-25T22:38:17.252Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/94/b8/f1f62a5e3c0ad2ff1d189590bfa4c46b4f3b6e49cef6f26c6ee4e575394d/setuptools-80.10.2-py3-none-any.whl", hash = "sha256:95b30ddfb717250edb492926c92b5221f7ef3fbcc2b07579bcd4a27da21d0173", size = 1064234, upload-time = "2026-01-25T22:38:15.216Z" },
 ]
 
 [[package]]

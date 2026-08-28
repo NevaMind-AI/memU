@@ -57,10 +57,8 @@ test = [
 [project.optional-dependencies]
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
 milvus = [
-    "pymilvus>=3.0.0,<4.0.0",
-    "milvus-lite>=3.0,<4.0",
-    # milvus-lite 3.0 still imports pkg_resources on Python 3.13.
-    "setuptools<81; python_version >= '3.13'",
+    "pymilvus>=3.0.1,<4.0.0",
+    "milvus-lite>=3.1.1,<4.0",
 ]
 
 [project.scripts]
@@ -86,7 +84,7 @@ memu-agent = "memu.hosts.generic.cli:main"
 
 [tool.deptry.per_rule_ignores]
 # Optional dependencies imported indirectly or loaded lazily behind extras.
-DEP002 = ["milvus-lite", "setuptools"]
+DEP002 = ["milvus-lite"]
 # memu.trust imports certifi only as a fallback, inside a try/except that
 # degrades when it is absent — so it is deliberately a transitive dependency
 # (via httpx) rather than one this package declares and would then require.

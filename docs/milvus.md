@@ -12,7 +12,7 @@ memU can route in-memory metadata-store similarity search to [Milvus](https://mi
 uv sync --extra milvus
 ```
 
-> The `milvus` extra pulls `pymilvus`, `milvus-lite` and — on Python 3.13 — a `setuptools<81` compatibility pin because Milvus Lite 3.0 still imports `pkg_resources`. New local Milvus Lite files should use the 3.x storage format; older 2.x `.db` files are not expected to be reusable after upgrading to Milvus Lite 3.x.
+> The `milvus` extra uses Milvus Lite 3.1.1 or newer. This excludes the known 3.0 score and dynamic-field compatibility window and starts with the first 3.1 patch release. New local databases use the 3.x storage format; older 2.x `.db` files are not reusable and must be rebuilt from the metadata source.
 
 ## Quick Start (Milvus Lite)
 
@@ -28,7 +28,7 @@ service = MemoryService(
 )
 ```
 
-With the default configuration the index is persisted to `./milvus.db` using Milvus Lite — no Docker, no separate process.
+With the default configuration the index is stored in `./milvus.db` using Milvus Lite — no Docker or separate process. The accompanying `inmemory` metadata is process-local and remains the source used to materialize search hits.
 
 ## Targeting a Milvus Server
 
@@ -73,10 +73,14 @@ database_config = {
 
 ## Supported Combinations
 
-memU keeps recall files, resources, segment text, and scope fields in the metadata store and mirrors `RecallFileSegment` embeddings into Milvus on create / delete.
+memU keeps recall files, resources, segment text, and scope fields in the metadata store and mirrors only `RecallFileSegment` embeddings into Milvus. Resource retrieval stays in the metadata backend.
 
-- **Available now**: `inmemory` metadata store + Milvus vector index (feature-complete).
+- **Available now**: `inmemory` metadata store + Milvus vector index for segment retrieval.
 - **Not wired yet**: `sqlite` and `postgres` metadata stores reject `vector_index.provider="milvus"` rather than silently ignoring it. See `docs/adr/0019-external-vector-index.md` for the rollout plan.
+
+Each `InMemoryStore` receives a private internal scope inside the shared Milvus collection. Two live stores can therefore use the same collection without seeing or consuming each other's top-k results. A normal `close()` deletes only the segment IDs owned by that store and never drops the collection.
+
+Because metadata is intentionally ephemeral, a new process starts with a new internal scope and does not recover vectors written by an earlier process. If a process exits without calling `close()`, its vectors may remain in the collection but are unreachable from later stores. Applications that need restart recovery should use a persistent metadata backend; Milvus is currently rejected for those backend combinations rather than presenting an incomplete recovery model.
 
 ## How Search Works
 
@@ -84,3 +88,5 @@ memU keeps recall files, resources, segment text, and scope fields in the metada
 2. `progressive_retrieve` forwards the query vector to Milvus through `recall_file_segment_repo.vector_search_segments` using a COSINE AUTOINDEX. Scope filters (e.g. `where={"user_id": "u1"}`) and track filters are translated into Milvus boolean expressions on dynamic fields.
 3. Milvus returns `(segment_id, score)` pairs; the metadata store resolves them back to segment records and rolls them up to recall files.
 4. Resource retrieval stays in the metadata backend because Milvus is only wired to the segment index in the first rollout.
+
+When reusing a collection, memU validates the string primary key, float-vector field, dimension, dynamic-field support, and COSINE index before writing. An incompatible collection fails with a descriptive error and is never modified.

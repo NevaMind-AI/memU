@@ -19,6 +19,7 @@ Introduce a `VectorIndex` protocol that memory repositories can delegate to when
 - `VectorIndex` lives in `memu/database/vector_index/` and exposes `upsert`, `delete`, `delete_many`, `search`, `close`.
 - `build_vector_index` in the factory constructs the provider based on `VectorIndexConfig.provider`.
 - The in-memory metadata backend receives the vector index through its builder and mirrors `RecallFileSegment` mutations to it on create / delete / clear.
+- Every in-memory store adds a private internal scope to its vectors. Search always includes that scope, and normal close removes only that store's segment IDs without dropping a shared collection.
 - `progressive_retrieve` routes segment search through the repository contract. The in-memory segment repository delegates to the vector index when present; other backends keep their existing local search paths.
 
 Initial scope: the `inmemory` metadata backend is wired to `MilvusVectorIndex`. `sqlite` and `postgres` are planned follow-ups; their existing (brute-force / pgvector) paths remain the default so the change is additive. Until those follow-ups land, memU rejects `vector_index.provider="milvus"` with non-`inmemory` metadata stores to avoid silently ignoring the configured external index.
@@ -34,7 +35,8 @@ Positive:
 Negative:
 
 - Two systems of record mean write amplification and a consistency window between the metadata store and the vector index.
+- In-memory metadata is intentionally ephemeral. Restarting creates a new internal scope rather than reconstructing metadata from a persistent Milvus collection; an unclean exit can therefore leave unreachable vectors for an operator to remove.
 - Scope fields are replicated into Milvus as dynamic fields, increasing storage vs. a single SQL column.
 - `pymilvus` / `milvus-lite` are optional and gated behind the `milvus` extra; users picking this path accept that dependency.
 - Milvus Lite 3.x uses a newer local storage format than the earlier 2.x line, so users upgrading existing local `.db` files should create a new Milvus Lite database and re-ingest their vectors.
-- Milvus Lite 3.0 still imports `pkg_resources` on Python 3.13, so the `milvus` extra pins `setuptools<81` until that dependency is removed upstream.
+- The `milvus` extra requires Milvus Lite 3.1.1 or newer, excluding the known 3.0 score and dynamic-field compatibility window and adopting the first 3.1 patch release without a `setuptools` compatibility pin.

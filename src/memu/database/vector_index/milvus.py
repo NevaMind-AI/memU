@@ -4,7 +4,6 @@ import logging
 import math
 import re
 from collections.abc import Iterable, Mapping
-from importlib.metadata import PackageNotFoundError, version
 from threading import Lock
 from typing import Any
 
@@ -16,6 +15,22 @@ _ID_FIELD = "id"
 _VECTOR_FIELD = "vector"
 _DEFAULT_ID_MAX_LENGTH = 128
 _FIELD_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_AUTO_ID_ERROR = "primary keys must use auto_id=False"
+_DYNAMIC_FIELD_ERROR = "dynamic fields must be enabled"
+_MISSING_ID_ERROR = f"missing primary-key field {_ID_FIELD!r}"
+_ID_SCHEMA_ERROR = f"field {_ID_FIELD!r} must be the VARCHAR primary key"
+_MISSING_VECTOR_ERROR = f"missing vector field {_VECTOR_FIELD!r}"
+_VECTOR_TYPE_ERROR = f"field {_VECTOR_FIELD!r} must be FLOAT_VECTOR"
+_VECTOR_DIM_ERROR = f"field {_VECTOR_FIELD!r} has no valid dimension"
+_MISSING_INDEX_ERROR = f"field {_VECTOR_FIELD!r} has no index"
+_INDEX_METRIC_ERROR = f"field {_VECTOR_FIELD!r} must use a COSINE index"
+
+
+class MilvusCollectionCompatibilityError(ValueError):
+    def __init__(self, collection_name: str, reason: str) -> None:
+        self.collection_name = collection_name
+        self.reason = reason
+        super().__init__(f"Milvus collection {collection_name!r} is incompatible: {reason}")
 
 
 def _valid_field_name(field_name: str) -> bool:
@@ -87,19 +102,6 @@ def _build_filter_expr(where: Mapping[str, Any] | None) -> str | None:
     return " and ".join(parts)
 
 
-def _cosine_distance_to_similarity(distance: Any) -> float:
-    """Convert Milvus COSINE distance to memU's higher-is-better similarity score."""
-    if distance is None:
-        return 0.0
-    try:
-        value = float(distance)
-    except (TypeError, ValueError):
-        return 0.0
-    if not math.isfinite(value):
-        return 0.0
-    return 1.0 - value
-
-
 def _coerce_score(score: Any) -> float:
     if score is None:
         return 0.0
@@ -110,13 +112,10 @@ def _coerce_score(score: Any) -> float:
     return value if math.isfinite(value) else 0.0
 
 
-def _uses_milvus_lite_cosine_distance(uri: str) -> bool:
-    if "://" in uri:
-        return False
-    try:
-        return version("milvus-lite") in {"3.0", "3.0.0"}
-    except PackageNotFoundError:
-        return False
+def _value(obj: Any, key: str, default: Any = None) -> Any:
+    if isinstance(obj, Mapping):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
 
 
 class MilvusVectorIndex(VectorIndex):
@@ -155,9 +154,6 @@ class MilvusVectorIndex(VectorIndex):
         self._collection_name = collection_name
         self._dim = dim
         self._consistency_level = consistency_level
-        # Milvus Lite 3.0/3.0.0 reports COSINE as distance rather than similarity.
-        # See https://github.com/milvus-io/milvus-lite/issues/343.
-        self._cosine_distance_scores = _uses_milvus_lite_cosine_distance(uri)
         client_kwargs: dict[str, Any] = {"uri": uri}
         if token:
             client_kwargs["token"] = token
@@ -178,27 +174,64 @@ class MilvusVectorIndex(VectorIndex):
             msg = f"Milvus vector dimension mismatch: expected {self._dim}, got {dim}"
             raise ValueError(msg)
 
-    def _existing_collection_dim(self) -> int | None:
+    def _incompatible_collection(self, reason: str) -> MilvusCollectionCompatibilityError:
+        return MilvusCollectionCompatibilityError(self._collection_name, reason)
+
+    def _validate_existing_schema(self, description: Any, dim: int) -> None:
+        from pymilvus import DataType
+
+        if _value(description, "auto_id") is not False:
+            raise self._incompatible_collection(_AUTO_ID_ERROR)
+        if _value(description, "enable_dynamic_field") is not True:
+            raise self._incompatible_collection(_DYNAMIC_FIELD_ERROR)
+
+        fields = _value(description, "fields", [])
+        by_name = {_value(field, "name"): field for field in fields}
+        id_field = by_name.get(_ID_FIELD)
+        if id_field is None:
+            raise self._incompatible_collection(_MISSING_ID_ERROR)
+        if _value(id_field, "type") != DataType.VARCHAR or _value(id_field, "is_primary") is not True:
+            raise self._incompatible_collection(_ID_SCHEMA_ERROR)
+
+        vector_field = by_name.get(_VECTOR_FIELD)
+        if vector_field is None:
+            raise self._incompatible_collection(_MISSING_VECTOR_ERROR)
+        if _value(vector_field, "type") != DataType.FLOAT_VECTOR:
+            raise self._incompatible_collection(_VECTOR_TYPE_ERROR)
+        params = _value(vector_field, "params", {})
+        raw_dim = _value(params, "dim", _value(vector_field, "dim"))
+        try:
+            existing_dim = int(raw_dim)
+        except (TypeError, ValueError) as exc:
+            raise self._incompatible_collection(_VECTOR_DIM_ERROR) from exc
+        if existing_dim != dim:
+            reason = f"field {_VECTOR_FIELD!r} has dimension {existing_dim}, expected {dim}"
+            raise self._incompatible_collection(reason)
+
+    def _validate_existing_indexes(self) -> None:
+        try:
+            index_names = self._client.list_indexes(collection_name=self._collection_name)
+            indexes = [
+                self._client.describe_index(collection_name=self._collection_name, index_name=index_name)
+                for index_name in index_names
+            ]
+        except Exception as exc:
+            msg = f"Could not inspect indexes for Milvus collection {self._collection_name!r}"
+            raise RuntimeError(msg) from exc
+        vector_indexes = [index for index in indexes if _value(index, "field_name") == _VECTOR_FIELD]
+        if not vector_indexes:
+            raise self._incompatible_collection(_MISSING_INDEX_ERROR)
+        if not any(str(_value(index, "metric_type", "")).upper() == "COSINE" for index in vector_indexes):
+            raise self._incompatible_collection(_INDEX_METRIC_ERROR)
+
+    def _validate_existing_collection(self, dim: int) -> None:
         try:
             description = self._client.describe_collection(collection_name=self._collection_name)
-        except Exception:
-            logger.debug("Could not inspect Milvus collection schema", exc_info=True)
-            return None
-
-        fields = description.get("fields", []) if isinstance(description, dict) else getattr(description, "fields", [])
-        for field in fields:
-            name = field.get("name") if isinstance(field, dict) else getattr(field, "name", None)
-            if name != _VECTOR_FIELD:
-                continue
-            params = field.get("params", {}) if isinstance(field, dict) else getattr(field, "params", {})
-            dim = params.get("dim") if isinstance(params, dict) else None
-            if dim is None and isinstance(field, dict):
-                dim = field.get("dim")
-            try:
-                return int(dim) if dim is not None else None
-            except (TypeError, ValueError):
-                return None
-        return None
+        except Exception as exc:
+            msg = f"Could not inspect Milvus collection {self._collection_name!r}"
+            raise RuntimeError(msg) from exc
+        self._validate_existing_schema(description, dim)
+        self._validate_existing_indexes()
 
     def _ensure_collection(self, dim: int) -> None:
         self._validate_dimension(dim)
@@ -207,15 +240,9 @@ class MilvusVectorIndex(VectorIndex):
             if self._ready:
                 return
             if self._client.has_collection(collection_name=self._collection_name):
-                existing_dim = self._existing_collection_dim()
-                if existing_dim is not None and existing_dim != dim:
-                    msg = (
-                        f"Milvus collection {self._collection_name!r} has dimension {existing_dim}, "
-                        f"but memU attempted to use dimension {dim}"
-                    )
-                    raise ValueError(msg)
+                self._validate_existing_collection(dim)
                 self._ready = True
-                self._dim = existing_dim or dim
+                self._dim = dim
                 return
 
             from pymilvus import DataType
@@ -336,20 +363,14 @@ class MilvusVectorIndex(VectorIndex):
             raw_score = hit.get("distance") if isinstance(hit, dict) else getattr(hit, "distance", 0.0)
             if hit_id is None:
                 continue
-            score = (
-                _cosine_distance_to_similarity(raw_score) if self._cosine_distance_scores else _coerce_score(raw_score)
-            )
-            scored.append((str(hit_id), score))
+            scored.append((str(hit_id), _coerce_score(raw_score)))
         return scored
 
     def close(self) -> None:
         with self._lock:
             close = getattr(self._client, "close", None)
             if callable(close):
-                try:
-                    close()
-                except Exception:
-                    logger.debug("MilvusClient.close raised; ignoring", exc_info=True)
+                close()
             self._ready = False
 
 
