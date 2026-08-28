@@ -1,6 +1,6 @@
 """Each host's record seam: does classify() slice its log the way that host writes it?
 
-One test module per invariant class, five hosts. The fixtures are hand-written
+The fixtures are hand-written
 records in each host's real on-disk shape (see the session-location table in ADR
 0010); if a host changes its log format, the fixture — not the pipeline — is what
 these tests localize the break to.
@@ -23,11 +23,65 @@ from memu.hosts.cola.sessions import ColaTranscriptSource
 from memu.hosts.cursor.sessions import CursorTranscriptSource
 from memu.hosts.hermes.sessions import HermesTranscriptSource, state_db_path
 from memu.hosts.openclaw.sessions import OpenClawTranscriptSource
+from memu.hosts.pi.sessions import PiTranscriptSource
 from memu.hosts.workbuddy.sessions import WorkBuddyTranscriptSource
 
 
 def _line(entry: dict) -> str:
     return json.dumps(entry)
+
+
+# ── pi ────────────────────────────────────────────────────────────────────────
+
+
+def test_pi_classifies_conversation_and_tool_rows() -> None:
+    source = PiTranscriptSource()
+    user = {"type": "message", "message": {"role": "user", "content": [{"type": "text", "text": "hi"}]}}
+    narrated_tool = {
+        "type": "message",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "Running it."}, {"type": "toolCall", "name": "bash"}],
+        },
+    }
+    tool_call = {
+        "type": "message",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "thinking", "thinking": "hmm"}, {"type": "toolCall", "name": "bash"}],
+        },
+    }
+    tool_result = {"type": "message", "message": {"role": "toolResult", "content": []}}
+    bash_execution = {"type": "message", "message": {"role": "bashExecution", "command": "pwd"}}
+
+    assert source.classify(_line(user)) is RecordKind.MESSAGE
+    assert source.classify(_line(narrated_tool)) is RecordKind.MESSAGE
+    assert source.classify(_line(tool_call)) is RecordKind.TOOL
+    assert source.classify(_line(tool_result)) is RecordKind.TOOL
+    assert source.classify(_line(bash_execution)) is RecordKind.TOOL
+
+
+def test_pi_drops_v3_metadata_and_thinking_only_rows() -> None:
+    source = PiTranscriptSource()
+    assert source.classify(_line({"type": "session", "version": 3, "id": "s", "cwd": "/workspace"})) is RecordKind.OTHER
+    assert source.classify(_line({"type": "compaction", "summary": "old work"})) is RecordKind.OTHER
+    assert (
+        source.classify(_line({"type": "message", "message": {"role": "assistant", "content": [{"type": "thinking"}]}}))
+        is RecordKind.OTHER
+    )
+    assert source.classify("not json") is RecordKind.OTHER
+
+
+def test_pi_discovers_sessions_across_encoded_working_directories(tmp_path: pathlib.Path) -> None:
+    older = tmp_path / "--Users-a-one--" / "older.jsonl"
+    newer = tmp_path / "--Users-a-two--" / "newer.jsonl"
+    older.parent.mkdir()
+    newer.parent.mkdir()
+    older.write_text("{}\n", encoding="utf-8")
+    newer.write_text("{}\n", encoding="utf-8")
+    os.utime(older, (1, 1))
+    os.utime(newer, (2, 2))
+    assert PiTranscriptSource(tmp_path).discover() == [newer, older]
 
 
 # ── Cola ──────────────────────────────────────────────────────────────────────

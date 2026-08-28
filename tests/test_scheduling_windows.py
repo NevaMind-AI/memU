@@ -30,10 +30,11 @@ from memu.hosts.generic.cli import SPEC as GENERIC
 from memu.hosts.hermes.cli import SPEC as HERMES
 from memu.hosts.host_cli import ScheduleBackend, build_parser, run
 from memu.hosts.openclaw.cli import SPEC as OPENCLAW
+from memu.hosts.pi.cli import SPEC as PI
 from memu.hosts.scheduling import prompt, windows
 from memu.hosts.workbuddy.cli import SPEC as WORKBUDDY
 
-SPECS = (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
+SPECS = (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, PI, GENERIC)
 
 EXPECTED_TASK_NAMES = {
     "claude-code": ("memu-bridging-claude-code", ("memu-remember-claude-code",)),
@@ -43,6 +44,7 @@ EXPECTED_TASK_NAMES = {
     "openclaw": ("memu-bridging-openclaw", ("memu-remember", "memu-bridging")),
     "workbuddy": ("memu-bridging-workbuddy", ()),
     "cola": ("memu-bridging-cola", ("memu-bridging", "memU 记忆桥接")),
+    "pi": ("memu-bridging-pi", ()),
     "agent": ("memu-bridging-agent", ()),
 }
 
@@ -444,7 +446,17 @@ def test_hermes_pipeline_prompt_matches_the_bridging_doc() -> None:
     assert doc_prompt == prompt.bridging_pipeline_prompt(HERMES)
 
 
-@pytest.mark.parametrize("pkg", ["claude_code", "cursor", "hermes", "generic"])
+def test_pi_pipeline_prompt_matches_the_bridging_doc() -> None:
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.pi") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    doc_prompt = next(
+        line.strip() for line in doc.splitlines() if line.strip().startswith("Run the memU bridging pipeline.")
+    )
+    assert doc_prompt == prompt.bridging_pipeline_prompt(PI)
+
+
+@pytest.mark.parametrize("pkg", ["claude_code", "cursor", "hermes", "pi", "generic"])
 def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
     # The bug class behind memU#591: an inlined pipeline prompt pushed the guide's
     # crontab entry past cron's ~1KB line buffer, so every tick died mid-quote
@@ -484,6 +496,7 @@ def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
         ("openclaw", "memu-openclaw", ".cron_job.openclaw.json"),
         ("workbuddy", "memu-workbuddy", "WorkBuddy's automation list"),
         ("cola", "memu-cola", "{{all_task_names}}"),
+        ("pi", "memu-pi", r"hosts/pi/bridge\.sh|memU bridging pipeline"),
     ],
 )
 def test_install_refreshes_existing_bridge_before_registration(pkg: str, binary: str, identity: str) -> None:
@@ -569,6 +582,11 @@ def test_openclaw_task_recreates_confirmed_bridge() -> None:
                 "memu-agent commit",
             ),
             ("hosts/agent/bridge\\.sh|memU bridging pipeline", "memu-agent prepare --session-dir …"),
+        ),
+        (
+            "pi",
+            ("$HOME/.memu/hosts/pi/bridge.sh", "{{task_name}}"),
+            ("hosts/pi/bridge.sh", "schedule uninstall"),
         ),
     ],
 )

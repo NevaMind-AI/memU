@@ -1,0 +1,39 @@
+"""``memu-pi`` — memU's pi host adapter."""
+
+from __future__ import annotations
+
+import sys
+
+from memu.hosts.host_cli import HostSpec, run
+from memu.hosts.pi.sessions import AGENT_DIR, SESSION_DIR, PiTranscriptSource
+
+HOST = "pi"
+AGENTS_MD = f"{AGENT_DIR}/AGENTS.md"
+SKILLS_DIR = f"{AGENT_DIR}/skills"
+
+SPEC = HostSpec(
+    host=HOST,
+    display="pi",
+    package="memu.hosts.pi",
+    task_name="memu-bridging-pi",
+    source_factory=PiTranscriptSource,
+    session_dir=SESSION_DIR,
+    session_help="pi v3 JSONL session directory (one directory per encoded cwd)",
+    instruction_path=AGENTS_MD,
+    skills_dir=SKILLS_DIR,
+    schedule_backend="os",
+    schedule_command="pi -p {prompt}",
+    schedule_prepare_session_dir=True,
+    session_id_env="PI_SESSION_ID",
+    needs_headless_auth=True,
+    install_hint="  npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
+    auth_hint="    authenticate pi with /login or persist the API key used by its selected provider",
+)
+
+
+def main(argv: list[str] | None = None) -> int:
+    return run(SPEC, argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
