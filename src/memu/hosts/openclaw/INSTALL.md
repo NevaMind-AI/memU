@@ -28,13 +28,11 @@ Parts 2 and 3 must share one configured mode. In local mode they must also share
 one store and embedding space, or retrieval silently returns nothing. Part 1 is
 what makes them agree.
 
-**Scope note.** This adapter reads every agent's transcripts under
-`~/.openclaw/agents/`, in either shape OpenClaw has shipped: the current
-per-agent SQLite store (`<agentId>/agent/openclaw-agent.sqlite`) and the legacy
-JSONL files (`<agentId>/sessions/*.jsonl`). Both are read, so an install works
-either side of the upgrade — and a session mined before it keeps its place in the
-cursor after it. If this install runs a non-default state dir
-(`OPENCLAW_STATE_DIR`), pass `--session-dir <state-dir>/agents` to `prepare`.
+**Scope note.** This adapter reads sessions produced by every OpenClaw agent,
+including data written by current and legacy OpenClaw releases. Both remain
+readable across an upgrade, and an already-mined session keeps its cursor. If
+this install runs a non-default state dir (`OPENCLAW_STATE_DIR`), pass
+`--session-dir <state-dir>/agents` to `prepare`.
 
 ---
 
@@ -195,9 +193,9 @@ backend.
 
 ## Part 2 — Register the bridging (record) task
 
-The *record* seam: a scheduled job that mines recent transcripts under
-`~/.openclaw/agents/*/sessions/` into memU memory, skills, and resources. In
-cloud mode, workspace resources are submitted but are not currently persisted.
+The *record* seam: a scheduled job that mines recent OpenClaw sessions into memU
+memory, skills, and resources. In cloud mode, workspace resources are submitted
+but are not currently persisted.
 
 **Refresh an existing bridging registration before continuing.** Inspect
 OpenClaw's cron jobs. Check every recognized name in {{all_task_names}}. If

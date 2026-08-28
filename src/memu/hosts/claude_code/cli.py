@@ -11,6 +11,7 @@ Usage:
     memu-claude-code verify-resources      # filter the touched-file log (run by a job)
     memu-claude-code commit                # submit what the agent produced back to memU
     memu-claude-code doctor                # check config + store before relying on them
+    memu-claude-code cowork verify         # verify Cowork discovery and composition
     memu-claude-code docs install          # print the agent-facing install guide
     memu-claude-code docs uninstall        # print the agent-facing removal guide
 """
@@ -19,7 +20,9 @@ from __future__ import annotations
 
 import sys
 
-from memu.hosts.claude_code.sessions import SESSION_DIR, ClaudeCodeTranscriptSource
+from memu.hosts.claude_code import cowork_cmd
+from memu.hosts.claude_code.desktop_sessions import ClaudeDesktopTranscriptSource
+from memu.hosts.claude_code.sessions import SESSION_DIR
 from memu.hosts.host_cli import HostSpec, run
 
 HOST = "claude-code"
@@ -46,7 +49,7 @@ SPEC = HostSpec(
     package="memu.hosts.claude_code",
     task_name="memu-bridging-claude-code",
     former_task_names=("memu-remember-claude-code",),
-    source_factory=ClaudeCodeTranscriptSource,
+    source_factory=ClaudeDesktopTranscriptSource,
     session_dir=SESSION_DIR,
     session_help="Claude Code session log (one project dir per escaped cwd)",
     instruction_path=CLAUDE_MD,
@@ -55,6 +58,7 @@ SPEC = HostSpec(
     schedule_command="claude -p {prompt}",
     session_id_env=SESSION_ID_ENV,
     needs_headless_auth=True,
+    register_extra=cowork_cmd.register,
     install_hint=(
         "  Install a standalone claude:\n"
         "    winget install Anthropic.ClaudeCode\n"

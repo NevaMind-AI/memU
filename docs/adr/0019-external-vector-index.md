@@ -1,4 +1,4 @@
-# ADR 0018: External Vector Index Alongside Metadata Store
+# ADR 0019: External Vector Index Alongside Metadata Store
 
 - Status: Accepted
 - Date: 2026-06-30

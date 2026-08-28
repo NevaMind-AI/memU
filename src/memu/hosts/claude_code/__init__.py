@@ -6,6 +6,7 @@ standing instruction in ``~/.claude/CLAUDE.md`` that points the agent at the
 ``memu-claude-code retrieve`` command.
 """
 
+from memu.hosts.claude_code.desktop_sessions import ClaudeDesktopTranscriptSource
 from memu.hosts.claude_code.sessions import ClaudeCodeTranscriptSource
 
-__all__ = ["ClaudeCodeTranscriptSource"]
+__all__ = ["ClaudeCodeTranscriptSource", "ClaudeDesktopTranscriptSource"]

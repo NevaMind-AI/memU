@@ -19,7 +19,9 @@ src_path = Path(__file__).parent.parent / "src"
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
+import httpx  # noqa: E402
 import pytest  # noqa: E402
+from pydantic import ValidationError  # noqa: E402
 
 from memu.app.settings import EmbeddingConfig  # noqa: E402
 from memu.embedding.backends import (  # noqa: E402
@@ -68,6 +70,8 @@ async def test_http_client_embed_returns_vectors_and_raw(monkeypatch):
     captured: dict = {}
 
     class _FakeResponse:
+        status_code = 200
+
         def raise_for_status(self):
             return None
 
@@ -104,6 +108,167 @@ async def test_http_client_embed_returns_vectors_and_raw(monkeypatch):
     assert captured["endpoint"] == "embeddings"  # leading slash stripped
     assert captured["headers"] == {"Authorization": "Bearer key"}
     assert captured["json"] == {"model": "voyage-3.5", "input": ["hello"]}
+
+
+async def test_http_client_splits_inputs_into_batches(monkeypatch):
+    """A list longer than ``embed_batch_size`` becomes several requests, one client."""
+    posted: list[list[str]] = []
+    clients: list[object] = []
+
+    class _FakeResponse:
+        status_code = 200
+
+        def __init__(self, count: int):
+            self._count = count
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": [{"embedding": [float(i)]} for i in range(self._count)]}
+
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            clients.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, endpoint, json, headers):
+            posted.append(json["input"])
+            return _FakeResponse(len(json["input"]))
+
+    import memu.embedding.http_client as http_mod
+
+    monkeypatch.setattr(http_mod.httpx, "AsyncClient", _FakeAsyncClient)
+
+    client = HTTPEmbeddingClient(base_url="https://x/v1", api_key="k", embed_model="m", embed_batch_size=2)
+    vectors, _ = await client.embed(["a", "b", "c", "d", "e"])
+
+    assert posted == [["a", "b"], ["c", "d"], ["e"]]
+    assert len(vectors) == 5
+    assert len(clients) == 1  # every batch shares one connection pool
+
+
+async def test_http_client_embed_of_nothing_makes_no_request(monkeypatch):
+    """An empty commit must not post an empty ``input`` the provider would reject."""
+
+    built = False
+
+    class _RecordingAsyncClient:
+        def __init__(self, *args, **kwargs):
+            nonlocal built
+            built = True
+
+    import memu.embedding.http_client as http_mod
+
+    monkeypatch.setattr(http_mod.httpx, "AsyncClient", _RecordingAsyncClient)
+
+    client = HTTPEmbeddingClient(base_url="https://x/v1", api_key="k", embed_model="m")
+    assert await client.embed([]) == ([], {})
+    assert not built
+
+
+class _StubResponse:
+    """Minimal httpx.Response stand-in for the retry tests."""
+
+    def __init__(self, status_code: int, *, headers: dict | None = None):
+        self.status_code = status_code
+        self.headers = headers or {}
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            request = httpx.Request("POST", "https://x/v1/embeddings")
+            raise httpx.HTTPStatusError(
+                str(self.status_code),
+                request=request,
+                response=httpx.Response(self.status_code, request=request),
+            )
+
+    def json(self):
+        return {"data": [{"embedding": [1.0]}]}
+
+
+def _client_over(responses, monkeypatch, **kwargs):
+    """Build an HTTPEmbeddingClient whose POSTs replay ``responses`` in order."""
+    attempts: list = []
+
+    class _FakeAsyncClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, endpoint, json, headers):
+            outcome = responses[len(attempts)]
+            attempts.append(outcome)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+    import memu.embedding.http_client as http_mod
+
+    monkeypatch.setattr(http_mod.httpx, "AsyncClient", _FakeAsyncClient)
+    monkeypatch.setattr(http_mod.asyncio, "sleep", _no_sleep)
+    return HTTPEmbeddingClient(base_url="https://x/v1", api_key="k", embed_model="m", **kwargs), attempts
+
+
+async def _no_sleep(_seconds):
+    return None
+
+
+async def test_embed_retries_rate_limit_then_succeeds(monkeypatch):
+    client, attempts = _client_over([_StubResponse(429, headers={"Retry-After": "0"}), _StubResponse(200)], monkeypatch)
+    vectors, _ = await client.embed(["a"])
+
+    assert vectors == [[1.0]]
+    assert len(attempts) == 2
+
+
+async def test_embed_retries_transport_errors(monkeypatch):
+    client, attempts = _client_over([httpx.ConnectError("boom"), _StubResponse(200)], monkeypatch)
+    vectors, _ = await client.embed(["a"])
+
+    assert vectors == [[1.0]]
+    assert len(attempts) == 2
+
+
+async def test_embed_does_not_retry_terminal_failures(monkeypatch):
+    """A 401 fails the same way every time; burning attempts only delays it."""
+    client, attempts = _client_over([_StubResponse(401)] * 3, monkeypatch)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.embed(["a"])
+    assert len(attempts) == 1
+
+
+async def test_embed_surfaces_the_provider_error_once_retries_are_exhausted(monkeypatch):
+    client, attempts = _client_over([_StubResponse(503)] * 3, monkeypatch, max_attempts=3)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await client.embed(["a"])
+    assert len(attempts) == 3
+
+
+def test_embed_batch_size_defaults_to_batching_and_is_plumbed_to_both_backends():
+    # A default of 1 silently turned each batched call into N sequential requests.
+    assert EmbeddingConfig().embed_batch_size == 64
+
+    httpx_client = build_embedding_client(EmbeddingConfig(client_backend="httpx", embed_batch_size=8))
+    assert httpx_client.embed_batch_size == 8
+
+    sdk = build_embedding_client(EmbeddingConfig(client_backend="sdk", embed_batch_size=8))
+    assert sdk.batch_size == 8
+
+    with pytest.raises(ValidationError):
+        EmbeddingConfig(embed_batch_size=0)
 
 
 def test_gateway_builds_sdk_and_httpx_clients():

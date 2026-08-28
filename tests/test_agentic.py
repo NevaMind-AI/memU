@@ -105,6 +105,17 @@ async def test_list_all_recall_files_paginates_by_track_name_id(service: MemoryS
     assert pages == 3  # 8 files / page size 3 -> 3,3,2
 
 
+async def test_list_all_recall_files_rejects_nonpositive_limit(service: MemoryService) -> None:
+    with pytest.raises(ValueError, match="limit must be greater than zero"):
+        await service.list_all_recall_files(limit=0)
+
+
+@pytest.mark.parametrize("cursor", ["not-a-cursor", "WyJ0b28iLCAic2hvcnQiXQ==", "WzEsIDIsIDNd"])
+async def test_list_all_recall_files_rejects_malformed_cursor(service: MemoryService, cursor: str) -> None:
+    with pytest.raises(ValueError, match="invalid cursor"):
+        await service.list_all_recall_files(cursor=cursor)
+
+
 async def test_progressive_retrieve_ranks_all_three_layers(service: MemoryService) -> None:
     await _seed(service)
     result = await service.progressive_retrieve("coffee")
@@ -181,6 +192,125 @@ async def test_recommit_updates_skill_description_and_segment(service: MemorySer
     assert "name: deploy-checklist\ndescription: how to deploy" not in seg_texts
 
 
+class EmbeddingProviderDown(RuntimeError):
+    """What a rate limit or a dead provider looks like to ``commit_results``."""
+
+
+class FailingEmbeddingClient(FakeEmbeddingClient):
+    """Fails the way a rate-limited or unreachable provider does."""
+
+    def __init__(self, *, fail_on_call: int = 1) -> None:
+        self.calls = 0
+        self._fail_on_call = fail_on_call
+
+    async def embed(self, inputs: list[str]) -> tuple[list[list[float]], None]:
+        self.calls += 1
+        if self.calls == self._fail_on_call:
+            raise EmbeddingProviderDown
+        return await super().embed(inputs)
+
+
+async def test_failed_embedding_leaves_the_store_untouched(service: MemoryService) -> None:
+    """A commit that cannot embed must write nothing — not even the items before the failure.
+
+    Each repo call commits its own transaction, so a write reached before the
+    failing embed would be permanent. This is the guarantee that makes a failed
+    commit safe to simply retry.
+    """
+    await _seed(service)
+    before = await service.list_all_recall_files()
+    baseline = await service.progressive_retrieve("coffee")
+
+    service._embedding_pool._cache["embedding"] = FailingEmbeddingClient()
+    with pytest.raises(EmbeddingProviderDown):
+        await service.commit_results(
+            recall_files=[
+                {"name": "Profile", "track": "memory", "description": "changed", "content": "# P\nlikes tea"},
+                {"name": "brand-new", "track": "memory", "description": "new", "content": "unseen line"},
+            ],
+            resource=[{"path": "/workspace/notes.md", "description": "rewritten caption"}],
+        )
+
+    after = await service.list_all_recall_files()
+    assert after["recall_files"] == before["recall_files"]
+
+    # The pre-existing resource survived: its caption embed failed, and the old
+    # record must not have been dropped in anticipation of a replacement.
+    service._embedding_pool._cache["embedding"] = FakeEmbeddingClient()
+    assert await service.progressive_retrieve("coffee") == baseline
+
+
+async def test_commit_embeds_everything_in_one_batched_call(service: MemoryService) -> None:
+    """Files, resources and segments share a single provider round-trip."""
+    counter = CountingEmbeddingClient()
+    service._embedding_pool._cache["embedding"] = counter
+
+    await service.commit_results(
+        recall_files=[
+            {"name": "A", "track": "memory", "description": "d", "content": "one\ntwo"},
+            {"name": "B", "track": "skill", "description": "e", "content": "step"},
+        ],
+        resource=[{"path": "/w/a.md", "description": "cap a"}, {"path": "/w/b.md", "description": "cap b"}],
+    )
+    assert counter.calls == 1
+
+
+async def test_repeated_path_in_one_payload_commits_once(service: MemoryService) -> None:
+    """Two records for one url collapse to one, in the response as well as the store.
+
+    The store always ended up with a single row, but the returned list used to
+    carry the superseded record too — so ``memu commit`` printed an inflated
+    count and filed it to telemetry.
+    """
+    committed = await service.commit_results(
+        resource=[
+            {"path": "/workspace/dup.md", "description": "first"},
+            {"path": "/workspace/dup.md", "description": "second"},
+        ]
+    )
+    assert len(committed["resources"]) == 1
+
+    found = await service.progressive_retrieve("second")
+    assert [r["url"] for r in found["resources"]] == ["/workspace/dup.md"]
+    assert [r["caption"] for r in found["resources"]] == ["second"]
+
+
+async def test_recommit_updates_the_resource_row_in_place(service: MemoryService) -> None:
+    """A url keeps its row across recommits, and an unchanged caption is not re-embedded.
+
+    Delete-then-create churned the id and created_at on every commit — unlike the
+    recall-file path, which updates in place — and paid the provider for a caption
+    vector each time, because a recreated row has no stored vector to keep.
+    """
+    counter = CountingEmbeddingClient()
+    service._embedding_pool._cache["embedding"] = counter
+
+    record = {"path": "/workspace/notes.md", "description": "meeting notes"}
+    original = (await service.commit_results(resource=[record]))["resources"][0]
+
+    counter.calls = 0
+    again = (await service.commit_results(resource=[dict(record)]))["resources"][0]
+    assert counter.calls == 0
+    assert again["id"] == original["id"]
+    assert again["created_at"] == original["created_at"]
+
+    # A changed caption is re-embedded, and lands on that same row.
+    counter.calls = 0
+    changed = (await service.commit_results(resource=[{**record, "description": "deploy notes"}]))["resources"][0]
+    assert counter.calls == 1
+    assert changed["id"] == original["id"]
+    assert changed["caption"] == "deploy notes"
+    found = await service.progressive_retrieve("deploy notes")
+    assert [r["url"] for r in found["resources"]] == ["/workspace/notes.md"]
+
+    # A record with no description clears the caption and its vector: the commit
+    # payload is authoritative for a resource, and an unranked row cannot be recalled.
+    cleared = (await service.commit_results(resource=[{"path": "/workspace/notes.md"}]))["resources"][0]
+    assert cleared["id"] == original["id"]
+    assert cleared["caption"] is None
+    assert (await service.progressive_retrieve("deploy notes"))["resources"] == []
+
+
 async def test_where_scope_filters_and_rejects_unknown_fields(service: MemoryService) -> None:
     await service.commit_results(
         recall_files=[{"name": "A", "track": "memory", "description": "d", "content": "alpha"}],
@@ -201,3 +331,29 @@ async def test_where_scope_filters_and_rejects_unknown_fields(service: MemorySer
 async def test_progressive_retrieve_rejects_empty_query(service: MemoryService) -> None:
     with pytest.raises(ValueError, match="empty_query"):
         await service.progressive_retrieve("   ")
+
+
+async def test_sqlite_resource_commit_sees_writes_from_another_instance(tmp_path: Any) -> None:
+    """Two SQLiteStore instances on the same DB file share ground truth, matching
+    PostgresResourceRepo's always-fresh reads: an unfiltered ``list_resources`` must
+    not shortcut to a per-instance cache once that cache is non-empty, or a sibling
+    instance's later write becomes invisible and a same-url recommit duplicates it.
+    """
+    dsn = f"sqlite:///{tmp_path}/memu.sqlite3"
+    service_a = make_service({"metadata_store": {"provider": "sqlite", "dsn": dsn}})
+    service_b = make_service({"metadata_store": {"provider": "sqlite", "dsn": dsn}})
+
+    await service_a.commit_results(resource=[{"path": "/workspace/notes.md", "description": "v1"}])
+    # First unfiltered read on a fresh instance always hits the DB, so this warms
+    # service_b's cache with notes.md too.
+    await service_b.commit_results(resource=[{"path": "/workspace/other.md", "description": "other"}])
+
+    await service_a.commit_results(resource=[{"path": "/workspace/extra.md", "description": "a's version"}])
+    committed = await service_b.commit_results(resource=[{"path": "/workspace/extra.md", "description": "b's version"}])
+    assert len(committed["resources"]) == 1
+
+    fresh = make_service({"metadata_store": {"provider": "sqlite", "dsn": dsn}})
+    rows = fresh._get_database().resource_repo.list_resources()
+    matches = [r for r in rows.values() if r.url == "/workspace/extra.md"]
+    assert len(matches) == 1
+    assert matches[0].caption == "b's version"

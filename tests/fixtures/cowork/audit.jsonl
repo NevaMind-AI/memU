@@ -1,0 +1,8 @@
+{"type":"user","timestamp":"2026-08-14T09:00:00Z","session_id":"outer-session","uuid":"user-1","_audit_timestamp":"transport-time","_audit_hmac":"secret","message":{"role":"user","content":"plan the project"}}
+{"type":"user","timestamp":"2026-08-14T09:00:00Z","session_id":"internal-session","uuid":"user-1","isReplay":true,"_audit_timestamp":"transport-time","_audit_hmac":"secret","message":{"role":"user","content":"plan the project"}}
+{"type":"assistant","timestamp":"2026-08-14T09:00:01Z","session_id":"internal-session","uuid":"assistant-1","_audit_timestamp":"transport-time","_audit_hmac":"secret","subagent_type":"general-purpose","message":{"role":"assistant","content":[{"type":"thinking","thinking":"private"},{"type":"tool_use","name":"Bash","input":{"command":"pwd"}}]}}
+{"type":"user","timestamp":"2026-08-14T09:00:02Z","session_id":"internal-session","uuid":"tool-1","_audit_timestamp":"transport-time","_audit_hmac":"secret","message":{"role":"user","content":[{"type":"tool_result","content":"ok"}]}}
+{"type":"assistant","timestamp":"2026-08-14T09:00:03Z","session_id":"internal-session","uuid":"assistant-2","_audit_timestamp":"transport-time","_audit_hmac":"secret","message":{"role":"assistant","content":[{"type":"text","text":"Done."}]}}
+{"type":"system","timestamp":"2026-08-14T09:00:04Z","session_id":"internal-session","_audit_timestamp":"transport-time","_audit_hmac":"secret","subtype":"init"}
+{"type":"command_lifecycle","timestamp":"2026-08-14T09:00:05Z","session_id":"internal-session","_audit_timestamp":"transport-time","_audit_hmac":"secret","state":"completed"}
+{"type":"result","timestamp":"2026-08-14T09:00:06Z","session_id":"internal-session","_audit_timestamp":"transport-time","_audit_hmac":"secret","result":"ignored"}

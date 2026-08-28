@@ -239,9 +239,9 @@ must exit cleanly. **Zero hits is the expected result** on a new store.
 
 ## Part 2 — Register the bridging (record) task
 
-The *record* seam: a scheduled job that periodically mines recent sessions under
-`~/.claude/projects` into memU memory, skills, and resources. In cloud mode,
-workspace resources are submitted but are not currently persisted.
+The *record* seam: a scheduled job that periodically mines recent Claude Code
+sessions and Cowork conversations into memU memory, skills, and resources. In
+cloud mode, workspace resources are submitted but are not currently persisted.
 
 ### 2.0 Prerequisite — a standalone, headless-authenticated `claude`
 
