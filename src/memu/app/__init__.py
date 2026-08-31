@@ -1,9 +1,11 @@
 from memu.app.memorize import (
     ConversationItem,
+    MaterializedConversation,
     MemorizeInput,
     MessageInput,
     ToolCallInput,
     ToolResultInput,
+    materialize_memorize_input,
     project_memory,
     project_skill,
 )
@@ -23,6 +25,7 @@ __all__ = [
     "DefaultUserModel",
     "EmbeddingConfig",
     "EmbeddingProfilesConfig",
+    "MaterializedConversation",
     "MemorizeInput",
     "MemoryService",
     "MessageInput",
@@ -30,6 +33,7 @@ __all__ = [
     "ToolCallInput",
     "ToolResultInput",
     "UserConfig",
+    "materialize_memorize_input",
     "project_memory",
     "project_skill",
 ]
