@@ -12,6 +12,7 @@ glob.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import ClassVar
@@ -20,6 +21,35 @@ from memu.hosts.base import RecordKind, TranscriptSource
 from memu.hosts.claude_records import classify_claude_record
 
 SESSION_DIR = "~/.claude/projects"
+
+_RECORD_PRIVATE_FIELDS = frozenset({
+    "attributionMcpServer",
+    "attributionMcpTool",
+    "attributionSkill",
+    "cwd",
+    "effort",
+    "entrypoint",
+    "gitBranch",
+    "isCompactSummary",
+    "isMeta",
+    "isSidechain",
+    "isVisibleInTranscriptOnly",
+    "origin",
+    "parentUuid",
+    "permissionMode",
+    "promptId",
+    "promptSource",
+    "sessionId",
+    "sourceToolAssistantUUID",
+    "sourceToolUseID",
+    "timestamp",
+    "toolDenialKind",
+    "toolUseResult",
+    "userType",
+    "uuid",
+    "version",
+})
+_MESSAGE_PRIVATE_FIELDS = frozenset({"id", "model", "stop_details", "stop_reason", "usage"})
 
 
 class ClaudeCodeTranscriptSource(TranscriptSource):
@@ -67,3 +97,26 @@ class ClaudeCodeTranscriptSource(TranscriptSource):
 
     def classify(self, record: str) -> RecordKind:
         return classify_claude_record(record)
+
+    def sanitize(self, path: Path, record: str) -> str:
+        try:
+            entry = json.loads(record)
+        except json.JSONDecodeError:
+            return record
+        if not isinstance(entry, dict):
+            return record
+
+        changed = False
+        for field in _RECORD_PRIVATE_FIELDS:
+            if field in entry:
+                del entry[field]
+                changed = True
+
+        message = entry.get("message")
+        if isinstance(message, dict):
+            for field in _MESSAGE_PRIVATE_FIELDS:
+                if field in message:
+                    del message[field]
+                    changed = True
+
+        return json.dumps(entry, ensure_ascii=False) if changed else record

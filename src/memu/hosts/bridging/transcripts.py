@@ -16,17 +16,18 @@ from memu.hosts.base import RecordKind, TranscriptRead, TranscriptReadError, Tra
 logger = logging.getLogger(__name__)
 
 
-def _split(source: TranscriptSource, records: list[str]) -> tuple[list[str], list[str]]:
+def _split(source: TranscriptSource, path: Path, records: list[str]) -> tuple[list[str], list[str]]:
     """Partition records into (conversation only, conversation + tool calls)."""
     messages: list[str] = []
     full: list[str] = []
     for record in records:
         kind = source.classify(record)
         if kind is RecordKind.MESSAGE:
-            messages.append(record)
-            full.append(record)
+            clean = source.sanitize(path, record)
+            messages.append(clean)
+            full.append(clean)
         elif kind is RecordKind.TOOL:
-            full.append(record)
+            full.append(source.sanitize(path, record))
     return messages, full
 
 
@@ -71,7 +72,7 @@ def prepare_transcripts(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
     skip = set(skip_sessions)
 
-    pending: list[tuple[str, TranscriptRead]] = []
+    pending: list[tuple[Path, str, TranscriptRead]] = []
     stopped_regions: set[str] = set()
     for path in source.discover():
         region = source.scan_region(path)
@@ -88,7 +89,7 @@ def prepare_transcripts(
             logger.warning("skipping unreadable transcript %s: %s", key, exc.cause)
             continue
         if read.changed:
-            pending.append((key, read))
+            pending.append((path, key, read))
         elif previous is not None:
             # Already recorded and unchanged; older sessions in this region cannot be newer.
             stopped_regions.add(region)
@@ -101,8 +102,8 @@ def prepare_transcripts(
     for stale in out_dir.glob("*.jsonl"):
         stale.unlink()
 
-    for idx, (key, read) in enumerate(selected, start=1):
-        messages, full = _split(source, read.records[read.start :])
+    for idx, (path, key, read) in enumerate(selected, start=1):
+        messages, full = _split(source, path, read.records[read.start :])
 
         (out_dir / f"{idx}.jsonl").write_text("\n".join(messages) + "\n", encoding="utf-8")
         (out_dir / f"{idx}_full.jsonl").write_text("\n".join(full) + "\n", encoding="utf-8")
