@@ -202,6 +202,112 @@ def test_claude_code_drops_noise() -> None:
     assert source.classify("not json") is RecordKind.OTHER
 
 
+def test_claude_code_sanitize_filters_known_private_fields_and_keeps_unknown_ones(tmp_path: pathlib.Path) -> None:
+    source = ClaudeCodeTranscriptSource()
+    content = [
+        {
+            "type": "tool_use",
+            "name": "Bash",
+            "input": {"command": "pytest"},
+            "futureBlockField": {"preserved": True},
+        }
+    ]
+    record = {
+        "type": "assistant",
+        "uuid": "record-id",
+        "timestamp": "2026-08-31T12:00:00Z",
+        "cwd": "D:/private",
+        "sessionId": "session-id",
+        "permissionMode": "default",
+        "toolUseResult": {"stdout": "private"},
+        "futureTopLevel": "preserved",
+        "message": {
+            "id": "message-id",
+            "type": "message",
+            "role": "assistant",
+            "model": "private-model",
+            "usage": {"input_tokens": 1},
+            "content": content,
+            "futureMessageField": "preserved",
+        },
+    }
+
+    assert json.loads(source.sanitize(tmp_path / "session.jsonl", _line(record))) == {
+        "type": "assistant",
+        "futureTopLevel": "preserved",
+        "message": {
+            "type": "message",
+            "role": "assistant",
+            "content": content,
+            "futureMessageField": "preserved",
+        },
+    }
+    assert source.sanitize(tmp_path / "session.jsonl", "not json") == "not json"
+    assert source.sanitize(tmp_path / "session.jsonl", "[]") == "[]"
+
+
+def test_claude_code_prepare_sanitizes_output_without_changing_cursor(tmp_path: pathlib.Path) -> None:
+    session = tmp_path / "session.jsonl"
+    records = [
+        {
+            "type": "user",
+            "timestamp": "2026-08-31T12:00:00Z",
+            "uuid": "user-id",
+            "message": {"role": "user", "content": "remember this", "id": "message-id"},
+        },
+        {
+            "type": "assistant",
+            "timestamp": "2026-08-31T12:00:01Z",
+            "toolUseResult": {"stdout": "private"},
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "pwd"}}],
+                "usage": {"input_tokens": 1},
+            },
+        },
+        {
+            "type": "user",
+            "timestamp": "2026-08-31T12:00:02Z",
+            "sessionId": "private-session",
+            "message": {
+                "role": "user",
+                "content": [{"type": "tool_result", "content": "D:/private"}],
+                "id": "message-id",
+            },
+        },
+    ]
+    raw = "\n".join(_line(record) for record in records) + "\n"
+    session.write_text(raw, encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+    pending = tmp_path / "pending.json"
+    out_dir = tmp_path / "out"
+
+    assert prepare_transcripts(ClaudeCodeTranscriptSource(tmp_path), out_dir, manifest, 10, pending) == 1
+
+    memory = [json.loads(line) for line in (out_dir / "1.jsonl").read_text(encoding="utf-8").splitlines()]
+    full = [json.loads(line) for line in (out_dir / "1_full.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert memory == [{"type": "user", "message": {"role": "user", "content": "remember this"}}]
+    assert full == [
+        *memory,
+        {
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "pwd"}}],
+            },
+        },
+        {
+            "type": "user",
+            "message": {"role": "user", "content": [{"type": "tool_result", "content": "D:/private"}]},
+        },
+    ]
+    assert session.read_text(encoding="utf-8") == raw
+    assert json.loads(pending.read_text(encoding="utf-8"))["session.jsonl"] == {
+        "lines": 3,
+        "last_timestamp": "2026-08-31T12:00:02Z",
+    }
+
+
 # ── Cursor ─────────────────────────────────────────────────────────────────────
 
 

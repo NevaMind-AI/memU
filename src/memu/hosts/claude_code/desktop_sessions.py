@@ -42,6 +42,9 @@ class ClaudeDesktopTranscriptSource(TranscriptSource):
     def classify(self, record: str) -> RecordKind:
         return self._code.classify(record)
 
+    def sanitize(self, path: Path, record: str) -> str:
+        return self._source(path).sanitize(path, record)
+
     def timestamp(self, record: str) -> str | None:
         return self._code.timestamp(record)
 

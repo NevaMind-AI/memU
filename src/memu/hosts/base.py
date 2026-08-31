@@ -81,6 +81,10 @@ class TranscriptSource(ABC):
     def classify(self, record: str) -> RecordKind:
         """Bucket one raw record. This *is* the host's log schema — the real seam."""
 
+    def sanitize(self, path: Path, record: str) -> str:
+        """Rewrite one kept record before it enters a prepared transcript."""
+        return record
+
     def exists(self) -> bool:
         """Whether the host has a session log here at all — the prepare gate.
 

@@ -239,3 +239,25 @@ def test_combined_source_preserves_code_self_skip_identity(tmp_path: Path) -> No
     assert source.session_id(own) == "scheduled-session"
     assert source.key(own) == "scheduled-session.jsonl"
     assert source.session_id(cowork) == "outer-session"
+
+
+def test_combined_source_sanitizes_only_code_records(tmp_path: Path) -> None:
+    code = tmp_path / "code"
+    code.mkdir()
+    code_record = json.dumps({
+        "type": "user",
+        "timestamp": "2026-08-31T12:00:00Z",
+        "sessionId": "private",
+        "message": {"role": "user", "content": "code", "id": "private"},
+    })
+    code_path = code / "session.jsonl"
+    code_path.write_text(code_record + "\n", encoding="utf-8")
+    cowork = _audit(tmp_path / "cowork", "outer-session")
+    source = ClaudeDesktopTranscriptSource(code, [tmp_path / "cowork"])
+    cowork_record = CoworkTranscriptSource([tmp_path / "cowork"]).read_records(cowork)[0]
+
+    assert json.loads(source.sanitize(code_path, code_record)) == {
+        "type": "user",
+        "message": {"role": "user", "content": "code"},
+    }
+    assert source.sanitize(cowork, cowork_record) == cowork_record
