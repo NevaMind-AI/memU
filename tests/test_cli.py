@@ -25,6 +25,7 @@ def test_parser_covers_all_entry_points() -> None:
         ["search", "query"],
         ["list-files"],
         ["commit", "payload.json"],
+        ["reindex"],
     ):
         args = parser.parse_args(argv)
         assert callable(args.handler)
@@ -106,3 +107,20 @@ def test_retrieve_and_list_files_use_selected_backend(
     assert main(["list-files"]) == 0
     assert calls == [("retrieve", "tea"), ("list", None)]
     assert "0 recall file(s)" in capsys.readouterr().out
+
+
+def test_reindex_uses_the_selected_local_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    calls: list[bool] = []
+
+    class Backend:
+        async def commit_results(self, *, reindex: bool = False, **kwargs: Any) -> dict[str, int]:
+            calls.append(reindex)
+            return {"recall_files": 2, "segments": 3, "resources": 1}
+
+    monkeypatch.setattr(cli, "build_agentic_memory_backend_from_env", lambda **kwargs: Backend())
+    assert main(["reindex"]) == 0
+    assert calls == [True]
+    assert "reindexed 2 recall file(s), 3 segment(s), and 1 resource(s)" in capsys.readouterr().out

@@ -12,6 +12,7 @@ from memu.retry import RETRYABLE_STATUS_CODES, retry_delay
 
 DEFAULT_CLOUD_BASE_URL = "https://api.memu.so/api/v4/memory/"
 DEFAULT_SCOPE = "default"
+_LOCAL_REINDEX_ONLY = "memu reindex is only available in local mode"
 
 _USER_FIELDS = {"user_id", "agent_id", "user_name", "agent_name"}
 _WHERE_FIELDS = {"user_id", "agent_id"}
@@ -142,7 +143,10 @@ class CloudMemoryClient:
         recall_files: list[dict[str, Any]] | None = None,
         resource: list[dict[str, Any]] | None = None,
         user: dict[str, Any] | None = None,
+        reindex: bool = False,
     ) -> dict[str, Any]:
+        if reindex:
+            raise ValueError(_LOCAL_REINDEX_ONLY)
         payload = {
             "user": self._user(user),
             "recall_files": recall_files or [],

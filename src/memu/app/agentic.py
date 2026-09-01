@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from memu.database.interfaces import Database
     from memu.database.models import RecallFile, Resource
 
+
 # Default recall-file page size for ``list_all_recall_files`` (ADR 0014). Callers
 # follow ``next_cursor`` to reassemble the full set; the page size only bounds the
 # per-call read/serialization/response, not the total returned.
@@ -57,6 +58,7 @@ async def _embed_one(embed_client: Any, text: str) -> list[float]:
 
 _UNRESOLVED_TICKET = "embedding ticket redeemed without a planned vector"
 _VECTOR_COUNT_MISMATCH = "embedding provider returned the wrong number of vectors"
+_REINDEX_PAYLOAD = "reindex cannot be combined with recall_files, resource, or user"
 
 
 class _EmbeddingBatch:
@@ -153,6 +155,7 @@ class AgenticMixin:
         _normalize_where: Callable[[Mapping[str, Any] | None], dict[str, Any]]
         _model_dump_without_embeddings: Callable[[BaseModel], dict[str, Any]]
         _get_embedding_client: Callable[..., Any]
+        _get_embedding_space: Callable[..., str]
         progressive_retrieve_config: ProgressiveRetrieveConfig
         user_model: type[BaseModel]
 
@@ -208,10 +211,13 @@ class AgenticMixin:
         if not query or not query.strip():
             raise ValueError("empty_query")
         store = self._get_database()
+        embedding_space = self._get_embedding_space()
+        store.assert_embedding_space(embedding_space, initialize=False)
         where_filters = self._normalize_where(where)
         config = self.progressive_retrieve_config
         embed_client = self._get_embedding_client("embedding")
         query_vector = await _embed_one(embed_client, query)
+        store.assert_embedding_space(embedding_space)
 
         segment_hits, segment_pool = self._recall_segments(
             store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.file.enabled
@@ -335,6 +341,7 @@ class AgenticMixin:
         recall_files: list[dict[str, Any]] | None = None,
         resource: list[dict[str, Any]] | None = None,
         user: dict[str, Any] | None = None,
+        reindex: bool = False,
     ) -> dict[str, Any]:
         """Persist externally-prepared resources and recall files into the store.
 
@@ -355,6 +362,12 @@ class AgenticMixin:
         carry no such guarantee; only the embedding step is hoisted clear of the writes.
         """
         store = self._get_database()
+        embedding_space = self._get_embedding_space()
+        if reindex:
+            if recall_files or resource or user:
+                raise ValueError(_REINDEX_PAYLOAD)
+            return await self._reindex_embeddings(store=store, embedding_space=embedding_space)
+        store.assert_embedding_space(embedding_space, initialize=False)
         user_scope = self.user_model(**user).model_dump() if user is not None else None
         embed_client = self._get_embedding_client("embedding")
         user_data = dict(user_scope or {})
@@ -371,12 +384,39 @@ class AgenticMixin:
         file_plans = self._plan_recall_files(recall_files or [], store=store, user_data=user_data, batch=batch)
 
         await batch.resolve(embed_client)
+        store.assert_embedding_space(embedding_space)
 
         committed_resources = self._write_resources(resource_plans, store=store, user_data=user_data, batch=batch)
         committed_files = self._write_recall_files(file_plans, store=store, user_data=user_data, batch=batch)
         return {
             "resources": [self._model_dump_without_embeddings(r) for r in committed_resources],
             "recall_files": [self._model_dump_without_embeddings(f) for f in committed_files],
+        }
+
+    async def _reindex_embeddings(self, *, store: Database, embedding_space: str) -> dict[str, int]:
+        """Replace every stored vector in one backend transaction."""
+        batch = _EmbeddingBatch()
+        resource_tickets = {
+            item.id: batch.request(item.caption)
+            for item in store.resource_repo.list_resources().values()
+            if item.caption
+        }
+        file_tickets = {
+            item.id: batch.request(f"{item.name}: {item.description}" if item.description else item.name)
+            for item in store.recall_file_repo.list_recall_files().values()
+        }
+        segment_tickets = {item.id: batch.request(item.text) for item in store.recall_file_segment_repo.list_segments()}
+        await batch.resolve(self._get_embedding_client("embedding"))
+        store.replace_all_embeddings(
+            resources={item_id: batch.vector(ticket) for item_id, ticket in resource_tickets.items()},
+            recall_files={item_id: batch.vector(ticket) for item_id, ticket in file_tickets.items()},
+            segments={item_id: batch.vector(ticket) for item_id, ticket in segment_tickets.items()},
+            embedding_space=embedding_space,
+        )
+        return {
+            "resources": len(resource_tickets),
+            "recall_files": len(file_tickets),
+            "segments": len(segment_tickets),
         }
 
     def _plan_resources(

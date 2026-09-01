@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, cast
 
 from pydantic import BaseModel
+from sqlalchemy import select, text, update
 
-from memu.database.interfaces import Database
+from memu.database.interfaces import Database, EmbeddingSpaceMismatch
 from memu.database.models import (
     RecallFile,
     RecallFileSegment,
@@ -25,6 +27,7 @@ from memu.database.repositories import (
 from memu.database.state import DatabaseState
 
 logger = logging.getLogger(__name__)
+_REINDEX_CONFLICT = "record changed during embedding reindex"
 
 
 class PostgresStore(Database):
@@ -103,3 +106,79 @@ class PostgresStore(Database):
         self.resource_repo.load_existing()
         self.recall_file_repo.load_existing()
         self.recall_file_segment_repo.load_existing()
+
+    def assert_embedding_space(self, embedding_space: str, *, initialize: bool = True) -> None:
+        with self._sessions.session() as session:
+            current = session.execute(
+                text("SELECT identity FROM memu_embedding_space WHERE id = 1")
+            ).scalar_one_or_none()
+            if current == embedding_space:
+                self._state.embedding_space = embedding_space
+                self._state.expected_embedding_space = embedding_space
+                return
+            has_vectors = any(
+                session.execute(select(model.id).where(model.embedding.is_not(None)).limit(1)).first()
+                for model in (
+                    self._sqla_models.Resource,
+                    self._sqla_models.RecallFile,
+                    self._sqla_models.RecallFileSegment,
+                )
+            )
+            if has_vectors and current != embedding_space:
+                raise EmbeddingSpaceMismatch
+            if initialize:
+                session.execute(
+                    text(
+                        "INSERT INTO memu_embedding_space (id, identity) VALUES (1, :identity) "
+                        "ON CONFLICT(id) DO UPDATE SET identity = excluded.identity"
+                    ),
+                    {"identity": embedding_space},
+                )
+                session.commit()
+        self._state.expected_embedding_space = embedding_space
+        if initialize:
+            self._state.embedding_space = embedding_space
+
+    def replace_all_embeddings(
+        self,
+        *,
+        resources: Mapping[str, list[float]],
+        recall_files: Mapping[str, list[float]],
+        segments: Mapping[str, list[float]],
+        embedding_space: str,
+    ) -> None:
+        mappings = (
+            (self._sqla_models.Resource, resources, self._sqla_models.Resource.caption.is_not(None)),
+            (self._sqla_models.RecallFile, recall_files, None),
+            (self._sqla_models.RecallFileSegment, segments, None),
+        )
+        with self._sessions.session() as session:
+            session.execute(text("SELECT identity FROM memu_embedding_space WHERE id = 1 FOR UPDATE"))
+            for model, vectors, predicate in mappings:
+                stmt = select(model.id)
+                if predicate is not None:
+                    stmt = stmt.where(predicate)
+                if set(session.execute(stmt).scalars()) != set(vectors):
+                    raise KeyError(_REINDEX_CONFLICT)
+                for item_id, vector in vectors.items():
+                    result = cast(
+                        Any, session.execute(update(model).where(model.id == item_id).values(embedding=list(vector)))
+                    )
+                    if result.rowcount != 1:
+                        raise KeyError(_REINDEX_CONFLICT)
+            session.execute(
+                update(self._sqla_models.Resource)
+                .where(self._sqla_models.Resource.caption.is_(None))
+                .values(embedding=None)
+            )
+            session.execute(
+                text(
+                    "INSERT INTO memu_embedding_space (id, identity) VALUES (1, :identity) "
+                    "ON CONFLICT(id) DO UPDATE SET identity = excluded.identity"
+                ),
+                {"identity": embedding_space},
+            )
+            session.commit()
+        self._state.embedding_space = embedding_space
+        self._state.expected_embedding_space = embedding_space
+        self._load_existing()

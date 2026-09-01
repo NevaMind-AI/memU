@@ -5,7 +5,9 @@ from collections.abc import Mapping
 from typing import Any
 
 import pendulum
+from sqlalchemy import text
 
+from memu.database.interfaces import EmbeddingSpaceMismatch
 from memu.database.postgres.session import SessionManager
 from memu.database.state import DatabaseState
 
@@ -60,6 +62,16 @@ class PostgresRepoBase:
         with self._sessions.session() as session:
             session.merge(obj)
             session.commit()
+
+    def _assert_current_embedding_space(self, session: Any) -> None:
+        expected = self._state.expected_embedding_space
+        if expected is None:
+            return
+        current = session.execute(
+            text("SELECT identity FROM memu_embedding_space WHERE id = 1 FOR UPDATE")
+        ).scalar_one_or_none()
+        if current != expected:
+            raise EmbeddingSpaceMismatch
 
     def _now(self) -> pendulum.DateTime:
         return pendulum.now("UTC")

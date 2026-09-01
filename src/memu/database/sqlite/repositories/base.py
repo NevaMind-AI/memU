@@ -8,7 +8,9 @@ from collections.abc import Mapping
 from typing import Any
 
 import pendulum
+from sqlalchemy import text
 
+from memu.database.interfaces import EmbeddingSpaceMismatch
 from memu.database.sqlite.session import SQLiteSessionManager
 from memu.database.state import DatabaseState
 
@@ -72,6 +74,17 @@ class SQLiteRepoBase:
         with self._sessions.session() as session:
             session.merge(obj)
             session.commit()
+
+    def _assert_current_embedding_space(self, session: Any) -> None:
+        expected = self._state.expected_embedding_space
+        if expected is None:
+            return
+        # Reindex takes the same SQLite write lock, so neither side can
+        # validate one space and then write into another.
+        session.execute(text("UPDATE memu_embedding_space SET identity = identity WHERE id = 1"))
+        current = session.execute(text("SELECT identity FROM memu_embedding_space WHERE id = 1")).scalar_one_or_none()
+        if current != expected:
+            raise EmbeddingSpaceMismatch
 
     def _now(self) -> pendulum.DateTime:
         """Get current UTC time."""

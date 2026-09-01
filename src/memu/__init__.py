@@ -1,6 +1,7 @@
 from importlib.metadata import PackageNotFoundError, version
 
 from memu.app.service import MemoryService
+from memu.database.interfaces import EmbeddingSpaceMismatch
 
 # Public alias used in documentation examples
 MemUService = MemoryService
@@ -12,4 +13,4 @@ except PackageNotFoundError:  # pragma: no cover - a source checkout with no ins
     # field, and a telemetry field must never be able to break `import memu`.
     __version__ = "0+unknown"
 
-__all__ = ["MemUService", "MemoryService", "__version__"]
+__all__ = ["EmbeddingSpaceMismatch", "MemUService", "MemoryService", "__version__"]

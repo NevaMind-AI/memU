@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel
-from sqlalchemy import MetaData
+from sqlalchemy import CheckConstraint, Column, Integer, MetaData, Table, Text
 from sqlmodel import SQLModel
 
 from memu.database.sqlite.models import (
@@ -46,6 +46,13 @@ def get_sqlite_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) 
         return cached
 
     metadata_obj = MetaData()
+    Table(
+        "memu_embedding_space",
+        metadata_obj,
+        Column("id", Integer, primary_key=True),
+        Column("identity", Text, nullable=False),
+        CheckConstraint("id = 1", name="ck_memu_embedding_space_singleton"),
+    )
 
     # NOTE: SQLite reserves any table name beginning with "sqlite_", so the tables
     # must use a different prefix.

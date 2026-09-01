@@ -12,7 +12,7 @@ except ImportError as exc:
     raise ImportError(msg) from exc
 
 try:
-    from sqlalchemy import MetaData
+    from sqlalchemy import CheckConstraint, Column, Integer, MetaData, Table, Text
 except ImportError as exc:
     msg = "sqlalchemy is required for Postgres storage support"
     raise ImportError(msg) from exc
@@ -65,6 +65,13 @@ def get_sqlalchemy_models(*, scope_model: type[BaseModel] | None = None) -> SQLA
         return cached
 
     metadata_obj = MetaData()
+    Table(
+        "memu_embedding_space",
+        metadata_obj,
+        Column("id", Integer, primary_key=True),
+        Column("identity", Text, nullable=False),
+        CheckConstraint("id = 1", name="ck_memu_embedding_space_singleton"),
+    )
 
     resource_model = build_table_model(
         scope,

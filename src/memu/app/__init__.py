@@ -22,6 +22,7 @@ from memu.app.settings import (
     ProgressiveRetrieveConfig,
     UserConfig,
 )
+from memu.database.interfaces import EmbeddingSpaceMismatch
 
 __all__ = [
     "ConversationItem",
@@ -29,6 +30,7 @@ __all__ = [
     "DefaultUserModel",
     "EmbeddingConfig",
     "EmbeddingProfilesConfig",
+    "EmbeddingSpaceMismatch",
     "MaterializedConversation",
     "MemorizeInput",
     "MemorizeWorkspace",

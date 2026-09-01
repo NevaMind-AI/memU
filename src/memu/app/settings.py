@@ -1,4 +1,7 @@
+import hashlib
+import json
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, BeforeValidator, Field, RootModel, StringConstraints, model_validator
 
@@ -70,6 +73,27 @@ class EmbeddingConfig(BaseModel):
             if resolved is not None:
                 self.embed_model = resolved
         return self
+
+    @property
+    def embedding_space(self) -> str:
+        """Stable, non-secret identity for vectors produced by this profile."""
+
+        def endpoint(value: str) -> str:
+            parsed = urlsplit(value.strip())
+            host = parsed.hostname or ""
+            if parsed.port:
+                host = f"{host}:{parsed.port}"
+            return urlunsplit((parsed.scheme.lower(), host.lower(), parsed.path.rstrip("/"), "", ""))
+
+        payload = {
+            "version": 1,
+            "provider": self.provider.strip().lower(),
+            "model": self.embed_model.strip(),
+            "base_url": endpoint(self.base_url),
+            "endpoint": endpoint(self.endpoint_overrides.get("embeddings", "")),
+        }
+        digest = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        return f"v1:{digest}"
 
 
 class RetrieveResourceConfig(BaseModel):

@@ -84,6 +84,7 @@ class SQLiteRecallFileSegmentRepo(SQLiteRepoBase, RecallFileSegmentRepo):
     ) -> RecallFileSegment:
         now = self._now()
         with self._sessions.session() as session:
+            self._assert_current_embedding_space(session)
             row = self._recall_file_segment_model(
                 recall_file_id=recall_file_id,
                 track=track,

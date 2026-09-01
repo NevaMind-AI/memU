@@ -61,6 +61,9 @@ class MemoryService(AgenticMixin):
     def _get_embedding_client(self, profile: str | None = None) -> Any:
         return self._embedding_pool.get(profile)
 
+    def _get_embedding_space(self, profile: str = "embedding") -> str:
+        return self.embedding_profiles.get(profile, self.embedding_profiles["default"]).embedding_space
+
     def _normalize_where(self, where: Mapping[str, Any] | None) -> dict[str, Any]:
         """Validate and clean the `where` scope filters against the configured user model."""
         if not where:

@@ -160,6 +160,19 @@ npx memu-cli --help          # CLI via npm launcher (engine: PyPI package memu-c
 uvx --from memu-cli memu     # CLI via uv, no install
 ```
 
+If you change the local embedding provider, model, or endpoint, rebuild the
+stored vectors before recording or retrieving memory:
+
+```bash
+memu reindex --db ~/.memu/memu.sqlite3 --provider jina --embed-model jina-embeddings-v3
+```
+
+memU records a non-secret identity for the active embedding space and refuses
+to compare vectors from another or unknown space. `reindex` embeds everything
+before opening one storage transaction, so a provider or database failure
+leaves the previous vectors usable. The command is local-only; memU Cloud owns
+its server-side indexes.
+
 ## Configuration
 
 Values resolve in order: process env → `~/.memu/config.env` → default. memU

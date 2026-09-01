@@ -188,6 +188,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
         # Check for existing file with same name, track, and scope
         where: dict[str, Any] = {"name": name, "track": track, **user_data}
         with self._sessions.session() as session:
+            self._assert_current_embedding_space(session)
             stmt = select(self._recall_file_model)
             filters = self._build_filters(self._recall_file_model, where)
             if filters:
@@ -267,6 +268,7 @@ class SQLiteRecallFileRepo(SQLiteRepoBase, RecallFileRepo):
             KeyError: If recall file not found.
         """
         with self._sessions.session() as session:
+            self._assert_current_embedding_space(session)
             stmt = select(self._recall_file_model).where(self._recall_file_model.id == recall_file_id)
             row = session.exec(stmt).first()
 

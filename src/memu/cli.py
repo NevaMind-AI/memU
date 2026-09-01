@@ -155,6 +155,18 @@ async def _cmd_commit(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _cmd_reindex(args: argparse.Namespace) -> int:
+    result = await _build_backend(args).commit_results(reindex=True)
+    if args.json:
+        _print_json(result)
+        return 0
+    print(
+        f"reindexed {result['recall_files']} recall file(s), "
+        f"{result['segments']} segment(s), and {result['resources']} resource(s)"
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="memu",
@@ -185,6 +197,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_common_options(p)
     p.set_defaults(handler=_cmd_commit)
+
+    p = sub.add_parser("reindex", help="Rebuild every local vector after changing the embedding configuration")
+    _add_common_options(p)
+    p.set_defaults(handler=_cmd_reindex)
 
     return parser
 

@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from memu.app import MemoryService
+from memu.database.interfaces import EmbeddingSpaceMismatch
 
 
 class FakeEmbeddingClient:
@@ -208,6 +209,140 @@ class FailingEmbeddingClient(FakeEmbeddingClient):
         if self.calls == self._fail_on_call:
             raise EmbeddingProviderDown
         return await super().embed(inputs)
+
+
+def model_service(dsn: str, model: str, client: Any) -> MemoryService:
+    service = MemoryService(
+        database_config={"metadata_store": {"provider": "sqlite", "dsn": dsn}},
+        embedding_profiles={
+            "default": {
+                "provider": "openai",
+                "embed_model": model,
+                "base_url": "https://api.openai.com/v1",
+            }
+        },
+    )
+    service._embedding_pool._cache["default"] = client
+    service._embedding_pool._cache["embedding"] = client
+    return service
+
+
+async def test_model_change_requires_explicit_atomic_reindex(tmp_path: Any) -> None:
+    dsn = f"sqlite:///{tmp_path}/memu.sqlite3"
+    old = model_service(dsn, "model-a", FakeEmbeddingClient())
+    await _seed(old)
+
+    new_client = CountingEmbeddingClient()
+    new = model_service(dsn, "model-b", new_client)
+    with pytest.raises(EmbeddingSpaceMismatch, match="memu reindex"):
+        await new.progressive_retrieve("coffee")
+    with pytest.raises(EmbeddingSpaceMismatch, match="memu reindex"):
+        await new.commit_results(
+            recall_files=[
+                {"name": "Profile", "track": "memory", "description": "who the user is", "content": "# P\nlikes coffee"}
+            ]
+        )
+    assert new_client.calls == 0
+
+    result = await new.commit_results(reindex=True)
+    assert result == {"resources": 1, "recall_files": 2, "segments": 2}
+    assert new_client.calls == 1
+    assert (await new.progressive_retrieve("coffee"))["files"][0]["name"] == "Profile"
+
+    with pytest.raises(ValueError, match="reindex cannot be combined"):
+        await new.commit_results(reindex=True, resource=[{"path": "/ignored.md"}])
+
+
+async def test_failed_reindex_keeps_the_old_embedding_space_readable(tmp_path: Any) -> None:
+    dsn = f"sqlite:///{tmp_path}/memu.sqlite3"
+    old = model_service(dsn, "model-a", FakeEmbeddingClient())
+    await _seed(old)
+
+    new = model_service(dsn, "model-b", FailingEmbeddingClient())
+    with pytest.raises(EmbeddingProviderDown):
+        await new.commit_results(reindex=True)
+
+    assert (await old.progressive_retrieve("coffee"))["files"][0]["name"] == "Profile"
+    with pytest.raises(EmbeddingSpaceMismatch, match="memu reindex"):
+        await new.progressive_retrieve("coffee")
+
+
+async def test_first_failed_commit_does_not_claim_an_embedding_space() -> None:
+    service = MemoryService(database_config={"metadata_store": {"provider": "inmemory"}})
+    service._embedding_pool._cache["embedding"] = FailingEmbeddingClient()
+
+    with pytest.raises(EmbeddingProviderDown):
+        await service.commit_results(resource=[{"path": "/notes.md", "description": "notes"}])
+
+    assert service._get_database().state.embedding_space is None
+
+
+async def test_legacy_vectors_require_reindex_instead_of_guessing_their_model(tmp_path: Any) -> None:
+    dsn = f"sqlite:///{tmp_path}/memu.sqlite3"
+    legacy = model_service(dsn, "model-a", FakeEmbeddingClient())
+    legacy._get_database().resource_repo.create_resource(
+        url="/legacy.md",
+        local_path="/legacy.md",
+        caption="legacy notes",
+        embedding=[1.0, 0.0, 0.0, 0.0],
+        user_data={},
+        track="workspace",
+    )
+
+    current = model_service(dsn, "model-a", FakeEmbeddingClient())
+    with pytest.raises(EmbeddingSpaceMismatch, match="memu reindex"):
+        await current.progressive_retrieve("notes")
+    assert await current.commit_results(reindex=True) == {"resources": 1, "recall_files": 0, "segments": 0}
+    assert [item["url"] for item in (await current.progressive_retrieve("notes"))["resources"]] == ["/legacy.md"]
+
+
+async def test_sqlite_reindex_rolls_back_every_vector_when_storage_fails(tmp_path: Any) -> None:
+    from sqlalchemy import text
+    from sqlalchemy.exc import DatabaseError
+
+    dsn = f"sqlite:///{tmp_path}/memu.sqlite3"
+    old = model_service(dsn, "model-a", FakeEmbeddingClient())
+    await _seed(old)
+    store = old._get_database()
+    with store._sessions.engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TRIGGER reject_recall_reindex BEFORE UPDATE OF embedding ON memu_recall_files "
+                "BEGIN SELECT RAISE(ABORT, 'reindex failed'); END"
+            )
+        )
+
+    new = model_service(dsn, "model-b", FakeEmbeddingClient())
+    with pytest.raises(DatabaseError, match="reindex failed"):
+        await new.commit_results(reindex=True)
+
+    assert (await old.progressive_retrieve("coffee"))["files"][0]["name"] == "Profile"
+    with pytest.raises(EmbeddingSpaceMismatch, match="memu reindex"):
+        await new.progressive_retrieve("coffee")
+
+
+async def test_sqlite_reindex_rejects_a_row_added_after_its_snapshot(tmp_path: Any) -> None:
+    dsn = f"sqlite:///{tmp_path}/memu.sqlite3"
+    old = model_service(dsn, "model-a", FakeEmbeddingClient())
+    await _seed(old)
+
+    class ConcurrentWriter(FakeEmbeddingClient):
+        async def embed(self, inputs: list[str]) -> tuple[list[list[float]], None]:
+            old._get_database().resource_repo.create_resource(
+                url="/late.md",
+                local_path="/late.md",
+                caption="late notes",
+                embedding=[0.0, 0.0, 1.0, 0.0],
+                user_data={},
+                track="workspace",
+            )
+            return await super().embed(inputs)
+
+    new = model_service(dsn, "model-b", ConcurrentWriter())
+    with pytest.raises(KeyError, match="record changed during embedding reindex"):
+        await new.commit_results(reindex=True)
+
+    assert (await old.progressive_retrieve("coffee"))["files"][0]["name"] == "Profile"
 
 
 async def test_failed_embedding_leaves_the_store_untouched(service: MemoryService) -> None:

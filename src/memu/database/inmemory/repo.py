@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from pydantic import BaseModel
@@ -11,13 +12,15 @@ from memu.database.inmemory.repositories import (
     InMemoryResourceRepository,
 )
 from memu.database.inmemory.state import InMemoryState
-from memu.database.interfaces import Database
+from memu.database.interfaces import Database, EmbeddingSpaceMismatch
 from memu.database.models import (
     RecallFile,
     RecallFileSegment,
     Resource,
 )
 from memu.database.repositories import RecallFileRepo, ResourceRepo
+
+_REINDEX_CONFLICT = "record changed during embedding reindex"
 
 
 class InMemoryStore(Database):
@@ -56,3 +59,42 @@ class InMemoryStore(Database):
 
     def close(self) -> None:
         return None
+
+    def assert_embedding_space(self, embedding_space: str, *, initialize: bool = True) -> None:
+        current = self.state.embedding_space
+        if current == embedding_space:
+            self.state.expected_embedding_space = embedding_space
+            return
+        has_vectors = (
+            any(item.embedding for item in self.resources.values())
+            or any(item.embedding for item in self.recall_files.values())
+            or any(item.embedding for item in self.segments)
+        )
+        if has_vectors and current != embedding_space:
+            raise EmbeddingSpaceMismatch
+        self.state.expected_embedding_space = embedding_space
+        if initialize:
+            self.state.embedding_space = embedding_space
+
+    def replace_all_embeddings(
+        self,
+        *,
+        resources: Mapping[str, list[float]],
+        recall_files: Mapping[str, list[float]],
+        segments: Mapping[str, list[float]],
+        embedding_space: str,
+    ) -> None:
+        segment_by_id = {item.id: item for item in self.segments}
+        resource_ids = {item.id for item in self.resources.values() if item.caption}
+        if set(resources) != resource_ids or set(recall_files) != self.recall_files.keys():
+            raise KeyError(_REINDEX_CONFLICT)
+        if set(segments) != segment_by_id.keys():
+            raise KeyError(_REINDEX_CONFLICT)
+        for item_id, vector in resources.items():
+            self.resources[item_id].embedding = vector
+        for item_id, vector in recall_files.items():
+            self.recall_files[item_id].embedding = vector
+        for item_id, vector in segments.items():
+            segment_by_id[item_id].embedding = vector
+        self.state.embedding_space = embedding_space
+        self.state.expected_embedding_space = embedding_space

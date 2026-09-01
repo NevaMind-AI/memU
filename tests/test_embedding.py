@@ -301,3 +301,21 @@ def test_embedding_config_provider_defaults():
     assert explicit.base_url == "https://proxy/v1"
     assert explicit.api_key == "real"
     assert explicit.embed_model == "custom"
+
+
+def test_embedding_space_tracks_model_and_endpoint_without_credentials():
+    first = EmbeddingConfig(
+        provider="openai",
+        embed_model="model-a",
+        base_url="https://alice:secret@example.test/v1?token=one",
+    )
+    other_credentials = EmbeddingConfig(
+        provider="openai",
+        embed_model="model-a",
+        base_url="https://bob:different@example.test/v1?token=two",
+    )
+    other_model = first.model_copy(update={"embed_model": "model-b"})
+
+    assert first.embedding_space == other_credentials.embedding_space
+    assert first.embedding_space != other_model.embedding_space
+    assert "secret" not in first.embedding_space

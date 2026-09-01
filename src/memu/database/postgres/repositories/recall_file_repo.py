@@ -105,6 +105,7 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
 
         now = self._now()
         with self._sessions.session() as session:
+            self._assert_current_embedding_space(session)
             filters = [
                 self._sqla_models.RecallFile.name == name,
                 self._sqla_models.RecallFile.track == track,
@@ -161,6 +162,7 @@ class PostgresRecallFileRepo(PostgresRepoBase, RecallFileRepo):
 
         now = self._now()
         with self._sessions.session() as session:
+            self._assert_current_embedding_space(session)
             recall_file = session.scalar(
                 select(self._sqla_models.RecallFile).where(self._sqla_models.RecallFile.id == recall_file_id)
             )

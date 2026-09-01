@@ -94,6 +94,7 @@ class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
         )
 
         with self._sessions.session() as session:
+            self._assert_current_embedding_space(session)
             session.add(res)
             session.commit()
             session.refresh(res)
@@ -113,6 +114,7 @@ class PostgresResourceRepo(PostgresRepoBase, ResourceRepo):
         from sqlmodel import select
 
         with self._sessions.session() as session:
+            self._assert_current_embedding_space(session)
             row = session.scalars(
                 select(self._sqla_models.Resource).where(self._sqla_models.Resource.id == resource_id)
             ).first()

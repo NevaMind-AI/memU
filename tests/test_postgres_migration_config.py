@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
 from pydantic import BaseModel
 
 
@@ -29,3 +30,10 @@ def test_make_alembic_config_escapes_percent_encoded_dsn() -> None:
     assert cfg.get_main_option("sqlalchemy.url") == dsn
     assert "%%40%%23%%24%%25%%5E%%26%%2A%%28%%29password" in raw_value
     assert raw_value != dsn
+
+
+def test_embedding_space_table_is_part_of_postgres_schema_validation() -> None:
+    pytest.importorskip("pgvector")
+    from memu.database.postgres.schema import get_metadata
+
+    assert "memu_embedding_space" in get_metadata(_ScopeModel).tables

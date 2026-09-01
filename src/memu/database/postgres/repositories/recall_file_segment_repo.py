@@ -115,6 +115,7 @@ class PostgresRecallFileSegmentRepo(PostgresRepoBase, RecallFileSegmentRepo):
             **user_data,
         )
         with self._sessions.session() as session:
+            self._assert_current_embedding_space(session)
             session.add(row)
             session.commit()
             session.refresh(row)
