@@ -120,7 +120,18 @@ def test_reindex_uses_the_selected_local_backend(
             calls.append(reindex)
             return {"recall_files": 2, "segments": 3, "resources": 1}
 
+    monkeypatch.setattr(cli, "MemoryService", Backend)
     monkeypatch.setattr(cli, "build_agentic_memory_backend_from_env", lambda **kwargs: Backend())
     assert main(["reindex"]) == 0
     assert calls == [True]
     assert "reindexed 2 recall file(s), 3 segment(s), and 1 resource(s)" in capsys.readouterr().out
+
+
+def test_reindex_rejects_cloud_backend(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(cli, "build_agentic_memory_backend_from_env", lambda **kwargs: object())
+
+    assert main(["reindex"]) == 2
+    assert "only available in local mode" in capsys.readouterr().err

@@ -38,5 +38,4 @@ class AgenticMemoryBackend(Protocol):
         recall_files: list[dict[str, Any]] | None = None,
         resource: list[dict[str, Any]] | None = None,
         user: dict[str, Any] | None = None,
-        reindex: bool = False,
     ) -> dict[str, Any]: ...

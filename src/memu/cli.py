@@ -29,6 +29,7 @@ from typing import Any
 
 from memu import events
 from memu.agentic_backend import AgenticMemoryBackend
+from memu.app import MemoryService
 from memu.env import build_agentic_memory_backend_from_env, embedding_provider, env
 
 
@@ -156,7 +157,11 @@ async def _cmd_commit(args: argparse.Namespace) -> int:
 
 
 async def _cmd_reindex(args: argparse.Namespace) -> int:
-    result = await _build_backend(args).commit_results(reindex=True)
+    backend = _build_backend(args)
+    if not isinstance(backend, MemoryService):
+        print("error: memu reindex is only available in local mode", file=sys.stderr)
+        return 2
+    result = await backend.commit_results(reindex=True)
     if args.json:
         _print_json(result)
         return 0
