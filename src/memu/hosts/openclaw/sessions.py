@@ -48,6 +48,40 @@ SESSION_DIR = "~/.openclaw/agents"
 
 _MESSAGE_ROLES = ("user", "assistant")
 
+# Keep OpenClaw's provider-native transcript dialect forward-compatible: these
+# sets are delete-only. Unknown record, message, and content-block fields are
+# preserved for future OpenClaw versions and for the self-evolve pass.
+_RECORD_PRIVATE_FIELDS = frozenset({"id", "parentId", "timestamp"})
+_MESSAGE_PRIVATE_FIELDS = frozenset({
+    "__openclaw",
+    "api",
+    "errorBody",
+    "errorCode",
+    "errorMessage",
+    "errorType",
+    "idempotencyKey",
+    "model",
+    "openclawDeliveryMirror",
+    "provider",
+    "responseId",
+    "stopReason",
+    "timestamp",
+    "usage",
+})
+_TOOL_RESULT_PRIVATE_FIELDS = frozenset({"details"})
+_BLOCK_PRIVATE_FIELDS = frozenset({"partialArgs", "textSignature", "thinkingSignature"})
+
+
+def _drop_known_fields(value: dict[object, object], fields: frozenset[str]) -> bool:
+    """Delete only known private fields; unknown fields are intentionally retained."""
+    changed = False
+    for field in fields:
+        if field in value:
+            del value[field]
+            changed = True
+    return changed
+
+
 # Sidecar files sharing the legacy sessions directory. Trajectory files hold
 # trace events — every record classifies OTHER, so scanning them fills prepare's
 # max_jobs slots with empty transcripts (they touch on every turn, so
@@ -316,6 +350,39 @@ class OpenClawTranscriptSource(TranscriptSource):
         )
 
     # ── shape ─────────────────────────────────────────────────────────────────
+
+    def sanitize(self, path: Path, record: str) -> str:
+        """Remove known runtime metadata from either OpenClaw transcript container.
+
+        SQLite stores the exact event JSON that legacy JSONL stored one line at a
+        time, so sanitization is deliberately container-agnostic. It never
+        changes source logs or classification/cursor behavior.
+        """
+        del path  # Required by the host seam; OpenClaw's two containers share a record shape.
+        try:
+            entry = json.loads(record)
+        except json.JSONDecodeError:
+            return record
+        if not isinstance(entry, dict):
+            return record
+
+        changed = _drop_known_fields(entry, _RECORD_PRIVATE_FIELDS)
+
+        message = entry.get("message")
+        if not isinstance(message, dict):
+            return json.dumps(entry, ensure_ascii=False) if changed else record
+
+        changed |= _drop_known_fields(message, _MESSAGE_PRIVATE_FIELDS)
+        if message.get("role") == "toolResult":
+            changed |= _drop_known_fields(message, _TOOL_RESULT_PRIVATE_FIELDS)
+
+        content = message.get("content")
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict):
+                    changed |= _drop_known_fields(block, _BLOCK_PRIVATE_FIELDS)
+
+        return json.dumps(entry, ensure_ascii=False) if changed else record
 
     def classify(self, record: str) -> RecordKind:
         try:
