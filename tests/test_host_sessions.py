@@ -360,6 +360,104 @@ def test_openclaw_classify() -> None:
     assert source.classify(_line(compaction)) is RecordKind.OTHER
 
 
+def test_openclaw_sanitize_filters_known_runtime_fields_and_keeps_unknown_ones(tmp_path: pathlib.Path) -> None:
+    source = OpenClawTranscriptSource()
+    record = {
+        "type": "message",
+        "id": "entry-id",
+        "parentId": "parent-id",
+        "timestamp": "2026-09-01T00:00:00Z",
+        "futureTopLevel": "preserved",
+        "message": {
+            "role": "assistant",
+            "timestamp": "2026-09-01T00:00:00Z",
+            "api": "private-api",
+            "provider": "private-provider",
+            "model": "private-model",
+            "usage": {"input": 1},
+            "stopReason": "toolUse",
+            "responseId": "private-response",
+            "idempotencyKey": "private-key",
+            "__openclaw": {"private": True},
+            "openclawDeliveryMirror": {"private": True},
+            "futureMessageField": "preserved",
+            "content": [
+                {"type": "text", "text": "hello", "textSignature": "private", "futureTextField": "preserved"},
+                {
+                    "type": "toolCall",
+                    "id": "call-id",
+                    "name": "exec",
+                    "arguments": {"command": "pwd"},
+                    "partialArgs": "private",
+                    "futureToolField": "preserved",
+                },
+            ],
+        },
+    }
+
+    assert json.loads(source.sanitize(tmp_path / "session.jsonl", _line(record))) == {
+        "type": "message",
+        "futureTopLevel": "preserved",
+        "message": {
+            "role": "assistant",
+            "futureMessageField": "preserved",
+            "content": [
+                {"type": "text", "text": "hello", "futureTextField": "preserved"},
+                {
+                    "type": "toolCall",
+                    "id": "call-id",
+                    "name": "exec",
+                    "arguments": {"command": "pwd"},
+                    "futureToolField": "preserved",
+                },
+            ],
+        },
+    }
+
+
+def test_openclaw_prepare_sanitizes_stored_output_without_changing_cursor(tmp_path: pathlib.Path) -> None:
+    entry = {
+        "type": "message",
+        "id": "entry-id",
+        "parentId": "parent-id",
+        "timestamp": "2026-09-01T00:00:00Z",
+        "message": {
+            "role": "toolResult",
+            "timestamp": "2026-09-01T00:00:00Z",
+            "toolCallId": "call-id",
+            "toolName": "exec",
+            "isError": False,
+            "details": {"cwd": "/private", "exitCode": 0},
+            "content": [{"type": "text", "text": "ok", "textSignature": "private"}],
+        },
+    }
+    _openclaw_store(tmp_path, "main", {"s1": [(0, entry, 1_788_220_800_000)]})
+    source = OpenClawTranscriptSource(tmp_path)
+
+    prepared, out_dir, pending = _prepare_openclaw(source, tmp_path, {})
+
+    assert prepared == 1
+    assert (out_dir / "1.jsonl").read_text(encoding="utf-8") == "\n"
+    assert [json.loads(line) for line in (out_dir / "1_full.jsonl").read_text(encoding="utf-8").splitlines()] == [
+        {
+            "type": "message",
+            "message": {
+                "role": "toolResult",
+                "toolCallId": "call-id",
+                "toolName": "exec",
+                "isError": False,
+                "content": [{"type": "text", "text": "ok"}],
+            },
+        }
+    ]
+    assert pending["main/sessions/s1.jsonl"] == {
+        "container": "sqlite",
+        "generation": "generation-s1",
+        "lines": 1,
+        "last_timestamp": "2026-09-01T00:00:00Z",
+    }
+
+
 def test_openclaw_timestamp_accepts_iso_and_epoch_millis() -> None:
     source = OpenClawTranscriptSource()
     iso = {"type": "message", "timestamp": "2026-07-15T00:00:00Z", "message": {"role": "user", "content": "hi"}}
