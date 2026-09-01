@@ -122,6 +122,166 @@ def test_codex_injected_filter_never_costs_a_real_message() -> None:
     assert source.classify(_line(assistant)) is RecordKind.MESSAGE
 
 
+def test_codex_sanitize_filters_known_private_fields_and_keeps_unknown_ones(tmp_path: pathlib.Path) -> None:
+    source = CodexTranscriptSource()
+    metadata = {"turn_id": "private-turn", "futureMetadataField": "private-with-container"}
+    image = {
+        "type": "input_image",
+        "image_url": "data:image/png;base64,content",
+        "detail": "auto",
+        "futureContentField": "preserved",
+    }
+    message = {
+        "timestamp": "2026-09-01T12:00:00Z",
+        "type": "response_item",
+        "futureTopLevel": "preserved",
+        "payload": {
+            "type": "message",
+            "id": "message-id",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "Done."}, image],
+            "phase": "final_answer",
+            "internal_chat_message_metadata_passthrough": metadata,
+            "futurePayloadField": "preserved",
+        },
+    }
+    tool_call = {
+        "timestamp": "2026-09-01T12:00:01Z",
+        "type": "response_item",
+        "payload": {
+            "type": "function_call",
+            "id": "call-item-id",
+            "name": "shell",
+            "arguments": '{"command":"pwd"}',
+            "call_id": "call-id",
+            "internal_chat_message_metadata_passthrough": metadata,
+        },
+    }
+    tool_output = {
+        "timestamp": "2026-09-01T12:00:02Z",
+        "type": "response_item",
+        "payload": {
+            "type": "function_call_output",
+            "id": "output-item-id",
+            "call_id": "call-id",
+            "output": "D:/private",
+            "internal_chat_message_metadata_passthrough": metadata,
+        },
+    }
+
+    assert json.loads(source.sanitize(tmp_path / "session.jsonl", _line(message))) == {
+        "type": "response_item",
+        "futureTopLevel": "preserved",
+        "payload": {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "Done."}, image],
+            "phase": "final_answer",
+            "futurePayloadField": "preserved",
+        },
+    }
+    assert json.loads(source.sanitize(tmp_path / "session.jsonl", _line(tool_call))) == {
+        "type": "response_item",
+        "payload": {
+            "type": "function_call",
+            "name": "shell",
+            "arguments": '{"command":"pwd"}',
+            "call_id": "call-id",
+        },
+    }
+    assert json.loads(source.sanitize(tmp_path / "session.jsonl", _line(tool_output))) == {
+        "type": "response_item",
+        "payload": {"type": "function_call_output", "call_id": "call-id", "output": "D:/private"},
+    }
+
+    untouched = '{"type": "response_item", "payload": {"type": "message", "role": "user"}}'
+    assert source.sanitize(tmp_path / "session.jsonl", untouched) == untouched
+    assert source.sanitize(tmp_path / "session.jsonl", "not json") == "not json"
+    assert source.sanitize(tmp_path / "session.jsonl", "[]") == "[]"
+
+
+def test_codex_prepare_sanitizes_output_without_changing_cursor(tmp_path: pathlib.Path) -> None:
+    session = tmp_path / "rollout-2026-09-01T12-00-00-session-id.jsonl"
+    metadata = {"turn_id": "private-turn"}
+    records = [
+        {
+            "timestamp": "2026-09-01T12:00:00Z",
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "id": "message-id",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "remember this"}],
+                "internal_chat_message_metadata_passthrough": metadata,
+            },
+        },
+        {
+            "timestamp": "2026-09-01T12:00:01Z",
+            "type": "response_item",
+            "payload": {
+                "type": "function_call",
+                "id": "call-item-id",
+                "name": "shell",
+                "arguments": '{"command":"pwd"}',
+                "call_id": "call-id",
+                "internal_chat_message_metadata_passthrough": metadata,
+            },
+        },
+        {
+            "timestamp": "2026-09-01T12:00:02Z",
+            "type": "response_item",
+            "payload": {
+                "type": "function_call_output",
+                "id": "output-item-id",
+                "call_id": "call-id",
+                "output": "D:/private",
+                "internal_chat_message_metadata_passthrough": metadata,
+            },
+        },
+    ]
+    raw = "\n".join(_line(record) for record in records) + "\n"
+    session.write_text(raw, encoding="utf-8")
+    manifest = tmp_path / "manifest.json"
+    pending = tmp_path / "pending.json"
+    out_dir = tmp_path / "out"
+
+    assert prepare_transcripts(CodexTranscriptSource(tmp_path), out_dir, manifest, 10, pending) == 1
+
+    memory = [json.loads(line) for line in (out_dir / "1.jsonl").read_text(encoding="utf-8").splitlines()]
+    full = [json.loads(line) for line in (out_dir / "1_full.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert memory == [
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "remember this"}],
+            },
+        }
+    ]
+    assert full == [
+        *memory,
+        {
+            "type": "response_item",
+            "payload": {
+                "type": "function_call",
+                "name": "shell",
+                "arguments": '{"command":"pwd"}',
+                "call_id": "call-id",
+            },
+        },
+        {
+            "type": "response_item",
+            "payload": {"type": "function_call_output", "call_id": "call-id", "output": "D:/private"},
+        },
+    ]
+    assert session.read_text(encoding="utf-8") == raw
+    assert json.loads(pending.read_text(encoding="utf-8"))[session.name] == {
+        "lines": 3,
+        "last_timestamp": "2026-09-01T12:00:02Z",
+    }
+
+
 # ── Claude Code ────────────────────────────────────────────────────────────────
 
 
