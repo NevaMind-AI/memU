@@ -18,6 +18,11 @@ SESSION_DIR = "~/.codex/sessions"
 _MESSAGE_ROLES = ("user", "assistant")
 _TOOL_TYPES = ("function_call", "function_call_output")
 
+# Keep Codex's response-item dialect forward-compatible: these sets are
+# delete-only. Unknown envelope, payload, and content-item fields are preserved.
+_RECORD_PRIVATE_FIELDS = frozenset({"timestamp"})
+_PAYLOAD_PRIVATE_FIELDS = frozenset({"id", "internal_chat_message_metadata_passthrough"})
+
 # Harness-injected context is logged as ordinary user messages with no
 # isMeta-style flag; the leading marker is the only thing that distinguishes it
 # from typing. The layout drifts across versions — 0.80.0 writes AGENTS.md and
@@ -63,6 +68,31 @@ class CodexTranscriptSource(TranscriptSource):
 
     def root(self) -> Path:
         return self._root
+
+    def sanitize(self, path: Path, record: str) -> str:
+        """Remove known runtime metadata without projecting the response item."""
+        del path  # Required by the host seam; every Codex session has the same record shape.
+        try:
+            entry = json.loads(record)
+        except json.JSONDecodeError:
+            return record
+        if not isinstance(entry, dict):
+            return record
+
+        changed = False
+        for field in _RECORD_PRIVATE_FIELDS:
+            if field in entry:
+                del entry[field]
+                changed = True
+
+        payload = entry.get("payload")
+        if isinstance(payload, dict):
+            for field in _PAYLOAD_PRIVATE_FIELDS:
+                if field in payload:
+                    del payload[field]
+                    changed = True
+
+        return json.dumps(entry, ensure_ascii=False) if changed else record
 
     def classify(self, record: str) -> RecordKind:
         try:
