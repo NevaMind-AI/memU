@@ -213,6 +213,21 @@ def _resolve_agent(spec: HostSpec) -> str | None:
     return shutil.which(_agent_binary(spec))
 
 
+def _resolve_scheduled_agent(agent_path: str) -> str | None:
+    """Return a launcher PowerShell can invoke directly from an S4U task.
+
+    npm exposes commands as sibling ``.cmd`` and ``.ps1`` shims on Windows.
+    ``shutil.which`` returns the batch shim, but PowerShell's S4U process cannot
+    reliably launch it. Use npm's native PowerShell shim instead; if a batch-only
+    launcher has no such companion, refuse to register a task that cannot wake.
+    """
+    path = Path(agent_path)
+    if path.suffix.lower() not in {".cmd", ".bat"}:
+        return agent_path
+    companion = path.with_suffix(".ps1")
+    return str(companion) if companion.is_file() else None
+
+
 def _authenticates(spec: HostSpec, agent_path: str, workdir: Path) -> tuple[bool, str]:
     """Does a cold headless run authenticate? (memU#538 Symptom B.)
 
@@ -294,6 +309,15 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
             file=sys.stderr,
         )
         return 1
+    scheduled_agent_path = _resolve_scheduled_agent(agent_path)
+    if scheduled_agent_path is None:
+        print(
+            f"error: `{_agent_binary(spec)}` resolves to the batch launcher '{agent_path}', but no sibling "
+            "PowerShell shim exists. Reinstall the npm package so its .ps1 shim is generated; the S4U task "
+            "cannot reliably launch .cmd/.bat files.",
+            file=sys.stderr,
+        )
+        return 1
     layout.base.mkdir(parents=True, exist_ok=True)
     if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc
@@ -321,7 +345,8 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
     # unless it sees a BOM, which would mangle a non-ASCII path (e.g. a CJK username)
     # baked into the wrapper. The BOM makes both 5.1 and 7 decode it as UTF-8.
     wrapper.write_text(
-        wrapper_script(agent_path, spec.schedule_command, prompt_file, log_file, path_dirs), encoding="utf-8-sig"
+        wrapper_script(scheduled_agent_path, spec.schedule_command, prompt_file, log_file, path_dirs),
+        encoding="utf-8-sig",
     )
 
     proc = _run_powershell(register_script(spec.task_name, wrapper, interval_minutes, layout.base))
@@ -338,7 +363,7 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
     )
     print(f"registered '{spec.task_name}' — runs every {interval_minutes} min, hidden, catches up if missed")
     print(f"  wrapper: {wrapper}")
-    print(f"  verify it can actually run:  {spec.binary} schedule verify")
+    print(f"  check registration and current-process headless auth:  {spec.binary} schedule verify")
     return 0
 
 
@@ -392,7 +417,7 @@ def status(spec: HostSpec, layout: Layout) -> int:
 
 
 def verify(spec: HostSpec, layout: Layout) -> int:
-    """Prove one task is registered and its agent CLI can run headless.
+    """Check registration and a headless agent run from the current process.
 
     Deliberately does not trigger a full pipeline run (that would memorize real
     sessions as a side effect); it checks the things that silently break the
@@ -423,6 +448,12 @@ def verify(spec: HostSpec, layout: Layout) -> int:
     if agent_path is None:
         print(f"error: `{_agent_binary(spec)}` is no longer on PATH (memU#538 Symptom A)", file=sys.stderr)
         return 1
+    if _resolve_scheduled_agent(agent_path) is None:
+        print(
+            f"error: `{_agent_binary(spec)}` resolves to a .cmd/.bat launcher without its sibling .ps1 shim",
+            file=sys.stderr,
+        )
+        return 1
     layout.base.mkdir(parents=True, exist_ok=True)
     if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc
@@ -431,7 +462,9 @@ def verify(spec: HostSpec, layout: Layout) -> int:
     if spec.needs_headless_auth:
         print("  its headless-auth probe also passed; credentials must remain persistent for the S4U run")
     print(
-        "  after the next scheduled run, confirm it did work by traces, not its summary:\n"
+        "  this does NOT run the S4U task; trigger the registered task and confirm it by traces:\n"
+        f"    - {layout.base / LOG_NAME} grew,\n"
+        "    - the host created a new session,\n"
         f"    - {layout.jobs} timestamps advanced, and\n"
         f"    - {layout.session_manifest} moved"
     )

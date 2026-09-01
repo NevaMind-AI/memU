@@ -85,6 +85,44 @@ def test_wrapper_keeps_prompt_off_the_command_line(tmp_path: Path) -> None:
     assert "$env:Path = 'C:\\bin;C:\\memu;' + $env:Path" in text
 
 
+def test_install_uses_powershell_companion_for_npm_cmd_shim(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    cmd_shim = bin_dir / "pi.CMD"
+    ps_shim = bin_dir / "pi.ps1"
+    cmd_shim.write_text("@ECHO off\r\n", encoding="utf-8")
+    ps_shim.write_text("#!/usr/bin/env pwsh\n", encoding="utf-8")
+
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(windows, "_resolve_agent", lambda spec: str(cmd_shim))
+    monkeypatch.setattr(windows, "_auth_gate", lambda spec, path, workdir: 0)
+    monkeypatch.setattr(windows.shutil, "which", lambda binary: None)
+    monkeypatch.setattr(
+        windows,
+        "_run_powershell",
+        lambda script: subprocess.CompletedProcess([], 0, "", ""),
+    )
+
+    layout = Layout.default(host=PI.host, base=tmp_path / "host")
+    assert windows.install(PI, layout) == 0
+
+    wrapper = (layout.base / windows.WRAPPER_NAME).read_text(encoding="utf-8-sig")
+    assert f"& '{ps_shim}' -p $prompt" in wrapper
+    assert str(cmd_shim) not in wrapper
+
+
+def test_install_rejects_batch_launcher_without_powershell_companion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cmd_shim = tmp_path / "pi.cmd"
+    cmd_shim.write_text("@ECHO off\r\n", encoding="utf-8")
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(windows, "_resolve_agent", lambda spec: str(cmd_shim))
+
+    assert windows.install(PI, Layout.default(host=PI.host, base=tmp_path / "host")) == 1
+    assert "no sibling PowerShell shim" in capsys.readouterr().err
+
+
 def test_register_script_is_canonical_and_hardened() -> None:
     script = windows.register_script("memu-bridging-claude-code", Path("C:\\w\\memu-bridge.ps1"), 60, Path("C:\\w"))
     assert "memu-bridging-claude-code" in script
@@ -220,6 +258,25 @@ def test_claude_verify_rejects_missing_or_legacy_registration(
     monkeypatch.setattr(windows, "_run_powershell", run)
     assert windows.verify(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 1
     assert "schedule install" in capsys.readouterr().err
+
+
+def test_verify_says_it_did_not_run_the_scheduled_task(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        windows,
+        "_run_powershell",
+        lambda script: subprocess.CompletedProcess([], 0, "registered", ""),
+    )
+    monkeypatch.setattr(windows, "_resolve_agent", lambda spec: "C:\\bin\\pi.exe")
+    monkeypatch.setattr(windows, "_auth_gate", lambda spec, path, workdir: 0)
+
+    assert windows.verify(PI, Layout.default(host=PI.host, base=tmp_path)) == 0
+    out = capsys.readouterr().out
+    assert "does NOT run the S4U task" in out
+    assert "bridge.log" in out
+    assert "new session" in out
 
 
 def test_claude_uninstall_removes_only_known_identities(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

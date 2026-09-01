@@ -72,6 +72,8 @@ memu-pi schedule status
 
 The helper resolves `pi`, runs a headless authentication probe, and registers
 `{{task_name}}`. `--interval <minutes>` changes the default 60-minute cadence.
+`schedule verify` checks registration and authentication only; it does not run
+the S4U task and is not end-to-end proof.
 
 ## Verify
 

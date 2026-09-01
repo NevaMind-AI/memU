@@ -186,7 +186,7 @@ removable by name:
 
 ```
 memu-claude-code schedule install     # register the hourly task
-memu-claude-code schedule verify      # prove it resolves + authenticates
+memu-claude-code schedule verify      # registration + current-process auth only
 memu-claude-code schedule status      # last run / next run
 memu-claude-code schedule uninstall   # remove it
 ```
@@ -197,6 +197,8 @@ it (nothing long ever touches the command line), bakes in the absolute path to
 **S4U** principal — it runs whether or not you're logged in, windowless, and
 catches up a run missed while the machine was off. `--interval <minutes>` changes
 the cadence (default 60).
+
+`schedule verify` does not trigger the S4U task and is not end-to-end proof.
 
 Because the scheduled run needs a standalone, headless-authenticated `claude`,
 `install` **refuses with guidance** if `claude` isn't on `PATH` or can't

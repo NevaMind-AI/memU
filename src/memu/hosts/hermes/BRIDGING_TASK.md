@@ -172,7 +172,7 @@ native-job removal at the start of Step 2, then use the shared helper:
 
 ```
 memu-hermes schedule install     # register the hourly OS task
-memu-hermes schedule verify      # prove a resolvable CLI
+memu-hermes schedule verify      # registration + current-process auth only
 memu-hermes schedule status      # last run / next run
 memu-hermes schedule uninstall   # remove it
 ```
@@ -186,6 +186,8 @@ above makes sure the pipeline has only the OS scheduler.
 Unlike Claude Code or Cursor, Hermes ships its client and CLI together and uses
 one runtime/configuration; there is no separate CLI install or headless-auth
 step.
+
+`schedule verify` does not trigger the S4U task and is not end-to-end proof.
 
 After a run, check filesystem traces rather than trusting its summary:
 `~/.memu/hosts/hermes/jobs/` timestamps and the session manifest must advance.
