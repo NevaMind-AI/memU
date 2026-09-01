@@ -179,7 +179,7 @@ helper instead — every install identical, removable by name:
 
 ```
 memu-cursor schedule install     # register the hourly task
-memu-cursor schedule verify      # registration + current-process auth only
+memu-cursor schedule verify      # prove it resolves + authenticates
 memu-cursor schedule status      # last run / next run
 memu-cursor schedule uninstall   # remove it
 ```
@@ -190,8 +190,6 @@ it (nothing long ever touches the command line), bakes in the absolute path to
 **S4U** principal — windowless, runs whether or not you're logged in, catches up
 a run missed while the machine was off. `--interval <minutes>` changes the
 cadence (default 60).
-
-`schedule verify` does not trigger the S4U task and is not end-to-end proof.
 
 Cursor-specific facts, all field-verified on real Windows 11:
 
