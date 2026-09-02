@@ -26,7 +26,6 @@ SPEC = HostSpec(
     schedule_prepare_session_dir=True,
     session_id_env="PI_SESSION_ID",
     needs_headless_auth=True,
-    install_hint="  npm install -g --ignore-scripts @earendil-works/pi-coding-agent",
     auth_hint="    authenticate pi with /login or persist the API key used by its selected provider",
 )
 
