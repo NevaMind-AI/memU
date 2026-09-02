@@ -84,6 +84,13 @@ def test_pi_discovers_sessions_across_encoded_working_directories(tmp_path: path
     assert PiTranscriptSource(tmp_path).discover() == [newer, older]
 
 
+def test_pi_session_id_matches_the_exported_uuid(tmp_path: pathlib.Path) -> None:
+    source = PiTranscriptSource(tmp_path)
+    transcript = tmp_path / "2026-09-02T10-31-41-043Z_01a061ac-aaf3-7f05-a295-d95115fef655.jsonl"
+
+    assert source.session_id(transcript) == "01a061ac-aaf3-7f05-a295-d95115fef655"
+
+
 # ── Cola ──────────────────────────────────────────────────────────────────────
 
 

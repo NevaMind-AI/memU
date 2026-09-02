@@ -26,6 +26,7 @@ from memu.hosts.claude_code.sessions import ClaudeCodeTranscriptSource
 from memu.hosts.hermes.cli import SESSION_ID_ENV as HERMES_SESSION_ID_ENV
 from memu.hosts.hermes.cli import SPEC as HERMES_SPEC
 from memu.hosts.hermes.sessions import HermesTranscriptSource
+from memu.hosts.pi.cli import SPEC as PI_SPEC
 
 
 class FakeSource(TranscriptSource):
@@ -161,6 +162,46 @@ def test_skipping_frees_the_job_slots_for_real_sessions(tmp_path: pathlib.Path) 
     assert written == 2
     staged = json.loads((tmp_path / "cursor.json.pending").read_text(encoding="utf-8"))
     assert set(staged) == {"real-2.jsonl", "real-1.jsonl"}
+
+
+async def test_pi_current_and_previous_bridge_sessions_produce_no_jobs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    previous_id = "01a061ac-aaf3-7f05-a295-d95115fef654"
+    current_id = "01a061ac-aaf3-7f05-a295-d95115fef655"
+    session_dir = tmp_path / "pi-sessions" / "--workspace--"
+    session_dir.mkdir(parents=True)
+    _session(session_dir, f"2026-09-02T09-00-00-000Z_{previous_id}", turns=2, mtime=1000)
+    _session(session_dir, f"2026-09-02T10-31-41-043Z_{current_id}", turns=2, mtime=2000)
+
+    base = tmp_path / "memu-pi"
+    layout = Layout.default(host=PI_SPEC.host, base=base)
+    self_sessions.remember(layout.self_sessions, previous_id)
+
+    class EmptyRecallService:
+        async def list_all_recall_files(self, *args: object, **kwargs: object) -> dict[str, object]:
+            return {"recall_files": [], "next_cursor": None}
+
+    from memu.hosts.bridging import pipeline
+
+    monkeypatch.setattr(pipeline, "build_agentic_memory_backend_from_env", lambda: EmptyRecallService())
+    monkeypatch.setattr(pipeline.templates, "resolve", lambda _name, fallback: fallback)
+    monkeypatch.setattr(pipeline.events, "record_list", lambda **kwargs: None)
+    monkeypatch.setattr(host_cli, "_mark_cycle_start", lambda spec, layout: None)
+    monkeypatch.setattr(host_cli, "_refresh_retrieval", lambda spec: None)
+    monkeypatch.setattr(host_cli.events, "flush", lambda: None)
+    monkeypatch.setenv(self_sessions.BRIDGING_RUN_ENV, "1")
+    monkeypatch.setenv(PI_SPEC.session_id_env, current_id)
+
+    rc = await host_cli._cmd_prepare(
+        PI_SPEC,
+        Namespace(session_dir=str(session_dir.parent), base_dir=str(base), max_jobs=10),
+    )
+
+    assert rc == 0
+    assert self_sessions.load(layout.self_sessions) == [previous_id, current_id]
+    assert list(layout.sessions.glob("*.jsonl")) == []
+    assert list(layout.jobs.glob("*.txt")) == []
 
 
 # ── only the scheduled run may claim a session ─────────────────────────────────

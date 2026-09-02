@@ -24,6 +24,10 @@ class PiTranscriptSource(TranscriptSource):
     def root(self) -> Path:
         return self._root
 
+    def session_id(self, path: Path) -> str:
+        """Return the UUID Pi exports, without its filename timestamp prefix."""
+        return path.stem.rsplit("_", 1)[-1]
+
     def classify(self, record: str) -> RecordKind:
         try:
             entry = json.loads(record)
