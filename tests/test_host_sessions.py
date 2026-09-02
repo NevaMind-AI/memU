@@ -1158,7 +1158,26 @@ def _hermes_db(tmp_path: pathlib.Path) -> pathlib.Path:
         ("old", "user", "earlier session", None, None, None, 100.0),
         ("new", "system", "you are hermes", None, None, None, 200.0),
         ("new", "user", "delete the temp files", None, None, None, 201.0),
-        ("new", "assistant", None, None, '[{"name":"shell"}]', None, 202.0),
+        (
+            "new",
+            "assistant",
+            None,
+            None,
+            json.dumps(
+                [
+                    {
+                        "id": "call_1",
+                        "call_id": "call_1",
+                        "response_item_id": "fc_1",
+                        "type": "function",
+                        "function": {"name": "shell", "arguments": '{"command":"rm temp"}'},
+                        "futureToolCallField": "preserved",
+                    }
+                ]
+            ),
+            None,
+            202.0,
+        ),
         ("new", "tool", "removed 3 files", "call_1", None, "shell", 203.0),
         ("new", "assistant", "Done — removed 3 files.", None, None, None, 204.0),
     ]
@@ -1210,6 +1229,107 @@ def test_hermes_reads_and_classifies_rows(tmp_path: pathlib.Path) -> None:
         RecordKind.MESSAGE,  # assistant answer
     ]
     assert source.timestamp(records[1]) == "1970-01-01T00:03:21+00:00"
+
+
+def test_hermes_sanitize_filters_known_private_fields_and_keeps_unknown_ones(tmp_path: pathlib.Path) -> None:
+    source = HermesTranscriptSource(tmp_path / "state.db")
+    tool_calls = [
+        {
+            "id": "call_1",
+            "call_id": "call_1",
+            "response_item_id": "fc_1",
+            "extra_content": {"google": {"thought_signature": "private"}},
+            "type": "function",
+            "function": {
+                "name": "shell",
+                "arguments": '{"command":"pwd"}',
+                "futureFunctionField": "preserved",
+            },
+            "futureToolCallField": "preserved",
+        }
+    ]
+    record = {
+        "role": "assistant",
+        "content": "Running shell.",
+        "tool_calls": json.dumps(tool_calls),
+        "timestamp": 1_788_220_800.0,
+        "futureRowField": "preserved",
+    }
+
+    sanitized = json.loads(source.sanitize(tmp_path / "session", _line(record)))
+    assert sanitized == {
+        "role": "assistant",
+        "content": "Running shell.",
+        "tool_calls": json.dumps(
+            [
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "shell",
+                        "arguments": '{"command":"pwd"}',
+                        "futureFunctionField": "preserved",
+                    },
+                    "futureToolCallField": "preserved",
+                }
+            ]
+        ),
+        "futureRowField": "preserved",
+    }
+
+    materialized = {**record, "tool_calls": tool_calls}
+    materialized_sanitized = json.loads(source.sanitize(tmp_path / "session", _line(materialized)))
+    assert isinstance(materialized_sanitized["tool_calls"], list)
+    assert materialized_sanitized["tool_calls"][0] == json.loads(sanitized["tool_calls"])[0]
+
+    untouched = '{"role": "user", "content": "hello"}'
+    malformed_tool_calls = '{"role":"assistant","tool_calls":"not json"}'
+    assert source.sanitize(tmp_path / "session", untouched) == untouched
+    assert source.sanitize(tmp_path / "session", malformed_tool_calls) == malformed_tool_calls
+    assert source.sanitize(tmp_path / "session", "not json") == "not json"
+    assert source.sanitize(tmp_path / "session", "[]") == "[]"
+
+
+def test_hermes_prepare_sanitizes_output_without_changing_cursor(tmp_path: pathlib.Path) -> None:
+    db = _hermes_db(tmp_path)
+    source = HermesTranscriptSource(db)
+    out_dir = tmp_path / "out"
+    manifest = tmp_path / "manifest.json"
+    pending = tmp_path / "pending.json"
+    before = db.read_bytes()
+
+    assert prepare_transcripts(source, out_dir, manifest, 10, pending) == 2
+
+    memory = [json.loads(line) for line in (out_dir / "2.jsonl").read_text(encoding="utf-8").splitlines()]
+    full = [json.loads(line) for line in (out_dir / "2_full.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert memory == [
+        {"role": "user", "content": "delete the temp files"},
+        {"role": "assistant", "content": "Done — removed 3 files."},
+    ]
+    assert full == [
+        memory[0],
+        {
+            "role": "assistant",
+            "tool_calls": json.dumps(
+                [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "shell", "arguments": '{"command":"rm temp"}'},
+                        "futureToolCallField": "preserved",
+                    }
+                ]
+            ),
+        },
+        {"role": "tool", "content": "removed 3 files", "tool_call_id": "call_1", "tool_name": "shell"},
+        memory[1],
+    ]
+    assert json.loads(full[1]["tool_calls"])[0]["id"] == full[2]["tool_call_id"]
+    assert db.read_bytes() == before
+    assert json.loads(pending.read_text(encoding="utf-8"))["new"] == {
+        "lines": 5,
+        "last_timestamp": "1970-01-01T00:03:24+00:00",
+    }
 
 
 def test_hermes_missing_db_is_empty_not_an_error(tmp_path: pathlib.Path) -> None:
