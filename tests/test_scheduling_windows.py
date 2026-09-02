@@ -85,7 +85,9 @@ def test_wrapper_keeps_prompt_off_the_command_line(tmp_path: Path) -> None:
     assert "$env:Path = 'C:\\bin;C:\\memu;' + $env:Path" in text
 
 
-def test_install_uses_powershell_companion_for_npm_cmd_shim(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_install_invokes_path_resolvable_command_for_npm_cmd_shim(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     cmd_shim = bin_dir / "pi.CMD"
@@ -107,20 +109,10 @@ def test_install_uses_powershell_companion_for_npm_cmd_shim(monkeypatch: pytest.
     assert windows.install(PI, layout) == 0
 
     wrapper = (layout.base / windows.WRAPPER_NAME).read_text(encoding="utf-8-sig")
-    assert f"& '{ps_shim}' -p $prompt" in wrapper
+    assert "& 'pi' -p $prompt" in wrapper
+    assert f"$env:Path = '{bin_dir};' + $env:Path" in wrapper
     assert str(cmd_shim) not in wrapper
-
-
-def test_install_rejects_batch_launcher_without_powershell_companion(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    cmd_shim = tmp_path / "pi.cmd"
-    cmd_shim.write_text("@ECHO off\r\n", encoding="utf-8")
-    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
-    monkeypatch.setattr(windows, "_resolve_agent", lambda spec: str(cmd_shim))
-
-    assert windows.install(PI, Layout.default(host=PI.host, base=tmp_path / "host")) == 1
-    assert "no sibling PowerShell shim" in capsys.readouterr().err
+    assert str(ps_shim) not in wrapper
 
 
 def test_register_script_is_canonical_and_hardened() -> None:

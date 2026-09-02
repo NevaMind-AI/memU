@@ -105,9 +105,9 @@ def wrapper_script(
     """The PowerShell wrapper the scheduled task runs.
 
     It re-establishes ``PATH`` (Task Scheduler does not inherit the interactive
-    shell's), reads the prompt from a file, and runs the agent. Absolute paths are
-    baked in at install time — the #530 "the scheduler's PATH is not your shell's"
-    capture, ported to Windows.
+    shell's), reads the prompt from a file, and runs the agent. Required search
+    paths are baked in at install time — the #530 "the scheduler's PATH is not
+    your shell's" capture, ported to Windows.
     """
     path_prefix = ";".join(path_dirs)
     return "\n".join([
@@ -213,21 +213,6 @@ def _resolve_agent(spec: HostSpec) -> str | None:
     return shutil.which(_agent_binary(spec))
 
 
-def _resolve_scheduled_agent(agent_path: str) -> str | None:
-    """Return a launcher PowerShell can invoke directly from an S4U task.
-
-    npm exposes commands as sibling ``.cmd`` and ``.ps1`` shims on Windows.
-    ``shutil.which`` returns the batch shim, but PowerShell's S4U process cannot
-    reliably launch it. Use npm's native PowerShell shim instead; if a batch-only
-    launcher has no such companion, refuse to register a task that cannot wake.
-    """
-    path = Path(agent_path)
-    if path.suffix.lower() not in {".cmd", ".bat"}:
-        return agent_path
-    companion = path.with_suffix(".ps1")
-    return str(companion) if companion.is_file() else None
-
-
 def _authenticates(spec: HostSpec, agent_path: str, workdir: Path) -> tuple[bool, str]:
     """Does a cold headless run authenticate? (memU#538 Symptom B.)
 
@@ -309,15 +294,7 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
             file=sys.stderr,
         )
         return 1
-    scheduled_agent_path = _resolve_scheduled_agent(agent_path)
-    if scheduled_agent_path is None:
-        print(
-            f"error: `{_agent_binary(spec)}` resolves to the batch launcher '{agent_path}', but no sibling "
-            "PowerShell shim exists. Reinstall the npm package so its .ps1 shim is generated; the S4U task "
-            "cannot reliably launch .cmd/.bat files.",
-            file=sys.stderr,
-        )
-        return 1
+    scheduled_agent_path = _agent_binary(spec)
     layout.base.mkdir(parents=True, exist_ok=True)
     if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc
@@ -447,12 +424,6 @@ def verify(spec: HostSpec, layout: Layout) -> int:
     agent_path = _resolve_agent(spec)
     if agent_path is None:
         print(f"error: `{_agent_binary(spec)}` is no longer on PATH (memU#538 Symptom A)", file=sys.stderr)
-        return 1
-    if _resolve_scheduled_agent(agent_path) is None:
-        print(
-            f"error: `{_agent_binary(spec)}` resolves to a .cmd/.bat launcher without its sibling .ps1 shim",
-            file=sys.stderr,
-        )
         return 1
     layout.base.mkdir(parents=True, exist_ok=True)
     if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:

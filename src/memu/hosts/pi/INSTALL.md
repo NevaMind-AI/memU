@@ -24,12 +24,6 @@ memu-pi --help
 `memu-pi` is missing, the installed package predates this adapter or its scripts
 directory is not on `PATH`.
 
-If pi itself is missing, install it with its official npm package:
-
-```sh
-npm install -g --ignore-scripts @earendil-works/pi-coding-agent
-```
-
 Create the shared memU configuration. If `SKILL.md` already ran `init`, reusing
 the existing mode is correct and re-running is harmless:
 
@@ -53,12 +47,9 @@ scheduled run.
 
 ```sh
 memu-pi doctor
-pi -p "Reply with exactly: ok"
 ```
 
-Both commands must exit cleanly. Zero retrieval hits is normal for a new store.
-The pi probe proves a model and persistent credential work without an
-interactive login.
+The command must exit cleanly. Zero retrieval hits is normal for a new store.
 
 ## Part 2 — Register the record bridge
 
