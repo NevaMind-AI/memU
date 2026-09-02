@@ -1163,18 +1163,16 @@ def _hermes_db(tmp_path: pathlib.Path) -> pathlib.Path:
             "assistant",
             None,
             None,
-            json.dumps(
-                [
-                    {
-                        "id": "call_1",
-                        "call_id": "call_1",
-                        "response_item_id": "fc_1",
-                        "type": "function",
-                        "function": {"name": "shell", "arguments": '{"command":"rm temp"}'},
-                        "futureToolCallField": "preserved",
-                    }
-                ]
-            ),
+            json.dumps([
+                {
+                    "id": "call_1",
+                    "call_id": "call_1",
+                    "response_item_id": "fc_1",
+                    "type": "function",
+                    "function": {"name": "shell", "arguments": '{"command":"rm temp"}'},
+                    "futureToolCallField": "preserved",
+                }
+            ]),
             None,
             202.0,
         ),
@@ -1260,20 +1258,18 @@ def test_hermes_sanitize_filters_known_private_fields_and_keeps_unknown_ones(tmp
     assert sanitized == {
         "role": "assistant",
         "content": "Running shell.",
-        "tool_calls": json.dumps(
-            [
-                {
-                    "id": "call_1",
-                    "type": "function",
-                    "function": {
-                        "name": "shell",
-                        "arguments": '{"command":"pwd"}',
-                        "futureFunctionField": "preserved",
-                    },
-                    "futureToolCallField": "preserved",
-                }
-            ]
-        ),
+        "tool_calls": json.dumps([
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                    "name": "shell",
+                    "arguments": '{"command":"pwd"}',
+                    "futureFunctionField": "preserved",
+                },
+                "futureToolCallField": "preserved",
+            }
+        ]),
         "futureRowField": "preserved",
     }
 
@@ -1310,16 +1306,14 @@ def test_hermes_prepare_sanitizes_output_without_changing_cursor(tmp_path: pathl
         memory[0],
         {
             "role": "assistant",
-            "tool_calls": json.dumps(
-                [
-                    {
-                        "id": "call_1",
-                        "type": "function",
-                        "function": {"name": "shell", "arguments": '{"command":"rm temp"}'},
-                        "futureToolCallField": "preserved",
-                    }
-                ]
-            ),
+            "tool_calls": json.dumps([
+                {
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "shell", "arguments": '{"command":"rm temp"}'},
+                    "futureToolCallField": "preserved",
+                }
+            ]),
         },
         {"role": "tool", "content": "removed 3 files", "tool_call_id": "call_1", "tool_name": "shell"},
         memory[1],
