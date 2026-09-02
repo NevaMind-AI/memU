@@ -91,6 +91,115 @@ def test_pi_session_id_matches_the_exported_uuid(tmp_path: pathlib.Path) -> None
     assert source.session_id(transcript) == "01a061ac-aaf3-7f05-a295-d95115fef655"
 
 
+def test_pi_sanitize_removes_runtime_fields_and_preserves_content(tmp_path: pathlib.Path) -> None:
+    source = PiTranscriptSource(tmp_path)
+    assistant = {
+        "id": "record-id",
+        "parentId": "parent-id",
+        "timestamp": "2026-09-02T12:00:00Z",
+        "type": "message",
+        "futureRecordField": "preserved",
+        "message": {
+            "role": "assistant",
+            "api": "private-api",
+            "provider": "private-provider",
+            "model": "private-model",
+            "usage": {"input": 1},
+            "stopReason": "error",
+            "rawStopReason": "private-reason",
+            "responseId": "private-response",
+            "timestamp": 1788350400000,
+            "errorMessage": "private-error",
+            "futureMessageField": "preserved",
+            "content": [
+                {
+                    "type": "thinking",
+                    "thinking": "reasoning",
+                    "thinkingSignature": "private-signature",
+                    "futureBlockField": "preserved",
+                },
+                {"type": "text", "text": "answer"},
+            ],
+        },
+    }
+    tool_result = {
+        "id": "result-id",
+        "parentId": "record-id",
+        "timestamp": "2026-09-02T12:00:01Z",
+        "type": "message",
+        "message": {
+            "role": "toolResult",
+            "timestamp": 1788350401000,
+            "toolCallId": "call-id",
+            "toolName": "read",
+            "details": {"private": True},
+            "isError": False,
+            "content": [{"type": "text", "text": "result"}],
+        },
+    }
+
+    assert json.loads(source.sanitize(tmp_path / "session.jsonl", _line(assistant))) == {
+        "type": "message",
+        "futureRecordField": "preserved",
+        "message": {
+            "role": "assistant",
+            "futureMessageField": "preserved",
+            "content": [
+                {"type": "thinking", "thinking": "reasoning", "futureBlockField": "preserved"},
+                {"type": "text", "text": "answer"},
+            ],
+        },
+    }
+    assert json.loads(source.sanitize(tmp_path / "session.jsonl", _line(tool_result))) == {
+        "type": "message",
+        "message": {
+            "role": "toolResult",
+            "toolCallId": "call-id",
+            "toolName": "read",
+            "isError": False,
+            "content": [{"type": "text", "text": "result"}],
+        },
+    }
+
+
+def test_pi_prepare_sanitizes_output_without_changing_source_or_cursor(tmp_path: pathlib.Path) -> None:
+    root = tmp_path / "sessions"
+    session = root / "--workspace--" / "2026-09-02T12-00-00-000Z_session-id.jsonl"
+    session.parent.mkdir(parents=True)
+    record = {
+        "id": "record-id",
+        "parentId": "parent-id",
+        "timestamp": "2026-09-02T12:00:00Z",
+        "type": "message",
+        "message": {
+            "role": "assistant",
+            "provider": "private-provider",
+            "usage": {"input": 1},
+            "content": [{"type": "text", "text": "answer"}],
+        },
+    }
+    raw = _line(record) + "\n"
+    session.write_text(raw, encoding="utf-8")
+
+    out = tmp_path / "prepared"
+    pending = tmp_path / "manifest.json.pending"
+    assert prepare_transcripts(PiTranscriptSource(root), out, tmp_path / "manifest.json", 10, pending) == 1
+
+    expected = {
+        "type": "message",
+        "message": {"role": "assistant", "content": [{"type": "text", "text": "answer"}]},
+    }
+    assert json.loads((out / "1.jsonl").read_text(encoding="utf-8")) == expected
+    assert json.loads((out / "1_full.jsonl").read_text(encoding="utf-8")) == expected
+    assert session.read_text(encoding="utf-8") == raw
+    assert json.loads(pending.read_text(encoding="utf-8")) == {
+        "--workspace--/2026-09-02T12-00-00-000Z_session-id.jsonl": {
+            "lines": 1,
+            "last_timestamp": "2026-09-02T12:00:00Z",
+        }
+    }
+
+
 # ── Cola ──────────────────────────────────────────────────────────────────────
 
 
