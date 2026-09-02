@@ -337,7 +337,7 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
         host=spec.host,
         session_id_env=spec.session_id_env,
     )
-    num_jobs = 2 * num_sessions + 1
+    num_jobs = 2 * num_sessions + 1 if num_sessions else 0
     print(f"prepared {num_sessions} session(s) -> {num_jobs} job(s) in {layout.jobs}")
     if num_sessions == 0:
         print("no new session turns since the last run; nothing to mine")
