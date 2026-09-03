@@ -89,13 +89,17 @@ class RetrieveFileConfig(BaseModel):
 class ProgressiveRetrieveConfig(BaseModel):
     """Configure the single-shot, LLM-free retrieval (``progressive_retrieve``).
 
-    The query is embedded once and the file-segment and resource layers are each
-    ranked by vector similarity. No routing, sufficiency check, or summarization
-    is involved.
+    The query is embedded once. Each layer is ranked by cosine, and — when
+    ``hybrid`` is on — fused with BM25 over the original query text (ADR 0019).
+    No routing, sufficiency check, or summarization is involved.
     """
 
     file: RetrieveFileConfig = Field(default=RetrieveFileConfig())
     resource: RetrieveResourceConfig = Field(default=RetrieveResourceConfig())
+    hybrid: bool = Field(
+        default=True,
+        description="Fuse BM25 with cosine via RRF. False is cosine-only (MEMU_RETRIEVE_HYBRID=0).",
+    )
 
 
 class DefaultUserModel(BaseModel):

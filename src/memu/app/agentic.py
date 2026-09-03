@@ -212,15 +212,24 @@ class AgenticMixin:
         config = self.progressive_retrieve_config
         embed_client = self._get_embedding_client("embedding")
         query_vector = await _embed_one(embed_client, query)
+        query_text = query if config.hybrid else None
 
         segment_hits, segment_pool = self._recall_segments(
-            store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.file.enabled
+            store=store,
+            where_filters=where_filters,
+            query_vector=query_vector,
+            query_text=query_text,
+            enabled=config.file.enabled,
         )
         file_hits, file_pool = self._collect_files(
             store=store, where_filters=where_filters, segment_hits=segment_hits, segment_pool=segment_pool
         )
         resource_hits, resource_pool = self._recall_resources(
-            store=store, where_filters=where_filters, query_vector=query_vector, enabled=config.resource.enabled
+            store=store,
+            where_filters=where_filters,
+            query_vector=query_vector,
+            query_text=query_text,
+            enabled=config.resource.enabled,
         )
 
         return {
@@ -235,9 +244,10 @@ class AgenticMixin:
         store: Database,
         where_filters: dict[str, Any],
         query_vector: list[float],
+        query_text: str | None,
         enabled: bool,
     ) -> tuple[list[tuple[str, float]], dict[str, Any]]:
-        """Rank :class:`RecallFileSegment` slices by embedding similarity.
+        """Rank :class:`RecallFileSegment` slices (cosine, or hybrid when ``query_text``).
 
         The ranking belongs to the repo (:meth:`RecallFileSegmentRepo.vector_search_segments`),
         which is what lets a backend with a native vector index answer from one
@@ -260,6 +270,7 @@ class AgenticMixin:
             query_vector,
             self.progressive_retrieve_config.file.top_k,
             where=segment_where,
+            query_text=query_text,
         )
         return [(seg.id, score) for seg, score in hits], {seg.id: seg for seg, _ in hits}
 
@@ -300,9 +311,10 @@ class AgenticMixin:
         store: Database,
         where_filters: dict[str, Any],
         query_vector: list[float],
+        query_text: str | None,
         enabled: bool,
     ) -> tuple[list[tuple[str, float]], dict[str, Any]]:
-        """Rank workspace-track resources by embedding similarity.
+        """Rank workspace-track resources (cosine, or hybrid when ``query_text``).
 
         Only ``track="workspace"`` resources (the kind :meth:`commit_results`
         writes) are surfaced; other tracks are excluded.
@@ -313,7 +325,10 @@ class AgenticMixin:
         resource_where = {**where_filters, "track": "workspace"}
         resource_pool = store.resource_repo.list_resources(resource_where)
         resource_hits = store.resource_repo.vector_search_resources(
-            query_vector, self.progressive_retrieve_config.resource.top_k, where=resource_where
+            query_vector,
+            self.progressive_retrieve_config.resource.top_k,
+            where=resource_where,
+            query_text=query_text,
         )
         return resource_hits, resource_pool
 
