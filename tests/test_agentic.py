@@ -333,6 +333,55 @@ async def test_progressive_retrieve_rejects_empty_query(service: MemoryService) 
         await service.progressive_retrieve("   ")
 
 
+async def test_retrieve_rollup_fetches_only_hit_files(service: MemoryService) -> None:
+    """Roll-up must not list the whole scoped corpus on every retrieve.
+
+    :meth:`AgenticMixin._collect_files` needs only the :class:`RecallFile` rows
+    that top segments point at, so it should issue an ``id__in`` fetch — a full
+    ``list_recall_files`` read for a handful of ids is wasted work that grows
+    with the store. The response surface stays identical.
+    """
+    await _seed(service)
+    repo = service._get_database().recall_file_repo
+    real_list = repo.list_recall_files
+    seen: list[dict[str, Any]] = []
+
+    def spying_list(where: Any = None) -> Any:
+        seen.append(where or {})
+        return real_list(where)
+
+    repo.list_recall_files = spying_list  # type: ignore[method-assign]
+
+    result = await service.progressive_retrieve("coffee")
+
+    assert len(seen) == 1  # the roll-up fetch; nothing else lists files
+    hit_ids = {seg["recall_file_id"] for seg in result["segments"]}
+    assert set(seen[0].get("id__in", [])) == hit_ids
+
+
+async def test_retrieve_rollup_short_circuits_when_no_segments(service: MemoryService) -> None:
+    """No segment hits means no file fetch at all, not an empty full listing."""
+    await _seed(service)
+    repo = service._get_database().recall_file_repo
+    real_list = repo.list_recall_files
+    calls: list[dict[str, Any]] = []
+
+    def spying_list(where: Any = None) -> Any:
+        calls.append(where or {})
+        return real_list(where)
+
+    repo.list_recall_files = spying_list  # type: ignore[method-assign]
+    segment_repo = service._get_database().recall_file_segment_repo
+
+    def no_hits(query_vec: Any, top_k: int, where: Any = None) -> Any:
+        return []
+
+    segment_repo.vector_search_segments = no_hits  # type: ignore[method-assign]
+
+    await service.progressive_retrieve("nothing matches")
+    assert calls == []
+
+
 async def test_sqlite_resource_commit_sees_writes_from_another_instance(tmp_path: Any) -> None:
     """Two SQLiteStore instances on the same DB file share ground truth, matching
     PostgresResourceRepo's always-fresh reads: an unfiltered ``list_resources`` must
