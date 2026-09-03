@@ -491,6 +491,77 @@ def test_cursor_classify() -> None:
     assert source.classify(_line({"role": "system"})) is RecordKind.OTHER
 
 
+def _cursor_session(root: pathlib.Path, name: str, records: list[dict], mtime: float) -> pathlib.Path:
+    path = root / "project" / "agent-transcripts" / name / f"{name}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(_line(record) for record in records) + "\n", encoding="utf-8")
+    os.utime(path, (mtime, mtime))
+    return path
+
+
+def test_cursor_sanitize_unwraps_runtime_user_prompt_and_keeps_other_content(tmp_path: pathlib.Path) -> None:
+    source = CursorTranscriptSource()
+    wrapped = (
+        "<timestamp>Thursday, Aug 6, 2026, 6:01 PM (UTC+9)</timestamp>\n<user_query>\nremember this\n</user_query>"
+    )
+    text = {"type": "text", "text": wrapped, "futureBlockField": "preserved"}
+    record = {
+        "role": "user",
+        "message": {"content": [text, {"type": "tool_use", "name": "Shell", "input": {"command": "pwd"}}]},
+    }
+
+    assert json.loads(source.sanitize(tmp_path / "session.jsonl", _line(record))) == {
+        "role": "user",
+        "message": {
+            "content": [
+                {"type": "text", "text": "remember this", "futureBlockField": "preserved"},
+                {"type": "tool_use", "name": "Shell", "input": {"command": "pwd"}},
+            ]
+        },
+    }
+    nested_tag = {"role": "user", "message": {"content": [{"type": "text", "text": "explain <user_query>"}]}}
+    assistant = {"role": "assistant", "message": {"content": [{"type": "text", "text": wrapped}]}}
+    assert source.sanitize(tmp_path / "session.jsonl", _line(nested_tag)) == _line(nested_tag)
+    assert source.sanitize(tmp_path / "session.jsonl", _line(assistant)) == _line(assistant)
+    assert source.sanitize(tmp_path / "session.jsonl", "not json") == "not json"
+    assert source.sanitize(tmp_path / "session.jsonl", "[]") == "[]"
+
+
+def test_cursor_prepare_sanitizes_output_without_changing_cursor(tmp_path: pathlib.Path) -> None:
+    wrapped = (
+        "<timestamp>Thursday, Aug 6, 2026, 6:01 PM (UTC+9)</timestamp>\n<user_query>\nremember this\n</user_query>"
+    )
+    records = [
+        {"role": "user", "message": {"content": [{"type": "text", "text": wrapped}]}},
+        {
+            "role": "assistant",
+            "message": {"content": [{"type": "tool_use", "name": "Shell", "input": {"command": "pwd"}}]},
+        },
+    ]
+    session = _cursor_session(tmp_path, "session", records, 1000)
+    raw = session.read_text(encoding="utf-8")
+    out_dir = tmp_path / "out"
+    pending = tmp_path / "pending.json"
+
+    assert prepare_transcripts(CursorTranscriptSource(tmp_path), out_dir, tmp_path / "manifest.json", 10, pending) == 1
+
+    memory = [json.loads(line) for line in (out_dir / "1.jsonl").read_text(encoding="utf-8").splitlines()]
+    full = [json.loads(line) for line in (out_dir / "1_full.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert memory == [{"role": "user", "message": {"content": [{"type": "text", "text": "remember this"}]}}]
+    assert full == [
+        *memory,
+        {
+            "role": "assistant",
+            "message": {"content": [{"type": "tool_use", "name": "Shell", "input": {"command": "pwd"}}]},
+        },
+    ]
+    assert session.read_text(encoding="utf-8") == raw
+    assert json.loads(pending.read_text(encoding="utf-8"))[CursorTranscriptSource(tmp_path).key(session)] == {
+        "lines": 2,
+        "last_timestamp": None,
+    }
+
+
 def test_cursor_discovers_only_agent_transcripts(tmp_path: pathlib.Path) -> None:
     """The project dirs also hold canvases and terminal logs — those must not be mined."""
     transcript = tmp_path / "Users-a-proj" / "agent-transcripts" / "abc" / "abc.jsonl"

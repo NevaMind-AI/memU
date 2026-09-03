@@ -14,12 +14,20 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import ClassVar
 
 from memu.hosts.base import RecordKind, TranscriptSource
 
 SESSION_DIR = "~/.cursor/projects"
+
+# Cursor wraps the actual prompt in these runtime tags before writing it to the
+# Agent transcript. Strip only the outer wrappers: the body remains verbatim,
+# and other tags in the user's text remain forward-compatible.
+_USER_PROMPT_WRAPPER = re.compile(
+    r"^(?:<timestamp>.*?</timestamp>\s*)?<user_query>\s*(.*?)\s*</user_query>$", re.DOTALL
+)
 
 
 class CursorTranscriptSource(TranscriptSource):
@@ -40,6 +48,41 @@ class CursorTranscriptSource(TranscriptSource):
 
     def root(self) -> Path:
         return self._root
+
+    def sanitize(self, path: Path, record: str) -> str:
+        """Unwrap Cursor's runtime timestamp and user-query envelope."""
+        del path  # Required by the host seam; every Cursor session has this shape.
+        try:
+            entry = json.loads(record)
+        except json.JSONDecodeError:
+            return record
+        if not isinstance(entry, dict) or entry.get("role") != "user":
+            return record
+
+        message = entry.get("message")
+        if not isinstance(message, dict):
+            return record
+        content = message.get("content")
+        if not isinstance(content, list):
+            return record
+
+        changed = False
+        sanitized_content: list[object] = []
+        for block in content:
+            if not isinstance(block, dict) or block.get("type") != "text" or not isinstance(block.get("text"), str):
+                sanitized_content.append(block)
+                continue
+            match = _USER_PROMPT_WRAPPER.match(block["text"])
+            if match is None:
+                sanitized_content.append(block)
+                continue
+            sanitized_content.append({**block, "text": match.group(1)})
+            changed = True
+
+        if not changed:
+            return record
+        entry["message"] = {**message, "content": sanitized_content}
+        return json.dumps(entry, ensure_ascii=False)
 
     def discover(self) -> list[Path]:
         """Only ``agent-transcripts`` JSONL files — the project dirs also hold
