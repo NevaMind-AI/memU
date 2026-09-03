@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 import re
 from collections.abc import Mapping, Sequence
+from itertools import pairwise
 
 RRF_K = 60
 BM25_K1 = 1.5
@@ -39,7 +40,7 @@ def tokenize(text: str) -> list[str]:
             continue
         chars = list(token)
         out.extend(chars)
-        out.extend(a + b for a, b in zip(chars, chars[1:], strict=False))
+        out.extend(a + b for a, b in pairwise(chars))
     return out
 
 

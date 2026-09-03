@@ -22,12 +22,12 @@ def test_bm25_ranks_the_document_that_has_the_rare_term() -> None:
             ("keyword", "ECONNREFUSED 127.0.0.1:5432"),
         ],
     )
-    assert [doc_id for doc_id, _ in ranked][0] == "keyword"
+    assert next(doc_id for doc_id, _ in ranked) == "keyword"
 
 
 def test_cjk_query_hits_character_ngrams() -> None:
     ranked = bm25_rank("武汉", [("en", "hello world"), ("zh", "我在武汉大学")])
-    assert [doc_id for doc_id, _ in ranked][0] == "zh"
+    assert next(doc_id for doc_id, _ in ranked) == "zh"
 
 
 def test_rrf_prefers_the_doc_strong_in_both_lists() -> None:
