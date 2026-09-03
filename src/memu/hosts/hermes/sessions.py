@@ -49,7 +49,42 @@ def state_db_path() -> Path:
 
 _MESSAGE_ROLES = ("user", "assistant")
 
+# Hermes already projects SQLite rows to _ROW_COLUMNS. Keep that OpenAI-shaped
+# dialect forward-compatible by deleting only known runtime/provider replay
+# fields from the projected record and its serialized tool calls.
+_ROW_PRIVATE_FIELDS = frozenset({"timestamp"})
+_TOOL_CALL_PRIVATE_FIELDS = frozenset({"call_id", "response_item_id", "extra_content"})
+
 _ROW_COLUMNS = ("role", "content", "tool_call_id", "tool_calls", "tool_name", "timestamp")
+
+
+def _drop_known_fields(value: dict[object, object], fields: frozenset[str]) -> bool:
+    """Delete only known private fields; unknown fields are intentionally retained."""
+    changed = False
+    for field in fields:
+        if field in value:
+            del value[field]
+            changed = True
+    return changed
+
+
+def _sanitize_tool_calls(value: object) -> tuple[object, bool]:
+    tool_calls = value
+    if isinstance(value, str):
+        try:
+            tool_calls = json.loads(value)
+        except json.JSONDecodeError:
+            return value, False
+    if not isinstance(tool_calls, list):
+        return value, False
+
+    changed = False
+    for tool_call in tool_calls:
+        if isinstance(tool_call, dict):
+            changed |= _drop_known_fields(tool_call, _TOOL_CALL_PRIVATE_FIELDS)
+    if not changed:
+        return value, False
+    return (json.dumps(tool_calls, ensure_ascii=False) if isinstance(value, str) else tool_calls), True
 
 
 class HermesTranscriptSource(TranscriptSource):
@@ -117,6 +152,24 @@ class HermesTranscriptSource(TranscriptSource):
             )
             for row in rows
         ]
+
+    def sanitize(self, path: Path, record: str) -> str:
+        """Remove known runtime metadata from one projected SQLite row."""
+        del path  # Required by the host seam; every Hermes session has the same row shape.
+        try:
+            row = json.loads(record)
+        except json.JSONDecodeError:
+            return record
+        if not isinstance(row, dict):
+            return record
+
+        changed = _drop_known_fields(row, _ROW_PRIVATE_FIELDS)
+        tool_calls, tool_calls_changed = _sanitize_tool_calls(row.get("tool_calls"))
+        if tool_calls_changed:
+            row["tool_calls"] = tool_calls
+            changed = True
+
+        return json.dumps(row, ensure_ascii=False) if changed else record
 
     def classify(self, record: str) -> RecordKind:
         try:
