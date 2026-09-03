@@ -24,7 +24,6 @@ import asyncio
 import json
 import os
 import pathlib
-import shlex
 import sys
 import time
 from collections.abc import Callable, Coroutine
@@ -168,15 +167,12 @@ async def _cmd_commit(args: argparse.Namespace) -> int:
     return 0
 
 
-def _memorize_workspace(args: argparse.Namespace) -> MemorizeWorkspace:
-    return MemorizeWorkspace(pathlib.Path(args.workspace).expanduser())
+def _memorize_workspace() -> MemorizeWorkspace:
+    return MemorizeWorkspace(pathlib.Path(MEMORIZE_WORKSPACE).expanduser())
 
 
-def _memorize_commit_command(args: argparse.Namespace, workspace: MemorizeWorkspace) -> str:
-    command = "memu memorize commit"
-    if args.workspace != MEMORIZE_WORKSPACE:
-        command += f" --workspace {shlex.quote(str(workspace.base))}"
-    return command
+def _memorize_commit_command() -> str:
+    return "memu memorize commit"
 
 
 def _memorize_executor_prompt(prepared: PreparedMemorizeRun) -> str:
@@ -210,8 +206,8 @@ async def _cmd_memorize_prepare(args: argparse.Namespace) -> int:
             print(f"error: no such file: {path}", file=sys.stderr)
             return 2
     memorize_input = _read_memorize_input(args.payload)
-    workspace = _memorize_workspace(args)
-    verify_command = f"memu memorize verify-resources --workspace {shlex.quote(str(workspace.base))}"
+    workspace = _memorize_workspace()
+    verify_command = "memu memorize verify-resources"
     prepared = await prepare_memorize(
         memorize_input,
         workspace,
@@ -229,7 +225,7 @@ async def _cmd_memorize_prepare(args: argparse.Namespace) -> int:
             },
             "jobs": [str(path) for path in prepared.jobs],
             "executor_prompt": executor_prompt,
-            "next_command": _memorize_commit_command(args, workspace),
+            "next_command": _memorize_commit_command(),
         })
         return 0
 
@@ -239,12 +235,12 @@ async def _cmd_memorize_prepare(args: argparse.Namespace) -> int:
     print("run one external agent session with this prompt:")
     print(executor_prompt)
     print("after the agent reports success, run:")
-    print(f"  {_memorize_commit_command(args, workspace)}")
+    print(f"  {_memorize_commit_command()}")
     return 0
 
 
 async def _cmd_memorize_commit(args: argparse.Namespace) -> int:
-    result = await commit_memorize(_memorize_workspace(args), _build_backend(args))
+    result = await commit_memorize(_memorize_workspace(), _build_backend(args))
     if args.json:
         _print_json(result)
         return 0
@@ -258,18 +254,10 @@ async def _cmd_memorize_commit(args: argparse.Namespace) -> int:
 
 
 async def _cmd_memorize_verify_resources(args: argparse.Namespace) -> int:
-    workspace = _memorize_workspace(args)
+    workspace = _memorize_workspace()
     kept = verify_resource_log(workspace.resource_log, workspace.resources)
     print(f"verified {kept} resource(s)")
     return 0
-
-
-def _add_memorize_workspace(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--workspace",
-        default=MEMORIZE_WORKSPACE,
-        help=f"Developer self-evolve workspace (default: {MEMORIZE_WORKSPACE})",
-    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -311,12 +299,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = memorize_actions.add_parser("prepare", help="Prepare self-evolve jobs from one conversation session")
     p.add_argument("payload", help='MemorizeInput JSON file, or "-" for stdin')
-    _add_memorize_workspace(p)
     _add_common_options(p)
     p.set_defaults(handler=_cmd_memorize_prepare)
 
     p = memorize_actions.add_parser("commit", help="Commit the active self-evolve run")
-    _add_memorize_workspace(p)
     _add_common_options(p)
     p.set_defaults(handler=_cmd_memorize_commit)
 
@@ -324,7 +310,6 @@ def build_parser() -> argparse.ArgumentParser:
         "verify-resources",
         help="Internal: verify files logged by generated skill jobs",
     )
-    _add_memorize_workspace(p)
     p.set_defaults(handler=_cmd_memorize_verify_resources)
 
     return parser
