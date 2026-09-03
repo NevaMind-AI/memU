@@ -28,19 +28,31 @@ def cosine_topk(
     if k <= 0:
         return []
 
-    # Filter out None vectors and collect valid entries
+    q = np.asarray(query_vec, dtype=np.float32)
+    if q.ndim != 1 or q.size == 0:
+        return []
+    dim = q.size
+
+    # Filter out None, empty, or wrong-dimension vectors. An empty list is not
+    # a vector, and a dimension mismatch would make np.array() fall back to an
+    # object matrix (then the matrix product below crashes or, worse, silently
+    # mis-scores). Callers already disagree on whether ``[]`` means "unembedded"
+    # (segments skip only ``None``; resources skip only falsy), so treat both
+    # the same way here: unusable rows never enter the ranking.
     ids: list[str] = []
     vecs: list[list[float]] = []
     for _id, vec in corpus:
-        if vec is not None:
-            ids.append(_id)
-            vecs.append(cast(list[float], vec))
+        if vec is None:
+            continue
+        if len(vec) != dim:
+            continue
+        ids.append(_id)
+        vecs.append(cast(list[float], vec))
 
     if not vecs:
         return []
 
     # Vectorized computation: stack all vectors into a matrix
-    q = np.array(query_vec, dtype=np.float32)
     matrix = np.array(vecs, dtype=np.float32)  # shape: (n, dim)
 
     # Compute all cosine similarities at once
