@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import json
-import shlex
 from pathlib import Path
 from typing import Any
 
@@ -39,15 +38,18 @@ def test_parser_covers_memorize_actions() -> None:
     ):
         assert callable(parser.parse_args(argv).handler)
 
+    with pytest.raises(SystemExit):
+        parser.parse_args(["memorize", "commit", "--workspace", "custom"])
 
-def test_prepare_reads_file_and_prints_agent_handoff(
+
+def test_prepare_uses_fixed_workspace_and_prints_agent_handoff(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     payload = tmp_path / "input.json"
     payload.write_text(json.dumps(_payload()), encoding="utf-8")
-    workspace = tmp_path / "developer workspace"
+    workspace = tmp_path / "developer"
     backend = object()
     received: dict[str, Any] = {}
 
@@ -60,15 +62,16 @@ def test_prepare_reads_file_and_prints_agent_handoff(
         })
         return _prepared(prepared_workspace)
 
+    monkeypatch.setattr(cli, "MEMORIZE_WORKSPACE", str(workspace))
     monkeypatch.setattr(cli, "_build_backend", lambda _args: backend)
     monkeypatch.setattr(cli, "prepare_memorize", fake_prepare)
 
-    assert cli.main(["memorize", "prepare", str(payload), "--workspace", str(workspace)]) == 0
+    assert cli.main(["memorize", "prepare", str(payload)]) == 0
 
     assert received["input"].items[0].content == "Remember this"
     assert received["workspace"].base == workspace
     assert received["backend"] is backend
-    assert received["verify_command"] == f"memu memorize verify-resources --workspace '{workspace}'"
+    assert received["verify_command"] == "memu memorize verify-resources"
     output = capsys.readouterr().out
     assert "prepared developer session" in output
     assert "3 job(s)" in output
@@ -79,7 +82,7 @@ def test_prepare_reads_file_and_prints_agent_handoff(
     assert "Do not parallelize, skip, or reorder jobs" in output
     assert "Do not run `memu memorize commit`" in output
     assert "after the agent reports success, run:" in output
-    assert f"memu memorize commit --workspace '{workspace}'" in output
+    assert "memu memorize commit" in output
 
 
 def test_prepare_reads_stdin_and_prints_machine_handoff(
@@ -93,10 +96,11 @@ def test_prepare_reads_stdin_and_prints_machine_handoff(
         return _prepared(prepared_workspace, ("1.txt",))
 
     monkeypatch.setattr(cli.sys, "stdin", io.StringIO(json.dumps(_payload())))
+    monkeypatch.setattr(cli, "MEMORIZE_WORKSPACE", str(workspace))
     monkeypatch.setattr(cli, "_build_backend", lambda _args: object())
     monkeypatch.setattr(cli, "prepare_memorize", fake_prepare)
 
-    assert cli.main(["memorize", "prepare", "-", "--workspace", str(workspace), "--json"]) == 0
+    assert cli.main(["memorize", "prepare", "-", "--json"]) == 0
 
     output = json.loads(capsys.readouterr().out)
     assert output == {
@@ -114,7 +118,7 @@ def test_prepare_reads_stdin_and_prints_machine_handoff(
             "If any job fails, stop and report failure. Do not run `memu memorize commit`. "
             "Report success only after every job has completed."
         ),
-        "next_command": f"memu memorize commit --workspace {shlex.quote(str(workspace))}",
+        "next_command": "memu memorize commit",
     }
 
 
@@ -159,7 +163,7 @@ def test_prepare_invalid_input_reports_validation_error(
     assert "at least 1 item" in capsys.readouterr().err
 
 
-def test_commit_uses_selected_backend_and_workspace(
+def test_commit_uses_selected_backend_and_fixed_workspace(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -175,17 +179,18 @@ def test_commit_uses_selected_backend_and_workspace(
             "resources": [{"url": "/workspace/notes.md"}],
         }
 
+    monkeypatch.setattr(cli, "MEMORIZE_WORKSPACE", str(workspace))
     monkeypatch.setattr(cli, "_build_backend", lambda _args: backend)
     monkeypatch.setattr(cli, "commit_memorize", fake_commit)
 
-    assert cli.main(["memorize", "commit", "--workspace", str(workspace)]) == 0
+    assert cli.main(["memorize", "commit"]) == 0
     assert received == {"workspace": cli.MemorizeWorkspace(workspace), "backend": backend}
     output = capsys.readouterr().out
     assert "committed 1 recall file(s) and 1 resource(s)" in output
     assert "memory/profile" in output
 
 
-def test_verify_resources_uses_workspace_without_backend(
+def test_verify_resources_uses_fixed_workspace_without_backend(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -198,9 +203,10 @@ def test_verify_resources_uses_workspace_without_backend(
         received = (log, resources)
         return 2
 
+    monkeypatch.setattr(cli, "MEMORIZE_WORKSPACE", str(workspace))
     monkeypatch.setattr(cli, "verify_resource_log", fake_verify)
     monkeypatch.setattr(cli, "_build_backend", lambda _args: pytest.fail("verifier must not build a backend"))
 
-    assert cli.main(["memorize", "verify-resources", "--workspace", str(workspace)]) == 0
+    assert cli.main(["memorize", "verify-resources"]) == 0
     assert received == (workspace / ".resource.tmp", workspace / "resources.md")
     assert "verified 2 resource(s)" in capsys.readouterr().out
