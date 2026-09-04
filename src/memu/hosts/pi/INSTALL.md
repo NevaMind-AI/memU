@@ -53,13 +53,10 @@ The command must exit cleanly. Zero retrieval hits is normal for a new store.
 
 ## Part 2 — Register the record bridge
 
-By default pi stores v3 JSONL sessions below `~/.pi/agent/sessions`. The adapter
-keeps user and assistant text, routes tool calls and results to the full
-transcript, and ignores session, compaction, model, and thinking metadata.
-
-If `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`, or `settings.json` moves
-the session directory, pass the final directory to `memu-pi prepare
---session-dir <dir>` and use the same explicit path in the scheduled prompt.
+Pi stores v3 JSONL sessions below `~/.pi/agent/sessions`. The adapter keeps
+user and assistant text, routes tool calls and results to the full transcript,
+and ignores session, compaction, model, and thinking metadata. The scheduled
+bridge only supports this default layout.
 
 **Refresh an existing bridging registration before continuing.** Check cron or
 launchd for `hosts/pi/bridge\.sh|memU bridging pipeline`, or Task Scheduler for
@@ -85,8 +82,7 @@ It must report a session count. Zero is correct when no new turns exist.
 
 Pi loads one global context file from its agent directory. Normally that is
 `~/.pi/agent/AGENTS.md`; if `AGENTS.override.md` already exists there, it takes
-precedence, so target that file instead. A custom `PI_CODING_AGENT_DIR` moves
-both the instruction and skills directories.
+precedence, so target that file instead.
 
 Default installation:
 

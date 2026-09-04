@@ -113,6 +113,9 @@ def test_install_invokes_path_resolvable_command_for_npm_cmd_shim(
     assert f"$env:Path = '{bin_dir};' + $env:Path" in wrapper
     assert str(cmd_shim) not in wrapper
     assert str(ps_shim) not in wrapper
+    scheduled = (layout.base / windows.PROMPT_NAME).read_text(encoding="utf-8")
+    assert "memu-pi prepare" in scheduled
+    assert "--session-dir" not in scheduled
 
 
 def test_register_script_is_canonical_and_hardened() -> None:
@@ -333,6 +336,20 @@ def test_hermes_scheduled_prompt_bakes_in_its_session_store() -> None:
     )
     assert "memu-hermes prepare --session-dir 'C:/Hermes Home/state.db'" in scheduled
     assert "--session-dir" not in prompt.bridging_pipeline_prompt(CLAUDE)
+
+
+def test_pi_scheduler_does_not_copy_claude_auth_or_hermes_session_bake() -> None:
+    # Interactive `pi` and scheduled `pi -p` are the same CLI. Credentials live
+    # in ~/.pi/agent/auth.json (or a persistent env), so there is no separate
+    # headless login for memU to probe — unlike Claude Code, whose desktop login
+    # is invisible to standalone `claude`. Sessions live at the default
+    # ~/.pi/agent/sessions; unlike Hermes, that path does not move with a runtime
+    # home the S4U task would fail to inherit, so scheduled prepare must not bake
+    # an install-time --session-dir.
+    assert PI.needs_headless_auth is False
+    assert PI.auth_hint == ""
+    assert PI.schedule_prepare_session_dir is False
+    assert "--session-dir" not in prompt.bridging_pipeline_prompt(PI)
 
 
 def test_cursor_template_carries_the_trust_flag_everywhere() -> None:

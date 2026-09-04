@@ -23,10 +23,7 @@ SPEC = HostSpec(
     skills_dir=SKILLS_DIR,
     schedule_backend="os",
     schedule_command="pi -p {prompt}",
-    schedule_prepare_session_dir=True,
     session_id_env="PI_SESSION_ID",
-    needs_headless_auth=True,
-    auth_hint="    authenticate pi with /login or persist the API key used by its selected provider",
 )
 
 
