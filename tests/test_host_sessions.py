@@ -8,6 +8,7 @@ these tests localize the break to.
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import pathlib
@@ -198,6 +199,22 @@ def test_pi_prepare_sanitizes_output_without_changing_source_or_cursor(tmp_path:
             "last_timestamp": "2026-09-02T12:00:00Z",
         }
     }
+
+
+def test_pi_session_dirs_ignore_process_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    # Manual prepare and the later cron/S4U prepare must share one store. Reading
+    # PI_CODING_AGENT_DIR / PI_CODING_AGENT_SESSION_DIR would make the install-time
+    # process see a custom directory the scheduled task does not inherit.
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "custom-pi"))
+    monkeypatch.setenv("PI_CODING_AGENT_SESSION_DIR", str(tmp_path / "custom-sessions"))
+    from memu.hosts.pi import sessions as pi_sessions
+
+    importlib.reload(pi_sessions)
+    assert pi_sessions.AGENT_DIR == "~/.pi/agent"
+    assert pi_sessions.SESSION_DIR == "~/.pi/agent/sessions"
+    assert pi_sessions.PiTranscriptSource().root() == pathlib.Path("~/.pi/agent/sessions").expanduser()
 
 
 # ── Cola ──────────────────────────────────────────────────────────────────────

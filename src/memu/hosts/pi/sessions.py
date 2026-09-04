@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import ClassVar
 
 from memu.hosts.base import RecordKind, TranscriptSource
 
-AGENT_DIR = os.environ.get("PI_CODING_AGENT_DIR", "~/.pi/agent")
-SESSION_DIR = os.environ.get("PI_CODING_AGENT_SESSION_DIR", f"{AGENT_DIR}/sessions")
+AGENT_DIR = "~/.pi/agent"
+SESSION_DIR = "~/.pi/agent/sessions"
 
 # Delete-only: unknown record, message, and content-block fields are preserved.
 _RECORD_PRIVATE_FIELDS = frozenset({"id", "parentId", "timestamp"})
@@ -44,7 +43,7 @@ class PiTranscriptSource(TranscriptSource):
     name: ClassVar[str] = "pi"
 
     def __init__(self, session_dir: str | Path = SESSION_DIR) -> None:
-        self._root = Path(os.path.expanduser(str(session_dir)))
+        self._root = Path(session_dir).expanduser()
 
     def root(self) -> Path:
         return self._root
