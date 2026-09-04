@@ -42,6 +42,7 @@ from memu.env import build_agentic_memory_backend_from_env, embedding_provider, 
 from memu.hosts.bridging.resources import verify_resource_log
 
 MEMORIZE_WORKSPACE = "~/.memu/developer"
+MAX_MEMORIZE_SESSIONS = 10
 
 
 def _env(name: str, default: str) -> str:
@@ -200,16 +201,22 @@ def _read_memorize_input(payload: str) -> MemorizeInput:
 
 
 async def _cmd_memorize_prepare(args: argparse.Namespace) -> int:
-    if args.payload != "-":
-        path = pathlib.Path(args.payload).expanduser()
-        if not path.exists():
-            print(f"error: no such file: {path}", file=sys.stderr)
+    payloads: list[str] = args.payloads
+    if len(payloads) > MAX_MEMORIZE_SESSIONS:
+        print(f"error: at most {MAX_MEMORIZE_SESSIONS} payload files are allowed", file=sys.stderr)
+        return 2
+    if "-" in payloads and len(payloads) != 1:
+        print("error: stdin payload cannot be combined with files", file=sys.stderr)
+        return 2
+    for payload in payloads:
+        if payload != "-" and not pathlib.Path(payload).expanduser().exists():
+            print(f"error: no such file: {pathlib.Path(payload).expanduser()}", file=sys.stderr)
             return 2
-    memorize_input = _read_memorize_input(args.payload)
+    memorize_inputs = [_read_memorize_input(payload) for payload in payloads]
     workspace = _memorize_workspace()
     verify_command = "memu memorize verify-resources"
     prepared = await prepare_memorize(
-        memorize_input,
+        memorize_inputs,
         workspace,
         _build_backend(args),
         verify_command=verify_command,
@@ -217,16 +224,18 @@ async def _cmd_memorize_prepare(args: argparse.Namespace) -> int:
 
     executor_prompt = _memorize_executor_prompt(prepared)
     if args.json:
-        _print_json({
+        response: dict[str, Any] = {
             "workspace": str(workspace.base),
-            "transcript": {
-                "memory_path": str(prepared.transcript.memory_path),
-                "skill_path": str(prepared.transcript.skill_path),
-            },
             "jobs": [str(path) for path in prepared.jobs],
             "executor_prompt": executor_prompt,
             "next_command": _memorize_commit_command(),
-        })
+        }
+        transcripts = [
+            {"memory_path": str(item.memory_path), "skill_path": str(item.skill_path)}
+            for item in prepared.transcripts
+        ]
+        response["transcript" if len(transcripts) == 1 else "transcripts"] = transcripts[0] if len(transcripts) == 1 else transcripts
+        _print_json(response)
         return 0
 
     print("prepared developer session")
@@ -297,8 +306,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     memorize_actions = memorize.add_subparsers(dest="memorize_action", required=True)
 
-    p = memorize_actions.add_parser("prepare", help="Prepare self-evolve jobs from one conversation session")
-    p.add_argument("payload", help='MemorizeInput JSON file, or "-" for stdin')
+    p = memorize_actions.add_parser("prepare", help="Prepare self-evolve jobs from 1–10 conversation sessions")
+    p.add_argument("payloads", nargs="+", help='1–10 MemorizeInput JSON files, or "-" for stdin')
     _add_common_options(p)
     p.set_defaults(handler=_cmd_memorize_prepare)
 

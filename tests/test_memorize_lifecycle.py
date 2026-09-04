@@ -90,6 +90,23 @@ async def test_prepare_mirrors_all_pages_and_returns_ordered_jobs(tmp_path: Path
     assert workspace.active_run.read_text(encoding="utf-8") == '{"schema_version":"1.0"}\n'
 
 
+async def test_prepare_batch_materializes_sessions_and_orders_jobs(tmp_path: Path) -> None:
+    workspace = MemorizeWorkspace(tmp_path / "workspace")
+
+    prepared = await prepare_memorize([_input("First"), _input("Second")], workspace, FakeBackend(), verify_command="memu verify")
+
+    assert [path.name for path in prepared.jobs] == ["1.txt", "2.txt", "3.txt", "4.txt", "5.txt"]
+    assert (workspace.input / "1.jsonl").is_file()
+    assert (workspace.input / "2.jsonl").is_file()
+    assert (workspace.input / "1_full.jsonl").is_file()
+    assert (workspace.input / "2_full.jsonl").is_file()
+    assert str(workspace.input / "1.jsonl") in prepared.jobs[0].read_text(encoding="utf-8")
+    assert str(workspace.input / "2.jsonl") in prepared.jobs[1].read_text(encoding="utf-8")
+    assert str(workspace.input / "1_full.jsonl") in prepared.jobs[2].read_text(encoding="utf-8")
+    assert str(workspace.input / "2_full.jsonl") in prepared.jobs[3].read_text(encoding="utf-8")
+    assert "memu verify" in prepared.jobs[4].read_text(encoding="utf-8")
+
+
 async def test_commit_submits_only_changed_recall_files_and_resources(tmp_path: Path) -> None:
     backend = FakeBackend([
         [{"name": "profile", "track": "memory", "description": "user profile", "content": "likes tea"}],
