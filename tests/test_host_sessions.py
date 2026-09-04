@@ -201,9 +201,7 @@ def test_pi_prepare_sanitizes_output_without_changing_source_or_cursor(tmp_path:
     }
 
 
-def test_pi_session_dirs_ignore_process_environment(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
-) -> None:
+def test_pi_session_dirs_ignore_process_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
     # Manual prepare and the later cron/S4U prepare must share one store. Reading
     # PI_CODING_AGENT_DIR / PI_CODING_AGENT_SESSION_DIR would make the install-time
     # process see a custom directory the scheduled task does not inherit.
