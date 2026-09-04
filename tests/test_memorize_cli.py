@@ -21,10 +21,12 @@ def _payload() -> dict[str, Any]:
 
 def _prepared(workspace: Any, jobs: tuple[str, ...] = ("1.txt", "2.txt", "3.txt")) -> PreparedMemorizeRun:
     return PreparedMemorizeRun(
-        transcripts=[MaterializedConversation(
-            memory_path=workspace.input / "1.jsonl",
-            skill_path=workspace.input / "1_full.jsonl",
-        )],
+        transcripts=[
+            MaterializedConversation(
+                memory_path=workspace.input / "1.jsonl",
+                skill_path=workspace.input / "1_full.jsonl",
+            )
+        ],
         jobs=[workspace.jobs / name for name in jobs],
     )
 
@@ -125,7 +127,10 @@ def test_prepare_reads_stdin_and_prints_machine_handoff(
 def test_prepare_multiple_files_passes_all_sessions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     payloads = [tmp_path / f"{index}.json" for index in range(2)]
     for index, payload in enumerate(payloads):
-        payload.write_text(json.dumps(_payload() | {"items": [{"type": "message", "role": "user", "content": str(index)}]}), encoding="utf-8")
+        payload.write_text(
+            json.dumps(_payload() | {"items": [{"type": "message", "role": "user", "content": str(index)}]}),
+            encoding="utf-8",
+        )
     received: dict[str, Any] = {}
 
     async def fake_prepare(inputs: Any, workspace: Any, _backend: Any, **_kwargs: Any) -> Any:

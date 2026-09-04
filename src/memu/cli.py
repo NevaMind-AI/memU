@@ -231,10 +231,11 @@ async def _cmd_memorize_prepare(args: argparse.Namespace) -> int:
             "next_command": _memorize_commit_command(),
         }
         transcripts = [
-            {"memory_path": str(item.memory_path), "skill_path": str(item.skill_path)}
-            for item in prepared.transcripts
+            {"memory_path": str(item.memory_path), "skill_path": str(item.skill_path)} for item in prepared.transcripts
         ]
-        response["transcript" if len(transcripts) == 1 else "transcripts"] = transcripts[0] if len(transcripts) == 1 else transcripts
+        response["transcript" if len(transcripts) == 1 else "transcripts"] = (
+            transcripts[0] if len(transcripts) == 1 else transcripts
+        )
         _print_json(response)
         return 0
 

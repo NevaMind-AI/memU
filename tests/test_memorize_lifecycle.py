@@ -93,7 +93,9 @@ async def test_prepare_mirrors_all_pages_and_returns_ordered_jobs(tmp_path: Path
 async def test_prepare_batch_materializes_sessions_and_orders_jobs(tmp_path: Path) -> None:
     workspace = MemorizeWorkspace(tmp_path / "workspace")
 
-    prepared = await prepare_memorize([_input("First"), _input("Second")], workspace, FakeBackend(), verify_command="memu verify")
+    prepared = await prepare_memorize(
+        [_input("First"), _input("Second")], workspace, FakeBackend(), verify_command="memu verify"
+    )
 
     assert [path.name for path in prepared.jobs] == ["1.txt", "2.txt", "3.txt", "4.txt", "5.txt"]
     assert (workspace.input / "1.jsonl").is_file()
