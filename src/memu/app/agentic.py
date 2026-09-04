@@ -275,8 +275,19 @@ class AgenticMixin:
 
         Every file pointed to by a top segment is returned; a file's score is the
         max score across the segments that point to it.
+
+        Only the files named by ``segment_hits`` are fetched (``id__in``): the
+        pool exists solely so :meth:`_materialize_hits` can expand hit ids, so
+        pulling the whole scoped corpus to look up a handful of ids is wasted
+        work on every retrieve. An empty hit set returns immediately without a
+        listing.
         """
-        file_pool = store.recall_file_repo.list_recall_files(where_filters)
+        hit_file_ids = {
+            seg.recall_file_id for seg_id, _ in segment_hits if (seg := segment_pool.get(seg_id)) is not None
+        }
+        if not hit_file_ids:
+            return [], {}
+        file_pool = store.recall_file_repo.list_recall_files({**where_filters, "id__in": list(hit_file_ids)})
 
         file_scores: dict[str, float] = {}
         for seg_id, score in segment_hits:
