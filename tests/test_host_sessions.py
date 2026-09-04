@@ -1,6 +1,6 @@
 """Each host's record seam: does classify() slice its log the way that host writes it?
 
-One test module per invariant class, five hosts. The fixtures are hand-written
+The fixtures are hand-written
 records in each host's real on-disk shape (see the session-location table in ADR
 0010); if a host changes its log format, the fixture — not the pipeline — is what
 these tests localize the break to.
@@ -8,6 +8,7 @@ these tests localize the break to.
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import pathlib
@@ -23,11 +24,195 @@ from memu.hosts.cola.sessions import ColaTranscriptSource
 from memu.hosts.cursor.sessions import CursorTranscriptSource
 from memu.hosts.hermes.sessions import HermesTranscriptSource, state_db_path
 from memu.hosts.openclaw.sessions import OpenClawTranscriptSource
+from memu.hosts.pi.sessions import PiTranscriptSource
 from memu.hosts.workbuddy.sessions import WorkBuddyTranscriptSource
 
 
 def _line(entry: dict) -> str:
     return json.dumps(entry)
+
+
+# ── pi ────────────────────────────────────────────────────────────────────────
+
+
+def test_pi_classifies_conversation_and_tool_rows() -> None:
+    source = PiTranscriptSource()
+    user = {"type": "message", "message": {"role": "user", "content": [{"type": "text", "text": "hi"}]}}
+    narrated_tool = {
+        "type": "message",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "text", "text": "Running it."}, {"type": "toolCall", "name": "bash"}],
+        },
+    }
+    tool_call = {
+        "type": "message",
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "thinking", "thinking": "hmm"}, {"type": "toolCall", "name": "bash"}],
+        },
+    }
+    tool_result = {"type": "message", "message": {"role": "toolResult", "content": []}}
+    bash_execution = {"type": "message", "message": {"role": "bashExecution", "command": "pwd"}}
+
+    assert source.classify(_line(user)) is RecordKind.MESSAGE
+    assert source.classify(_line(narrated_tool)) is RecordKind.MESSAGE
+    assert source.classify(_line(tool_call)) is RecordKind.TOOL
+    assert source.classify(_line(tool_result)) is RecordKind.TOOL
+    assert source.classify(_line(bash_execution)) is RecordKind.TOOL
+
+
+def test_pi_drops_v3_metadata_and_thinking_only_rows() -> None:
+    source = PiTranscriptSource()
+    assert source.classify(_line({"type": "session", "version": 3, "id": "s", "cwd": "/workspace"})) is RecordKind.OTHER
+    assert source.classify(_line({"type": "compaction", "summary": "old work"})) is RecordKind.OTHER
+    assert (
+        source.classify(_line({"type": "message", "message": {"role": "assistant", "content": [{"type": "thinking"}]}}))
+        is RecordKind.OTHER
+    )
+    assert source.classify("not json") is RecordKind.OTHER
+
+
+def test_pi_discovers_sessions_across_encoded_working_directories(tmp_path: pathlib.Path) -> None:
+    older = tmp_path / "--Users-a-one--" / "older.jsonl"
+    newer = tmp_path / "--Users-a-two--" / "newer.jsonl"
+    older.parent.mkdir()
+    newer.parent.mkdir()
+    older.write_text("{}\n", encoding="utf-8")
+    newer.write_text("{}\n", encoding="utf-8")
+    os.utime(older, (1, 1))
+    os.utime(newer, (2, 2))
+    assert PiTranscriptSource(tmp_path).discover() == [newer, older]
+
+
+def test_pi_session_id_matches_the_exported_uuid(tmp_path: pathlib.Path) -> None:
+    source = PiTranscriptSource(tmp_path)
+    transcript = tmp_path / "2026-09-02T10-31-41-043Z_01a061ac-aaf3-7f05-a295-d95115fef655.jsonl"
+
+    assert source.session_id(transcript) == "01a061ac-aaf3-7f05-a295-d95115fef655"
+
+
+def test_pi_sanitize_removes_runtime_fields_and_preserves_content(tmp_path: pathlib.Path) -> None:
+    source = PiTranscriptSource(tmp_path)
+    assistant = {
+        "id": "record-id",
+        "parentId": "parent-id",
+        "timestamp": "2026-09-02T12:00:00Z",
+        "type": "message",
+        "futureRecordField": "preserved",
+        "message": {
+            "role": "assistant",
+            "api": "private-api",
+            "provider": "private-provider",
+            "model": "private-model",
+            "usage": {"input": 1},
+            "stopReason": "error",
+            "rawStopReason": "private-reason",
+            "responseId": "private-response",
+            "timestamp": 1788350400000,
+            "errorMessage": "private-error",
+            "futureMessageField": "preserved",
+            "content": [
+                {
+                    "type": "thinking",
+                    "thinking": "reasoning",
+                    "thinkingSignature": "private-signature",
+                    "futureBlockField": "preserved",
+                },
+                {"type": "text", "text": "answer"},
+            ],
+        },
+    }
+    tool_result = {
+        "id": "result-id",
+        "parentId": "record-id",
+        "timestamp": "2026-09-02T12:00:01Z",
+        "type": "message",
+        "message": {
+            "role": "toolResult",
+            "timestamp": 1788350401000,
+            "toolCallId": "call-id",
+            "toolName": "read",
+            "details": {"private": True},
+            "isError": False,
+            "content": [{"type": "text", "text": "result"}],
+        },
+    }
+
+    assert json.loads(source.sanitize(tmp_path / "session.jsonl", _line(assistant))) == {
+        "type": "message",
+        "futureRecordField": "preserved",
+        "message": {
+            "role": "assistant",
+            "futureMessageField": "preserved",
+            "content": [
+                {"type": "thinking", "thinking": "reasoning", "futureBlockField": "preserved"},
+                {"type": "text", "text": "answer"},
+            ],
+        },
+    }
+    assert json.loads(source.sanitize(tmp_path / "session.jsonl", _line(tool_result))) == {
+        "type": "message",
+        "message": {
+            "role": "toolResult",
+            "toolCallId": "call-id",
+            "toolName": "read",
+            "isError": False,
+            "content": [{"type": "text", "text": "result"}],
+        },
+    }
+
+
+def test_pi_prepare_sanitizes_output_without_changing_source_or_cursor(tmp_path: pathlib.Path) -> None:
+    root = tmp_path / "sessions"
+    session = root / "--workspace--" / "2026-09-02T12-00-00-000Z_session-id.jsonl"
+    session.parent.mkdir(parents=True)
+    record = {
+        "id": "record-id",
+        "parentId": "parent-id",
+        "timestamp": "2026-09-02T12:00:00Z",
+        "type": "message",
+        "message": {
+            "role": "assistant",
+            "provider": "private-provider",
+            "usage": {"input": 1},
+            "content": [{"type": "text", "text": "answer"}],
+        },
+    }
+    raw = _line(record) + "\n"
+    session.write_text(raw, encoding="utf-8")
+
+    out = tmp_path / "prepared"
+    pending = tmp_path / "manifest.json.pending"
+    assert prepare_transcripts(PiTranscriptSource(root), out, tmp_path / "manifest.json", 10, pending) == 1
+
+    expected = {
+        "type": "message",
+        "message": {"role": "assistant", "content": [{"type": "text", "text": "answer"}]},
+    }
+    assert json.loads((out / "1.jsonl").read_text(encoding="utf-8")) == expected
+    assert json.loads((out / "1_full.jsonl").read_text(encoding="utf-8")) == expected
+    assert session.read_text(encoding="utf-8") == raw
+    assert json.loads(pending.read_text(encoding="utf-8")) == {
+        "--workspace--/2026-09-02T12-00-00-000Z_session-id.jsonl": {
+            "lines": 1,
+            "last_timestamp": "2026-09-02T12:00:00Z",
+        }
+    }
+
+
+def test_pi_session_dirs_ignore_process_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    # Manual prepare and the later cron/S4U prepare must share one store. Reading
+    # PI_CODING_AGENT_DIR / PI_CODING_AGENT_SESSION_DIR would make the install-time
+    # process see a custom directory the scheduled task does not inherit.
+    monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "custom-pi"))
+    monkeypatch.setenv("PI_CODING_AGENT_SESSION_DIR", str(tmp_path / "custom-sessions"))
+    from memu.hosts.pi import sessions as pi_sessions
+
+    importlib.reload(pi_sessions)
+    assert pi_sessions.AGENT_DIR == "~/.pi/agent"
+    assert pi_sessions.SESSION_DIR == "~/.pi/agent/sessions"
+    assert pi_sessions.PiTranscriptSource().root() == pathlib.Path("~/.pi/agent/sessions").expanduser()
 
 
 # ── Cola ──────────────────────────────────────────────────────────────────────

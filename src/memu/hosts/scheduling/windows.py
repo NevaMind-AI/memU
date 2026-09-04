@@ -105,9 +105,9 @@ def wrapper_script(
     """The PowerShell wrapper the scheduled task runs.
 
     It re-establishes ``PATH`` (Task Scheduler does not inherit the interactive
-    shell's), reads the prompt from a file, and runs the agent. Absolute paths are
-    baked in at install time — the #530 "the scheduler's PATH is not your shell's"
-    capture, ported to Windows.
+    shell's), reads the prompt from a file, and runs the agent. Required search
+    paths are baked in at install time — the #530 "the scheduler's PATH is not
+    your shell's" capture, ported to Windows.
     """
     path_prefix = ";".join(path_dirs)
     return "\n".join([
@@ -294,6 +294,7 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
             file=sys.stderr,
         )
         return 1
+    scheduled_agent_path = _agent_binary(spec)
     layout.base.mkdir(parents=True, exist_ok=True)
     if (rc := _auth_gate(spec, agent_path, layout.base)) != 0:
         return rc
@@ -321,7 +322,8 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
     # unless it sees a BOM, which would mangle a non-ASCII path (e.g. a CJK username)
     # baked into the wrapper. The BOM makes both 5.1 and 7 decode it as UTF-8.
     wrapper.write_text(
-        wrapper_script(agent_path, spec.schedule_command, prompt_file, log_file, path_dirs), encoding="utf-8-sig"
+        wrapper_script(scheduled_agent_path, spec.schedule_command, prompt_file, log_file, path_dirs),
+        encoding="utf-8-sig",
     )
 
     proc = _run_powershell(register_script(spec.task_name, wrapper, interval_minutes, layout.base))
@@ -338,7 +340,7 @@ def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_I
     )
     print(f"registered '{spec.task_name}' — runs every {interval_minutes} min, hidden, catches up if missed")
     print(f"  wrapper: {wrapper}")
-    print(f"  verify it can actually run:  {spec.binary} schedule verify")
+    print(f"  check registration and current-process headless auth:  {spec.binary} schedule verify")
     return 0
 
 
@@ -392,7 +394,7 @@ def status(spec: HostSpec, layout: Layout) -> int:
 
 
 def verify(spec: HostSpec, layout: Layout) -> int:
-    """Prove one task is registered and its agent CLI can run headless.
+    """Check registration and a headless agent run from the current process.
 
     Deliberately does not trigger a full pipeline run (that would memorize real
     sessions as a side effect); it checks the things that silently break the
@@ -431,7 +433,9 @@ def verify(spec: HostSpec, layout: Layout) -> int:
     if spec.needs_headless_auth:
         print("  its headless-auth probe also passed; credentials must remain persistent for the S4U run")
     print(
-        "  after the next scheduled run, confirm it did work by traces, not its summary:\n"
+        "  this does NOT run the S4U task; trigger the registered task and confirm it by traces:\n"
+        f"    - {layout.base / LOG_NAME} grew,\n"
+        "    - the host created a new session,\n"
         f"    - {layout.jobs} timestamps advanced, and\n"
         f"    - {layout.session_manifest} moved"
     )
