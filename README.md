@@ -116,7 +116,7 @@ By default, uninstalling removes the host integration and tooling while keeping 
 memU runs as a sidecar to a desktop agent, one binary per host. Each binds two seams:
 
 - **record** — a scheduled bridging task slices new session logs into self-contained job files; the agent itself distills them into memory/skill Markdown; `commit` submits whatever the agent left on disk back through `commit_results`.
-- **inject** — a standing instruction in the host's instruction file tells the agent to run `<binary> retrieve` (→ `progressive_retrieve`) before answering.
+- **inject** — a standing instruction in the host's instruction file tells the agent to run `<binary> retrieve` (→ `progressive_retrieve`) before answering. Local retrieve fuses BM25 keyword scores with cosine (RRF); set `MEMU_RETRIEVE_HYBRID=0` for cosine-only.
 
 | Host | Binary | Session log it mines | Instruction file it patches |
 | --- | --- | --- | --- |
@@ -182,6 +182,7 @@ For Local / self-hosted installations, every CLI flag has a matching variable:
 | API key | `MEMU_API_KEY` | the provider's env var, e.g. `OPENAI_API_KEY` |
 | Embedding model | `MEMU_EMBED_MODEL` | the provider's default |
 | Base URL | `MEMU_BASE_URL` | the provider's default |
+| Retrieve hybrid | `MEMU_RETRIEVE_HYBRID` | `1` (set `0` for cosine-only ranking) |
 
 Run `<binary> doctor` to display the resolved mode and verify the same retrieval
 path the host uses.

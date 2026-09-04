@@ -65,12 +65,14 @@ class PostgresRecallFileSegmentRepo(PostgresRepoBase, RecallFileSegmentRepo):
         query_vec: list[float],
         top_k: int,
         where: Mapping[str, Any] | None = None,
+        *,
+        query_text: str | None = None,
     ) -> list[tuple[RecallFileSegment, float]]:
         """Rank segments with pgvector, inside the database.
 
-        Postgres does the ordering and the truncation, so only ``top_k`` rows
-        cross the wire instead of every segment in scope — the one thing the
-        inherited Python scan cannot do.
+        Cosine-only: Postgres orders and truncates, so only ``top_k`` rows cross
+        the wire. Hybrid: take ``candidate_k`` cosine hits from the index, BM25
+        over scoped texts, RRF-fuse the two lists, then cut to ``top_k``.
 
         A deployment that asked for a non-pgvector index (``vector_index.provider``)
         gets the inherited scan instead, even though the column type is ``VECTOR``
@@ -79,10 +81,14 @@ class PostgresRecallFileSegmentRepo(PostgresRepoBase, RecallFileSegmentRepo):
         if top_k <= 0:
             return []
         if not self._use_vector:
-            return super().vector_search_segments(query_vec, top_k, where)
+            return super().vector_search_segments(query_vec, top_k, where, query_text=query_text)
 
         from sqlmodel import select
 
+        from memu.hybrid import hybrid_candidate_k, maybe_hybrid_topk
+
+        hybrid = bool(query_text and query_text.strip())
+        cosine_k = hybrid_candidate_k(top_k) if hybrid else top_k
         model = self._sqla_models.RecallFileSegment
         # ``<=>`` yields cosine *distance*; the contract is similarity, hence
         # ``1 - distance`` below. Rows without an embedding are filtered out
@@ -91,9 +97,24 @@ class PostgresRecallFileSegmentRepo(PostgresRepoBase, RecallFileSegmentRepo):
         filters = [*self._build_filters(model, where), model.embedding.is_not(None)]
         with self._sessions.session() as session:
             rows = session.exec(
-                select(model, distance.label("distance")).where(*filters).order_by(distance).limit(top_k)
+                select(model, distance.label("distance")).where(*filters).order_by(distance).limit(cosine_k)
             ).all()
-            return [(self._cache_segment(row), 1.0 - float(dist)) for row, dist in rows]
+            cosine_pairs = [(self._cache_segment(row), 1.0 - float(dist)) for row, dist in rows]
+        if not hybrid:
+            return cosine_pairs
+
+        pool = self.list_segments(where)
+        by_id = {seg.id: seg for seg in pool}
+        for seg, _ in cosine_pairs:
+            by_id.setdefault(seg.id, seg)
+        fused = maybe_hybrid_topk(
+            query_text=query_text,
+            cosine_hits=[(seg.id, score) for seg, score in cosine_pairs],
+            texts={seg.id: seg.text for seg in by_id.values()},
+            top_k=top_k,
+            bm25_limit=cosine_k,
+        )
+        return [(by_id[seg_id], score) for seg_id, score in fused if seg_id in by_id]
 
     def create_segment(
         self,
