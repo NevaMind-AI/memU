@@ -56,6 +56,10 @@ test = [
 
 [project.optional-dependencies]
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
+milvus = [
+    "pymilvus>=3.0.1,<4.0.0",
+    "milvus-lite>=3.1.1,<4.0",
+]
 
 [project.scripts]
 memu = "memu.cli:main"
@@ -77,6 +81,14 @@ memu-agent = "memu.hosts.generic.cli:main"
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
 "Bug Tracker" = "https://github.com/NevaMind-AI/MemU/issues"
 "Documentation" = "https://github.com/NevaMind-AI/MemU#readme"
+
+[tool.deptry.per_rule_ignores]
+# Optional dependencies imported indirectly or loaded lazily behind extras.
+DEP002 = ["milvus-lite"]
+# memu.trust imports certifi only as a fallback, inside a try/except that
+# degrades when it is absent — so it is deliberately a transitive dependency
+# (via httpx) rather than one this package declares and would then require.
+DEP003 = ["certifi"]
 
 [tool.mypy]
 files = ["src", "tests"]
@@ -100,11 +112,9 @@ disable_error_code = ["attr-defined", "call-arg"]
 module = ["pgvector.*"]
 ignore_missing_imports = true
 
-[tool.deptry.per_rule_ignores]
-# memu.trust imports certifi only as a fallback, inside a try/except that
-# degrades when it is absent — so it is deliberately a transitive dependency
-# (via httpx) rather than one this package declares and would then require.
-DEP003 = ["certifi"]
+[[tool.mypy.overrides]]
+module = ["pymilvus.*"]
+ignore_missing_imports = true
 
 [tool.ruff]
 target-version = "py311"

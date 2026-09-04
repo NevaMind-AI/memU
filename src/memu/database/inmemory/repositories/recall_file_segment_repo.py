@@ -8,13 +8,28 @@ from memu.database.inmemory.repositories.filter import matches_where
 from memu.database.inmemory.state import InMemoryState
 from memu.database.models import RecallFileSegment
 from memu.database.repositories.recall_file_segment import RecallFileSegmentRepo
+from memu.database.vector_index.interfaces import VectorIndex
+
+_STORE_SCOPE_FIELD = "_memu_store_id"
 
 
 class InMemoryFileSegmentRepository(RecallFileSegmentRepo):
-    def __init__(self, *, state: InMemoryState, recall_file_segment_model: type[RecallFileSegment]) -> None:
+    def __init__(
+        self,
+        *,
+        state: InMemoryState,
+        recall_file_segment_model: type[RecallFileSegment],
+        vector_index: VectorIndex | None = None,
+        vector_scope_id: str | None = None,
+    ) -> None:
         self._state = state
         self.recall_file_segment_model = recall_file_segment_model
         self.segments: list[RecallFileSegment] = self._state.segments
+        self._vector_index = vector_index
+        self._vector_scope_id = vector_scope_id
+        if vector_index is not None and not vector_scope_id:
+            msg = "An external vector index requires an internal in-memory store scope"
+            raise ValueError(msg)
 
     def list_segments(self, where: Mapping[str, Any] | None = None) -> list[RecallFileSegment]:
         if not where:
@@ -44,28 +59,60 @@ class InMemoryFileSegmentRepository(RecallFileSegmentRepo):
             embedding=embedding,
             **user_data,
         )
+        if self._vector_index is not None and embedding:
+            self._vector_index.upsert(
+                seg.id,
+                embedding,
+                scope={
+                    "recall_file_id": recall_file_id,
+                    "track": track,
+                    **user_data,
+                    _STORE_SCOPE_FIELD: self._vector_scope_id,
+                },
+            )
         self.segments.append(seg)
         return seg
 
     def delete_segment(self, segment_id: str) -> None:
+        if self._vector_index is not None:
+            self._vector_index.delete(segment_id)
         # Mutate the shared state list in place so the DatabaseState reference and this
         # repo's view never diverge.
         self.segments[:] = [seg for seg in self.segments if seg.id != segment_id]
 
     def delete_segments_for_file(self, recall_file_id: str) -> list[RecallFileSegment]:
         removed = [seg for seg in self.segments if seg.recall_file_id == recall_file_id]
+        if self._vector_index is not None:
+            self._vector_index.delete_many(seg.id for seg in removed)
         self.segments[:] = [seg for seg in self.segments if seg.recall_file_id != recall_file_id]
         return removed
 
     def clear_segments(self, where: Mapping[str, Any] | None = None) -> list[RecallFileSegment]:
         if not where:
             removed = list(self.segments)
+            if self._vector_index is not None:
+                self._vector_index.delete_many(seg.id for seg in removed)
             self.segments.clear()
             return removed
         removed = [seg for seg in self.segments if matches_where(seg, where)]
         removed_ids = {seg.id for seg in removed}
+        if self._vector_index is not None:
+            self._vector_index.delete_many(removed_ids)
         self.segments[:] = [seg for seg in self.segments if seg.id not in removed_ids]
         return removed
+
+    def vector_search_segments(
+        self,
+        query_vec: list[float],
+        top_k: int,
+        where: Mapping[str, Any] | None = None,
+    ) -> list[tuple[RecallFileSegment, float]]:
+        if self._vector_index is not None:
+            by_id = {segment.id: segment for segment in self.list_segments(where)}
+            index_where = {**dict(where or {}), _STORE_SCOPE_FIELD: self._vector_scope_id}
+            ranked = self._vector_index.search(query_vec, top_k, where=index_where)
+            return [(by_id[segment_id], score) for segment_id, score in ranked if segment_id in by_id]
+        return super().vector_search_segments(query_vec, top_k, where)
 
     def load_existing(self) -> None:
         return None
