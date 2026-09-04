@@ -306,8 +306,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     memorize_actions = memorize.add_subparsers(dest="memorize_action", required=True)
 
-    p = memorize_actions.add_parser("prepare", help="Prepare self-evolve jobs from 1–10 conversation sessions")
-    p.add_argument("payloads", nargs="+", help='1–10 MemorizeInput JSON files, or "-" for stdin')
+    p = memorize_actions.add_parser("prepare", help="Prepare self-evolve jobs from 1-10 conversation sessions")
+    p.add_argument("payloads", nargs="+", help='1-10 MemorizeInput JSON files, or "-" for stdin')
     _add_common_options(p)
     p.set_defaults(handler=_cmd_memorize_prepare)
 
