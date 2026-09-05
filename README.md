@@ -205,4 +205,4 @@ service = MemoryService(
 Apache-2.0
 
 
-<sub>Partnership Community: <a href="https://linux.do">LINUX DO</a></sub>
+<sub>Partnership Community: <a href="https://linux.do">LINUX DO</a> · <a href="https://github.com/sandbaseai/awesome-workbuddy">Awesome WorkBuddy</a></sub>
