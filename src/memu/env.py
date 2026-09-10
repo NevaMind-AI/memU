@@ -122,6 +122,14 @@ def env(name: str, default: str | None = None) -> str | None:
     return os.environ.get(name) or _file_values().get(name) or default
 
 
+def retrieve_hybrid() -> bool:
+    """Local retrieve fuses BM25 with cosine unless ``MEMU_RETRIEVE_HYBRID=0``."""
+    raw = env("MEMU_RETRIEVE_HYBRID")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in {"0", "false", "off", "no"}
+
+
 def env_declared(name: str, default: str = "") -> str:
     """Like :func:`env`, but a *declared* value wins even when it is empty.
 
@@ -243,6 +251,7 @@ def build_agentic_memory_backend_from_env(
     return MemoryService(
         embedding_profiles={"default": resolved_embedding},
         database_config=resolved_database,
+        progressive_retrieve_config={"hybrid": retrieve_hybrid()},
     )
 
 
@@ -259,4 +268,5 @@ def build_service_from_env() -> Any:
     return MemoryService(
         embedding_profiles={"default": embedding_profile()},
         database_config=database_config(require("MEMU_DB")),
+        progressive_retrieve_config={"hybrid": retrieve_hybrid()},
     )
