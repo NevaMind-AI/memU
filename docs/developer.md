@@ -279,7 +279,7 @@ memu memorize discard run-a1b2c3d4 --json
 
 Discard removes only that run directory and does not contact the backend. It also accepts incomplete runs left by a process termination during prepare. Ordinary prepare errors remove the newly allocated directory before returning; a hard process termination may leave a directory under `runs/` for inspection and explicit discard. Active runs are never deleted on a timer.
 
-Partial job execution is not resumable in the developer v1 interface. After executor failure, discard the stopped run and prepare the batch again if needed. Backend commit failure retains the evolved workspace for commit retry. If the backend accepted a commit but final filesystem cleanup failed, stop work on that run and use discard for the remaining directory; discard does not undo committed data.
+Partial job execution is not resumable in the developer v1 interface. After executor failure, discard the stopped run and prepare the batch again if needed. Backend commit failure retains the evolved workspace for commit retry. If the CLI reports `committed, but cleanup failed`, the backend accepted the submission even if the active marker still exists. Do not retry commit: stop work on that run and use `discard <run-id>` for the remaining directory. This applies to snapshot refresh, working-file removal, and final directory removal failures; discard does not undo committed data.
 
 ## Consistency and concurrency
 

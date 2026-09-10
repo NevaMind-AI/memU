@@ -104,24 +104,37 @@ def test_discard_removes_only_selected_run_without_backend(rig, monkeypatch: pyt
     assert sentinel.read_text(encoding="utf-8") == "keep"
 
 
+@pytest.mark.parametrize("stage", ["snapshot", "job", "directory"])
 def test_commit_cleanup_failure_reports_durable_success(
-    rig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    rig, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], stage: str
 ) -> None:
     _root, payload, backend, output = rig
     assert cli.main(["memorize", "prepare", str(payload), "--json"]) == 0
     prepared = output[-1]
     workspace = Path(prepared["workspace"])
 
-    def fail_cleanup(_path):
-        msg = "directory busy"
+    def fail_cleanup(*_args):
+        msg = "filesystem busy"
         raise PermissionError(msg)
 
+    original_unlink = Path.unlink
+
+    def fail_job_unlink(path, *args, **kwargs):
+        if path.parent == workspace / "jobs":
+            fail_cleanup()
+        return original_unlink(path, *args, **kwargs)
+
     with monkeypatch.context() as patch:
-        patch.setattr(cli.shutil, "rmtree", fail_cleanup)
+        if stage == "snapshot":
+            patch.setattr("memu.app.memorize.lifecycle.snapshot_tracked", fail_cleanup)
+        elif stage == "job":
+            patch.setattr(Path, "unlink", fail_job_unlink)
+        else:
+            patch.setattr(cli.shutil, "rmtree", fail_cleanup)
         assert cli.main(["memorize", "commit", prepared["run_id"]]) == 1
     assert "committed, but cleanup failed" in capsys.readouterr().err
     backend.commit_results.assert_awaited_once()
-    assert not (workspace / ".memorize_run.json").exists()
+    assert (workspace / ".memorize_run.json").exists() is (stage != "directory")
     assert cli.main(["memorize", "discard", prepared["run_id"]]) == 0
     assert not workspace.exists()
 
