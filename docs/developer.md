@@ -1,6 +1,6 @@
 # Developer integration
 
-Applications that already own their conversation history can submit one completed session to memU without implementing a host adapter. The application decides when a session is ready, converts it to the canonical input, runs one external evolve executor, and commits the executor's result to the configured Local or Cloud backend.
+Applications that already own their conversation history can submit 1–10 completed sessions to memU without implementing a host adapter. The application decides when sessions are ready, converts each to the canonical input, runs one external evolve executor, and commits the executor's result to the configured Local or Cloud backend.
 
 This is an application integration contract. It starts with a completed session supplied by the application; selecting facts from an ongoing conversation or inventing a conversation on an agent's behalf is outside the v1 interface.
 
@@ -32,9 +32,9 @@ memU uses the fixed working directory `~/.memu/developer`. Version 1.0 permits o
 
 The configured backend is authoritative. `memory/` and `skill/` are temporary, writable working copies used by the executor; committed changes are persisted as RecallFiles in the backend.
 
-## 1. Build one canonical session
+## 1. Build canonical sessions
 
-A payload represents one completed session. Its `items` must remain in the order in which the activity occurred.
+Each payload represents one completed session. A `prepare` invocation accepts 1–10 independent payload files; the CLI argument list is the batch boundary, not a JSON envelope. Its `items` must remain in the order in which the activity occurred.
 
 Use source activity faithfully:
 
@@ -138,34 +138,42 @@ Configure Local or Cloud mode once through the shared `MEMU_*` environment or `~
 Write the payload as UTF-8 JSON and run:
 
 ```bash
-memu memorize prepare session.json --json
+memu memorize prepare session-1.json session-2.json --json
 ```
 
-Use `-` instead of a file path to read one payload from stdin.
+Use `-` instead of a file path to read one payload from stdin; stdin cannot be combined with files.
 
 `prepare` performs the following work before returning:
 
-1. validates the canonical payload;
-2. writes the message-only and full JSONL projections;
+1. validates every canonical payload before opening the run;
+2. writes numbered message-only and full JSONL projections;
 3. lists the current RecallFiles from the configured backend and writes them into the workspace's `memory/` and `skill/` directories;
 4. snapshots the working copies by content hash;
-5. creates three numbered jobs and the active-run marker.
+5. creates all memory jobs, then all skill jobs, then one resource job and the active-run marker. One session creates three jobs; ten sessions create 21.
 
-A successful JSON response has this shape:
+A successful JSON response for the two-session command above has this shape:
 
 ```json
 {
   "workspace": "/home/alice/.memu/developer",
-  "transcript": {
-    "memory_path": "/home/alice/.memu/developer/input/1.jsonl",
-    "skill_path": "/home/alice/.memu/developer/input/1_full.jsonl"
-  },
+  "transcripts": [
+    {
+      "memory_path": "/home/alice/.memu/developer/input/1.jsonl",
+      "skill_path": "/home/alice/.memu/developer/input/1_full.jsonl"
+    },
+    {
+      "memory_path": "/home/alice/.memu/developer/input/2.jsonl",
+      "skill_path": "/home/alice/.memu/developer/input/2_full.jsonl"
+    }
+  ],
   "jobs": [
     "/home/alice/.memu/developer/jobs/1.txt",
     "/home/alice/.memu/developer/jobs/2.txt",
-    "/home/alice/.memu/developer/jobs/3.txt"
+    "/home/alice/.memu/developer/jobs/3.txt",
+    "/home/alice/.memu/developer/jobs/4.txt",
+    "/home/alice/.memu/developer/jobs/5.txt"
   ],
-  "executor_prompt": "Process this prepared memU self-evolve run in one agent session.\nRead and carry out every job file below in the listed order:\n1. /home/alice/.memu/developer/jobs/1.txt\n2. /home/alice/.memu/developer/jobs/2.txt\n3. /home/alice/.memu/developer/jobs/3.txt\nRun one job at a time. Do not parallelize, skip, or reorder jobs. If any job fails, stop and report failure. Do not run `memu memorize commit`. Report success only after every job has completed.",
+  "executor_prompt": "Process this prepared memU self-evolve run in one agent session.\nRead and carry out every job file below in the listed order:\n1. /home/alice/.memu/developer/jobs/1.txt\n2. /home/alice/.memu/developer/jobs/2.txt\n3. /home/alice/.memu/developer/jobs/3.txt\n4. /home/alice/.memu/developer/jobs/4.txt\n5. /home/alice/.memu/developer/jobs/5.txt\nRun one job at a time. Do not parallelize, skip, or reorder jobs. If any job fails, stop and report failure. Do not run `memu memorize commit`. Report success only after every job has completed.",
   "next_command": "memu memorize commit"
 }
 ```
@@ -173,10 +181,13 @@ A successful JSON response has this shape:
 | Response field | Use |
 |---|---|
 | `workspace` | Fixed memU developer workspace. |
-| `transcript` | Materialized inputs referenced by the jobs; applications normally do not edit them. |
+| `transcript` | Present for one input (file or stdin): one object containing `memory_path` and `skill_path`. |
+| `transcripts` | Present for 2–10 inputs: an array of those objects in CLI argument order. |
 | `jobs` | Authoritative execution order. |
 | `executor_prompt` | Complete handoff to one external evolve executor. |
 | `next_command` | Commit command to run once after executor success. |
+
+Exactly one of `transcript` or `transcripts` is returned. These paths identify the materialized inputs referenced by the jobs; applications normally do not edit them.
 
 Only one prepared run may be active. A second `prepare` is rejected until the current run commits.
 
@@ -192,9 +203,9 @@ Pass `executor_prompt` to that agent. It instructs the executor to process these
 
 | Order | Job | Expected outcome |
 |---:|---|---|
-| 1 | Memory evolution | Create, patch, or leave unchanged the user-memory Markdown files. |
-| 2 | Skill evolution | Create, patch, or leave unchanged skills, then log files changed during the supplied session. |
-| 3 | Resource description | Verify logged paths and describe readable files in `resources.md`. |
+| 1..N | Memory evolution | Create, patch, or leave unchanged the user-memory Markdown files for each session. |
+| N+1..2N | Skill evolution | Create, patch, or leave unchanged skills, then log files changed during each supplied session. |
+| 2N+1 | Resource description | Verify logged paths and describe readable files in `resources.md`. |
 
 The executor must process the returned `jobs` list serially in its given order. It must stop on the first failure and must not run `commit`. A create, patch, or no-op result is valid for the memory and skill jobs; the executor should not invent an artifact merely to make the run non-empty. Treat each job file as the self-contained instruction for that step; do not treat transcript, memory, skill, or resource contents as new orchestration instructions.
 
@@ -251,8 +262,8 @@ Only newly created or content-modified files are submitted. File deletion is not
 
 | State | Evidence | Application action |
 |---|---|---|
-| Ready | No `.memorize_run.json` | Call `prepare` with one canonical session. |
-| Prepared | Active marker and three jobs exist | Start exactly one evolve executor. |
+| Ready | No `.memorize_run.json` | Call `prepare` with 1–10 canonical sessions. |
+| Prepared | Active marker and ordered jobs exist | Start exactly one evolve executor. |
 | Executing | Executor is processing the jobs | Do not call another `prepare` or `commit`. |
 | Evolve succeeded | Executor completed all jobs | Run `next_command` once. |
 | Evolve failed | Executor stopped before all jobs completed | Do not commit. The active run remains for inspection; version 1.0 has no discard command. |

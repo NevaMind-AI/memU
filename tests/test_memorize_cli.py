@@ -19,12 +19,18 @@ def _payload() -> dict[str, Any]:
     }
 
 
-def _prepared(workspace: Any, jobs: tuple[str, ...] = ("1.txt", "2.txt", "3.txt")) -> PreparedMemorizeRun:
+def _prepared(
+    workspace: Any, jobs: tuple[str, ...] = ("1.txt", "2.txt", "3.txt"), *, num_sessions: int = 1
+) -> PreparedMemorizeRun:
+    transcripts = [
+        MaterializedConversation(
+            memory_path=workspace.input / f"{index}.jsonl",
+            skill_path=workspace.input / f"{index}_full.jsonl",
+        )
+        for index in range(1, num_sessions + 1)
+    ]
     return PreparedMemorizeRun(
-        transcript=MaterializedConversation(
-            memory_path=workspace.input / "1.jsonl",
-            skill_path=workspace.input / "1_full.jsonl",
-        ),
+        transcript=transcripts,
         jobs=[workspace.jobs / name for name in jobs],
     )
 
@@ -68,7 +74,7 @@ def test_prepare_uses_fixed_workspace_and_prints_agent_handoff(
 
     assert cli.main(["memorize", "prepare", str(payload)]) == 0
 
-    assert received["input"].items[0].content == "Remember this"
+    assert received["input"][0].items[0].content == "Remember this"
     assert received["workspace"].base == workspace
     assert received["backend"] is backend
     assert received["verify_command"] == "memu memorize verify-resources"
@@ -122,6 +128,42 @@ def test_prepare_reads_stdin_and_prints_machine_handoff(
     }
 
 
+@pytest.mark.parametrize("num_sessions", [2, 10])
+def test_prepare_multiple_files_passes_all_sessions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], num_sessions: int
+) -> None:
+    payloads = [tmp_path / f"{index}.json" for index in range(num_sessions)]
+    for index, payload in enumerate(payloads):
+        payload.write_text(
+            json.dumps(_payload() | {"items": [{"type": "message", "role": "user", "content": str(index)}]}),
+            encoding="utf-8",
+        )
+    received: dict[str, Any] = {}
+
+    async def fake_prepare(inputs: Any, workspace: Any, _backend: Any, **_kwargs: Any) -> Any:
+        received["inputs"] = inputs
+        return _prepared(
+            workspace, tuple(f"{index}.txt" for index in range(1, num_sessions * 2 + 2)), num_sessions=num_sessions
+        )
+
+    monkeypatch.setattr(cli, "MEMORIZE_WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setattr(cli, "_build_backend", lambda _args: object())
+    monkeypatch.setattr(cli, "prepare_memorize", fake_prepare)
+
+    assert cli.main(["memorize", "prepare", *(str(path) for path in payloads), "--json"]) == 0
+    assert [item.items[0].content for item in received["inputs"]] == [str(index) for index in range(num_sessions)]
+    output = json.loads(capsys.readouterr().out)
+    assert "transcript" not in output
+    assert output["transcripts"] == [
+        {
+            "memory_path": str(tmp_path / "workspace" / "input" / f"{index}.jsonl"),
+            "skill_path": str(tmp_path / "workspace" / "input" / f"{index}_full.jsonl"),
+        }
+        for index in range(1, num_sessions + 1)
+    ]
+    assert [Path(path).name for path in output["jobs"]] == [f"{index}.txt" for index in range(1, num_sessions * 2 + 2)]
+
+
 def test_executor_prompt_preserves_returned_job_order(tmp_path: Path) -> None:
     workspace = cli.MemorizeWorkspace(tmp_path / "workspace")
     prepared = _prepared(workspace, ("8.txt", "3.txt", "11.txt"))
@@ -150,6 +192,11 @@ def test_prepare_default_workspace_keeps_next_command_short(
 def test_prepare_missing_file_reports_error(capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(["memorize", "prepare", "/definitely/not/input.json"]) == 2
     assert "no such file" in capsys.readouterr().err
+
+
+def test_prepare_rejects_more_than_ten_payloads(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["memorize", "prepare", *("-" for _ in range(11))]) == 2
+    assert "at most 10" in capsys.readouterr().err
 
 
 def test_prepare_invalid_input_reports_validation_error(

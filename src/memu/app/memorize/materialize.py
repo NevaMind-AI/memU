@@ -57,18 +57,30 @@ def _atomic_write_text(path: Path, content: str) -> None:
 def materialize_memorize_input(
     memorize_input: MemorizeInput,
     out_dir: Path,
+    *,
+    session_index: int = 1,
+    clear: bool = True,
 ) -> MaterializedConversation:
-    """Write the memory and skill JSONL inputs for one session."""
+    """Write one session's memory and skill JSONL projections."""
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    for stale in out_dir.glob("*.jsonl"):
-        stale.unlink()
+    if clear:
+        for stale in out_dir.glob("*.jsonl"):
+            stale.unlink()
 
-    memory_path = out_dir / "1.jsonl"
-    skill_path = out_dir / "1_full.jsonl"
+    memory_path = out_dir / f"{session_index}.jsonl"
+    skill_path = out_dir / f"{session_index}_full.jsonl"
     _atomic_write_text(memory_path, _serialize_items(project_memory(memorize_input)))
     _atomic_write_text(skill_path, _serialize_items(project_skill(memorize_input)))
-    return MaterializedConversation(
-        memory_path=memory_path,
-        skill_path=skill_path,
-    )
+    return MaterializedConversation(memory_path=memory_path, skill_path=skill_path)
+
+
+def materialize_memorize_inputs(
+    memorize_inputs: Sequence[MemorizeInput], out_dir: Path
+) -> list[MaterializedConversation]:
+    """Write numbered projections for a batch of sessions."""
+
+    return [
+        materialize_memorize_input(item, out_dir, session_index=index, clear=index == 1)
+        for index, item in enumerate(memorize_inputs, start=1)
+    ]
