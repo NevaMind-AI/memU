@@ -7,7 +7,8 @@ import pytest
 
 from memu.app.memorize import lifecycle as lifecycle_module
 from memu.app.memorize.input import MemorizeInput, MessageInput
-from memu.app.memorize.lifecycle import MemorizeWorkspace, commit_memorize, prepare_memorize
+from memu.app.memorize.lifecycle import MemorizeWorkspace, PreparedMemorizeRun, commit_memorize, prepare_memorize
+from memu.app.memorize.materialize import MaterializedConversation
 
 
 class FakeBackend:
@@ -77,7 +78,9 @@ async def test_prepare_mirrors_all_pages_and_returns_ordered_jobs(tmp_path: Path
     ])
     workspace = MemorizeWorkspace(tmp_path / "workspace")
 
-    prepared = await prepare_memorize(_input(), workspace, backend, verify_command="memu verify")
+    prepared = await prepare_memorize(
+        memorize_input=_input(), workspace=workspace, backend=backend, verify_command="memu verify"
+    )
 
     assert backend.list_cursors == [None, "1"]
     assert [path.name for path in prepared.jobs] == ["1.txt", "2.txt", "3.txt"]
@@ -88,6 +91,20 @@ async def test_prepare_mirrors_all_pages_and_returns_ordered_jobs(tmp_path: Path
     assert str(prepared.transcript.skill_path) in prepared.jobs[1].read_text(encoding="utf-8")
     assert "memu verify" in prepared.jobs[-1].read_text(encoding="utf-8")
     assert workspace.active_run.read_text(encoding="utf-8") == '{"schema_version":"1.0"}\n'
+
+
+def test_prepared_run_accepts_single_transcript_constructor(tmp_path: Path) -> None:
+    transcript = MaterializedConversation(tmp_path / "1.jsonl", tmp_path / "1_full.jsonl")
+    jobs = [tmp_path / "1.txt"]
+
+    prepared = PreparedMemorizeRun(transcript=transcript, jobs=jobs)
+
+    assert prepared.transcript is transcript
+    assert prepared.transcripts == [transcript]
+    assert prepared.jobs == jobs
+    assert PreparedMemorizeRun(transcript, jobs) == prepared
+    with pytest.raises(ValueError, match="at least one transcript"):
+        PreparedMemorizeRun(transcript=[], jobs=[])
 
 
 async def test_prepare_batch_materializes_sessions_and_orders_jobs(tmp_path: Path) -> None:

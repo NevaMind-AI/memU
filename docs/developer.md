@@ -151,21 +151,29 @@ Use `-` instead of a file path to read one payload from stdin; stdin cannot be c
 4. snapshots the working copies by content hash;
 5. creates all memory jobs, then all skill jobs, then one resource job and the active-run marker. One session creates three jobs; ten sessions create 21.
 
-A successful JSON response has this shape:
+A successful JSON response for the two-session command above has this shape:
 
 ```json
 {
   "workspace": "/home/alice/.memu/developer",
-  "transcript": {
-    "memory_path": "/home/alice/.memu/developer/input/1.jsonl",
-    "skill_path": "/home/alice/.memu/developer/input/1_full.jsonl"
-  },
+  "transcripts": [
+    {
+      "memory_path": "/home/alice/.memu/developer/input/1.jsonl",
+      "skill_path": "/home/alice/.memu/developer/input/1_full.jsonl"
+    },
+    {
+      "memory_path": "/home/alice/.memu/developer/input/2.jsonl",
+      "skill_path": "/home/alice/.memu/developer/input/2_full.jsonl"
+    }
+  ],
   "jobs": [
     "/home/alice/.memu/developer/jobs/1.txt",
     "/home/alice/.memu/developer/jobs/2.txt",
-    "/home/alice/.memu/developer/jobs/3.txt"
+    "/home/alice/.memu/developer/jobs/3.txt",
+    "/home/alice/.memu/developer/jobs/4.txt",
+    "/home/alice/.memu/developer/jobs/5.txt"
   ],
-  "executor_prompt": "Process this prepared memU self-evolve run in one agent session.\nRead and carry out every job file below in the listed order:\n1. /home/alice/.memu/developer/jobs/1.txt\n2. /home/alice/.memu/developer/jobs/2.txt\n3. /home/alice/.memu/developer/jobs/3.txt\nRun one job at a time. Do not parallelize, skip, or reorder jobs. If any job fails, stop and report failure. Do not run `memu memorize commit`. Report success only after every job has completed.",
+  "executor_prompt": "Process this prepared memU self-evolve run in one agent session.\nRead and carry out every job file below in the listed order:\n1. /home/alice/.memu/developer/jobs/1.txt\n2. /home/alice/.memu/developer/jobs/2.txt\n3. /home/alice/.memu/developer/jobs/3.txt\n4. /home/alice/.memu/developer/jobs/4.txt\n5. /home/alice/.memu/developer/jobs/5.txt\nRun one job at a time. Do not parallelize, skip, or reorder jobs. If any job fails, stop and report failure. Do not run `memu memorize commit`. Report success only after every job has completed.",
   "next_command": "memu memorize commit"
 }
 ```
@@ -173,10 +181,13 @@ A successful JSON response has this shape:
 | Response field | Use |
 |---|---|
 | `workspace` | Fixed memU developer workspace. |
-| `transcript` | Materialized inputs referenced by the jobs; applications normally do not edit them. |
+| `transcript` | Present for one input (file or stdin): one object containing `memory_path` and `skill_path`. |
+| `transcripts` | Present for 2–10 inputs: an array of those objects in CLI argument order. |
 | `jobs` | Authoritative execution order. |
 | `executor_prompt` | Complete handoff to one external evolve executor. |
 | `next_command` | Commit command to run once after executor success. |
+
+Exactly one of `transcript` or `transcripts` is returned. These paths identify the materialized inputs referenced by the jobs; applications normally do not edit them.
 
 Only one prepared run may be active. A second `prepare` is rejected until the current run commits.
 

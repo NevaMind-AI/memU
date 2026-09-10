@@ -63,12 +63,20 @@ class MemorizeWorkspace:
         return list(TRACK_DIRS.values())
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class PreparedMemorizeRun:
     """The prepared inputs and jobs an external agent must process."""
 
     transcripts: list[MaterializedConversation]
     jobs: list[Path]
+
+    def __init__(self, transcript: MaterializedConversation | list[MaterializedConversation], jobs: list[Path]) -> None:
+        transcripts = [transcript] if isinstance(transcript, MaterializedConversation) else transcript
+        if not transcripts:
+            msg = "at least one transcript is required"
+            raise ValueError(msg)
+        object.__setattr__(self, "transcripts", transcripts)
+        object.__setattr__(self, "jobs", jobs)
 
     @property
     def transcript(self) -> MaterializedConversation:
@@ -94,7 +102,7 @@ async def _mirror_recall_files(backend: AgenticMemoryBackend, workspace: Memoriz
 
 
 async def prepare_memorize(
-    memorize_inputs: list[MemorizeInput] | MemorizeInput,
+    memorize_input: list[MemorizeInput] | MemorizeInput,
     workspace: MemorizeWorkspace,
     backend: AgenticMemoryBackend,
     *,
@@ -102,8 +110,7 @@ async def prepare_memorize(
 ) -> PreparedMemorizeRun:
     """Prepare one batch of developer sessions for external self-evolve work."""
 
-    if isinstance(memorize_inputs, MemorizeInput):
-        memorize_inputs = [memorize_inputs]
+    memorize_inputs = [memorize_input] if isinstance(memorize_input, MemorizeInput) else memorize_input
     if not memorize_inputs:
         msg = "at least one memorize input is required"
         raise ValueError(msg)
@@ -142,7 +149,7 @@ async def prepare_memorize(
         json.dumps({"schema_version": memorize_inputs[0].schema_version}, separators=(",", ":")) + "\n",
     )
     jobs = sorted(workspace.jobs.glob("*.txt"), key=_numeric_path_key)
-    return PreparedMemorizeRun(transcripts=transcripts, jobs=jobs)
+    return PreparedMemorizeRun(transcript=transcripts, jobs=jobs)
 
 
 async def commit_memorize(workspace: MemorizeWorkspace, backend: AgenticMemoryBackend) -> dict[str, Any]:
