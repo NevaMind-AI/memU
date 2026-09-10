@@ -669,11 +669,95 @@ def test_cursor_classify() -> None:
         },
     }
     bare_tool = {"role": "assistant", "message": {"content": [{"type": "tool_use", "name": "Shell", "input": {}}]}}
+    turn_error = {
+        "type": "turn_ended",
+        "status": "error",
+        "error": "You've hit your usage limit Get Cursor Pro for more Agent usage, unlimited Tab, and more.",
+    }
     assert source.classify(_line(user)) is RecordKind.MESSAGE
     # Prose sharing a record with the tool calls it narrates stays conversation.
     assert source.classify(_line(narrated_tool)) is RecordKind.MESSAGE
     assert source.classify(_line(bare_tool)) is RecordKind.TOOL
     assert source.classify(_line({"role": "system"})) is RecordKind.OTHER
+    assert source.classify(_line(turn_error)) is RecordKind.OTHER
+
+
+def _cursor_session(root: pathlib.Path, name: str, records: list[dict], mtime: float) -> pathlib.Path:
+    path = root / "project" / "agent-transcripts" / name / f"{name}.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(_line(record) for record in records) + "\n", encoding="utf-8")
+    os.utime(path, (mtime, mtime))
+    return path
+
+
+def test_cursor_prepare_skips_empty_sessions_and_backfills_job_capacity(tmp_path: pathlib.Path) -> None:
+    turn_error = {"type": "turn_ended", "status": "error", "error": "usage limit"}
+    valid = {"role": "user", "message": {"content": [{"type": "text", "text": "remember this"}]}}
+    error_paths = [_cursor_session(tmp_path, f"error-{idx}", [turn_error], 3000 + idx) for idx in range(3)]
+    valid_paths = [_cursor_session(tmp_path, f"valid-{idx}", [valid], 1000 + idx) for idx in range(2)]
+    out_dir = tmp_path / "out"
+    pending = tmp_path / "pending.json"
+    source = CursorTranscriptSource(tmp_path)
+
+    assert prepare_transcripts(source, out_dir, tmp_path / "manifest.json", 2, pending) == 2
+
+    assert [path.name for path in sorted(out_dir.glob("*.jsonl"))] == [
+        "1.jsonl",
+        "1_full.jsonl",
+        "2.jsonl",
+        "2_full.jsonl",
+    ]
+    assert all(path.read_text(encoding="utf-8").strip() for path in out_dir.glob("*.jsonl"))
+    staged = json.loads(pending.read_text(encoding="utf-8"))
+    assert {source.key(path) for path in error_paths + valid_paths} == set(staged)
+    assert all(staged[source.key(path)] == {"lines": 1, "last_timestamp": None} for path in error_paths + valid_paths)
+
+
+@pytest.mark.parametrize("max_jobs", [0, 1])
+def test_cursor_prepare_sanitizes_only_selected_sessions(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, max_jobs: int
+) -> None:
+    turn_error = {"type": "turn_ended", "status": "error"}
+    tool = {"role": "assistant", "message": {"content": [{"type": "tool_use", "name": "Shell", "input": {}}]}}
+    selected = _cursor_session(tmp_path, "newest", [tool], 3000)
+    _cursor_session(tmp_path, "older", [turn_error, tool], 2000)
+    empty = _cursor_session(tmp_path, "empty", [turn_error], 1000)
+    source = CursorTranscriptSource(tmp_path)
+    sanitized: list[pathlib.Path] = []
+
+    def sanitize(path: pathlib.Path, record: str) -> str:
+        sanitized.append(path)
+        return record
+
+    monkeypatch.setattr(source, "sanitize", sanitize)
+    pending = tmp_path / "pending.json"
+    manifest = tmp_path / "manifest.json"
+    out_dir = tmp_path / "out"
+
+    assert prepare_transcripts(source, out_dir, manifest, max_jobs, pending) == max_jobs
+    assert sanitized == [selected] * max_jobs
+    staged = json.loads(pending.read_text(encoding="utf-8"))
+    assert set(staged) == {source.key(empty)} | ({source.key(selected)} if max_jobs else set())
+    assert staged[source.key(empty)] == {"lines": 1, "last_timestamp": None}
+    assert not manifest.exists()
+    if max_jobs:
+        assert (out_dir / "1_full.jsonl").read_text(encoding="utf-8").strip() == _line(tool)
+    else:
+        assert list(out_dir.glob("*.jsonl")) == []
+
+
+def test_cursor_prepare_with_only_empty_sessions_writes_no_transcripts(tmp_path: pathlib.Path) -> None:
+    turn_error = {"type": "turn_ended", "status": "error", "error": "usage limit"}
+    transcript = _cursor_session(tmp_path, "error", [turn_error], 1000)
+    out_dir = tmp_path / "out"
+    pending = tmp_path / "pending.json"
+    source = CursorTranscriptSource(tmp_path)
+
+    assert prepare_transcripts(source, out_dir, tmp_path / "manifest.json", 10, pending) == 0
+    assert list(out_dir.glob("*.jsonl")) == []
+    assert json.loads(pending.read_text(encoding="utf-8")) == {
+        source.key(transcript): {"lines": 1, "last_timestamp": None}
+    }
 
 
 def test_cursor_discovers_only_agent_transcripts(tmp_path: pathlib.Path) -> None:

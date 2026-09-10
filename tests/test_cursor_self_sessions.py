@@ -30,7 +30,10 @@ def test_cursor_transcript_name_is_its_conversation_id(tmp_path: pathlib.Path) -
 
 @pytest.mark.parametrize("marked", [False, True])
 async def test_only_an_os_marked_cursor_run_claims_its_session(
-    marked: bool, monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+    marked: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     conversation_id = "6ea28aed-874f-44e1-9dd2-d8ad0b1bbc85"
     captured: dict[str, object] = {}
@@ -63,6 +66,7 @@ async def test_only_an_os_marked_cursor_run_claims_its_session(
 
     expected = [conversation_id] if marked else []
     assert rc == 0
+    assert "prepared 0 session(s) -> 0 job(s)" in capsys.readouterr().out
     assert captured["skip_sessions"] == expected
     assert self_sessions.load(Layout(base=base, host="cursor").self_sessions) == expected
 
