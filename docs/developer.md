@@ -10,16 +10,16 @@ This is an application integration contract. It starts with a completed session 
 completed application session
   → memu memorize prepare
   → one external executor processes all jobs serially
-  → memu memorize commit
+  → memu memorize commit <run-id>
   → configured Local or Cloud backend
 ```
 
 `prepare` and `commit` are the deterministic parts of the lifecycle. The middle step is real agent work: the executor reads the session, compares it with existing memory and skill files, and makes create, patch, or no-op decisions.
 
-memU uses the fixed working directory `~/.memu/developer`. Version 1.0 permits one active developer run at a time:
+Each `prepare` invocation allocates a private directory under `~/.memu/developer/runs/` and returns an opaque `run_id`. Its 1–10 sessions belong to that single run. Concurrent prepares receive distinct directories:
 
 ```text
-~/.memu/developer/
+~/.memu/developer/runs/<run-id>/
 ├── input/                     projected session transcripts
 ├── jobs/                      numbered executor instructions
 ├── memory/                    writable mirror of memory RecallFiles
@@ -145,8 +145,8 @@ Use `-` instead of a file path to read one payload from stdin; stdin cannot be c
 
 `prepare` performs the following work before returning:
 
-1. validates every canonical payload before opening the run;
-2. writes numbered message-only and full JSONL projections;
+1. validates every canonical payload before allocating a private run directory;
+2. writes numbered message-only and full JSONL projections into that directory;
 3. lists the current RecallFiles from the configured backend and writes them into the workspace's `memory/` and `skill/` directories;
 4. snapshots the working copies by content hash;
 5. creates all memory jobs, then all skill jobs, then one resource job and the active-run marker. One session creates three jobs; ten sessions create 21.
@@ -155,32 +155,34 @@ A successful JSON response for the two-session command above has this shape:
 
 ```json
 {
-  "workspace": "/home/alice/.memu/developer",
+  "run_id": "run-a1b2c3d4",
+  "workspace": "/home/alice/.memu/developer/runs/run-a1b2c3d4",
   "transcripts": [
     {
-      "memory_path": "/home/alice/.memu/developer/input/1.jsonl",
-      "skill_path": "/home/alice/.memu/developer/input/1_full.jsonl"
+      "memory_path": "/home/alice/.memu/developer/runs/run-a1b2c3d4/input/1.jsonl",
+      "skill_path": "/home/alice/.memu/developer/runs/run-a1b2c3d4/input/1_full.jsonl"
     },
     {
-      "memory_path": "/home/alice/.memu/developer/input/2.jsonl",
-      "skill_path": "/home/alice/.memu/developer/input/2_full.jsonl"
+      "memory_path": "/home/alice/.memu/developer/runs/run-a1b2c3d4/input/2.jsonl",
+      "skill_path": "/home/alice/.memu/developer/runs/run-a1b2c3d4/input/2_full.jsonl"
     }
   ],
   "jobs": [
-    "/home/alice/.memu/developer/jobs/1.txt",
-    "/home/alice/.memu/developer/jobs/2.txt",
-    "/home/alice/.memu/developer/jobs/3.txt",
-    "/home/alice/.memu/developer/jobs/4.txt",
-    "/home/alice/.memu/developer/jobs/5.txt"
+    "/home/alice/.memu/developer/runs/run-a1b2c3d4/jobs/1.txt",
+    "/home/alice/.memu/developer/runs/run-a1b2c3d4/jobs/2.txt",
+    "/home/alice/.memu/developer/runs/run-a1b2c3d4/jobs/3.txt",
+    "/home/alice/.memu/developer/runs/run-a1b2c3d4/jobs/4.txt",
+    "/home/alice/.memu/developer/runs/run-a1b2c3d4/jobs/5.txt"
   ],
-  "executor_prompt": "Process this prepared memU self-evolve run in one agent session.\nRead and carry out every job file below in the listed order:\n1. /home/alice/.memu/developer/jobs/1.txt\n2. /home/alice/.memu/developer/jobs/2.txt\n3. /home/alice/.memu/developer/jobs/3.txt\n4. /home/alice/.memu/developer/jobs/4.txt\n5. /home/alice/.memu/developer/jobs/5.txt\nRun one job at a time. Do not parallelize, skip, or reorder jobs. If any job fails, stop and report failure. Do not run `memu memorize commit`. Report success only after every job has completed.",
-  "next_command": "memu memorize commit"
+  "executor_prompt": "Process this prepared memU self-evolve run in one agent session.\nRead and carry out every job file below in the listed order:\n1. /home/alice/.memu/developer/runs/run-a1b2c3d4/jobs/1.txt\n2. /home/alice/.memu/developer/runs/run-a1b2c3d4/jobs/2.txt\n3. /home/alice/.memu/developer/runs/run-a1b2c3d4/jobs/3.txt\n4. /home/alice/.memu/developer/runs/run-a1b2c3d4/jobs/4.txt\n5. /home/alice/.memu/developer/runs/run-a1b2c3d4/jobs/5.txt\nRun one job at a time. Do not parallelize, skip, or reorder jobs. If any job fails, stop and report failure. Do not run `memu memorize commit`. Report success only after every job has completed.",
+  "next_command": "memu memorize commit run-a1b2c3d4"
 }
 ```
 
 | Response field | Use |
 |---|---|
-| `workspace` | Fixed memU developer workspace. |
+| `run_id` | Opaque memU-allocated id used by commit, verify-resources, and discard. |
+| `workspace` | Absolute path of this run's private working directory. |
 | `transcript` | Present for one input (file or stdin): one object containing `memory_path` and `skill_path`. |
 | `transcripts` | Present for 2–10 inputs: an array of those objects in CLI argument order. |
 | `jobs` | Authoritative execution order. |
@@ -189,7 +191,7 @@ A successful JSON response for the two-session command above has this shape:
 
 Exactly one of `transcript` or `transcripts` is returned. These paths identify the materialized inputs referenced by the jobs; applications normally do not edit them.
 
-Only one prepared run may be active. A second `prepare` is rejected until the current run commits.
+Persist `run_id` and the handoff before starting the executor. Each prepare creates a new run; it does not resume or replace an existing run. Resource job instructions include `memu memorize verify-resources <run-id>` so verification targets that run's log.
 
 ## 3. Execute all evolve jobs
 
@@ -233,6 +235,7 @@ committed = run_json([
     "memu",
     "memorize",
     "commit",
+    prepared["run_id"],
     "--json",
 ])
 ```
@@ -244,16 +247,14 @@ The executor API and process isolation are application choices. memU defines the
 After the executor reports success, run `next_command` once. Add `--json` when a machine-readable result is required:
 
 ```bash
-memu memorize commit --json
+memu memorize commit run-a1b2c3d4 --json
 ```
 
 `commit` hashes the workspace's `memory/` and `skill/` files against the pre-evolve snapshot, reads successfully described resources, and submits the resulting records through the configured backend. The response contains `recall_files` and `resources`; either list may be empty after a valid no-op run.
 
 On success, memU:
 
-- updates the workspace snapshot;
-- removes the projected input, numbered jobs, resource files, and active marker;
-- leaves the `memory/` and `skill/` mirrors on disk;
+- removes the complete run directory, including the working mirrors and any executor-created temporary files;
 - makes committed RecallFiles available to normal `list-files` and `retrieve` calls.
 
 Only newly created or content-modified files are submitted. File deletion is not part of the v1 commit contract.
@@ -262,25 +263,37 @@ Only newly created or content-modified files are submitted. File deletion is not
 
 | State | Evidence | Application action |
 |---|---|---|
-| Ready | No `.memorize_run.json` | Call `prepare` with 1–10 canonical sessions. |
-| Prepared | Active marker and ordered jobs exist | Start exactly one evolve executor. |
-| Executing | Executor is processing the jobs | Do not call another `prepare` or `commit`. |
+| Ready | Application has a completed batch | Call `prepare` with 1–10 canonical sessions. |
+| Prepared | Returned run directory contains an active marker and ordered jobs | Start exactly one evolve executor for this run. |
+| Executing | Executor is processing the jobs | Do not commit, discard, or start another executor for this run. |
 | Evolve succeeded | Executor completed all jobs | Run `next_command` once. |
-| Evolve failed | Executor stopped before all jobs completed | Do not commit. The active run remains for inspection; version 1.0 has no discard command. |
-| Commit failed | Command returned non-zero and the active marker remains | Preserve the workspace, fix the backend problem, and retry `commit`; do not repeat `prepare` or evolve. |
-| Committed | Active marker and ephemeral run files are gone | The fixed workspace is ready for the next run. |
+| Evolve failed | Executor stopped before all jobs completed | Preserve the run for inspection, or explicitly discard it after the executor has stopped. |
+| Backend commit failed | Active marker, inputs, jobs, and edits remain | Fix the backend problem and retry `commit <run-id>`; do not repeat prepare or evolve. |
+| Committed / discarded | The run directory is gone | Other runs remain available. |
 
-Partial job execution is not resumable in the developer v1 interface, and there is currently no abort command. Backend commit failure intentionally retains the evolved workspace for commit retry.
+To abandon a run after stopping its executor:
+
+```bash
+memu memorize discard run-a1b2c3d4 --json
+```
+
+Discard removes only that run directory and does not contact the backend. It also accepts incomplete runs left by a process termination during prepare. Ordinary prepare errors remove the newly allocated directory before returning; a hard process termination may leave a directory under `runs/` for inspection and explicit discard. Active runs are never deleted on a timer.
+
+Partial job execution is not resumable in the developer v1 interface. After executor failure, discard the stopped run and prepare the batch again if needed. Backend commit failure retains the evolved workspace for commit retry. If the backend accepted a commit but final filesystem cleanup failed, stop work on that run and use discard for the remaining directory; discard does not undo committed data.
 
 ## Consistency and concurrency
 
-The fixed workspace permits only one active developer run, so applications must not start a second executor or `prepare` while its marker exists. It does not provide backend-level conflict resolution.
+Independent prepares have isolated working directories. Within a run, the application must serialize executor work, verification, commit, and discard; the active marker is a commit/retry guard, not a process lock. Directory isolation does not provide backend-level conflict resolution.
 
 `prepare` reads the backend once and establishes the baseline for the run. The workspace is not refreshed again before `commit`. If another host or developer run changes the same `(track, name, user scope)` RecallFile during that window, the later successful commit may overwrite the earlier content. Version 1.0 has no ETag, base revision, three-way merge, or conflict copy.
 
-Applications that may overlap with host bridging should serialize runs that can edit the same RecallFiles, or assign non-overlapping RecallFile ownership.
+Applications that may overlap with other developer runs or host bridging should serialize the entire prepare → evolve → commit cycle for runs that can edit the same RecallFiles, or assign non-overlapping RecallFile ownership. Serializing only commits does not refresh an already-prepared run's baseline.
 
-The prepare mirror is additive/overwriting: RecallFiles returned by the backend are written atomically into the workspace, but local files absent from the backend response are not deletion-synchronized. Applications should treat the backend—not a retained workspace directory—as the source of truth between runs.
+Each new CLI run starts with a fresh backend mirror. The explicit-workspace Python functions retain their existing workspace behavior; callers of those functions continue to own directory lifecycle.
+
+## Upgrading from the fixed workspace
+
+`memu memorize commit` and `verify-resources` now require a run id. Applications must retain the returned `run_id` or execute the returned `next_command`; there is no implicit selection of the newest run. Finish an active run in `~/.memu/developer` with the previous CLI version before upgrading. Existing fixed-workspace files are not migrated or removed automatically. The per-run lifecycle applies to the developer CLI; host adapter prepare–commit commands keep their existing behavior.
 
 ## Responsibility boundary
 

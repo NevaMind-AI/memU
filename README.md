@@ -146,7 +146,11 @@ Adding another host means implementing one `TranscriptSource` (where its session
 
 Applications that already own their conversation history can use `memu memorize`
 to prepare self-evolve jobs from 1–10 completed sessions for one external agent and
-commit the resulting memory, skill, and resource changes. See [Developer integration](docs/developer.md) for the
+commit the resulting memory, skill, and resource changes. Each prepare allocates a
+private run directory and returns a `run_id`; use `memu memorize commit <run-id>`
+after executor success, or `memu memorize discard <run-id>` after stopping a failed
+executor. Successful commit and discard remove that run's directory.
+See [Developer integration](docs/developer.md) for the
 canonical input contract and the complete prepare → agent → commit workflow.
 
 ## CLI
