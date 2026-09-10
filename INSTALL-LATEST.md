@@ -103,7 +103,7 @@ A bare "yes" / "ok" means **Use this version** — default to proceeding.
 ## Step 4 — set up memU
 
 You now have the latest binaries. Identify **which agent you are** and use its
-binary — memU has seven host adapters:
+binary — memU has nine host adapters:
 
 | You are | Your binary |
 | --- | --- |
@@ -113,6 +113,8 @@ binary — memU has seven host adapters:
 | OpenClaw | `memu-openclaw` |
 | Hermes | `memu-hermes` |
 | WorkBuddy | `memu-workbuddy` |
+| Cola | `memu-cola` |
+| pi | `memu-pi` |
 | anything else | `memu-agent` — run `memu-agent detect` if unsure |
 
 Then print your host's packaged guide and follow it to the letter:

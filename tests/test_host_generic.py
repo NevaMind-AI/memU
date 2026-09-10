@@ -122,6 +122,10 @@ def test_detect_points_dedicated_hosts_at_their_binary(tmp_path: pathlib.Path) -
     (root / "AGENTS.md").write_text("# rules\n", encoding="utf-8")
     assert "memu-codex" in render(probe(root))
 
+    pi_root = tmp_path / ".pi"
+    pi_root.mkdir()
+    assert "memu-pi" in render(probe(pi_root))
+
 
 def test_scan_home_finds_only_plausible_agents(tmp_path: pathlib.Path) -> None:
     _agent_dir(tmp_path, sessions=True, instructions=True)

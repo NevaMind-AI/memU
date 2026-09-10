@@ -40,6 +40,7 @@ INSTRUCTION_NAMES = (
 """Instruction-file names the ecosystem's agents load into every session."""
 
 DEDICATED = {
+    ".pi": "memu-pi",
     ".codex": "memu-codex",
     ".claude": "memu-claude-code",
     ".cursor": "memu-cursor",

@@ -30,10 +30,11 @@ from memu.hosts.generic.cli import SPEC as GENERIC
 from memu.hosts.hermes.cli import SPEC as HERMES
 from memu.hosts.host_cli import ScheduleBackend, build_parser, run
 from memu.hosts.openclaw.cli import SPEC as OPENCLAW
+from memu.hosts.pi.cli import SPEC as PI
 from memu.hosts.scheduling import prompt, windows
 from memu.hosts.workbuddy.cli import SPEC as WORKBUDDY
 
-SPECS = (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
+SPECS = (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, PI, GENERIC)
 
 EXPECTED_TASK_NAMES = {
     "claude-code": ("memu-bridging-claude-code", ("memu-remember-claude-code",)),
@@ -43,6 +44,7 @@ EXPECTED_TASK_NAMES = {
     "openclaw": ("memu-bridging-openclaw", ("memu-remember", "memu-bridging")),
     "workbuddy": ("memu-bridging-workbuddy", ()),
     "cola": ("memu-bridging-cola", ("memu-bridging", "memU 记忆桥接")),
+    "pi": ("memu-bridging-pi", ()),
     "agent": ("memu-bridging-agent", ()),
 }
 
@@ -81,6 +83,39 @@ def test_wrapper_keeps_prompt_off_the_command_line(tmp_path: Path) -> None:
     assert "& 'C:\\bin\\claude.exe' -p $prompt" in text
     # PATH is re-established for the scheduler's bare environment (#530, ported).
     assert "$env:Path = 'C:\\bin;C:\\memu;' + $env:Path" in text
+
+
+def test_install_invokes_path_resolvable_command_for_npm_cmd_shim(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    cmd_shim = bin_dir / "pi.CMD"
+    ps_shim = bin_dir / "pi.ps1"
+    cmd_shim.write_text("@ECHO off\r\n", encoding="utf-8")
+    ps_shim.write_text("#!/usr/bin/env pwsh\n", encoding="utf-8")
+
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(windows, "_resolve_agent", lambda spec: str(cmd_shim))
+    monkeypatch.setattr(windows, "_auth_gate", lambda spec, path, workdir: 0)
+    monkeypatch.setattr(windows.shutil, "which", lambda binary: None)
+    monkeypatch.setattr(
+        windows,
+        "_run_powershell",
+        lambda script: subprocess.CompletedProcess([], 0, "", ""),
+    )
+
+    layout = Layout.default(host=PI.host, base=tmp_path / "host")
+    assert windows.install(PI, layout) == 0
+
+    wrapper = (layout.base / windows.WRAPPER_NAME).read_text(encoding="utf-8-sig")
+    assert "& 'pi' -p $prompt" in wrapper
+    assert f"$env:Path = '{bin_dir};' + $env:Path" in wrapper
+    assert str(cmd_shim) not in wrapper
+    assert str(ps_shim) not in wrapper
+    scheduled = (layout.base / windows.PROMPT_NAME).read_text(encoding="utf-8")
+    assert "memu-pi prepare" in scheduled
+    assert "--session-dir" not in scheduled
 
 
 def test_register_script_is_canonical_and_hardened() -> None:
@@ -220,6 +255,25 @@ def test_claude_verify_rejects_missing_or_legacy_registration(
     assert "schedule install" in capsys.readouterr().err
 
 
+def test_verify_says_it_did_not_run_the_scheduled_task(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        windows,
+        "_run_powershell",
+        lambda script: subprocess.CompletedProcess([], 0, "registered", ""),
+    )
+    monkeypatch.setattr(windows, "_resolve_agent", lambda spec: "C:\\bin\\pi.exe")
+    monkeypatch.setattr(windows, "_auth_gate", lambda spec, path, workdir: 0)
+
+    assert windows.verify(PI, Layout.default(host=PI.host, base=tmp_path)) == 0
+    out = capsys.readouterr().out
+    assert "does NOT run the S4U task" in out
+    assert "bridge.log" in out
+    assert "new session" in out
+
+
 def test_claude_uninstall_removes_only_known_identities(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     scripts: list[str] = []
     monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
@@ -282,6 +336,20 @@ def test_hermes_scheduled_prompt_bakes_in_its_session_store() -> None:
     )
     assert "memu-hermes prepare --session-dir 'C:/Hermes Home/state.db'" in scheduled
     assert "--session-dir" not in prompt.bridging_pipeline_prompt(CLAUDE)
+
+
+def test_pi_scheduler_does_not_copy_claude_auth_or_hermes_session_bake() -> None:
+    # Interactive `pi` and scheduled `pi -p` are the same CLI. Credentials live
+    # in ~/.pi/agent/auth.json (or a persistent env), so there is no separate
+    # headless login for memU to probe — unlike Claude Code, whose desktop login
+    # is invisible to standalone `claude`. Sessions live at the default
+    # ~/.pi/agent/sessions; unlike Hermes, that path does not move with a runtime
+    # home the S4U task would fail to inherit, so scheduled prepare must not bake
+    # an install-time --session-dir.
+    assert PI.needs_headless_auth is False
+    assert PI.auth_hint == ""
+    assert PI.schedule_prepare_session_dir is False
+    assert "--session-dir" not in prompt.bridging_pipeline_prompt(PI)
 
 
 def test_cursor_template_carries_the_trust_flag_everywhere() -> None:
@@ -444,7 +512,17 @@ def test_hermes_pipeline_prompt_matches_the_bridging_doc() -> None:
     assert doc_prompt == prompt.bridging_pipeline_prompt(HERMES)
 
 
-@pytest.mark.parametrize("pkg", ["claude_code", "cursor", "hermes", "generic"])
+def test_pi_pipeline_prompt_matches_the_bridging_doc() -> None:
+    from importlib.resources import files
+
+    doc = (files("memu.hosts.pi") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    doc_prompt = next(
+        line.strip() for line in doc.splitlines() if line.strip().startswith("Run the memU bridging pipeline.")
+    )
+    assert doc_prompt == prompt.bridging_pipeline_prompt(PI)
+
+
+@pytest.mark.parametrize("pkg", ["claude_code", "cursor", "hermes", "pi", "generic"])
 def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
     # The bug class behind memU#591: an inlined pipeline prompt pushed the guide's
     # crontab entry past cron's ~1KB line buffer, so every tick died mid-quote
@@ -484,6 +562,7 @@ def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
         ("openclaw", "memu-openclaw", ".cron_job.openclaw.json"),
         ("workbuddy", "memu-workbuddy", "WorkBuddy's automation list"),
         ("cola", "memu-cola", "{{all_task_names}}"),
+        ("pi", "memu-pi", r"hosts/pi/bridge\.sh|memU bridging pipeline"),
     ],
 )
 def test_install_refreshes_existing_bridge_before_registration(pkg: str, binary: str, identity: str) -> None:
@@ -569,6 +648,11 @@ def test_openclaw_task_recreates_confirmed_bridge() -> None:
                 "memu-agent commit",
             ),
             ("hosts/agent/bridge\\.sh|memU bridging pipeline", "memu-agent prepare --session-dir …"),
+        ),
+        (
+            "pi",
+            ("$HOME/.memu/hosts/pi/bridge.sh", "{{task_name}}"),
+            ("hosts/pi/bridge.sh", "schedule uninstall"),
         ),
     ],
 )
