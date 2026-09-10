@@ -528,6 +528,39 @@ def test_cursor_prepare_skips_empty_sessions_and_backfills_job_capacity(tmp_path
     assert all(staged[source.key(path)] == {"lines": 1, "last_timestamp": None} for path in error_paths + valid_paths)
 
 
+@pytest.mark.parametrize("max_jobs", [0, 1])
+def test_cursor_prepare_sanitizes_only_selected_sessions(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, max_jobs: int
+) -> None:
+    turn_error = {"type": "turn_ended", "status": "error"}
+    tool = {"role": "assistant", "message": {"content": [{"type": "tool_use", "name": "Shell", "input": {}}]}}
+    selected = _cursor_session(tmp_path, "newest", [tool], 3000)
+    _cursor_session(tmp_path, "older", [turn_error, tool], 2000)
+    empty = _cursor_session(tmp_path, "empty", [turn_error], 1000)
+    source = CursorTranscriptSource(tmp_path)
+    sanitized: list[pathlib.Path] = []
+
+    def sanitize(path: pathlib.Path, record: str) -> str:
+        sanitized.append(path)
+        return record
+
+    monkeypatch.setattr(source, "sanitize", sanitize)
+    pending = tmp_path / "pending.json"
+    manifest = tmp_path / "manifest.json"
+    out_dir = tmp_path / "out"
+
+    assert prepare_transcripts(source, out_dir, manifest, max_jobs, pending) == max_jobs
+    assert sanitized == [selected] * max_jobs
+    staged = json.loads(pending.read_text(encoding="utf-8"))
+    assert set(staged) == {source.key(empty)} | ({source.key(selected)} if max_jobs else set())
+    assert staged[source.key(empty)] == {"lines": 1, "last_timestamp": None}
+    assert not manifest.exists()
+    if max_jobs:
+        assert (out_dir / "1_full.jsonl").read_text(encoding="utf-8").strip() == _line(tool)
+    else:
+        assert list(out_dir.glob("*.jsonl")) == []
+
+
 def test_cursor_prepare_with_only_empty_sessions_writes_no_transcripts(tmp_path: pathlib.Path) -> None:
     turn_error = {"type": "turn_ended", "status": "error", "error": "usage limit"}
     transcript = _cursor_session(tmp_path, "error", [turn_error], 1000)
