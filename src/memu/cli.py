@@ -14,7 +14,8 @@ Usage:
     memu list-files
     memu commit results.json
     memu memorize prepare session.json
-    memu memorize commit
+    memu memorize commit <run-id>
+    memu memorize discard <run-id>
 """
 
 from __future__ import annotations
@@ -24,7 +25,10 @@ import asyncio
 import json
 import os
 import pathlib
+import re
+import shutil
 import sys
+import tempfile
 import time
 from collections.abc import Callable, Coroutine
 from typing import Any
@@ -168,12 +172,27 @@ async def _cmd_commit(args: argparse.Namespace) -> int:
     return 0
 
 
-def _memorize_workspace() -> MemorizeWorkspace:
-    return MemorizeWorkspace(pathlib.Path(MEMORIZE_WORKSPACE).expanduser())
+def _memorize_workspace(run_id: str | None = None) -> MemorizeWorkspace:
+    """Allocate a private run, or resolve an existing id within the runs root."""
+    root = (pathlib.Path(MEMORIZE_WORKSPACE).expanduser() / "runs").resolve()
+    if run_id is None:
+        root.mkdir(parents=True, exist_ok=True)
+        return MemorizeWorkspace(pathlib.Path(tempfile.mkdtemp(prefix="run-", dir=root)))
+    if not re.fullmatch(r"run-[a-z0-9_]{1,64}", run_id):
+        msg = "invalid memorize run id"
+        raise ValueError(msg)
+    path = root / run_id
+    if path.is_symlink() or path.resolve() != path:
+        msg = "memorize run must be a directory directly below the runs root"
+        raise ValueError(msg)
+    if not path.is_dir():
+        msg = f"no such memorize run: {run_id}"
+        raise FileNotFoundError(msg)
+    return MemorizeWorkspace(path)
 
 
-def _memorize_commit_command() -> str:
-    return "memu memorize commit"
+def _memorize_commit_command(run_id: str) -> str:
+    return f"memu memorize commit {run_id}"
 
 
 def _memorize_executor_prompt(prepared: PreparedMemorizeRun) -> str:
@@ -213,22 +232,25 @@ async def _cmd_memorize_prepare(args: argparse.Namespace) -> int:
             print(f"error: no such file: {pathlib.Path(payload).expanduser()}", file=sys.stderr)
             return 2
     memorize_inputs = [_read_memorize_input(payload) for payload in payloads]
+    backend = _build_backend(args)
     workspace = _memorize_workspace()
-    verify_command = "memu memorize verify-resources"
-    prepared = await prepare_memorize(
-        memorize_inputs,
-        workspace,
-        _build_backend(args),
-        verify_command=verify_command,
-    )
+    run_id = workspace.base.name
+    verify_command = f"memu memorize verify-resources {run_id}"
+    try:
+        prepared = await prepare_memorize(memorize_inputs, workspace, backend, verify_command=verify_command)
+    except BaseException:
+        # No executor has received this freshly allocated run yet.
+        shutil.rmtree(workspace.base)
+        raise
 
     executor_prompt = _memorize_executor_prompt(prepared)
     if args.json:
         response: dict[str, Any] = {
+            "run_id": run_id,
             "workspace": str(workspace.base),
             "jobs": [str(path) for path in prepared.jobs],
             "executor_prompt": executor_prompt,
-            "next_command": _memorize_commit_command(),
+            "next_command": _memorize_commit_command(run_id),
         }
         transcripts = [
             {"memory_path": str(item.memory_path), "skill_path": str(item.skill_path)} for item in prepared.transcripts
@@ -241,16 +263,23 @@ async def _cmd_memorize_prepare(args: argparse.Namespace) -> int:
 
     print("prepared developer session")
     print(f"  {len(prepared.jobs)} job(s)")
+    print(f"  run_id: {run_id}")
     print(f"  workspace: {workspace.base}")
     print("run one external agent session with this prompt:")
     print(executor_prompt)
     print("after the agent reports success, run:")
-    print(f"  {_memorize_commit_command()}")
+    print(f"  {_memorize_commit_command(run_id)}")
     return 0
 
 
 async def _cmd_memorize_commit(args: argparse.Namespace) -> int:
-    result = await commit_memorize(_memorize_workspace(), _build_backend(args))
+    workspace = _memorize_workspace(args.run_id)
+    result = await commit_memorize(workspace, _build_backend(args))
+    try:
+        shutil.rmtree(workspace.base)
+    except OSError as exc:
+        msg = f"run {args.run_id} committed, but cleanup failed; use memu memorize discard {args.run_id}: {exc}"
+        raise RuntimeError(msg) from exc
     if args.json:
         _print_json(result)
         return 0
@@ -264,9 +293,22 @@ async def _cmd_memorize_commit(args: argparse.Namespace) -> int:
 
 
 async def _cmd_memorize_verify_resources(args: argparse.Namespace) -> int:
-    workspace = _memorize_workspace()
+    workspace = _memorize_workspace(args.run_id)
+    if not workspace.active_run.is_file():
+        msg = "memorize workspace has no active run"
+        raise RuntimeError(msg)
     kept = verify_resource_log(workspace.resource_log, workspace.resources)
     print(f"verified {kept} resource(s)")
+    return 0
+
+
+async def _cmd_memorize_discard(args: argparse.Namespace) -> int:
+    workspace = _memorize_workspace(args.run_id)
+    shutil.rmtree(workspace.base)
+    if args.json:
+        _print_json({"run_id": args.run_id, "discarded": True})
+    else:
+        print(f"discarded memorize run {args.run_id}")
     return 0
 
 
@@ -312,7 +354,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_options(p)
     p.set_defaults(handler=_cmd_memorize_prepare)
 
-    p = memorize_actions.add_parser("commit", help="Commit the active self-evolve run")
+    p = memorize_actions.add_parser("commit", help="Commit a prepared self-evolve run and remove its directory")
+    p.add_argument("run_id", help="Run id returned by prepare")
     _add_common_options(p)
     p.set_defaults(handler=_cmd_memorize_commit)
 
@@ -320,7 +363,13 @@ def build_parser() -> argparse.ArgumentParser:
         "verify-resources",
         help="Internal: verify files logged by generated skill jobs",
     )
+    p.add_argument("run_id", help="Run id returned by prepare")
     p.set_defaults(handler=_cmd_memorize_verify_resources)
+
+    p = memorize_actions.add_parser("discard", help="Remove a run after its executor has stopped, without committing")
+    p.add_argument("run_id", help="Run id returned by prepare")
+    p.add_argument("--json", action="store_true", help="Print the raw JSON response")
+    p.set_defaults(handler=_cmd_memorize_discard)
 
     return parser
 

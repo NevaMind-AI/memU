@@ -26,7 +26,7 @@ def test_parser_covers_all_entry_points() -> None:
         ["list-files"],
         ["commit", "payload.json"],
         ["memorize", "prepare", "input.json"],
-        ["memorize", "commit"],
+        ["memorize", "commit", "run-test"],
     ):
         args = parser.parse_args(argv)
         assert callable(args.handler)
