@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from memu import cli
+from memu.app.memorize.input import MemorizeInput, ToolCallInput, ToolResultInput
 from memu.app.memorize.lifecycle import PreparedMemorizeRun
 from memu.app.memorize.materialize import MaterializedConversation
 
@@ -43,6 +45,7 @@ def _prepared(
 def test_parser_covers_memorize_actions() -> None:
     parser = cli.build_parser()
     for argv in (
+        ["memorize", "instructions"],
         ["memorize", "prepare", "input.json"],
         ["memorize", "commit", "run-test"],
         ["memorize", "verify-resources", "run-test"],
@@ -56,6 +59,23 @@ def test_parser_covers_memorize_actions() -> None:
 
     with pytest.raises(SystemExit):
         parser.parse_args(["memorize", "commit", "--workspace", "custom"])
+
+
+def test_memorize_instructions_prints_offline_guide_with_valid_examples(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cli, "_build_backend", lambda _args: pytest.fail("instructions must not build a backend"))
+    assert cli.main(["memorize", "instructions"]) == 0
+    guide = capsys.readouterr().out
+    payload, tool_call, tool_result = [json.loads(text) for text in re.findall(r"```json\n(.*?)\n```", guide, re.S)]
+    MemorizeInput.model_validate(payload)
+    ToolCallInput.model_validate(tool_call)
+    ToolResultInput.model_validate(tool_result)
+    assert "run_id" in guide and "next_command" in guide
+    assert "committed, but cleanup failed" in guide
+    assert "do not commit or recursively trigger active memorize" in guide
+    assert "memu memorize discard <run-id> --json" in guide
+    assert not (tmp_path / "developer").exists()
 
 
 def test_prepare_allocates_workspace_and_prints_agent_handoff(

@@ -31,6 +31,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable, Coroutine
+from importlib.resources import files
 from typing import Any
 
 from memu import events
@@ -302,6 +303,11 @@ async def _cmd_memorize_verify_resources(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _cmd_memorize_instructions(_args: argparse.Namespace) -> int:
+    print(files("memu.app.memorize").joinpath("INSTRUCTIONS.md").read_text(encoding="utf-8"), end="")
+    return 0
+
+
 async def _cmd_memorize_discard(args: argparse.Namespace) -> int:
     workspace = _memorize_workspace(args.run_id)
     shutil.rmtree(workspace.base)
@@ -348,6 +354,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Turn developer-supplied conversations into external self-evolve jobs",
     )
     memorize_actions = memorize.add_subparsers(dest="memorize_action", required=True)
+
+    p = memorize_actions.add_parser("instructions", help="Print the agent guide for active memorization")
+    p.set_defaults(handler=_cmd_memorize_instructions)
 
     p = memorize_actions.add_parser("prepare", help="Prepare self-evolve jobs from 1-10 conversation sessions")
     p.add_argument("payloads", nargs="+", help='1-10 MemorizeInput JSON files, or "-" for stdin')
