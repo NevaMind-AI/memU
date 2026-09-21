@@ -13,14 +13,11 @@ import math
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, Protocol, Self
+from typing import Any, Literal, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from memu.agentic_backend import AgenticMemoryBackend
-
-if TYPE_CHECKING:
-    from typesafe_sdk import JSONContent, NoulModel
 
 CandidateKind = Literal["segment", "resource"]
 ErrorPolicy = Literal["fallback", "raise"]
@@ -125,13 +122,13 @@ class TypeSafeJevEvaluator:
             message = "Jev evaluation requires at least one candidate"
             raise ValueError(message)
 
-        state: JSONContent = {
+        state: dict[str, object] = {
             "query": query,
             "candidates": {
                 candidate.key: {"kind": candidate.kind, "content": candidate.text} for candidate in candidates
             },
         }
-        questions: dict[str, NoulModel] = {
+        questions: dict[str, dict[str, object]] = {
             candidate.key: {
                 "type": "noul",
                 "instructions": (
