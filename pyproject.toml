@@ -36,6 +36,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/memu"]
 
+# The root SKILL.md doubles as the seed skill (memu.hosts.seed): setup plants it
+# in the user's store so a bare "uninstall memU" can retrieve the packaged guide.
+[tool.hatch.build.targets.wheel.force-include]
+"SKILL.md" = "memu/SKILL.md"
+
 [dependency-groups]
 dev = [
     {include-group = "lint"},

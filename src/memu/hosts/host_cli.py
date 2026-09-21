@@ -649,6 +649,22 @@ async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
     return 0
 
 
+async def _cmd_seed_skills(spec: HostSpec, args: argparse.Namespace) -> int:
+    """Plant the packaged install/uninstall skill into the store (see :mod:`memu.hosts.seed`).
+
+    A setup-time step: run once after ``doctor`` is green, so a later bare
+    "uninstall memU" can surface the packaged guide through retrieval on any
+    host sharing this store. Rerunning is an upsert, never a duplicate.
+    """
+    from memu.hosts import seed as seed_module
+
+    mirror, result = await seed_module.seed(_layout(spec, args).base)
+    committed = result.get("recall_files", [])
+    print(f"mirror  {mirror}")
+    print(f"store   upserted {len(committed)} skill file(s)")
+    return 0
+
+
 async def _cmd_docs(spec: HostSpec, args: argparse.Namespace) -> int:
     # Server-first, then last-good cache, then the embedded floor — the same
     # self-updating shape ADR 0013 gives the instruction templates, applied to the
@@ -895,6 +911,14 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
 
     p = sub.add_parser("doctor", help="Verify MEMU_* config resolves and the selected memory backend is reachable")
     p.set_defaults(handler=bind(_cmd_doctor))
+
+    p = with_base(
+        sub.add_parser(
+            "seed-skills",
+            help="Plant the packaged install/uninstall skill into the store (setup-time; rerun-safe upsert)",
+        )
+    )
+    p.set_defaults(handler=bind(_cmd_seed_skills))
 
     p = sub.add_parser("docs", help="Print a packaged agent-facing guide")
     p.add_argument(
