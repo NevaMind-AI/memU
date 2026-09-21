@@ -217,6 +217,46 @@ def cloud_api_key() -> str:
     return value
 
 
+def retrieval_reranker() -> str | None:
+    """Resolve the optional post-retrieval integration."""
+    value = (env("MEMU_RETRIEVAL_RERANKER") or "").strip().lower()
+    if not value:
+        return None
+    if value != "jev":
+        raise ConfigError("MEMU_RETRIEVAL_RERANKER", "must be 'jev' when set")
+    return value
+
+
+def _with_retrieval_reranker(backend: AgenticMemoryBackend) -> AgenticMemoryBackend:
+    """Wrap ``backend`` only when the explicitly configured integration needs it."""
+    if retrieval_reranker() is None:
+        return backend
+
+    api_key = env("TYPESAFE_API_KEY")
+    if not api_key:
+        raise ConfigError(
+            "TYPESAFE_API_KEY",
+            f"is required when MEMU_RETRIEVAL_RERANKER=jev. Add it to {CONFIG_ENV} (or export it)",
+        )
+
+    from pydantic import ValidationError
+
+    from memu.integrations.jev import JevRerankConfig, JevRerankedMemoryBackend
+
+    raw_config = {
+        "model": env("MEMU_JEV_MODEL", "jev-latest"),
+        "min_relevance": env("MEMU_JEV_MIN_RELEVANCE", "0.5"),
+        "max_candidates": env("MEMU_JEV_MAX_CANDIDATES", "32"),
+        "timeout_seconds": env("MEMU_JEV_TIMEOUT_SECONDS", "1.5"),
+        "on_error": env("MEMU_JEV_ON_ERROR", "fallback"),
+    }
+    try:
+        config = JevRerankConfig.model_validate(raw_config)
+    except ValidationError as exc:
+        raise ConfigError("MEMU_JEV_*", "invalid Jev reranker configuration") from exc
+    return JevRerankedMemoryBackend(backend, config=config, api_key=api_key)
+
+
 def build_agentic_memory_backend_from_env(
     *,
     local_database: str | None = None,
@@ -231,19 +271,20 @@ def build_agentic_memory_backend_from_env(
     if memory_mode() == "cloud":
         from memu.cloud import CloudMemoryClient
 
-        return CloudMemoryClient(
+        backend: AgenticMemoryBackend = CloudMemoryClient(
             base_url=cloud_base_url(),
             api_key=cloud_api_key(),
         )
+    else:
+        from memu.app import MemoryService
 
-    from memu.app import MemoryService
-
-    resolved_database = database_config(local_database if local_database is not None else require("MEMU_DB"))
-    resolved_embedding = local_embedding_profile if local_embedding_profile is not None else embedding_profile()
-    return MemoryService(
-        embedding_profiles={"default": resolved_embedding},
-        database_config=resolved_database,
-    )
+        resolved_database = database_config(local_database if local_database is not None else require("MEMU_DB"))
+        resolved_embedding = local_embedding_profile if local_embedding_profile is not None else embedding_profile()
+        backend = MemoryService(
+            embedding_profiles={"default": resolved_embedding},
+            database_config=resolved_database,
+        )
+    return _with_retrieval_reranker(backend)
 
 
 def build_service_from_env() -> Any:

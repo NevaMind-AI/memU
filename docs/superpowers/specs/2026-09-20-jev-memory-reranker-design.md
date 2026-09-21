@@ -1,7 +1,9 @@
 # Jev-Reranked Memory Retrieval
 
-**Status:** Proposed for implementation review  
-**Date:** 2026-09-20  
+**Status:** Approved
+
+**Date:** 2026-09-20
+
 **Target:** memU `main`, as an opt-in integration with no default behavior change
 
 ## Summary
@@ -115,7 +117,7 @@ Add an optional dependency:
 
 ```toml
 [project.optional-dependencies]
-jev = ["typesafe-sdk>=0.7.0,<1"]
+jev = ["typesafe-sdk>=0.7.0,<0.8"]
 ```
 
 The shared backend builder will wrap the selected local or cloud backend only
