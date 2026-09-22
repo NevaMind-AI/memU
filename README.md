@@ -144,10 +144,8 @@ Adding another host means implementing one `TranscriptSource` (where its session
 
 ## Developer integration
 
-Applications that already own their conversation history can use `memu memorize`
-to prepare self-evolve jobs from 1–10 completed sessions for one external agent and
-commit the resulting memory, skill, and resource changes. See [Developer integration](docs/developer.md) for the
-canonical input contract and the complete prepare → agent → commit workflow.
+Use `memu memorize` to turn application-owned conversations into memory and skills.
+See the [developer guide](docs/developer.md) for the input format and integration workflow.
 
 ## CLI
 

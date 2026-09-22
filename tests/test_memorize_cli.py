@@ -12,6 +12,11 @@ from memu.app.memorize.lifecycle import PreparedMemorizeRun
 from memu.app.memorize.materialize import MaterializedConversation
 
 
+@pytest.fixture(autouse=True)
+def isolated_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli, "MEMORIZE_WORKSPACE", str(tmp_path / "developer"))
+
+
 def _payload() -> dict[str, Any]:
     return {
         "schema_version": "1.0",
@@ -39,16 +44,21 @@ def test_parser_covers_memorize_actions() -> None:
     parser = cli.build_parser()
     for argv in (
         ["memorize", "prepare", "input.json"],
-        ["memorize", "commit"],
-        ["memorize", "verify-resources"],
+        ["memorize", "commit", "run-test"],
+        ["memorize", "verify-resources", "run-test"],
+        ["memorize", "discard", "run-test"],
     ):
         assert callable(parser.parse_args(argv).handler)
+
+    for action in ("commit", "verify-resources", "discard"):
+        with pytest.raises(SystemExit):
+            parser.parse_args(["memorize", action])
 
     with pytest.raises(SystemExit):
         parser.parse_args(["memorize", "commit", "--workspace", "custom"])
 
 
-def test_prepare_uses_fixed_workspace_and_prints_agent_handoff(
+def test_prepare_allocates_workspace_and_prints_agent_handoff(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -75,9 +85,11 @@ def test_prepare_uses_fixed_workspace_and_prints_agent_handoff(
     assert cli.main(["memorize", "prepare", str(payload)]) == 0
 
     assert received["input"][0].items[0].content == "Remember this"
-    assert received["workspace"].base == workspace
+    assert received["workspace"].base.parent == workspace / "runs"
+    workspace = received["workspace"].base
+    assert workspace.is_dir()
     assert received["backend"] is backend
-    assert received["verify_command"] == "memu memorize verify-resources"
+    assert received["verify_command"] == f"memu memorize verify-resources {workspace.name}"
     output = capsys.readouterr().out
     assert "prepared developer session" in output
     assert "3 job(s)" in output
@@ -109,7 +121,10 @@ def test_prepare_reads_stdin_and_prints_machine_handoff(
     assert cli.main(["memorize", "prepare", "-", "--json"]) == 0
 
     output = json.loads(capsys.readouterr().out)
+    assert Path(output["workspace"]).parent == workspace / "runs"
+    workspace = Path(output["workspace"])
     assert output == {
+        "run_id": workspace.name,
         "workspace": str(workspace),
         "transcript": {
             "memory_path": str(workspace / "input" / "1.jsonl"),
@@ -124,7 +139,7 @@ def test_prepare_reads_stdin_and_prints_machine_handoff(
             "If any job fails, stop and report failure. Do not run `memu memorize commit`. "
             "Report success only after every job has completed."
         ),
-        "next_command": "memu memorize commit",
+        "next_command": f"memu memorize commit {workspace.name}",
     }
 
 
@@ -153,11 +168,13 @@ def test_prepare_multiple_files_passes_all_sessions(
     assert cli.main(["memorize", "prepare", *(str(path) for path in payloads), "--json"]) == 0
     assert [item.items[0].content for item in received["inputs"]] == [str(index) for index in range(num_sessions)]
     output = json.loads(capsys.readouterr().out)
+    workspace = Path(output["workspace"])
+    assert workspace.parent == tmp_path / "workspace" / "runs"
     assert "transcript" not in output
     assert output["transcripts"] == [
         {
-            "memory_path": str(tmp_path / "workspace" / "input" / f"{index}.jsonl"),
-            "skill_path": str(tmp_path / "workspace" / "input" / f"{index}_full.jsonl"),
+            "memory_path": str(workspace / "input" / f"{index}.jsonl"),
+            "skill_path": str(workspace / "input" / f"{index}_full.jsonl"),
         }
         for index in range(1, num_sessions + 1)
     ]
@@ -174,7 +191,7 @@ def test_executor_prompt_preserves_returned_job_order(tmp_path: Path) -> None:
     assert prompt.index(f"2. {workspace.jobs / '3.txt'}") < prompt.index(f"3. {workspace.jobs / '11.txt'}")
 
 
-def test_prepare_default_workspace_keeps_next_command_short(
+def test_prepare_next_command_targets_allocated_run(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -186,7 +203,8 @@ def test_prepare_default_workspace_keeps_next_command_short(
     monkeypatch.setattr(cli, "prepare_memorize", fake_prepare)
 
     assert cli.main(["memorize", "prepare", "-", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out)["next_command"] == "memu memorize commit"
+    output = json.loads(capsys.readouterr().out)
+    assert output["next_command"] == f"memu memorize commit {output['run_id']}"
 
 
 def test_prepare_missing_file_reports_error(capsys: pytest.CaptureFixture[str]) -> None:
@@ -210,7 +228,7 @@ def test_prepare_invalid_input_reports_validation_error(
     assert "at least 1 item" in capsys.readouterr().err
 
 
-def test_commit_uses_selected_backend_and_fixed_workspace(
+def test_commit_uses_selected_backend_and_run_workspace(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -227,17 +245,20 @@ def test_commit_uses_selected_backend_and_fixed_workspace(
         }
 
     monkeypatch.setattr(cli, "MEMORIZE_WORKSPACE", str(workspace))
+    workspace = workspace / "runs" / "run-test"
+    workspace.mkdir(parents=True)
     monkeypatch.setattr(cli, "_build_backend", lambda _args: backend)
     monkeypatch.setattr(cli, "commit_memorize", fake_commit)
 
-    assert cli.main(["memorize", "commit"]) == 0
+    assert cli.main(["memorize", "commit", "run-test"]) == 0
+    assert not workspace.exists()
     assert received == {"workspace": cli.MemorizeWorkspace(workspace), "backend": backend}
     output = capsys.readouterr().out
     assert "committed 1 recall file(s) and 1 resource(s)" in output
     assert "memory/profile" in output
 
 
-def test_verify_resources_uses_fixed_workspace_without_backend(
+def test_verify_resources_uses_run_workspace_without_backend(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -251,9 +272,12 @@ def test_verify_resources_uses_fixed_workspace_without_backend(
         return 2
 
     monkeypatch.setattr(cli, "MEMORIZE_WORKSPACE", str(workspace))
+    workspace = workspace / "runs" / "run-test"
+    workspace.mkdir(parents=True)
+    (workspace / ".memorize_run.json").write_text("{}", encoding="utf-8")
     monkeypatch.setattr(cli, "verify_resource_log", fake_verify)
     monkeypatch.setattr(cli, "_build_backend", lambda _args: pytest.fail("verifier must not build a backend"))
 
-    assert cli.main(["memorize", "verify-resources"]) == 0
+    assert cli.main(["memorize", "verify-resources", "run-test"]) == 0
     assert received == (workspace / ".resource.tmp", workspace / "resources.md")
     assert "verified 2 resource(s)" in capsys.readouterr().out

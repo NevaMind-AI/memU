@@ -165,12 +165,19 @@ async def commit_memorize(workspace: MemorizeWorkspace, backend: AgenticMemoryBa
     resources = read_resources(workspace.resources)
     result = await backend.commit_results(recall_files=recall_files, resource=resources)
 
-    snapshot_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
-    for stale in workspace.jobs.glob("*.txt"):
-        stale.unlink()
-    for stale in workspace.input.glob("*.jsonl"):
-        stale.unlink()
-    workspace.resource_log.unlink(missing_ok=True)
-    workspace.resources.unlink(missing_ok=True)
-    workspace.active_run.unlink()
+    try:
+        snapshot_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
+        for stale in workspace.jobs.glob("*.txt"):
+            stale.unlink()
+        for stale in workspace.input.glob("*.jsonl"):
+            stale.unlink()
+        workspace.resource_log.unlink(missing_ok=True)
+        workspace.resources.unlink(missing_ok=True)
+        workspace.active_run.unlink()
+    except OSError as exc:
+        msg = (
+            f"memorize run committed, but cleanup failed at {workspace.base}: {exc}; "
+            "do not resubmit; discard the stopped run"
+        )
+        raise RuntimeError(msg) from exc
     return result
