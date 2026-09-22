@@ -2,7 +2,21 @@
 
 Applications that already own their conversation history can submit 1–10 completed sessions to memU without implementing a host adapter. The application decides when sessions are ready, converts each to the canonical input, runs one external evolve executor, and commits the executor's result to the configured Local or Cloud backend.
 
-This is an application integration contract. It starts with a completed session supplied by the application; selecting facts from an ongoing conversation or inventing a conversation on an agent's behalf is outside the v1 interface.
+This is an application integration contract. It starts with a completed session supplied by the application. A host agent can treat a completed exchange or task as that session, using its actual messages; unfinished activity and invented conversations are outside this interface.
+
+## Active memorization from hosts
+
+Each host's `install-instruction` installs a short active-memorization trigger alongside retrieval guidance. When the user asks to remember something, or completed work reveals a durable preference, decision, or reusable workflow, it directs the agent to:
+
+```bash
+memu memorize instructions
+```
+
+This prints the packaged agent guide without contacting a backend or allocating a run. The guide covers faithful canonical input, the prepare response and run id, serial evolve execution, commit, and recovery/discard. All hosts use the same developer CLI contract, including hosts whose retrieval procedure is installed as a skill. An agent can perform the executor pass itself or delegate it to one executor it can await; this does not require a host-specific subagent API.
+
+Re-run `<host-binary> install-instruction` after upgrading to install the trigger in an existing host. Use the same custom `--path` / `--skills-dir` settings as the existing installation. `remove-instruction` removes it with the managed block. Ordinary retrieval refresh keeps its existing scope; on skill hosts it does not add the new trigger to a previously installed global block.
+
+The trigger honors memory opt-outs and skips installation, scheduled bridging, and evolve execution to avoid recursively memorizing memU's own work. Scheduled host bridging continues to use its own prepare–commit flow. Active memorization does not advance host transcript cursors or exclude the original session from later bridging.
 
 ## Lifecycle
 

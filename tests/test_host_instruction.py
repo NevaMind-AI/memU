@@ -13,6 +13,7 @@ about today's behaviour moves.
 from __future__ import annotations
 
 import argparse
+import importlib
 import pathlib
 
 import pytest
@@ -38,6 +39,42 @@ def _migration_parser(current: pathlib.Path, legacy: pathlib.Path) -> argparse.A
         legacy_paths=(str(legacy),),
     )
     return parser
+
+
+@pytest.mark.parametrize(
+    "host", ["codex", "claude_code", "cursor", "hermes", "openclaw", "workbuddy", "cola", "pi", "generic"]
+)
+def test_every_host_installs_and_removes_active_memorization_guidance(
+    host: str, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    spec = importlib.import_module(f"memu.hosts.{host}.cli").SPEC
+    parser = build_host_parser(spec)
+    path = tmp_path / "instructions.md"
+    original = "# User rules\n\nKeep my settings.\n"
+    path.write_text(original, encoding="utf-8")
+    skills = str(tmp_path / "skills") if spec.skills_dir else ""
+    flags = ["--path", str(path), "--skills-dir", skills]
+    monkeypatch.setattr(instruction.templates, "fetch", lambda _name: None)
+
+    install_args = parser.parse_args(["install-instruction", *flags])
+    assert instruction._cmd_install_instruction(install_args) == 0
+    installed = path.read_text(encoding="utf-8")
+    assert instruction.MEMORIZE_INSTRUCTION in installed
+    assert installed.count("`memu memorize instructions`") == 1
+    assert "evolve execution" in installed
+    assert original.strip() in installed
+    assert instruction._cmd_install_instruction(install_args) == 0
+    assert path.read_text(encoding="utf-8") == installed
+
+    assert instruction._cmd_remove_instruction(parser.parse_args(["remove-instruction", *flags])) == 0
+    assert path.read_text(encoding="utf-8") == original
+
+
+def test_remote_retrieval_content_preserves_active_memorization_pointer() -> None:
+    remote_skill = "---\nname: memu-retrieve\n---\n\n# Retrieve\n\nRun {binary} retrieve.\n"
+    for skill in (False, True):
+        text = instruction.instruction(BINARY, skill=skill, skill_text=remote_skill)
+        assert instruction.MEMORIZE_INSTRUCTION in text
 
 
 def test_creates_file_when_absent(tmp_path: pathlib.Path) -> None:
