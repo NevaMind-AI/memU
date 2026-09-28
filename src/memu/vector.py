@@ -29,11 +29,11 @@ def cosine_topk(
         return []
 
     q = np.asarray(query_vec, dtype=np.float32)
-    if q.ndim != 1 or q.size == 0:
+    if q.ndim != 1 or q.size == 0 or not np.isfinite(q).all():
         return []
     dim = q.size
 
-    # Filter out None, empty, or wrong-dimension vectors. An empty list is not
+    # Filter out None, empty, wrong-dimension, or non-finite vectors. An empty list is not
     # a vector, and a dimension mismatch would make np.array() fall back to an
     # object matrix (then the matrix product below crashes or, worse, silently
     # mis-scores). Callers already disagree on whether ``[]`` means "unembedded"
@@ -44,7 +44,7 @@ def cosine_topk(
     for _id, vec in corpus:
         if vec is None:
             continue
-        if len(vec) != dim:
+        if len(vec) != dim or not np.isfinite(vec).all():
             continue
         ids.append(_id)
         vecs.append(cast(list[float], vec))

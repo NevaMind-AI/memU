@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from memu.database.inmemory.vector import cosine_topk
 
 
@@ -40,3 +42,30 @@ def test_cosine_topk_skips_wrong_dimension_vectors() -> None:
 def test_cosine_topk_empty_or_nonvector_query_returns_empty() -> None:
     assert cosine_topk([], _corpus(), k=2) == []
     assert cosine_topk([1.0, 0.0], [], k=2) == []
+
+
+def test_cosine_topk_skips_nonfinite_rows_without_mutating_inputs() -> None:
+    query = [1.0, 0.0]
+    corpus = [
+        ("nan", [float("nan"), 0.0]),
+        ("best", [1.0, 0.0]),
+        ("inf", [float("inf"), 0.0]),
+        ("other", [0.0, 1.0]),
+    ]
+    original = repr((query, corpus))
+
+    assert [row_id for row_id, _ in cosine_topk(query, corpus, k=1)] == ["best"]
+    results = cosine_topk(query, corpus, k=4)
+    assert [row_id for row_id, _ in results] == ["best", "other"]
+    assert all(math.isfinite(score) for _, score in results)
+    assert results[0][1] > results[1][1]
+    assert repr((query, corpus)) == original
+
+
+def test_cosine_topk_nonfinite_query_returns_empty_without_mutating_inputs() -> None:
+    corpus = _corpus()
+    for value in (float("nan"), float("inf")):
+        query = [value, 0.0]
+        original = repr((query, corpus))
+        assert cosine_topk(query, corpus, k=2) == []
+        assert repr((query, corpus)) == original

@@ -82,6 +82,16 @@ def test_skips_segments_without_an_embedding(db_backend: Database) -> None:
     assert [seg.text for seg, _ in hits] == ["east"]
 
 
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf")], ids=["nan", "inf"])
+def test_skips_segments_with_nonfinite_embedding(db_backend: Database, invalid: float) -> None:
+    _seed(db_backend, [("bad", [invalid, 0.0], "memory"), ("east", [1.0, 0.0], "memory")])
+
+    hits = db_backend.recall_file_segment_repo.vector_search_segments([1.0, 0.0], 1)
+
+    assert [seg.text for seg, _ in hits] == ["east"]
+    assert hits[0][1] == pytest.approx(1.0, abs=1e-3)
+
+
 def test_scopes_to_where_including_track_in(db_backend: Database) -> None:
     _seed(db_backend, [("east", [1.0, 0.0], "memory"), ("skill east", [1.0, 0.0], "skill")])
 
