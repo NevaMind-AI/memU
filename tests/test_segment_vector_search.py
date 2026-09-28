@@ -9,6 +9,7 @@ session, since scoring in SQL is precisely what cannot be checked in Python.
 
 from __future__ import annotations
 
+import math
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
@@ -90,6 +91,19 @@ def test_skips_segments_with_nonfinite_embedding(db_backend: Database, invalid: 
 
     assert [seg.text for seg, _ in hits] == ["east"]
     assert hits[0][1] == pytest.approx(1.0, abs=1e-3)
+
+
+def test_skips_segments_that_overflow_float32(db_backend: Database) -> None:
+    # A stored [1e39, 0.0] is finite in float64 but inf once the ranker casts
+    # the corpus to float32; its NaN score would sort first. The stored row must
+    # be judged on its float32 value, with a usable segment as the control.
+    _seed(db_backend, [("huge", [1e39, 0.0], "memory"), ("east", [1.0, 0.0], "memory")])
+
+    hits = db_backend.recall_file_segment_repo.vector_search_segments([1.0, 0.0], 2)
+
+    assert [seg.text for seg, _ in hits] == ["east"]
+    assert hits[0][1] == pytest.approx(1.0, abs=1e-3)
+    assert all(math.isfinite(score) for _, score in hits)
 
 
 def test_scopes_to_where_including_track_in(db_backend: Database) -> None:

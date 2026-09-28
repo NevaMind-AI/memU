@@ -62,6 +62,18 @@ def test_cosine_topk_skips_nonfinite_rows_without_mutating_inputs() -> None:
     assert repr((query, corpus)) == original
 
 
+def test_cosine_topk_skips_rows_that_overflow_float32() -> None:
+    # [1e39, 0.0] is finite in float64 but inf once the corpus is cast to
+    # float32 for the ranking matrix; the row guard must judge the cast value,
+    # or the row's NaN score would sort first.
+    corpus = [("huge", [1e39, 0.0]), ("best", [1.0, 0.0]), ("other", [0.0, 1.0])]
+
+    results = cosine_topk([1.0, 0.0], corpus, k=3)
+
+    assert [row_id for row_id, _ in results] == ["best", "other"]
+    assert all(math.isfinite(score) for _, score in results)
+
+
 def test_cosine_topk_nonfinite_query_returns_empty_without_mutating_inputs() -> None:
     corpus = _corpus()
     for value in (float("nan"), float("inf")):

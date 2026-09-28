@@ -44,7 +44,7 @@ def cosine_topk(
     for _id, vec in corpus:
         if vec is None:
             continue
-        if len(vec) != dim or not np.isfinite(vec).all():
+        if len(vec) != dim or not np.isfinite(np.asarray(vec, dtype=np.float32)).all():
             continue
         ids.append(_id)
         vecs.append(cast(list[float], vec))
