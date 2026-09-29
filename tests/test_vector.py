@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import math
+from typing import cast
 
+import numpy as np
+import pytest
+
+import memu.vector as vector_module
 from memu.database.inmemory.vector import cosine_topk
 
 
@@ -72,6 +77,26 @@ def test_cosine_topk_skips_rows_that_overflow_float32() -> None:
 
     assert [row_id for row_id, _ in results] == ["best", "other"]
     assert all(math.isfinite(score) for _, score in results)
+
+
+def test_cosine_topk_checks_corpus_finiteness_in_one_matrix_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_isfinite = np.isfinite
+    checked_shapes: list[tuple[int, ...]] = []
+
+    def track_isfinite(values: np.ndarray) -> np.ndarray:
+        checked_shapes.append(values.shape)
+        return cast(np.ndarray, original_isfinite(values))
+
+    monkeypatch.setattr(vector_module.np, "isfinite", track_isfinite)
+    corpus = [
+        ("best", [1.0, 0.0]),
+        ("nan", [float("nan"), 0.0]),
+        ("overflow", [1e39, 0.0]),
+        ("other", [0.0, 1.0]),
+    ]
+
+    assert [row_id for row_id, _ in cosine_topk([1.0, 0.0], corpus, k=4)] == ["best", "other"]
+    assert checked_shapes == [(2,), (4, 2)]
 
 
 def test_cosine_topk_nonfinite_query_returns_empty_without_mutating_inputs() -> None:

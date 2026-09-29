@@ -33,7 +33,7 @@ def cosine_topk(
         return []
     dim = q.size
 
-    # Filter out None, empty, wrong-dimension, or non-finite vectors. An empty list is not
+    # Filter out None, empty, or wrong-dimension vectors. An empty list is not
     # a vector, and a dimension mismatch would make np.array() fall back to an
     # object matrix (then the matrix product below crashes or, worse, silently
     # mis-scores). Callers already disagree on whether ``[]`` means "unembedded"
@@ -44,7 +44,7 @@ def cosine_topk(
     for _id, vec in corpus:
         if vec is None:
             continue
-        if len(vec) != dim or not np.isfinite(np.asarray(vec, dtype=np.float32)).all():
+        if len(vec) != dim:
             continue
         ids.append(_id)
         vecs.append(cast(list[float], vec))
@@ -53,7 +53,15 @@ def cosine_topk(
         return []
 
     # Vectorized computation: stack all vectors into a matrix
-    matrix = np.array(vecs, dtype=np.float32)  # shape: (n, dim)
+    with np.errstate(over="ignore"):
+        matrix = np.array(vecs, dtype=np.float32)  # shape: (n, dim)
+    # Check after the cast so values that overflow float32 are excluded too.
+    finite_rows = cast(np.ndarray, np.isfinite(matrix).all(axis=1))
+    if not finite_rows.all():
+        matrix = matrix[finite_rows]
+        ids = [row_id for row_id, keep in zip(ids, finite_rows, strict=True) if keep]
+        if not ids:
+            return []
 
     # Compute all cosine similarities at once
     q_norm = np.linalg.norm(q)
