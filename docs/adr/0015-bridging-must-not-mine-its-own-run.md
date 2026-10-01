@@ -191,3 +191,18 @@ forced into one shape.
 - Builds on `docs/adr/0011-generic-host-adapter.md` — the indeterminate host is the one memU
   cannot wire on its own; if it is wired, the user supplies the missing value, as with
   `--session-dir`.
+
+## Amendment: 2026-10-01
+
+The implementation was tightened after #606 review feedback:
+
+- **The launch marker is the only ownership signal.** `cwd == base` was removed
+  because a person can legitimately run the host from memU's working tree; treating
+  that as a scheduled run permanently claimed their real conversation. Existing
+  scheduled installs must be refreshed to carry `MEMU_BRIDGING_RUN`.
+- **Self-session bookkeeping is serialized and replaced atomically.** Concurrent
+  runs, retries, and manual invocations can no longer lose each other's ids through
+  an unlocked read-modify-write.
+- **Claude Code owner attribution follows the structural `subagents` directory.**
+  It no longer assumes a fixed project-slug depth, so root layouts without a project
+  slug still attribute the subagent to its owning session instead of to `subagents`.

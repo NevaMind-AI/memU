@@ -9,8 +9,12 @@ take the max_jobs slots ahead of real conversation.
 from __future__ import annotations
 
 import json
+import os
 import pathlib
+import threading
+import time
 from argparse import Namespace
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
 import pytest
@@ -45,8 +49,16 @@ class FakeSource(TranscriptSource):
 def _session(root: pathlib.Path, name: str, turns: int, mtime: float) -> pathlib.Path:
     path = root / f"{name}.jsonl"
     path.write_text("".join(f'{{"role":"user","content":"turn {i}"}}\n' for i in range(turns)), encoding="utf-8")
-    import os
+    os.utime(path, (mtime, mtime))
+    return path
 
+
+def _claude_session(path: pathlib.Path, content: str, mtime: float) -> pathlib.Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"type": "user", "message": {"role": "user", "content": content}}) + "\n",
+        encoding="utf-8",
+    )
     os.utime(path, (mtime, mtime))
     return path
 
@@ -67,6 +79,30 @@ def test_remembering_the_same_session_twice_does_not_duplicate(tmp_path: pathlib
     store = tmp_path / ".self_sessions.fake.json"
     self_sessions.remember(store, "aaa")
     assert self_sessions.remember(store, "aaa") == ["aaa"]
+
+
+def test_concurrent_remembering_keeps_every_session(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Overlapping scheduled runs must merge their owners, not overwrite one."""
+    store = tmp_path / ".self_sessions.fake.json"
+    original_load = self_sessions.load
+
+    def slow_load(path: pathlib.Path) -> list[str]:
+        remembered = original_load(path)
+        time.sleep(0.2)
+        return remembered
+
+    monkeypatch.setattr(self_sessions, "load", slow_load)
+    start = threading.Barrier(2)
+
+    def remember(session_id: str) -> list[str]:
+        start.wait(timeout=2)
+        return self_sessions.remember(store, session_id)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(remember, ["aaa", "bbb"]))
+
+    assert set(original_load(store)) == {"aaa", "bbb"}
+    assert any(set(result) == {"aaa", "bbb"} for result in results)
 
 
 def test_remembered_ids_are_capped_keeping_the_newest(tmp_path: pathlib.Path) -> None:
@@ -216,11 +252,14 @@ def test_a_hand_run_from_a_project_dir_is_not_a_bridging_run(tmp_path: pathlib.P
     assert self_sessions.is_bridging_run(project, base, env={}) is False
 
 
-def test_the_scheduled_workdir_is_a_bridging_run(tmp_path: pathlib.Path) -> None:
-    """`schedule` passes -WorkingDirectory, so the task runs in memU's own tree.
-    This keeps tasks registered before the env marker existed working."""
+def test_the_scheduled_workdir_alone_is_not_a_bridging_run(tmp_path: pathlib.Path) -> None:
+    """A working directory is not ownership.
+
+    A person can legitimately run the host from memU's working tree. Treating
+    that as the scheduled run permanently claims their real conversation, so
+    only the launcher's explicit marker may do that (#606)."""
     base = tmp_path / "memu" / "hosts" / "claude-code"
-    assert self_sessions.is_bridging_run(base, base, env={}) is True
+    assert self_sessions.is_bridging_run(base, base, env={}) is False
 
 
 def test_the_env_marker_wins_wherever_the_agent_wandered(tmp_path: pathlib.Path) -> None:
@@ -276,10 +315,14 @@ def test_claude_code_attributes_a_subagent_transcript_to_its_parent(tmp_path: pa
     top_level = project / f"{owner}.jsonl"
     subagent = project / owner / "subagents" / "agent-a1a4f93e4dfa97ec5.jsonl"
     workflow = project / owner / "subagents" / "workflows" / "wf_x" / "agent-acfdaaf110b4ceecb.jsonl"
+    # Some stores have no project slug. The owner still precedes the
+    # structural `subagents` directory; never mistake that marker for an id.
+    owner_only_root = tmp_path / owner / "subagents" / "agent-a1a4f93e4dfa97ec5.jsonl"
 
     assert source.session_id(top_level) == owner
     assert source.session_id(subagent) == owner
     assert source.session_id(workflow) == owner
+    assert source.session_id(owner_only_root) == owner
 
 
 @pytest.mark.parametrize("host", ["claude_code", "hermes"])
@@ -341,6 +384,112 @@ async def test_only_an_os_marked_hermes_run_claims_its_session(
     assert rc == 0
     assert captured["skip_sessions"] == ([session_id] if marked else [])
     assert self_sessions.load(Layout(base=base, host="hermes").self_sessions) == ([session_id] if marked else [])
+
+
+async def test_marked_run_skips_own_owner_transcripts_and_keeps_external_ones(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    """A run and every transcript owned by its session are one skipped unit."""
+    own_id = "bridge-owner"
+    logs = tmp_path / "claude-projects"
+    _claude_session(logs / "project" / f"{own_id}.jsonl", "self top level", mtime=2000)
+    _claude_session(logs / own_id / "subagents" / "agent-child.jsonl", "self subagent", mtime=3000)
+    _claude_session(logs / "project" / "real-session.jsonl", "external work", mtime=1000)
+
+    class EmptyRecallService:
+        async def list_all_recall_files(self, *args: object, **kwargs: object) -> dict[str, object]:
+            return {"recall_files": [], "next_cursor": None}
+
+    from memu.hosts.bridging import pipeline
+
+    monkeypatch.setattr(pipeline, "build_agentic_memory_backend_from_env", lambda: EmptyRecallService())
+    monkeypatch.setattr(pipeline.templates, "resolve", lambda _name, fallback: fallback)
+    monkeypatch.setattr(pipeline.events, "record_list", lambda **kwargs: None)
+    monkeypatch.setattr(host_cli, "_mark_cycle_start", lambda spec, layout: None)
+    monkeypatch.setattr(host_cli, "_refresh_retrieval", lambda spec: None)
+    monkeypatch.setattr(host_cli.events, "flush", lambda: None)
+    monkeypatch.setenv(self_sessions.BRIDGING_RUN_ENV, "1")
+    monkeypatch.setenv(SESSION_ID_ENV, own_id)
+
+    base = tmp_path / "memu-claude"
+    rc = await host_cli._cmd_prepare(
+        CLAUDE_CODE_SPEC,
+        Namespace(session_dir=str(logs), base_dir=str(base), max_jobs=10),
+    )
+
+    layout = Layout(base=base, host=CLAUDE_CODE_SPEC.host)
+    assert rc == 0
+    assert sorted(path.name for path in layout.jobs.glob("*.txt")) == ["1.txt", "2.txt", "3.txt"]
+    staged = json.loads(layout.session_manifest_pending.read_text(encoding="utf-8"))
+    assert list(staged) == ["project/real-session.jsonl"]
+    assert self_sessions.load(layout.self_sessions) == [own_id]
+
+
+async def test_manual_prepare_from_the_memu_tree_keeps_its_session_mineable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    """Ownership needs the launch marker, not merely the working directory."""
+    captured: dict[str, object] = {}
+    base = tmp_path / "memu-claude"
+    logs = tmp_path / "claude-projects"
+    logs.mkdir()
+    session_id = "real-conversation"
+
+    async def fake_prepare(*args: object, **kwargs: object) -> int:
+        captured["skip_sessions"] = kwargs["skip_sessions"]
+        return 1
+
+    monkeypatch.setattr(host_cli, "prepare", fake_prepare)
+    monkeypatch.setattr(host_cli, "_mark_cycle_start", lambda spec, layout: None)
+    monkeypatch.setattr(host_cli, "_refresh_retrieval", lambda spec: None)
+    monkeypatch.setattr(host_cli.events, "flush", lambda: None)
+    monkeypatch.setattr(host_cli.Path, "cwd", lambda: base)
+    monkeypatch.delenv(self_sessions.BRIDGING_RUN_ENV, raising=False)
+    monkeypatch.setenv(SESSION_ID_ENV, session_id)
+
+    rc = await host_cli._cmd_prepare(
+        CLAUDE_CODE_SPEC,
+        Namespace(session_dir=str(logs), base_dir=str(base), max_jobs=10),
+    )
+
+    assert rc == 0
+    assert captured["skip_sessions"] == []
+    assert self_sessions.load(Layout(base=base, host=CLAUDE_CODE_SPEC.host).self_sessions) == []
+
+
+async def test_failed_prepare_retry_reuses_the_claimed_owner(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path
+) -> None:
+    """Remembering before prepare makes a failed run safe to retry."""
+    captured: dict[str, object] = {}
+    base = tmp_path / "memu-claude"
+    logs = tmp_path / "claude-projects"
+    logs.mkdir()
+    session_id = "retry-owner"
+    attempts = 0
+
+    async def flaky_prepare(*args: object, **kwargs: object) -> int:
+        nonlocal attempts
+        attempts += 1
+        captured.setdefault("skip_sessions", kwargs["skip_sessions"])
+        if attempts == 1:
+            raise RuntimeError
+        return 0
+
+    monkeypatch.setattr(host_cli, "prepare", flaky_prepare)
+    monkeypatch.setattr(host_cli, "_mark_cycle_start", lambda spec, layout: None)
+    monkeypatch.setattr(host_cli, "_refresh_retrieval", lambda spec: None)
+    monkeypatch.setattr(host_cli.events, "flush", lambda: None)
+    monkeypatch.setenv(self_sessions.BRIDGING_RUN_ENV, "1")
+    monkeypatch.setenv(SESSION_ID_ENV, session_id)
+
+    args = Namespace(session_dir=str(logs), base_dir=str(base), max_jobs=10)
+    with pytest.raises(RuntimeError):
+        await host_cli._cmd_prepare(CLAUDE_CODE_SPEC, args)
+    assert self_sessions.load(Layout(base=base, host=CLAUDE_CODE_SPEC.host).self_sessions) == [session_id]
+
+    assert await host_cli._cmd_prepare(CLAUDE_CODE_SPEC, args) == 0
+    assert captured["skip_sessions"] == [session_id]
 
 
 def test_layout_scopes_the_file_per_host(tmp_path: pathlib.Path) -> None:
