@@ -4,15 +4,17 @@ import base64
 import binascii
 import json
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
+from memu.vector import cosine_topk
+
 if TYPE_CHECKING:
     from memu.app.settings import ProgressiveRetrieveConfig
     from memu.database.interfaces import Database
-    from memu.database.models import RecallFile, Resource
+    from memu.database.models import RecallFile, RecallFileSegment, Resource
 
 # Default recall-file page size for ``list_all_recall_files`` (ADR 0014). Callers
 # follow ``next_cursor`` to reassemble the full set; the page size only bounds the
@@ -145,6 +147,28 @@ class _RecallFilePlan:
     create_ticket: int | None
     description_ticket: int | None
     segments: _SegmentPlan
+
+
+# Commit-time consolidation (#630): a stored memory segment at or above this cosine
+# against an incoming segment is treated as the same fact in an older state, not as a
+# second fact. Deliberately high — a false merge silently drops a real fact, while a
+# missed merge only leaves the stale statement for the next commit to catch.
+CONSOLIDATION_MIN_SIMILARITY = 0.95
+
+
+@dataclass
+class _Consolidation:
+    """One auto-resolved cross-file memory conflict.
+
+    ``replaced_*`` describes the stale stored segment that was removed;
+    ``source_recall_file_id`` is the file whose commit superseded it.
+    """
+
+    replaced_segment_id: str
+    replaced_text: str
+    replaced_in_recall_file_id: str
+    source_recall_file_id: str
+    similarity: float
 
 
 class AgenticMixin:
@@ -360,6 +384,11 @@ class AgenticMixin:
           is a :class:`RecallFile` keyed by ``name`` within its ``track`` (``memory``/``skill``),
           with the same track-specific segment (re)generation as the workspace path.
 
+        Memory-track commits also consolidate (``#630``): a fresh segment that near-duplicates
+        a stored segment of a *different* memory file supersedes it — see
+        :meth:`_consolidate_memory_segments`. The resolved conflicts come back under
+        ``"consolidations"`` so the calling agent can see what was auto-replaced.
+
         A commit that cannot reach the embedding provider writes nothing at all, so
         callers may retry it wholesale — which is what makes the bridging pipeline's
         "advance state on durable success, not intent" (#518) hold. Storage failures
@@ -383,11 +412,36 @@ class AgenticMixin:
 
         await batch.resolve(embed_client)
 
+        # Consolidation candidates come from a *pre-write* snapshot: a segment
+        # created by this same commit must never be superseded by a sibling
+        # addition, or two near-identical facts arriving together would delete
+        # each other and the fact would vanish entirely.
+        memory_planned = any(p.track == "memory" for p in file_plans)
+        consolidation_snapshot = (
+            list(store.recall_file_segment_repo.list_segments(where={**user_data, "track": "memory"}))
+            if memory_planned
+            else []
+        )
+        consolidation_files = (
+            store.recall_file_repo.list_recall_files(where=dict(user_data) if user_data else None)
+            if memory_planned
+            else {}
+        )
+
         committed_resources = self._write_resources(resource_plans, store=store, user_data=user_data, batch=batch)
         committed_files = self._write_recall_files(file_plans, store=store, user_data=user_data, batch=batch)
+        consolidations = self._consolidate_memory_segments(
+            file_plans,
+            committed=committed_files,
+            snapshot=consolidation_snapshot,
+            files_by_id=consolidation_files,
+            store=store,
+            batch=batch,
+        )
         return {
             "resources": [self._model_dump_without_embeddings(r) for r in committed_resources],
             "recall_files": [self._model_dump_without_embeddings(f) for f in committed_files],
+            "consolidations": [asdict(c) for c in consolidations],
         }
 
     def _plan_resources(
@@ -643,6 +697,92 @@ class AgenticMixin:
                 )
             committed.append(file)
         return committed
+
+    def _consolidate_memory_segments(
+        self,
+        plans: list[_RecallFilePlan],
+        *,
+        committed: list[RecallFile],
+        snapshot: list[RecallFileSegment],
+        files_by_id: dict[str, RecallFile],
+        store: Database,
+        batch: _EmbeddingBatch,
+    ) -> list[_Consolidation]:
+        """Auto-resolve cross-file near-duplicate memory segments (``#630``).
+
+        Memory is expected to reflect the agent's *current* state, not its history: when a
+        freshly committed segment is a near-duplicate (cosine >=
+        :data:`CONSOLIDATION_MIN_SIMILARITY`) of a stored segment from a *different* memory
+        file, the stored one is the same fact in an older state and is removed. Removal is
+        two-sided: the segment row is deleted, and — because segments mirror their file's
+        content (the L2 items derive from the L1 document, ADR 0007) — the source line is
+        dropped from that file's content too, so a later recommit of the file cannot
+        resurrect the stale fact. The newly committed side wins; no LLM call is involved
+        (both vectors are already in hand).
+
+        Only the memory track participates: a skill file is a whole artifact keyed by name
+        (one segment per file), so cross-file conflicts there are a naming problem, not a
+        segment problem. Decisions run against the pre-write ``snapshot``: a segment this
+        same commit just created is never a candidate, so two near-identical facts arriving
+        together in one payload coexist (and settle on the *next* commit that touches
+        either file) rather than deleting each other. The superseded fact is not destroyed
+        blindly either — the full audit trail comes back under ``"consolidations"`` so the
+        calling agent can inspect or override every replacement.
+        """
+        if not snapshot:
+            return []
+        seg_by_id = {seg.id: seg for seg in snapshot}
+        handled: set[str] = {seg_id for plan in plans for seg_id in plan.segments.stale_ids}
+        file_id_by_key = {(p.track, p.name): f.id for p, f in zip(plans, committed, strict=True)}
+        consolidations: list[_Consolidation] = []
+        for plan in plans:
+            if plan.track != "memory":
+                continue
+            file_id = file_id_by_key[(plan.track, plan.name)]
+            for _text, ticket in plan.segments.additions:
+                corpus = [
+                    (seg.id, seg.embedding)
+                    for seg in snapshot
+                    if seg.track == "memory" and seg.recall_file_id != file_id and seg.id not in handled
+                ]
+                # cosine_topk returns scores in descending order, so the first
+                # entry below the threshold ends the scan.
+                for seg_id, score in cosine_topk(batch.vector(ticket), corpus, k=len(corpus)):
+                    if score < CONSOLIDATION_MIN_SIMILARITY:
+                        break
+                    handled.add(seg_id)
+                    stale = seg_by_id[seg_id]
+                    store.recall_file_segment_repo.delete_segment(seg_id)
+                    target = files_by_id.get(stale.recall_file_id)
+                    if target is not None:
+                        pruned = self._strip_content_line(target.content or "", stale.text)
+                        if pruned is not None:
+                            store.recall_file_repo.update_recall_file(
+                                recall_file_id=stale.recall_file_id, content=pruned
+                            )
+                    consolidations.append(
+                        _Consolidation(
+                            replaced_segment_id=seg_id,
+                            replaced_text=stale.text,
+                            replaced_in_recall_file_id=stale.recall_file_id,
+                            source_recall_file_id=file_id,
+                            similarity=score,
+                        )
+                    )
+        return consolidations
+
+    @staticmethod
+    def _strip_content_line(content: str, text: str) -> str | None:
+        """Drop the first line whose stripped form equals ``text``.
+
+        Returns the new content, or ``None`` when no line matches (a content the
+        segment no longer mirrors is left untouched rather than half-edited).
+        """
+        lines = content.split("\n")
+        for i, line in enumerate(lines):
+            if line.strip() == text:
+                return "\n".join(lines[:i] + lines[i + 1 :])
+        return None
 
     @staticmethod
     def _commit_segment_texts_for_file(*, name: str, description: str, content: str, file_track: str) -> list[str]:
