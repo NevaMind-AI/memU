@@ -406,3 +406,100 @@ async def test_sqlite_resource_commit_sees_writes_from_another_instance(tmp_path
     matches = [r for r in rows.values() if r.url == "/workspace/extra.md"]
     assert len(matches) == 1
     assert matches[0].caption == "b's version"
+
+
+async def test_commit_consolidates_cross_file_duplicate(service: MemoryService) -> None:
+    """A fresh fact supersedes its older self in a *differently named* file (#630).
+
+    The (track, name) key never collides for day-stamped or renamed files, so before
+    consolidation two copies of one fact accumulated forever and retrieval ranked them
+    as equals. The replacement must be two-sided: the stale segment goes away AND the
+    line is pruned from the old file's content, or the file's next recommit would
+    resurrect it.
+    """
+    await service.commit_results(
+        recall_files=[
+            {
+                "name": "homelab-0731",
+                "track": "memory",
+                "description": "server notes",
+                "content": "# H\nssh password is hunter2",
+            }
+        ]
+    )
+    result = await service.commit_results(
+        recall_files=[
+            {
+                "name": "homelab-0815",
+                "track": "memory",
+                "description": "server notes",
+                "content": "ssh password is hunter3",
+            }
+        ]
+    )
+
+    assert len(result["consolidations"]) == 1
+    c = result["consolidations"][0]
+    assert c["replaced_text"] == "ssh password is hunter2"
+    assert c["replaced_in_recall_file_id"] != c["source_recall_file_id"]
+
+    listed = await service.list_all_recall_files()
+    by_name = {f["name"]: f for f in listed["recall_files"]}
+    # The stale line is gone from the old file's content ...
+    assert "hunter2" not in (by_name["homelab-0731"]["content"] or "")
+    # ... and the store holds exactly one copy of the fact.
+    segments = service._get_database().recall_file_segment_repo.list_segments({"track": "memory"})
+    texts = [s.text for s in segments]
+    assert texts.count("ssh password is hunter3") == 1
+    assert "ssh password is hunter2" not in texts
+
+
+async def test_commit_keeps_distinct_facts(service: MemoryService) -> None:
+    """Consolidation merges same-fact segments only; unrelated facts are untouched."""
+    await service.commit_results(
+        recall_files=[{"name": "profile", "track": "memory", "description": "who", "content": "likes coffee"}]
+    )
+    result = await service.commit_results(
+        recall_files=[{"name": "skills", "track": "memory", "description": "what", "content": "knows deploy"}]
+    )
+    assert result["consolidations"] == []
+    segments = service._get_database().recall_file_segment_repo.list_segments({"track": "memory"})
+    assert sorted(s.text for s in segments) == ["knows deploy", "likes coffee"]
+
+
+async def test_consolidation_is_scoped_per_user(service: MemoryService) -> None:
+    """One user's commit never reaches into another user's memory."""
+    await service.commit_results(
+        recall_files=[
+            {"name": "homelab", "track": "memory", "description": "servers", "content": "ssh password is hunter2"}
+        ],
+        user={"user_id": "alice"},
+    )
+    result = await service.commit_results(
+        recall_files=[
+            {"name": "homelab", "track": "memory", "description": "servers", "content": "ssh password is hunter3"}
+        ],
+        user={"user_id": "bob"},
+    )
+    assert result["consolidations"] == []
+    segments = service._get_database().recall_file_segment_repo.list_segments({"track": "memory"})
+    assert {s.text for s in segments} == {"ssh password is hunter2", "ssh password is hunter3"}
+
+
+async def test_consolidation_leaves_same_payload_facts_alone(service: MemoryService) -> None:
+    """Two near-identical facts arriving in one payload coexist.
+
+    Decisions run against a pre-write snapshot, so neither side of a same-payload
+    near-duplicate pair can delete the other — otherwise the pair would annihilate
+    and the fact would vanish entirely. They settle on the next commit that
+    touches either file.
+    """
+    result = await service.commit_results(
+        recall_files=[
+            {"name": "first", "track": "memory", "description": "d", "content": "ssh password is hunter2"},
+            {"name": "second", "track": "memory", "description": "d", "content": "ssh password is hunter3"},
+        ]
+    )
+    assert result["consolidations"] == []
+    segments = service._get_database().recall_file_segment_repo.list_segments({"track": "memory"})
+    assert sorted(s.text for s in segments) == ["ssh password is hunter2", "ssh password is hunter3"]
