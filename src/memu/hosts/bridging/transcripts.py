@@ -8,12 +8,80 @@ from __future__ import annotations
 
 import json
 import logging
+import sqlite3
 from collections.abc import Collection
+from dataclasses import dataclass
 from pathlib import Path
 
 from memu.hosts.base import RecordKind, TranscriptRead, TranscriptReadError, TranscriptSource
 
 logger = logging.getLogger(__name__)
+
+_PROBE_SESSIONS = 3
+_PROBE_RECORDS_PER_SESSION = 200
+
+
+@dataclass(frozen=True)
+class TranscriptProbe:
+    """Read-only sample of whether discovered sessions contain a known dialect."""
+
+    sessions: int
+    sampled_records: int
+    recognized_records: int
+
+
+def probe_transcripts(
+    source: TranscriptSource,
+    *,
+    skip_sessions: Collection[str] = (),
+    max_sessions: int = _PROBE_SESSIONS,
+    max_records_per_session: int = _PROBE_RECORDS_PER_SESSION,
+) -> TranscriptProbe:
+    """Sample discovered sessions without advancing cursors or raising read failures.
+
+    This is the bounded diagnostic used when ``prepare`` returns zero. It asks a
+    different question from the incremental scan: did the host still write records
+    this adapter recognizes? A read failure is inconclusive and is left to the
+    existing per-session warning, rather than being mistaken for an unknown dialect.
+    """
+    skip = set(skip_sessions)
+    sessions = 0
+    sampled_records = 0
+    recognized_records = 0
+
+    try:
+        paths = source.discover()
+    except (OSError, sqlite3.Error, TranscriptReadError):
+        # Discovery already failed open in the main prepare path. The probe is
+        # diagnostic-only, so it must not turn that recoverable failure into a crash.
+        return TranscriptProbe(sessions=0, sampled_records=0, recognized_records=0)
+
+    for path in paths:
+        if source.session_id(path) in skip:
+            continue
+        try:
+            records = source.read_records(path)
+        except (OSError, UnicodeDecodeError, TranscriptReadError):
+            continue
+
+        sessions += 1
+        for record in records[:max_records_per_session]:
+            # A newer SQLite schema can carry a compressed payload instead of text.
+            # Treat that as unreadable-by-this-adapter, not as an empty transcript.
+            if not isinstance(record, str):
+                continue
+            sampled_records += 1
+            if source.classify(record) is not RecordKind.OTHER:
+                recognized_records += 1
+
+        if sessions >= max_sessions:
+            break
+
+    return TranscriptProbe(
+        sessions=sessions,
+        sampled_records=sampled_records,
+        recognized_records=recognized_records,
+    )
 
 
 def _split(source: TranscriptSource, path: Path, records: list[str]) -> tuple[list[str], list[str]]:
@@ -67,8 +135,9 @@ def prepare_transcripts(
     ending the scan: they are the newest transcripts on disk, so stopping there
     would hide every real session underneath them.
 
-    Returns the number of sessions written. Zero is the correct, common outcome
-    on a quiet day.
+    Returns the number of sessions written. Zero is the common outcome on a quiet
+    day; the CLI separately distinguishes that from discovered sessions whose
+    records all classify as ``OTHER``.
     """
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
     skip = set(skip_sessions)
