@@ -42,6 +42,7 @@ from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging import Layout, commit, prepare, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
 from memu.hosts.bridging.resources import verify_resource_log
+from memu.hosts.bridging.transcripts import probe_transcripts
 
 ScheduleBackend = Literal["os", "native", "external"]
 """The existing scheduler arrangement a host documents; informational only."""
@@ -340,7 +341,17 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
     num_jobs = 2 * num_sessions + 1 if num_sessions else 0
     print(f"prepared {num_sessions} session(s) -> {num_jobs} job(s) in {layout.jobs}")
     if num_sessions == 0:
-        print("no new session turns since the last run; nothing to mine")
+        probe = probe_transcripts(source, skip_sessions=skip_sessions)
+        if probe.sessions and probe.recognized_records == 0:
+            print(
+                f"warning: found {probe.sessions} session(s) for {spec.display} but recognized 0 "
+                f"conversation/tool record(s) in {probe.sampled_records} sampled record(s); "
+                "the host's transcript format may have changed. "
+                f"Run `memu-agent detect {source.root()}` to inspect it.",
+                file=sys.stderr,
+            )
+        else:
+            print("no new session turns since the last run; nothing to mine")
     _refresh_retrieval(spec)
     # One of the two designated flush points (ADR 0016): low-frequency and
     # latency-tolerant, which is exactly what the per-turn retrieve hook is not.

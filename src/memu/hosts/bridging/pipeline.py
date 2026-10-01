@@ -51,8 +51,9 @@ async def prepare(
     carries them for its own event. This module still knows nothing about what a
     Codex *is*; it only knows what to call the platform it is running for.
 
-    Returns the number of sessions prepared. Zero is a correct, common outcome —
-    a scheduled run on a day with no new sessions has nothing to do.
+    Returns the number of sessions prepared. Zero is a common outcome when there
+    are no new sessions; the CLI separately alarms if discovered sessions contain
+    no records the host adapter recognizes.
     """
     num_sessions = prepare_transcripts(
         source,
