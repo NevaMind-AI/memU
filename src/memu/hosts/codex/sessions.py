@@ -8,12 +8,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import ClassVar
 
 from memu.hosts.base import RecordKind, TranscriptSource
 
 SESSION_DIR = "~/.codex/sessions"
+
+_THREAD_ID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 
 _MESSAGE_ROLES = ("user", "assistant")
 _TOOL_TYPES = ("function_call", "function_call_output")
@@ -68,6 +71,15 @@ class CodexTranscriptSource(TranscriptSource):
 
     def root(self) -> Path:
         return self._root
+
+    def session_id(self, path: Path) -> str:
+        """The thread id at the end of ``rollout-<timestamp>-<thread id>.jsonl``.
+
+        That id is what ``codex exec --json`` reports for the hook run's own
+        thread, so this is how that run is kept out of the next one's mining.
+        """
+        match = _THREAD_ID_RE.search(path.stem)
+        return match.group(0) if match else path.stem
 
     def sanitize(self, path: Path, record: str) -> str:
         """Remove known runtime metadata without projecting the response item."""

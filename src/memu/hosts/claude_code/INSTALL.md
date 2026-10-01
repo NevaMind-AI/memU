@@ -19,7 +19,7 @@
 Installing memU on Claude Code is three parts:
 
 1. **Install memU** — a Python package and the memory backend it uses.
-2. **Register the bridging task** — the scheduled job that turns recent Claude
+2. **Install the bridging hook** — a `SessionEnd` hook that turns recent Claude
    Code sessions into durable memory (the *record* seam).
 3. **Patch `~/.claude/CLAUDE.md`** — a standing instruction that tells you to pull
    relevant memory before you answer (the *inject* seam).
@@ -45,7 +45,8 @@ $c = Get-Command claude -ErrorAction SilentlyContinue
 "claude:     " + $(if ($c) { $c.Source } else { "NOT FOUND; landing dir has it: $(Test-Path "$env:USERPROFILE\.local\bin\claude.exe") (True = stale PATH - prepend the landing dir to PATH for the next commands)" })
 "memu:       " + $(if (Get-Command memu-claude-code -ErrorAction SilentlyContinue) { "ok" } else { "NOT FOUND - do Part 1" })
 "credential: token=" + [bool][Environment]::GetEnvironmentVariable('CLAUDE_CODE_OAUTH_TOKEN','User') + " apikey=" + [bool][Environment]::GetEnvironmentVariable('ANTHROPIC_API_KEY','User') + " file=" + (Test-Path "$env:USERPROFILE\.claude\.credentials.json")
-if (Get-Command memu-claude-code -ErrorAction SilentlyContinue) { memu-claude-code schedule status } else { "sched task: check after Part 1" }
+if (Get-Command memu-claude-code -ErrorAction SilentlyContinue) { memu-claude-code schedule status } else { "legacy sched task: check after Part 1" }
+"hook:       " + [bool](Select-String -Path "$env:USERPROFILE\.claude\settings.json" -Pattern 'memu-claude-code.*hook' -Quiet -ErrorAction SilentlyContinue)
 "inject:     " + [bool](Select-String -Path "$env:USERPROFILE\.claude\CLAUDE.md" -Pattern 'memu' -Quiet -ErrorAction SilentlyContinue)
 ```
 
@@ -55,16 +56,16 @@ macOS / Linux:
 command -v claude || echo "claude NOT FOUND (landing dir: $(ls ~/.local/bin/claude 2>/dev/null || echo none))"
 command -v memu-claude-code || echo "memu NOT FOUND - do Part 1"
 [ -f ~/.claude/.credentials.json ] && echo "cred file: yes" || echo "cred file: no"
-crontab -l 2>/dev/null | grep -qE 'ANTHROPIC|CLAUDE_CODE' && echo "cron env: set" || echo "cron env: none"
-crontab -l 2>/dev/null | grep -qE '{{task_name_pattern}}|hosts/claude-code/bridge\.sh|memU bridging pipeline' && echo "cron entry: yes" || echo "cron entry: no"
+crontab -l 2>/dev/null | grep -qE '{{task_name_pattern}}|hosts/claude-code/bridge\.sh|memU bridging pipeline' && echo "legacy cron entry: yes" || echo "legacy cron entry: no"
+grep -qE 'memu-claude-code.*hook' ~/.claude/settings.json 2>/dev/null && echo "hook: yes" || echo "hook: no"
 grep -q memu ~/.claude/CLAUDE.md 2>/dev/null && echo "inject: yes" || echo "inject: no"
 ```
 
 Reading the answers: `memu` missing → Part 1. `claude` missing → Part 2.0
 step 1. No credential anywhere → Part 2.0 step 2. `inject` false → Part 3.
-Part 2 always runs once its prerequisites pass: an existing task / cron entry
-must be removed and recreated from the current packaged procedure, not treated
-as proof that its prompt and wrapper are current.
+Part 2 always runs once its prerequisites pass: a legacy scheduled task / cron
+entry must be removed, and `install-hook` is safe to re-run — it rewrites only
+its own entry.
 
 ---
 
@@ -96,8 +97,8 @@ memu-claude-code --help
 ```
 
 If it is not found, the install landed in an environment that isn't on your
-`PATH`. Fix that now — the scheduled task in Part 2 runs from a bare,
-non-interactive environment and needs this command to resolve there.
+`PATH`. Fix that now — Part 2 resolves this command to an absolute path for
+the hook, and can only do that if it resolves here.
 
 ### 1.2 Configure the memory backend
 
@@ -180,9 +181,9 @@ memu-claude-code config --local --db /absolute/path/memu.sqlite3 --embed-provide
 
 Only the flags you pass are written, so a later run can add one without
 disturbing the rest. Give `--db` an **absolute** path: a relative one resolves
-against a working directory the scheduled task does not have. And do not export
-any of this in a shell profile instead — the scheduled task does not inherit
-your interactive shell, so the file is the carrier.
+against a working directory the hook run does not have. And do not export
+any of this in a shell profile instead — a hook inherits the environment of
+whatever launched Claude Code (often not your shell), so the file is the carrier.
 
 **No embedding key? Say so, then use a local embedding server.** If the user has
 no API key to give, tell them up front what that means: memory cannot be called
@@ -237,16 +238,24 @@ must exit cleanly. **Zero hits is the expected result** on a new store.
 
 ---
 
-## Part 2 — Register the bridging (record) task
+## Part 2 — Install the bridging (record) hook
 
-The *record* seam: a scheduled job that periodically mines recent Claude Code
-sessions and Cowork conversations into memU memory, skills, and resources. In
-cloud mode, workspace resources are submitted but are not currently persisted.
+The *record* seam runs from Claude Code's own `SessionEnd` hook — no scheduled
+task. When a session ends, `memu-claude-code hook` starts a detached
+`memu-claude-code hook-run` and returns at once. That run does the network work
+itself (`prepare`, then `commit`), and in between runs `claude -p` over
+`~/.memu/hosts/claude-code/jobs/*.txt` with exactly the permissions the jobs
+need (reads, edits in the working tree, `memu-claude-code verify-resources`),
+passed on the command line — the agent never runs a memU command that talks to
+a server, so no permission rule or sandbox can block the upload. It mines
+recent Claude Code sessions and Cowork conversations into memU memory, skills,
+and resources. In cloud mode, workspace resources are submitted but are not
+currently persisted.
 
 ### 2.0 Prerequisite — a standalone, headless-authenticated `claude`
 
-The scheduled run invokes **`claude -p` from a bare, non-interactive
-environment**. The Claude **Desktop app cannot serve it**: its bundled binary
+The hook run invokes **`claude -p` non-interactively**, from the environment
+Claude Code hands its hooks. The Claude **Desktop app cannot serve it**: its bundled binary
 lives outside `PATH` and its login is invisible to the standalone CLI
 (memU#538). Two checks, in order, before you register anything:
 
@@ -288,7 +297,7 @@ lives outside `PATH` and its login is invisible to the standalone CLI
 
    If the user has neither, **stop here and say so**: Part 2 is blocked on
    an unmet prerequisite — Parts 1 and 3 still stand, and the user knows
-   exactly what to bring back. Never register a schedule that cannot
+   exactly what to bring back. Never install a hook that cannot
    authenticate. And no third options: a "custom endpoint" invites a
    protocol trap (the CLI speaks the Anthropic Messages protocol, which
    OpenAI-format relays do not serve), and "skip" is failure wearing a
@@ -335,115 +344,64 @@ lives outside `PATH` and its login is invisible to the standalone CLI
       OAuth exchange fails even though the browser half looks complete.
       Fix it where it lives, then rerun: in that terminal window,
       `set HTTPS_PROXY=http://127.0.0.1:<port>` (and `HTTP_PROXY`
-      likewise), then `claude setup-token` again. The scheduled run needs
+      likewise), then `claude setup-token` again. The hook run needs
       the same outbound — persist the proxy variables exactly like a
-      credential (Windows `setx`; Unix crontab header), and keep Part 1's
+      credential (Windows `setx`; Unix shell profile), and keep Part 1's
       `NO_PROXY` note in mind for loopback embedding servers. **Only the
       gate decides success — never the browser page.**
 
    Persisting the API key (Web auth needs none of this — its credential
-   is the profile file): on Windows, `setx` (the S4U task reads persistent
-   user env); on macOS/Linux a shell-profile `export` does **not** reach
-   cron —
-   the variables go in the crontab header exactly like the `PATH` line. A
-   key exported only in the current shell passes your check here and still
-   leaves the scheduled task stuck on "Not logged in" — the one false
-   positive this gate cannot catch by itself. The gate below proves
-   whichever method was chosen — with the probe carrying that method's own
-   variables, and nothing else.
+   is the profile file): on Windows, `setx`; on macOS/Linux, an `export` in
+   the shell profile Claude Code is started from. The gate below proves
+   whichever method was chosen.
 
-**Right after installing, expect a stale-`PATH` false negative.** On
-Windows the installers register `claude` on the *user* `PATH` in the
-registry; on macOS/Linux they append to the shell rc — and in both cases
-every process started before the install, this shell included, keeps its
-launch-time environment, so `claude` can report "not found" here while
-being correctly installed (the mechanism is field-proven on this repo's
-cursor host). Judge by the landing directory (`~/.local/bin`) or a **newly
-opened** terminal, never by a pre-install shell. The gate below is immune —
-it names the install locations explicitly. On Windows, run
-`schedule install` the same unconditional way — with the landing directory
-prepended to that one command's `PATH`:
+**Gate.** From a **newly opened** terminal (an older shell can carry a stale
+`PATH` right after installing `claude`), both must pass:
 
 ```
-$env:Path = "$env:USERPROFILE\.local\bin;$env:Path"; memu-claude-code schedule install
+claude -p 'ping'
+memu-claude-code doctor
 ```
 
-This is a no-op in a fresh shell and the fix in a stale one — there is no
-need to know which this is — and it is safe either way: the registered
-task bakes absolute paths and never depends on the invoking shell.
+Do not continue until they do.
 
-Prove both the way the scheduler will experience them — from a bare
-environment, resolve *and* authenticate. The probe must carry **exactly
-what the scheduler will carry, nothing more** — which differs by method:
-
-- **Web auth** — the credential lives in a file under `HOME`, so keeping
-  `HOME` is enough (real schedulers set it):
-
-  ```
-  env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" claude -p 'ping'
-  ```
-
-- **Anthropic API key** — the credential is an environment variable, and
-  `env -i` strips it: the bare probe above would **false-fail a correctly
-  configured machine**. Name the variable in the probe with its value,
-  exactly as the crontab header will carry it:
-
-  ```
-  env -i HOME="$HOME" PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" ANTHROPIC_API_KEY="<the key>" claude -p 'ping'
-  ```
-
-This `PATH` is only a **probe** for the common install locations. The cron
-entry still derives its own `PATH` at registration time from
-`command -v memu-claude-code` / `command -v claude` (see `docs task`); a green
-probe does not replace that line.
-
-On Windows, `schedule install` (reached through `docs task` below) runs this
-gate for you and refuses with install guidance when either check fails. Do
-not continue until the gate passes.
-
-**Refresh an existing bridging registration before continuing.** If a memU
-bridging entry exists, record its current cadence and remove **only that entry**.
-On Unix, identify the cron or launchd entry by
-`~/.memu/hosts/claude-code/bridge.sh` or an old inline
-`claude -p 'Run the memU bridging pipeline. …'` prompt. Rewrite cron with
+**Remove a scheduled bridging entry left by an earlier install.** On Unix,
+identify the cron or launchd entry by `~/.memu/hosts/claude-code/bridge.sh` or
+an old inline `claude -p 'Run the memU bridging pipeline. …'` prompt. Rewrite
+cron with
 `crontab -l | grep -vE '{{task_name_pattern}}|hosts/claude-code/bridge\.sh|memU bridging pipeline' | crontab -`;
 remove its `PATH=` line only if nothing else needs it, and use `crontab -r` only
 when no lines remain. For launchd, run `launchctl bootout gui/$(id -u)/{{task_name}}`
 and delete only its memU plist. On Windows run
-`memu-claude-code schedule uninstall`. Verify `crontab -l` (and
-`ls ~/Library/LaunchAgents`, if launchd was used) shows no memU bridging entry
-while unrelated entries remain; on Windows, `memu-claude-code schedule status`
-must report neither the current nor legacy task registered. Leave the store,
-session cursor, working tree, and retrieval instruction untouched. An absent entry is the normal first-install
-case. Reuse the recorded cadence below unless the user requested a change.
+`memu-claude-code schedule uninstall`. Leave the store, session cursor, working
+tree, and retrieval instruction untouched — the hook resumes from the same
+cursor. An absent entry is the normal first-install case.
 
-**Do not reinvent this.** Follow the packaged procedure:
+### 2.1 Install the hook
 
 ```
-memu-claude-code docs task
+memu-claude-code install-hook
 ```
 
-It is authoritative. In summary: you will settle a schedule with the user
-(default: every hour) and register a recurring headless Claude Code run —
-via system cron (the default; launchd only if the user prefers it) invoking
-`claude -p "<the prompt that document gives you verbatim>"` — that runs
-`memu-claude-code prepare`, works through
-`~/.memu/hosts/claude-code/jobs/*.txt` in order, then runs
-`memu-claude-code commit`.
+It adds one `SessionEnd` command hook to `~/.claude/settings.json` — the
+absolute `memu-claude-code hook` path, with the `claude` binary it found pinned
+alongside, because a hook gets the Claude Code app's `PATH`, not your shell's.
+Every other setting and hook is left as it was; re-running it is safe. If
+`claude` moves later (a reinstall elsewhere), re-run it.
 
-Nothing in that prompt is machine-specific. If you find yourself substituting an
-absolute path into it, you are doing it wrong.
+A session that ends without a clean exit fires no `SessionEnd`; its turns are
+not lost — the next run mines every session from the cursor.
 
 ### ✅ Verify Part 2
 
-Confirm the cron/launchd entry exists. Then dry-run the first step by hand:
-
 ```
-memu-claude-code prepare
+memu-claude-code hook-run
 ```
 
-It should report how many sessions it prepared (zero, if there is nothing new
-since the cursor — that is fine and correct).
+runs one pass in the foreground: it should report how many sessions it
+prepared (zero is fine if nothing is new) and finish with a commit line. Then
+confirm `~/.claude/settings.json` lists the `memu-claude-code … hook`
+`SessionEnd` hook. Later runs log to `~/.memu/hosts/claude-code/hook.log`.
 
 ---
 
@@ -539,7 +497,7 @@ nothing secret.
 
 ## Done
 
-Report back to the user: the selected mode and its cloud endpoint or local store/provider; the scheduled
-job and its schedule in words; and that the retrieval instruction is now in
+Report back to the user: the selected mode and its cloud endpoint or local store/provider; that the
+bridging hook runs when each Claude Code session ends; and that the retrieval instruction is now in
 `~/.claude/CLAUDE.md`, pointing at the `memu-retrieve` skill and taking effect in
-their next session. Record and inject both read `~/.memu/config.env`, so they provably share one backend — what the task learns tonight is what retrieval finds tomorrow.
+their next session. Record and inject both read `~/.memu/config.env`, so they provably share one backend — what the hook learns from one session is what retrieval finds in the next.

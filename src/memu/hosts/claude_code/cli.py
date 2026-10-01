@@ -10,6 +10,7 @@ Usage:
     memu-claude-code prepare               # slice new sessions into job files
     memu-claude-code verify-resources      # filter the touched-file log (run by a job)
     memu-claude-code commit                # submit what the agent produced back to memU
+    memu-claude-code install-hook          # run bridging from the SessionEnd hook (ADR 0019)
     memu-claude-code doctor                # check config + store before relying on them
     memu-claude-code cowork verify         # verify Cowork discovery and composition
     memu-claude-code docs install          # print the agent-facing install guide
@@ -23,6 +24,7 @@ import sys
 from memu.hosts.claude_code import cowork_cmd
 from memu.hosts.claude_code.desktop_sessions import ClaudeDesktopTranscriptSource
 from memu.hosts.claude_code.sessions import SESSION_DIR
+from memu.hosts.hooks import ClaudeSettingsHook, HeadlessAgent, HookSpec
 from memu.hosts.host_cli import HostSpec, run
 
 HOST = "claude-code"
@@ -43,6 +45,36 @@ file name (``<projects>/<escaped cwd>/<sessionId>.jsonl``), which is exactly wha
 :meth:`TranscriptSource.session_id` reads back, so the bridging run can recognise
 its own session without matching any content (#606)."""
 
+HOOK = HookSpec(
+    agent=HeadlessAgent(
+        # The jobs read transcripts and touched files anywhere on disk, and write only
+        # under the working tree (the cwd), so: blanket reads, edits accepted in the
+        # cwd, and the one memU command a job runs. No network-bound memU command
+        # is allowed — the hook run does those itself (ADR 0019).
+        argv=(
+            "claude",
+            "-p",
+            "--session-id",
+            "{session_id}",
+            "--permission-mode",
+            "acceptEdits",
+            "--allowedTools",
+            "Read",
+            "Glob",
+            "Grep",
+            "Edit",
+            "Write",
+            "Bash(cat *)",
+            "Bash(ls *)",
+            "Bash(echo *)",
+            "Bash(mkdir *)",
+            "Bash(memu-claude-code verify-resources)",
+        ),
+        preset_session_id=True,
+    ),
+    installer=ClaudeSettingsHook(),
+)
+
 SPEC = HostSpec(
     host=HOST,
     display="Claude Code",
@@ -59,6 +91,7 @@ SPEC = HostSpec(
     session_id_env=SESSION_ID_ENV,
     needs_headless_auth=True,
     register_extra=cowork_cmd.register,
+    hook=HOOK,
     install_hint=(
         "  Install a standalone claude:\n"
         "    winget install Anthropic.ClaudeCode\n"
