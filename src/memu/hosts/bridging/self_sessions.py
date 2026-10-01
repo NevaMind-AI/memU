@@ -35,7 +35,10 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Mapping
+import tempfile
+import time
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 MAX_REMEMBERED = 1000
@@ -47,6 +50,17 @@ BRIDGING_RUN_ENV = "MEMU_BRIDGING_RUN"
 """Set by the wrapper ``schedule install`` generates, so a run can tell that *it*
 is the scheduled one."""
 
+_LOCK_TIMEOUT_SECONDS = 5.0
+_LOCK_STALE_SECONDS = 30.0
+_LOCK_POLL_SECONDS = 0.01
+
+
+class SelfSessionLockTimeout(TimeoutError):
+    """The per-store self-session lock was not released in time."""
+
+    def __init__(self, path: Path) -> None:
+        super().__init__(f"timed out waiting for self-session lock {path}")
+
 
 def is_bridging_run(cwd: Path, base: Path, env: Mapping[str, str] | None = None) -> bool:
     """Whether this invocation is the scheduled bridging task, not a person.
@@ -57,19 +71,64 @@ def is_bridging_run(cwd: Path, base: Path, env: Mapping[str, str] | None = None)
     session the user asked to have mined, permanently and for every later run.
 
     What actually marks the scheduled task is how it was *launched*: the wrapper
-    exports :data:`BRIDGING_RUN_ENV`, and the task runs in memU's own working
-    directory (``schedule`` passes ``-WorkingDirectory``; without it Task Scheduler
-    would start in ``System32``). Either signal is enough — the directory keeps
-    tasks registered before this existed working, and the variable survives an
-    agent that changes directory before running the command.
+    exports :data:`BRIDGING_RUN_ENV`. A working directory is not ownership — a
+    person can run the host from memU's tree too — so ``cwd`` and ``base`` are
+    retained only for call compatibility and are never used to claim a session.
 
     Fails open in the safe direction: unrecognised means "a person ran this", so
     nothing is recorded and nothing is skipped.
     """
+    del cwd, base
     environ = os.environ if env is None else env
-    if environ.get(BRIDGING_RUN_ENV, "").strip():
-        return True
-    return cwd == base
+    return bool(environ.get(BRIDGING_RUN_ENV, "").strip())
+
+
+@contextmanager
+def _exclusive(path: Path) -> Iterator[None]:
+    """Serialize read-modify-write updates to one self-session store.
+
+    ``O_EXCL`` is atomic on the platforms memU supports and needs no dependency.
+    The critical section is tiny; a stale marker is only reclaimed after a full
+    process could not have been inside :func:`remember`.
+    """
+    lock = path.with_name(f"{path.name}.lock")
+    deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
+    while True:
+        try:
+            descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            try:
+                stale = time.time() - lock.stat().st_mtime >= _LOCK_STALE_SECONDS
+            except FileNotFoundError:
+                continue
+            if stale:
+                with suppress(FileNotFoundError):
+                    lock.unlink()
+                continue
+            if time.monotonic() >= deadline:
+                raise SelfSessionLockTimeout(lock) from None
+            time.sleep(_LOCK_POLL_SECONDS)
+        else:
+            os.close(descriptor)
+            break
+    try:
+        yield
+    finally:
+        with suppress(FileNotFoundError):
+            lock.unlink()
+
+
+def _write_atomic(path: Path, remembered: list[str]) -> None:
+    """Replace the store in one step so readers never observe a partial write."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(remembered, handle, indent=2)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def load(path: Path) -> list[str]:
@@ -91,11 +150,14 @@ def remember(path: Path, session_id: str) -> list[str]:
 
     Idempotent: a re-run inside the same host session (a retried bridging task,
     or a bare ``prepare`` the user typed themselves) does not duplicate the id.
+    Concurrent runs merge under an exclusive lock instead of overwriting one
+    another's owner.
     """
-    remembered = load(path)
-    if session_id not in remembered:
-        remembered.append(session_id)
-    remembered = remembered[-MAX_REMEMBERED:]
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(remembered, indent=2), encoding="utf-8")
+    with _exclusive(path):
+        remembered = load(path)
+        if session_id not in remembered:
+            remembered.append(session_id)
+        remembered = remembered[-MAX_REMEMBERED:]
+        _write_atomic(path, remembered)
     return remembered

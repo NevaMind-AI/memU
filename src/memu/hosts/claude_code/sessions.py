@@ -84,16 +84,19 @@ class ClaudeCodeTranscriptSource(TranscriptSource):
         (703 transcripts) they are ``<slug>/<sessionId>/subagents/agent-<id>.jsonl``
         and ``<slug>/<sessionId>/subagents/workflows/wf_<id>/agent-<id>.jsonl``.
         So the owner is not the parent directory, which is ``subagents`` or a
-        workflow id; it is always the *first* directory under the project slug.
-        Reading it positionally that way also survives whatever level Claude Code
-        adds next.
+        workflow id; it is the directory immediately before the structural
+        ``subagents`` marker. That also supports stores without the optional
+        project-slug level and survives whatever depth Claude Code adds next.
 
         The owner is what matters for skipping a bridging run (#606): if a run
         spawns a subagent, the child's transcript is just as much memU's own
         bookkeeping as the parent's.
         """
         parts = path.relative_to(self.root()).parts
-        return parts[1] if len(parts) > 2 else path.stem
+        for index, part in enumerate(parts[1:-1], start=1):
+            if part == "subagents":
+                return parts[index - 1]
+        return path.stem
 
     def classify(self, record: str) -> RecordKind:
         return classify_claude_record(record)
