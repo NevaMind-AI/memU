@@ -55,6 +55,7 @@ executing this skill):
 | WorkBuddy | `memu-workbuddy` |
 | Cola | `memu-cola` |
 | pi | `memu-pi` |
+| DeepSeek Harness (DSH) | `memu-dsh` |
 | anything else | `memu-agent` |
 
 Unsure, or not in the table? You are `memu-agent`. Run:
