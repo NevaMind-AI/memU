@@ -43,15 +43,9 @@ memu-dsh doctor
 ## 第二步 —— 安装 `dsh-memu` 插件
 
 插件把 DSH 的会话事件导出成 memU 能挖的 JSONL，并提供 `memu_retrieve` 等工具。
-它是一个独立的公开仓库 `Swcmb/dsh-memu`，同时以 git submodule 的形式挂在本仓库的
-`dsh-memu/` 下——两种拿法都行：
+它是一个独立的公开仓库 `Swcmb/dsh-memu`，从该仓库单独检出安装：
 
 ```sh
-# 方式一：随本仓库一起 checkout（需要 clone 时带 --recurse-submodules，
-#         或在本仓库根目录执行 git submodule update --init）
-dsh plugin --profile desktop add link:<memU 检出目录>/dsh-memu
-
-# 方式二：单独克隆独立仓库
 git clone https://github.com/Swcmb/dsh-memu.git
 dsh plugin --profile desktop add link:<克隆路径>
 ```
