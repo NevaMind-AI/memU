@@ -1,0 +1,4 @@
+[submodule "dsh-memu"]
+	path = dsh-memu
+	url = git@github.com:Swcmb/dsh-memu.git
+	branch = main
