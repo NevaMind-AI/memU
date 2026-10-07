@@ -44,8 +44,10 @@ def recall_file_path(base_dir: Path, subdir: str, name: str) -> Path:
     that needs to *locate* a mirrored file by name (e.g. retrieval, surfacing a
     file's path to the agent) agree by construction rather than by comment.
     """
-    # Escape spaces in the filename with '-'; the frontmatter keeps the raw name.
-    return base_dir / subdir / f"{name.replace(' ', '-')}.md"
+    # Preserve the distinction between spaces and hyphens. Escape '%' first so
+    # a literal "%20" cannot alias an encoded space; frontmatter keeps the raw name.
+    filename = name.replace("%", "%25").replace(" ", "%20")
+    return base_dir / subdir / f"{filename}.md"
 
 
 def write_recall_file(base_dir: Path, subdir: str, recall_file: dict[str, Any]) -> Path:
