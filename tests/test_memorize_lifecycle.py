@@ -9,6 +9,7 @@ from memu.app.memorize import lifecycle as lifecycle_module
 from memu.app.memorize.input import MemorizeInput, MessageInput
 from memu.app.memorize.lifecycle import MemorizeWorkspace, PreparedMemorizeRun, commit_memorize, prepare_memorize
 from memu.app.memorize.materialize import MaterializedConversation
+from memu.hosts.bridging.recall_files import read_recall_file
 
 
 class FakeBackend:
@@ -225,3 +226,24 @@ async def test_noop_commit_allows_next_session(tmp_path: Path) -> None:
 async def test_commit_requires_active_run(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match="no active run"):
         await commit_memorize(MemorizeWorkspace(tmp_path / "workspace"), FakeBackend())
+
+
+@pytest.mark.parametrize("track", ["memory", "skill"])
+async def test_prepare_and_commit_keep_distinct_names(tmp_path: Path, track: str) -> None:
+    contents = {"project preferences": "Use Python.", "project-preferences": "Use TypeScript."}
+    backend = FakeBackend([[{"name": name, "track": track, "content": content}] for name, content in contents.items()])
+    workspace = MemorizeWorkspace(tmp_path / "workspace")
+    await prepare_memorize(_input(), workspace, backend, verify_command="memu verify")
+    paths = list((workspace.base / track).glob("*.md"))
+
+    assert len(paths) == 2
+    documents = {read_recall_file(path, track)["name"]: path for path in paths}
+    assert {name: read_recall_file(path, track)["content"] for name, path in documents.items()} == contents
+    target = documents["project preferences"]
+    target.write_text(target.read_text(encoding="utf-8") + " Updated.", encoding="utf-8")
+
+    await commit_memorize(workspace, backend)
+
+    assert backend.commits[0]["recall_files"] == [
+        {"name": "project preferences", "track": track, "description": "", "content": "Use Python. Updated."}
+    ]

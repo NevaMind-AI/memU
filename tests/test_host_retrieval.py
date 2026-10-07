@@ -49,8 +49,8 @@ def test_mirrorable_file_is_bootstrapped_and_replaces_content_with_path(tmp_path
     file = shaped["files"][0]
     assert "content" not in file, "a locatable file hands over a path, not its full text"
     assert "resource_urls" not in file, "the internal link list the instruction never names is dropped"
-    # The mirror was written out (space in the name becomes a dash) and its path handed back.
-    out_path = tmp_path / "memory" / "coffee-preferences.md"
+    # The mirror was written out (space in the name is escaped) and its path handed back.
+    out_path = tmp_path / "memory" / "coffee%20preferences.md"
     assert file["path"] == str(out_path)
     assert out_path.read_text(encoding="utf-8").endswith("No sugar."), "the mirror carries the file's content"
 
@@ -63,8 +63,8 @@ def test_bootstrap_overwrites_a_stale_mirror(tmp_path: pathlib.Path, monkeypatch
     shaped = retrieval._shape_for_agent(_result())
 
     file = shaped["files"][0]
-    assert file["path"] == str(tmp_path / "memory" / "coffee-preferences.md")
-    assert (tmp_path / "memory" / "coffee-preferences.md").read_text(encoding="utf-8").endswith("No sugar.")
+    assert file["path"] == str(tmp_path / "memory" / "coffee%20preferences.md")
+    assert (tmp_path / "memory" / "coffee%20preferences.md").read_text(encoding="utf-8").endswith("No sugar.")
 
 
 def test_unmappable_file_keeps_content_inline_with_no_path(tmp_path: pathlib.Path, monkeypatch) -> None:
@@ -100,3 +100,21 @@ def test_resource_collapses_to_single_path(tmp_path: pathlib.Path, monkeypatch) 
     res = shaped["resources"][0]
     assert res["path"] == "notes/onboarding.md"
     assert "url" not in res and "local_path" not in res
+
+
+def test_retrieval_paths_open_the_matching_document(tmp_path: pathlib.Path, monkeypatch) -> None:
+    monkeypatch.setattr(retrieval, "BASE_DIR", str(tmp_path))
+    result = _result()
+    contents = {"project preferences": "Use Python.", "project-preferences": "Use TypeScript."}
+    result["files"] = [
+        {"id": name, "name": name, "track": "memory", "content": content} for name, content in contents.items()
+    ]
+
+    shaped = retrieval._shape_for_agent(result)
+
+    assert len({file["path"] for file in shaped["files"]}) == 2
+    for file in shaped["files"]:
+        document = pathlib.Path(file["path"]).read_text(encoding="utf-8")
+        assert f"name: {file['name']}\n" in document
+        assert document.endswith(contents[file["name"]])
+        assert "content" not in file
