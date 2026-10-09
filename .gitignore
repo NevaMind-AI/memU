@@ -213,3 +213,7 @@ api_keys.txt
 .cursor
 
 .local/
+claude_sessions.md
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/hooks/
