@@ -12,8 +12,8 @@
 
 Uninstalling is the install run in reverse, and it is three parts:
 
-1. **Unregister the bridging task** — stop the scheduled job first, so nothing
-   fires mid-teardown (the *record* seam).
+1. **Remove the bridging hook** — and any scheduled task an older install left —
+   first, so nothing fires mid-teardown (the *record* seam).
 2. **Unpatch `~/.codex/AGENTS.md`** — remove the standing retrieval
    instruction and the `memu-retrieve` skill it points at (the *inject* seam).
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
@@ -30,17 +30,24 @@ instruction file exactly as they are.
 
 ---
 
-## Part 1 — Unregister the bridging (record) task
+## Part 1 — Remove the bridging (record) hook
 
-Find the Codex scheduled task that runs the memU bridging pipeline — current installs name it `{{task_name}}`; older installs may use any name in
-{{former_task_names}} or another user-chosen name — and delete **that task only**, through the same
-scheduled-task surface Codex used to create it. The name is only a hint; the
-load-bearing signal is the prompt, which runs the prepare / self-evolve / commit
-pipeline. Any other scheduled tasks the user has are theirs and stay.
+```
+memu-codex remove-hook
+```
+
+It removes memU's `notify` from `~/.codex/config.toml` and restores whatever
+`notify` program it replaced, if any. Older installs ran bridging as a Codex
+scheduled task instead — current installs name it `{{task_name}}`; older ones
+may use any name in {{former_task_names}} or another user-chosen name. If one
+exists, delete **that task only** through Codex's scheduled-task surface. The
+name is only a hint; the load-bearing signal is its prompt, which runs the
+prepare / self-evolve / commit pipeline. Any other scheduled tasks the user has are theirs and stay.
 
 ### ✅ Verify Part 1
 
-Codex's scheduled-task list no longer shows a memU bridging task.
+`~/.codex/config.toml` has no `memu-codex hook` `notify`, and Codex's
+scheduled-task list shows no memU bridging task.
 
 ---
 

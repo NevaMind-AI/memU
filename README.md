@@ -116,6 +116,7 @@ By default, uninstalling removes the host integration and tooling while keeping 
 memU runs as a sidecar to a desktop agent, one binary per host. Each binds two seams:
 
 - **record** — a scheduled bridging task slices new session logs into self-contained job files; the agent itself distills them into memory/skill Markdown; `commit` submits whatever the agent left on disk back through `commit_results`.
+  Codex and Claude Code trigger it from their own hooks instead of a schedule (`notify` / `SessionEnd`, via `<binary> install-hook`): a detached `<binary> hook-run` does `prepare` and `commit` outside the agent's sandbox, and a headless agent run in between only reads and writes local job files — so a sandbox without network never blocks the upload.
 - **inject** — a standing instruction in the host's instruction file tells the agent to run `<binary> retrieve` (→ `progressive_retrieve`) before answering.
 
 | Host | Binary | Session log it mines | Instruction file it patches |

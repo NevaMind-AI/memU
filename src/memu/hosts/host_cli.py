@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from memu import events
-from memu.hosts import config_cmd, instruction, retrieval, templates
+from memu.hosts import config_cmd, hooks, instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging import Layout, commit, prepare, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
@@ -194,6 +194,12 @@ class HostSpec:
     register_extra: Callable[[Any], None] | None = None
     """Optional hook adding host-specific subcommands (the generic adapter's
     ``detect``). Called with the subparsers object after the shared verbs."""
+
+    hook: hooks.HookSpec | None = None
+    """Hook mode (ADR 0019): the host's own hook triggers bridging, and only the
+    job work runs inside the agent. Given one, the CLI grows ``hook``,
+    ``hook-run``, ``install-hook``, and ``remove-hook``. ``None`` keeps the host
+    on its scheduled task."""
 
     resolve_self_sessions: Callable[[TranscriptSource, Layout], list[str]] | None = None
     """Optional native-scheduler identity resolver.
@@ -727,6 +733,126 @@ async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
     return scheduling.verify(spec, layout)
 
 
+def _hook_spec(spec: HostSpec) -> hooks.HookSpec:
+    if spec.hook is None:  # the parser only registers hook verbs for hosts that have one
+        msg = f"{spec.display} has no hook mode"
+        raise RuntimeError(msg)
+    return spec.hook
+
+
+async def _cmd_hook(spec: HostSpec, args: argparse.Namespace) -> int:
+    """What the host's hook runs: hand off to a detached ``hook-run`` and return.
+
+    Never fails, and never blocks: a hook that errored or waited would surface
+    in — or stall — the user's own session for a problem that is ours. Anything
+    that goes wrong is a line on stderr and in ``hook.log``.
+    """
+    if os.environ.get(self_sessions.BRIDGING_RUN_ENV, "").strip():
+        # The headless agent's own session ending. Mining it is exactly what the
+        # self-session ledger exists to prevent; recursing into it is worse.
+        return 0
+    hook = _hook_spec(spec)
+    layout = _layout(spec, args)
+    try:
+        hook.installer.forward(layout, args.payload)
+    except Exception as exc:
+        print(f"memU hook: could not forward to the previous hook ({exc})", file=sys.stderr)
+    argv = [sys.executable, "-m", f"{spec.package}.cli", "hook-run", "--base-dir", str(layout.base)]
+    argv += ["--min-interval", str(args.min_interval)]
+    if args.agent:
+        argv += ["--agent", args.agent]
+    try:
+        hooks.runner.spawn_detached(argv, layout)
+    except Exception as exc:
+        print(f"memU hook: could not start the bridging run ({exc})", file=sys.stderr)
+    return 0
+
+
+async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
+    """One hook-triggered bridging run, in the foreground (``hook`` detaches it).
+
+    Runs outside any agent sandbox, so ``prepare`` and ``commit`` reach the store
+    and memU Cloud directly; only the job work in between goes to the headless
+    agent. One run at a time per host: a hook that fires mid-run leaves a re-run
+    request instead, so a burst of sessions ending is one run plus one more pass,
+    not a pile of agents racing over one ``jobs/``.
+    """
+    if os.environ.get(self_sessions.BRIDGING_RUN_ENV, "").strip():
+        print("inside a bridging run; standing down")
+        return 0
+    layout = _layout(spec, args)
+    with hooks.runner.run_lock(layout) as held:
+        if not held:
+            hooks.runner.request_rerun(layout)
+            print("a bridging run is already in flight; it will make one more pass")
+            return 0
+        if hooks.runner.cooling_down(layout, args.min_interval):
+            print(f"last run started under {args.min_interval} min ago; skipping")
+            return 0
+        hooks.runner.take_rerun(layout)
+        for _ in range(1 + hooks.runner.MAX_RERUNS):
+            hooks.runner.stamp_run(layout)
+            code = await _hook_pass(spec, args, layout)
+            # A cooldown means the next hook will come back for the rest; re-running
+            # now would only re-mine a session that is still in progress.
+            if code or args.min_interval > 0 or not hooks.runner.take_rerun(layout):
+                return code
+    return 0
+
+
+async def _hook_pass(spec: HostSpec, args: argparse.Namespace, layout: Layout) -> int:
+    """LEFTOVERS, PREPARE, SELF-EVOLVE, COMMIT — the scheduled prompt's four steps, as code."""
+    agent = _hook_spec(spec).agent
+    if hooks.runner.pending_jobs(layout):
+        # Unfinished jobs from a run that died: prepare would delete them while the
+        # cursor already counts their sessions as seen, so they go first (#518).
+        hooks.runner.run_agent(agent, layout, executable=args.agent)
+        code = await _cmd_commit(spec, args)
+        if code:
+            return code
+    code = await _cmd_prepare(spec, args)
+    if code:
+        return code
+    if hooks.runner.pending_jobs(layout):
+        hooks.runner.run_agent(agent, layout, executable=args.agent)
+    # Committed even with no jobs, as the scheduled pipeline always did: it is
+    # what promotes the cursor past sessions that held nothing mineable.
+    return await _cmd_commit(spec, args)
+
+
+async def _cmd_install_hook(spec: HostSpec, args: argparse.Namespace) -> int:
+    import shutil
+
+    hook = _hook_spec(spec)
+    layout = _layout(spec, args)
+    # Absolute, because a hook runs with whatever PATH the host app was launched
+    # with — a desktop app's is rarely the shell's.
+    argv = [shutil.which(spec.binary) or spec.binary, "hook"]
+    if args.min_interval > 0:
+        argv += ["--min-interval", str(args.min_interval)]
+    # The agent too, for the same reason; re-run install-hook if it moves.
+    agent_binary = hook.agent.argv[0]
+    agent_path = shutil.which(agent_binary)
+    if agent_path is None:
+        print(
+            f"warning: `{agent_binary}` is not on PATH; each hook run will fail until it is",
+            file=sys.stderr,
+        )
+    else:
+        argv += ["--agent", agent_path]
+    changed = hook.installer.install(argv, layout)
+    print(f"{'installed' if changed else 'already installed'}: {' '.join(argv)} in {hook.installer.path}")
+    print(f"runs log to {layout.hook_log}; run `{spec.binary} hook-run` to do one pass now")
+    return 0
+
+
+async def _cmd_remove_hook(spec: HostSpec, args: argparse.Namespace) -> int:
+    hook = _hook_spec(spec)
+    changed = hook.installer.remove(spec.binary, _layout(spec, args))
+    print(f"{'removed' if changed else 'not installed'}: {spec.binary} hook in {hook.installer.path}")
+    return 0
+
+
 async def _cmd_report(spec: HostSpec, args: argparse.Namespace) -> int:
     """The one command surface for events code cannot observe by itself (ADR 0016).
 
@@ -919,10 +1045,44 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
         p.add_argument("--interval", type=int, default=60, help="Minutes between runs, for install (default: 60)")
         p.set_defaults(handler=bind(_cmd_schedule))
 
+    if spec.hook is not None:
+        _register_hook_verbs(sub, spec, with_base, bind)
+
     if spec.register_extra is not None:
         spec.register_extra(sub)
 
     return parser
+
+
+def _register_hook_verbs(sub: Any, spec: HostSpec, with_base: Any, bind: Any) -> None:
+    hook = _hook_spec(spec)
+    interval_help = "Skip a run if the last one started fewer than this many minutes ago"
+    agent_help = f"Absolute path of `{hook.agent.argv[0]}` (default: look it up on PATH)"
+
+    p = with_base(sub.add_parser("hook", help=f"Entry point for {spec.display}'s hook: start a bridging run, detached"))
+    p.add_argument("--min-interval", type=int, default=hook.min_interval_minutes, help=interval_help)
+    p.add_argument("--agent", default="", help=agent_help)
+    p.add_argument("payload", nargs="*", help=argparse.SUPPRESS)
+    p.set_defaults(handler=bind(_cmd_hook))
+
+    p = with_base(sub.add_parser("hook-run", help="Run one hook-triggered bridging pass in the foreground"))
+    p.add_argument("--session-dir", default=spec.session_dir, help=spec.session_help)
+    p.add_argument("--max-jobs", type=int, default=MAX_JOBS, help=f"Sessions per run (default: {MAX_JOBS})")
+    p.add_argument("--min-interval", type=int, default=0, help=interval_help + " (default: 0)")
+    p.add_argument("--agent", default="", help=agent_help)
+    p.set_defaults(handler=bind(_cmd_hook_run))
+
+    p = with_base(sub.add_parser("install-hook", help=f"Register the bridging hook in {hook.installer.path}"))
+    p.add_argument(
+        "--min-interval",
+        type=int,
+        default=hook.min_interval_minutes,
+        help=f"{interval_help} (default: {hook.min_interval_minutes})",
+    )
+    p.set_defaults(handler=bind(_cmd_install_hook))
+
+    p = with_base(sub.add_parser("remove-hook", help=f"Unregister the bridging hook from {hook.installer.path}"))
+    p.set_defaults(handler=bind(_cmd_remove_hook))
 
 
 def run(spec: HostSpec, argv: list[str] | None = None) -> int:
