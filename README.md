@@ -195,6 +195,8 @@ path the host uses.
 | `sqlite` | `sqlite:///path.sqlite3` | brute-force cosine | local/default, single writer |
 | `postgres` | `postgresql://...` | pgvector | concurrent access, large stores (`pip install "memu-cli[postgres]"`) |
 
+The Python cosine search skips stored vectors containing NaN or Infinity. A query vector containing either returns no hits.
+
 ```python
 service = MemoryService(
     database_config={"metadata_store": {"provider": "postgres", "dsn": "postgresql://..."}},
