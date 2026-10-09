@@ -149,6 +149,14 @@ to prepare self-evolve jobs from 1–10 completed sessions for one external agen
 commit the resulting memory, skill, and resource changes. See [Developer integration](docs/developer.md) for the
 canonical input contract and the complete prepare → agent → commit workflow.
 
+Recall-file mirrors preserve the original name in Markdown frontmatter. In
+filenames, spaces become `%20` and literal `%` becomes `%25`; ordinary kebab-case
+names are unchanged. Use the `path` returned by retrieval to locate a document.
+After upgrading from space-to-hyphen naming, old mirror files may remain because
+workspace mirroring does not delete files. Finish any active memorize run before
+upgrading, preserve local edits, and reconcile obsolete mirrors against the backend
+before removing them; see [workspace lifecycle](docs/developer.md).
+
 ## CLI
 
 With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
