@@ -22,6 +22,7 @@ from memu.hosts.claude_code.sessions import ClaudeCodeTranscriptSource
 from memu.hosts.codex.sessions import CodexTranscriptSource
 from memu.hosts.cola.sessions import ColaTranscriptSource
 from memu.hosts.cursor.sessions import CursorTranscriptSource
+from memu.hosts.dsh.sessions import DshTranscriptSource
 from memu.hosts.hermes.sessions import HermesTranscriptSource, state_db_path
 from memu.hosts.openclaw.sessions import OpenClawTranscriptSource
 from memu.hosts.pi.sessions import PiTranscriptSource
@@ -1582,3 +1583,74 @@ def test_workbuddy_discover(tmp_path: pathlib.Path) -> None:
     assert source.exists()
     assert source.discover() == [session]
     assert source.key(session) == "d-Users-proj/abc-123.jsonl"
+
+
+# ── DSH ───────────────────────────────────────────────────────────────────────
+
+
+def test_dsh_classifies_messages_tools_and_noise() -> None:
+    source = DshTranscriptSource()
+    message = {"type": "message", "role": "user", "text": "hi", "seq": 1, "timestamp": "2026-10-04T10:00:00.000Z"}
+    tool_call = {"type": "tool_call", "name": "bash", "arguments": {"command": "ls"}, "seq": 2}
+    tool_result = {"type": "tool_result", "name": "bash", "content": "a.ts", "is_error": False, "seq": 3}
+
+    assert source.classify(_line(message)) is RecordKind.MESSAGE
+    assert source.classify(_line(tool_call)) is RecordKind.TOOL
+    assert source.classify(_line(tool_result)) is RecordKind.TOOL
+    # 投影之外的形状一律丢弃: 导入器只要认得出这三类。
+    assert source.classify(_line({"type": "session", "id": "session-1"})) is RecordKind.OTHER
+    assert source.classify(_line({"type": "request/header", "data": {"tools": []}})) is RecordKind.OTHER
+    assert source.classify("[1, 2]") is RecordKind.OTHER
+    assert source.classify("not json") is RecordKind.OTHER
+
+
+def test_dsh_discovers_and_names_exported_sessions(tmp_path: pathlib.Path) -> None:
+    older = tmp_path / "--D-memU--" / "session-42338862-d919-4cde-ab27-8222d3811794.jsonl"
+    newer = tmp_path / "--C-Users-Swcmb--" / "session-e4a21e94-ea9b-4e77-bf3f-d6452e54d579.jsonl"
+    older.parent.mkdir()
+    newer.parent.mkdir()
+    older.write_text("{}\n", encoding="utf-8")
+    newer.write_text("{}\n", encoding="utf-8")
+    os.utime(older, (1, 1))
+    os.utime(newer, (2, 2))
+
+    source = DshTranscriptSource(tmp_path)
+    assert source.exists()
+    assert source.discover() == [newer, older]
+    assert source.session_id(older) == "session-42338862-d919-4cde-ab27-8222d3811794"
+    assert source.key(newer) == "--C-Users-Swcmb--/session-e4a21e94-ea9b-4e77-bf3f-d6452e54d579.jsonl"
+
+
+def test_dsh_reads_the_iso_timestamp_the_plugin_wrote() -> None:
+    source = DshTranscriptSource()
+    record = {"type": "message", "role": "assistant", "text": "ok", "seq": 9, "timestamp": "2026-10-04T10:00:09.000Z"}
+
+    assert source.timestamp(_line(record)) == "2026-10-04T10:00:09.000Z"
+    assert source.timestamp(_line({"type": "message", "role": "assistant", "text": "no time"})) is None
+
+
+def test_dsh_prepare_splits_conversation_and_tool_activity(tmp_path: pathlib.Path) -> None:
+    root = tmp_path / "transcripts"
+    session = root / "--D-memU--" / "session-abc.jsonl"
+    session.parent.mkdir(parents=True)
+    records = [
+        {"type": "message", "role": "user", "text": "读一下这个文件", "seq": 1, "timestamp": "2026-10-04T10:00:00.000Z"},
+        {"type": "tool_call", "name": "read", "arguments": {"path": "a.ts"}, "seq": 2, "timestamp": "2026-10-04T10:00:01.000Z"},
+        {"type": "tool_result", "name": "read", "content": "export {};", "is_error": False, "seq": 3, "timestamp": "2026-10-04T10:00:02.000Z"},
+    ]
+    raw = "".join(_line(record) + "\n" for record in records)
+    session.write_text(raw, encoding="utf-8")
+
+    out = tmp_path / "prepared"
+    pending = tmp_path / "manifest.json.pending"
+    assert prepare_transcripts(DshTranscriptSource(root), out, tmp_path / "manifest.json", 10, pending) == 1
+
+    # 记忆只收对话, 技能还要收工具活动。
+    conversation = [json.loads(line) for line in (out / "1.jsonl").read_text(encoding="utf-8").splitlines()]
+    full = [json.loads(line) for line in (out / "1_full.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert [record["type"] for record in conversation] == ["message"]
+    assert [record["type"] for record in full] == ["message", "tool_call", "tool_result"]
+    assert session.read_text(encoding="utf-8") == raw
+    cursor = json.loads(pending.read_text(encoding="utf-8"))
+    assert cursor["--D-memU--/session-abc.jsonl"]["lines"] == 3
+    assert cursor["--D-memU--/session-abc.jsonl"]["last_timestamp"] == "2026-10-04T10:00:02.000Z"
