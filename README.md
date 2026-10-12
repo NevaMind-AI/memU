@@ -149,6 +149,9 @@ to prepare self-evolve jobs from 1–10 completed sessions for one external agen
 commit the resulting memory, skill, and resource changes. See [Developer integration](docs/developer.md) for the
 canonical input contract and the complete prepare → agent → commit workflow.
 
+Supplied tool activity preserves its original JSON values in the skill transcript,
+including explicit `null` arguments.
+
 ## CLI
 
 With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
