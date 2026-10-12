@@ -8,6 +8,7 @@ refresh skips rather than downgrades when the server is unreachable.
 
 from __future__ import annotations
 
+import importlib
 import pathlib
 
 import pytest
@@ -107,9 +108,11 @@ def test_resolve_prefers_the_last_good_cache_over_embedded_on_outage(monkeypatch
     embedded = f"embedded v0 {MEMORY_KEYS}"
     remote_v1 = f"server v1 {MEMORY_KEYS}"
 
+    monkeypatch.setattr(templates.time, "time", lambda: 100_000.0)
     _serve(monkeypatch, remote_v1.encode())
     assert templates.resolve(templates.MEMORY_JOB, embedded) == remote_v1  # seen once, now cached
 
+    monkeypatch.setattr(templates.time, "time", lambda: 186_400.0)
     _server_down(monkeypatch)  # the next day the pull fails
     assert templates.resolve(templates.MEMORY_JOB, embedded) == remote_v1, (
         "a transient outage must keep the last-good v1, not regress to the embedded v0"
@@ -130,6 +133,61 @@ def test_resolve_ignores_a_corrupt_cache(monkeypatch: pytest.MonkeyPatch) -> Non
     embedded = f"embedded floor {MEMORY_KEYS}"
     _server_down(monkeypatch)
 
+    assert templates.resolve(templates.MEMORY_JOB, embedded) == embedded
+
+
+@pytest.mark.parametrize("response", [f"remote {MEMORY_KEYS}", None, "invalid template"])
+def test_job_cooldown_survives_reload_and_expires(monkeypatch: pytest.MonkeyPatch, response: str | None) -> None:
+    cache = templates._cache_dir()
+    monkeypatch.setenv("MEMU_TEMPLATE_BASE_URL", "https://example.test/inst")
+    now = 100_000.0
+    calls: list[str] = []
+
+    def get(url: str) -> str | None:
+        calls.append(url)
+        return response
+
+    monkeypatch.setattr(templates.time, "time", lambda: now)
+    monkeypatch.setattr(templates, "_get", get)
+    embedded = f"embedded {MEMORY_KEYS}"
+    expected = (
+        response if response and templates._valid(response, templates.REQUIRED_KEYS[templates.MEMORY_JOB]) else embedded
+    )
+    assert templates.resolve(templates.MEMORY_JOB, embedded) == expected
+    # Discard module state; only disk state is retained, as in a new CLI invocation.
+    importlib.reload(templates)
+    monkeypatch.setattr(templates, "_cache_dir", lambda: cache)
+    monkeypatch.setattr(templates, "_get", get)
+    for hour in range(1, 24):
+        now = 100_000.0 + hour * 3600
+        assert templates.resolve(templates.MEMORY_JOB, embedded) == expected
+    assert len(calls) == 1
+    now = 186_400.0
+    assert templates.resolve(templates.MEMORY_JOB, embedded) == expected
+    assert len(calls) == 2
+    monkeypatch.setenv("MEMU_TEMPLATE_BASE_URL", "https://other.test/inst")
+    assert templates.resolve(templates.MEMORY_JOB, embedded) == expected
+    assert len(calls) == 3
+
+
+@pytest.mark.parametrize("stamp", ["broken", "nan", "inf", "200000", "0"])
+def test_bad_or_expired_cooldown_state_allows_refresh(monkeypatch: pytest.MonkeyPatch, stamp: str) -> None:
+    _server_down(monkeypatch)
+    monkeypatch.setattr(templates.time, "time", lambda: 100_000.0)
+    embedded = f"embedded {MEMORY_KEYS}"
+    assert templates.resolve(templates.MEMORY_JOB, embedded) == embedded
+    marker = next(templates._cache_dir().glob("attempt-*.txt"))
+    marker.write_text(stamp, encoding="utf-8")
+    remote = f"remote {MEMORY_KEYS}"
+    _serve(monkeypatch, remote.encode())
+    assert templates.resolve(templates.MEMORY_JOB, embedded) == remote
+
+
+def test_unwritable_cooldown_state_does_not_block_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    _server_down(monkeypatch)
+    cache = templates._cache_dir()
+    cache.write_text("not a directory", encoding="utf-8")
+    embedded = f"embedded {MEMORY_KEYS}"
     assert templates.resolve(templates.MEMORY_JOB, embedded) == embedded
 
 

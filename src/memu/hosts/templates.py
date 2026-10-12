@@ -12,7 +12,8 @@ Two fallback shapes, because the two kinds of template are consumed differently:
 
 * :func:`resolve` — server, then a local **last-good cache**, then embedded. For
   the job templates, which are read on the low-frequency, latency-tolerant
-  ``prepare`` run and can be pulled every time. The cache is what makes a
+  ``prepare`` run. Remote attempts are limited to once per URL per 24 hours,
+  including failed attempts, with the cooldown persisted across CLI runs. The cache makes a
   *transient* server outage a non-event: once an install has seen ``v1``, a day
   where the pull fails still runs ``v1`` rather than regressing to the embedded
   ``v0``.
@@ -29,17 +30,18 @@ never a dependency.
 
 One deliberate limitation, without version numbers (see ADR 0013): the cache
 holds *the last text seen*, not *the newest by version*. If the SDK is upgraded
-while the server is unreachable, a cached older-remote could momentarily win over
-a newer embedded template. It self-heals on the next successful pull — which is
-imminent, since a release publishes the matching server copy — and touches at
-most a handful of low-frequency jobs. Adding a version field to arbitrate this is
-tracked as the open issue in ADR 0013.
+while the server is unreachable or refresh is cooling down, a cached older-remote
+could temporarily win over a newer embedded template. It self-heals on a successful
+refresh and touches only a handful of low-frequency jobs. Adding a version field
+is tracked as an open issue in ADR 0013.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
+import time
 import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
@@ -68,6 +70,7 @@ REQUIRED_KEYS: dict[str, frozenset[str]] = {
 }
 
 _TIMEOUT_SECONDS = 4.0
+_REFRESH_INTERVAL_SECONDS = 24 * 60 * 60
 _MAX_BYTES = 64 * 1024
 
 
@@ -172,19 +175,33 @@ def _read_cache(name: str) -> str | None:
     """
     try:
         text = (_cache_dir() / f"{name}.txt").read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeError):
         return None
     return text if _valid(text, REQUIRED_KEYS[name]) else None
 
 
 def resolve(name: str, embedded: str) -> str:
-    """The best template available: server, then last-good cache, then ``embedded``.
+    """Resolve a job template, attempting remote refresh at most once per day.
 
-    For the job templates — low-frequency, latency-tolerant, so pulled on every
-    ``prepare``. The embedded copy shipped with the SDK is the guaranteed floor,
-    so a total outage degrades to it, never to nothing.
+    Successful and failed attempts share a disk-backed cooldown. Missing or
+    corrupt state permits a new attempt; cache-write failures remain fail-open.
     """
-    return fetch(name) or _read_cache(name) or embedded
+    base = _base_url()
+    if base is not None:
+        url = f"{base}/{name}.txt"
+        stamp_name = f"attempt-{hashlib.sha256(url.encode()).hexdigest()}"
+        now = time.time()
+        try:
+            last_attempt = float((_cache_dir() / f"{stamp_name}.txt").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            last_attempt = float("-inf")
+        if not 0 <= now - last_attempt < _REFRESH_INTERVAL_SECONDS:
+            # ponytail: concurrent processes may both refresh; add locking if duplicate fetches matter.
+            _write_cache(stamp_name, str(now))
+            remote = fetch(name)
+            if remote is not None:
+                return remote
+    return _read_cache(name) or embedded
 
 
 # --------------------------------------------------------------------------- #
