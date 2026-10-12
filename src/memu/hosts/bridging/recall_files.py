@@ -69,7 +69,16 @@ def read_recall_file(path: Path, track: str) -> dict[str, Any]:
     tagging it with the ``track`` its directory represents (the file itself does
     not store the track). Mirrors the fields ``list_all_recall_files`` returns.
     """
-    text = path.read_text(encoding="utf-8")
+    return parse_recall_text(path.read_text(encoding="utf-8"), track)
+
+
+def parse_recall_text(text: str, track: str) -> dict[str, Any]:
+    """The parsing half of :func:`read_recall_file`, for text not yet on disk.
+
+    Split out so a caller holding a front-mattered document from elsewhere (a
+    packaged skill being seeded, a server-fetched template) can parse it with the
+    same convention the mirror uses, rather than growing a second parser.
+    """
     name = ""
     description = ""
     content = text
