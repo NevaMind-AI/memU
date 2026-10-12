@@ -59,12 +59,14 @@ class SQLiteRecallFileSegmentRepo(SQLiteRepoBase, RecallFileSegmentRepo):
                 stmt = stmt.where(*filters)
             rows = session.exec(stmt).all()
 
+        cached_ids = {segment.id for segment in self.segments}
         result: list[RecallFileSegment] = []
         for row in rows:
             seg = self._row_to_record(row)
             result.append(seg)
-            if not any(s.id == seg.id for s in self.segments):
+            if seg.id not in cached_ids:
                 self.segments.append(seg)
+                cached_ids.add(seg.id)
         return result
 
     # ``vector_search_segments`` is the protocol's Python scan: SQLite has no
