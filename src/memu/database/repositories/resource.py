@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from typing import Any, Protocol, runtime_checkable
 
 from memu.database.models import Resource
+from memu.hybrid import maybe_hybrid_topk
+from memu.vector import cosine_topk
 
 
 @runtime_checkable
@@ -55,12 +57,29 @@ class ResourceRepo(Protocol):
         query_vec: list[float],
         top_k: int,
         where: Mapping[str, Any] | None = None,
+        *,
+        query_text: str | None = None,
     ) -> list[tuple[str, float]]:
-        """Rank resources by cosine similarity of their stored embeddings.
+        """Rank resources by cosine, optionally fused with BM25 over ``caption``.
 
-        Returns a list of ``(resource_id, score)`` tuples ordered by descending
-        similarity. Resources without an embedding are skipped.
+        Returns ``(resource_id, score)`` pairs, best first, at most ``top_k``.
+        ``query_text=None`` is cosine-only. All three backends already scan the
+        scoped pool in Python, so hybrid uses that whole pool (ADR 0019).
+        Resources without an embedding are skipped by cosine; they can still
+        surface through BM25 when ``caption`` matches.
         """
-        ...
+        pool = self.list_resources(where)
+        cosine_k = len(pool) if query_text and query_text.strip() else top_k
+        ranked = cosine_topk(
+            query_vec,
+            [(rid, res.embedding) for rid, res in pool.items() if res.embedding],
+            k=cosine_k,
+        )
+        return maybe_hybrid_topk(
+            query_text=query_text,
+            cosine_hits=ranked,
+            texts={rid: res.caption or "" for rid, res in pool.items()},
+            top_k=top_k,
+        )
 
     def load_existing(self) -> None: ...

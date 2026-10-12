@@ -119,7 +119,7 @@ async def test_progressive_retrieve_takes_the_repo_shortcut() -> None:
         scans += 1
         return real_list_segments(where)
 
-    def native_search(query_vec: list[float], top_k: int, where: Any = None) -> Any:
+    def native_search(query_vec: list[float], top_k: int, where: Any = None, *, query_text: str | None = None) -> Any:
         native_calls.append(top_k)
         # A backend-native answer the Python scan would never produce: one hit,
         # the *worse* match, at an impossible score.
@@ -246,6 +246,68 @@ def test_postgres_without_pgvector_falls_back_to_the_python_scan() -> None:
     sql = str(sessions.seen[0])
     assert "<=>" not in sql
     assert "LIMIT" not in sql
+
+
+def test_resource_hybrid_prefers_caption_keyword(db_backend: Database) -> None:
+    repo = db_backend.resource_repo
+    repo.create_resource(
+        url="/a.md",
+        local_path="/a.md",
+        caption="unrelated prose about weather",
+        embedding=[1.0, 0.0],
+        user_data=dict(USER),
+        track="workspace",
+    )
+    repo.create_resource(
+        url="/b.md",
+        local_path="/b.md",
+        caption="ECONNREFUSED 127.0.0.1:5432",
+        embedding=[0.0, 1.0],
+        user_data=dict(USER),
+        track="workspace",
+    )
+
+    cosine = repo.vector_search_resources([1.0, 0.0], 1)
+    cosine_hit = db_backend.resource_repo.resources[cosine[0][0]]
+    assert cosine_hit.caption and cosine_hit.caption.startswith("unrelated")
+
+    hybrid = repo.vector_search_resources([1.0, 0.0], 1, query_text="ECONNREFUSED 5432")
+    hybrid_hit = db_backend.resource_repo.resources[hybrid[0][0]]
+    assert hybrid_hit.caption and "ECONNREFUSED" in hybrid_hit.caption
+
+
+def test_hybrid_query_text_prefers_keyword_over_closer_vector(db_backend: Database) -> None:
+    _seed(
+        db_backend,
+        [
+            ("unrelated prose about weather", [1.0, 0.0], "memory"),
+            ("ECONNREFUSED 127.0.0.1:5432", [0.0, 1.0], "memory"),
+        ],
+    )
+
+    cosine = db_backend.recall_file_segment_repo.vector_search_segments([1.0, 0.0], 1)
+    assert cosine[0][0].text.startswith("unrelated")
+
+    hybrid = db_backend.recall_file_segment_repo.vector_search_segments([1.0, 0.0], 1, query_text="ECONNREFUSED 5432")
+    assert "ECONNREFUSED" in hybrid[0][0].text
+
+
+def test_postgres_hybrid_unions_bm25_outside_the_cosine_window() -> None:
+    pytest.importorskip("pgvector")
+
+    from memu.database.models import RecallFileSegment
+
+    close_row = _row("seg-close", "unrelated prose", [1.0, 0.0])
+    far_row = _row("seg-far", "ECONNREFUSED 5432", [0.0, 1.0])
+    repo, sessions = _postgres_repo([(close_row, 0.0), (far_row, 1.0)], use_vector=True)
+    close = RecallFileSegment(id="seg-close", recall_file_id="file-1", text="unrelated prose", embedding=[1.0, 0.0])
+    far = RecallFileSegment(id="seg-far", recall_file_id="file-1", text="ECONNREFUSED 5432", embedding=[0.0, 1.0])
+    repo.list_segments = lambda where=None: [close, far]  # type: ignore[method-assign]
+
+    hits = repo.vector_search_segments([1.0, 0.0], 5, query_text="ECONNREFUSED 5432")
+
+    assert hits[0][0].id == "seg-far"
+    assert "LIMIT" in str(sessions.seen[0])
 
 
 def test_postgres_native_path_honours_nonpositive_top_k() -> None:

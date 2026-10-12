@@ -10,7 +10,6 @@ from memu.database.inmemory.repositories.filter import matches_where
 from memu.database.inmemory.state import InMemoryState
 from memu.database.models import Resource
 from memu.database.repositories.resource import ResourceRepo as ResourceRepoProtocol
-from memu.vector import cosine_topk
 
 
 class InMemoryResourceRepository(ResourceRepoProtocol):
@@ -81,16 +80,6 @@ class InMemoryResourceRepository(ResourceRepoProtocol):
         res.track = track
         res.updated_at = pendulum.now("UTC")
         return res
-
-    def vector_search_resources(
-        self,
-        query_vec: list[float],
-        top_k: int,
-        where: Mapping[str, Any] | None = None,
-    ) -> list[tuple[str, float]]:
-        pool = self.list_resources(where)
-        corpus = [(rid, res.embedding) for rid, res in pool.items() if res.embedding]
-        return cosine_topk(query_vec, corpus, k=top_k)
 
     def load_existing(self) -> None:
         return None
