@@ -359,6 +359,33 @@ async def test_retrieve_rollup_fetches_only_hit_files(service: MemoryService) ->
     assert set(seen[0].get("id__in", [])) == hit_ids
 
 
+async def test_file_top_k_bounds_segments_while_files_roll_up(service: MemoryService) -> None:
+    """``file.top_k`` caps ranked segments, not the file list (#692).
+
+    The files layer is a roll-up of the winning segments, so one chatty file
+    occupying every segment slot yields a single file even though ``top_k``
+    allows more and another relevant file exists.
+    """
+    await service.commit_results(
+        recall_files=[
+            {
+                "name": "chatty",
+                "track": "memory",
+                "description": "d",
+                "content": "coffee deploy one\ncoffee deploy two\ncoffee deploy three",
+            },
+            {"name": "quiet", "track": "memory", "description": "d", "content": "coffee solo line here"},
+        ],
+    )
+    service.progressive_retrieve_config.file.top_k = 2
+
+    result = await service.progressive_retrieve("coffee deploy")
+
+    assert len(result["segments"]) == 2
+    assert len({seg["recall_file_id"] for seg in result["segments"]}) == 1
+    assert [f["name"] for f in result["files"]] == ["chatty"]
+
+
 async def test_retrieve_rollup_short_circuits_when_no_segments(service: MemoryService) -> None:
     """No segment hits means no file fetch at all, not an empty full listing."""
     await _seed(service)
