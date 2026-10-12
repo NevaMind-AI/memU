@@ -62,6 +62,23 @@ def test_message_only_session_produces_equivalent_views(tmp_path: Path) -> None:
     assert result.memory_path.read_bytes() == result.skill_path.read_bytes()
 
 
+def test_preserves_explicit_null_tool_arguments_and_missing_arguments_default(tmp_path: Path) -> None:
+    memorize_input = MemorizeInput.model_validate({
+        "items": [
+            {"type": "message", "role": "user", "content": "Remember the reset workflow"},
+            {"type": "tool_call", "name": "reset", "arguments": None},
+            {"type": "tool_call", "name": "inspect"},
+        ],
+    })
+
+    result = materialize_memorize_input(memorize_input, tmp_path)
+    items = _read_jsonl(result.skill_path)
+
+    assert items[1]["arguments"] is None
+    assert items[2]["arguments"] == {}
+    assert MemorizeInput.model_validate({"items": items}) == memorize_input
+
+
 def test_serializes_unicode_structured_values(tmp_path: Path) -> None:
     memorize_input = MemorizeInput(
         items=[

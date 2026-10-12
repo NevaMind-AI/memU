@@ -22,10 +22,10 @@ class MaterializedConversation:
 
 
 def _dump_item(item: SkillInputItem) -> dict[str, JsonValue]:
+    # Omit absent optional metadata, but retain explicit JSON null values such
+    # as tool arguments whose default is an empty object rather than None.
     optional_none = {
-        name
-        for name, field in type(item).model_fields.items()
-        if getattr(item, name) is None and not field.is_required()
+        name for name, field in type(item).model_fields.items() if getattr(item, name) is None and field.default is None
     }
     return item.model_dump(mode="json", exclude=optional_none)
 
