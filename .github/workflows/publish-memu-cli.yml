@@ -29,8 +29,11 @@ jobs:
       # scopes the match to the [project] table near the top of the file.
       - name: Set memu-cli version
         shell: bash
+        env:
+          MEMU_RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          perl -pi -e 's/^version = "[^"]*"/version = "${{ inputs.version }}"/ if $. < 10' pyproject.toml
+          python3 -c 'import os, re; assert re.fullmatch(r"[0-9][a-zA-Z0-9.!+_-]*", os.environ["MEMU_RELEASE_VERSION"]), "Invalid version"'
+          perl -pi -e 's/^version = "[^"]*"/version = "$ENV{MEMU_RELEASE_VERSION}"/ if $. < 10' pyproject.toml
           grep -q '^name = "memu-cli"' pyproject.toml || { echo "::error::pyproject is not memu-cli"; exit 1; }
           grep -E '^(name|version) = ' pyproject.toml | head -2
 
@@ -47,11 +50,26 @@ jobs:
         shell: bash
         run: uvx --isolated --from ./dist/memu_cli-*.whl memu --help
 
+      - name: Export SDK assets from the release wheel
+        shell: bash
+        run: |
+          wheel=("$PWD"/dist/memu_cli-*.whl)
+          uv run --no-project --isolated --with "${wheel[0]}" python scripts/sdk_assets.py export --output dist/sdk-assets --source-commit "$GITHUB_SHA"
+
+      - name: Upload SDK assets artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: sdk-assets
+          path: dist/sdk-assets/
+          if-no-files-found: error
+
       - name: Upload dist artifacts
         uses: actions/upload-artifact@v6
         with:
           name: memu-cli-dist
-          path: dist/*
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
           if-no-files-found: error
 
   publish:
@@ -73,4 +91,12 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
-          skip-existing: true
+          # Do not publish instructions from a different wheel when PyPI already
+          # owns this version. Retry/correct assets with publish-sdk-assets.yml.
+          skip-existing: false
+
+  publish-sdk-assets:
+    needs: publish
+    if: vars.SDK_ASSETS_BUCKET != ''
+    uses: ./.github/workflows/sdk-assets-upload.yml
+    secrets: inherit

@@ -1,0 +1,49 @@
+name: publish SDK assets only
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Target SDK version; run from its compatible maintenance branch
+        type: string
+        required: true
+      overwrite:
+        description: Replace the existing version with a reviewed wording correction
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.13'
+      - name: Stamp target version and build wheel
+        env:
+          MEMU_RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          python3 -c 'import os, re; assert re.fullmatch(r"[0-9][a-zA-Z0-9.!+_-]*", os.environ["MEMU_RELEASE_VERSION"]), "Invalid version"'
+          perl -pi -e 's/^version = "[^"]*"/version = "$ENV{MEMU_RELEASE_VERSION}"/ if $. < 10' pyproject.toml
+          uv build --wheel --out-dir dist
+      - name: Export from wheel
+        shell: bash
+        run: |
+          wheel=("$PWD"/dist/memu_cli-*.whl)
+          uv run --no-project --isolated --with "${wheel[0]}" python scripts/sdk_assets.py export --output dist/sdk-assets --source-commit "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: sdk-assets
+          path: dist/sdk-assets/
+          if-no-files-found: error
+
+  upload:
+    needs: export
+    uses: ./.github/workflows/sdk-assets-upload.yml
+    with:
+      overwrite: ${{ inputs.overwrite }}
+    secrets: inherit

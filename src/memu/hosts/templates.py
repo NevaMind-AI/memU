@@ -5,7 +5,7 @@ the retrieval skill — ships embedded in the SDK as a Python string. Embedded t
 is a floor, not a ceiling: it is frozen at release time, so a wording fix or a
 better mining prompt cannot reach an install until that install upgrades. This
 module lets the SDK *try* the server's current copy at
-``https://memu.pro/sdk/instructions/<name>.txt`` and use it when it is reachable
+``https://memu.pro/sdk/<version>/instructions/<name>.txt`` and use it when it is reachable
 and well-formed, falling back otherwise.
 
 Two fallback shapes, because the two kinds of template are consumed differently:
@@ -28,12 +28,10 @@ an oversize body, or a malformed template all collapse to "fall back". The
 embedded template is always a correct answer, so the server is pure upside and
 never a dependency.
 
-One deliberate limitation, without version numbers (see ADR 0013): the cache
-holds *the last text seen*, not *the newest by version*. If the SDK is upgraded
-while the server is unreachable or refresh is cooling down, a cached older-remote
-could temporarily win over a newer embedded template. It self-heals on a successful
-refresh and touches only a handful of low-frequency jobs. Adding a version field
-is tracked as an open issue in ADR 0013.
+URLs and job/doc caches are scoped to the installed distribution version (ADR
+0020). Compatible wording corrections can replace that version's remote copy;
+upgrading the SDK never reads another version's job/doc cache. The installed
+retrieval skill remains its own last-good copy and is left alone on fetch failure.
 """
 
 from __future__ import annotations
@@ -45,13 +43,21 @@ import re
 import time
 import urllib.request
 from collections.abc import Iterable
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+
+from packaging.version import Version
 
 from memu import trust
 from memu.hosts.bridging.layout import BASE_DIR
 
-DEFAULT_BASE_URL = "https://memu.pro/sdk/instructions"
-"""Where the server keeps the current templates. Override with
+try:
+    SDK_VERSION = str(Version(version("memu-cli")))
+except PackageNotFoundError:  # uninstalled source checkout: no published namespace
+    SDK_VERSION = "0+unknown"
+
+DEFAULT_BASE_URL = f"https://memu.pro/sdk/{SDK_VERSION}/instructions"
+"""Where the server keeps templates compatible with this distribution. Override with
 ``MEMU_TEMPLATE_BASE_URL``; set it empty to switch remote refresh off entirely
 (air-gapped installs, offline CI, tests)."""
 
@@ -88,7 +94,7 @@ def _base_url() -> str | None:
 def _cache_dir() -> Path:
     """Where last-good templates live — shared across hosts, since the templates
     are host-agnostic (only ``{binary}`` differs, and it is filled after fetch)."""
-    return Path(os.path.expanduser(BASE_DIR)) / "cache" / "instructions"
+    return Path(os.path.expanduser(BASE_DIR)) / "cache" / "sdk" / SDK_VERSION / "instructions"
 
 
 def _valid(text: str, required_keys: Iterable[str]) -> bool:
@@ -239,7 +245,7 @@ def resolve(name: str, embedded: str) -> str:
 # fallback rather than the uncached :func:`fetch` shape.
 # --------------------------------------------------------------------------- #
 
-DEFAULT_DOCS_BASE_URL = "https://memu.pro/sdk/docs"
+DEFAULT_DOCS_BASE_URL = f"https://memu.pro/sdk/{SDK_VERSION}/docs"
 """Server root for the host guides. Override with ``MEMU_DOCS_BASE_URL``; set it
 empty to switch remote doc refresh off (air-gapped installs, offline CI, tests).
 Kept distinct from ``MEMU_TEMPLATE_BASE_URL`` so the two can be steered — and
@@ -255,7 +261,7 @@ def _docs_base_url() -> str | None:
 
 def _docs_cache_dir(host: str) -> Path:
     """Last-good docs for one host. Host-scoped, since the guides differ per host."""
-    return Path(os.path.expanduser(BASE_DIR)) / "cache" / "docs" / host
+    return Path(os.path.expanduser(BASE_DIR)) / "cache" / "sdk" / SDK_VERSION / "docs" / host
 
 
 DOC_REQUIRED_TOKENS = frozenset({"task_name", "former_task_names", "all_task_names"})

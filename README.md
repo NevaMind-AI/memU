@@ -207,3 +207,14 @@ Apache-2.0
 
 
 <sub>Partnership Community: <a href="https://linux.do">LINUX DO</a></sub>
+
+### SDK instruction distribution
+
+Host adapters fetch compatible instruction updates from
+`https://memu.pro/sdk/<installed-memu-cli-version>/`, falling back to a
+version-scoped local cache and the embedded package content. The normalized wheel metadata
+version determines the URL (for example, `0.11.0b3`). Remote templates and host
+guides are exported and published by this repository, independently of the
+website. Compatible wording corrections can replace a version's active revision.
+See [SDK asset deployment](deploy/sdk-assets/README.md) for the R2/Worker setup,
+release and correction workflows, verification, and rollback.
