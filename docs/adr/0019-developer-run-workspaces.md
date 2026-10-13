@@ -11,8 +11,6 @@ run an external executor, and commit once. A shared `~/.memu/developer` workspac
 couples independent invocations: a pending or failed executor blocks the next run,
 and callers cannot address each run independently.
 
-Related: https://github.com/MrXnneHang/xnnehang.top/issues/183
-
 ## Decision
 
 The developer CLI allocates one private directory per prepare invocation using
@@ -26,11 +24,18 @@ resolve only ids below that root. Path syntax and links redirecting the run
 outside its allocated location are rejected. Callers cannot select arbitrary
 workspace paths through the CLI.
 
-Each run retains the existing active marker and content snapshot. Backend commit
-failure preserves the run for retry. Successful commit removes the entire run
-directory. Explicit discard removes a stopped run without a backend call and can
-also remove an incomplete run left by process termination. Ordinary prepare
-failure cleans up its newly allocated directory; there is no TTL deletion.
+Each run retains the existing active marker and content snapshot. Backend errors
+preserve the run for recovery. A transport failure may leave the submission
+outcome unknown, so retaining the run does not guarantee that retry is safe.
+After acknowledged backend success, the CLI attempts to remove the entire run
+directory. If post-commit cleanup fails, it reports that the submission succeeded;
+callers must discard the stopped run rather than resubmit it. The current marker
+does not reliably distinguish a committed run from an active run after such a
+failure, so callers must honor that result rather than retry every failed command.
+Explicit discard removes a stopped run without a backend call and does not undo
+an accepted submission. It can also remove an incomplete run left by process
+termination. Ordinary prepare failure cleans up its newly allocated directory;
+there is no TTL deletion.
 
 Allocation and complete-directory deletion belong to the CLI, which owns these
 paths. The existing explicit-workspace Python lifecycle functions retain their
