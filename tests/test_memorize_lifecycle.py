@@ -230,7 +230,7 @@ async def test_commit_requires_active_run(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("track", ["memory", "skill"])
 async def test_prepare_and_commit_keep_distinct_names(tmp_path: Path, track: str) -> None:
-    contents = {"project preferences": "Use Python.", "project-preferences": "Use TypeScript."}
+    contents = {"project-preferences": "Use Python.", "project-tools": "Use TypeScript."}
     backend = FakeBackend([[{"name": name, "track": track, "content": content}] for name, content in contents.items()])
     workspace = MemorizeWorkspace(tmp_path / "workspace")
     await prepare_memorize(_input(), workspace, backend, verify_command="memu verify")
@@ -239,11 +239,11 @@ async def test_prepare_and_commit_keep_distinct_names(tmp_path: Path, track: str
     assert len(paths) == 2
     documents = {read_recall_file(path, track)["name"]: path for path in paths}
     assert {name: read_recall_file(path, track)["content"] for name, path in documents.items()} == contents
-    target = documents["project preferences"]
+    target = documents["project-preferences"]
     target.write_text(target.read_text(encoding="utf-8") + " Updated.", encoding="utf-8")
 
     await commit_memorize(workspace, backend)
 
     assert backend.commits[0]["recall_files"] == [
-        {"name": "project preferences", "track": track, "description": "", "content": "Use Python. Updated."}
+        {"name": "project-preferences", "track": track, "description": "", "content": "Use Python. Updated."}
     ]

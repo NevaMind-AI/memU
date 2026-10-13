@@ -7,11 +7,17 @@ network is involved. This is the service's whole public surface.
 
 from __future__ import annotations
 
+from copy import deepcopy
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from memu.app import MemoryService
+from memu.app.memorize.input import MemorizeInput, MessageInput
+from memu.app.memorize.lifecycle import MemorizeWorkspace, commit_memorize, prepare_memorize
+from memu.hosts import retrieval
+from memu.hosts.bridging.recall_files import read_recall_file
 
 
 class FakeEmbeddingClient:
@@ -71,7 +77,7 @@ async def test_commit_then_list_covers_both_tracks(service: MemoryService) -> No
 
     listed = await service.list_all_recall_files()
     by_track = sorted((f["track"], f["name"]) for f in listed["recall_files"])
-    assert by_track == [("memory", "Profile"), ("skill", "deploy-checklist")]
+    assert by_track == [("memory", "profile"), ("skill", "deploy-checklist")]
 
 
 async def test_list_all_recall_files_paginates_by_track_name_id(service: MemoryService) -> None:
@@ -122,7 +128,7 @@ async def test_progressive_retrieve_ranks_all_three_layers(service: MemoryServic
 
     assert next(seg["text"] for seg in result["segments"]) == "likes coffee"
     file_names = [f["name"] for f in result["files"]]
-    assert file_names[0] == "Profile"
+    assert file_names[0] == "profile"
     # Committed resources land on the workspace track and are retrievable.
     assert [r["url"] for r in result["resources"]] == ["/workspace/notes.md"]
 
@@ -134,7 +140,7 @@ async def test_recommit_updates_content_and_segments(service: MemoryService) -> 
     )
 
     listed = await service.list_all_recall_files()
-    profile = next(f for f in listed["recall_files"] if f["name"] == "Profile")
+    profile = next(f for f in listed["recall_files"] if f["name"] == "profile")
     assert profile["content"] == "# P\nlikes tea"
 
     result = await service.progressive_retrieve("tea time")
@@ -172,7 +178,7 @@ async def test_recommit_reembeds_description_only_when_changed(service: MemorySe
     assert counter.calls == 1
 
     listed = await service.list_all_recall_files()
-    profile = next(f for f in listed["recall_files"] if f["name"] == "Profile")
+    profile = next(f for f in listed["recall_files"] if f["name"] == "profile")
     assert profile["description"] == "the user profile"
 
 
@@ -322,7 +328,7 @@ async def test_where_scope_filters_and_rejects_unknown_fields(service: MemorySer
     )
 
     listed = await service.list_all_recall_files(where={"user_id": "u1"})
-    assert [f["name"] for f in listed["recall_files"]] == ["A"]
+    assert [f["name"] for f in listed["recall_files"]] == ["a"]
 
     with pytest.raises(ValueError, match="Unknown filter field"):
         await service.list_all_recall_files(where={"nope": "x"})
@@ -406,3 +412,193 @@ async def test_sqlite_resource_commit_sees_writes_from_another_instance(tmp_path
     matches = [r for r in rows.values() if r.url == "/workspace/extra.md"]
     assert len(matches) == 1
     assert matches[0].caption == "b's version"
+
+
+@pytest.mark.parametrize("track", ["memory", "skill"])
+@pytest.mark.parametrize("reverse", [False, True])
+async def test_canonical_names_deduplicate_before_writing_and_mirror_last_content(
+    service: MemoryService, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, track: str, reverse: bool
+) -> None:
+    records = [
+        {"name": "Project Preferences", "track": track, "description": "first", "content": "likes coffee"},
+        {"name": "project-preferences", "track": track, "description": "last", "content": "deploy notes"},
+    ]
+    if reverse:
+        records.reverse()
+    original = deepcopy(records)
+    result = await service.commit_results(recall_files=records)
+
+    assert len(result["recall_files"]) == 1
+    stored = result["recall_files"][0]
+    assert stored["name"] == "project-preferences"
+    assert stored["content"] == records[-1]["content"]
+    assert stored["description"] == records[-1]["description"]
+    assert len((await service.list_all_recall_files())["recall_files"]) == 1
+    segments = service._get_database().recall_file_segment_repo.list_segments_for_file(stored["id"])
+    expected = (
+        records[-1]["content"]
+        if track == "memory"
+        else f"name: project-preferences\ndescription: {records[-1]['description']}"
+    )
+    assert [segment.text for segment in segments] == [expected]
+    assert records == original
+
+    monkeypatch.setattr(retrieval, "BASE_DIR", str(tmp_path / "mirrors"))
+    shaped = retrieval._shape_for_agent(await service.progressive_retrieve("coffee deploy notes"))
+    assert len(shaped["files"]) == 1
+    path = Path(shaped["files"][0]["path"])
+    assert path.name == "project-preferences.md"
+    assert read_recall_file(path, track) == {
+        "name": stored["name"],
+        "track": track,
+        "description": stored["description"],
+        "content": stored["content"],
+    }
+
+
+@pytest.mark.parametrize("track", ["memory", "skill"])
+async def test_canonical_names_recommit_updates_existing_id(service: MemoryService, track: str) -> None:
+    item = {"name": "project-preferences", "track": track, "description": "coffee", "content": "likes coffee"}
+    first = (await service.commit_results(recall_files=[item]))["recall_files"][0]
+    counter = CountingEmbeddingClient()
+    service._embedding_pool._cache["embedding"] = counter
+    same = (await service.commit_results(recall_files=[{**item, "name": " PROJECT__preferences "}]))["recall_files"][0]
+    assert same["id"] == first["id"]
+    assert same["created_at"] == first["created_at"]
+    assert counter.calls == 0
+    changed = (
+        await service.commit_results(recall_files=[{**item, "name": "project preferences", "content": "likes tea"}])
+    )["recall_files"][0]
+    assert changed["id"] == first["id"]
+    assert changed["content"] == "likes tea"
+    assert len((await service.list_all_recall_files())["recall_files"]) == 1
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        (" Project Preferences ", "project-preferences"),
+        ("project__preferences", "project-preferences"),
+        ("--project---preferences--", "project-preferences"),
+        ("project\t \npreferences", "project-preferences"),
+        ("项目 偏好", "项目-偏好"),
+        ("CAFÉ Notes", "café-notes"),
+        ("ProjectPreferences", "projectpreferences"),
+        ("v2-notes", "v2-notes"),
+    ],
+)
+async def test_canonical_name_rules(service: MemoryService, name: str, expected: str) -> None:
+    result = await service.commit_results(recall_files=[{"name": name, "content": "notes"}])
+    assert result["recall_files"][0]["name"] == expected
+
+
+async def test_canonical_name_unicode_lowercase_expansion_is_idempotent(service: MemoryService) -> None:
+    first = (await service.commit_results(recall_files=[{"name": "İSTANBUL Notes", "content": "notes"}]))[
+        "recall_files"
+    ][0]
+    assert first["name"] == "i\u0307stanbul-notes"
+    second = (await service.commit_results(recall_files=[{"name": first["name"], "content": "updated notes"}]))[
+        "recall_files"
+    ][0]
+    assert second["id"] == first["id"]
+    assert second["content"] == "updated notes"
+    assert len((await service.list_all_recall_files())["recall_files"]) == 1
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "___",
+        "---",
+        "project%20preferences",
+        "project/preferences",
+        "project\\preferences",
+        "../project",
+        "project.preferences",
+        "notes!",
+        "\u0307notes",
+        "notes-\u0307",
+    ],
+)
+async def test_canonical_name_invalid_input_writes_nothing(service: MemoryService, name: str) -> None:
+    with pytest.raises(ValueError, match="recall-file name"):
+        await service.commit_results(
+            recall_files=[{"name": "valid", "content": "notes"}, {"name": name, "content": "bad"}],
+            resource=[{"path": "/notes", "description": "notes"}],
+        )
+    assert (await service.list_all_recall_files())["recall_files"] == []
+    assert service._get_database().resource_repo.list_resources() == {}
+
+
+async def test_canonical_name_deduplication_respects_user_and_track(service: MemoryService) -> None:
+    for user, track, name in [
+        ("alice", "memory", "Project Preferences"),
+        ("alice", "skill", "project_preferences"),
+        ("bob", "memory", "project-preferences"),
+    ]:
+        await service.commit_results(
+            recall_files=[{"name": name, "track": track, "content": user}], user={"user_id": user}
+        )
+    alice = (await service.list_all_recall_files(where={"user_id": "alice"}))["recall_files"]
+    bob = (await service.list_all_recall_files(where={"user_id": "bob"}))["recall_files"]
+    assert {(f["track"], f["name"], f["content"]) for f in alice} == {
+        ("memory", "project-preferences", "alice"),
+        ("skill", "project-preferences", "alice"),
+    }
+    assert [(f["name"], f["content"]) for f in bob] == [("project-preferences", "bob")]
+
+
+async def test_canonical_names_do_not_migrate_legacy_records(service: MemoryService) -> None:
+    repo = service._get_database().recall_file_repo
+    legacy = repo.get_or_create_recall_file(
+        name="project preferences", description="legacy", embedding=[1.0, 0.0, 0.0, 0.0], user_data={}, track="memory"
+    )
+    repo.update_recall_file(recall_file_id=legacy.id, content="keep the legacy content")
+
+    canonical = (await service.commit_results(recall_files=[{"name": "project preferences", "content": "new notes"}]))[
+        "recall_files"
+    ][0]
+
+    assert canonical["id"] != legacy.id
+    listed = (await service.list_all_recall_files())["recall_files"]
+    assert {(f["name"], f["content"]) for f in listed} == {
+        ("project preferences", "keep the legacy content"),
+        ("project-preferences", "new notes"),
+    }
+
+
+async def test_canonical_names_keep_skipping_missing_and_blank_names(service: MemoryService) -> None:
+    result = await service.commit_results(recall_files=[{}, {"name": ""}, {"name": " \t\n "}])
+    assert result["recall_files"] == []
+    assert (await service.list_all_recall_files())["recall_files"] == []
+
+
+@pytest.mark.parametrize("track", ["memory", "skill"])
+async def test_canonical_name_prepare_edit_commit_round_trip(
+    service: MemoryService, tmp_path: Path, track: str
+) -> None:
+    original = (
+        await service.commit_results(recall_files=[{"name": "Project Preferences", "track": track, "content": "notes"}])
+    )["recall_files"][0]
+    workspace = MemorizeWorkspace(tmp_path / "workspace")
+    await prepare_memorize(
+        MemorizeInput(items=[MessageInput(role="user", content="hello")]),
+        workspace,
+        service,
+        verify_command="memu verify",
+    )
+    path = workspace.base / track / "project-preferences.md"
+    assert read_recall_file(path, track)["name"] == "project-preferences"
+    path.write_text("---\nname: PROJECT preferences\ndescription: notes\n---\nupdated notes", encoding="utf-8")
+    committed = (await commit_memorize(workspace, service))["recall_files"]
+    assert len(committed) == 1
+    assert committed[0]["id"] == original["id"]
+    assert committed[0]["name"] == "project-preferences"
+    await prepare_memorize(
+        MemorizeInput(items=[MessageInput(role="user", content="next")]),
+        workspace,
+        service,
+        verify_command="memu verify",
+    )
+    assert read_recall_file(path, track)["content"] == "updated notes"
+    assert read_recall_file(path, track)["name"] == "project-preferences"
