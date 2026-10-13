@@ -10,7 +10,7 @@ from memu.hosts.bridging.recall_files import read_recall_file, write_recall_file
 @pytest.mark.parametrize("track", ["memory", "skill"])
 @pytest.mark.parametrize("reverse", [False, True])
 def test_distinct_names_survive_mirroring(tmp_path: Path, track: str, reverse: bool) -> None:
-    names = ["project preferences", "project-preferences", "project%20preferences", "project%2520preferences"]
+    names = ["project-preferences", "project-tools", "项目-偏好"]
     if reverse:
         names.reverse()
     paths = {
@@ -30,14 +30,14 @@ def test_distinct_names_survive_mirroring(tmp_path: Path, track: str, reverse: b
     assert paths["project-preferences"] == tmp_path / track / "project-preferences.md"
 
 
-def test_legacy_mirror_is_not_deleted_or_used_for_a_spaced_name(tmp_path: Path) -> None:
+def test_mirroring_does_not_delete_unrelated_workspace_edits(tmp_path: Path) -> None:
     directory = tmp_path / "memory"
     directory.mkdir()
-    legacy = directory / "project-preferences.md"
-    pending = "---\nname: project preferences\ndescription: draft\n---\nUncommitted edit"
+    legacy = directory / "uncommitted-notes.md"
+    pending = "---\nname: uncommitted-notes\ndescription: draft\n---\nUncommitted edit"
     legacy.write_text(pending, encoding="utf-8")
 
-    current = write_recall_file(tmp_path, "memory", {"name": "project preferences", "content": "Stored"})
+    current = write_recall_file(tmp_path, "memory", {"name": "project-preferences", "content": "Stored"})
 
     assert current != legacy
     assert legacy.read_text(encoding="utf-8") == pending

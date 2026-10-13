@@ -147,13 +147,21 @@ Adding another host means implementing one `TranscriptSource` (where its session
 Use `memu memorize` to turn application-owned conversations into memory and skills.
 See the [developer guide](docs/developer.md) for the input format and integration workflow.
 
-Recall-file mirrors preserve the original name in Markdown frontmatter. In
-filenames, spaces become `%20` and literal `%` becomes `%25`; ordinary kebab-case
-names are unchanged. Use the `path` returned by retrieval to locate a document.
-After upgrading from space-to-hyphen naming, old mirror files may remain because
-workspace mirroring does not delete files. Finish any active memorize run before
-upgrading, preserve local edits, and reconcile obsolete mirrors against the backend
-before removing them; see [workspace lifecycle](docs/developer.md).
+`commit_results` canonicalizes recall-file names before deduplication and lookup:
+lowercase; collapse whitespace, underscores and repeated hyphens to `-`; remove
+leading/trailing hyphens. Words must start with a Unicode letter or number;
+letters, numbers and attached combining marks are preserved, without
+transliteration or camel-case splitting. Other punctuation and names made only of
+separators are rejected; missing or whitespace-only names remain skipped.
+Within the same user scope and track, equivalent names such as `Project Preferences`
+and `project-preferences` update one record, with the last batch occurrence winning.
+Stored names, generated Markdown frontmatter and mirror filenames all use the
+canonical name. Use retrieval's returned `path` to locate the document.
+
+Existing non-canonical database records and workspace files are not automatically
+renamed, merged or deleted. They require separate reconciliation; recommitting an
+old name targets the canonical name rather than migrating its old record. Preserve
+local edits when reconciling an existing workspace; see [workspace lifecycle](docs/developer.md).
 
 ## CLI
 
