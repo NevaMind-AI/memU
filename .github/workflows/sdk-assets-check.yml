@@ -1,0 +1,26 @@
+name: SDK assets checks
+
+on:
+  push:
+    paths:
+      - 'deploy/sdk-assets/**'
+      - 'scripts/sdk_assets.py'
+      - '.github/workflows/*sdk-assets*.yml'
+  pull_request:
+    paths:
+      - 'deploy/sdk-assets/**'
+      - 'scripts/sdk_assets.py'
+      - '.github/workflows/*sdk-assets*.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - run: node --test deploy/sdk-assets/worker.test.mjs

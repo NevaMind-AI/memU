@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib
 import pathlib
+import runpy
 
 import pytest
 
@@ -324,3 +325,22 @@ def test_refresh_updates_an_inline_host_in_place(monkeypatch: pytest.MonkeyPatch
     assert "name: memu-retrieve" not in text
     assert "# Retrieve from memU before answering" not in text
     assert "# My rules" in text, "the user's own content survives the refresh"
+
+
+def test_default_urls_and_cache_are_isolated_by_distribution_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    from importlib.metadata import version
+
+    from packaging.version import Version
+
+    normalized = str(Version(version("memu-cli")))
+    assert normalized == templates.SDK_VERSION
+    assert f"https://memu.pro/sdk/{normalized}/instructions" == templates.DEFAULT_BASE_URL
+    assert f"https://memu.pro/sdk/{normalized}/docs" == templates.DEFAULT_DOCS_BASE_URL
+    # Load fresh functions without conftest's cache stubs; never touch disk.
+    namespace = runpy.run_path(templates.__file__)
+    first_cache = namespace["_cache_dir"]()
+    first_docs = namespace["_docs_cache_dir"]("codex")
+    namespace["_cache_dir"].__globals__["SDK_VERSION"] = "999.0b1"
+    assert namespace["_cache_dir"]() != first_cache
+    assert namespace["_docs_cache_dir"]("codex") != first_docs
+    assert "999.0b1" in namespace["_cache_dir"]().parts

@@ -1,0 +1,11 @@
+name = "memu-sdk-assets"
+main = "worker.mjs"
+compatibility_date = "2026-10-13"
+workers_dev = false
+
+# Change both zone_name and pattern if your canonical domain is memu.so.
+routes = [{ pattern = "memu.pro/sdk/*", zone_name = "memu.pro" }]
+
+[[r2_buckets]]
+binding = "SDK_ASSETS"
+bucket_name = "memu-sdk-assets"

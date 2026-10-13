@@ -1,0 +1,47 @@
+name: upload SDK assets
+
+on:
+  workflow_call:
+    inputs:
+      overwrite:
+        description: Allow a reviewed correction of an existing SDK version
+        type: boolean
+        default: false
+
+# Shared by normal releases and manual corrections. Serialize pointer writes;
+# do not cancel a publication partway through its upload.
+concurrency:
+  group: sdk-assets-publication
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    environment: sdk-assets
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
+        with:
+          name: sdk-assets
+          path: dist/sdk-assets
+      - name: Upload complete revision and switch current pointer
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_EC2_METADATA_DISABLED: 'true'
+          R2_ENDPOINT: ${{ vars.SDK_ASSETS_R2_ENDPOINT }}
+          R2_BUCKET: ${{ vars.SDK_ASSETS_BUCKET }}
+          ALLOW_OVERWRITE: ${{ inputs.overwrite }}
+        shell: bash
+        run: |
+          aws --version
+          options=()
+          if [[ "$ALLOW_OVERWRITE" == true ]]; then options+=(--overwrite); fi
+          python3 scripts/sdk_assets.py upload --directory dist/sdk-assets --bucket "$R2_BUCKET" --endpoint "$R2_ENDPOINT" "${options[@]}"
+      - name: Verify public manifest and all asset hashes
+        env:
+          PUBLIC_BASE_URL: ${{ vars.SDK_ASSETS_PUBLIC_BASE_URL || 'https://memu.pro/sdk' }}
+        run: python3 scripts/sdk_assets.py verify --directory dist/sdk-assets --base-url "$PUBLIC_BASE_URL"

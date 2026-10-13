@@ -23,6 +23,7 @@ dependencies = [
     "httpx>=0.28.1",
     "numpy>=2.3.4",
     "openai>=2.8.0",
+    "packaging>=24.0",
     "pydantic>=2.12.4",
     "sqlmodel>=0.0.27",
     "alembic>=1.14.0",
