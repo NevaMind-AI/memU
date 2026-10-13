@@ -1,4 +1,9 @@
-"""The inject seam's other half — the standing instruction, shared by every host.
+"""Standing retrieval and active-memorization guidance, shared by every host.
+
+The managed block also points completed-work memorization to
+``memu memorize instructions``. That command prints the developer run guide on
+demand, keeping canonical input and run recovery details out of every turn's
+context. It is installed and removed with the same host-owned block.
 
 :mod:`memu.hosts.retrieval` is what *runs* when the agent retrieves. This is what
 makes it run: one paragraph, patched into the host's global instruction file
@@ -46,6 +51,16 @@ from memu.hosts import templates
 
 BEGIN_TEMPLATE = "<!-- memu:begin — managed block, do not edit ({binary} install-instruction) -->"
 END = "<!-- memu:end -->"
+
+MEMORIZE_INSTRUCTION = """\
+
+## memU — remember completed work
+
+When the user asks you to remember something, or a completed exchange/task reveals
+an enduring preference, decision, or reusable workflow worth retaining, run
+`memu memorize instructions` and follow the returned guide. Honor memory opt-outs.
+Do not trigger this during memU installation, scheduled bridging, or evolve execution.
+"""
 
 SKILL_NAME = "memu-retrieve"
 """Directory and frontmatter name of the installed skill — ``<skills>/memu-retrieve/SKILL.md``."""
@@ -144,7 +159,7 @@ def skill_document(binary: str, *, skill_text: str | None = None) -> str:
 
 
 def instruction(binary: str, *, skill: bool = False, skill_text: str | None = None) -> str:
-    """The instruction text, telling the agent to run this host's ``retrieve``.
+    """Retrieval guidance and the shared active-memorization trigger.
 
     ``skill=True`` returns the short pointer for hosts where :func:`install_skill`
     has put the detail in a skill; otherwise the full inline text. ``skill_text``
@@ -152,8 +167,10 @@ def instruction(binary: str, *, skill: bool = False, skill_text: str | None = No
     server-fetched skill (ignored for the pointer, which carries no body).
     """
     if skill:
-        return SKILL_INSTRUCTION_TEMPLATE.format(skill=SKILL_NAME, binary=binary)
-    return INSTRUCTION_TEMPLATE.format(body=_body(binary, skill_text))
+        retrieval = SKILL_INSTRUCTION_TEMPLATE.format(skill=SKILL_NAME, binary=binary)
+    else:
+        retrieval = INSTRUCTION_TEMPLATE.format(body=_body(binary, skill_text))
+    return retrieval + MEMORIZE_INSTRUCTION
 
 
 def block(binary: str, *, skill: bool = False, skill_text: str | None = None) -> str:
@@ -470,7 +487,7 @@ def register(
     """
     parser = sub.add_parser(
         "install-instruction",
-        help="Patch the host's global instruction file so the agent retrieves before answering",
+        help="Install retrieval and active memorization guidance in the host's global instruction file",
     )
     parser.add_argument("--path", default=path, help=f"Instruction file to patch (default: {path})")
     parser.add_argument(
