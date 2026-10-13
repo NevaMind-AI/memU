@@ -151,16 +151,7 @@ canonical input contract and the complete prepare → agent → commit workflow.
 
 ## CLI
 
-Memory, skill, and resource job templates are refreshed remotely at most once per
-24 hours per template URL during `prepare`. Successful and failed attempts share
-this cooldown, persisted under `~/.memu/cache/instructions/` across CLI runs.
-Between attempts, memU uses the last-good cached template or its embedded fallback.
-The first attempt and refresh after expiry can still wait for the network; remote
-changes may take a day plus the wait for the next prepare to reach an installation.
-Set `MEMU_TEMPLATE_BASE_URL` to an empty environment variable to disable remote job
-template fetching. This does not change retrieval-skill installation/refresh or
-host-document fetching. If the cache directory is unwritable, cooldown persistence
-is best-effort and subsequent runs may retry.
+Job templates refresh at most once every 24 hours during `prepare`, with local fallbacks when unavailable.
 
 With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
 
