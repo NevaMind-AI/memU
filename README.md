@@ -151,8 +151,6 @@ canonical input contract and the complete prepare → agent → commit workflow.
 
 ## CLI
 
-Job templates refresh at most once every 24 hours during `prepare`, with local fallbacks when unavailable.
-
 With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
 
 Once installed, your agent retrieves relevant memory automatically before answering. To retrieve manually, run the adapter for your host:
