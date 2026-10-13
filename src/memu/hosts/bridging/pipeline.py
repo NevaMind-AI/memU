@@ -107,10 +107,8 @@ async def prepare(
     # eventually crowd out every file the current run actually touched.
     layout.resource_log.unlink(missing_ok=True)
 
-    # Pull the current job templates from the server, each falling back to its
-    # last-good cache and then the embedded copy (:mod:`memu.hosts.templates`).
-    # prepare is low-frequency and latency-tolerant, so pulling every run is fine;
-    # a total outage silently degrades to the embedded text the SDK shipped with.
+    # Resolve job templates with a persistent 24-hour remote refresh cooldown,
+    # falling back to the last-good cache and then the embedded copy.
     prepare_instruction_jobs(
         job_dir=layout.jobs,
         session_dir=layout.sessions,
