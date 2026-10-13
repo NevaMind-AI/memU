@@ -187,6 +187,82 @@ For Local / self-hosted installations, every CLI flag has a matching variable:
 Run `<binary> doctor` to display the resolved mode and verify the same retrieval
 path the host uses.
 
+### Optional Jev relevance reranking
+
+memU can use [TypeSafe Jev](https://typesafe.ai/) as an opt-in second-stage
+relevance gate after the normal vector search. Jev evaluates all returned
+segment and resource candidates in one System One request, removes candidates
+below the configured probability threshold, and reranks the rest. The original
+vector `score` remains in each result and the Jev probability is added as
+`jev_score`.
+
+> [!IMPORTANT]
+> Enabling this integration sends the retrieval query and the bounded candidate
+> text to TypeSafe. It does not send embeddings or unrelated memory rows. Jev is
+> disabled by default, and a default installation never imports its SDK or sends
+> memory content to TypeSafe.
+
+Install the optional dependency:
+
+```bash
+pip install "memu-cli[jev]"
+```
+
+Then add these values to `~/.memu/config.env` (keep the file private, for
+example with mode `600` on POSIX systems):
+
+```dotenv
+MEMU_RETRIEVAL_RERANKER=jev
+TYPESAFE_API_KEY=your-typesafe-key
+```
+
+Do not put the API key in a command-line argument. Optional tuning settings:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `MEMU_JEV_MODEL` | `jev-latest` | TypeSafe model name or alias |
+| `MEMU_JEV_MIN_RELEVANCE` | `0.5` | Minimum Noul probability retained |
+| `MEMU_JEV_MAX_CANDIDATES` | `32` | Maximum candidates sent in one request |
+| `MEMU_JEV_TIMEOUT_SECONDS` | `1.5` | Per-request timeout |
+| `MEMU_JEV_ON_ERROR` | `fallback` | Return vector results with fallback metadata, or `raise` |
+
+The normal retrieve commands now use Jev automatically. Successful responses
+retain the existing `segments`, `files`, and `resources` layers and add:
+
+```json
+{
+  "segments": [{"text": "...", "score": 0.81, "jev_score": 0.96}],
+  "files": [{"name": "deploy", "score": 0.81, "jev_score": 0.96}],
+  "resources": [],
+  "jev": {
+    "applied": true,
+    "fallback": false,
+    "model": "jev-1.13.0",
+    "latency_ms": 112,
+    "candidate_count": 6,
+    "retained_count": 2
+  }
+}
+```
+
+`fallback` is explicit: if TypeSafe is temporarily unavailable, the three
+layers are returned unchanged and `jev.fallback` is `true`. Set
+`MEMU_JEV_ON_ERROR=raise` when callers must refuse unevaluated results.
+
+To validate the SDK contract without contacting TypeSafe, run:
+
+```bash
+uv run --extra jev python -m pytest tests/test_jev.py tests/test_jev_sdk.py -m "not integration"
+```
+
+With `TYPESAFE_API_KEY` exported or stored in `~/.memu/config.env`, the live
+smoke test and latency benchmark are:
+
+```bash
+MEMU_RUN_LIVE_JEV=1 uv run --extra jev python -m pytest tests/test_jev_sdk.py -m integration
+uv run --extra jev python scripts/benchmark_jev_retrieval.py
+```
+
 ### Storage backends
 
 | Provider | DSN | Vector search | Use for |

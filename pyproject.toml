@@ -55,6 +55,7 @@ test = [
 ]
 
 [project.optional-dependencies]
+jev = ["typesafe-sdk>=0.7.0,<0.8"]
 postgres = ["pgvector>=0.3.4", "sqlalchemy[postgresql-psycopgbinary]>=2.0.36"]
 
 [project.scripts]
@@ -98,7 +99,7 @@ warn_unused_ignores = false
 disable_error_code = ["attr-defined", "call-arg"]
 
 [[tool.mypy.overrides]]
-module = ["pgvector.*"]
+module = ["pgvector.*", "typesafe_sdk.*"]
 ignore_missing_imports = true
 
 [tool.deptry.per_rule_ignores]
@@ -170,3 +171,4 @@ testpaths = ["tests"]
 log_cli = true
 log_cli_level = "INFO"
 asyncio_mode = "auto"
+markers = ["integration: live external-service tests requiring explicit credentials"]
