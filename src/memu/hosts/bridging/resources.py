@@ -80,7 +80,7 @@ def verify_resource_log(log: Path, resource_file: Path, max_resources: int = MAX
             path = raw.strip()
             # Absolute paths only: a relative path has no meaning here, since the
             # agent logged it from a working directory we no longer know.
-            if not path.startswith(("/", "~")) or path in seen:
+            if path in seen or not (path.startswith(("/", "~")) or Path(path).is_absolute()):
                 continue
             seen.add(path)
             if os.path.isfile(os.path.expanduser(path)):
