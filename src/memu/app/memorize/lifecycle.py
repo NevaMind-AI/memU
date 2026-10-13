@@ -158,12 +158,28 @@ async def commit_memorize(workspace: MemorizeWorkspace, backend: AgenticMemoryBa
     if not workspace.active_run.is_file():
         msg = "memorize workspace has no active run"
         raise RuntimeError(msg)
+    marker = json.loads(workspace.active_run.read_text(encoding="utf-8"))
+    if marker.get("status") == "committed":
+        msg = "memorize run already committed; do not resubmit; discard the stopped run"
+        raise RuntimeError(msg)
 
     subdir_track = {subdir: track for track, subdir in TRACK_DIRS.items()}
     changed = diff_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
     recall_files = [read_recall_file(path, subdir_track[path.relative_to(workspace.base).parts[0]]) for path in changed]
     resources = read_resources(workspace.resources)
     result = await backend.commit_results(recall_files=recall_files, resource=resources)
+
+    # Persist the acknowledgement before cleanup can fail and leave a retryable run.
+    # This does not cover an ambiguous backend failure or a crash before this write.
+    marker["status"] = "committed"
+    try:
+        _atomic_write_text(workspace.active_run, json.dumps(marker, separators=(",", ":")) + "\n")
+    except OSError as exc:
+        msg = (
+            f"memorize run committed, but could not persist its committed status at {workspace.base}: {exc}; "
+            "do not resubmit; discard the stopped run"
+        )
+        raise RuntimeError(msg) from exc
 
     try:
         snapshot_tracked(workspace.base, workspace.track_dirs, workspace.manifest)

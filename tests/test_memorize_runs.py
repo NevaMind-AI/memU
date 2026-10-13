@@ -135,6 +135,15 @@ def test_commit_cleanup_failure_reports_durable_success(
     assert "committed, but cleanup failed" in capsys.readouterr().err
     backend.commit_results.assert_awaited_once()
     assert (workspace / ".memorize_run.json").exists() is (stage != "directory")
+    # A later retry must not send the old run's content back to the backend.
+    assert cli.main(["memorize", "commit", prepared["run_id"]]) == 1
+    assert backend.commit_results.await_count == 1
+    retry_error = capsys.readouterr().err
+    if stage != "directory":
+        assert "already committed" in retry_error
+        assert "discard" in retry_error
+        marker = json.loads((workspace / ".memorize_run.json").read_text(encoding="utf-8"))
+        assert marker["status"] == "committed"
     assert cli.main(["memorize", "discard", prepared["run_id"]]) == 0
     assert not workspace.exists()
 
