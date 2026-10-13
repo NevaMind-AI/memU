@@ -12,8 +12,8 @@
 
 Uninstalling is the install run in reverse, and it is three parts:
 
-1. **Unregister the bridging task** — stop the scheduled job first, so nothing
-   fires mid-teardown (the *record* seam).
+1. **Remove the bridging hook** — and any scheduled task an older install left —
+   first, so nothing fires mid-teardown (the *record* seam).
 2. **Unpatch `~/.claude/CLAUDE.md`** — remove the standing retrieval
    instruction and the `memu-retrieve` skill it points at (the *inject* seam).
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
@@ -30,9 +30,16 @@ instruction file exactly as they are.
 
 ---
 
-## Part 1 — Unregister the bridging (record) task
+## Part 1 — Remove the bridging (record) hook
 
-Find the scheduled entry that runs the memU bridging pipeline — a cron entry
+```
+memu-claude-code remove-hook
+```
+
+It removes memU's `SessionEnd` hook from `~/.claude/settings.json` and leaves
+every other setting and hook alone.
+
+Older installs ran bridging as a scheduled task instead. Find the scheduled entry that runs the memU bridging pipeline — a cron entry
 (or launchd job, if that is what the user chose at install time) invoking
 `~/.memu/hosts/claude-code/bridge.sh` (or, on installs predating the prompt-file
 layout, inlining `claude -p 'Run the memU bridging pipeline. …'` directly) —
@@ -59,7 +66,7 @@ and stays.
 
 ### ✅ Verify Part 1
 
-`crontab -l` (and `ls ~/Library/LaunchAgents`, if launchd was used) shows no
+`~/.claude/settings.json` has no `memu-claude-code … hook` entry. `crontab -l` (and `ls ~/Library/LaunchAgents`, if launchd was used) shows no
 memU bridging entry, and everything unrelated is still there. On Windows,
 `memu-claude-code schedule status` reports not-registered.
 

@@ -554,11 +554,9 @@ def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
 @pytest.mark.parametrize(
     ("pkg", "binary", "identity"),
     [
-        ("claude_code", "memu-claude-code", r"hosts/claude-code/bridge\.sh|memU bridging pipeline"),
         ("cursor", "memu-cursor", r"hosts/cursor/bridge\.sh|memU bridging pipeline"),
         ("hermes", "memu-hermes", r"hosts/hermes/bridge\.sh|memU bridging pipeline"),
         ("generic", "memu-agent", r"hosts/agent/bridge\.sh|memU bridging pipeline"),
-        ("codex", "memu-codex", "load-bearing deletion identity"),
         ("openclaw", "memu-openclaw", ".cron_job.openclaw.json"),
         ("workbuddy", "memu-workbuddy", "WorkBuddy's automation list"),
         ("cola", "memu-cola", "{{all_task_names}}"),

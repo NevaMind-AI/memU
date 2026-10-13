@@ -109,5 +109,25 @@ class Layout:
         return self.base / "resources.md"
 
     @property
+    def hook_lock(self) -> Path:
+        """Held by the one hook-triggered run in flight (ADR 0019)."""
+        return self.base / f".hook_run.{self.host}.lock"
+
+    @property
+    def hook_rerun(self) -> Path:
+        """Left by a hook that fired while a run was in flight, so that run goes again."""
+        return self.base / f".hook_rerun.{self.host}"
+
+    @property
+    def hook_last_run(self) -> Path:
+        """When the last hook-triggered run started, for ``--min-interval``."""
+        return self.base / f".hook_last_run.{self.host}"
+
+    @property
+    def hook_log(self) -> Path:
+        """Where the detached hook run writes, since no terminal is watching it."""
+        return self.base / "hook.log"
+
+    @property
     def track_dirs(self) -> list[str]:
         return list(TRACK_DIRS.values())

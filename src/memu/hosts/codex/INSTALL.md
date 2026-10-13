@@ -19,8 +19,8 @@
 Installing memU on Codex is three parts:
 
 1. **Install memU** — a Python package and the memory backend it uses.
-2. **Register the bridging task** — the scheduled job that turns recent Codex
-   sessions into durable memory (the *record* seam).
+2. **Install the bridging hook** — Codex's `notify` hook triggers the run that
+   turns recent Codex sessions into durable memory (the *record* seam).
 3. **Patch `~/.codex/AGENTS.md`** — a standing instruction that tells you to pull
    relevant memory before you answer (the *inject* seam).
 
@@ -62,7 +62,7 @@ memu-codex --help
 ```
 
 If it is not found, the install landed in an environment that isn't on your
-`PATH`. Fix that now rather than working around it — the scheduled task in Part 2
+`PATH`. Fix that now rather than working around it — the bridging hook in Part 2
 and the hook in Part 3 both need this command to resolve from a bare, non-
 interactive environment.
 
@@ -147,8 +147,8 @@ memu-codex config --local --db /absolute/path/memu.sqlite3 --embed-provider open
 
 Only the flags you pass are written, so a later run can add one without
 disturbing the rest. Give `--db` an **absolute** path: a relative one resolves
-against a working directory the scheduled task does not have. And do not export
-any of this in a shell profile instead — the scheduled task does not inherit
+against a working directory the hook run does not have. And do not export
+any of this in a shell profile instead — the hook run does not inherit
 your interactive shell, so the file is the carrier.
 
 **No embedding key? Say so, then use a local embedding server.** If the user has
@@ -212,49 +212,50 @@ on this working, and both fail *silently* if it is wrong.
 
 ---
 
-## Part 2 — Register the bridging (record) task
+## Part 2 — Install the bridging (record) hook
 
-The *record* seam: a Codex scheduled task that periodically mines recent Codex
-sessions into memU memory, skills, and resources. In cloud mode, workspace
-resources are submitted but are not currently persisted.
+The *record* seam runs from Codex's own `notify` hook — no scheduled task. When
+a Codex turn completes, `memu-codex hook` starts a detached `memu-codex hook-run`
+**outside Codex's sandbox** and returns at once. That run does the network work
+itself (`prepare`, then `commit`), and in between runs `codex exec` with a
+`workspace-write` sandbox over `~/.memu/hosts/codex/jobs/*.txt` — the agent
+only reads and writes local files, so the sandbox never blocks an upload. At
+most one run every 30 minutes; a session's later turns are picked up by the next
+run. In cloud mode, workspace resources are submitted but are not currently
+persisted.
 
-**Refresh an existing bridging registration before continuing.** Inspect
-Codex's scheduled-task surface. Check every recognized name in
-{{all_task_names}}, then confirm the task's prompt runs the memU prepare /
-self-evolve / commit pipeline. Record its current cadence and delete **only that
-confirmed task** through the same surface. A name narrows the search; the
-complete pipeline prompt remains the load-bearing deletion identity. Re-list scheduled tasks and verify
-no memU bridging task remains. Leave the store, session cursor, working tree,
-and retrieval instruction untouched. An absent task is the normal first-install
-case. Reuse the recorded cadence below unless the user requested a change.
+**Remove a scheduled bridging task left by an earlier install.** Inspect
+Codex's scheduled-task surface for every recognized name in
+{{all_task_names}}, confirm the task's prompt runs the memU prepare /
+self-evolve / commit pipeline, and delete **only that confirmed task**. A name
+narrows the search; the pipeline prompt is the load-bearing identity. An absent
+task is the normal first-install case. Leave the store, session cursor, working
+tree, and retrieval instruction untouched — the hook resumes from the same
+cursor.
 
-**Do not reinvent this.** Follow the packaged procedure:
+Then install the hook:
 
 ```
-memu-codex docs task
+memu-codex install-hook
 ```
 
-It is authoritative. In summary, you will settle a cron schedule with the user
-(default: every hour, `0 * * * *`) and create a Codex scheduled task whose
-recurring prompt is the three-step block that document gives you verbatim —
-`memu-codex prepare`, then the agent works through `~/.memu/hosts/codex/jobs/*.txt` in order,
-then `memu-codex commit`.
-
-Nothing in that prompt is machine-specific. If you find yourself substituting an
-absolute path into it, you are doing it wrong.
+It sets the top-level `notify` in `~/.codex/config.toml` to the absolute
+`memu-codex hook` command (pinning the `codex` binary it found, too). If
+`notify` already ran another program, that program is kept: memU forwards every
+notification to it, and `remove-hook` puts it back. Codex runs `notify` from the
+terminal UI; sessions from other Codex front ends are still mined, by the next
+run a terminal session triggers.
 
 ### ✅ Verify Part 2
 
-Confirm the scheduled task exists with the expected name and cron. Then dry-run
-the first step by hand:
-
 ```
-memu-codex prepare
+memu-codex hook-run
 ```
 
-It should report how many sessions it prepared (zero, if there is nothing new
-since the cursor — that is fine and correct). Report the task name and schedule
-back to the user.
+runs one pass in the foreground: it should report how many sessions it
+prepared (zero is fine if nothing is new) and finish with a commit line. Then
+confirm `~/.codex/config.toml` has the `memu-codex … hook` `notify` line. Later
+runs log to `~/.memu/hosts/codex/hook.log`.
 
 ---
 
@@ -386,7 +387,7 @@ nothing secret.
 Report back to the user:
 
 - the selected mode and its cloud endpoint or local store/provider;
-- the scheduled task's name and cron, in words (e.g. "daily at 00:00 local");
+- that the bridging hook runs from Codex's `notify`, at most every 30 minutes;
 - that the retrieval instruction is now in `~/.codex/AGENTS.md`, pointing at the
   `memu-retrieve` skill, and that it takes effect in their next Codex session.
 

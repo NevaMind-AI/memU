@@ -18,3 +18,4 @@
 - [0016: Client Event Reporting — One Envelope, a Spool by Default, Bounded Payloads](0016-client-event-reporting.md)
 - [0017: `config.env` Is Written by a Command — `init` for the Entry, `config` for the Detail](0017-config-env-as-a-command.md)
 - [0018: Mine Claude Cowork Through the Claude Code Bridge](0018-cowork-through-claude-code-bridge.md)
+- [0019: Hook-Triggered Bridging — Network Steps Outside the Agent](0019-hook-triggered-bridging.md)

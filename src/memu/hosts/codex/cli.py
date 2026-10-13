@@ -19,6 +19,7 @@ Usage:
     memu-codex prepare               # slice new sessions into job files
     memu-codex verify-resources      # filter the touched-file log (run by a job)
     memu-codex commit                # submit what the agent produced back to memU
+    memu-codex install-hook          # run bridging from Codex's notify hook (ADR 0019)
     memu-codex doctor                # check config + store before relying on them
     memu-codex docs install          # print the agent-facing install guide
     memu-codex docs uninstall        # print the agent-facing removal guide
@@ -30,6 +31,7 @@ import argparse
 import sys
 
 from memu.hosts.codex.sessions import SESSION_DIR, CodexTranscriptSource
+from memu.hosts.hooks import CodexNotifyHook, HeadlessAgent, HookSpec, codex_thread_id
 from memu.hosts.host_cli import HostSpec, run
 
 HOST = "codex"
@@ -45,6 +47,19 @@ SKILLS_DIR = "~/.codex/skills"
 """Codex's skills directory. Because it exists, the AGENTS.md block is a pointer
 and the retrieval procedure itself is installed here as a skill."""
 
+HOOK = HookSpec(
+    agent=HeadlessAgent(
+        # workspace-write with the working tree as cwd: the jobs write only there,
+        # and need no network — the hook run does prepare/commit itself (ADR 0019).
+        # `--json` is how the run learns its own thread id, to keep it unmined.
+        argv=("codex", "exec", "--json", "--skip-git-repo-check", "--sandbox", "workspace-write", "-C", "{base}", "-"),
+        session_id_from_output=codex_thread_id,
+    ),
+    installer=CodexNotifyHook(),
+    # `notify` fires after every reply, not once per session.
+    min_interval_minutes=30,
+)
+
 SPEC = HostSpec(
     host=HOST,
     display="Codex",
@@ -57,6 +72,7 @@ SPEC = HostSpec(
     instruction_path=AGENTS_MD,
     skills_dir=SKILLS_DIR,
     schedule_backend="native",
+    hook=HOOK,
 )
 
 
