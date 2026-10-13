@@ -155,7 +155,7 @@ def fetch(name: str) -> str | None:
     return text
 
 
-def _write_cache(path: Path, text: str) -> None:
+def _write_cache(path: Path, text: str) -> bool:
     """Atomically persist template content or refresh state, best-effort."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -163,17 +163,18 @@ def _write_cache(path: Path, text: str) -> None:
         tmp.write_text(text, encoding="utf-8")
         os.replace(tmp, path)
     except OSError:
-        pass
+        return False
+    return True
 
 
-def _read_cache(name: str) -> str | None:
+def _read_cache(path: Path, name: str) -> str | None:
     """The last server template we saw and trusted, if it is still valid on disk.
 
     Re-validated on read: a truncated or hand-edited cache file is treated as
     absent, so a corrupt cache is never worse than no cache.
     """
     try:
-        text = (_cache_dir() / f"{name}.txt").read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return None
     return text if _valid(text, REQUIRED_KEYS[name]) else None
@@ -198,18 +199,24 @@ def resolve(name: str, embedded: str) -> str:
     corrupt state permits a new attempt; cache-write failures remain fail-open.
     """
     base = _base_url()
-    if base is not None:
-        url = f"{base}/{name}.txt"
-        url_key = hashlib.sha256(url.encode()).hexdigest()
-        attempt_path = _cache_dir() / f"attempt-{url_key}.txt"
-        now = time.time()
-        if _refresh_due(attempt_path, now):
-            # ponytail: concurrent processes may both refresh; add locking if duplicate fetches matter.
-            _write_cache(attempt_path, str(now))
-            remote = fetch(name)
-            if remote is not None:
-                return remote
-    return _read_cache(name) or embedded
+    if base is None:
+        return embedded
+
+    url = f"{base}/{name}.txt"
+    url_key = hashlib.sha256(url.encode()).hexdigest()
+    cache_path = _cache_dir() / f"template-{url_key}.txt"
+    attempt_path = _cache_dir() / f"attempt-{url_key}.txt"
+    now = time.time()
+    if _refresh_due(attempt_path, now):
+        # ponytail: concurrent processes may both refresh; add locking if duplicate fetches matter.
+        remote = _get(url)
+        if remote is not None and _valid(remote, REQUIRED_KEYS[name]):
+            # A successful download only starts cooling down once its content is durable.
+            if _write_cache(cache_path, remote):
+                _write_cache(attempt_path, str(now))
+            return remote
+        _write_cache(attempt_path, str(now))
+    return _read_cache(cache_path, name) or embedded
 
 
 # --------------------------------------------------------------------------- #

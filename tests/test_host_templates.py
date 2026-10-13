@@ -127,9 +127,10 @@ def test_resolve_falls_to_embedded_with_no_cache_and_no_server(monkeypatch: pyte
 
 
 def test_resolve_ignores_a_corrupt_cache(monkeypatch: pytest.MonkeyPatch) -> None:
-    cache = templates._cache_dir()
-    cache.mkdir(parents=True, exist_ok=True)
-    (cache / f"{templates.MEMORY_JOB}.txt").write_text("corrupt } cache", encoding="utf-8")
+    _serve(monkeypatch, f"remote {MEMORY_KEYS}".encode())
+    templates.resolve(templates.MEMORY_JOB, "embedded")
+    cache = next(templates._cache_dir().glob("template-*.txt"))
+    cache.write_text("corrupt } cache", encoding="utf-8")
     embedded = f"embedded floor {MEMORY_KEYS}"
     _server_down(monkeypatch)
 
@@ -189,6 +190,68 @@ def test_unwritable_cooldown_state_does_not_block_fallback(monkeypatch: pytest.M
     cache.write_text("not a directory", encoding="utf-8")
     embedded = f"embedded {MEMORY_KEYS}"
     assert templates.resolve(templates.MEMORY_JOB, embedded) == embedded
+
+
+def test_template_sources_keep_independent_content(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def get(url: str) -> str:
+        calls.append(url)
+        return f"{url} {MEMORY_KEYS}"
+
+    monkeypatch.setattr(templates, "_get", get)
+    for source in ("a", "b", "a"):
+        base = f"https://{source}.test"
+        monkeypatch.setenv("MEMU_TEMPLATE_BASE_URL", base)
+        assert templates.resolve(templates.MEMORY_JOB, "embedded") == f"{base}/memory-job.txt {MEMORY_KEYS}"
+    assert len(calls) == 2
+
+
+def test_same_url_updates_content_only_after_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEMU_TEMPLATE_BASE_URL", "https://example.test")
+    now = 100_000.0
+    remote = f"v1 {MEMORY_KEYS}"
+    calls: list[str] = []
+
+    def get(url: str) -> str:
+        calls.append(url)
+        return remote
+
+    monkeypatch.setattr(templates, "_get", get)
+    monkeypatch.setattr(templates.time, "time", lambda: now)
+    assert templates.resolve(templates.MEMORY_JOB, "embedded") == remote
+    remote = f"v2 {MEMORY_KEYS}"
+    assert templates.resolve(templates.MEMORY_JOB, "embedded") == f"v1 {MEMORY_KEYS}"
+    now += 86_400
+    assert templates.resolve(templates.MEMORY_JOB, "embedded") == remote
+    assert templates.resolve(templates.MEMORY_JOB, "embedded") == remote
+    assert len(calls) == 2
+
+
+def test_failed_content_write_allows_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    remote = f"remote {MEMORY_KEYS}"
+    _serve(monkeypatch, remote.encode())
+    write = templates._write_cache
+
+    def fail_content(path: pathlib.Path, text: str) -> bool:
+        return False if path.name.startswith("template-") else write(path, text)
+
+    monkeypatch.setattr(templates, "_write_cache", fail_content)
+    assert templates.resolve(templates.MEMORY_JOB, "embedded") == remote
+    assert not list(templates._cache_dir().glob("attempt-*.txt"))
+    monkeypatch.setattr(templates, "_write_cache", write)
+    assert templates.resolve(templates.MEMORY_JOB, "embedded") == remote
+    assert next(templates._cache_dir().glob("template-*.txt")).read_text(encoding="utf-8") == remote
+    _server_down(monkeypatch)
+    assert templates.resolve(templates.MEMORY_JOB, "embedded") == remote
+
+
+def test_legacy_cache_without_source_is_not_used(monkeypatch: pytest.MonkeyPatch) -> None:
+    _server_down(monkeypatch)
+    templates._write_cache(templates._cache_dir() / "memory-job.txt", f"unknown origin {MEMORY_KEYS}")
+    assert templates.resolve(templates.MEMORY_JOB, "embedded") == "embedded"
+    monkeypatch.setenv("MEMU_TEMPLATE_BASE_URL", "")
+    assert templates.resolve(templates.MEMORY_JOB, "embedded") == "embedded"
 
 
 # --- refresh: the installed file is the retrieval skill's last-good, so skip on failure ---
