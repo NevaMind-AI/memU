@@ -128,6 +128,7 @@ memU runs as a sidecar to a desktop agent, one binary per host. Each binds two s
 | WorkBuddy | `memu-workbuddy` | `~/.workbuddy/projects/<project>/<session>.jsonl` | `~/.workbuddy/SOUL.md` |
 | Cola | `memu-cola` | `~/.cola/sessions/<scope>/<session>.jsonl` | `~/.cola/memory-bank/MEMORY.md` |
 | pi | `memu-pi` | `~/.pi/agent/sessions/<encoded-cwd>/<session>.jsonl` | `~/.pi/agent/AGENTS.md` |
+| DeepSeek Harness (DSH) | `memu-dsh` | `~/.dsh/memu/transcripts/<encoded-cwd>/<session>.jsonl` (exported by the `dsh-memu` plugin) | `~/.dsh/AGENTS.md` (or the `dsh-memu` plugin's standing instruction) |
 | **any other agent** | `memu-agent` | found by `memu-agent detect` (JSONL dialect sniffed) | found by `detect` (AGENTS.md / CLAUDE.md / SOUL.md / …) |
 
 For agents without a dedicated binary, `memu-agent detect` probes the machine and reports per agent whether **memorization** works (a recognizable session log exists) and whether **retrieval** works (an instruction file exists to patch) — then the same verbs run against what it found.
@@ -157,7 +158,7 @@ Once installed, your agent retrieves relevant memory automatically before answer
 
 ```bash
 memu-codex retrieve "What should I remember about this project?"
-# or: memu-claude-code / memu-cursor / memu-openclaw / memu-hermes / memu-workbuddy / memu-cola / memu-pi / memu-agent
+# or: memu-claude-code / memu-cursor / memu-openclaw / memu-hermes / memu-workbuddy / memu-cola / memu-pi / memu-dsh / memu-agent
 ```
 
 Install or invoke the CLI directly:
