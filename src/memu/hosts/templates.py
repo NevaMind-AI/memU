@@ -39,6 +39,7 @@ is tracked as an open issue in ADR 0013.
 from __future__ import annotations
 
 import hashlib
+import math
 import os
 import re
 import time
@@ -150,19 +151,17 @@ def fetch(name: str) -> str | None:
     text = _get(f"{base}/{name}.txt")
     if text is None or not _valid(text, REQUIRED_KEYS[name]):
         return None
-    _write_cache(name, text)
+    _write_cache(_cache_dir() / f"{name}.txt", text)
     return text
 
 
-def _write_cache(name: str, text: str) -> None:
-    """Refresh the last-good copy, atomically. Best-effort: a cache we cannot
-    write is not fatal, since the fetched text is already in hand for this run."""
+def _write_cache(path: Path, text: str) -> None:
+    """Atomically persist template content or refresh state, best-effort."""
     try:
-        cache_dir = _cache_dir()
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        tmp = cache_dir / f"{name}.txt.tmp"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".txt.tmp")
         tmp.write_text(text, encoding="utf-8")
-        os.replace(tmp, cache_dir / f"{name}.txt")
+        os.replace(tmp, path)
     except OSError:
         pass
 
@@ -180,6 +179,18 @@ def _read_cache(name: str) -> str | None:
     return text if _valid(text, REQUIRED_KEYS[name]) else None
 
 
+def _refresh_due(attempt_path: Path, now: float) -> bool:
+    """Allow refresh after 24 hours, or when persisted state cannot be trusted."""
+    try:
+        last_attempt = float(attempt_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+
+    if not math.isfinite(last_attempt) or last_attempt > now:
+        return True
+    return now - last_attempt >= _REFRESH_INTERVAL_SECONDS
+
+
 def resolve(name: str, embedded: str) -> str:
     """Resolve a job template, attempting remote refresh at most once per day.
 
@@ -189,15 +200,12 @@ def resolve(name: str, embedded: str) -> str:
     base = _base_url()
     if base is not None:
         url = f"{base}/{name}.txt"
-        stamp_name = f"attempt-{hashlib.sha256(url.encode()).hexdigest()}"
+        url_key = hashlib.sha256(url.encode()).hexdigest()
+        attempt_path = _cache_dir() / f"attempt-{url_key}.txt"
         now = time.time()
-        try:
-            last_attempt = float((_cache_dir() / f"{stamp_name}.txt").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            last_attempt = float("-inf")
-        if not 0 <= now - last_attempt < _REFRESH_INTERVAL_SECONDS:
+        if _refresh_due(attempt_path, now):
             # ponytail: concurrent processes may both refresh; add locking if duplicate fetches matter.
-            _write_cache(stamp_name, str(now))
+            _write_cache(attempt_path, str(now))
             remote = fetch(name)
             if remote is not None:
                 return remote
