@@ -147,21 +147,6 @@ Adding another host means implementing one `TranscriptSource` (where its session
 Use `memu memorize` to turn application-owned conversations into memory and skills.
 See the [developer guide](docs/developer.md) for the input format and integration workflow.
 
-`commit_results` canonicalizes recall-file names before deduplication and lookup:
-lowercase names and collapse runs of whitespace, underscores, or hyphens to a single `-`,
-with leading/trailing hyphens removed. Existing kebab-case names are unchanged.
-Within the same user scope and track, equivalent names such as `Project Preferences`
-and `project-preferences` update one record, with the last batch occurrence winning.
-Stored names, generated Markdown frontmatter and mirror filenames all use the
-canonical name. Use retrieval's returned `path` to locate the document.
-
-Only case and separators are normalized; other punctuation and Unicode characters
-are preserved. Path separators and null bytes are rejected. Missing, blank, or
-separator-only names are skipped. This is not a general filename sanitizer.
-Existing non-canonical records are not renamed or merged: recommitting their names
-can create a separate canonical record. Mirror paths and generated frontmatter now
-use the same formatter; legacy workspace files are not automatically removed.
-
 ## CLI
 
 With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
