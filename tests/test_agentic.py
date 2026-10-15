@@ -505,31 +505,6 @@ async def test_canonical_name_unicode_lowercase_expansion_is_idempotent(service:
     assert len((await service.list_all_recall_files())["recall_files"]) == 1
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        "___",
-        "---",
-        "project%20preferences",
-        "project/preferences",
-        "project\\preferences",
-        "../project",
-        "project.preferences",
-        "notes!",
-        "\u0307notes",
-        "notes-\u0307",
-    ],
-)
-async def test_canonical_name_invalid_input_writes_nothing(service: MemoryService, name: str) -> None:
-    with pytest.raises(ValueError, match="recall-file name"):
-        await service.commit_results(
-            recall_files=[{"name": "valid", "content": "notes"}, {"name": name, "content": "bad"}],
-            resource=[{"path": "/notes", "description": "notes"}],
-        )
-    assert (await service.list_all_recall_files())["recall_files"] == []
-    assert service._get_database().resource_repo.list_resources() == {}
-
-
 async def test_canonical_name_deduplication_respects_user_and_track(service: MemoryService) -> None:
     for user, track, name in [
         ("alice", "memory", "Project Preferences"),

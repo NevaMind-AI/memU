@@ -3,13 +3,13 @@ from __future__ import annotations
 import base64
 import binascii
 import json
-import re
-import unicodedata
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
+
+from memu.recall_file_names import canonical_recall_file_name
 
 if TYPE_CHECKING:
     from memu.app.settings import ProgressiveRetrieveConfig
@@ -20,27 +20,6 @@ if TYPE_CHECKING:
 # follow ``next_cursor`` to reassemble the full set; the page size only bounds the
 # per-call read/serialization/response, not the total returned.
 DEFAULT_PAGE_LIMIT = 50
-
-
-def _normalize_recall_file_name(name: str) -> str:
-    """Canonicalize separators/case without guessing word boundaries or transliterating.
-
-    Unicode letters, numbers and attached combining marks survive; punctuation is rejected rather than
-    silently discarded. Empty input keeps the existing commit skip behavior.
-    """
-    if not name.strip():
-        return ""
-    normalized = re.sub(r"[\s_-]+", "-", name.strip().lower()).strip("-")
-    valid = all(
-        word
-        and word[0].isalnum()
-        and all(char.isalnum() or unicodedata.category(char).startswith("M") for char in word)
-        for word in normalized.split("-")
-    )
-    if not valid:
-        msg = "recall-file name must contain letters/numbers separated by whitespace, underscores or hyphens"
-        raise ValueError(msg)
-    return normalized
 
 
 def _encode_cursor(after: tuple[str, str, str] | None) -> str | None:
@@ -544,7 +523,7 @@ class AgenticMixin:
         """
         deduped: dict[tuple[str, str], dict[str, Any]] = {}
         for item in recall_files:
-            name = _normalize_recall_file_name(item.get("name") or "")
+            name = canonical_recall_file_name(item.get("name") or "")
             if name:
                 deduped[(item.get("track") or "memory", name)] = item
 

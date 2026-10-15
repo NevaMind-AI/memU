@@ -148,20 +148,19 @@ Use `memu memorize` to turn application-owned conversations into memory and skil
 See the [developer guide](docs/developer.md) for the input format and integration workflow.
 
 `commit_results` canonicalizes recall-file names before deduplication and lookup:
-lowercase; collapse whitespace, underscores and repeated hyphens to `-`; remove
-leading/trailing hyphens. Words must start with a Unicode letter or number;
-letters, numbers and attached combining marks are preserved, without
-transliteration or camel-case splitting. Other punctuation and names made only of
-separators are rejected; missing or whitespace-only names remain skipped.
+lowercase names and collapse runs of whitespace, underscores, or hyphens to a single `-`,
+with leading/trailing hyphens removed. Existing kebab-case names are unchanged.
 Within the same user scope and track, equivalent names such as `Project Preferences`
 and `project-preferences` update one record, with the last batch occurrence winning.
 Stored names, generated Markdown frontmatter and mirror filenames all use the
 canonical name. Use retrieval's returned `path` to locate the document.
 
-Existing non-canonical database records and workspace files are not automatically
-renamed, merged or deleted. They require separate reconciliation; recommitting an
-old name targets the canonical name rather than migrating its old record. Preserve
-local edits when reconciling an existing workspace; see [workspace lifecycle](docs/developer.md).
+Only case and separators are normalized; other punctuation and Unicode characters
+are preserved. Path separators and null bytes are rejected. Missing, blank, or
+separator-only names are skipped. This is not a general filename sanitizer.
+Existing non-canonical records are not renamed or merged: recommitting their names
+can create a separate canonical record. Mirror paths and generated frontmatter now
+use the same formatter; legacy workspace files are not automatically removed.
 
 ## CLI
 
