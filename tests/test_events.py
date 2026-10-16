@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import ssl
 import time
 import urllib.error
 from typing import Any
@@ -568,6 +569,85 @@ def test_a_flush_is_bounded_and_the_next_one_resumes_where_it_stopped(
     # Every event exactly once, in order, and nothing left behind.
     assert delivered == spooled
     assert not list(reporting.parent.glob("events.jsonl.*"))
+
+
+def test_repeated_failed_flushes_keep_the_spool_bounded(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed flush must not mint a new ``.sending`` file every time.
+
+    The live spool is capped, but rotating it on every attempt while an older
+    generation is still undeliverable moves the growth to ``.sending`` files. A
+    machine with a persistent TLS or network failure then has no total bound at
+    all, which is the failure this regression pins.
+    """
+    monkeypatch.setattr(events, "MAX_SPOOL_BYTES", 1200)
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError("no route to host")))
+
+    for _ in range(6):
+        events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
+        assert events.flush() == (0, 0)
+
+    sending = sorted(reporting.parent.glob("events.jsonl.*.sending"))
+    assert len(sending) == 1, "one undeliverable generation at a time"
+    total = sum(path.stat().st_size for path in (reporting, *sending) if path.exists())
+    assert total <= events.MAX_SPOOL_BYTES * 2, "the live spool and its sending generation share one bound"
+
+
+def test_recovery_drains_the_retained_generation_and_the_live_spool(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError("offline")))
+    assert events.flush() == (0, 0)
+    assert list(reporting.parent.glob("events.jsonl.*.sending"))
+
+    events.record(events.CLI_UNINSTALL_SUCCEEDED, host="codex")
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+
+    assert events.flush() == (2, 0)
+    assert [event["event_name"] for event in posted.events] == [
+        events.CLI_INSTALL_SUCCEEDED,
+        events.CLI_UNINSTALL_SUCCEEDED,
+    ]
+    assert not list(reporting.parent.glob("events.jsonl.*"))
+
+
+def test_debug_reports_a_certificate_failure_and_a_later_flush_recovers(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The fail-open path stays silent by default, but can narrate the actual cause."""
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
+    certificate_error = ssl.SSLCertVerificationError(1, "certificate verify failed")
+    monkeypatch.setenv("MEMU_EVENTS_DEBUG", "1")
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=urllib.error.URLError(certificate_error)))
+
+    assert events.flush() == (0, 0)
+    stderr = capsys.readouterr().err
+    assert "SSLCertVerificationError" in stderr
+    assert "retry" in stderr.lower()
+    assert list(reporting.parent.glob("events.jsonl.*.sending"))
+
+    posted = _Posted()
+    monkeypatch.setattr(events.urllib.request, "urlopen", posted)
+    assert events.flush() == (1, 0)
+    assert [event["event_name"] for event in posted.events] == [events.CLI_INSTALL_SUCCEEDED]
+    assert not list(reporting.parent.glob("events.jsonl.*.sending"))
+
+
+def test_debug_reports_a_network_failure_without_its_message(
+    reporting: pathlib.Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
+    raw_error = "proxy denied user-token"
+    monkeypatch.setenv("MEMU_EVENTS_DEBUG", "1")
+    monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError(raw_error)))
+
+    assert events.flush() == (0, 0)
+    stderr = capsys.readouterr().err
+    assert "OSError" in stderr
+    assert raw_error not in stderr
 
 
 def test_only_retrieve_delivers_inline(reporting: pathlib.Path) -> None:
