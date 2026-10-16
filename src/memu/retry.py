@@ -10,7 +10,7 @@ everywhere.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 
 import httpx
@@ -50,7 +50,7 @@ def retry_delay(attempt: int, response: httpx.Response | None = None) -> float:
                     try:
                         now = parsedate_to_datetime(response.headers["Date"])
                     except (KeyError, TypeError, ValueError, OverflowError):
-                        now = datetime.now(timezone.utc)
+                        now = datetime.now(UTC)
                     return float(min(max((retry_at - now).total_seconds(), 0.0), _MAX_RETRY_AFTER))
                 except (TypeError, ValueError, OverflowError):
                     pass

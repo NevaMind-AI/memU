@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 
 import httpx
@@ -15,12 +15,12 @@ import memu.retry as retry
 def test_http_date_retry_after_without_valid_response_date(
     monkeypatch: pytest.MonkeyPatch, server_date: str | None
 ) -> None:
-    now = datetime(2026, 10, 16, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 16, 12, 0, tzinfo=UTC)
 
     class FixedDateTime:
         @staticmethod
-        def now(tz: timezone) -> datetime:
-            assert tz == timezone.utc
+        def now(tz: object) -> datetime:
+            assert tz == UTC
             return now
 
     monkeypatch.setattr(retry, "datetime", FixedDateTime)
@@ -32,7 +32,7 @@ def test_http_date_retry_after_without_valid_response_date(
 
 
 def test_http_date_retry_after_prefers_response_date() -> None:
-    server_time = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    server_time = datetime(2025, 1, 1, tzinfo=UTC)
     response = httpx.Response(
         429,
         headers={
@@ -44,7 +44,7 @@ def test_http_date_retry_after_prefers_response_date() -> None:
 
 
 def test_http_date_retry_after_is_capped_to_thirty_seconds() -> None:
-    server_time = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    server_time = datetime(2025, 1, 1, tzinfo=UTC)
     response = httpx.Response(
         429,
         headers={
