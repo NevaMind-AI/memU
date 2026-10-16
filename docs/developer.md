@@ -269,6 +269,7 @@ Only newly created or content-modified files are submitted. File deletion is not
 | Evolve succeeded | Executor completed all jobs | Run `next_command` once. |
 | Evolve failed | Executor stopped before all jobs completed | Preserve the run for inspection, or explicitly discard it after the executor has stopped. |
 | Backend commit failed | Active marker, inputs, jobs, and edits remain | Fix the backend problem and retry `commit <run-id>`; do not repeat prepare or evolve. |
+| Backend commit acknowledged, cleanup failed | Marker has `"status":"committed"`, or was removed before directory cleanup failed | Do not retry commit; discard the stopped run. |
 | Committed / discarded | The run directory is gone | Other runs remain available. |
 
 To abandon a run after stopping its executor:
@@ -280,6 +281,10 @@ memu memorize discard run-a1b2c3d4 --json
 Discard removes only that run directory and does not contact the backend. It also accepts incomplete runs left by a process termination during prepare. Ordinary prepare errors remove the newly allocated directory before returning; a hard process termination may leave a directory under `runs/` for inspection and explicit discard. Active runs are never deleted on a timer.
 
 Partial job execution is not resumable in the developer v1 interface. After executor failure, discard the stopped run and prepare the batch again if needed. Backend commit failure retains the evolved workspace for commit retry. If the CLI reports `committed, but cleanup failed`, the backend accepted the submission even if the active marker still exists. Do not retry commit: stop work on that run and use `discard <run-id>` for the remaining directory. This applies to snapshot refresh, working-file removal, and final directory removal failures; discard does not undo committed data.
+
+After the backend acknowledges success, memU atomically records `"status":"committed"` in the run marker before refreshing the snapshot or removing working files. A later commit attempt rejects that marker without resubmitting to the backend. Existing prepared markers containing only `schema_version` remain usable.
+
+This is a retry guard, not exactly-once delivery. A process termination between backend acknowledgement and marker persistence, a marker-write failure, or an ambiguous network failure can leave the outcome uncertain. If memU reports that the backend committed but the status could not be persisted, do not retry; inspect the backend and discard the stopped run. This guard does not serialize concurrent commits of the same run.
 
 ## Consistency and concurrency
 

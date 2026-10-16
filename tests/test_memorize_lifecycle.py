@@ -209,6 +209,26 @@ async def test_failed_commit_preserves_run_for_retry(tmp_path: Path) -> None:
     assert not workspace.active_run.exists()
 
 
+async def test_committed_marker_write_failure_reports_acknowledgement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = FakeBackend()
+    workspace = MemorizeWorkspace(tmp_path / "workspace")
+    await prepare_memorize(_input(), workspace, backend, verify_command="memu verify")
+    before = workspace.active_run.read_bytes()
+
+    def fail_write(*_args: Any) -> None:
+        msg = "marker cannot be replaced"
+        raise PermissionError(msg)
+
+    monkeypatch.setattr(lifecycle_module, "_atomic_write_text", fail_write)
+    with pytest.raises(RuntimeError, match=r"committed, but could not persist.*do not resubmit"):
+        await commit_memorize(workspace, backend)
+    assert len(backend.commits) == 1
+    assert workspace.active_run.read_bytes() == before
+    assert list(workspace.jobs.glob("*.txt"))
+
+
 async def test_noop_commit_allows_next_session(tmp_path: Path) -> None:
     backend = FakeBackend()
     workspace = MemorizeWorkspace(tmp_path / "workspace")
