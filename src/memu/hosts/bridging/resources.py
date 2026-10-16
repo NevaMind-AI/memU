@@ -8,6 +8,7 @@ agent is asked to spend a read on each one.
 
 from __future__ import annotations
 
+import ntpath
 import os
 from pathlib import Path
 from typing import Any
@@ -80,7 +81,7 @@ def verify_resource_log(log: Path, resource_file: Path, max_resources: int = MAX
             path = raw.strip()
             # Absolute paths only: a relative path has no meaning here, since the
             # agent logged it from a working directory we no longer know.
-            if not path.startswith(("/", "~")) or path in seen:
+            if not (os.path.isabs(path) or ntpath.isabs(path) or path.startswith("~")) or path in seen:
                 continue
             seen.add(path)
             if os.path.isfile(os.path.expanduser(path)):
