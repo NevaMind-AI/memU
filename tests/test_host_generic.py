@@ -143,7 +143,7 @@ def test_detect_skips_unstatable_jsonl_without_discarding_healthy_ones(
 
     def stat_with_denied_file(self: pathlib.Path, *args: object, **kwargs: object):
         if self == inaccessible:
-            raise PermissionError("cannot stat this session")
+            raise PermissionError
         return original_stat(self, *args, **kwargs)
 
     monkeypatch.setattr(pathlib.Path, "stat", stat_with_denied_file)

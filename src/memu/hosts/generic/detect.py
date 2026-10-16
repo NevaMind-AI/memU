@@ -113,6 +113,22 @@ def _iter_files(root: Path) -> list[Path]:
     return found
 
 
+def _session_files(files: list[Path]) -> list[Path]:
+    """Return newest-first regular JSONL sessions; tolerate bad filesystem entries."""
+    entries: list[tuple[float, Path]] = []
+    for file in files:
+        if file.suffix != ".jsonl":
+            continue
+        try:
+            info = file.stat()
+        except OSError:
+            # Broken links and unreadable files must not abort detection.
+            continue
+        if S_ISREG(info.st_mode):
+            entries.append((info.st_mtime, file))
+    return [file for _, file in sorted(entries, key=lambda item: item[0], reverse=True)]
+
+
 def probe(path: str | Path) -> Probe:
     """Probe one directory. Read-only; safe on anything."""
     root = Path(os.path.expanduser(str(path)))
@@ -121,18 +137,7 @@ def probe(path: str | Path) -> Probe:
         return result
 
     files = _iter_files(root)
-    session_entries: list[tuple[float, Path]] = []
-    for file in files:
-        if file.suffix != ".jsonl":
-            continue
-        try:
-            info = file.stat()
-        except OSError:
-            # Broken links and unreadable files should not abort detection.
-            continue
-        if S_ISREG(info.st_mode):
-            session_entries.append((info.st_mtime, file))
-    result.session_files = [file for _, file in sorted(session_entries, key=lambda item: item[0], reverse=True)]
+    result.session_files = _session_files(files)
     result.sqlite_files = [f for f in files if f.suffix in (".db", ".sqlite", ".sqlite3", ".vscdb")]
     # An instruction file the agent actually loads sits at the top of its dir
     # (or one level down, like OpenClaw's workspace/AGENTS.md). Anything deeper
