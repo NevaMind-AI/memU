@@ -10,6 +10,7 @@ everywhere.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
 import httpx
@@ -34,8 +35,9 @@ def retry_delay(attempt: int, response: httpx.Response | None = None) -> float:
     A provider's own ``Retry-After`` wins when it sends one — it knows when its
     rate-limit window reopens and we do not — in either of the header's two
     forms (delta-seconds or an HTTP-date, the latter read against the response's
-    own ``Date`` so a skewed local clock cannot turn into a wild sleep). Absent
-    or unparseable, fall back to capped exponential backoff.
+    own ``Date`` when available, falling back to the local UTC clock if the
+    response omits or misformats ``Date``). Absent or unparseable, use capped
+    exponential backoff.
     """
     if response is not None:
         retry_after = response.headers.get("Retry-After")
@@ -45,7 +47,10 @@ def retry_delay(attempt: int, response: httpx.Response | None = None) -> float:
             except ValueError:
                 try:
                     retry_at = parsedate_to_datetime(retry_after)
-                    now = parsedate_to_datetime(response.headers.get("Date", ""))
+                    try:
+                        now = parsedate_to_datetime(response.headers["Date"])
+                    except (KeyError, TypeError, ValueError, OverflowError):
+                        now = datetime.now(timezone.utc)
                     return float(min(max((retry_at - now).total_seconds(), 0.0), _MAX_RETRY_AFTER))
                 except (TypeError, ValueError, OverflowError):
                     pass
