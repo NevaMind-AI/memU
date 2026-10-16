@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from stat import S_ISREG
 
 from memu.hosts.base import RecordKind
 from memu.hosts.generic.sessions import GenericTranscriptSource
@@ -120,11 +121,18 @@ def probe(path: str | Path) -> Probe:
         return result
 
     files = _iter_files(root)
-    result.session_files = sorted(
-        (f for f in files if f.suffix == ".jsonl"),
-        key=lambda f: f.stat().st_mtime,
-        reverse=True,
-    )
+    session_entries: list[tuple[float, Path]] = []
+    for file in files:
+        if file.suffix != ".jsonl":
+            continue
+        try:
+            info = file.stat()
+        except OSError:
+            # Broken links and unreadable files should not abort detection.
+            continue
+        if S_ISREG(info.st_mode):
+            session_entries.append((info.st_mtime, file))
+    result.session_files = [file for _, file in sorted(session_entries, key=lambda item: item[0], reverse=True)]
     result.sqlite_files = [f for f in files if f.suffix in (".db", ".sqlite", ".sqlite3", ".vscdb")]
     # An instruction file the agent actually loads sits at the top of its dir
     # (or one level down, like OpenClaw's workspace/AGENTS.md). Anything deeper
