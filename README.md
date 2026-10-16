@@ -26,6 +26,11 @@ memU is a lightweight, agent-driven memory system that gives users a shared LLM 
 
 memU works with Codex, Claude Code, Cursor, OpenClaw, Hermes, WorkBuddy, Cola, pi, and more. See [Host adapters](#host-adapters-memory-for-desktop-coding-agents).
 
+Codex record runs use `notify` and require a working Codex CLI, including for
+Desktop users. Run `memu-codex docs install` for CLI/PATH prerequisites and the
+unattended agent permission requirements; `memu-codex install-hook` verifies and
+pins the CLI before changing notify.
+
 **Cross-device · Free · Unlimited · [View online](https://memu.so)**
 
 Get your API key from [memu.so](https://memu.so), then send this message to your agent:
