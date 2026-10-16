@@ -138,7 +138,7 @@ def test_detect_skips_unstatable_jsonl_without_discarding_healthy_ones(
 ) -> None:
     root = _agent_dir(tmp_path, sessions=True, instructions=False)
     inaccessible = root / "sessions" / "inaccessible.jsonl"
-    inaccessible.write_text('{"role":"user","content":"other"}\\n', encoding="utf-8")
+    inaccessible.write_text('{"role":"user","content":"other"}\n', encoding="utf-8")
     original_stat = pathlib.Path.stat
 
     def stat_with_denied_file(self: pathlib.Path, *args: object, **kwargs: object):
