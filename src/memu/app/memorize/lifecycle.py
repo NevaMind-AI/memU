@@ -158,6 +158,10 @@ async def commit_memorize(workspace: MemorizeWorkspace, backend: AgenticMemoryBa
     if not workspace.active_run.is_file():
         msg = "memorize workspace has no active run"
         raise RuntimeError(msg)
+    marker = json.loads(workspace.active_run.read_text(encoding="utf-8"))
+    if marker.get("status") == "committed":
+        msg = "memorize run already committed; do not resubmit; discard the stopped run"
+        raise RuntimeError(msg)
 
     subdir_track = {subdir: track for track, subdir in TRACK_DIRS.items()}
     changed = diff_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
@@ -165,12 +169,31 @@ async def commit_memorize(workspace: MemorizeWorkspace, backend: AgenticMemoryBa
     resources = read_resources(workspace.resources)
     result = await backend.commit_results(recall_files=recall_files, resource=resources)
 
-    snapshot_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
-    for stale in workspace.jobs.glob("*.txt"):
-        stale.unlink()
-    for stale in workspace.input.glob("*.jsonl"):
-        stale.unlink()
-    workspace.resource_log.unlink(missing_ok=True)
-    workspace.resources.unlink(missing_ok=True)
-    workspace.active_run.unlink()
+    # Persist the acknowledgement before cleanup can fail and leave a retryable run.
+    # This does not cover an ambiguous backend failure or a crash before this write.
+    marker["status"] = "committed"
+    try:
+        _atomic_write_text(workspace.active_run, json.dumps(marker, separators=(",", ":")) + "\n")
+    except OSError as exc:
+        msg = (
+            f"memorize run committed, but could not persist its committed status at {workspace.base}: {exc}; "
+            "do not resubmit; discard the stopped run"
+        )
+        raise RuntimeError(msg) from exc
+
+    try:
+        snapshot_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
+        for stale in workspace.jobs.glob("*.txt"):
+            stale.unlink()
+        for stale in workspace.input.glob("*.jsonl"):
+            stale.unlink()
+        workspace.resource_log.unlink(missing_ok=True)
+        workspace.resources.unlink(missing_ok=True)
+        workspace.active_run.unlink()
+    except OSError as exc:
+        msg = (
+            f"memorize run committed, but cleanup failed at {workspace.base}: {exc}; "
+            "do not resubmit; discard the stopped run"
+        )
+        raise RuntimeError(msg) from exc
     return result

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -19,7 +18,6 @@ def test_verify_retains_existing_native_absolute_paths(tmp_path: Path) -> None:
     assert output.read_text(encoding="utf-8") == f"---\npath: {artifact}\ndescription: \n---\n"
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows path semantics")
 @pytest.mark.parametrize("path", [r"C:\workspace\notes.md", "C:/workspace/notes.md", r"\\server\share\notes.md"])
 def test_verify_accepts_windows_absolute_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, path: str) -> None:
     log = tmp_path / ".resource.tmp"

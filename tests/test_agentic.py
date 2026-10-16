@@ -12,6 +12,8 @@ from typing import Any
 import pytest
 
 from memu.app import MemoryService
+from memu.app.memorize import lifecycle
+from memu.app.memorize.input import MemorizeInput, MessageInput
 
 
 class FakeEmbeddingClient:
@@ -139,6 +141,33 @@ async def test_recommit_updates_content_and_segments(service: MemoryService) -> 
 
     result = await service.progressive_retrieve("tea time")
     assert "likes coffee" not in [seg["text"] for seg in result["segments"]]
+
+
+async def test_cleanup_failure_retry_cannot_overwrite_a_later_commit(
+    service: MemoryService, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(lifecycle.templates, "resolve", lambda _name, embedded: embedded)
+    workspace = lifecycle.MemorizeWorkspace(tmp_path / "run-a")
+    session = MemorizeInput(items=[MessageInput(role="user", content="I use Rust")])
+    await lifecycle.prepare_memorize(session, workspace, service, verify_command="memu verify")
+    workspace.memory.mkdir(exist_ok=True)
+    (workspace.memory / "language.md").write_text("---\nname: language\n---\nRust", encoding="utf-8")
+
+    def fail_snapshot(*_args: Any) -> None:
+        msg = "injected cleanup failure"
+        raise PermissionError(msg)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(lifecycle, "snapshot_tracked", fail_snapshot)
+        with pytest.raises(RuntimeError, match="committed, but cleanup failed"):
+            await lifecycle.commit_memorize(workspace, service)
+
+    # An independent run updates the same authoritative record after A succeeded.
+    await service.commit_results(recall_files=[{"name": "language", "track": "memory", "content": "Go"}])
+    with pytest.raises(RuntimeError, match="already committed"):
+        await lifecycle.commit_memorize(workspace, service)
+    listed = await service.list_all_recall_files()
+    assert next(file for file in listed["recall_files"] if file["name"] == "language")["content"] == "Go"
 
 
 class CountingEmbeddingClient(FakeEmbeddingClient):
