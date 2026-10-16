@@ -508,7 +508,7 @@ class AgenticMixin:
     ) -> list[_RecallFilePlan]:
         """Resolve each ``{name, track, description, content}`` and request its vectors.
 
-        Keyed by separator-normalized ``name`` within the record's ``track`` (``memory``/``skill``). New files embed
+        Keyed by case/separator-normalized ``name`` within the record's ``track`` (``memory``/``skill``). New files embed
         their ``name: description`` for file-level recall. Existing files always take the new
         content and re-embed only when the description actually changed — commit always carries
         a description (read from the local file), but it's usually unchanged.
@@ -521,7 +521,7 @@ class AgenticMixin:
         """
         deduped: dict[tuple[str, str], dict[str, Any]] = {}
         for item in recall_files:
-            name = (item.get("name") or "").strip().replace(" ", "-").replace("_", "-")
+            name = (item.get("name") or "").strip().lower().replace(" ", "-").replace("_", "-")
             if any(char in name for char in "/\\\x00") or name in {".", ".."}:
                 msg = "recall-file name must not contain path separators or null bytes"
                 raise ValueError(msg)

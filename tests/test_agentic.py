@@ -71,7 +71,7 @@ async def test_commit_then_list_covers_both_tracks(service: MemoryService) -> No
 
     listed = await service.list_all_recall_files()
     by_track = sorted((f["track"], f["name"]) for f in listed["recall_files"])
-    assert by_track == [("memory", "Profile"), ("skill", "deploy-checklist")]
+    assert by_track == [("memory", "profile"), ("skill", "deploy-checklist")]
 
 
 async def test_list_all_recall_files_paginates_by_track_name_id(service: MemoryService) -> None:
@@ -122,7 +122,7 @@ async def test_progressive_retrieve_ranks_all_three_layers(service: MemoryServic
 
     assert next(seg["text"] for seg in result["segments"]) == "likes coffee"
     file_names = [f["name"] for f in result["files"]]
-    assert file_names[0] == "Profile"
+    assert file_names[0] == "profile"
     # Committed resources land on the workspace track and are retrievable.
     assert [r["url"] for r in result["resources"]] == ["/workspace/notes.md"]
 
@@ -134,7 +134,7 @@ async def test_recommit_updates_content_and_segments(service: MemoryService) -> 
     )
 
     listed = await service.list_all_recall_files()
-    profile = next(f for f in listed["recall_files"] if f["name"] == "Profile")
+    profile = next(f for f in listed["recall_files"] if f["name"] == "profile")
     assert profile["content"] == "# P\nlikes tea"
 
     result = await service.progressive_retrieve("tea time")
@@ -172,7 +172,7 @@ async def test_recommit_reembeds_description_only_when_changed(service: MemorySe
     assert counter.calls == 1
 
     listed = await service.list_all_recall_files()
-    profile = next(f for f in listed["recall_files"] if f["name"] == "Profile")
+    profile = next(f for f in listed["recall_files"] if f["name"] == "profile")
     assert profile["description"] == "the user profile"
 
 
@@ -322,7 +322,7 @@ async def test_where_scope_filters_and_rejects_unknown_fields(service: MemorySer
     )
 
     listed = await service.list_all_recall_files(where={"user_id": "u1"})
-    assert [f["name"] for f in listed["recall_files"]] == ["A"]
+    assert [f["name"] for f in listed["recall_files"]] == ["a"]
 
     with pytest.raises(ValueError, match="Unknown filter field"):
         await service.list_all_recall_files(where={"nope": "x"})
@@ -409,24 +409,26 @@ async def test_sqlite_resource_commit_sees_writes_from_another_instance(tmp_path
 
 
 @pytest.mark.parametrize("track", ["memory", "skill"])
-async def test_commit_normalizes_separators_before_dedup_and_lookup(service: MemoryService, track: str) -> None:
+async def test_commit_normalizes_case_and_separators_before_dedup_and_lookup(
+    service: MemoryService, track: str
+) -> None:
     result = await service.commit_results(
         recall_files=[
             {"name": name, "track": track, "content": name}
-            for name in ("personal memory", "personal_memory", "personal-memory")
+            for name in ("Personal Memory", "Personal_Memory", "personal-memory")
         ]
     )
     (first,) = result["recall_files"]
     assert first["name"] == first["content"] == "personal-memory"
     (updated,) = (
-        await service.commit_results(recall_files=[{"name": "personal_memory", "track": track, "content": "updated"}])
+        await service.commit_results(recall_files=[{"name": "PERSONAL-memory", "track": track, "content": "updated"}])
     )["recall_files"]
     assert updated["id"] == first["id"]
     assert updated["content"] == "updated"
     assert len((await service.list_all_recall_files())["recall_files"]) == 1
 
 
-@pytest.mark.parametrize("name", ["Pro-Alice", "personal--memory", "café-notes", "memu-pi-windows-install"])
+@pytest.mark.parametrize("name", ["pro-alice", "personal--memory", "café-notes", "memu-pi-windows-install"])
 async def test_commit_preserves_existing_name_format(service: MemoryService, name: str) -> None:
     (first,) = (await service.commit_results(recall_files=[{"name": name, "content": "original"}]))["recall_files"]
     (updated,) = (await service.commit_results(recall_files=[{"name": name, "content": "updated"}]))["recall_files"]
@@ -444,17 +446,16 @@ async def test_unsafe_name_rejects_entire_commit(service: MemoryService) -> None
     assert service._get_database().resource_repo.list_resources() == {}
 
 
-async def test_separator_normalization_does_not_migrate_legacy_record(service: MemoryService) -> None:
+@pytest.mark.parametrize("legacy_name", ["personal memory", "Personal-Memory"])
+async def test_normalization_does_not_migrate_legacy_record(service: MemoryService, legacy_name: str) -> None:
     repo = service._get_database().recall_file_repo
     legacy = repo.get_or_create_recall_file(
-        name="personal memory", description="legacy", embedding=[], user_data={}, track="memory"
+        name=legacy_name, description="legacy", embedding=[], user_data={}, track="memory"
     )
-    (current,) = (await service.commit_results(recall_files=[{"name": "personal memory", "content": "new"}]))[
-        "recall_files"
-    ]
+    (current,) = (await service.commit_results(recall_files=[{"name": legacy_name, "content": "new"}]))["recall_files"]
     assert current["name"] == "personal-memory"
     assert current["id"] != legacy.id
     assert {f["name"] for f in (await service.list_all_recall_files())["recall_files"]} == {
-        "personal memory",
+        legacy_name,
         "personal-memory",
     }
