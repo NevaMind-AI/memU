@@ -128,7 +128,7 @@ def test_http_client_bypasses_ambient_proxy_for_loopback(monkeypatch: pytest.Mon
     assert local.proxy is None
     assert local.mounts == {"all://localhost": None}
 
-    remote = HTTPEmbeddingClient(base_url="https://api.openai.com/v1", api_key="x", embed_model="m")
+    remote = HTTPEmbeddingClient(base_url="http://api.openai.com/v1", api_key="x", embed_model="m")
     assert remote.proxy == PROXY
     assert remote.mounts is None
 
