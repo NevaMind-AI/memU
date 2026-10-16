@@ -13,8 +13,6 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from memu.recall_file_names import canonical_recall_file_name
-
 
 def _atomic_write_text(path: Path, text: str) -> None:
     """Write ``text`` to ``path`` so a concurrent reader never sees it half-written.
@@ -46,13 +44,13 @@ def recall_file_path(base_dir: Path, subdir: str, name: str) -> Path:
     that needs to *locate* a mirrored file by name (e.g. retrieval, surfacing a
     file's path to the agent) agree by construction rather than by comment.
     """
-    name = canonical_recall_file_name(name)
-    return base_dir / subdir / f"{name}.md"
+    # Escape spaces in the filename with '-'; the frontmatter keeps the raw name.
+    return base_dir / subdir / f"{name.replace(' ', '-')}.md"
 
 
 def write_recall_file(base_dir: Path, subdir: str, recall_file: dict[str, Any]) -> Path:
     """Mirror one recall file into ``base_dir/subdir`` as front-mattered markdown."""
-    name = canonical_recall_file_name(recall_file["name"])
+    name = recall_file["name"]
     description = recall_file.get("description", "")
     content = recall_file.get("content") or ""
 

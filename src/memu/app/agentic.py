@@ -9,8 +9,6 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
-from memu.recall_file_names import canonical_recall_file_name
-
 if TYPE_CHECKING:
     from memu.app.settings import ProgressiveRetrieveConfig
     from memu.database.interfaces import Database
@@ -359,7 +357,7 @@ class AgenticMixin:
           :class:`Resource` keyed by ``url`` (``= path``); the description becomes the
           embedded caption used for INDEX/resource recall.
         - ``recall_files`` — a list of ``{name, track, description, content}`` records. Each
-          is a :class:`RecallFile` keyed by canonical kebab-case ``name`` within its ``track`` (``memory``/``skill``),
+          is a :class:`RecallFile` keyed by ``name`` within its ``track`` (``memory``/``skill``),
           with the same track-specific segment (re)generation as the workspace path.
 
         A commit that cannot reach the embedding provider writes nothing at all, so
@@ -510,7 +508,7 @@ class AgenticMixin:
     ) -> list[_RecallFilePlan]:
         """Resolve each ``{name, track, description, content}`` and request its vectors.
 
-        Keyed by canonical ``name`` within the record's ``track`` (``memory``/``skill``). New files embed
+        Keyed by separator-normalized ``name`` within the record's ``track`` (``memory``/``skill``). New files embed
         their ``name: description`` for file-level recall. Existing files always take the new
         content and re-embed only when the description actually changed — commit always carries
         a description (read from the local file), but it's usually unchanged.
@@ -523,7 +521,10 @@ class AgenticMixin:
         """
         deduped: dict[tuple[str, str], dict[str, Any]] = {}
         for item in recall_files:
-            name = canonical_recall_file_name(item.get("name") or "")
+            name = (item.get("name") or "").strip().replace(" ", "-").replace("_", "-")
+            if any(char in name for char in "/\\\x00") or name in {".", ".."}:
+                msg = "recall-file name must not contain path separators or null bytes"
+                raise ValueError(msg)
             if name:
                 deduped[(item.get("track") or "memory", name)] = item
 
