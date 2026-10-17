@@ -19,8 +19,8 @@
 Installing memU on Codex is three parts:
 
 1. **Install memU** — a Python package and the memory backend it uses.
-2. **Register the bridging task** — the scheduled job that turns recent Codex
-   sessions into durable memory (the *record* seam).
+2. **Install the bridging hook** — Codex's `notify` hook triggers the run that
+   turns recent Codex sessions into durable memory (the *record* seam).
 3. **Patch `~/.codex/AGENTS.md`** — a standing instruction that tells you to pull
    relevant memory before you answer (the *inject* seam).
 
@@ -62,7 +62,7 @@ memu-codex --help
 ```
 
 If it is not found, the install landed in an environment that isn't on your
-`PATH`. Fix that now rather than working around it — the scheduled task in Part 2
+`PATH`. Fix that now rather than working around it — the bridging hook in Part 2
 and the hook in Part 3 both need this command to resolve from a bare, non-
 interactive environment.
 
@@ -147,8 +147,8 @@ memu-codex config --local --db /absolute/path/memu.sqlite3 --embed-provider open
 
 Only the flags you pass are written, so a later run can add one without
 disturbing the rest. Give `--db` an **absolute** path: a relative one resolves
-against a working directory the scheduled task does not have. And do not export
-any of this in a shell profile instead — the scheduled task does not inherit
+against a working directory the hook run does not have. And do not export
+any of this in a shell profile instead — the hook run does not inherit
 your interactive shell, so the file is the carrier.
 
 **No embedding key? Say so, then use a local embedding server.** If the user has
@@ -212,49 +212,85 @@ on this working, and both fail *silently* if it is wrong.
 
 ---
 
-## Part 2 — Register the bridging (record) task
+## Part 2 — Install the record hook
 
-The *record* seam: a Codex scheduled task that periodically mines recent Codex
-sessions into memU memory, skills, and resources. In cloud mode, workspace
-resources are submitted but are not currently persisted.
+Codex's `notify` starts a record run; no scheduled task is installed. The hook
+returns immediately, runs at most once every 30 minutes, and picks up later
+turns on the next run. In cloud mode, workspace resources are submitted but are
+not currently persisted.
 
-**Refresh an existing bridging registration before continuing.** Inspect
-Codex's scheduled-task surface. Check every recognized name in
-{{all_task_names}}, then confirm the task's prompt runs the memU prepare /
-self-evolve / commit pipeline. Record its current cadence and delete **only that
-confirmed task** through the same surface. A name narrows the search; the
-complete pipeline prompt remains the load-bearing deletion identity. Re-list scheduled tasks and verify
-no memU bridging task remains. Leave the store, session cursor, working tree,
-and retrieval instruction untouched. An absent task is the normal first-install
-case. Reuse the recorded cadence below unless the user requested a change.
+The background agent runs with Codex's approval and sandbox bypass. Its working
+directory is the memU staging workspace, but this does not restrict access to
+other user files or the network. Enable the hook only when this unattended
+execution is acceptable; never use a user project as the staging directory.
 
-**Do not reinvent this.** Follow the packaged procedure:
+### CLI prerequisite (including Desktop users)
+
+The background run invokes `codex exec`. Desktop being installed does not prove
+that a usable CLI is on PATH. Reuse an existing installation first:
 
 ```
-memu-codex docs task
+codex --version
+codex login status
 ```
 
-It is authoritative. In summary, you will settle a cron schedule with the user
-(default: every hour, `0 * * * *`) and create a Codex scheduled task whose
-recurring prompt is the three-step block that document gives you verbatim —
-`memu-codex prepare`, then the agent works through `~/.memu/hosts/codex/jobs/*.txt` in order,
-then `memu-codex commit`.
+If the command is missing, install the official CLI (requires Node.js/npm):
 
-Nothing in that prompt is machine-specific. If you find yourself substituting an
-absolute path into it, you are doing it wrong.
+```
+npm install -g @openai/codex
+```
+
+If npm is also missing, follow the [official Codex CLI installation guide](https://developers.openai.com/codex/cli/)
+for a supported installation. Do not guess a Desktop-internal executable path.
+
+An already-running shell or Desktop keeps its old environment after installation.
+For an npm installation, prepend its actual global prefix to the current Windows
+PowerShell process before running the checks and `install-hook`:
+
+```powershell
+$codexPrefix = (npm prefix -g).Trim()
+$env:Path = "$codexPrefix;$env:Path"
+codex --version
+```
+
+On macOS/Linux, start a new shell or add the npm global prefix's `bin` directory
+to PATH. Fully quit and reopen Desktop after installing the prerequisites so its
+children inherit the updated PATH, including Node and `memu-codex`.
+
+Reuse existing credentials under the same user and `CODEX_HOME`; shared
+`config.toml` alone does not prove authentication. If `codex login status` fails,
+complete `codex login` or the configured provider's authentication setup. Do not
+print credentials. Custom providers may require environment variables in the
+Desktop process as well as in the installation shell.
+
+`install-hook` checks that the CLI resolves and that `--version` succeeds before
+editing notify. It pins that executable's absolute path; rerun it if the CLI
+moves. This check does not make a model request or prove authentication; the
+foreground record run below is the end-to-end check.
+
+Install the hook:
+
+```
+memu-codex install-hook
+```
+
+It sets the top-level `notify` in `~/.codex/config.toml` to the absolute
+`memu-codex hook` command (pinning the `codex` binary it found, too). If
+`notify` already ran another program, that program is kept: memU forwards every
+notification to it, and `remove-hook` puts it back. Codex frontends that execute
+`notify` trigger the record run; session files from any other front end are
+picked up by the next successful run.
 
 ### ✅ Verify Part 2
 
-Confirm the scheduled task exists with the expected name and cron. Then dry-run
-the first step by hand:
-
 ```
-memu-codex prepare
+memu-codex hook-run
 ```
 
-It should report how many sessions it prepared (zero, if there is nothing new
-since the cursor — that is fine and correct). Report the task name and schedule
-back to the user.
+runs one pass in the foreground: it should report how many sessions it
+prepared (zero is fine if nothing is new) and finish with a commit line. Then
+confirm `~/.codex/config.toml` has the `memu-codex … hook` `notify` line. Later
+runs log to `~/.memu/hosts/codex/hook.log`.
 
 ---
 
@@ -386,7 +422,7 @@ nothing secret.
 Report back to the user:
 
 - the selected mode and its cloud endpoint or local store/provider;
-- the scheduled task's name and cron, in words (e.g. "daily at 00:00 local");
+- that the bridging hook runs from Codex's `notify`, at most every 30 minutes;
 - that the retrieval instruction is now in `~/.codex/AGENTS.md`, pointing at the
   `memu-retrieve` skill, and that it takes effect in their next Codex session.
 
