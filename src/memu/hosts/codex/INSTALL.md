@@ -28,6 +28,19 @@ Parts 2 and 3 must share one configured mode. In local mode they must also share
 one store and embedding space, or retrieval silently returns nothing. Part 1 is
 what makes them agree.
 
+## Notify record trigger (Codex)
+
+The notify record trigger runs the same prepare → headless `codex exec` → commit
+pipeline after a Codex turn. Install it with:
+
+```
+memu-codex install-hook
+```
+
+The command refuses to overwrite an existing Codex `notify` command; preserving
+and forwarding an existing notifier is handled by a later install step. Remove
+this trigger with `memu-codex remove-hook`.
+
 ---
 
 ## Part 1 — Install memU
