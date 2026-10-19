@@ -17,7 +17,7 @@ def _patch_console_launcher(monkeypatch, launch):
     monkeypatch.setattr(cli, "SPEC", replace(cli.SPEC, hook=replace(cli.HOOK, launch_console=launch)))
 
 
-def test_diagnostic_agent_output_is_live(tmp_path, capsys):
+def test_console_agent_output_is_live(tmp_path, capsys):
     import concurrent.futures
     import sys
     import time
@@ -58,7 +58,7 @@ def test_diagnostic_agent_output_is_live(tmp_path, capsys):
         ("import time; print('waiting',flush=True); time.sleep(30)", 1, subprocess.TimeoutExpired),
     ],
 )
-def test_diagnostic_agent_failure_and_timeout(tmp_path, script, timeout, error):
+def test_console_agent_failure_and_timeout(tmp_path, script, timeout, error):
     import sys
 
     with pytest.raises(error):
@@ -70,7 +70,7 @@ def test_diagnostic_agent_failure_and_timeout(tmp_path, script, timeout, error):
     assert (tmp_path / "hook.log").read_text()
 
 
-def test_hook_passes_diagnostic_options(tmp_path, monkeypatch):
+def test_hook_passes_console_options(tmp_path, monkeypatch):
     from memu.hosts.codex.cli import main
 
     calls = []
@@ -82,7 +82,7 @@ def test_hook_passes_diagnostic_options(tmp_path, monkeypatch):
             str(tmp_path),
             "--session-dir",
             "~/sessions",
-            "--diagnostic",
+            "--console",
             "--hold",
             "--label",
             "desktop-codex",
@@ -91,13 +91,13 @@ def test_hook_passes_diagnostic_options(tmp_path, monkeypatch):
         == 0
     )
     argv, _layout, label, hold = calls[0]
-    assert "--diagnostic" in argv
+    assert "--console" in argv
     assert argv[argv.index("--session-dir") + 1] == "~/sessions"
     assert label == "desktop-codex" and hold
 
 
 @pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
-def test_diagnostic_launch_platform(tmp_path, monkeypatch, platform):
+def test_console_launch_platform(tmp_path, monkeypatch, platform):
     calls = []
     monkeypatch.setattr(notify_console.sys, "platform", platform)
     monkeypatch.setattr(notify_console.subprocess, "CREATE_NEW_CONSOLE", 16, raising=False)
@@ -134,7 +134,7 @@ def test_codex_notify_hook_does_not_overwrite_existing_notify(tmp_path):
     assert config.read_text() == 'notify = ["existing-notifier"]\n'
 
 
-def test_diagnostic_window_logs_failure_and_holds(tmp_path, monkeypatch):
+def test_console_window_logs_failure_and_holds(tmp_path, monkeypatch):
     import sys
 
     def fail(_argv):
@@ -163,24 +163,21 @@ def test_headless_codex_disables_recursive_notify():
     assert HOOK.stream_output is notify_console.stream_agent
 
 
-def test_hook_diagnostic_home_is_shared_by_worker(tmp_path, monkeypatch):
+def test_hook_preserves_home_and_backend_config(tmp_path, monkeypatch):
     import os
 
     from memu.hosts.codex.cli import main
 
-    for key in ("HOME", "USERPROFILE", "CODEX_HOME", "MEMU_CONFIG_ENV"):
-        monkeypatch.setenv(key, os.environ.get(key, ""))
+    expected = {key: str(tmp_path / key) for key in ("HOME", "USERPROFILE", "CODEX_HOME", "MEMU_CONFIG_ENV")}
+    for key, value in expected.items():
+        monkeypatch.setenv(key, value)
     seen = []
-    _patch_console_launcher(monkeypatch, lambda *args: seen.append((args, dict(os.environ))))
-    assert main(["hook", "--diagnostic", "--diagnostic-home", str(tmp_path)]) == 0
-    args, env = seen[0]
-    assert env["HOME"] == str(tmp_path)
-    assert env["CODEX_HOME"] == str(tmp_path / ".codex")
-    assert env["MEMU_CONFIG_ENV"] == str(tmp_path / ".memu/config.env")
-    assert args[1].base == tmp_path / ".memu/hosts/codex"
+    _patch_console_launcher(monkeypatch, lambda *args: seen.append(dict(os.environ)))
+    assert main(["hook", "--console", "--base-dir", str(tmp_path)]) == 0
+    assert {key: seen[0][key] for key in expected} == expected
 
 
-def test_diagnostic_workspace_lock_serializes_and_releases(tmp_path):
+def test_console_workspace_lock_serializes_and_releases(tmp_path):
     import concurrent.futures
     import threading
 

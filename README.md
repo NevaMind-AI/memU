@@ -95,42 +95,41 @@ Once the scheduled bridging task is installed, memU can turn useful agent histor
 
 The judgment and synthesis stay inside the agent. `MemoryService` makes no LLM or chat calls; it stores, embeds, and retrieves the skill Markdown the agent prepared.
 
-## Codex notify diagnostics
+## Codex notify console
 
-For a visible diagnostic run, configure the Codex notify command to invoke the
+To open a console with live output, configure the Codex notify command to invoke the
 installed CLI:
 
 ```text
-memu-codex hook --diagnostic --hold --label codex
+memu-codex hook --console --hold --label codex
 ```
 
 The same command accepts turn-complete payloads from CLI and Desktop. Preserve
 any Desktop `turn-ended --previous-notify` chain and change only its memU command.
-Each invocation opens a diagnostic worker. `--label` identifies the test (for
-example `cli`, `desktop-codex`, or `desktop-gpt-work`); it does not filter events.
+Each invocation opens a console worker. `--label` names the run; use `codex`
+when CLI and Desktop share the same notify configuration. It does not detect the
+source or filter events.
 Agent stdout and stderr are merged and streamed live to the window and
 `~/.memu/hosts/codex/hook.log`. Start/end markers include the worker PID and exit
-code. `--hold` waits for Enter even on a failed run. Closing an active diagnostic
+code. `--hold` waits for Enter even on a failed run. Closing an active console
 window may interrupt its worker; wait for the end marker before closing it.
 
 Windows launches the installed Codex notify console worker
 (`memu.hosts.codex.notify_console`) in a new console. macOS uses
 Terminal; Linux requires `x-terminal-emulator` or `xterm`. Windows is the current
 manual validation platform; macOS/Linux launch argument branches have automated
-coverage only. `hook-run --diagnostic` runs in an existing terminal. Without
-`--diagnostic`, the background notify path is unchanged. The headless Codex
+coverage only. `hook-run --console` runs in an existing terminal. Without
+`--console`, the background notify path is unchanged. The headless Codex
 invocation retains `--dangerously-bypass-approvals-and-sandbox` and overrides its
 own notify to `[]` to prevent recursive runs.
 
-Use `--base-dir` and `--session-dir` to select an isolated test workspace and
-session log. `hook --diagnostic --diagnostic-home <prepared-home>` sets HOME,
-USERPROFILE, CODEX_HOME and MEMU_CONFIG_ENV for the worker; prepare that home's
-`.codex/config.toml`, session source, and `.memu/config.env` before enabling it.
-Backend credentials in that config must target the test backend. These options
-do not create or copy user session history. Diagnostic workers sharing a workspace
-run serially under an OS file lock; the lock is released before the Enter prompt
-and when the process exits. This slice does not add scheduling or per-turn
-deduplication.
+Console mode uses the normal HOME and memU backend configuration. Existing notify
+commands must replace `--diagnostic` with `--console` and remove
+`--diagnostic-home <path>` when upgrading from #742. Use
+`--base-dir` and `--session-dir` to select a workspace and session source.
+Console workers sharing a workspace run serially under an OS file lock; the lock
+is released before the Enter prompt and when the process exits. This slice does
+not add scheduling or per-turn deduplication.
 
 ## Self-hosted
 
