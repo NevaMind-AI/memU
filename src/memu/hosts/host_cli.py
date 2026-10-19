@@ -27,6 +27,7 @@ import json
 import os
 import platform
 import re
+import shutil
 import sys
 import time
 import urllib.request
@@ -37,7 +38,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from memu import events
-from memu.hosts import config_cmd, instruction, retrieval, templates
+from memu.hosts import config_cmd, hooks, instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging import Layout, commit, prepare, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
@@ -202,6 +203,9 @@ class HostSpec:
     Native schedulers can instead resolve their registered task from structural
     host metadata, without asking the model to carry identity.
     """
+
+    hook: Any = None
+    """Optional host-triggered notify hook. Hook-specific behavior is opt-in."""
 
     def __post_init__(self) -> None:
         if not _TASK_NAME_RE.fullmatch(self.task_name):
@@ -698,7 +702,52 @@ def _report_guide_opened(spec: HostSpec, event: str) -> None:
     events.flush()
 
 
-async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
+async def _cmd_hook(spec: HostSpec, args: argparse.Namespace) -> int:
+    hook = spec.hook
+    if hook is None:
+        raise RuntimeError(f"{spec.display} has no notify hook")
+    layout = _layout(spec, args)
+    argv = [sys.executable, "-m", f"{spec.package}.cli", "hook-run", "--base-dir", str(layout.base)]
+    if args.agent:
+        argv += ["--agent", args.agent]
+    hooks.spawn_detached(argv, layout)
+    return 0
+
+
+async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
+    hook = spec.hook
+    if hook is None:
+        raise RuntimeError(f"{spec.display} has no notify hook")
+    layout = _layout(spec, args)
+    code = await _cmd_prepare(spec, args)
+    if code:
+        return code
+    if hooks.pending_jobs(layout):
+        hooks.run_agent(hook.agent, layout, executable=args.agent)
+    return await _cmd_commit(spec, args)
+
+
+async def _cmd_install_hook(spec: HostSpec, args: argparse.Namespace) -> int:
+    hook = spec.hook
+    if hook is None:
+        raise RuntimeError(f"{spec.display} has no notify hook")
+    binary = shutil.which(spec.binary) or spec.binary
+    agent = shutil.which(hook.agent.argv[0]) or hook.agent.argv[0]
+    hook.installer.install([binary, "hook", "--agent", agent])
+    print(f"installed notify hook in {hook.installer.path}")
+    return 0
+
+
+async def _cmd_remove_hook(spec: HostSpec, args: argparse.Namespace) -> int:
+    hook = spec.hook
+    if hook is None:
+        raise RuntimeError(f"{spec.display} has no notify hook")
+    hook.installer.remove(Path(spec.binary).name)
+    print(f"removed notify hook from {hook.installer.path}")
+    return 0
+
+
+
     """Register/inspect the existing OS-scheduled bridging task on Windows Task Scheduler.
 
     The parser registers this handler only when ``schedule_command`` supplies an
@@ -921,6 +970,24 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
 
     if spec.register_extra is not None:
         spec.register_extra(sub)
+
+    if spec.hook is not None:
+        p = with_base(sub.add_parser("hook", help="Start one notify-triggered bridging run in the background"))
+        p.add_argument("--agent", default="", help=f"Path to {hook.agent.argv[0]}")
+        p.add_argument("payload", nargs="*", help=argparse.SUPPRESS)
+        p.set_defaults(handler=bind(_cmd_hook))
+
+        p = with_base(sub.add_parser("hook-run", help="Run one notify-triggered bridging pass"))
+        p.add_argument("--session-dir", default=spec.session_dir, help=spec.session_help)
+        p.add_argument("--max-jobs", type=int, default=MAX_JOBS)
+        p.add_argument("--agent", default="", help=f"Path to {hook.agent.argv[0]}")
+        p.set_defaults(handler=bind(_cmd_hook_run))
+
+        p = with_base(sub.add_parser("install-hook", help="Install the Codex notify hook"))
+        p.set_defaults(handler=bind(_cmd_install_hook))
+
+        p = with_base(sub.add_parser("remove-hook", help="Remove the Codex notify hook"))
+        p.set_defaults(handler=bind(_cmd_remove_hook))
 
     return parser
 

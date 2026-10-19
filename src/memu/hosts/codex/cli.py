@@ -29,6 +29,8 @@ from __future__ import annotations
 import argparse
 import sys
 
+from memu.hosts import hooks
+
 from memu.hosts.codex.sessions import SESSION_DIR, CodexTranscriptSource
 from memu.hosts.host_cli import HostSpec, run
 
@@ -42,8 +44,23 @@ AGENTS_MD = "~/.codex/AGENTS.md"
 lands here. The path is the only part of that seam that is Codex-specific."""
 
 SKILLS_DIR = "~/.codex/skills"
-"""Codex's skills directory. Because it exists, the AGENTS.md block is a pointer
-and the retrieval procedure itself is installed here as a skill."""
+"""Codex's skills directory."""
+
+HOOK = hooks.HookSpec(
+    agent=hooks.HeadlessAgent(
+        argv=(
+            "codex",
+            "exec",
+            "--json",
+            "--skip-git-repo-check",
+            "--dangerously-bypass-approvals-and-sandbox",
+            "-C",
+            "{base}",
+            "-",
+        )
+    ),
+    installer=hooks.CodexNotifyHook(),
+)
 
 SPEC = HostSpec(
     host=HOST,
@@ -57,6 +74,7 @@ SPEC = HostSpec(
     instruction_path=AGENTS_MD,
     skills_dir=SKILLS_DIR,
     schedule_backend="native",
+    hook=HOOK,
 )
 
 
