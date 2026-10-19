@@ -723,7 +723,7 @@ async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
     if code:
         return code
     if hooks.pending_jobs(layout):
-        hooks.run_agent(hook.agent, layout, executable=args.agent)
+        hooks.run_agent(hook.agent, layout, executable=args.agent, diagnostic=args.diagnostic)
     return await _cmd_commit(spec, args)
 
 
@@ -982,6 +982,9 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
         p.add_argument("--session-dir", default=spec.session_dir, help=spec.session_help)
         p.add_argument("--max-jobs", type=int, default=MAX_JOBS)
         p.add_argument("--agent", default="", help=f"Path to {hook.agent.argv[0]}")
+        p.add_argument(
+            "--diagnostic", action="store_true", help="Tee agent output to hook.log and the foreground terminal"
+        )
         p.set_defaults(handler=bind(_cmd_hook_run))
 
         p = with_base(sub.add_parser("install-hook", help="Install the Codex notify hook"))

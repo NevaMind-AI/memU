@@ -40,7 +40,13 @@ def pending_jobs(layout: Layout) -> list[Path]:
     return sorted(layout.jobs.glob("*.txt"))
 
 
-def run_agent(agent: HeadlessAgent, layout: Layout, *, executable: str = "") -> None:
+def run_agent(
+    agent: HeadlessAgent,
+    layout: Layout,
+    *,
+    executable: str = "",
+    diagnostic: bool = False,
+) -> None:
     argv = [token.replace("{base}", str(layout.base)) for token in agent.argv]
     resolved = executable or shutil.which(argv[0])
     if not resolved:
@@ -56,6 +62,12 @@ def run_agent(agent: HeadlessAgent, layout: Layout, *, executable: str = "") -> 
         timeout=agent.timeout_seconds,
         check=False,
     )
+    if diagnostic:
+        log = layout.base / "hook.log"
+        with log.open("a", encoding="utf-8") as output:
+            output.write("\n=== diagnostic agent output ===\n")
+            output.write(result.stdout)
+            output.write(result.stderr)
     if result.stdout.strip():
         print(result.stdout.strip()[-2000:])
     if result.stderr.strip():
