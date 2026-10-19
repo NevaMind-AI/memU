@@ -30,6 +30,7 @@ import argparse
 import sys
 
 from memu.hosts import hooks
+from memu.hosts.codex import notify_console
 from memu.hosts.codex.sessions import SESSION_DIR, CodexTranscriptSource
 from memu.hosts.host_cli import HostSpec, run
 
@@ -61,6 +62,8 @@ HOOK = hooks.HookSpec(
         )
     ),
     installer=hooks.CodexNotifyHook(),
+    launch_console=notify_console.launch,
+    stream_output=notify_console.stream_agent,
 )
 
 SPEC = HostSpec(

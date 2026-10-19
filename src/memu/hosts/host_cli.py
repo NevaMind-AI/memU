@@ -717,10 +717,10 @@ async def _cmd_hook(spec: HostSpec, args: argparse.Namespace) -> int:
     if args.agent:
         argv += ["--agent", args.agent]
     if args.diagnostic:
-        from memu.hosts.hooks.diagnostic import launch
-
+        if hook.launch_console is None:
+            raise ValueError(f"{spec.display} has no notify console")  # noqa: TRY003
         argv.append("--diagnostic")
-        launch(argv, layout, args.label, args.hold)
+        hook.launch_console(argv, layout, args.label, args.hold)
     else:
         hooks.spawn_detached([sys.executable, "-m", f"{spec.package}.cli", *argv], layout)
     return 0
@@ -735,7 +735,11 @@ async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
     if code:
         return code
     if hooks.pending_jobs(layout):
-        hooks.run_agent(hook.agent, layout, executable=args.agent, diagnostic=args.diagnostic)
+        if args.diagnostic and hook.stream_output is None:
+            raise ValueError(f"{spec.display} has no live agent output")  # noqa: TRY003
+        hooks.run_agent(
+            hook.agent, layout, executable=args.agent, stream_output=hook.stream_output if args.diagnostic else None
+        )
     return await _cmd_commit(spec, args)
 
 

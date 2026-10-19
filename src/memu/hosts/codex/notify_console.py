@@ -1,4 +1,4 @@
-"""Visible notify diagnostics. Run by the installed CLI, never a generated script."""
+"""Codex notify console worker: live agent output, hook.log, and an optional close prompt."""
 
 from __future__ import annotations
 

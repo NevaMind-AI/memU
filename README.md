@@ -113,7 +113,8 @@ Agent stdout and stderr are merged and streamed live to the window and
 code. `--hold` waits for Enter even on a failed run. Closing an active diagnostic
 window may interrupt its worker; wait for the end marker before closing it.
 
-Windows launches the installed Python worker in a new console. macOS uses
+Windows launches the installed Codex notify console worker
+(`memu.hosts.codex.notify_console`) in a new console. macOS uses
 Terminal; Linux requires `x-terminal-emulator` or `xterm`. Windows is the current
 manual validation platform; macOS/Linux launch argument branches have automated
 coverage only. `hook-run --diagnostic` runs in an existing terminal. Without
