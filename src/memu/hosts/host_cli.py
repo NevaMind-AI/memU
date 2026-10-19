@@ -705,7 +705,7 @@ def _report_guide_opened(spec: HostSpec, event: str) -> None:
 async def _cmd_hook(spec: HostSpec, args: argparse.Namespace) -> int:
     hook = spec.hook
     if hook is None:
-        raise RuntimeError(f"{spec.display} has no notify hook")
+        raise RuntimeError(f"{spec.display} has no notify hook")  # noqa: TRY003
     layout = _layout(spec, args)
     argv = [sys.executable, "-m", f"{spec.package}.cli", "hook-run", "--base-dir", str(layout.base)]
     if args.agent:
@@ -717,7 +717,7 @@ async def _cmd_hook(spec: HostSpec, args: argparse.Namespace) -> int:
 async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
     hook = spec.hook
     if hook is None:
-        raise RuntimeError(f"{spec.display} has no notify hook")
+        raise RuntimeError(f"{spec.display} has no notify hook")  # noqa: TRY003
     layout = _layout(spec, args)
     code = await _cmd_prepare(spec, args)
     if code:
@@ -730,7 +730,7 @@ async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
 async def _cmd_install_hook(spec: HostSpec, args: argparse.Namespace) -> int:
     hook = spec.hook
     if hook is None:
-        raise RuntimeError(f"{spec.display} has no notify hook")
+        raise RuntimeError(f"{spec.display} has no notify hook")  # noqa: TRY003
     binary = shutil.which(spec.binary) or spec.binary
     agent = shutil.which(hook.agent.argv[0]) or hook.agent.argv[0]
     hook.installer.install([binary, "hook", "--agent", agent])
@@ -741,13 +741,12 @@ async def _cmd_install_hook(spec: HostSpec, args: argparse.Namespace) -> int:
 async def _cmd_remove_hook(spec: HostSpec, args: argparse.Namespace) -> int:
     hook = spec.hook
     if hook is None:
-        raise RuntimeError(f"{spec.display} has no notify hook")
+        raise RuntimeError(f"{spec.display} has no notify hook")  # noqa: TRY003
     hook.installer.remove(Path(spec.binary).name)
     print(f"removed notify hook from {hook.installer.path}")
     return 0
 
-
-
+async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
     """Register/inspect the existing OS-scheduled bridging task on Windows Task Scheduler.
 
     The parser registers this handler only when ``schedule_command`` supplies an
@@ -972,6 +971,7 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
         spec.register_extra(sub)
 
     if spec.hook is not None:
+        hook = spec.hook
         p = with_base(sub.add_parser("hook", help="Start one notify-triggered bridging run in the background"))
         p.add_argument("--agent", default="", help=f"Path to {hook.agent.argv[0]}")
         p.add_argument("payload", nargs="*", help=argparse.SUPPRESS)

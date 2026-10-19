@@ -7,9 +7,9 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
 
 from memu.hosts.bridging import Layout
 
@@ -43,8 +43,8 @@ def run_agent(agent: HeadlessAgent, layout: Layout, *, executable: str = "") -> 
     argv = [token.replace("{base}", str(layout.base)) for token in agent.argv]
     resolved = executable or shutil.which(argv[0])
     if not resolved:
-        raise RuntimeError(f"`{argv[0]}` is not on PATH")
-    result = subprocess.run(
+        raise RuntimeError(f"`{argv[0]}` is not on PATH")  # noqa: TRY003
+    result = subprocess.run(  # noqa: S603
         [resolved, *argv[1:]],
         input=jobs_prompt(layout),
         text=True,
@@ -60,7 +60,7 @@ def run_agent(agent: HeadlessAgent, layout: Layout, *, executable: str = "") -> 
     if result.stderr.strip():
         print(result.stderr.strip()[-4000:], file=sys.stderr)
     if result.returncode:
-        raise RuntimeError(f"`{argv[0]}` exited {result.returncode}")
+        raise RuntimeError(f"`{argv[0]}` exited {result.returncode}")  # noqa: TRY003
 
 
 def spawn_detached(argv: Sequence[str], layout: Layout) -> None:
@@ -69,7 +69,7 @@ def spawn_detached(argv: Sequence[str], layout: Layout) -> None:
     with log.open("a", encoding="utf-8") as output:
         output.write("\n=== hook run ===\n")
         output.flush()
-        subprocess.Popen(
+        subprocess.Popen(  # noqa: S603
             list(argv),
             stdin=subprocess.DEVNULL,
             stdout=output,
@@ -98,13 +98,15 @@ class CodexNotifyHook:
         if value is None:
             return None
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-            raise ValueError("Codex notify must be a string array")
+            raise ValueError("Codex notify must be a string array")  # noqa: TRY003
         return value
 
     def install(self, argv: list[str]) -> None:
         current = self._notify()
         if current is not None and current != argv:
-            raise ValueError(f"{self.path} already defines notify; remove it or use the notify-chain PR")
+            raise ValueError(  # noqa: TRY003
+                f"{self.path} already defines notify; remove it or use the notify-chain PR"
+            )
         text = self.path.read_text(encoding="utf-8") if self.path.exists() else ""
         if current == argv:
             return
