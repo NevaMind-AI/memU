@@ -1,0 +1,192 @@
+"""Visible notify diagnostics. Run by the installed CLI, never a generated script."""
+
+from __future__ import annotations
+
+import argparse
+import contextlib
+import errno
+import io
+import json
+import os
+import shlex
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import traceback
+from collections.abc import Iterator
+from pathlib import Path
+from typing import TextIO, cast
+
+from memu.hosts.bridging import Layout
+
+
+class _Tee(io.TextIOBase):
+    def __init__(self, terminal: TextIO, log: TextIO) -> None:
+        self.terminal = terminal
+        self.log = log
+
+    def write(self, text: str) -> int:
+        self.terminal.write(text)
+        self.log.write(text)
+        self.flush()
+        return len(text)
+
+    def flush(self) -> None:
+        if not self.terminal.closed:
+            self.terminal.flush()
+        if not self.log.closed:
+            self.log.flush()
+
+
+def launch(argv: list[str], layout: Layout, label: str, hold: bool) -> None:
+    layout.base.mkdir(parents=True, exist_ok=True)
+    command = [sys.executable, "-u", "-m", __name__, "--label", label]
+    if hold:
+        command.append("--hold")
+    command += ["--", *argv]
+    if sys.platform == "win32":
+        subprocess.Popen(command, cwd=layout.base, creationflags=subprocess.CREATE_NEW_CONSOLE)  # noqa: S603
+    elif sys.platform == "darwin":
+        script = 'tell application "Terminal" to do script ' + json.dumps(shlex.join(command))
+        subprocess.run(["osascript", "-e", script], check=True)  # noqa: S603, S607
+    else:
+        terminal = shutil.which("x-terminal-emulator") or shutil.which("xterm")
+        if not terminal:
+            raise RuntimeError("Diagnostic mode needs x-terminal-emulator or xterm")  # noqa: TRY003
+        subprocess.Popen([terminal, "-e", *command], cwd=layout.base, start_new_session=True)  # noqa: S603
+
+
+def _copy_output(stream: TextIO | None, log: TextIO | None, errors: list[Exception]) -> None:
+    try:
+        if stream is not None:
+            for line in stream:
+                if log is not None:
+                    log.write(line)
+                    log.flush()
+                print(line, end="", flush=True)
+    except Exception as exc:
+        errors.append(exc)
+
+
+def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> None:
+    # A file for stdin avoids a write/read pipe deadlock before the reader starts.
+    log_context = (
+        contextlib.nullcontext(None)
+        if isinstance(sys.stdout, _Tee)
+        else (layout.base / "hook.log").open("a", encoding="utf-8")
+    )
+    with tempfile.TemporaryFile() as source, log_context as log:
+        source.write(prompt.encode("utf-8"))
+        source.seek(0)
+        with subprocess.Popen(  # noqa: S603
+            argv,
+            stdin=source,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            cwd=layout.base,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            start_new_session=sys.platform != "win32",
+        ) as process:
+            errors: list[Exception] = []
+
+            reader = threading.Thread(target=_copy_output, args=(process.stdout, log, errors), daemon=True)
+            reader.start()
+            try:
+                code = process.wait(timeout=timeout)
+            except BaseException:
+                if sys.platform == "win32":
+                    subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], check=False)  # noqa: S603, S607
+                else:
+                    os.killpg(process.pid, signal.SIGKILL)
+                process.wait()
+                raise
+            finally:
+                reader.join(timeout=5)
+            if reader.is_alive():
+                raise RuntimeError("Agent output pipe did not close")  # noqa: TRY003
+            if errors:
+                raise errors[0]
+            if code:
+                raise RuntimeError(f"Agent exited {code}")  # noqa: TRY003
+
+
+@contextlib.contextmanager
+def _workspace_lock(base: Path) -> Iterator[None]:
+    """Serialize diagnostic workers; the OS releases the lock if a window closes."""
+    with (base / ".diagnostic.lock").open("a+b") as lock:
+        if lock.tell() == 0:
+            lock.write(b"0")
+            lock.flush()
+        lock.seek(0)
+        if sys.platform == "win32":
+            import msvcrt
+
+            while True:
+                try:
+                    msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError as exc:
+                    if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                        raise
+                    time.sleep(0.1)
+            try:
+                yield
+            finally:
+                lock.seek(0)
+                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--label", required=True)
+    parser.add_argument("--hold", action="store_true")
+    parser.add_argument("command", nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    command = args.command[1:]
+    base = Path(command[command.index("--base-dir") + 1]).expanduser()
+    base.mkdir(parents=True, exist_ok=True)
+
+    def report(message: str) -> None:
+        print(message, flush=True)
+        with (base / "hook.log").open("a", encoding="utf-8") as log:
+            log.write(message + "\n")
+
+    code = 1
+    report(f"=== START {args.label} pid={os.getpid()} ===")
+    try:
+        from memu.hosts.codex.cli import main as codex_main
+
+        report("Waiting for diagnostic workspace...")
+        with (
+            _workspace_lock(base),
+            (base / "hook.log").open("a", encoding="utf-8") as log,
+            contextlib.redirect_stdout(cast(TextIO, _Tee(sys.stdout, log))),
+            contextlib.redirect_stderr(cast(TextIO, _Tee(sys.stderr, log))),
+        ):
+            code = codex_main(command)
+    except Exception:
+        report(traceback.format_exc())
+    finally:
+        report(f"=== FINISHED {args.label} exit={code} ===")
+        if args.hold:
+            with contextlib.suppress(EOFError):
+                input("Press Enter to close this diagnostic session...")
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

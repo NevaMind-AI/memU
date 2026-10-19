@@ -50,6 +50,8 @@ HOOK = hooks.HookSpec(
         argv=(
             "codex",
             "exec",
+            "-c",
+            "notify=[]",
             "--json",
             "--skip-git-repo-check",
             "--dangerously-bypass-approvals-and-sandbox",

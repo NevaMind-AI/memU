@@ -40,17 +40,16 @@ def pending_jobs(layout: Layout) -> list[Path]:
     return sorted(layout.jobs.glob("*.txt"))
 
 
-def run_agent(
-    agent: HeadlessAgent,
-    layout: Layout,
-    *,
-    executable: str = "",
-    diagnostic: bool = False,
-) -> None:
+def run_agent(agent: HeadlessAgent, layout: Layout, *, executable: str = "", diagnostic: bool = False) -> None:
     argv = [token.replace("{base}", str(layout.base)) for token in agent.argv]
     resolved = executable or shutil.which(argv[0])
     if not resolved:
         raise RuntimeError(f"`{argv[0]}` is not on PATH")  # noqa: TRY003
+    if diagnostic:
+        from memu.hosts.hooks.diagnostic import stream_agent
+
+        stream_agent([resolved, *argv[1:]], layout, jobs_prompt(layout), agent.timeout_seconds)
+        return
     result = subprocess.run(  # noqa: S603
         [resolved, *argv[1:]],
         input=jobs_prompt(layout),
@@ -62,12 +61,6 @@ def run_agent(
         timeout=agent.timeout_seconds,
         check=False,
     )
-    if diagnostic:
-        log = layout.base / "hook.log"
-        with log.open("a", encoding="utf-8") as output:
-            output.write("\n=== diagnostic agent output ===\n")
-            output.write(result.stdout)
-            output.write(result.stderr)
     if result.stdout.strip():
         print(result.stdout.strip()[-2000:])
     if result.stderr.strip():
