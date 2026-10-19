@@ -19,6 +19,7 @@ class HeadlessAgent:
     argv: tuple[str, ...]
     timeout_seconds: int = 60 * 60
 
+
 @dataclass(frozen=True)
 class HookSpec:
     agent: HeadlessAgent

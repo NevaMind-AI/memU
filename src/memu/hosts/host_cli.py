@@ -746,6 +746,7 @@ async def _cmd_remove_hook(spec: HostSpec, args: argparse.Namespace) -> int:
     print(f"removed notify hook from {hook.installer.path}")
     return 0
 
+
 async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
     """Register/inspect the existing OS-scheduled bridging task on Windows Task Scheduler.
 
