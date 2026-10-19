@@ -98,7 +98,6 @@ def test_hook_passes_diagnostic_options(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
 def test_diagnostic_launch_platform(tmp_path, monkeypatch, platform):
-
     calls = []
     monkeypatch.setattr(notify_console.sys, "platform", platform)
     monkeypatch.setattr(notify_console.subprocess, "CREATE_NEW_CONSOLE", 16, raising=False)
