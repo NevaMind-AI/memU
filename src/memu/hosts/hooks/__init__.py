@@ -7,7 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +24,8 @@ class HeadlessAgent:
 class HookSpec:
     agent: HeadlessAgent
     installer: CodexNotifyHook
+    launch_console: Callable[[list[str], Layout, str, bool], None] | None = None
+    stream_output: Callable[[list[str], Layout, str, int], None] | None = None
 
 
 def jobs_prompt(layout: Layout) -> str:
@@ -40,11 +42,20 @@ def pending_jobs(layout: Layout) -> list[Path]:
     return sorted(layout.jobs.glob("*.txt"))
 
 
-def run_agent(agent: HeadlessAgent, layout: Layout, *, executable: str = "") -> None:
+def run_agent(
+    agent: HeadlessAgent,
+    layout: Layout,
+    *,
+    executable: str = "",
+    stream_output: Callable[[list[str], Layout, str, int], None] | None = None,
+) -> None:
     argv = [token.replace("{base}", str(layout.base)) for token in agent.argv]
     resolved = executable or shutil.which(argv[0])
     if not resolved:
         raise RuntimeError(f"`{argv[0]}` is not on PATH")  # noqa: TRY003
+    if stream_output is not None:
+        stream_output([resolved, *argv[1:]], layout, jobs_prompt(layout), agent.timeout_seconds)
+        return
     result = subprocess.run(  # noqa: S603
         [resolved, *argv[1:]],
         input=jobs_prompt(layout),

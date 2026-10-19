@@ -703,14 +703,26 @@ def _report_guide_opened(spec: HostSpec, event: str) -> None:
 
 
 async def _cmd_hook(spec: HostSpec, args: argparse.Namespace) -> int:
+    if args.diagnostic_home:
+        if not args.diagnostic:
+            raise ValueError("--diagnostic-home requires --diagnostic")  # noqa: TRY003
+        home = Path(args.diagnostic_home).expanduser().resolve()
+        os.environ.update(HOME=str(home), USERPROFILE=str(home), CODEX_HOME=str(home / ".codex"))
+        os.environ["MEMU_CONFIG_ENV"] = str(home / ".memu" / "config.env")
     hook = spec.hook
     if hook is None:
         raise RuntimeError(f"{spec.display} has no notify hook")  # noqa: TRY003
     layout = _layout(spec, args)
-    argv = [sys.executable, "-m", f"{spec.package}.cli", "hook-run", "--base-dir", str(layout.base)]
+    argv = ["hook-run", "--base-dir", str(layout.base), "--session-dir", args.session_dir]
     if args.agent:
         argv += ["--agent", args.agent]
-    hooks.spawn_detached(argv, layout)
+    if args.diagnostic:
+        if hook.launch_console is None:
+            raise ValueError(f"{spec.display} has no notify console")  # noqa: TRY003
+        argv.append("--diagnostic")
+        hook.launch_console(argv, layout, args.label, args.hold)
+    else:
+        hooks.spawn_detached([sys.executable, "-m", f"{spec.package}.cli", *argv], layout)
     return 0
 
 
@@ -723,7 +735,11 @@ async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
     if code:
         return code
     if hooks.pending_jobs(layout):
-        hooks.run_agent(hook.agent, layout, executable=args.agent)
+        if args.diagnostic and hook.stream_output is None:
+            raise ValueError(f"{spec.display} has no live agent output")  # noqa: TRY003
+        hooks.run_agent(
+            hook.agent, layout, executable=args.agent, stream_output=hook.stream_output if args.diagnostic else None
+        )
     return await _cmd_commit(spec, args)
 
 
@@ -733,7 +749,12 @@ async def _cmd_install_hook(spec: HostSpec, args: argparse.Namespace) -> int:
         raise RuntimeError(f"{spec.display} has no notify hook")  # noqa: TRY003
     binary = shutil.which(spec.binary) or spec.binary
     agent = shutil.which(hook.agent.argv[0]) or hook.agent.argv[0]
-    hook.installer.install([binary, "hook", "--agent", agent])
+    notify = [binary, "hook", "--agent", agent]
+    if args.diagnostic:
+        notify += ["--diagnostic", "--label", args.label]
+        if args.hold:
+            notify.append("--hold")
+    hook.installer.install(notify)
     print(f"installed notify hook in {hook.installer.path}")
     return 0
 
@@ -975,6 +996,13 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
         hook = spec.hook
         p = with_base(sub.add_parser("hook", help="Start one notify-triggered bridging run in the background"))
         p.add_argument("--agent", default="", help=f"Path to {hook.agent.argv[0]}")
+        p.add_argument("--session-dir", default=spec.session_dir, help=spec.session_help)
+        p.add_argument(
+            "--diagnostic", action="store_true", help="Open a visible diagnostic worker with live hook.log output"
+        )
+        p.add_argument("--hold", action="store_true", help="Keep the diagnostic window until Enter is pressed")
+        p.add_argument("--label", default="codex", help="Diagnostic session label (for example desktop-codex)")
+        p.add_argument("--diagnostic-home", default="", help="Use a prepared isolated HOME for diagnostics")
         p.add_argument("payload", nargs="*", help=argparse.SUPPRESS)
         p.set_defaults(handler=bind(_cmd_hook))
 
@@ -982,9 +1010,15 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
         p.add_argument("--session-dir", default=spec.session_dir, help=spec.session_help)
         p.add_argument("--max-jobs", type=int, default=MAX_JOBS)
         p.add_argument("--agent", default="", help=f"Path to {hook.agent.argv[0]}")
+        p.add_argument(
+            "--diagnostic", action="store_true", help="Tee agent output to hook.log and the foreground terminal"
+        )
         p.set_defaults(handler=bind(_cmd_hook_run))
 
         p = with_base(sub.add_parser("install-hook", help="Install the Codex notify hook"))
+        p.add_argument("--diagnostic", action="store_true", help="Install the visible diagnostic notify command")
+        p.add_argument("--hold", action="store_true", help="Keep diagnostic windows open after completion")
+        p.add_argument("--label", default="codex", help="Diagnostic session label")
         p.set_defaults(handler=bind(_cmd_install_hook))
 
         p = with_base(sub.add_parser("remove-hook", help="Remove the Codex notify hook"))
