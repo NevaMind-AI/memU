@@ -715,6 +715,8 @@ async def _cmd_hook(spec: HostSpec, args: argparse.Namespace) -> int:
             raise ValueError(f"{spec.display} has no notify console")  # noqa: TRY003
         argv.append("--console")
         hook.launch_console(argv, layout, args.label, args.hold)
+    elif hook.launch_background is not None:
+        hook.launch_background(argv, layout, args.label)
     else:
         hooks.spawn_detached([sys.executable, "-m", f"{spec.package}.cli", *argv], layout)
     return 0
@@ -731,9 +733,7 @@ async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
     if hooks.pending_jobs(layout):
         if args.console and hook.stream_output is None:
             raise ValueError(f"{spec.display} has no live agent output")  # noqa: TRY003
-        hooks.run_agent(
-            hook.agent, layout, executable=args.agent, stream_output=hook.stream_output if args.console else None
-        )
+        hooks.run_agent(hook.agent, layout, executable=args.agent, stream_output=hook.stream_output)
     return await _cmd_commit(spec, args)
 
 
@@ -744,6 +744,16 @@ async def _cmd_install_hook(spec: HostSpec, args: argparse.Namespace) -> int:
     binary = shutil.which(spec.binary) or spec.binary
     agent = shutil.which(hook.agent.argv[0]) or hook.agent.argv[0]
     notify = [binary, "hook", "--agent", agent]
+    if sys.platform == "win32":
+        # A GUI-subsystem entry avoids allocating a console before hook code runs.
+        notify = [
+            str(Path(sys.executable).with_name("pythonw.exe")),
+            "-m",
+            f"{spec.package}.cli",
+            "hook",
+            "--agent",
+            agent,
+        ]
     if args.console:
         notify += ["--console", "--label", args.label]
         if args.hold:

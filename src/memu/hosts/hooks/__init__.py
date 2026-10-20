@@ -24,6 +24,7 @@ class HeadlessAgent:
 class HookSpec:
     agent: HeadlessAgent
     installer: CodexNotifyHook
+    launch_background: Callable[[list[str], Layout, str], None] | None = None
     launch_console: Callable[[list[str], Layout, str, bool], None] | None = None
     stream_output: Callable[[list[str], Layout, str, int], None] | None = None
 
@@ -131,7 +132,15 @@ class CodexNotifyHook:
 
         text = self.path.read_text(encoding="utf-8") if self.path.exists() else ""
         current = self._notify()
-        if not current or Path(current[0]).name.removesuffix(".exe") != binary:
+        if not current:
+            return
+        owns_command = Path(current[0]).name.lower().removesuffix(".exe") == binary
+        owns_windowless = (
+            binary == "memu-codex"
+            and Path(current[0]).name.lower() == "pythonw.exe"
+            and current[1:4] == ["-m", "memu.hosts.codex.cli", "hook"]
+        )
+        if not (owns_command or owns_windowless):
             return
         updated = re.sub(r"(?m)^notify\s*=\s*\[[^\n]*\]\n?", "", text, count=1)
         tomllib.loads(updated)

@@ -122,8 +122,16 @@ Windows launches the installed Codex notify console worker
 (`memu.hosts.codex.notify_console`) in a new console. macOS uses
 Terminal; Linux requires `x-terminal-emulator` or `xterm`. Windows is the current
 manual validation platform; macOS/Linux launch argument branches have automated
-coverage only. `hook-run --console` runs in an existing terminal. Without
-`--console`, the background notify path is unchanged. The headless Codex
+coverage only. `hook-run --console` runs in an existing terminal.
+By default, Codex notify runs the same logged worker in the background. On Windows,
+the worker, agent, and timeout cleanup commands use `CREATE_NO_WINDOW`.
+`install-hook` registers the installed `pythonw.exe -m memu.hosts.codex.cli hook`
+entry on Windows so the notify callback itself does not allocate a console;
+existing notify configurations need to adopt that entry as well. Preserve any
+Desktop `turn-ended --previous-notify` chain when updating its memU command.
+macOS/Linux use native process sessions. Both modes stream full agent
+stdout/stderr to `hook.log` and record worker PID, errors and final exit status.
+The headless Codex
 invocation retains `--dangerously-bypass-approvals-and-sandbox` and overrides its
 own notify to `[]` to prevent recursive runs.
 
@@ -131,7 +139,7 @@ Console mode uses the normal HOME and memU backend configuration. Existing notif
 commands must replace `--diagnostic` with `--console` and remove
 `--diagnostic-home <path>` when upgrading from #742. Use
 `--base-dir` and `--session-dir` to select a workspace and session source.
-Console workers sharing a workspace run serially under an OS file lock; the lock
+Notify workers sharing a workspace run serially under an OS file lock; the lock
 is released before the Enter prompt and when the process exits. This slice does
 not add scheduling or per-turn deduplication.
 

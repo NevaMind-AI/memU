@@ -100,6 +100,9 @@ def test_hook_passes_console_options(tmp_path, monkeypatch):
 def test_console_launch_platform(tmp_path, monkeypatch, platform):
     calls = []
     monkeypatch.setattr(notify_console.sys, "platform", platform)
+    monkeypatch.setattr(
+        notify_console.sys, "executable", "/venv/pythonw.exe" if platform == "win32" else "/venv/python"
+    )
     monkeypatch.setattr(notify_console.subprocess, "CREATE_NEW_CONSOLE", 16, raising=False)
     monkeypatch.setattr(notify_console.shutil, "which", lambda _: "/usr/bin/xterm")
     monkeypatch.setattr(notify_console.subprocess, "Popen", lambda *a, **k: calls.append((a, k)))
@@ -110,6 +113,72 @@ def test_console_launch_platform(tmp_path, monkeypatch, platform):
     assert "cmd.exe" not in args[0]
     worker = args[0] if platform == "win32" else args[0][-1] if platform == "darwin" else args[0][2:]
     assert "memu.hosts.codex.notify_console" in worker
+    if platform == "win32":
+        assert args[0][0].endswith("python.exe")
+
+
+@pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
+def test_background_launch_has_no_console(tmp_path, monkeypatch, platform):
+    calls = []
+    monkeypatch.setattr(notify_console.sys, "platform", platform)
+    monkeypatch.setattr(notify_console.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    monkeypatch.setattr(notify_console.subprocess, "Popen", lambda *a, **k: calls.append((a, k)))
+    notify_console.launch_background(
+        ["hook-run", "--base-dir", str(tmp_path)], Layout.default("codex", tmp_path), "codex"
+    )
+    args, kwargs = calls[0]
+    assert "memu.hosts.codex.notify_console" in args[0]
+    assert "--hold" not in args[0]
+    assert kwargs["creationflags"] == (0x08000000 if platform == "win32" else 0)
+    assert kwargs["start_new_session"] == (platform != "win32")
+    assert all(kwargs[stream] == subprocess.DEVNULL for stream in ("stdin", "stdout", "stderr"))
+
+
+def test_background_hook_uses_packaged_worker(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from memu.hosts.codex import cli
+
+    calls = []
+    hook = replace(cli.HOOK, launch_background=lambda *args: calls.append(args))
+    monkeypatch.setattr(cli, "SPEC", replace(cli.SPEC, hook=hook))
+    assert cli.main(["hook", "--base-dir", str(tmp_path)]) == 0
+    argv, layout, label = calls[0]
+    assert argv[0] == "hook-run" and "--console" not in argv
+    assert layout.base == tmp_path and label == "codex"
+
+
+@pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
+def test_agent_launch_platform_flags(tmp_path, monkeypatch, platform):
+    import io
+
+    class Process:
+        pid = 123
+        stdout = io.StringIO("agent output\n")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+        def wait(self, timeout=None):
+            return 0
+
+    calls = []
+    monkeypatch.setattr(notify_console.sys, "platform", platform)
+    monkeypatch.setattr(notify_console.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+
+    def popen(*args, **kwargs):
+        calls.append((args, kwargs))
+        return Process()
+
+    monkeypatch.setattr(notify_console.subprocess, "Popen", popen)
+    notify_console.stream_agent(["codex", "exec"], Layout.default("codex", tmp_path), "test", 10)
+    args, kwargs = calls[0]
+    assert args[0] == ["codex", "exec"]
+    assert kwargs["creationflags"] == (0x08000000 if platform == "win32" else 0)
+    assert kwargs["start_new_session"] == (platform != "win32")
 
 
 def test_codex_notify_hook_installs_and_removes_its_own_command(tmp_path):
@@ -124,6 +193,41 @@ def test_codex_notify_hook_installs_and_removes_its_own_command(tmp_path):
     assert config.read_text() == ""
 
 
+@pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
+def test_install_hook_uses_windowless_python_only_on_windows(tmp_path, monkeypatch, platform):
+    import sys
+    from dataclasses import replace
+
+    from memu.hosts import host_cli
+    from memu.hosts.codex import cli
+
+    config = tmp_path / "config.toml"
+    hook = replace(cli.HOOK, installer=CodexNotifyHook(config))
+    monkeypatch.setattr(cli, "SPEC", replace(cli.SPEC, hook=hook))
+    monkeypatch.setattr(host_cli.sys, "platform", platform)
+    monkeypatch.setattr(host_cli.shutil, "which", lambda binary: binary)
+    assert cli.main(["install-hook"]) == 0
+    command = hook.installer._notify()
+    assert command is not None
+    if platform == "win32":
+        from pathlib import Path
+
+        assert command[:4] == [str(Path(sys.executable).with_name("pythonw.exe")), "-m", "memu.hosts.codex.cli", "hook"]
+    else:
+        assert command[:2] == ["memu-codex", "hook"]
+    hook.installer.remove("memu-codex")
+    assert hook.installer._notify() is None
+
+
+def test_uninstall_leaves_unrelated_pythonw_notify(tmp_path):
+    config = tmp_path / "config.toml"
+    hook = CodexNotifyHook(config)
+    command = ["pythonw.exe", "-m", "other.cli", "hook"]
+    hook.install(command)
+    hook.remove("memu-codex")
+    assert hook._notify() == command
+
+
 def test_codex_notify_hook_does_not_overwrite_existing_notify(tmp_path):
     config = tmp_path / "config.toml"
     config.write_text('notify = ["existing-notifier"]\n')
@@ -132,6 +236,25 @@ def test_codex_notify_hook_does_not_overwrite_existing_notify(tmp_path):
         CodexNotifyHook(config).install(["memu-codex", "hook"])
 
     assert config.read_text() == 'notify = ["existing-notifier"]\n'
+
+
+def test_background_worker_streams_full_output_to_log(tmp_path, monkeypatch):
+    import sys
+
+    def run(_argv):
+        run_agent(
+            HeadlessAgent((sys.executable, "-c", "import sys; print('x'*5000); print('stderr',file=sys.stderr)")),
+            Layout.default("codex", tmp_path),
+            stream_output=notify_console.stream_agent,
+        )
+        return 0
+
+    monkeypatch.setattr("memu.hosts.codex.cli.main", run)
+    monkeypatch.setattr(sys, "argv", ["worker", "--label", "test", "--", "hook-run", "--base-dir", str(tmp_path)])
+    assert notify_console.main() == 0
+    log = (tmp_path / "hook.log").read_text()
+    assert "x" * 5000 in log and log.splitlines().count("stderr") == 1
+    assert "FINISHED test exit=0" in log
 
 
 def test_console_window_logs_failure_and_holds(tmp_path, monkeypatch):
@@ -159,6 +282,7 @@ def test_headless_codex_disables_recursive_notify():
 
     assert "notify=[]" in HOOK.agent.argv
     assert "--dangerously-bypass-approvals-and-sandbox" in HOOK.agent.argv
+    assert HOOK.launch_background is notify_console.launch_background
     assert HOOK.launch_console is notify_console.launch
     assert HOOK.stream_output is notify_console.stream_agent
 

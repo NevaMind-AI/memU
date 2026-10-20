@@ -1,4 +1,4 @@
-"""Codex notify console worker: live agent output, hook.log, and an optional close prompt."""
+"""Codex notify worker: background or visible execution with complete hook.log output."""
 
 from __future__ import annotations
 
@@ -42,9 +42,25 @@ class _Tee(io.TextIOBase):
             self.log.flush()
 
 
+def launch_background(argv: list[str], layout: Layout, label: str) -> None:
+    """Run the logged worker independently of the notifying frontend's console."""
+    layout.base.mkdir(parents=True, exist_ok=True)
+    interpreter = str(Path(sys.executable).with_name("python.exe")) if sys.platform == "win32" else sys.executable
+    subprocess.Popen(  # noqa: S603
+        [interpreter, "-u", "-m", __name__, "--label", label, "--", *argv],
+        cwd=layout.base,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=sys.platform != "win32",
+        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+    )
+
+
 def launch(argv: list[str], layout: Layout, label: str, hold: bool) -> None:
     layout.base.mkdir(parents=True, exist_ok=True)
-    command = [sys.executable, "-u", "-m", __name__, "--label", label]
+    interpreter = str(Path(sys.executable).with_name("python.exe")) if sys.platform == "win32" else sys.executable
+    command = [interpreter, "-u", "-m", __name__, "--label", label]
     if hold:
         command.append("--hold")
     command += ["--", *argv]
@@ -92,7 +108,9 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
             encoding="utf-8",
             errors="replace",
             start_new_session=sys.platform != "win32",
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         ) as process:
+            print(f"=== AGENT pid={process.pid} parent={os.getpid()} argv={json.dumps(argv)} ===", flush=True)
             errors: list[Exception] = []
 
             reader = threading.Thread(target=_copy_output, args=(process.stdout, log, errors), daemon=True)
@@ -101,7 +119,11 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
                 code = process.wait(timeout=timeout)
             except BaseException:
                 if sys.platform == "win32":
-                    subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], check=False)  # noqa: S603, S607
+                    subprocess.run(  # noqa: S603
+                        ["taskkill", "/PID", str(process.pid), "/T", "/F"],  # noqa: S607
+                        check=False,
+                        creationflags=subprocess.CREATE_NO_WINDOW,
+                    )
                 else:
                     os.killpg(process.pid, signal.SIGKILL)
                 process.wait()
@@ -118,7 +140,7 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
 
 @contextlib.contextmanager
 def _workspace_lock(base: Path) -> Iterator[None]:
-    """Serialize diagnostic workers; the OS releases the lock if a window closes."""
+    """Serialize notify workers; the OS releases the lock if a process exits."""
     with (base / ".diagnostic.lock").open("a+b") as lock:
         if lock.tell() == 0:
             lock.write(b"0")
@@ -167,10 +189,11 @@ def main() -> int:
 
     code = 1
     report(f"=== START {args.label} pid={os.getpid()} ===")
+    report(f"worker parent={os.getppid()} source={__file__}")
     try:
         from memu.hosts.codex.cli import main as codex_main
 
-        report("Waiting for diagnostic workspace...")
+        report("Waiting for notify workspace...")
         with (
             _workspace_lock(base),
             (base / "hook.log").open("a", encoding="utf-8") as log,
