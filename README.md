@@ -144,12 +144,7 @@ retains the original Unicode text. Output read/write failures stop the agent and
 are reported as worker failures.
 The headless Codex
 invocation retains `--dangerously-bypass-approvals-and-sandbox` and overrides its
-own notify to `[]` to prevent recursive runs. When the agent emits its
-`thread.started` event, the worker records the thread UUID in
-`~/.memu/hosts/codex/.self_sessions.codex.json`. Later prepares skip that rollout
-while continuing to collect normal user sessions. Registration happens before
-agent completion, so an ID already received remains excluded after a nonzero exit
-or timeout.
+own notify to `[]` to prevent recursive runs.
 
 Console mode uses the normal HOME and memU backend configuration. Existing notify
 commands must replace `--diagnostic` with `--console` and remove
