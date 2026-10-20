@@ -125,9 +125,12 @@ manual validation platform; macOS/Linux launch argument branches have automated
 coverage only. `hook-run --console` runs in an existing terminal.
 By default, Codex notify runs the same logged worker in the background. On Windows,
 the worker, agent, and timeout cleanup commands use `CREATE_NO_WINDOW`.
-`install-hook` registers the installed `pythonw.exe -m memu.hosts.codex.cli hook`
-entry on Windows so the notify callback itself does not allocate a console;
-existing notify configurations need to adopt that entry as well. Preserve any
+`install-hook` registers the package-provided `memu-codex-notify hook` entry on
+Windows so the notify callback itself does not allocate a console. Standard
+Python package installers (including pip and uv) generate this entry from
+`[project.gui-scripts]`; notify configuration does not reference a Python
+interpreter. Existing notify configurations need to adopt that entry as well.
+Preserve any
 Desktop `turn-ended --previous-notify` chain when updating its memU command.
 macOS/Linux use native process sessions. Both modes stream full agent
 stdout/stderr to `hook.log` and record worker PID, errors and final exit status.

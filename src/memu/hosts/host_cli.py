@@ -741,19 +741,14 @@ async def _cmd_install_hook(spec: HostSpec, args: argparse.Namespace) -> int:
     hook = spec.hook
     if hook is None:
         raise RuntimeError(f"{spec.display} has no notify hook")  # noqa: TRY003
-    binary = shutil.which(spec.binary) or spec.binary
+    notify_binary = (
+        hook.windows_notify_binary if sys.platform == "win32" and hook.windows_notify_binary else spec.binary
+    )
+    binary = shutil.which(notify_binary)
+    if not binary:
+        raise RuntimeError(f"`{notify_binary}` is not on PATH; reinstall {spec.binary}")  # noqa: TRY003
     agent = shutil.which(hook.agent.argv[0]) or hook.agent.argv[0]
     notify = [binary, "hook", "--agent", agent]
-    if sys.platform == "win32":
-        # A GUI-subsystem entry avoids allocating a console before hook code runs.
-        notify = [
-            str(Path(sys.executable).with_name("pythonw.exe")),
-            "-m",
-            f"{spec.package}.cli",
-            "hook",
-            "--agent",
-            agent,
-        ]
     if args.console:
         notify += ["--console", "--label", args.label]
         if args.hold:

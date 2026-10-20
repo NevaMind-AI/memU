@@ -24,6 +24,7 @@ class HeadlessAgent:
 class HookSpec:
     agent: HeadlessAgent
     installer: CodexNotifyHook
+    windows_notify_binary: str = ""
     launch_background: Callable[[list[str], Layout, str], None] | None = None
     launch_console: Callable[[list[str], Layout, str, bool], None] | None = None
     stream_output: Callable[[list[str], Layout, str, int], None] | None = None
@@ -136,9 +137,7 @@ class CodexNotifyHook:
             return
         owns_command = Path(current[0]).name.lower().removesuffix(".exe") == binary
         owns_windowless = (
-            binary == "memu-codex"
-            and Path(current[0]).name.lower() == "pythonw.exe"
-            and current[1:4] == ["-m", "memu.hosts.codex.cli", "hook"]
+            binary == "memu-codex" and Path(current[0]).name.lower().removesuffix(".exe") == "memu-codex-notify"
         )
         if not (owns_command or owns_windowless):
             return

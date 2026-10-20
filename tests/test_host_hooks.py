@@ -194,8 +194,7 @@ def test_codex_notify_hook_installs_and_removes_its_own_command(tmp_path):
 
 
 @pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
-def test_install_hook_uses_windowless_python_only_on_windows(tmp_path, monkeypatch, platform):
-    import sys
+def test_install_hook_uses_windowless_package_entry_only_on_windows(tmp_path, monkeypatch, platform):
     from dataclasses import replace
 
     from memu.hosts import host_cli
@@ -210,13 +209,26 @@ def test_install_hook_uses_windowless_python_only_on_windows(tmp_path, monkeypat
     command = hook.installer._notify()
     assert command is not None
     if platform == "win32":
-        from pathlib import Path
-
-        assert command[:4] == [str(Path(sys.executable).with_name("pythonw.exe")), "-m", "memu.hosts.codex.cli", "hook"]
+        assert command[:2] == ["memu-codex-notify", "hook"]
     else:
         assert command[:2] == ["memu-codex", "hook"]
     hook.installer.remove("memu-codex")
     assert hook.installer._notify() is None
+
+
+def test_install_hook_missing_entry_leaves_config_untouched(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from memu.hosts import host_cli
+    from memu.hosts.codex import cli
+
+    config = tmp_path / "config.toml"
+    config.write_text('model = "test"\n')
+    hook = replace(cli.HOOK, installer=CodexNotifyHook(config))
+    monkeypatch.setattr(cli, "SPEC", replace(cli.SPEC, hook=hook))
+    monkeypatch.setattr(host_cli.shutil, "which", lambda _: None)
+    assert cli.main(["install-hook"]) == 1
+    assert config.read_text() == 'model = "test"\n'
 
 
 def test_uninstall_leaves_unrelated_pythonw_notify(tmp_path):
