@@ -63,6 +63,49 @@ def rig(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> tuple[FakeSo
     return FakeSource(logs), layout, service
 
 
+@pytest.mark.parametrize("tracks", [(), ("memory",), ("skill",), ("memory", "skill")])
+async def test_prepare_initializes_tracks_after_mirroring(rig, monkeypatch, tracks) -> None:
+    from unittest.mock import AsyncMock
+
+    import memu.hosts.bridging.pipeline as pipeline
+
+    source, layout, service = rig
+    pages = [
+        {
+            "recall_files": [{"name": f"test-{track}", "track": track, "description": "existing", "content": track}],
+            "next_cursor": str(index + 1) if index + 1 < len(tracks) else None,
+        }
+        for index, track in enumerate(tracks)
+    ] or [{"recall_files": [], "next_cursor": None}]
+    listing = AsyncMock(side_effect=pages)
+    monkeypatch.setattr(service, "list_all_recall_files", listing)
+    monkeypatch.setattr(pipeline.templates, "resolve", lambda _key, fallback: fallback)
+
+    assert await prepare(source, layout, verify_command="x verify-resources") == 1
+
+    for track in ("memory", "skill"):
+        directory = layout.base / track
+        files = list(directory.iterdir())
+        assert len(files) == (1 if track in tracks else 0)
+        if files:
+            assert files[0].read_text(encoding="utf-8") == (
+                f"---\nname: test-{track}\ndescription: existing\n---\n{track}"
+            )
+    assert [call.kwargs["cursor"] for call in listing.await_args_list] == [
+        None,
+        *[str(index) for index in range(1, len(pages))],
+    ]
+    assert len(list(layout.jobs.glob("*.txt"))) == 3
+
+    await commit(layout)
+
+    assert service.committed == [{"recall_files": [], "resource": []}]
+    assert layout.session_manifest.exists()
+    assert not layout.session_manifest_pending.exists()
+    assert list(layout.jobs.glob("*.txt")) == []
+    assert list(layout.sessions.glob("*.jsonl")) == []
+
+
 async def test_bare_prepare_leaves_the_promoted_cursor_untouched(rig) -> None:
     source, layout, _ = rig
 

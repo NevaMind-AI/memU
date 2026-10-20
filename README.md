@@ -95,6 +95,10 @@ Once the scheduled bridging task is installed, memU can turn useful agent histor
 
 The judgment and synthesis stay inside the agent. `MemoryService` makes no LLM or chat calls; it stores, embeds, and retrieves the skill Markdown the agent prepared.
 
+`prepare` mirrors the backend's existing memory and skill files into the host
+workspace and ensures both `memory/` and `skill/` directories exist, including
+when a track is empty, before generating the evolve jobs.
+
 ## Codex notify console
 
 To open a console with live output, configure the Codex notify command to invoke the
