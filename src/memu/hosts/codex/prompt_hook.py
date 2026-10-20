@@ -53,7 +53,9 @@ def _retrieve(trace: dict[str, Any]) -> None:
     if not prompt.strip():
         trace["status"] = "empty_prompt"
         return
-    flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    flags = 0
+    if sys.platform == "win32":
+        flags = subprocess.CREATE_NO_WINDOW
     # Invoke the installed memu-codex entry point without relying on the host's PATH.
     retrieve_started = time.monotonic()
     try:
