@@ -133,7 +133,11 @@ interpreter. Existing notify configurations need to adopt that entry as well.
 Preserve any
 Desktop `turn-ended --previous-notify` chain when updating its memU command.
 macOS/Linux use native process sessions. Both modes stream full agent
-stdout/stderr to `hook.log` and record worker PID, errors and final exit status.
+stdout/stderr to UTF-8 `hook.log` and record worker PID, errors and final exit status.
+Background mode writes directly to the log without forwarding output to a terminal.
+Console characters that the terminal cannot display are escaped there; the log
+retains the original Unicode text. Output read/write failures stop the agent and
+are reported as worker failures.
 The headless Codex
 invocation retains `--dangerously-bypass-approvals-and-sandbox` and overrides its
 own notify to `[]` to prevent recursive runs.

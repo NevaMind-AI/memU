@@ -128,7 +128,7 @@ def test_background_launch_has_no_console(tmp_path, monkeypatch, platform):
     )
     args, kwargs = calls[0]
     assert "memu.hosts.codex.notify_console" in args[0]
-    assert "--hold" not in args[0]
+    assert "--hold" not in args[0] and "--background" in args[0]
     assert kwargs["creationflags"] == (0x08000000 if platform == "win32" else 0)
     assert kwargs["start_new_session"] == (platform != "win32")
     assert all(kwargs[stream] == subprocess.DEVNULL for stream in ("stdin", "stdout", "stderr"))
@@ -250,7 +250,7 @@ def test_codex_notify_hook_does_not_overwrite_existing_notify(tmp_path):
     assert config.read_text() == 'notify = ["existing-notifier"]\n'
 
 
-def test_background_worker_streams_full_output_to_log(tmp_path, monkeypatch):
+def test_background_worker_streams_full_output_to_log(tmp_path, monkeypatch, capsys):
     import sys
 
     def run(_argv):
@@ -262,11 +262,89 @@ def test_background_worker_streams_full_output_to_log(tmp_path, monkeypatch):
         return 0
 
     monkeypatch.setattr("memu.hosts.codex.cli.main", run)
-    monkeypatch.setattr(sys, "argv", ["worker", "--label", "test", "--", "hook-run", "--base-dir", str(tmp_path)])
+    monkeypatch.setattr(
+        sys, "argv", ["worker", "--label", "test", "--background", "--", "hook-run", "--base-dir", str(tmp_path)]
+    )
     assert notify_console.main() == 0
+    assert capsys.readouterr() == ("", "")
     log = (tmp_path / "hook.log").read_text()
     assert "x" * 5000 in log and log.splitlines().count("stderr") == 1
     assert "FINISHED test exit=0" in log
+
+
+@pytest.mark.parametrize("background", [True, False])
+def test_worker_logs_unicode_once_under_module_execution(tmp_path, background):
+    import sys
+
+    message = "中文日志 \ue6c6 😀"
+    script = """
+import io, runpy, sys
+from memu.hosts.codex import cli, notify_console
+from memu.hosts.bridging import Layout
+sys.stdout = io.TextIOWrapper(io.BytesIO(), encoding="gbk", errors="strict")
+sys.stderr = io.TextIOWrapper(io.BytesIO(), encoding="gbk", errors="strict")
+agent, base, message, *flags = sys.argv[1:]
+def run(argv, agent=agent, base=base, message=message):
+    notify_console.stream_agent([sys.executable, "-c", agent], Layout.default("codex", base), "test", 10)
+    print("worker final report: " + message)
+    return 0
+cli.main = run
+sys.argv = ["worker", "--label", "unicode", *flags, "--", "hook-run", "--base-dir", base]
+runpy.run_module("memu.hosts.codex.notify_console", run_name="__main__")
+"""
+    agent = (
+        f"import sys; sys.stdout.buffer.write({(message + chr(10)).encode()!r}); "
+        f"sys.stderr.buffer.write({('stderr: ' + message + chr(10)).encode()!r})"
+    )
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", script, agent, str(tmp_path), message, *(["--background"] if background else [])],
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    log = (tmp_path / "hook.log").read_text(encoding="utf-8")
+    assert log.splitlines().count(message) == 1
+    assert log.splitlines().count("stderr: " + message) == 1
+    assert "worker final report: " + message in log
+    assert "FINISHED unicode exit=0" in log
+
+
+def test_agent_output_failure_stops_waiting_and_cleans_up(tmp_path, monkeypatch):
+    import io
+    import sys
+    import time
+
+    class BrokenTerminal(io.StringIO):
+        def write(self, text):
+            if text.startswith("agent output"):
+                raise OSError("output sink failed")  # noqa: TRY003
+            return super().write(text)
+
+    processes = []
+    popen = subprocess.Popen
+
+    def capture_process(*args, **kwargs):
+        process = popen(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(notify_console.subprocess, "Popen", capture_process)
+    monkeypatch.setattr(sys, "stdout", BrokenTerminal())
+    started = time.monotonic()
+    with pytest.raises(OSError, match="output sink failed"):
+        notify_console.stream_agent(
+            [
+                sys.executable,
+                "-c",
+                "import time; print('agent output',flush=True); print('x'*1000000,flush=True); time.sleep(30)",
+            ],
+            Layout.default("codex", tmp_path),
+            "test",
+            5,
+        )
+    assert time.monotonic() - started < 4
+    assert processes[0].poll() is not None
 
 
 def test_console_window_logs_failure_and_holds(tmp_path, monkeypatch):

@@ -28,10 +28,16 @@ class _Tee(io.TextIOBase):
     def __init__(self, terminal: TextIO, log: TextIO) -> None:
         self.terminal = terminal
         self.log = log
+        if isinstance(terminal, io.TextIOWrapper):
+            terminal.reconfigure(errors="backslashreplace")
+
+    @property
+    def name(self) -> str:
+        return str(self.log.name)
 
     def write(self, text: str) -> int:
-        self.terminal.write(text)
         self.log.write(text)
+        self.terminal.write(text)
         self.flush()
         return len(text)
 
@@ -47,7 +53,7 @@ def launch_background(argv: list[str], layout: Layout, label: str) -> None:
     layout.base.mkdir(parents=True, exist_ok=True)
     interpreter = str(Path(sys.executable).with_name("python.exe")) if sys.platform == "win32" else sys.executable
     subprocess.Popen(  # noqa: S603
-        [interpreter, "-u", "-m", __name__, "--label", label, "--", *argv],
+        [interpreter, "-u", "-m", __name__, "--label", label, "--background", "--", *argv],
         cwd=layout.base,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
@@ -90,9 +96,10 @@ def _copy_output(stream: TextIO | None, log: TextIO | None, errors: list[Excepti
 
 def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> None:
     # A file for stdin avoids a write/read pipe deadlock before the reader starts.
+    # Match the sink across both module imports and execution as __main__.
     log_context = (
         contextlib.nullcontext(None)
-        if isinstance(sys.stdout, _Tee)
+        if getattr(sys.stdout, "name", None) == str(layout.base / "hook.log")
         else (layout.base / "hook.log").open("a", encoding="utf-8")
     )
     with tempfile.TemporaryFile() as source, log_context as log:
@@ -110,13 +117,20 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
             start_new_session=sys.platform != "win32",
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         ) as process:
-            print(f"=== AGENT pid={process.pid} parent={os.getpid()} argv={json.dumps(argv)} ===", flush=True)
             errors: list[Exception] = []
 
             reader = threading.Thread(target=_copy_output, args=(process.stdout, log, errors), daemon=True)
+            deadline = time.monotonic() + timeout
             reader.start()
             try:
-                code = process.wait(timeout=timeout)
+                print(f"=== AGENT pid={process.pid} parent={os.getpid()} argv={json.dumps(argv)} ===", flush=True)
+                # A failed reader must stop the agent before its output pipe fills.
+                reader.join(timeout=timeout)
+                if errors:
+                    raise errors[0]  # noqa: TRY301
+                if reader.is_alive():
+                    raise subprocess.TimeoutExpired(argv, timeout)  # noqa: TRY301
+                code = process.wait(timeout=max(0, deadline - time.monotonic()))
             except BaseException:
                 if sys.platform == "win32":
                     subprocess.run(  # noqa: S603
@@ -132,8 +146,6 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
                 reader.join(timeout=5)
             if reader.is_alive():
                 raise RuntimeError("Agent output pipe did not close")  # noqa: TRY003
-            if errors:
-                raise errors[0]
             if code:
                 raise RuntimeError(f"Agent exited {code}")  # noqa: TRY003
 
@@ -176,6 +188,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--label", required=True)
     parser.add_argument("--hold", action="store_true")
+    parser.add_argument("--background", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:]
@@ -183,9 +196,11 @@ def main() -> int:
     base.mkdir(parents=True, exist_ok=True)
 
     def report(message: str) -> None:
-        print(message, flush=True)
+        message = f"[{time.strftime('%Y-%m-%d %H:%M:%S%z')}] {message}"
         with (base / "hook.log").open("a", encoding="utf-8") as log:
             log.write(message + "\n")
+        if not args.background:
+            print(message, flush=True)
 
     code = 1
     report(f"=== START {args.label} pid={os.getpid()} ===")
@@ -196,9 +211,9 @@ def main() -> int:
         report("Waiting for notify workspace...")
         with (
             _workspace_lock(base),
-            (base / "hook.log").open("a", encoding="utf-8") as log,
-            contextlib.redirect_stdout(cast(TextIO, _Tee(sys.stdout, log))),
-            contextlib.redirect_stderr(cast(TextIO, _Tee(sys.stderr, log))),
+            (base / "hook.log").open("a", encoding="utf-8", buffering=1) as log,
+            contextlib.redirect_stdout(log if args.background else cast(TextIO, _Tee(sys.stdout, log))),
+            contextlib.redirect_stderr(log if args.background else cast(TextIO, _Tee(sys.stderr, log))),
         ):
             code = codex_main(command)
     except Exception:
