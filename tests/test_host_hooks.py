@@ -38,10 +38,12 @@ def test_console_agent_output_is_live(tmp_path, capsys):
         try:
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
-                log = tmp_path / "hook.log"
-                if log.exists() and "agent stderr" in log.read_text():
+                logs = list((tmp_path / "log").glob("*.log"))
+                if logs and "agent stderr" in logs[0].read_text():
                     break
                 time.sleep(0.01)
+            assert len(logs) == 1
+            log = logs[0]
             assert "agent stdout" in log.read_text()
             assert "agent stderr" in log.read_text()
             assert not future.done()
@@ -67,7 +69,7 @@ def test_console_agent_failure_and_timeout(tmp_path, script, timeout, error):
             Layout.default("codex", tmp_path),
             stream_output=notify_console.stream_agent,
         )
-    assert (tmp_path / "hook.log").read_text()
+    assert next((tmp_path / "log").glob("*.log")).read_text()
 
 
 def test_hook_passes_console_options(tmp_path, monkeypatch):
@@ -267,13 +269,16 @@ def test_background_worker_streams_full_output_to_log(tmp_path, monkeypatch, cap
     )
     assert notify_console.main() == 0
     assert capsys.readouterr() == ("", "")
-    log = (tmp_path / "hook.log").read_text()
+    logs = list((tmp_path / "log").glob("*.log"))
+    assert len(logs) == 1
+    log = logs[0].read_text()
     assert "x" * 5000 in log and log.splitlines().count("stderr") == 1
     assert "FINISHED test exit=0" in log
 
 
 @pytest.mark.parametrize("background", [True, False])
 def test_worker_logs_unicode_once_under_module_execution(tmp_path, background):
+    import re
     import sys
 
     message = "中文日志 \ue6c6 😀"
@@ -292,22 +297,44 @@ cli.main = run
 sys.argv = ["worker", "--label", "unicode", *flags, "--", "hook-run", "--base-dir", base]
 runpy.run_module("memu.hosts.codex.notify_console", run_name="__main__")
 """
-    agent = (
-        f"import sys; sys.stdout.buffer.write({(message + chr(10)).encode()!r}); "
-        f"sys.stderr.buffer.write({('stderr: ' + message + chr(10)).encode()!r})"
-    )
-    result = subprocess.run(  # noqa: S603
-        [sys.executable, "-c", script, agent, str(tmp_path), message, *(["--background"] if background else [])],
-        capture_output=True,
-        timeout=20,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr.decode(errors="replace")
-    log = (tmp_path / "hook.log").read_text(encoding="utf-8")
-    assert log.splitlines().count(message) == 1
-    assert log.splitlines().count("stderr: " + message) == 1
-    assert "worker final report: " + message in log
-    assert "FINISHED unicode exit=0" in log
+    historical = tmp_path / "hook.log"
+    historical.write_bytes(b"historical log\n")
+    previous_logs = set((tmp_path / "log").glob("*.log"))
+    for number in range(2):
+        run_message = f"{message} run-{number}"
+        agent = (
+            f"import sys; sys.stdout.buffer.write({(run_message + chr(10)).encode()!r}); "
+            f"sys.stderr.buffer.write({('stderr: ' + run_message + chr(10)).encode()!r})"
+        )
+        result = subprocess.run(  # noqa: S603
+            [
+                sys.executable,
+                "-c",
+                script,
+                agent,
+                str(tmp_path),
+                run_message,
+                *(["--background"] if background else []),
+            ],
+            capture_output=True,
+            timeout=20,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr.decode(errors="replace")
+        logs = set((tmp_path / "log").glob("*.log"))
+        new_logs = logs - previous_logs
+        assert len(new_logs) == 1
+        path = new_logs.pop()
+        assert re.fullmatch(r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{6}-\d+\.log", path.name)
+        log = path.read_text(encoding="utf-8")
+        assert log.splitlines().count(run_message) == 1
+        assert log.splitlines().count("stderr: " + run_message) == 1
+        assert "worker final report: " + run_message in log
+        assert "FINISHED unicode exit=0" in log
+        assert f"run-{1 - number}" not in log
+        previous_logs = logs
+    assert len(previous_logs) == 2
+    assert historical.read_bytes() == b"historical log\n"
 
 
 def test_agent_output_failure_stops_waiting_and_cleans_up(tmp_path, monkeypatch):
@@ -361,7 +388,7 @@ def test_console_window_logs_failure_and_holds(tmp_path, monkeypatch):
         sys, "argv", ["diagnostic", "--label", "desktop-codex", "--hold", "--", "hook-run", "--base-dir", str(tmp_path)]
     )
     assert notify_console.main() == 2
-    log = (tmp_path / "hook.log").read_text()
+    log = next((tmp_path / "log").glob("*.log")).read_text()
     assert "prepare failed" in log
     assert "FINISHED desktop-codex exit=2" in log
     assert len(held) == 1

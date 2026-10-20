@@ -1,4 +1,4 @@
-"""Codex notify worker: background or visible execution with complete hook.log output."""
+"""Codex notify worker: background or visible execution with complete per-run logs."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ import threading
 import time
 import traceback
 from collections.abc import Iterator
+from datetime import datetime
 from pathlib import Path
 from typing import TextIO, cast
 
@@ -85,6 +86,14 @@ def launch(argv: list[str], layout: Layout, label: str, hold: bool) -> None:
         subprocess.Popen([terminal, "-e", *command], cwd=layout.base, start_new_session=True)  # noqa: S603
 
 
+def _new_log_path(base: Path) -> Path:
+    directory = base / "log"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{datetime.now():%Y-%m-%d_%H-%M-%S.%f}-{os.getpid()}.log"
+    path.touch(exist_ok=False)
+    return path
+
+
 def _copy_output(stream: TextIO | None, log: TextIO | None, errors: list[Exception]) -> None:
     try:
         if stream is not None:
@@ -100,10 +109,11 @@ def _copy_output(stream: TextIO | None, log: TextIO | None, errors: list[Excepti
 def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> None:
     # A file for stdin avoids a write/read pipe deadlock before the reader starts.
     # Match the sink across both module imports and execution as __main__.
+    name = getattr(sys.stdout, "name", None)
     log_context = (
         contextlib.nullcontext(None)
-        if getattr(sys.stdout, "name", None) == str(layout.base / "hook.log")
-        else (layout.base / "hook.log").open("a", encoding="utf-8")
+        if isinstance(name, str) and Path(name).parent == layout.base / "log"
+        else _new_log_path(layout.base).open("a", encoding="utf-8", buffering=1)
     )
     flags = 0
     if sys.platform == "win32":
@@ -199,11 +209,11 @@ def main() -> int:
     args = parser.parse_args()
     command = args.command[1:]
     base = Path(command[command.index("--base-dir") + 1]).expanduser()
-    base.mkdir(parents=True, exist_ok=True)
+    log_path = _new_log_path(base)
 
     def report(message: str) -> None:
         message = f"[{time.strftime('%Y-%m-%d %H:%M:%S%z')}] {message}"
-        with (base / "hook.log").open("a", encoding="utf-8") as log:
+        with log_path.open("a", encoding="utf-8") as log:
             log.write(message + "\n")
         if not args.background:
             print(message, flush=True)
@@ -217,7 +227,7 @@ def main() -> int:
         report("Waiting for notify workspace...")
         with (
             _workspace_lock(base),
-            (base / "hook.log").open("a", encoding="utf-8", buffering=1) as log,
+            log_path.open("a", encoding="utf-8", buffering=1) as log,
             contextlib.redirect_stdout(log if args.background else cast(TextIO, _Tee(sys.stdout, log))),
             contextlib.redirect_stderr(log if args.background else cast(TextIO, _Tee(sys.stderr, log))),
         ):

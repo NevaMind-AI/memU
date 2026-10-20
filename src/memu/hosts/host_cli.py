@@ -996,7 +996,7 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
         p = with_base(sub.add_parser("hook", help="Start one notify-triggered bridging run in the background"))
         p.add_argument("--agent", default="", help=f"Path to {hook.agent.argv[0]}")
         p.add_argument("--session-dir", default=spec.session_dir, help=spec.session_help)
-        p.add_argument("--console", action="store_true", help="Open a visible console worker with live hook.log output")
+        p.add_argument("--console", action="store_true", help="Open a visible console worker with live run-log output")
         p.add_argument("--hold", action="store_true", help="Keep the console window until Enter is pressed")
         p.add_argument("--label", default="codex", help="Console run label")
         p.add_argument("payload", nargs="*", help=argparse.SUPPRESS)
@@ -1007,7 +1007,7 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
         p.add_argument("--max-jobs", type=int, default=MAX_JOBS)
         p.add_argument("--agent", default="", help=f"Path to {hook.agent.argv[0]}")
         p.add_argument(
-            "--console", action="store_true", help="Tee agent output to hook.log and the foreground terminal"
+            "--console", action="store_true", help="Tee agent output to the run log and the foreground terminal"
         )
         p.set_defaults(handler=bind(_cmd_hook_run))
 

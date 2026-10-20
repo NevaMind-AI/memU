@@ -114,8 +114,12 @@ Each invocation opens a console worker. `--label` names the run; use `codex`
 when CLI and Desktop share the same notify configuration. It does not detect the
 source or filter events.
 Agent stdout and stderr are merged and streamed live to the window and
-`~/.memu/hosts/codex/hook.log`. Start/end markers include the worker PID and exit
-code. `--hold` waits for Enter even on a failed run. Closing an active console
+`~/.memu/hosts/codex/log/<timestamp>-<pid>.log`. Each worker gets one UTF-8 log,
+created before waiting for the workspace lock. For example:
+`log/2026-10-20_10-25-04.123456-12345.log`. Start/end markers include the worker PID and exit
+code. Existing `hook.log` files remain as historical logs; new Codex notify runs
+write only to their individual files. Logs are retained for inspection and manual
+cleanup. `--hold` waits for Enter even on a failed run. Closing an active console
 window may interrupt its worker; wait for the end marker before closing it.
 
 Windows launches the installed Codex notify console worker
@@ -133,7 +137,7 @@ interpreter. Existing notify configurations need to adopt that entry as well.
 Preserve any
 Desktop `turn-ended --previous-notify` chain when updating its memU command.
 macOS/Linux use native process sessions. Both modes stream full agent
-stdout/stderr to UTF-8 `hook.log` and record worker PID, errors and final exit status.
+stdout/stderr to the run's UTF-8 log and record worker PID, errors and final exit status.
 Background mode writes directly to the log without forwarding output to a terminal.
 Console characters that the terminal cannot display are escaped there; the log
 retains the original Unicode text. Output read/write failures stop the agent and
