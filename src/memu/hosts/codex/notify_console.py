@@ -21,8 +21,9 @@ from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from typing import TextIO, cast
+from uuid import UUID
 
-from memu.hosts.bridging import Layout
+from memu.hosts.bridging import Layout, self_sessions
 
 
 class _Tee(io.TextIOBase):
@@ -94,10 +95,28 @@ def _new_log_path(base: Path) -> Path:
     return path
 
 
-def _copy_output(stream: TextIO | None, log: TextIO | None, errors: list[Exception]) -> None:
+def _remember_thread(line: str, layout: Layout) -> None:
+    try:
+        event = json.loads(line)
+    except json.JSONDecodeError:
+        return
+    if not isinstance(event, dict) or event.get("type") != "thread.started":
+        return
+    thread_id = event.get("thread_id")
+    if not isinstance(thread_id, str):
+        return
+    try:
+        session_id = str(UUID(thread_id))
+    except ValueError:
+        return
+    self_sessions.remember(layout.self_sessions, session_id)
+
+
+def _copy_output(stream: TextIO | None, log: TextIO | None, errors: list[Exception], layout: Layout) -> None:
     try:
         if stream is not None:
             for line in stream:
+                _remember_thread(line, layout)
                 if log is not None:
                     log.write(line)
                     log.flush()
@@ -135,7 +154,7 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
         ) as process:
             errors: list[Exception] = []
 
-            reader = threading.Thread(target=_copy_output, args=(process.stdout, log, errors), daemon=True)
+            reader = threading.Thread(target=_copy_output, args=(process.stdout, log, errors, layout), daemon=True)
             deadline = time.monotonic() + timeout
             reader.start()
             try:

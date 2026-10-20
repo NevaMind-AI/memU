@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import subprocess
 
 import pytest
@@ -23,8 +24,10 @@ def test_console_agent_output_is_live(tmp_path, capsys):
     import time
 
     layout = Layout.default("codex", tmp_path)
+    thread_id = "01a15739-1522-7003-b1d4-c13585d5ac95"
     script = (
         "import sys,time,pathlib; sys.stdin.read(); "
+        f"print({json.dumps({'type': 'thread.started', 'thread_id': thread_id})!r},flush=True); "
         "print('agent stdout',flush=True); print('agent stderr',file=sys.stderr,flush=True); "
         "\nwhile not pathlib.Path('release').exists(): time.sleep(.01)"
     )
@@ -46,6 +49,7 @@ def test_console_agent_output_is_live(tmp_path, capsys):
             log = logs[0]
             assert "agent stdout" in log.read_text()
             assert "agent stderr" in log.read_text()
+            assert json.loads(layout.self_sessions.read_text()) == [thread_id]
             assert not future.done()
         finally:
             (tmp_path / "release").touch()
@@ -70,6 +74,56 @@ def test_console_agent_failure_and_timeout(tmp_path, script, timeout, error):
             stream_output=notify_console.stream_agent,
         )
     assert next((tmp_path / "log").glob("*.log")).read_text()
+
+
+@pytest.mark.parametrize("ending", ["pass", "sys.exit(7)", "time.sleep(30)"])
+def test_agent_thread_is_excluded_from_next_prepare(tmp_path, ending):
+    import contextlib
+    import sys
+
+    from memu.hosts.bridging import self_sessions
+    from memu.hosts.bridging.transcripts import prepare_transcripts
+    from memu.hosts.codex.sessions import CodexTranscriptSource
+
+    layout = Layout.default("codex", tmp_path)
+    thread_id = "01a15739-1522-7003-b1d4-c13585d5ac95"
+    user_id = "01a15738-c76e-7661-a46c-6e3126d0d81a"
+    event = json.dumps({"type": "thread.started", "thread_id": thread_id})
+    script = (
+        "import sys,time; "
+        "print('startup warning',flush=True); print('[]',flush=True); "
+        "print('{broken',flush=True); "
+        'print(\'{"type":"thread.started","thread_id":""}\',flush=True); '
+        f"print({event!r},flush=True); print({event!r},flush=True); {ending}"
+    )
+    error = subprocess.TimeoutExpired if ending.startswith("time.sleep") else RuntimeError
+    expected = contextlib.nullcontext() if ending == "pass" else pytest.raises(error)
+    with expected:
+        notify_console.stream_agent([sys.executable, "-c", script], layout, "test", 1)
+    assert self_sessions.load(layout.self_sessions) == [thread_id]
+    assert event in next((tmp_path / "log").glob("*.log")).read_text()
+
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    for session_id, text in [(user_id, "new user content"), (thread_id, "background bookkeeping")]:
+        path = source_dir / f"rollout-2026-10-20T10-52-01-{session_id}.jsonl"
+        path.write_text(json.dumps({"payload": {"type": "message", "role": "user", "content": text}}) + "\n")
+    source = CodexTranscriptSource(source_dir)
+    assert (
+        prepare_transcripts(
+            source,
+            layout.sessions,
+            layout.session_manifest,
+            10,
+            layout.session_manifest_pending,
+            skip_sessions=self_sessions.load(layout.self_sessions),
+        )
+        == 1
+    )
+    assert "new user content" in (layout.sessions / "1.jsonl").read_text()
+    assert "background bookkeeping" not in (layout.sessions / "1_full.jsonl").read_text()
+    pending = json.loads(layout.session_manifest_pending.read_text())
+    assert len(pending) == 1 and user_id in next(iter(pending))
 
 
 def test_hook_passes_console_options(tmp_path, monkeypatch):
