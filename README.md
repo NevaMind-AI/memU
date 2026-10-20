@@ -114,16 +114,35 @@ Each invocation opens a console worker. `--label` names the run; use `codex`
 when CLI and Desktop share the same notify configuration. It does not detect the
 source or filter events.
 Agent stdout and stderr are merged and streamed live to the window and
-`~/.memu/hosts/codex/hook.log`. Start/end markers include the worker PID and exit
-code. `--hold` waits for Enter even on a failed run. Closing an active console
+`~/.memu/hosts/codex/log/<timestamp>-<pid>.log`. Each worker gets one UTF-8 log,
+created before waiting for the workspace lock. For example:
+`log/2026-10-20_10-25-04.123456-12345.log`. Start/end markers include the worker PID and exit
+code. Existing `hook.log` files remain as historical logs; new Codex notify runs
+write only to their individual files. Logs are retained for inspection and manual
+cleanup. `--hold` waits for Enter even on a failed run. Closing an active console
 window may interrupt its worker; wait for the end marker before closing it.
 
 Windows launches the installed Codex notify console worker
 (`memu.hosts.codex.notify_console`) in a new console. macOS uses
 Terminal; Linux requires `x-terminal-emulator` or `xterm`. Windows is the current
 manual validation platform; macOS/Linux launch argument branches have automated
-coverage only. `hook-run --console` runs in an existing terminal. Without
-`--console`, the background notify path is unchanged. The headless Codex
+coverage only. `hook-run --console` runs in an existing terminal.
+By default, Codex notify runs the same logged worker in the background. On Windows,
+the worker, agent, and timeout cleanup commands use `CREATE_NO_WINDOW`.
+`install-hook` registers the package-provided `memu-codex-notify hook` entry on
+Windows so the notify callback itself does not allocate a console. Standard
+Python package installers (including pip and uv) generate this entry from
+`[project.gui-scripts]`; notify configuration does not reference a Python
+interpreter. Existing notify configurations need to adopt that entry as well.
+Preserve any
+Desktop `turn-ended --previous-notify` chain when updating its memU command.
+macOS/Linux use native process sessions. Both modes stream full agent
+stdout/stderr to the run's UTF-8 log and record worker PID, errors and final exit status.
+Background mode writes directly to the log without forwarding output to a terminal.
+Console characters that the terminal cannot display are escaped there; the log
+retains the original Unicode text. Output read/write failures stop the agent and
+are reported as worker failures.
+The headless Codex
 invocation retains `--dangerously-bypass-approvals-and-sandbox` and overrides its
 own notify to `[]` to prevent recursive runs.
 
@@ -131,7 +150,7 @@ Console mode uses the normal HOME and memU backend configuration. Existing notif
 commands must replace `--diagnostic` with `--console` and remove
 `--diagnostic-home <path>` when upgrading from #742. Use
 `--base-dir` and `--session-dir` to select a workspace and session source.
-Console workers sharing a workspace run serially under an OS file lock; the lock
+Notify workers sharing a workspace run serially under an OS file lock; the lock
 is released before the Enter prompt and when the process exits. This slice does
 not add scheduling or per-turn deduplication.
 
