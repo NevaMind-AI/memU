@@ -52,6 +52,9 @@ def launch_background(argv: list[str], layout: Layout, label: str) -> None:
     """Run the logged worker independently of the notifying frontend's console."""
     layout.base.mkdir(parents=True, exist_ok=True)
     interpreter = str(Path(sys.executable).with_name("python.exe")) if sys.platform == "win32" else sys.executable
+    flags = 0
+    if sys.platform == "win32":
+        flags = subprocess.CREATE_NO_WINDOW
     subprocess.Popen(  # noqa: S603
         [interpreter, "-u", "-m", __name__, "--label", label, "--background", "--", *argv],
         cwd=layout.base,
@@ -59,7 +62,7 @@ def launch_background(argv: list[str], layout: Layout, label: str) -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=sys.platform != "win32",
-        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        creationflags=flags,
     )
 
 
@@ -102,6 +105,9 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
         if getattr(sys.stdout, "name", None) == str(layout.base / "hook.log")
         else (layout.base / "hook.log").open("a", encoding="utf-8")
     )
+    flags = 0
+    if sys.platform == "win32":
+        flags = subprocess.CREATE_NO_WINDOW
     with tempfile.TemporaryFile() as source, log_context as log:
         source.write(prompt.encode("utf-8"))
         source.seek(0)
@@ -115,7 +121,7 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
             encoding="utf-8",
             errors="replace",
             start_new_session=sys.platform != "win32",
-            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            creationflags=flags,
         ) as process:
             errors: list[Exception] = []
 
