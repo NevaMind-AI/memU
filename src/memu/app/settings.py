@@ -79,7 +79,14 @@ class RetrieveResourceConfig(BaseModel):
 
 class RetrieveFileConfig(BaseModel):
     enabled: bool = Field(default=True, description="Whether to enable file retrieval.")
-    top_k: int = Field(default=5, description="Total number of files to retrieve.")
+    top_k: int = Field(
+        default=5,
+        description=(
+            "Number of file segments ranked per retrieve. The files layer rolls the winning "
+            "segments up to their files, so fewer than top_k files can result when one file "
+            "dominates the segment window."
+        ),
+    )
     tracks: list[str] | None = Field(
         default=None,
         description="Optional file tracks (e.g. ['memory', 'skill']) to filter on. None means all tracks.",
