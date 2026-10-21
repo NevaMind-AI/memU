@@ -285,7 +285,10 @@ def _valid_host_doc(host: str, filename: str, text: str) -> bool:
     if not _valid_doc(text):
         return False
     if host == "codex" and filename in {"INSTALL.md", "UNINSTALL.md"}:
-        return "<!-- memu-codex-record: notify-v2 -->" in text
+        if "<!-- memu-codex-record: notify-v2 -->" not in text:
+            return False
+        if filename == "INSTALL.md":
+            return "<!-- memu-codex-permissions: v1 -->" in text
     return True
 
 

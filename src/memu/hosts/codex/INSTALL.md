@@ -1,6 +1,7 @@
 # Install memU for Codex
 
 <!-- memu-codex-record: notify-v2 -->
+<!-- memu-codex-permissions: v1 -->
 
 ## Task identity
 
@@ -17,6 +18,42 @@
 >
 > However this run ends — finished or abandoned — close it out with **Report
 > the outcome to memU** at the bottom of this file.
+
+## Execution permissions — choose from the current session
+
+Read the current session's sandbox mode, approval policy and available tool
+schemas before installing. Use those values, not a Desktop UI label or a previous
+session's permissions. Apply this section to both setup and migration.
+
+- **Full access (`danger-full-access`):** execute the authorized installation
+  directly. No sandbox permission request is needed; normal OS permissions still
+  apply.
+- **Restricted session with `request_permissions`:** proactively request the
+  required `file_system` read/write paths and `network` access before commands
+  need them. Use the tool's actual schema and inspect its response. Include the
+  package/tool/cache directories used by the selected installer, existing memU
+  configuration, and Codex files needed by the step. A shell access-denied error
+  does not automatically request permission.
+- **Restricted session with command approval:** if the shell tool exposes
+  `sandbox_permissions` and the active policy permits it, request
+  `require_escalated` for the specific command that needs execution outside the
+  sandbox, with a concrete justification. A filesystem grant does not grant
+  Windows Task Scheduler/COM access. Use supported command approval when needed
+  for that inventory or handoff; never interpret denied enumeration as no tasks.
+- **Granular approval:** inspect individual categories. A false
+  `sandbox_approval` means command escalation is unavailable even when
+  `request_permissions` is allowed. Do not request a prohibited category or
+  assume `approval_policy = never` implies full access; sandbox mode is separate.
+
+Use the available, permitted mechanism to complete the installation. After a
+grant, verify the operation actually works before changing registrations.
+On denial, inspect the failing path or operation and the effective grant. Retry
+only after a relevant permission/environment change or new diagnostic evidence;
+do not rerun an unchanged failing command or repeat an equivalent request.
+If no permitted mechanism can provide the required access, preserve the existing
+integration, report the exact blocked gate and the required access, and close
+with the error outcome. Do not silently switch to Full access, change ACLs or
+claim completion. A user may choose a different execution environment to resume.
 
 ## Choose the installation path
 
@@ -311,6 +348,36 @@ user submits a prompt. The command reads the hook's stdin JSON, passes the
 original prompt to shared retrieval, and returns
 `hookSpecificOutput.additionalContext` before the model answers.
 
+### 3.0 Preflight — app-server access before hook edits
+
+When using app-server for trust, first verify it can start against the real
+Codex home. Resolve that home from the existing configuration/environment;
+sandbox `USERPROFILE` or home lookup can differ from the signed-in user's.
+If lookup fails, pass the confirmed home environment and `CODEX_HOME` to the
+child process without changing which user's configuration is used.
+
+In a restricted session, request access before launching. Besides `hooks.json`
+and `config.toml`, app-server needs temporary files and writable SQLite runtime
+state. Inspect the installed version's actual paths: on the verified Windows
+CLI, `state_5.sqlite` and its `-wal` / `-shm` files live directly under
+`~/.codex/`, not `~/.codex/sqlite/`. Request the necessary state files and parent
+access for creating companion files, plus `~/.codex/tmp/`. Other versions may
+use different names or additional runtime files. Do not hard-code this one
+version's list as complete, move the database, delete locks or reset state.
+
+Start `codex app-server --stdio` and keep stdin open. Send `initialize` with
+`capabilities.experimentalApi = true`, wait for its successful response, send
+`initialized`, then call `hooks/list` with the installation directory in `cwds`
+and wait for its response. Empty hooks are valid at this stage; startup failure,
+RPC errors or hook-loading errors fail this gate. Do not pipe all requests and
+immediately close stdin, or treat `codex --version` as this check.
+
+If startup or access fails, follow **Execution permissions** above. An approved
+request is not proof of effective access. Verify startup again only after a
+relevant change, and do not edit the hook or trust state while this gate fails.
+Once it passes, register the command below and use a live app-server connection
+that reads the final definition for trust approval.
+
 ### 3.1 Register the command
 
 Resolve the installed `memu-codex` executable to an absolute path. The hook must
@@ -366,7 +433,7 @@ changes during an upgrade, recheck its approval with the installed Codex version
 before relying on it. An existing identical, trusted entry can be retained.
 
 For the verified CLI 0.163.0, automation can use `codex app-server --stdio`:
-initialize the JSON-RPC connection, then call `hooks/list` with the installation
+initialize the JSON-RPC connection as in Part 3.0, then call `hooks/list` with the installation
 working directory in `cwds`. Select the exact registered `userPromptSubmit`
 entry by `sourcePath` and `command`; use its returned `key` and `currentHash`.
 After reviewing that command, call `config/value/write` with
