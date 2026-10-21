@@ -368,6 +368,17 @@ path or hook definition, or invent a hash algorithm. If the command definition
 changes during an upgrade, recheck its approval with the installed Codex version
 before relying on it. An existing identical, trusted entry can be retained.
 
+For the verified CLI 0.163.0, automation can use `codex app-server --stdio`:
+initialize the JSON-RPC connection, then call `hooks/list` with the installation
+working directory in `cwds`. Select the exact registered `userPromptSubmit`
+entry by `sourcePath` and `command`; use its returned `key` and `currentHash`.
+After reviewing that command, call `config/value/write` with
+`keyPath = hooks.state.<TOML-quoted returned key>.trusted_hash`,
+`value = <returned currentHash>` and `mergeStrategy = upsert`.
+Call `hooks/list` again and require `trustStatus = trusted`. This uses Codex's
+own fingerprint and config writer. Do not pass `--dangerously-bypass-hook-trust`
+as a substitute for registration or verification.
+
 ### 3.3 Migrate the old retrieval instruction
 
 Once the prompt hook is registered, trusted and verified below, remove the
