@@ -680,14 +680,16 @@ def test_native_scheduler_identity_docs_stay_explicit() -> None:
     assert "desktop:local" in cola
 
     codex_source = (files("memu.hosts.codex") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
+    codex_install_source = (files("memu.hosts.codex") / "INSTALL.md").read_text(encoding="utf-8")
     codex_uninstall_source = (files("memu.hosts.codex") / "UNINSTALL.md").read_text(encoding="utf-8")
-    codex = " ".join(CODEX.render_doc(codex_source).split())
     codex_uninstall = " ".join(CODEX.render_doc(codex_uninstall_source).split())
-    assert f"Current task name: `{CODEX.task_name}`" in codex
+    assert codex_source == ""
+    assert "docs task" not in codex_install_source
+    assert "memu-codex install-hook" in codex_install_source
+    assert "## Part 3 — Register and trust the UserPromptSubmit retrieval hook" in codex_install_source
+    assert "trusted_hash" in codex_install_source and "memu-codex install-instruction" not in codex_install_source
     assert "Candidate names are" in codex_uninstall
     assert "prepare / self-evolve / commit" in codex_uninstall
-    assert "Deleting a registration does not stop the running agent" in codex
-    assert "Do not create a recurring bridging task alongside notify" in codex
 
     openclaw_source = (files("memu.hosts.openclaw") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
     openclaw_uninstall_source = (files("memu.hosts.openclaw") / "UNINSTALL.md").read_text(encoding="utf-8")

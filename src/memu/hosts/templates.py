@@ -284,7 +284,7 @@ def _valid_host_doc(host: str, filename: str, text: str) -> bool:
     """Keep lifecycle guides compatible with the installed record entry point."""
     if not _valid_doc(text):
         return False
-    if host == "codex" and filename in {"INSTALL.md", "UNINSTALL.md", "BRIDGING_TASK.md"}:
+    if host == "codex" and filename in {"INSTALL.md", "UNINSTALL.md"}:
         return "<!-- memu-codex-record: notify-v1 -->" in text
     return True
 
@@ -328,7 +328,9 @@ def _read_doc_cache(host: str, filename: str) -> str | None:
 def resolve_doc(host: str, filename: str, embedded: str) -> str:
     """The best guide available: server, then host-scoped cache, then ``embedded``.
 
-    ``embedded`` is the copy shipped in the host package — the guaranteed floor,
-    so a total outage degrades to it, never to nothing.
+    An empty packaged guide disables that document, including remote/cache copies.
+    Otherwise ``embedded`` is the guaranteed floor for an unavailable server.
     """
+    if not embedded.strip():
+        return embedded
     return fetch_doc(host, filename) or _read_doc_cache(host, filename) or embedded

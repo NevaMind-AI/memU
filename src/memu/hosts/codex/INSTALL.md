@@ -23,8 +23,8 @@ Installing memU on Codex is three parts:
 1. **Install memU** — a Python package and the memory backend it uses.
 2. **Verify the notify record trigger and migrate old schedules** — turn recent
    Codex sessions into durable memory (the *record* seam).
-3. **Patch `~/.codex/AGENTS.md`** — a standing instruction that tells you to pull
-   relevant memory before you answer (the *inject* seam).
+3. **Register and trust `UserPromptSubmit`** — retrieve memory before each
+   user turn (the *inject* seam).
 
 Parts 2 and 3 must share one configured mode. In local mode they must also share
 one store and embedding space, or retrieval silently returns nothing. Part 1 is
@@ -70,9 +70,9 @@ memu-codex --help
 ```
 
 If it is not found, the install landed in an environment that isn't on your
-`PATH`. Fix that now rather than working around it — the scheduled task in Part 2
-and the hook in Part 3 both need this command to resolve from a bare, non-
-interactive environment.
+`PATH`. Fix that now rather than working around it — the notify worker in Part 2
+and the hook in Part 3 both need a usable executable in a non-interactive
+environment.
 
 ### 1.2 Configure the memory backend
 
@@ -223,8 +223,8 @@ on this working, and both fail *silently* if it is wrong.
 ## Part 2 — Verify notify and migrate old record schedules
 
 The *record* seam runs after a Codex turn. In cloud mode, workspace resources
-are submitted but are not currently persisted. Do not create a recurring task
-from `docs task`; that guide now describes migration precautions.
+are submitted but are not currently persisted. Complete notify registration
+and historical schedule migration here.
 
 ### 2.1 Inventory and preserve the old entry points
 
@@ -307,87 +307,98 @@ is incomplete while a gate or safe handoff remains unresolved.
 
 ---
 
-## Part 3 — Patch `~/.codex/AGENTS.md` with the retrieval instruction
+## Part 3 — Register and trust the UserPromptSubmit retrieval hook
 
-The *inject* seam: a standing instruction in Codex's **global AGENTS.md** telling
-you to pull relevant memory before you answer. If this installation already uses
-`UserPromptSubmit` → `memu-codex prompt-hook`, preserve its command and trust
-registration and skip this legacy skill setup. Hook installation and skill
-migration are a separate integration step; a record-trigger migration must not
-replace a working prompt hook.
+This part owns the *inject* seam: Codex runs `memu-codex prompt-hook` when the
+user submits a prompt. The command reads the hook's stdin JSON, passes the
+original prompt to shared retrieval, and returns
+`hookSpecificOutput.additionalContext` before the model answers.
 
-For installations using the skill-based retrieval instruction, Codex loads `~/.codex/AGENTS.md`
-into every session, so the instruction is simply always there — no hook, no
-wrapper, no per-turn process. You run the retrieval yourself and factor the
-results into your answer.
+### 3.1 Register the command
 
-**Do not hand-write the instruction.** memU owns the text and installs it for you:
+Resolve the installed `memu-codex` executable to an absolute path. The hook must
+use that executable followed by `prompt-hook`, so it does not depend on Codex's
+background PATH. Quote the executable path if it contains spaces. Windows JSON
+paths can use forward slashes.
+
+Back up `~/.codex/hooks.json` locally, then merge a command hook under
+`hooks.UserPromptSubmit`. Preserve every unrelated event, matcher and command;
+if the exact memU entry is already present, reuse it instead of appending a
+second entry. The following is the structure, with the executable placeholder
+replaced by the resolved path:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"<absolute path to memu-codex executable>\" prompt-hook",
+            "timeout": 50,
+            "additionalContextLimit": 0,
+            "statusMessage": "Retrieving memU memory"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The CLI currently implements `prompt-hook`; `install-hook` installs **notify
+only**. Automatic retrieval-hook registration and trust management are not yet
+integrated. Apply and verify these steps using the installed Codex version's
+supported hook configuration and approval facilities. If those facilities are
+unavailable, report Part 3 as incomplete; do not report a successful installation.
+
+### 3.2 Add trust for the registered definition
+
+After the command definition is final, approve that exact hook using Codex's
+hook trust/approval mechanism. Registration alone does not establish trust.
+On the currently verified Windows Codex version, persisted approval appears in
+`~/.codex/config.toml` under `hooks.state`, keyed by the absolute hooks file path,
+`user_prompt_submit`, matcher index and command index, with a `trusted_hash`.
+Those indices must match the merged configuration; do not assume `0:0` when
+other hooks already exist.
+
+Preserve unrelated approvals. Do not copy a fingerprint from another machine,
+path or hook definition, or invent a hash algorithm. If the command definition
+changes during an upgrade, recheck its approval with the installed Codex version
+before relying on it. An existing identical, trusted entry can be retained.
+
+### 3.3 Migrate the old retrieval instruction
+
+Once the prompt hook is registered, trusted and verified below, remove the
+previous memU retrieval skill and its AGENTS pointer, if present:
 
 ```
-memu-codex install-instruction
+memu-codex remove-instruction
 ```
 
-That is the whole step. It writes two files and prints the diff of each, creating
-either if it does not exist:
-
-- **`~/.codex/skills/memu-retrieve/SKILL.md`** — the procedure: the command to run
-  and how to read what comes back.
-- **`~/.codex/AGENTS.md`** — two sentences telling you to use that skill before
-  answering.
-
-The split is the point. AGENTS.md is in your context on *every* turn, whether or
-not the turn has anything to do with memory, so it carries only what you need in
-order to decide to retrieve; the skill carries the detail and is loaded only once
-you act on it.
-
-Three properties worth knowing, because they are what make it safe to just run:
-
-- **It appends; it never overwrites.** `~/.codex/AGENTS.md` is the *user's* global
-  instruction file and may already hold rules that have nothing to do with memU.
-  Everything already in there survives, and the previous contents are backed up to
-  `~/.codex/AGENTS.md.bak` before anything is written. (The skill directory is
-  memU's own — nothing of the user's lives there — so it is simply overwritten.)
-- **It is idempotent.** memU's text goes inside a marked block. Re-running replaces
-  that block in place rather than appending a second copy, so running it twice is
-  harmless — and so a later memU release can *improve* the instruction and have the
-  upgrade actually reach users who already installed it. A copy pasted in by hand
-  could never be upgraded. The same holds for the skill.
-- **It shows its work.** `--dry-run` prints the diffs and writes nothing; `--print`
-  prints what would be installed. If the user wants to see what lands in their file
-  before it lands, that is how.
-
-If you want to read the text itself, run `memu-codex install-instruction --print`.
-In short: the skill tells you to run `memu-codex retrieve "<query>"` before
-answering — the LLM-free single-shot retrieval, not the LLM-routed `memu retrieve`,
-which would cost an LLM call on every turn — and it explains how to read the
-`segments`/`files`/`resources` layers that come back.
+This removes memU's marked instruction and owned `memu-retrieve` skill while
+preserving other instructions and skills. Keep the old entry until the new hook
+has passed verification. A machine already using the trusted prompt hook needs
+no new skill or AGENTS pointer.
 
 ### ✅ Verify Part 3
 
-Read both files back:
+Read back the merged hook configuration and its corresponding trust state.
+Confirm one intended memU command and an existing executable; retain unrelated
+hooks, notify forwarding and user configuration.
 
-```
-cat ~/.codex/AGENTS.md
-cat ~/.codex/skills/memu-retrieve/SKILL.md
-```
+In a fresh Codex session, submit a normal prompt and confirm that
+`UserPromptSubmit` completes before the answer. Inspect the matching local log
+under `~/.memu/hosts/codex/log/hooks/retrieve/` for hook status and the actual
+`additionalContext` returned. Empty retrieval can be valid; an untrusted or
+unexecuted hook does not pass. A direct `memu-codex retrieve` or `doctor` check
+alone does not verify hook execution or trust. Keep prompts and retrieved memory
+local.
 
-The memU block must appear in AGENTS.md exactly once and name the `memu-retrieve`
-skill, that skill must exist, and anything the user had in AGENTS.md beforehand
-must still be intact.
-
-Then confirm the command the skill names actually works against the Part 1
-store:
-
-```
-memu-codex retrieve "smoke test"
-```
-
-Empty result lists are fine — you are testing that the read path works, not that
-the store has content yet.
-
-Finally, note that a *fresh* Codex session is what picks up the new AGENTS.md and
-the new skill. The session you are installing from already loaded the old one, so
-do not be surprised that the instruction is not in your own context yet.
+Confirm the old memU skill and instruction pointer are gone after migration,
+and that the notify chain from Part 2 still works. Use a fresh session after
+changing hook definitions or global instructions.
 
 ---
 

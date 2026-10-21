@@ -25,6 +25,9 @@ SPECS = (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
 @pytest.mark.parametrize("filename", DOCS.values())
 def test_embedded_docs_render_names_only_from_host_spec(spec: HostSpec, filename: str) -> None:
     source = (files(spec.package) / filename).read_text(encoding="utf-8")
+    if spec.host == "codex" and filename == "BRIDGING_TASK.md":
+        assert source == ""
+        return
 
     assert templates._valid_doc(source)
     assert "{{task_name}}" in source
@@ -70,13 +73,13 @@ def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
     monkeypatch.setattr(templates, "_get", lambda url: source)
 
-    resolved = templates.resolve_doc(CODEX.host, "BRIDGING_TASK.md", "unused")
+    resolved = templates.resolve_doc(CODEX.host, "INSTALL.md", "unused")
 
-    assert CODEX.render_doc(resolved).startswith(f"---\nname: {CODEX.task_doc_name}\n")
-    assert (templates._docs_cache_dir(CODEX.host) / "BRIDGING_TASK.md").read_text(encoding="utf-8") == source
+    assert CODEX.task_name in CODEX.render_doc(resolved)
+    assert (templates._docs_cache_dir(CODEX.host) / "INSTALL.md").read_text(encoding="utf-8") == source
 
 
-@pytest.mark.parametrize("filename", DOCS.values())
+@pytest.mark.parametrize("filename", ("INSTALL.md", "UNINSTALL.md"))
 def test_codex_record_guides_reject_old_remote_and_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, filename: str
 ) -> None:
@@ -97,6 +100,26 @@ def test_codex_record_guides_reject_old_remote_and_cache(
     assert cache.read_text(encoding="utf-8") == embedded
     monkeypatch.setattr(templates, "_get", lambda _: None)
     assert templates.resolve_doc("codex", filename, "unused") == embedded
+
+
+def test_codex_task_guide_stays_empty_without_remote_or_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from memu.hosts.codex.cli import main
+
+    assert (files(CODEX.package) / "BRIDGING_TASK.md").read_bytes() == b""
+    cache = tmp_path / "BRIDGING_TASK.md"
+    old = "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\nCreate a recurring task.\n"
+    cache.write_text(old, encoding="utf-8")
+    monkeypatch.setattr(templates, "_docs_cache_dir", lambda _: tmp_path)
+
+    def unexpected_fetch(_url: str) -> str:
+        pytest.fail("A disabled guide must not fetch remote instructions")
+
+    monkeypatch.setattr(templates, "_get", unexpected_fetch)
+    assert main(["docs", "task"]) == 0
+    assert capsys.readouterr().out.strip() == ""
+    assert cache.read_text(encoding="utf-8") == old
 
 
 def test_record_guide_version_guard_is_codex_only() -> None:

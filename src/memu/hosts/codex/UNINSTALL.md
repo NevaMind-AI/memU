@@ -16,8 +16,8 @@ Uninstalling is the install run in reverse, and it is three parts:
 
 1. **Remove the memU notify entry and confirmed old schedules** — prevent new
    record runs, then let existing agents finish (the *record* seam).
-2. **Unpatch `~/.codex/AGENTS.md`** — remove the standing retrieval
-   instruction and the `memu-retrieve` skill it points at (the *inject* seam).
+2. **Remove the retrieval hook and its trust entry** — clean up the
+   `UserPromptSubmit` command and any old memU skill/instruction (the *inject* seam).
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
    tooling is removed — and close by reporting both.
 
@@ -67,15 +67,27 @@ notifiers and hosts remain intact. Repeating the removal is a no-op.
 
 ---
 
-## Part 2 — Remove the retrieval instruction
+## Part 2 — Remove the retrieval hook, trust and old instruction
 
-Before continuing, inspect `~/.codex/hooks.json` for a `UserPromptSubmit`
-command invoking `memu-codex prompt-hook`. Its automatic removal and trust
-cleanup are not yet integrated. If present, stop before package removal and
-complete that separate integration step, preserving unrelated hooks; this guide
-must not leave a registered hook pointing at a removed executable.
+Back up `~/.codex/hooks.json` and the relevant Codex hook trust state locally.
+Identify the `UserPromptSubmit` command by its resolved memu-codex executable
+and `prompt-hook` argument. Remove only that confirmed entry, preserving other
+hooks and events. Remove its corresponding approval using the installed Codex
+version's hook trust facilities; current Windows versions persist the fingerprint
+in `~/.codex/config.toml` under `hooks.state` as `trusted_hash`.
 
-**Do not hand-edit the block out.** memU owns the text and removes it for you:
+Trust keys include the hooks file path and matcher/command indices. If removal
+changes other hooks' indices, verify their approvals through Codex rather than
+copying or deleting unrelated fingerprints. Repeating removal when the memU
+entry is absent must preserve all unrelated configuration.
+
+Automatic hook/trust removal is not yet integrated in memu-cli. If safe removal
+cannot be completed with the installed Codex version, report uninstall as pending
+and retain the executable. Do not leave a registered hook pointing at a removed
+package.
+
+Remove any old memU AGENTS pointer and owned retrieval skill with the existing
+command:
 
 ```
 memu-codex remove-instruction
@@ -97,10 +109,12 @@ nothing to remove by hand.
 
 ### ✅ Verify Part 2
 
-`cat ~/.codex/AGENTS.md` — no `memu:begin`/`memu:end` markers remain, and the
-user's own content is intact; `~/.codex/skills/memu-retrieve` no longer exists.
-The session you are working in already loaded the old file, so the instruction
-may still be in your own context; a fresh session is what picks the removal up.
+Read back `hooks.json` and the hook trust state: the confirmed memU prompt-hook
+and its approval are gone, and unrelated hooks remain configured and trusted.
+`~/.codex/AGENTS.md` has no memU instruction markers, its user content is intact,
+and the owned `~/.codex/skills/memu-retrieve` skill is gone. A fresh Codex session
+must no longer attempt to run memU retrieval. The session you are working in may
+still carry the old instruction in its context.
 
 ---
 
@@ -186,6 +200,6 @@ Close the report with the two things the user needs to hear, in this order:
 1. **What was kept:** their memory — the store at `MEMU_DB`,
    `~/.memu/config.env`, and the session cursor — untouched. A later reinstall
    picks it up as is and resumes mining right where it left off.
-2. **What was removed:** the bridging schedule, the retrieval instruction,
-   this host's working state, and (unless another host still needs it) the
-   `memu-cli` package.
+2. **What was removed:** the memU notify callback, confirmed old schedules,
+   retrieval hook and approval, old retrieval instruction, this host's working
+   state, and (unless another host still needs it) the `memu-cli` package.
