@@ -12,7 +12,14 @@
 > guide to uninstall memU"). Work top to bottom. Each part ends with a
 > **verify** gate — do not proceed until the current one passes.
 
-Uninstalling is the install run in reverse, and it is three parts:
+This guide removes both current and known historical Codex memU integrations,
+including partial upgrades. Check every subsection: finding a current hook does
+not mean old tasks or instructions are gone. An absent entry is a normal no-op;
+do not create or reinstall anything in order to uninstall it. Preserve unrelated
+hosts, hooks, tasks and user instructions. Report unresolved ownership separately
+and keep the package while any confirmed entry still needs its executable.
+
+Uninstalling has three parts:
 
 1. **Remove the memU notify entry and confirmed old schedules** — prevent new
    record runs, then let existing agents finish (the *record* seam).
@@ -34,6 +41,11 @@ instruction file exactly as they are.
 
 ## Part 1 — Remove record triggers and wait for running agents
 
+### 1.1 Current entry — notify
+
+Inspect the parsed notify chain. If it contains no memU callback, continue to
+historical schedules without modifying the user's notifier.
+
 Save the current notify configuration locally before changing it. For a direct
 memU notify command, use `memu-codex remove-hook`; repeating it is a no-op and
 unrelated notify commands are preserved. Read the configuration back.
@@ -46,12 +58,18 @@ backup belongs to this chain. Never overwrite an unrelated or newer notifier
 from a stale backup. If this cannot be done safely, stop the uninstall and
 report the remaining callback; do not remove its executable.
 
+### 1.2 Historical entries — scheduled bridging tasks
+
 Inspect Windows Task Scheduler in all folders and Codex's native task surface.
 Candidate names are {{all_task_names}}, but actions, wrapper contents or the full
 prepare / self-evolve / commit prompt must confirm **Codex** ownership. Leave
 other hosts and ambiguous registrations untouched. Save restorable definitions
 and original states locally before disabling/removing confirmed tasks, following
-the migration section of `memu-codex docs install`. Do not invoke another host's schedule helper.
+the migration section of `memu-codex docs install`. Do not invoke another host's
+schedule helper. No confirmed task is a no-op; multiple confirmed registrations
+must each be removed, even if a current notify callback was also found.
+
+### 1.3 Wait for affected runs before cleanup
 
 Disable future triggers first. Removing a registration does not stop a running
 agent. Do not terminate it; wait for all affected runs and descendants to finish
@@ -68,6 +86,12 @@ notifiers and hosts remain intact. Repeating the removal is a no-op.
 ---
 
 ## Part 2 — Remove the retrieval hook, trust and old instruction
+
+### 2.1 Current entry — UserPromptSubmit hook and trust
+
+Inspect `~/.codex/hooks.json` and relevant trust state if they exist. A missing
+file or absent memU hook is a normal no-op; continue to the historical instruction
+check. Remove a leftover approval only if its ownership can still be confirmed.
 
 Back up `~/.codex/hooks.json` and the relevant Codex hook trust state locally.
 Identify the `UserPromptSubmit` command by its resolved memu-codex executable
@@ -86,10 +110,24 @@ cannot be completed with the installed Codex version, report uninstall as pendin
 and retain the executable. Do not leave a registered hook pointing at a removed
 package.
 
-Remove any old memU AGENTS pointer and owned retrieval skill with the existing
-command:
+### 2.2 Historical entries — AGENTS instruction and retrieve skill
 
+Check these independently of the current hook; they can remain after a partial
+upgrade. Inspect `~/.codex/AGENTS.md` for memU's marked block and
+`~/.codex/skills/memu-retrieve/SKILL.md` for the owned retrieval procedure.
+Confirm ownership before removal: the shared command treats an existing
+SKILL.md in that named directory as its marker. Preserve ambiguous or user-owned
+content and report it for review.
+
+Preview the existing cleanup command and review its diff:
+
+```text
+memu-codex remove-instruction --dry-run
 ```
+
+Then remove the confirmed old instruction and skill:
+
+```text
 memu-codex remove-instruction
 ```
 
@@ -105,7 +143,10 @@ at `~/.codex/skills/memu-retrieve/`. The same command takes that skill out too
 at a deleted skill. The directory is memU's own (the install wrote it whole, so
 it goes whole); a same-named directory without memU's `SKILL.md` is left alone,
 as are the user's or Codex's other entries in `~/.codex/skills/`. So there is
-nothing to remove by hand.
+nothing to remove by hand. If both old entries are absent, this step is already
+complete. Never delete the whole skills directory or memU's distribution/install
+SKILL.md. Custom skill locations or unmarked references require confirmed
+ownership and targeted cleanup; do not remove unrelated user text.
 
 ### ✅ Verify Part 2
 
@@ -200,6 +241,7 @@ Close the report with the two things the user needs to hear, in this order:
 1. **What was kept:** their memory — the store at `MEMU_DB`,
    `~/.memu/config.env`, and the session cursor — untouched. A later reinstall
    picks it up as is and resumes mining right where it left off.
-2. **What was removed:** the memU notify callback, confirmed old schedules,
-   retrieval hook and approval, old retrieval instruction, this host's working
-   state, and (unless another host still needs it) the `memu-cli` package.
+2. **What was removed:** list current notify/hook/trust entries and historical
+   schedules/instructions/skills separately, noting entries already absent and
+   any unresolved remnants. Also report this host's working state and whether
+   the shared `memu-cli` package was removed or retained for another host.
