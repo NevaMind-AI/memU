@@ -30,7 +30,7 @@ import argparse
 import sys
 
 from memu.hosts import hooks
-from memu.hosts.codex import notify_console
+from memu.hosts.codex import notify_console, prompt_hook
 from memu.hosts.codex.sessions import SESSION_DIR, CodexTranscriptSource
 from memu.hosts.host_cli import HostSpec, run
 
@@ -81,6 +81,7 @@ SPEC = HostSpec(
     skills_dir=SKILLS_DIR,
     schedule_backend="native",
     hook=HOOK,
+    register_extra=prompt_hook.register,
 )
 
 

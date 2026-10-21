@@ -87,8 +87,8 @@ def launch(argv: list[str], layout: Layout, label: str, hold: bool) -> None:
         subprocess.Popen([terminal, "-e", *command], cwd=layout.base, start_new_session=True)  # noqa: S603
 
 
-def _new_log_path(base: Path) -> Path:
-    directory = base / "log"
+def _new_log_path(base: Path, hook: str = "notify") -> Path:
+    directory = base / "log" / "hooks" / hook
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{datetime.now():%Y-%m-%d_%H-%M-%S.%f}-{os.getpid()}.log"
     path.touch(exist_ok=False)
@@ -131,7 +131,7 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
     name = getattr(sys.stdout, "name", None)
     log_context = (
         contextlib.nullcontext(None)
-        if isinstance(name, str) and Path(name).parent == layout.base / "log"
+        if isinstance(name, str) and Path(name).parent == layout.base / "log" / "hooks" / "notify"
         else _new_log_path(layout.base).open("a", encoding="utf-8", buffering=1)
     )
     flags = 0
