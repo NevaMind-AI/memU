@@ -287,6 +287,25 @@ def test_install_hook_missing_entry_leaves_config_untouched(tmp_path, monkeypatc
     assert config.read_text() == 'model = "test"\n'
 
 
+def test_install_hook_missing_agent_preserves_existing_entry(tmp_path, monkeypatch, capsys):
+    from dataclasses import replace
+
+    from memu.hosts import host_cli
+    from memu.hosts.codex import cli
+
+    config = tmp_path / "config.toml"
+    original = 'notify = ["previous-notifier"]\nmodel = "existing"\n'
+    config.write_text(original, encoding="utf-8")
+    hook = replace(cli.HOOK, installer=CodexNotifyHook(config))
+    monkeypatch.setattr(cli, "SPEC", replace(cli.SPEC, hook=hook))
+    monkeypatch.setattr(host_cli.shutil, "which", lambda binary: None if binary == "codex" else binary)
+    assert cli.main(["install-hook"]) == 1
+    assert config.read_text(encoding="utf-8") == original
+    error = capsys.readouterr().err
+    assert "codex` is not on PATH" in error
+    assert "https://chatgpt.com/codex/install.ps1" in error
+
+
 def test_uninstall_leaves_unrelated_pythonw_notify(tmp_path):
     config = tmp_path / "config.toml"
     hook = CodexNotifyHook(config)

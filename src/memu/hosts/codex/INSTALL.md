@@ -1,6 +1,6 @@
 # Install memU for Codex
 
-<!-- memu-codex-record: notify-v1 -->
+<!-- memu-codex-record: notify-v2 -->
 
 ## Task identity
 
@@ -18,10 +18,18 @@
 > However this run ends — finished or abandoned — close it out with **Report
 > the outcome to memU** at the bottom of this file.
 
-Installing memU on Codex is three parts:
+## Choose the installation path
+
+**New installation:** follow Parts 1–3 below.
+**Existing installation:** start with **Existing installations — migration**
+later in this same guide. It references the setup parts for the new entries and
+owns old schedule/skill cleanup. Read this guide once; no additional docs command
+is needed.
+
+New installation has three parts:
 
 1. **Install memU** — a Python package and the memory backend it uses.
-2. **Verify the notify record trigger and migrate old schedules** — turn recent
+2. **Register and verify notify** — turn recent
    Codex sessions into durable memory (the *record* seam).
 3. **Register and trust `UserPromptSubmit`** — retrieve memory before each
    user turn (the *inject* seam).
@@ -33,8 +41,8 @@ what makes them agree.
 ## Notify record trigger (Codex)
 
 The record trigger is Codex notify: prepare → headless `codex exec` → commit.
-Follow Part 2 after the backend gate passes. Existing schedules stay available
-until the replacement has been verified.
+Follow Part 2 after the backend gate passes. Existing installations use the
+migration section for safe handoff.
 
 ---
 
@@ -220,90 +228,79 @@ on this working, and both fail *silently* if it is wrong.
 
 ---
 
-## Part 2 — Verify notify and migrate old record schedules
+## Part 2 — Register and verify notify
 
-The *record* seam runs after a Codex turn. In cloud mode, workspace resources
-are submitted but are not currently persisted. Complete notify registration
-and historical schedule migration here.
+The *record* seam runs after a Codex turn: prepare → headless `codex exec` →
+commit. In cloud mode, workspace resources are submitted but not persisted.
 
-### 2.1 Inventory and preserve the old entry points
+### 2.0 Prerequisite — a standalone Codex CLI
 
-Inspect both Windows Task Scheduler (all task folders) and Codex's own
-scheduled-task surface when present. Candidate names are {{all_task_names}}.
-A name is only a search hint: confirm that the action, wrapper or prompt invokes
-**Codex's** memU prepare / self-evolve / commit pipeline. Generic historical
-names may belong to another host. Leave unrelated or ambiguous tasks untouched
-and report them for review. Do not use another host's `schedule uninstall`.
+Probe before installing: resolve `codex` and run `codex --version`. Reuse a
+working CLI, including an existing npm-managed installation. If lookup fails,
+check the official installer's landing directory before reinstalling; an older
+shell may simply have a stale PATH.
 
-Before changing a confirmed registration, save its exact task path/ID,
-action and arguments or full prompt, working directory, principal, triggers,
-enabled state and current running state locally. Export Windows task XML and
-keep referenced wrapper/prompt files; use the native surface's supported export
-for native tasks. If a restorable definition cannot be saved, stop migration.
-Backups may contain private content and must stay local.
+If Codex is missing, announce the action and run the official native installer:
 
-No matching task is a normal installation. Multiple confirmed registrations
-must each be recorded; do not assume a single task or the `\\memU\\` folder.
+- Windows, from PowerShell:
 
-### 2.2 Verify the replacement before removing anything
+  ```powershell
+  irm https://chatgpt.com/codex/install.ps1 | iex
+  ```
 
-1. Resolve the standalone `codex` CLI and run `codex --version`. A version check
-   proves startup only; it does not prove authentication or model execution.
-2. Keep the configured backend and pass `memu-codex doctor` from Part 1.
-3. If Codex has no notify command, run `memu-codex install-hook`. Read the
-   configuration back and verify the executable and agent paths exist.
-   Repeating an identical installation is a no-op.
-4. If notify already exists, inspect it first. The current installer refuses to
-   overwrite a different command, including a Desktop `turn-ended
-   --previous-notify` wrapper. Preserve that wrapper and its existing forwarding
-   chain. An already verified memU callback can be retained; if the replacement
-   cannot be installed or verified, stop here with every old registration intact.
-5. Check existing callback and worker evidence in
-   `~/.memu/hosts/codex/log/hooks/notify/`, or validate the replacement in an
-   isolated environment. Confirm prepare and commit/no-op results and cursor
-   behavior; `codex --version` alone is insufficient. Keep raw logs local.
-   Do not start a production smoke test while old schedules can launch into the
-   same working tree; perform the final production check during the handoff below.
+- macOS / Linux:
 
-### 2.3 Complete the switch
+  ```sh
+  curl -fsSL https://chatgpt.com/codex/install.sh | sh
+  ```
 
-Only after the replacement gates pass, disable future triggers on each confirmed
-old registration through its original scheduler. Recheck its running state.
-Deleting a registration does **not** terminate an already running agent; do not
-kill it. Wait for the run and its descendants to finish naturally before allowing
-notify to prepare the same working tree or cleaning any files. Old scheduled
-agents do not necessarily acquire notify's workspace lock. If safe handoff cannot
-be established, retain the saved disabled registration and report migration as
-pending; do not claim completion. During this wait, prevent new memU notify
-launches while retaining the user's other notifier; if that cannot be done
-safely, stop before changing the old registrations.
+These installers do not require Node.js or npm. Use an already available package
+manager only as a fallback if the native installer fails or the user has stated
+a preference; for existing npm environments, `npm install -g @openai/codex` is
+supported. Do not install a second Node.js manager to install Codex. If download,
+approval or installation fails, report the blocker and retain the old record
+entry; do not register a callback whose agent cannot start.
 
-Once idle, enable/retain the verified memU notify callback and use a real Codex
-turn to check prepare → agent → commit/no-op in the production log. On failure,
-follow Recovery and restore the old entry; do not delete its registration.
+After installation, resolve the actual executable and run its `--version`.
+The current official default landing directories are:
 
-Remove only the confirmed, now idle registrations after this final check passes. Re-list both scheduler
-surfaces and verify that unrelated registrations survive. Keep the saved
-definitions, wrappers, logs, backend config, memories and session cursors.
-A repeated migration with no remaining old task is a no-op; it must preserve the
-existing notify chain and retrieval hooks.
+- Windows: `$env:LOCALAPPDATA\Programs\OpenAI\Codex\bin`.
+- macOS/Linux: `$HOME/.local/bin`.
 
-### Recovery
+Honor an explicit `CODEX_INSTALL_DIR` instead of these defaults. Prepend the
+actual landing directory to the current install process's PATH before calling
+`memu-codex install-hook`; a persistent PATH change does not refresh an already
+running Desktop or its shells. Read the registered `--agent` back and require an
+absolute path to the verified executable. Restart Desktop or open a fresh session
+when necessary, then check the callback again.
 
-If a replacement gate fails, leave the old registration unchanged. If a problem
-appears after disabling/removing it, first stop future memU notify launches while
-preserving the user's other notifier, then wait for any worker to finish.
-Restore the exact saved task path/ID, definition and original enabled state
-through the same scheduler, using its supported import. S4U/password principals
-may require credentials again; verify the restored registration and referenced
-files before relying on it. Do not reset the backend or cursor to repair a trigger.
+Keep the existing Codex home, model/provider and authentication configuration.
+Desktop and CLI normally share that configuration; reuse it before asking for
+new credentials. A successful `--version` proves startup, while the real record
+check below proves the configured execution path. If an existing CLI resolves
+but cannot start, report and repair that failure before registration.
+
+### 2.1 Register the callback
+
+After the CLI probe and Part 1's backend gate pass, run:
+
+```text
+memu-codex install-hook
+```
+
+Read the configuration back and verify callback and agent executable paths exist.
+Repeating an identical installation is a no-op. The installer refuses a different
+existing notifier, including Desktop's `turn-ended --previous-notify` wrapper.
+Preserve existing forwarding chains. If a different notifier or an old memU
+installation exists, use the **Existing installations — migration** section below
+for the handoff; do not overwrite it.
 
 ### ✅ Verify Part 2
 
-Report which notify chain was verified, which confirmed registrations were
-removed (or that none existed), where local recovery definitions were saved,
-and whether a running old agent still needs to finish. Installation or migration
-is incomplete while a gate or safe handoff remains unresolved.
+Use a real Codex turn to verify callback execution and worker completion in
+`~/.memu/hosts/codex/log/hooks/notify/`. Confirm prepare, agent work when jobs
+exist, commit/no-op and cursor behavior. Version/doctor checks alone do not
+verify record execution. Keep raw logs local. Report any unresolved gate.
 
 ---
 
@@ -379,20 +376,6 @@ Call `hooks/list` again and require `trustStatus = trusted`. This uses Codex's
 own fingerprint and config writer. Do not pass `--dangerously-bypass-hook-trust`
 as a substitute for registration or verification.
 
-### 3.3 Migrate the old retrieval instruction
-
-Once the prompt hook is registered, trusted and verified below, remove the
-previous memU retrieval skill and its AGENTS pointer, if present:
-
-```
-memu-codex remove-instruction
-```
-
-This removes memU's marked instruction and owned `memu-retrieve` skill while
-preserving other instructions and skills. Keep the old entry until the new hook
-has passed verification. A machine already using the trusted prompt hook needs
-no new skill or AGENTS pointer.
-
 ### ✅ Verify Part 3
 
 Read back the merged hook configuration and its corresponding trust state.
@@ -407,11 +390,131 @@ unexecuted hook does not pass. A direct `memu-codex retrieve` or `doctor` check
 alone does not verify hook execution or trust. Keep prompts and retrieved memory
 local.
 
-Confirm the old memU skill and instruction pointer are gone after migration,
-and that the notify chain from Part 2 still works. Use a fresh session after
-changing hook definitions or global instructions.
+Confirm the notify chain from Part 2 still works. Use a fresh session after
+changing hook definitions. Legacy skill cleanup belongs to the migration section.
 
 ---
+
+---
+
+## Existing installations — migration
+
+Use this branch when Codex already has a memU schedule, retrieve skill, hook or
+notify callback. Keep the existing backend and progress; do not reinitialize a
+store to repair trigger configuration. The new-install parts above describe the
+replacement entries, while this section owns backups, handoff and cleanup.
+
+### M1 — Inventory and preserve the old entry points
+
+Inspect both Windows Task Scheduler (all task folders) and Codex's own
+scheduled-task surface when present. Candidate names are {{all_task_names}}.
+A name is only a search hint: confirm that the action, wrapper or prompt invokes
+**Codex's** memU prepare / self-evolve / commit pipeline. Generic historical
+names may belong to another host. Leave unrelated or ambiguous tasks untouched
+and report them for review. Do not use another host's `schedule uninstall`.
+
+Before changing a confirmed registration, save its exact task path/ID,
+action and arguments or full prompt, working directory, principal, triggers,
+enabled state and current running state locally. Export Windows task XML and
+keep referenced wrapper/prompt files; use the native surface's supported export
+for native tasks. If a restorable definition cannot be saved, stop migration.
+Backups may contain private content and must stay local.
+
+No matching task is a normal installation. Multiple confirmed registrations
+must each be recorded; do not assume a single task or the `\\memU\\` folder.
+
+### M2 — Verify the replacement before removing anything
+
+1. Complete Part 2.0's CLI probe, installing the native CLI only if missing.
+   A version check proves startup only, not authentication or model execution.
+2. Keep the configured backend and pass `memu-codex doctor` from Part 1.
+3. If Codex has no notify command, run `memu-codex install-hook`. Read the
+   configuration back and verify the executable and agent paths exist.
+   Repeating an identical installation is a no-op.
+4. If notify already exists, inspect it first. The current installer refuses to
+   overwrite a different command, including a Desktop `turn-ended
+   --previous-notify` wrapper. Preserve that wrapper and its existing forwarding
+   chain. An already verified memU callback can be retained; if the replacement
+   cannot be installed or verified, stop here with every old registration intact.
+5. Check existing callback and worker evidence in
+   `~/.memu/hosts/codex/log/hooks/notify/`, or validate the replacement in an
+   isolated environment. Confirm prepare and commit/no-op results and cursor
+   behavior; `codex --version` alone is insufficient. Keep raw logs local.
+   Do not start a production smoke test while old schedules can launch into the
+   same working tree; perform the final production check during the handoff below.
+
+### M3 — Complete the schedule switch
+
+Only after the replacement gates pass, disable future triggers on each confirmed
+old registration through its original scheduler. Recheck its running state.
+Deleting a registration does **not** terminate an already running agent; do not
+kill it. Wait for the run and its descendants to finish naturally before allowing
+notify to prepare the same working tree or cleaning any files. Old scheduled
+agents do not necessarily acquire notify's workspace lock. If safe handoff cannot
+be established, retain the saved disabled registration and report migration as
+pending; do not claim completion. During this wait, prevent new memU notify
+launches while retaining the user's other notifier; if that cannot be done
+safely, stop before changing the old registrations.
+
+Once idle, enable/retain the verified memU notify callback and use a real Codex
+turn to check prepare → agent → commit/no-op in the production log. On failure,
+follow Recovery and restore the old entry; do not delete its registration.
+
+Remove only the confirmed, now idle registrations after this final check passes. Re-list both scheduler
+surfaces and verify that unrelated registrations survive. Keep the saved
+definitions, wrappers, logs, backend config, memories and session cursors.
+A repeated migration with no remaining old task is a no-op; it must preserve the
+existing notify chain and retrieval hooks.
+
+### Migration recovery
+
+If a replacement gate fails, leave the old registration unchanged. If a problem
+appears after disabling/removing it, first stop future memU notify launches while
+preserving the user's other notifier, then wait for any worker to finish.
+Restore the exact saved task path/ID, definition and original enabled state
+through the same scheduler, using its supported import. S4U/password principals
+may require credentials again; verify the restored registration and referenced
+files before relying on it. Do not reset the backend or cursor to repair a trigger.
+
+### M4 — Remove the old retrieve skill and its AGENTS pointer
+
+First complete Part 3's prompt-hook registration, trust and real-turn verification.
+Keep the old retrieval entry until the replacement works. Back up
+`~/.codex/skills/memu-retrieve/` and `~/.codex/AGENTS.md` locally.
+Inspect `~/.codex/skills/memu-retrieve/SKILL.md` and the AGENTS pointer to confirm
+memU ownership; the removal command treats SKILL.md in that named directory as
+its ownership marker. Stop if ownership is ambiguous or user edits need review.
+
+Preview and review the targeted removal:
+
+```text
+memu-codex remove-instruction --dry-run
+```
+
+Then apply:
+
+```text
+memu-codex remove-instruction
+```
+
+This removes memU's marked AGENTS pointer first, then the owned `memu-retrieve/`
+directory, including its `SKILL.md`. Preserve all unrelated skills and user
+instructions. Do not delete `~/.codex/skills/`, another host's skill or memU's
+distribution/install SKILL.md. A custom location or unmarked reference requires
+explicit ownership confirmation and targeted cleanup; do not delete user text.
+
+Read back both locations: the old owned skill and pointer must be gone, unrelated
+content intact, and the trusted prompt hook and notify chain still working in a
+fresh session. Repeating cleanup with no old entry is a no-op. If retrieval must
+be reverted, restore only the backed-up owned skill and its pointer, preserving
+unrelated edits made since backup.
+
+### ✅ Verify migration
+
+Report verified notify and trusted prompt-hook entries, confirmed schedules
+removed (or none found), old skill/pointer cleanup and local recovery location.
+Leave migration pending while a gate, running agent or ownership question remains
+unresolved. Keep backend config, memory, session cursors and logs intact.
 
 ---
 

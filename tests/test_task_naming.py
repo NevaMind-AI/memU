@@ -67,7 +67,7 @@ def test_remote_doc_without_naming_contract_is_rejected(monkeypatch: pytest.Monk
 def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatch) -> None:
     source = (
         "---\nname: {{task_doc_name}}\ndescription: test\n---\n"
-        "<!-- memu-codex-record: notify-v1 -->\n"
+        "<!-- memu-codex-record: notify-v2 -->\n"
         "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\n"
     )
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
@@ -126,3 +126,20 @@ def test_record_guide_version_guard_is_codex_only() -> None:
     old = "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}."
     assert templates._valid_host_doc("claude-code", "INSTALL.md", old)
     assert not templates._valid_host_doc("codex", "INSTALL.md", old)
+
+
+def test_codex_install_separates_setup_from_legacy_cleanup() -> None:
+    text = (files(CODEX.package) / "INSTALL.md").read_text(encoding="utf-8")
+    setup, migration = text.split("## Existing installations — migration", 1)
+    assert "memu-codex install-hook" in setup
+    assert "https://chatgpt.com/codex/install.ps1 | iex" in setup
+    assert "https://chatgpt.com/codex/install.sh | sh" in setup
+    assert "CODEX_INSTALL_DIR" in setup and "stale PATH" in setup
+    assert "hooks/list" in setup and "trusted_hash" in setup
+    assert "memu-codex remove-instruction" not in setup
+    assert "### M4 — Remove the old retrieve skill" in migration
+    assert "~/.codex/skills/memu-retrieve/SKILL.md" in migration
+    assert "memu-codex remove-instruction --dry-run" in migration
+    assert "memu-codex remove-instruction" in migration
+    assert "docs task" not in text
+    assert not templates._valid_host_doc("codex", "INSTALL.md", text.replace("notify-v2", "notify-v1"))

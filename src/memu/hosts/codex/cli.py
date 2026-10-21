@@ -81,6 +81,12 @@ SPEC = HostSpec(
     skills_dir=SKILLS_DIR,
     schedule_backend="native",
     hook=HOOK,
+    install_hint=(
+        "Install the standalone Codex CLI using the official native installer:\n"
+        "  Windows (PowerShell): irm https://chatgpt.com/codex/install.ps1 | iex\n"
+        "  macOS/Linux: curl -fsSL https://chatgpt.com/codex/install.sh | sh\n"
+        "Refresh PATH, verify `codex --version`, then retry `memu-codex install-hook`."
+    ),
     register_extra=prompt_hook.register,
 )
 

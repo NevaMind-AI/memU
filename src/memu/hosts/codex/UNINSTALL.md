@@ -1,6 +1,6 @@
 # Uninstall memU for Codex
 
-<!-- memu-codex-record: notify-v1 -->
+<!-- memu-codex-record: notify-v2 -->
 
 ## Task identity
 
@@ -51,7 +51,7 @@ Candidate names are {{all_task_names}}, but actions, wrapper contents or the ful
 prepare / self-evolve / commit prompt must confirm **Codex** ownership. Leave
 other hosts and ambiguous registrations untouched. Save restorable definitions
 and original states locally before disabling/removing confirmed tasks, following
-`memu-codex docs install` Part 2. Do not invoke another host's schedule helper.
+the migration section of `memu-codex docs install`. Do not invoke another host's schedule helper.
 
 Disable future triggers first. Removing a registration does not stop a running
 agent. Do not terminate it; wait for all affected runs and descendants to finish
