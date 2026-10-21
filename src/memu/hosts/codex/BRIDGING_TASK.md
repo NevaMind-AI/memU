@@ -1,9 +1,11 @@
 ---
 name: {{task_doc_name}}
-description: Create a Codex scheduled task that bridges recent Codex sessions into memU memory, skills, and resource submissions. Runs the prepare → self-evolve → commit pipeline on a schedule (default: every hour).
+description: Inspect historical Codex bridging schedules and migrate the record trigger to notify.
 ---
 
-# Create the memU bridging scheduled task
+<!-- memu-codex-record: notify-v1 -->
+
+# Codex record trigger and historical schedules
 
 ## Task identity
 
@@ -11,140 +13,34 @@ description: Create a Codex scheduled task that bridges recent Codex sessions in
 - Former task names: {{former_task_names}}
 - Names recognized during migration and removal: {{all_task_names}}
 
-Use this when the user asks to **set up (or change) the recurring memU "bridging"
-task** — the job that periodically turns what the agent recently did in its Codex
-sessions into memU memory files, skills, and resource submissions.
+Codex record runs now use notify → prepare → headless `codex exec` → commit.
+For installation and migration, follow `memu-codex docs install` Part 2.
+For removal, follow `memu-codex docs uninstall`. Do not create a recurring
+bridging task alongside notify.
 
-Memory and skills are durable in both modes. In cloud mode, the current service
-accepts workspace resources from this unchanged pipeline but does not persist or
-retrieve them yet.
+The names above identify candidates only. Inspect both Windows Task Scheduler
+(in every task folder) and Codex's native scheduling surface when present.
+Confirm Codex ownership using the action and arguments, referenced wrapper or
+full prompt: the historical pipeline calls `memu-codex prepare`, processes the
+numbered self-evolve jobs, then calls `memu-codex commit`. Generic names can
+belong to another host. Leave unrelated and ambiguous tasks untouched.
 
-Your goal is to **create a Codex scheduled task** whose recurring prompt runs the
-three-step pipeline below. You are not running the pipeline now; you are
-registering the schedule that will run it later.
+Before changing a confirmed task, save its full definition and enabled/running
+state locally, including task path/ID, triggers, principal, working directory,
+actions or prompt and referenced wrapper files. Do not delete the old entry
+until CLI, backend and notify checks pass. Disable future triggers for the
+handoff and wait for any running agent and descendants to finish naturally.
+Deleting a registration does not stop the running agent, and old scheduled
+agents do not necessarily take notify's workspace lock.
 
-Part of the full setup in `INSTALL.md` (`memu-codex docs install`), but usable on
-its own to add or re-schedule the task on a machine where memU is already
-installed.
+No old task is a normal outcome. Multiple confirmed old tasks must each be
+accounted for. A repeated migration must preserve the current notify chain,
+retrieval hooks, configuration, memories, logs and session cursors. If a gate
+fails, retain/restore the old entry and its original enabled state using the
+saved definition; stop future memU notify launches before restoring a schedule.
+Never reset the store or cursor to repair a trigger.
 
-## What the bridging task does (context)
-
-Each run walks a fixed pipeline that bridges raw session history into memU:
-
-1. **Prepare** — `memu-codex prepare` scans new turns from Codex sessions,
-   mirrors the current memU recall files to `~/.memu/hosts/codex/memory` and `~/.memu/hosts/codex/skill`,
-   snapshots them by content hash, and writes a set of numbered **job-instruction
-   files** to `~/.memu/hosts/codex/jobs/` (`1.txt`, `2.txt`, …). Each job is a self-contained
-   prompt telling the agent exactly what to mine from one session.
-2. **Self-evolve** — the agent opens each `~/.memu/hosts/codex/jobs/*.txt` **in numeric
-   order** and follows it. Jobs come in three kinds: mine a session into user
-   **memory**, mine a session into a **skill**, and **describe** the files the
-   sessions touched. They write and patch markdown under `~/.memu/hosts/codex/memory` and
-   `~/.memu/hosts/codex/skill`, and fill in `~/.memu/hosts/codex/resources.md`. "Do nothing" is an
-   allowed, common outcome for any job.
-3. **Commit** — `memu-codex commit` diffs the tracked directories against the
-   step-1 snapshot, collects only the files the agent actually created or changed
-   plus the described resources, and submits them back to memU.
-
-Only steps 1 and 3 are code. **Step 2 is real agent work** — reading transcripts,
-making judgement calls, writing markdown — so the scheduled task's prompt must
-instruct the agent to do it, not shell out to a script.
-
-## Prerequisites
-
-- **memU is installed and `memu-codex` is on `PATH`.** Verify:
-
-  ```
-  memu-codex doctor
-  ```
-
-  It prints the selected mode and endpoint or local store/provider, then runs a smoke-test retrieval. If it
-  fails, stop — do `INSTALL.md` Part 1 first. Do not proceed with a broken store:
-  the task would happily run and write nowhere useful.
-
-There are no paths to resolve. The pipeline is invoked through `PATH` commands, so
-nothing in the task prompt is specific to this machine's directory layout.
-
-## Step 1 — settle the schedule
-
-Ask the user for a schedule if the request doesn't include one. **Default: every
-hour**, cron `0 * * * *` (local time). Confirm the cron expression
-before creating the task.
-
-## Step 2 — create the scheduled task
-
-Create a Codex scheduled task with the chosen cron, named
-`{{task_name}}`, and set its recurring prompt to this block **verbatim**:
-
-```
-Run the memU bridging pipeline. Do the four steps strictly in order; do not
-skip a step even if the previous one looks like it produced nothing.
-
-1. LEFTOVERS. If ~/.memu/hosts/codex/jobs/ already contains job files, they are unfinished
-   work from an earlier run (a crash, or the install itself). Process them
-   exactly as step 3 describes, then run memu-codex commit — and only then
-   continue.
-
-2. PREPARE. Run this exact command with bash:
-
-     memu-codex prepare
-
-   It regenerates ~/.memu/hosts/codex/jobs/. If the command exits non-zero, stop and report
-   the error — do not continue.
-
-3. SELF-EVOLVE. List ~/.memu/hosts/codex/jobs/*.txt and process them in ascending numeric
-   order (1.txt, then 2.txt, …). There may be anywhere from 0 to ~21 files, and
-   the count changes every run — always glob and sort; never assume a fixed
-   number. If there are no job files, skip to step 4.
-
-   For each job file: read it with `cat` and follow its instructions to the
-   letter. Each job is self-contained and already carries the concrete paths it
-   needs. Order matters — finish one job before starting the next. Emitting no
-   files for a job is a valid outcome; do not invent content to fill a job.
-
-4. COMMIT. After every job is done, run this exact command with bash:
-
-     memu-codex commit
-
-   It commits whatever the jobs created or changed. If it exits non-zero, report
-   the error.
-
-ON FAILURE. If step 2 or step 4 exited non-zero, run this once before you stop:
-
-     memu-codex report error --stage remember --detail "<a full account of what went wrong>"
-
-   That detail is all a memU engineer gets to work out what is broken on this
-   machine, so be generous: which step, what you ran, what happened instead,
-   what you already tried, and what you think the cause is. Write it as prose
-   for a human, not as a transcript — do not paste the traceback or raw command
-   output, which the CLI already reports on its own, and keep credentials,
-   absolute paths, and memory or transcript text out of it. Ignore any failure
-   of that command; it is never part of the run.
-
-Finish with a one-line summary: how many jobs ran (leftovers included) and what was committed (or
-that there was nothing to commit).
-```
-
-## Step 3 — confirm
-
-Report back to the user: the task name and the cron schedule in words (e.g. "hourly
-at :00 local time"). Mention that the first run only has work to do once there
-are new Codex sessions since the last run.
-
-## Notes
-
-- **Leftovers run before prepare.** Job files already on disk when the run
-  starts are unfinished work — a run that died mid-pipeline, or the install's
-  own verify. `prepare` deletes unprocessed job files, and the cursor already
-  marks their sessions as seen, so anything skipped at that moment would never
-  be minable again; draining leftovers first turns a half-done cycle into
-  bounded re-work instead of silent loss.
-- **Idempotent and incremental.** `prepare` tracks a per-session line cursor in
-  `~/.memu/hosts/codex/.session_manifest.codex.json`, so each run only processes turns it
-  hasn't seen. A run with no new session activity correctly does nothing.
-- **Ordering is load-bearing.** Memory jobs are numbered before skill jobs, and
-  the resource-describe job is last — later jobs depend on files earlier ones
-  write (the skill jobs are what populate the touched-file log the resource job
-  reads). Always process in ascending numeric order.
-- **Failure handling.** Steps 1 and 3 are the only failure points that should
-  abort the run. A single "do nothing" job in step 2 is normal, not an error.
+Native task export/import and Desktop notify-chain editing require their
+supported configuration surfaces. The current CLI does not automate those
+operations. If a safe export, handoff or restore cannot be established, report
+the migration as pending and keep the recoverable old entry.

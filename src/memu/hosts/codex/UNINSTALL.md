@@ -1,5 +1,7 @@
 # Uninstall memU for Codex
 
+<!-- memu-codex-record: notify-v1 -->
+
 ## Task identity
 
 - Current task name: `{{task_name}}`
@@ -12,8 +14,8 @@
 
 Uninstalling is the install run in reverse, and it is three parts:
 
-1. **Unregister the bridging task** — stop the scheduled job first, so nothing
-   fires mid-teardown (the *record* seam).
+1. **Remove the memU notify entry and confirmed old schedules** — prevent new
+   record runs, then let existing agents finish (the *record* seam).
 2. **Unpatch `~/.codex/AGENTS.md`** — remove the standing retrieval
    instruction and the `memu-retrieve` skill it points at (the *inject* seam).
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
@@ -30,21 +32,48 @@ instruction file exactly as they are.
 
 ---
 
-## Part 1 — Unregister the bridging (record) task
+## Part 1 — Remove record triggers and wait for running agents
 
-Find the Codex scheduled task that runs the memU bridging pipeline — current installs name it `{{task_name}}`; older installs may use any name in
-{{former_task_names}} or another user-chosen name — and delete **that task only**, through the same
-scheduled-task surface Codex used to create it. The name is only a hint; the
-load-bearing signal is the prompt, which runs the prepare / self-evolve / commit
-pipeline. Any other scheduled tasks the user has are theirs and stay.
+Save the current notify configuration locally before changing it. For a direct
+memU notify command, use `memu-codex remove-hook`; repeating it is a no-op and
+unrelated notify commands are preserved. Read the configuration back.
+
+The current remover does not unwrap Desktop's `turn-ended --previous-notify`
+chain. If that wrapper contains memU, preserve the outer Desktop command and
+remove only the confirmed memU callback through the wrapper's supported
+configuration path. Restore a saved predecessor only after verifying that the
+backup belongs to this chain. Never overwrite an unrelated or newer notifier
+from a stale backup. If this cannot be done safely, stop the uninstall and
+report the remaining callback; do not remove its executable.
+
+Inspect Windows Task Scheduler in all folders and Codex's native task surface.
+Candidate names are {{all_task_names}}, but actions, wrapper contents or the full
+prepare / self-evolve / commit prompt must confirm **Codex** ownership. Leave
+other hosts and ambiguous registrations untouched. Save restorable definitions
+and original states locally before disabling/removing confirmed tasks, following
+`memu-codex docs install` Part 2. Do not invoke another host's schedule helper.
+
+Disable future triggers first. Removing a registration does not stop a running
+agent. Do not terminate it; wait for all affected runs and descendants to finish
+naturally before deleting registrations, working files or the package. If a run
+is still active or ownership is unresolved, leave uninstall pending. Keep logs,
+recovery definitions, original wrappers, backend config, memories and cursors.
 
 ### ✅ Verify Part 1
 
-Codex's scheduled-task list no longer shows a memU bridging task.
+The parsed notify chain no longer invokes memU, confirmed old registrations are
+absent from both scheduler surfaces, and affected agents have finished. Other
+notifiers and hosts remain intact. Repeating the removal is a no-op.
 
 ---
 
 ## Part 2 — Remove the retrieval instruction
+
+Before continuing, inspect `~/.codex/hooks.json` for a `UserPromptSubmit`
+command invoking `memu-codex prompt-hook`. Its automatic removal and trust
+cleanup are not yet integrated. If present, stop before package removal and
+complete that separate integration step, preserving unrelated hooks; this guide
+must not leave a registered hook pointing at a removed executable.
 
 **Do not hand-edit the block out.** memU owns the text and removes it for you:
 
@@ -95,7 +124,8 @@ Only one thing overrides a default: the user's own explicit words.
   store marks history as already mined, and it would never be mined again.
 - **Remove this host's residue.** Codex's run-scoped working tree is
   `~/.memu/hosts/codex/`: the `jobs/`, `sessions/`, `memory/`, and `skill/`
-  directories and `resources.md` — but **not** the `.session_manifest*` cursor
+  directories and `resources.md` — but **not** logs, recovery definitions,
+  original scheduler wrappers or the `.session_manifest*` cursor
   files there (see above), unless the store is going too. The shared
   `~/.memu/config.env` and the store file sit at the `~/.memu/` root, outside
   this tree, so removing the tree never touches them. Also

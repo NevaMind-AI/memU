@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from importlib.resources import files
+from pathlib import Path
 
 import pytest
 
@@ -63,6 +64,7 @@ def test_remote_doc_without_naming_contract_is_rejected(monkeypatch: pytest.Monk
 def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatch) -> None:
     source = (
         "---\nname: {{task_doc_name}}\ndescription: test\n---\n"
+        "<!-- memu-codex-record: notify-v1 -->\n"
         "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\n"
     )
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
@@ -72,3 +74,32 @@ def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatc
 
     assert CODEX.render_doc(resolved).startswith(f"---\nname: {CODEX.task_doc_name}\n")
     assert (templates._docs_cache_dir(CODEX.host) / "BRIDGING_TASK.md").read_text(encoding="utf-8") == source
+
+
+@pytest.mark.parametrize("filename", DOCS.values())
+def test_codex_record_guides_reject_old_remote_and_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, filename: str
+) -> None:
+    embedded = (files(CODEX.package) / filename).read_text(encoding="utf-8")
+    old = "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\nCreate a scheduled task.\n"
+    cache = tmp_path / filename
+    cache.write_text(old, encoding="utf-8")
+    monkeypatch.setattr(templates, "_docs_cache_dir", lambda _: tmp_path)
+    monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
+    monkeypatch.setattr(templates, "_get", lambda _: old)
+
+    assert templates._valid_doc(old)  # Naming tokens alone cannot detect the old flow.
+    assert templates.resolve_doc("codex", filename, embedded) == embedded
+    assert cache.read_text(encoding="utf-8") == old
+
+    monkeypatch.setattr(templates, "_get", lambda _: embedded)
+    assert templates.resolve_doc("codex", filename, "unused") == embedded
+    assert cache.read_text(encoding="utf-8") == embedded
+    monkeypatch.setattr(templates, "_get", lambda _: None)
+    assert templates.resolve_doc("codex", filename, "unused") == embedded
+
+
+def test_record_guide_version_guard_is_codex_only() -> None:
+    old = "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}."
+    assert templates._valid_host_doc("claude-code", "INSTALL.md", old)
+    assert not templates._valid_host_doc("codex", "INSTALL.md", old)

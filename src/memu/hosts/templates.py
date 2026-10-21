@@ -280,6 +280,15 @@ def _valid_doc(text: str) -> bool:
     return "{{" not in stripped and "}}" not in stripped
 
 
+def _valid_host_doc(host: str, filename: str, text: str) -> bool:
+    """Keep lifecycle guides compatible with the installed record entry point."""
+    if not _valid_doc(text):
+        return False
+    if host == "codex" and filename in {"INSTALL.md", "UNINSTALL.md", "BRIDGING_TASK.md"}:
+        return "<!-- memu-codex-record: notify-v1 -->" in text
+    return True
+
+
 def fetch_doc(host: str, filename: str) -> str | None:
     """The server's current ``<host>/<filename>`` guide, validated — or ``None``.
 
@@ -289,7 +298,7 @@ def fetch_doc(host: str, filename: str) -> str | None:
     if base is None:
         return None
     text = _get(f"{base}/{host}/{filename}")
-    if text is None or not _valid_doc(text):
+    if text is None or not _valid_host_doc(host, filename, text):
         return None
     _write_doc_cache(host, filename, text)
     return text
@@ -313,7 +322,7 @@ def _read_doc_cache(host: str, filename: str) -> str | None:
         text = (_docs_cache_dir(host) / filename).read_text(encoding="utf-8")
     except OSError:
         return None
-    return text if _valid_doc(text) else None
+    return text if _valid_host_doc(host, filename, text) else None
 
 
 def resolve_doc(host: str, filename: str, embedded: str) -> str:
