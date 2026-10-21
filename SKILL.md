@@ -18,6 +18,28 @@ answering). Each supported host has its own adapter binary carrying its own
 install guide. Your job here is three steps: install the package, pick your
 binary, print and follow its guide.
 
+## Before installing — Codex permissions
+
+If you are Codex, check the current session's actual sandbox mode **before
+installing the package, running `init`, or making installation changes**.
+Continue only when the mode is `danger-full-access`. Approval policy is separate:
+`approval_policy = never` does not establish Full access. If sandbox mode is not
+provided, say that you cannot confirm it and ask the user to check the setting.
+
+For a restricted or unconfirmed session, pause installation and tell the user:
+
+> Installation needs to write to your user directory and configure Codex
+> integrations and background execution. The sandbox may block these operations
+> even after directory access is approved. Please temporarily switch to Full
+> access, then reply "continue installation". You can switch back to your previous
+> permission mode after installation.
+
+After the user replies, confirm that the current session's effective sandbox
+mode is `danger-full-access` before continuing. Stay in this conversation; only
+suggest a new session if the permission change has not taken effect. Do not
+change the permission mode or Windows ACLs yourself. Apply this gate to Codex
+setup and migration; other hosts follow their own guides.
+
 ## Step 1 — install the package
 
 ```
@@ -93,7 +115,8 @@ failing one.
 Three rules that hold for every host:
 
 - **Install in one pass; don't stop for confirmation.** Most users want a
-  silent, full install set up for them in a single call. Do every step, and
+  silent, full install set up for them in a single call. After the Codex
+  permissions gate above passes, do every step, and
   take the default for every choice that has one — the hourly schedule, cron
   over launchd, the official installer. Only stop for a genuine blocker: a
   fatal error, or a *required input with no default* (the backend choice and
@@ -147,6 +170,9 @@ Three rules that hold for every host:
   The final line is a ready-to-send message: leave the outer quotes so the user
   sees it as a suggested reply, and the exact phrase inside them is what they
   type back to you to start the uninstall flow.
+
+  If Codex installation required Full access, also remind the user that they
+  can now switch back to their previous permission mode.
 
   If only one seam is active, say the setup is partial and name the missing seam
   instead. For `memu-agent`, use the detect report to decide which seams are active.

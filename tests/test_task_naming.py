@@ -68,7 +68,7 @@ def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatc
     source = (
         "---\nname: {{task_doc_name}}\ndescription: test\n---\n"
         "<!-- memu-codex-record: notify-v2 -->\n"
-        "<!-- memu-codex-permissions: v1 -->\n"
+        "<!-- memu-codex-permissions: v2 -->\n"
         "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\n"
     )
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
@@ -151,11 +151,23 @@ def test_codex_install_separates_setup_from_legacy_cleanup() -> None:
 def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
     text = (files(CODEX.package) / "INSTALL.md").read_text(encoding="utf-8")
     permissions = text.split("## Execution permissions", 1)[1].split("## Choose the installation path", 1)[0]
-    assert "danger-full-access" in permissions and "request_permissions" in permissions
-    assert "require_escalated" in permissions and "sandbox_approval" in permissions
-    assert "do not rerun an unchanged failing command" in permissions
+    assert "Continue only with `danger-full-access`" in permissions
+    assert 'reply "continue installation"' in permissions
+    assert "A new conversation is needed only if" in permissions
+    assert "Do not rerun an unchanged failing command" in permissions
+    skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
+    gate = skill.split("## Before installing — Codex permissions", 1)[1].split("## Step 1", 1)[0]
+    assert "Continue only when the mode is `danger-full-access`" in gate
+    assert "before" in gate and "running `init`" in gate
+    assert "Stay in this conversation" in gate
+    assert "switch back to their previous permission mode" in skill
     preflight = text.split("### 3.0 Preflight", 1)[1].split("### 3.1 Register the command", 1)[0]
     assert "state_5.sqlite" in preflight and "-wal" in preflight and "-shm" in preflight
-    assert "keep stdin open" in preflight and "capabilities.experimentalApi = true" in preflight
+    assert "keeps stdin open" in preflight and '"experimentalApi": true' in preflight
+    assert '"clientInfo": {"name": "memu-install", "version": "1"}' in preflight
     assert "do not edit the hook or trust state while this gate fails" in preflight
-    assert not templates._valid_host_doc("codex", "INSTALL.md", text.replace("<!-- memu-codex-permissions: v1 -->", ""))
+    assert not templates._valid_host_doc(
+        "codex",
+        "INSTALL.md",
+        text.replace("<!-- memu-codex-permissions: v2 -->", "<!-- memu-codex-permissions: v1 -->"),
+    )
