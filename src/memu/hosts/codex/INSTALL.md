@@ -1,7 +1,7 @@
 # Install memU for Codex
 
 <!-- memu-codex-record: notify-v2 -->
-<!-- memu-codex-permissions: v12 -->
+<!-- memu-codex-permissions: v13 -->
 
 ## Task identity
 
@@ -69,8 +69,23 @@ resolved before continuing. Do not rerun an unchanged failing command.
 ## Installation checks — keep the user-facing flow short
 
 Reuse successful checks from this run: resolve executables once, run `doctor`
-once after the final backend/package change, and use one short fresh Codex turn
-for both hook checks. Only repeat a check when a relevant change invalidates it.
+once after the final backend/package change, and only test changed integrations.
+For an unchanged hook command with current trust and matching successful local
+logs, reuse that evidence instead of starting another model turn. Otherwise use
+one short fresh Codex turn for both hooks. Only repeat a check when a relevant
+change invalidates it.
+
+Batch independent read-only checks into one call and return a concise summary,
+not whole configurations, guides or logs. Read this guide once. Resolve the
+Codex executable before registering notify so `install-hook` runs once. Use one
+app-server connection for preflight, registration/trust readback; match RPC
+responses by id while skipping notifications. Check both hook logs in one call.
+Print stage headings before their work, never together retrospectively.
+
+If Windows blocks package replacement because a worker is using that environment,
+report the installation blocker and resume after it exits; do not spend the
+interactive installation inventing alternate tool directories or rebinding shims.
+
 Record notify startup and its log path, then leave memorization running in the
 background. Full memory evolution and cursor validation belong to development
 acceptance, not the interactive installation.
@@ -353,7 +368,8 @@ follow **Existing installations — migration** below.
 
 ### ✅ Verify Part 2
 
-Use the single short Codex turn in Part 3 to check both hooks. For notify, confirm
+Use matching startup evidence for an unchanged callback, or the single short
+Codex turn in Part 3 when runtime testing is needed. For notify, confirm
 that a new log under `~/.memu/hosts/codex/log/hooks/notify/` records the worker
 starting for that turn. Allow at most 15 seconds for startup; if it is not
 observed, report startup as pending and provide the log directory.
@@ -501,8 +517,10 @@ Read back the merged hook configuration and its corresponding trust state.
 Confirm one intended memU command and an existing executable; retain unrelated
 hooks and user configuration.
 
-Use one fresh Codex turn with a fixed short reply to check hook execution;
-reuse the same turn for Part 2. Inspect only the matching retrieval log's status
+Use matching successful local logs when the registered hook command is unchanged
+and its current trust is confirmed. Otherwise use one fresh Codex turn with a
+fixed short reply to check hook execution; reuse the same turn for Part 2.
+Inspect only the matching retrieval log's status
 and exit code under `~/.memu/hosts/codex/log/hooks/retrieve/`. Successful context
 return or an empty result is valid; do not inspect or display retrieved memory
 as part of installation. An untrusted or unexecuted hook does not pass.
@@ -525,7 +543,10 @@ replacement entries, while this section owns backups, handoff and cleanup.
 ### M1 — Inventory and preserve the old entry points
 
 Inspect both Windows Task Scheduler (all task folders) and Codex's own
-scheduled-task surface when present. Candidate names are {{all_task_names}}.
+scheduled-task surface when present. Windows Task Scheduler cannot establish
+that Codex native automations are absent; query those through the available
+Codex automation tools. If that inventory is unavailable, report it as unresolved.
+Candidate names are {{all_task_names}}.
 A name is only a search hint: confirm that the action, wrapper or prompt invokes
 **Codex's** memU prepare / self-evolve / commit pipeline. Generic historical
 names may belong to another host. Leave unrelated or ambiguous tasks untouched
@@ -629,6 +650,8 @@ unrelated edits made since backup.
 
 Report verified notify and trusted prompt-hook entries, confirmed schedules
 removed (or none found), old skill/pointer cleanup and local recovery location.
+An unresolved native-task inventory or retained old retrieval entry means
+migration is partial; do not report complete installation.
 Leave migration pending while a gate, old scheduled agent or ownership question
 remains unresolved. The new memorize worker may continue in the background.
 Keep backend config, memory, session cursors and logs intact.

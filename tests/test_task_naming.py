@@ -68,7 +68,7 @@ def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatc
     source = (
         "---\nname: {{task_doc_name}}\ndescription: test\n---\n"
         "<!-- memu-codex-record: notify-v2 -->\n"
-        "<!-- memu-codex-permissions: v12 -->\n"
+        "<!-- memu-codex-permissions: v13 -->\n"
         "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\n"
     )
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
@@ -189,6 +189,10 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
     assert "do not tail" in startup
     assert "exact local log path" in startup
     assert "Do not wait for" in startup
+    assert "only test changed integrations" in text
+    assert "Check both hook logs in one call" in text
+    assert "never together retrospectively" in text
+    assert "query those through the available" in text
     migration = text.split("### M2", 1)[1].split("### Migration recovery", 1)[0]
     assert "If no old schedules" in migration
     assert "after this startup check passes" in migration
@@ -201,5 +205,5 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
     assert not templates._valid_host_doc(
         "codex",
         "INSTALL.md",
-        text.replace("<!-- memu-codex-permissions: v12 -->", "<!-- memu-codex-permissions: v1 -->"),
+        text.replace("<!-- memu-codex-permissions: v13 -->", "<!-- memu-codex-permissions: v1 -->"),
     )
