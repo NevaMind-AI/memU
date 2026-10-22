@@ -51,12 +51,14 @@ access. If sandbox mode is not provided, say that you cannot confirm it and ask
 the user to check the setting.
 
 If the session is restricted or its mode is unknown, pause at stage 1 and show
-**both** options below so the user can choose:
+**both** options below so the user can choose. Bold only the application name,
+placing the colon outside the bold markers, e.g. `**Codex Desktop**: ...` or
+`**Codex Desktop**：切换……`:
 
-- **Codex Desktop:** ask the user to switch to **Full access / 完全访问权限**
+- **Codex Desktop**: ask the user to switch to **Full access / 完全访问权限**
   and reply "continue installation" here. Recheck the effective mode before
   resuming; remain paused if the change has not taken effect.
-- **Codex CLI:** ask the user to exit and start a new session from the same
+- **Codex CLI**: ask the user to exit and start a new session from the same
   directory, then repeat the installation request:
 
   ```sh
