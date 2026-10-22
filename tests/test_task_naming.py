@@ -68,7 +68,7 @@ def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatc
     source = (
         "---\nname: {{task_doc_name}}\ndescription: test\n---\n"
         "<!-- memu-codex-record: notify-v2 -->\n"
-        "<!-- memu-codex-permissions: v10 -->\n"
+        "<!-- memu-codex-permissions: v11 -->\n"
         "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\n"
     )
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
@@ -176,10 +176,9 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
         assert "3. Other" in language
         assert "End the response immediately after the question and wait for the answer" in language
         assert "do not check or discuss permissions" in language
-        assert "reproduce the following prompt exactly, without a preface" in language
-        assert "`request_user_input_async` is exposed, you **must call it**" in language
-        assert '"options": ["EN — English", "ZH — 中文", "Other' in language
-        assert "Do not infer unavailability" in language
+        assert "Prefer native interactive options" in language
+        assert "numbered menu without a preface" in language
+        assert "custom language answer" in language
         assert "Full access check" in language
         assert "without asking again" in language or "without\nasking again" in language
         assert "never repeat" in guide
@@ -212,5 +211,5 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
     assert not templates._valid_host_doc(
         "codex",
         "INSTALL.md",
-        text.replace("<!-- memu-codex-permissions: v10 -->", "<!-- memu-codex-permissions: v1 -->"),
+        text.replace("<!-- memu-codex-permissions: v11 -->", "<!-- memu-codex-permissions: v1 -->"),
     )

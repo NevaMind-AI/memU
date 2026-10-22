@@ -1,7 +1,7 @@
 # Install memU for Codex
 
 <!-- memu-codex-record: notify-v2 -->
-<!-- memu-codex-permissions: v10 -->
+<!-- memu-codex-permissions: v11 -->
 
 ## Task identity
 
@@ -23,27 +23,10 @@
 
 Before stage 1, the Full access check, or any installation commands, use the
 language explicitly selected for this installation. If none was selected, the
-first response is a **language-selection turn only**. If
-`request_user_input_async` is exposed, you **must call it**, not print a text
-menu. Use its actual schema; for the verified Desktop tool, pass:
-
-```json
-{
-  "questions": [
-    {
-      "title": "Choose your installation language / 请选择安装引导语言",
-      "options": ["EN — English", "ZH — 中文", "Other — specify a language / 输入其他语言"]
-    }
-  ]
-}
-```
-
-The tool permits a free-text answer. Prefer it over plan-mode-only
-`request_user_input`. If only another permitted choice tool is exposed, call
-that tool with equivalent choices. Use the text fallback only when no choice
-tool is exposed, higher-priority instructions prohibit it, or an actual call
-fails. Do not infer unavailability from the current sandbox or collaboration
-mode. For that fallback, reproduce the following prompt exactly, without a preface:
+first response is a **language-selection turn only**. Offer EN, ZH and Other
+(with a custom language answer). Prefer native interactive options supported by
+the current environment over a plain-text reply. If native options are
+unavailable, show this concise numbered menu without a preface:
 
 ```text
 🌐 Choose your installation language / 请选择安装引导语言
