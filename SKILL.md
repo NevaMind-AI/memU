@@ -23,9 +23,27 @@ binary, print and follow its guide.
 For Codex installation or migration, ask the user to choose the guide language
 **before stage 1, the Full access check, or any installation commands**. If the
 user already explicitly selected a language for this installation, reuse it.
-Otherwise the first response is a **language-selection turn only**. Use an
-available choice tool with EN, ZH and a free-text Other answer; if unavailable
-or disallowed, reproduce the following prompt exactly, without a preface:
+Otherwise the first response is a **language-selection turn only**. If
+`request_user_input_async` is exposed, you **must call it**, not print a text
+menu. Use its actual schema; for the verified Desktop tool, pass:
+
+```json
+{
+  "questions": [
+    {
+      "title": "Choose your installation language / 请选择安装引导语言",
+      "options": ["EN — English", "ZH — 中文", "Other — specify a language / 输入其他语言"]
+    }
+  ]
+}
+```
+
+The tool permits a free-text answer. Prefer it over plan-mode-only
+`request_user_input`. If only another permitted choice tool is exposed, call
+that tool with equivalent choices. Use the text fallback only when no choice
+tool is exposed, higher-priority instructions prohibit it, or an actual call
+fails. Do not infer unavailability from the current sandbox or collaboration
+mode. For that fallback, reproduce the following prompt exactly, without a preface:
 
 ```text
 🌐 Choose your installation language / 请选择安装引导语言
