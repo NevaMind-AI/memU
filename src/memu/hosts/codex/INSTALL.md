@@ -531,8 +531,8 @@ partial. Keep backend config, memory, session cursors and logs intact.
 ## Report the outcome to memU
 
 memU is otherwise blind to whether any of this worked: an install that died in
-Part 2 looks exactly like one that was never attempted. Close this run with
-**one** command, whichever way it ended.
+Part 2 looks exactly like one that was never attempted. Report once when this
+run succeeds or encounters an actual failure:
 
 It is best-effort throughout and never part of the install — if the command
 fails, ignore it, and if `memu-codex` is not on `PATH` (a Part 1 that never
@@ -547,8 +547,12 @@ memu-codex report install
 The event's *existence* is the success signal: there is no failure flag, and
 nothing leaves the machine here — it records locally and returns.
 
-**You are stopping early instead** — a part that failed, or a prerequisite you
-could not resolve — then tell the user as usual:
+If registration succeeded and runtime verification only awaits the user's next
+message, give Part 2's activation message. Defer `report install` until runtime
+verification passes; this normal wait is not an installation error.
+
+**An installation step failed or a required prerequisite is unavailable** —
+tell the user and report the actual failure:
 
 ```
 memu-codex report error --stage install --detail "<a full account of what went wrong>"
