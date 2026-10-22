@@ -18,6 +18,29 @@ answering). Each supported host has its own adapter binary carrying its own
 install guide. Your job here is three steps: install the package, pick your
 binary, print and follow its guide.
 
+## Before installing — choose the guide language
+
+For Codex installation or migration, ask the user to choose the guide language
+**before stage 1, the Full access check, or any installation commands**. If the
+user already explicitly selected a language for this installation, reuse it.
+Otherwise use an available choice tool with these options and a free-text Other
+answer; if the tool is unavailable or disallowed, ask in plain text:
+
+```text
+🌐 Choose your installation language / 请选择安装引导语言
+
+1. EN — English
+2. ZH — 中文
+3. Other — enter your preferred language / 输入其他语言
+```
+
+Wait for the answer before continuing. If Other has no language filled in, ask
+which language. Do not infer a selection from the language of the initial request
+alone. Use the selected language for stage labels, permission prompts, blockers
+and the final report; keep commands, paths and configuration keys unchanged.
+Carry the selection into the packaged guide without asking again. Language
+selection is an introduction, not a numbered installation stage.
+
 ## Codex installation progress
 
 For Codex, show these five progress messages in the user's language. Print each

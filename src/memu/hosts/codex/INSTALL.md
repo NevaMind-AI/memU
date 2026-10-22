@@ -1,7 +1,7 @@
 # Install memU for Codex
 
 <!-- memu-codex-record: notify-v2 -->
-<!-- memu-codex-permissions: v4 -->
+<!-- memu-codex-permissions: v5 -->
 
 ## Task identity
 
@@ -18,6 +18,27 @@
 >
 > However this run ends — finished or abandoned — close it out with **Report
 > the outcome to memU** at the bottom of this file.
+
+## Before installing — choose the guide language
+
+Before stage 1, the Full access check, or any installation commands, use the
+language explicitly selected for this installation. If none was selected, use
+an available choice tool with EN, ZH and a free-text Other answer. If that tool
+is unavailable or disallowed, ask in plain text:
+
+```text
+🌐 Choose your installation language / 请选择安装引导语言
+
+1. EN — English
+2. ZH — 中文
+3. Other — enter your preferred language / 输入其他语言
+```
+
+Wait for the answer; ask which language if Other was left blank. Do not infer
+a selection from the initial request's language alone. Use the selected language
+for all progress, permission prompts, blockers and the final report, preserving
+commands, paths and configuration keys. Reuse the choice from `SKILL.md` without
+asking again. This introduction is outside the five numbered stages.
 
 ## Installation progress — five stages
 

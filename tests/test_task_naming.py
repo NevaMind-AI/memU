@@ -68,7 +68,7 @@ def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatc
     source = (
         "---\nname: {{task_doc_name}}\ndescription: test\n---\n"
         "<!-- memu-codex-record: notify-v2 -->\n"
-        "<!-- memu-codex-permissions: v4 -->\n"
+        "<!-- memu-codex-permissions: v5 -->\n"
         "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\n"
     )
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
@@ -162,6 +162,18 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
     assert "Stay in this conversation" in gate
     assert "switch back to their previous permission mode" in skill
     assert "registration-time retrieval below" in skill
+    for guide, progress_heading in (
+        (skill, "## Codex installation progress"),
+        (text, "## Installation progress — five stages"),
+    ):
+        language = guide.split("## Before installing — choose the guide language", 1)[1].split(progress_heading, 1)[0]
+        assert "1. EN — English" in language
+        assert "2. ZH — 中文" in language
+        assert "3. Other" in language
+        assert "Wait for the answer" in language
+        assert "Full access check" in language
+        assert "without asking again" in language or "without\nasking again" in language
+        assert guide.index("## Before installing — choose the guide language") < guide.index(progress_heading)
     for progress in (
         "🔐 [1/5]",
         "📦 [2/5]",
@@ -188,5 +200,5 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
     assert not templates._valid_host_doc(
         "codex",
         "INSTALL.md",
-        text.replace("<!-- memu-codex-permissions: v4 -->", "<!-- memu-codex-permissions: v1 -->"),
+        text.replace("<!-- memu-codex-permissions: v5 -->", "<!-- memu-codex-permissions: v1 -->"),
     )
