@@ -23,8 +23,7 @@
 
 Use English for installation guidance unless the user explicitly requests
 another language. Begin directly with stage 1, even when permissions are blocked.
-Render each stage message below as a Markdown `##` heading exactly once before its work. If already printed while following
-`SKILL.md`, resume silently without repeating the heading. Within a stage, use
+Render each stage message below as a Markdown `##` heading exactly once before its work. Within a stage, use
 at most one short plain-text status when needed; never repeat the emoji, counter
 or stage name in status updates. Show a concrete blocker and next action briefly,
 without narrating commands, process details or reasoning.
@@ -142,35 +141,23 @@ memU is distributed as a **pip package**. There is no npm package — do not loo
 for one; a Python runtime is required regardless, because the bridging task runs
 Python.
 
-### 1.1 Install
+### 1.1 Reuse the installed package
 
-```
+If you followed `SKILL.md`, package installation and executable selection are
+already complete. Reuse that installation, source and executable path; do not
+install again or repeat successful executable checks.
+
+If you opened this guide directly and have not installed or updated the package,
+use the user's requested package manager and source. The default is:
+
+```text
 pip install --upgrade memu-cli
 ```
 
-**`--upgrade` matters, and a bare install is not enough.** A machine that
-already carries an older `memu-cli` keeps it otherwise, and this guide names
-subcommands (`init`, `config`) that older builds answer with `invalid choice`.
-If you meet that error anywhere below, you are on a stale build: upgrade, then
-re-run the command that failed.
+For uv, use `uv tool install --upgrade memu-cli`. Confirm `memu-codex --help`
+succeeds once after installation. Keep the executable available to Codex's
+background processes; respect any explicit executable path supplied by the user.
 
-This puts two commands on `PATH`:
-
-- **`memu`** — memU itself (commit, list-files, retrieve). The library's own
-  surface; this guide does not use it directly.
-- **`memu-codex`** — the Codex adapter. Both Part 2 (record) and Part 3 (inject)
-  go through it.
-
-Confirm it resolves:
-
-```
-memu-codex --help
-```
-
-If it is not found, the install landed in an environment that isn't on your
-`PATH`. Fix that now rather than working around it — the notify worker in Part 2
-and the hook in Part 3 both need a usable executable in a non-interactive
-environment.
 
 ### 1.2 Configure the memory backend
 

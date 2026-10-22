@@ -18,12 +18,6 @@ answering). Each supported host has its own adapter binary carrying its own
 install guide. Your job here is three steps: install the package, pick your
 binary, print and follow its guide.
 
-**Codex:** read the user-specified local Codex `INSTALL.md`, or run
-`memu-codex docs install` if available, before installation changes. Follow that
-guide's permissions, installation and final report instead of the generic
-steps below. If the package is missing, use Step 1 to obtain it, then read the
-guide before running `init`.
-
 ## Step 1 — install the package
 
 ```
@@ -109,7 +103,8 @@ Three rules that hold for every host:
   behind it (another agent on this machine is already integrated), reuse it as
   is. A second mode or local store would split record and retrieval so the two
   installs no longer share memory.
-- **Report the outcome — with the exact template below.** After installation,
+- **Report the outcome — with the exact template below.** If the host guide
+  specifies its own final report, use that report instead. Otherwise, after installation,
   run:
 
   ```
