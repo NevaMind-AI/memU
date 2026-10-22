@@ -68,7 +68,7 @@ def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatc
     source = (
         "---\nname: {{task_doc_name}}\ndescription: test\n---\n"
         "<!-- memu-codex-record: notify-v2 -->\n"
-        "<!-- memu-codex-permissions: v9 -->\n"
+        "<!-- memu-codex-permissions: v10 -->\n"
         "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\n"
     )
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
@@ -182,6 +182,9 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
         assert "Do not infer unavailability" in language
         assert "Full access check" in language
         assert "without asking again" in language or "without\nasking again" in language
+        assert "never repeat" in guide
+        assert "plain-text status" in guide
+        assert "Markdown `##`" in guide or "Markdown\n`##`" in guide
         assert guide.index("## Before installing — choose the guide language") < guide.index(progress_heading)
     for progress in (
         "🔐 [1/5]",
@@ -209,5 +212,5 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
     assert not templates._valid_host_doc(
         "codex",
         "INSTALL.md",
-        text.replace("<!-- memu-codex-permissions: v9 -->", "<!-- memu-codex-permissions: v1 -->"),
+        text.replace("<!-- memu-codex-permissions: v10 -->", "<!-- memu-codex-permissions: v1 -->"),
     )

@@ -79,19 +79,20 @@ prompt belongs under that heading; it never replaces the progress message.
 
 ## Codex installation progress
 
-For Codex, show these five progress messages in the user's language. Print each
-once when entering that stage, before its tools; resume a paused stage without
-restarting the counter. Use these labels instead of narrating individual commands
-or internal reasoning. Keep any necessary blocker explanation to one short
-sentence identifying the stage and next action.
+For Codex, show these five progress messages in the user's language as Markdown
+`##` headings. Print each heading exactly once when entering its stage, before
+its tools. On continuation, resume silently without repeating that heading.
+Within a stage, use at most one short plain-text status when needed; never repeat
+the emoji, counter or stage name in status updates. Show a concrete blocker and
+next action briefly, without narrating commands, process details or reasoning.
 
-1. `🔐 [1/5] Checking installation permissions` — the permissions gate below.
-2. `📦 [2/5] Preparing memU and the memory backend` — reuse/install the package
+1. `## 🔐 [1/5] Checking installation permissions` — the permissions gate below.
+2. `## 📦 [2/5] Preparing memU and the memory backend` — reuse/install the package
    and configure or reuse the backend.
-3. `🔔 [3/5] Setting up automatic memorization` — register notify and perform
+3. `## 🔔 [3/5] Setting up automatic memorization` — register notify and perform
    any required old-schedule handoff.
-4. `🧠 [4/5] Setting up memory retrieval` — register and trust the prompt hook.
-5. `🚀 [5/5] Starting your first memorize task` — one short turn to check
+4. `## 🧠 [4/5] Setting up memory retrieval` — register and trust the prompt hook.
+5. `## 🚀 [5/5] Starting your first memorize task` — one short turn to check
    retrieval and notify startup, then finish required legacy instruction cleanup.
 
 Finish with `✅ memU installation complete`, the background task status and its

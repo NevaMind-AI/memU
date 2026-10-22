@@ -1,7 +1,7 @@
 # Install memU for Codex
 
 <!-- memu-codex-record: notify-v2 -->
-<!-- memu-codex-permissions: v9 -->
+<!-- memu-codex-permissions: v10 -->
 
 ## Task identity
 
@@ -80,10 +80,12 @@ prompt belongs under that heading; it never replaces the progress message.
 
 ## Installation progress — five stages
 
-Use the user's language and print each stage message once before its work.
-If already printed while following `SKILL.md`, continue that stage rather than
-restarting the counter. Use these messages instead of command-by-command
-narration; explain a blocker in one short sentence with the required next action.
+Use the user's language and render each stage message below as a Markdown `##`
+heading exactly once before its work. If already printed while following
+`SKILL.md`, resume silently without repeating the heading. Within a stage, use
+at most one short plain-text status when needed; never repeat the emoji, counter
+or stage name in status updates. Show a concrete blocker and next action briefly,
+without narrating commands, process details or reasoning.
 
 | Stage message | Work |
 | --- | --- |
