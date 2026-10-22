@@ -64,7 +64,7 @@ class AppServer:
                 raise RuntimeError(f"Codex app-server {method} failed: {response['error']}")  # noqa: TRY003
             result = response.get("result", {})
             if not isinstance(result, dict):
-                raise RuntimeError(f"Unexpected Codex app-server result for {method}")  # noqa: TRY003
+                raise TypeError(f"Unexpected Codex app-server result for {method}")  # noqa: TRY003
             return result
 
     def notify(self, method: str) -> None:
