@@ -363,7 +363,9 @@ turns, as the two newest logs are not correlated by session ID.
 
 Verify that the registered callback and agent paths exist. Runtime startup is
 checked after the next user message; it does not delay cleanup or installation
-completion. When installation and M3 cleanup are complete, tell the user:
+completion. When installation and M3 cleanup are complete, include the following
+meaning once in the final report, using the same language as the rest of that
+report. This is a content example, not text to append verbatim:
 
 > memU is installed. Send one more message here to trigger your first memory
 > retrieval and background memorize task. You can ask: "What did memU retrieve
@@ -559,6 +561,11 @@ through what looks like a system proxy"* says everything useful and names
 nothing secret.
 
 ## Done
+
+Give one concise final report in a consistent language. Combine installation
+success, the next-message invitation and background log location into that
+report; do not append a second activation paragraph or repeat the same facts
+in English and Chinese.
 
 Report back to the user:
 
