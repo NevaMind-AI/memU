@@ -68,7 +68,7 @@ def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatc
     source = (
         "---\nname: {{task_doc_name}}\ndescription: test\n---\n"
         "<!-- memu-codex-record: notify-v2 -->\n"
-        "<!-- memu-codex-permissions: v5 -->\n"
+        "<!-- memu-codex-permissions: v6 -->\n"
         "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\n"
     )
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
@@ -153,7 +153,7 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
     permissions = text.split("## Execution permissions", 1)[1].split("## Choose the installation path", 1)[0]
     assert "Continue only with `danger-full-access`" in permissions
     assert 'reply "continue installation"' in permissions
-    assert "A new conversation is needed only if" in permissions
+    assert "remain paused at" in permissions and "stage 1" in permissions
     assert "Do not rerun an unchanged failing command" in permissions
     skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
     gate = skill.split("## Before installing — Codex permissions", 1)[1].split("## Step 1", 1)[0]
@@ -170,7 +170,9 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
         assert "1. EN — English" in language
         assert "2. ZH — 中文" in language
         assert "3. Other" in language
-        assert "Wait for the answer" in language
+        assert "End the response immediately after the question and wait for the answer" in language
+        assert "do not check or discuss permissions" in language
+        assert "reproduce the following prompt exactly, without a preface" in language
         assert "Full access check" in language
         assert "without asking again" in language or "without\nasking again" in language
         assert guide.index("## Before installing — choose the guide language") < guide.index(progress_heading)
@@ -200,5 +202,5 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
     assert not templates._valid_host_doc(
         "codex",
         "INSTALL.md",
-        text.replace("<!-- memu-codex-permissions: v5 -->", "<!-- memu-codex-permissions: v1 -->"),
+        text.replace("<!-- memu-codex-permissions: v6 -->", "<!-- memu-codex-permissions: v1 -->"),
     )

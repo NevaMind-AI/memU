@@ -1,7 +1,7 @@
 # Install memU for Codex
 
 <!-- memu-codex-record: notify-v2 -->
-<!-- memu-codex-permissions: v5 -->
+<!-- memu-codex-permissions: v6 -->
 
 ## Task identity
 
@@ -22,9 +22,10 @@
 ## Before installing — choose the guide language
 
 Before stage 1, the Full access check, or any installation commands, use the
-language explicitly selected for this installation. If none was selected, use
-an available choice tool with EN, ZH and a free-text Other answer. If that tool
-is unavailable or disallowed, ask in plain text:
+language explicitly selected for this installation. If none was selected, the
+first response is a **language-selection turn only**. Use an available choice
+tool with EN, ZH and a free-text Other answer. If unavailable or disallowed,
+reproduce the following prompt exactly, without a preface:
 
 ```text
 🌐 Choose your installation language / 请选择安装引导语言
@@ -34,8 +35,13 @@ is unavailable or disallowed, ask in plain text:
 3. Other — enter your preferred language / 输入其他语言
 ```
 
-Wait for the answer; ask which language if Other was left blank. Do not infer
-a selection from the initial request's language alone. Use the selected language
+**End the response immediately after the question and wait for the answer.**
+Until the user chooses, do not check or discuss permissions, mention Full access,
+print a numbered stage, run commands, read another guide, or explain later steps.
+The language prompt is the entire response, not a summary of this document.
+If Other has no language filled in, ask only which language and wait again.
+Do not infer a selection from the initial request's language alone.
+Use the selected language
 for all progress, permission prompts, blockers and the final report, preserving
 commands, paths and configuration keys. Reuse the choice from `SKILL.md` without
 asking again. This introduction is outside the five numbered stages.
@@ -77,8 +83,9 @@ Otherwise pause installation and tell the user:
 > permission mode after installation.
 
 Confirm the current session's effective mode after the user replies, then resume
-from the pending step. A new conversation is needed only if the permission change
-has not taken effect. Do not switch modes or change Windows ACLs yourself.
+from the pending step in this conversation. If it still reports restricted
+permissions, report that the change has not taken effect and remain paused at
+stage 1. Do not switch modes or change Windows ACLs yourself.
 Normal OS permissions still apply in Full access; an access error must be
 resolved before continuing. Do not rerun an unchanged failing command.
 

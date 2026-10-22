@@ -23,8 +23,9 @@ binary, print and follow its guide.
 For Codex installation or migration, ask the user to choose the guide language
 **before stage 1, the Full access check, or any installation commands**. If the
 user already explicitly selected a language for this installation, reuse it.
-Otherwise use an available choice tool with these options and a free-text Other
-answer; if the tool is unavailable or disallowed, ask in plain text:
+Otherwise the first response is a **language-selection turn only**. Use an
+available choice tool with EN, ZH and a free-text Other answer; if unavailable
+or disallowed, reproduce the following prompt exactly, without a preface:
 
 ```text
 🌐 Choose your installation language / 请选择安装引导语言
@@ -34,9 +35,13 @@ answer; if the tool is unavailable or disallowed, ask in plain text:
 3. Other — enter your preferred language / 输入其他语言
 ```
 
-Wait for the answer before continuing. If Other has no language filled in, ask
-which language. Do not infer a selection from the language of the initial request
-alone. Use the selected language for stage labels, permission prompts, blockers
+**End the response immediately after the question and wait for the answer.**
+Until the user chooses, do not check or discuss permissions, mention Full access,
+print a numbered stage, run commands, read another guide, or explain later steps.
+The language prompt is the entire response, not a summary of this document.
+If Other has no language filled in, ask only which language and wait again.
+Do not infer a selection from the language of the initial request alone.
+Use the selected language for stage labels, permission prompts, blockers
 and the final report; keep commands, paths and configuration keys unchanged.
 Carry the selection into the packaged guide without asking again. Language
 selection is an introduction, not a numbered installation stage.
@@ -81,9 +86,10 @@ For a restricted or unconfirmed session, pause installation and tell the user:
 > permission mode after installation.
 
 After the user replies, confirm that the current session's effective sandbox
-mode is `danger-full-access` before continuing. Stay in this conversation; only
-suggest a new session if the permission change has not taken effect. Do not
-change the permission mode or Windows ACLs yourself. Apply this gate to Codex
+mode is `danger-full-access` before continuing. Stay in this conversation. If
+it still reports restricted permissions, report that the change has not taken
+effect and remain paused at stage 1. Do not change the permission mode or
+Windows ACLs yourself. Apply this gate to Codex
 setup and migration; other hosts follow their own guides.
 
 ## Step 1 — install the package
