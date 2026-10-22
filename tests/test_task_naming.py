@@ -68,7 +68,7 @@ def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatc
     source = (
         "---\nname: {{task_doc_name}}\ndescription: test\n---\n"
         "<!-- memu-codex-record: notify-v2 -->\n"
-        "<!-- memu-codex-permissions: v3 -->\n"
+        "<!-- memu-codex-permissions: v4 -->\n"
         "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\n"
     )
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
@@ -161,6 +161,25 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
     assert "before" in gate and "running `init`" in gate
     assert "Stay in this conversation" in gate
     assert "switch back to their previous permission mode" in skill
+    assert "registration-time retrieval below" in skill
+    for progress in (
+        "🔐 [1/5]",
+        "📦 [2/5]",
+        "🔔 [3/5]",
+        "🧠 [4/5]",
+        "🚀 [5/5]",
+        "✅ memU installation complete",
+    ):
+        assert progress in skill and progress in text
+    startup = text.split("### ✅ Verify Part 2", 1)[1].split("## Part 3", 1)[0]
+    assert "at most 15 seconds" in startup
+    assert "do not tail" in startup
+    assert "exact local log path" in startup
+    assert "Do not wait for" in startup
+    migration = text.split("### M2", 1)[1].split("### Migration recovery", 1)[0]
+    assert "If no old schedules" in migration
+    assert "after this startup check passes" in migration
+    assert "wait for the new worker's" in migration
     preflight = text.split("### 3.0 Preflight", 1)[1].split("### 3.1 Register the command", 1)[0]
     assert "state_5.sqlite" in preflight and "-wal" in preflight and "-shm" in preflight
     assert "keeps stdin open" in preflight and '"experimentalApi": true' in preflight
@@ -169,5 +188,5 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
     assert not templates._valid_host_doc(
         "codex",
         "INSTALL.md",
-        text.replace("<!-- memu-codex-permissions: v3 -->", "<!-- memu-codex-permissions: v1 -->"),
+        text.replace("<!-- memu-codex-permissions: v4 -->", "<!-- memu-codex-permissions: v1 -->"),
     )

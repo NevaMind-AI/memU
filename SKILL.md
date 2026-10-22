@@ -18,6 +18,29 @@ answering). Each supported host has its own adapter binary carrying its own
 install guide. Your job here is three steps: install the package, pick your
 binary, print and follow its guide.
 
+## Codex installation progress
+
+For Codex, show these five progress messages in the user's language. Print each
+once when entering that stage, before its tools; resume a paused stage without
+restarting the counter. Use these labels instead of narrating individual commands
+or internal reasoning. Keep any necessary blocker explanation to one short
+sentence identifying the stage and next action.
+
+1. `🔐 [1/5] Checking installation permissions` — the permissions gate below.
+2. `📦 [2/5] Preparing memU and the memory backend` — reuse/install the package
+   and configure or reuse the backend.
+3. `🔔 [3/5] Setting up automatic memorization` — register notify and perform
+   any required old-schedule handoff.
+4. `🧠 [4/5] Setting up memory retrieval` — register and trust the prompt hook.
+5. `🚀 [5/5] Starting your first memorize task` — one short turn to check
+   retrieval and notify startup, then finish required legacy instruction cleanup.
+
+Finish with `✅ memU installation complete`, the background task status and its
+exact log path, plus the reminder about restoring the previous permission mode.
+If a stage is blocked or startup remains pending, report that stage and the
+remaining action instead of announcing completion. Memorization itself runs in
+the background; do not add progress stages for processing its jobs.
+
 ## Before installing — Codex permissions
 
 If you are Codex, check the current session's actual sandbox mode **before
@@ -126,8 +149,14 @@ Three rules that hold for every host:
   behind it (another agent on this machine is already integrated), reuse it as
   is. A second mode or local store would split record and retrieval so the two
   installs no longer share memory.
-- **Report the outcome — with the exact template below.** After installation,
-  run:
+- **Report the outcome — with the exact template below.** For Codex, report
+  the configured backend, retrieval-hook trust/execution status, and notify
+  startup with its exact local log path. Once the worker has started, tell the
+  user their first memorize task is running in the background and finish; do
+  not wait for jobs, commit or worker completion, tail logs, or run the extra
+  registration-time retrieval below. If the worker already completed a no-op,
+  report that instead. Remind the user they can restore their previous permission
+  mode. Other hosts use the following report. After installation, run:
 
   ```
   <your-binary> retrieve "When did the user register for memU?"

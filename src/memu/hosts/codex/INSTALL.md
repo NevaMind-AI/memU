@@ -1,7 +1,7 @@
 # Install memU for Codex
 
 <!-- memu-codex-record: notify-v2 -->
-<!-- memu-codex-permissions: v3 -->
+<!-- memu-codex-permissions: v4 -->
 
 ## Task identity
 
@@ -18,6 +18,26 @@
 >
 > However this run ends — finished or abandoned — close it out with **Report
 > the outcome to memU** at the bottom of this file.
+
+## Installation progress — five stages
+
+Use the user's language and print each stage message once before its work.
+If already printed while following `SKILL.md`, continue that stage rather than
+restarting the counter. Use these messages instead of command-by-command
+narration; explain a blocker in one short sentence with the required next action.
+
+| Stage message | Work |
+| --- | --- |
+| 🔐 [1/5] Checking installation permissions | Full-access gate below |
+| 📦 [2/5] Preparing memU and the memory backend | Part 1; reuse existing configuration |
+| 🔔 [3/5] Setting up automatic memorization | Part 2 registration; old-schedule handoff if needed |
+| 🧠 [4/5] Setting up memory retrieval | Part 3 registration and trust |
+| 🚀 [5/5] Starting your first memorize task | One short turn for both hook checks; legacy instruction cleanup |
+
+After successful installation checks, print `✅ memU installation complete`,
+the background task status and exact log path, then the permission-mode reminder.
+For a blocker or pending startup, name the stage and remaining action instead
+of announcing completion. Background job processing does not add stages.
 
 ## Execution permissions — Full access before installation
 
@@ -41,6 +61,15 @@ has not taken effect. Do not switch modes or change Windows ACLs yourself.
 Normal OS permissions still apply in Full access; an access error must be
 resolved before continuing. Do not rerun an unchanged failing command.
 
+
+## Installation checks — keep the user-facing flow short
+
+Reuse successful checks from this run: resolve executables once, run `doctor`
+once after the final backend/package change, and use one short fresh Codex turn
+for both hook checks. Only repeat a check when a relevant change invalidates it.
+Record notify startup and its log path, then leave memorization running in the
+background. Full memory evolution and cursor validation belong to development
+acceptance, not the interactive installation.
 
 ## Choose the installation path
 
@@ -320,10 +349,18 @@ follow **Existing installations — migration** below.
 
 ### ✅ Verify Part 2
 
-Use a real Codex turn to verify callback execution and worker completion in
-`~/.memu/hosts/codex/log/hooks/notify/`. Confirm prepare, agent work when jobs
-exist, commit/no-op and cursor behavior. Version/doctor checks alone do not
-verify record execution. Keep raw logs local. Report any unresolved gate.
+Use the single short Codex turn in Part 3 to check both hooks. For notify, confirm
+that a new log under `~/.memu/hosts/codex/log/hooks/notify/` records the worker
+starting for that turn. Allow at most 15 seconds for startup; if it is not
+observed, report startup as pending and provide the log directory.
+
+Once startup is observed, continue installation immediately. Do not wait for
+memorization jobs, commit, cursor updates or worker completion, and do not tail
+logs or poll the worker afterward. Tell the user their first memorize task has
+started in the background and provide the exact local log path so they can
+follow progress. A log containing an immediate startup error does not pass.
+If the log already shows a successful no-op, report that result instead of
+claiming memories were created. Keep raw logs local.
 
 ---
 
@@ -460,16 +497,15 @@ Read back the merged hook configuration and its corresponding trust state.
 Confirm one intended memU command and an existing executable; retain unrelated
 hooks and user configuration.
 
-In a fresh Codex session, submit a normal prompt and confirm that
-`UserPromptSubmit` completes before the answer. Inspect the matching local log
-under `~/.memu/hosts/codex/log/hooks/retrieve/` for hook status and the actual
-`additionalContext` returned. Empty retrieval can be valid; an untrusted or
-unexecuted hook does not pass. A direct `memu-codex retrieve` or `doctor` check
-alone does not verify hook execution or trust. Keep prompts and retrieved memory
-local.
+Use one fresh Codex turn with a fixed short reply to check hook execution;
+reuse the same turn for Part 2. Inspect only the matching retrieval log's status
+and exit code under `~/.memu/hosts/codex/log/hooks/retrieve/`. Successful context
+return or an empty result is valid; do not inspect or display retrieved memory
+as part of installation. An untrusted or unexecuted hook does not pass.
 
-Confirm the notify chain from Part 2 still works. Use a fresh session after
-changing hook definitions. Legacy skill cleanup belongs to the migration section.
+After retrieval and notify startup are confirmed, finish installation and
+report the background log path. Legacy skill cleanup belongs to the migration
+section and does not depend on the new memorize worker finishing.
 
 ---
 
@@ -511,12 +547,10 @@ must each be recorded; do not assume a single task or the `\\memU\\` folder.
    Repeating an identical installation is a no-op.
 4. Verify the registered command is memU's callback and unrelated Codex settings
    are preserved.
-5. Check existing callback and worker evidence in
-   `~/.memu/hosts/codex/log/hooks/notify/`, or validate the replacement in an
-   isolated environment. Confirm prepare and commit/no-op results and cursor
-   behavior; `codex --version` alone is insufficient. Keep raw logs local.
-   Do not start a production smoke test while old schedules can launch into the
-   same working tree; perform the final production check during the handoff below.
+5. Use Part 2's worker-startup check and share its log path. If no old schedules
+   exist, proceed directly to Part 3 and M4. Do not wait for the new worker's
+   jobs or commit. If old schedules exist, perform the production startup check
+   only after their safe handoff below; do not launch competing workers.
 
 ### M3 — Complete the schedule switch
 
@@ -531,11 +565,12 @@ pending; do not claim completion. During this wait, prevent new memU notify
 launches while retaining the user's other notifier; if that cannot be done
 safely, stop before changing the old registrations.
 
-Once idle, enable/retain the verified memU notify callback and use a real Codex
-turn to check prepare → agent → commit/no-op in the production log. On failure,
-follow Recovery and restore the old entry; do not delete its registration.
+Once idle, enable/retain the memU notify callback and use the single short
+Codex turn from Part 3 to confirm worker startup as described in Part 2. On a
+startup error, follow Recovery and restore the old entry; do not delete its
+registration. The new worker continues in the background.
 
-Remove only the confirmed, now idle registrations after this final check passes. Re-list both scheduler
+Remove only the confirmed, now idle old registrations after this startup check passes. Re-list both scheduler
 surfaces and verify that unrelated registrations survive. Keep the saved
 definitions, wrappers, logs, backend config, memories and session cursors.
 A repeated migration with no remaining old task is a no-op; it must preserve the
@@ -578,9 +613,11 @@ instructions. Do not delete `~/.codex/skills/`, another host's skill or memU's
 distribution/install SKILL.md. A custom location or unmarked reference requires
 explicit ownership confirmation and targeted cleanup; do not delete user text.
 
-Read back both locations: the old owned skill and pointer must be gone, unrelated
-content intact, and the trusted prompt hook and notify chain still working in a
-fresh session. Repeating cleanup with no old entry is a no-op. If retrieval must
+Use Part 3's single fresh-turn result for this gate; do not launch another
+model turn or wait for the new memorize worker. Read back both locations: the
+old owned skill and pointer must be gone and unrelated content intact. Reuse
+the verified hook trust and notify-startup evidence from this installation.
+Repeating cleanup with no old entry is a no-op. If retrieval must
 be reverted, restore only the backed-up owned skill and its pointer, preserving
 unrelated edits made since backup.
 
@@ -588,8 +625,9 @@ unrelated edits made since backup.
 
 Report verified notify and trusted prompt-hook entries, confirmed schedules
 removed (or none found), old skill/pointer cleanup and local recovery location.
-Leave migration pending while a gate, running agent or ownership question remains
-unresolved. Keep backend config, memory, session cursors and logs intact.
+Leave migration pending while a gate, old scheduled agent or ownership question
+remains unresolved. The new memorize worker may continue in the background.
+Keep backend config, memory, session cursors and logs intact.
 
 ---
 
@@ -642,6 +680,8 @@ Report back to the user:
 
 - remind the user they can switch back to their previous permission mode after
   installation;
+- notify startup status and the exact local log path; memorization continues in
+  the background and its completion is not an installation gate;
 - the selected mode and its cloud endpoint or local store/provider;
 - the verified notify record entry and the outcome of old-task migration;
 - the retrieval entry retained or installed for this machine, and whether a fresh
