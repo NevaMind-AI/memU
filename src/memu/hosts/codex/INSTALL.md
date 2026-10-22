@@ -1,7 +1,7 @@
 # Install memU for Codex
 
 <!-- memu-codex-record: notify-v2 -->
-<!-- memu-codex-permissions: v8 -->
+<!-- memu-codex-permissions: v9 -->
 
 ## Task identity
 
@@ -61,17 +61,22 @@ If Other has no language filled in, ask only which language and wait again.
 Do not infer a selection from the initial request's language alone.
 Use the selected language
 for all progress, permission prompts, blockers and the final report, preserving
-commands, paths and configuration keys. For Chinese guidance, name the setting
-`Full access / 完全访问权限` and ask the user to reply `继续安装`. Use this prompt:
-
-> 安装需要写入用户目录并配置 Codex 集成与后台任务，当前沙箱模式可能阻止这些操作。
-> 请临时切换到 **Full access / 完全访问权限**，然后回复“继续安装”。
-> 安装完成后可切回原权限模式。
+commands, paths and configuration keys. For every selected language, translate
+the permission explanation and continuation reply naturally, while preserving
+the stage emoji and `[1/5]`. Use the setting's localized UI name alongside
+`Full access` so users can find it (for Chinese: `Full access / 完全访问权限`).
+Ask the user to switch temporarily and reply with the localized equivalent of
+"continue installation"; explain that they can restore their previous permission
+mode after installation.
 
 Use `danger-full-access` to check effective permissions internally; the
 user-facing setting name should match the selected language's UI label.
 Reuse the choice from `SKILL.md` without
 asking again. This introduction is outside the five numbered stages.
+
+After language selection, begin the next response with the stage 1 heading,
+including its emoji and `[1/5]`, even when permission is blocked. The permission
+prompt belongs under that heading; it never replaces the progress message.
 
 ## Installation progress — five stages
 
