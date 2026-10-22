@@ -43,6 +43,15 @@ If Other has no language filled in, ask only which language and wait again.
 Do not infer a selection from the language of the initial request alone.
 Use the selected language for stage labels, permission prompts, blockers
 and the final report; keep commands, paths and configuration keys unchanged.
+For Chinese guidance, name the setting `Full access / 完全访问权限` and ask the
+user to reply `继续安装`. Use the following Chinese permission prompt:
+
+> 安装需要写入用户目录并配置 Codex 集成与后台任务，当前沙箱模式可能阻止这些操作。
+> 请临时切换到 **Full access / 完全访问权限**，然后回复“继续安装”。
+> 安装完成后可切回原权限模式。
+
+Use `danger-full-access` to check effective permissions internally; the
+user-facing setting name should match the selected language's UI label.
 Carry the selection into the packaged guide without asking again. Language
 selection is an introduction, not a numbered installation stage.
 
