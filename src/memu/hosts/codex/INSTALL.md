@@ -1,7 +1,7 @@
 # Install memU for Codex
 
 <!-- memu-codex-record: notify-v2 -->
-<!-- memu-codex-permissions: v20 -->
+<!-- memu-codex-permissions: v21 -->
 
 ## Task identity
 
@@ -34,13 +34,13 @@ without narrating commands, process details or reasoning.
 | 📦 [2/5] Preparing memU and the memory backend | Part 1; reuse existing configuration |
 | 🔔 [3/5] Setting up automatic memorization | Part 2 registration; old-schedule handoff if needed |
 | 🧠 [4/5] Setting up memory retrieval | Part 3 registration and trust |
-| 🚀 [5/5] Starting your first memorize task | One short turn for both hook checks; legacy instruction cleanup |
+| 🚀 [5/5] Starting your first memorize task | Finish legacy cleanup and invite the next user message |
 
-After successful installation checks, print `✅ memU installation complete`,
-the background task status and exact log path, then the permission-mode reminder.
-For a blocker, name the stage and remaining action. When registration and trust
-succeeded and only the next user turn is needed, use the activation message in
-Part 2 instead. Background job processing does not add stages.
+Installation is complete once the backend check, notify registration,
+prompt-hook registration/trust and M3 cleanup pass. Print
+`✅ memU installation complete` and Part 2's activation message. The first
+user-triggered retrieval and memorize run is a post-install check, not a
+completion gate. Report actual configuration or cleanup blockers when present.
 
 ## Execution permissions — Full access before installation
 
@@ -361,32 +361,19 @@ turns, as the two newest logs are not correlated by session ID.
 
 ### ✅ Verify Part 2
 
-Use matching startup evidence for an unchanged callback, or the single short
-Codex turn in Part 3 when runtime testing is needed. For notify, confirm
-that a new log under `~/.memu/hosts/codex/log/hooks/notify/` records the worker
-starting for that turn. Allow at most 15 seconds for startup; if it is not
-observed because no subsequent user turn has occurred, tell the user:
+Verify that the registered callback and agent paths exist. Runtime startup is
+checked after the next user message; it does not delay cleanup or installation
+completion. When installation and M3 cleanup are complete, tell the user:
 
-> Send one more message here to start your first memorize task. Memorization
-> runs in the background and processes only new conversation content since the
-> previous run. You can follow its logs in
-> `~/.memu/hosts/codex/log/hooks/notify/`.
+> memU is installed. Send one more message here to trigger your first memory
+> retrieval and background memorize task. You can ask: "What did memU retrieve
+> for this message?" Memorization processes new conversation content in the
+> background; follow its logs in `~/.memu/hosts/codex/log/hooks/notify/`.
 
-Resolve that directory to the user's actual local path. Explain that runtime
-verification and any remaining schedule cleanup will follow their next message.
-Complete M3's legacy-entry cleanup before asking for that message, except any
-schedule removal that still requires a safe runtime handoff.
-Continue in this conversation; a new session is unnecessary unless Codex reports
-that the changed configuration requires one. If a verification turn already ran
-without startup evidence, report the missing evidence or concrete error instead.
-
-Once startup is observed, continue installation immediately. Do not wait for
-memorization jobs, commit, cursor updates or worker completion, and do not tail
-logs or poll the worker afterward. Tell the user their first memorize task has
-started in the background and provide the exact local log path so they can
-follow progress. A log containing an immediate startup error does not pass.
-If the log already shows a successful no-op, report that result instead of
-claiming memories were created. Keep raw logs local.
+Resolve the directory to the user's actual local path. Use the existing
+conversation unless Codex explicitly requires a new session. Do not claim a
+worker is already running without startup evidence. If a later runtime check
+finds an error, report it then; do not wait for jobs or worker completion.
 
 ---
 
@@ -421,24 +408,20 @@ relevant access issue is fixed. Do not edit trust fingerprints manually.
 
 ### ✅ Verify Part 3
 
-Use matching successful local logs when the registered hook command is unchanged
-and current trust is confirmed. Otherwise, use one fresh Codex turn to exercise
-both hooks. If this session cannot initiate that turn, give Part 2's activation
-message and resume verification after the user's next message. Then check once:
+Require `install-prompt-hook` to confirm that the hook is registered and trusted.
+That completes this installation gate. After the next user message, runtime
+execution can be checked once with:
 
 ```powershell
 memu-codex hook-status --since <ISO-8601-time>
 ```
 
-Successful retrieval context return or an empty result is valid; notify must
-show `started`. Do not inspect or display retrieved memory. An untrusted or
-unexecuted hook does not pass.
-
-
-After retrieval and notify startup are confirmed, finish runtime verification
-and report the background log path. All legacy cleanup belongs to M3; its
-retrieval cleanup follows registration and trust without waiting for runtime
-verification or the new memorize worker.
+Successful retrieval context return or an empty result is valid; notify startup
+appears as `started`. Missing evidence before the first subsequent message is
+normal. Keep retrieved memory out of installation diagnostics; if the user asks
+what was retrieved, answer from the actual context available for that message
+without inventing results. All legacy cleanup belongs to M3 and is completed
+during installation.
 
 ---
 
@@ -464,18 +447,16 @@ as unresolved. No matching task is normal; handle every confirmed match.
 
 Complete Parts 1–3's backend verification, notify registration and prompt-hook
 registration/trust, reusing results already obtained in this run. Then handle
-all legacy entries in M3. If old schedules exist, defer the runtime startup
-check until their safe handoff in M3 to avoid competing workers. Runtime
-verification may follow the next user message; do not wait for background
-memorization to finish.
+all legacy entries in M3 before announcing installation completion. Keep new
+notify workers from processing the workspace until the old tasks are idle.
+Runtime verification follows the next user message and does not delay cleanup.
 
 ### M3 — Migrate and remove legacy entries
 
 This is the single cleanup stage for old memU schedules, retrieval skills,
 managed instruction pointers and other version-specific residue. Add future
 legacy cleanup requirements here. Process both checklists before leaving this
-stage; a deferred schedule handoff does not defer safe retrieval cleanup.
-Use M1's ownership results without repeating discovery. Preserve
+stage. Use M1's ownership results without repeating discovery. Preserve
 backend configuration, memories, session cursors and unrelated integrations.
 
 #### Old scheduled tasks
@@ -493,11 +474,10 @@ allowing the new notify worker to process the same workspace. Prevent new memU
 notify launches during this handoff; if that cannot be done safely, stop before
 changing registrations. Do not kill running tasks.
 
-Once idle, verify notify startup using Part 2's check. If successful, delete the
-old automations by ID and query again to verify removal. If startup fails or
-runtime verification awaits the next user message, leave them paused and report
-the remaining step. Preserve unrelated automations and session history; use
-Codex's management tool rather than editing its database.
+Once idle, delete the confirmed old automations by ID and query again to verify
+removal. M2's verified registration is the replacement gate; do not wait for a
+new notify run before deleting old schedules. Preserve unrelated automations
+and session history; use Codex's management tool rather than editing its database.
 
 #### Old retrieve skill and AGENTS pointer
 
@@ -522,11 +502,12 @@ unmarked references require confirmed ownership and targeted cleanup.
 
 #### Verify legacy cleanup
 
-Check every M3 cleanup item together: confirmed old schedules are removed or
-explicitly pending a safe handoff, the owned retrieval skill and AGENTS pointer
-are gone, and unrelated entries survive. Missing
-inventory, an ownership question or an unhandled legacy entry leaves migration
-partial. Keep backend config, memory, session cursors and logs intact.
+Check every M3 cleanup item together: confirmed old schedules are gone, the owned
+retrieval skill and AGENTS pointer are gone, and unrelated entries survive.
+Explicitly report each as removed or already absent. A running old task,
+missing inventory, an ownership question or an unhandled legacy entry is a
+cleanup blocker; identify it rather than postponing cleanup until a new hook
+runs. Keep backend config, memory, session cursors and logs intact.
 
 ---
 
@@ -549,9 +530,9 @@ memu-codex report install
 The event's *existence* is the success signal: there is no failure flag, and
 nothing leaves the machine here — it records locally and returns.
 
-If registration succeeded and runtime verification only awaits the user's next
-message, give Part 2's activation message. Defer `report install` until runtime
-verification passes; this normal wait is not an installation error.
+After registration and cleanup pass, run `report install` even if the first
+user-triggered runtime check has not occurred. Give Part 2's activation message;
+waiting for the next message is normal after successful installation.
 
 **An installation step failed or a required prerequisite is unavailable** —
 tell the user and report the actual failure:
