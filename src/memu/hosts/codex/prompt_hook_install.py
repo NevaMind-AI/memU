@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import queue
+import re
 import shlex
 import shutil
 import subprocess
@@ -18,13 +19,16 @@ from typing import Any
 
 
 class AppServer:
-    def __init__(self, executable: str, cwd: Path) -> None:
+    def __init__(self, executable: str, cwd: Path, codex_home: Path) -> None:
+        env = os.environ.copy()
+        env["CODEX_HOME"] = str(codex_home)
         self.process = subprocess.Popen(  # noqa: S603
             [executable, "app-server", "--stdio"],
             cwd=cwd,
+            env=env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            # Inherit stderr so diagnostics remain visible and cannot fill an unread pipe.
             text=True,
             encoding="utf-8",
         )
@@ -109,8 +113,21 @@ def _entries(value: Any, command: str, source: str) -> list[dict[str, Any]]:
 
 
 def _command() -> str:
-    argv = [str(Path(sys.argv[0]).resolve()), "prompt-hook"]
-    return subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
+    executable = str(Path(sys.argv[0]).resolve())
+    if sys.platform == "win32":
+        return "& '" + executable.replace("'", "''") + "' prompt-hook"
+    return shlex.join([executable, "prompt-hook"])
+
+
+def _owns_command(command: str) -> bool:
+    match = re.fullmatch(
+        r"""\s*(?:&\s+)?(?:"([^"]+)"|'((?:[^']|'')+)'|([^\s'"&;|]+))\s+prompt-hook\s*""",
+        command,
+    )
+    if match is None:
+        return False
+    executable = next(part for part in match.groups() if part is not None).replace("''", "'")
+    return executable.replace("\\", "/").rsplit("/", 1)[-1].casefold() in {"memu-codex", "memu-codex.exe"}
 
 
 def _definition(groups: list[dict[str, Any]], command: str) -> None:
@@ -118,11 +135,7 @@ def _definition(groups: list[dict[str, Any]], command: str) -> None:
         hook
         for group in groups
         for hook in group.get("hooks", [])
-        if hook.get("type") == "command"
-        and "prompt-hook" in hook.get("command", "")
-        and Path(hook.get("command", "").split(" prompt-hook", 1)[0].strip("\\\"' "))
-        .name.casefold()
-        .startswith("memu-codex")
+        if hook.get("type") == "command" and _owns_command(hook.get("command", ""))
     ]
     definition = {
         "type": "command",
@@ -146,7 +159,9 @@ def install(codex: str, hooks_file: Path, cwd: Path) -> None:
     if hooks_file.exists() and not hooks_file.is_file():
         raise FileNotFoundError(f"Codex hooks path is not a file: {hooks_file}")  # noqa: TRY003
 
-    server = AppServer(codex, cwd)
+    if hooks_file.name != "hooks.json":
+        raise ValueError("Codex loads hooks.json from its home; --hooks-file must name hooks.json")  # noqa: TRY003
+    server = AppServer(codex, cwd, hooks_file.parent)
     try:
         server.request(
             "initialize",
@@ -203,7 +218,8 @@ def install(codex: str, hooks_file: Path, cwd: Path) -> None:
 def register(sub: Any) -> None:
     parser = sub.add_parser("install-prompt-hook", help="Register and trust the Codex retrieval hook")
     parser.add_argument("--codex", default=shutil.which("codex"), help="Codex CLI executable (default: PATH)")
-    parser.add_argument("--hooks-file", type=Path, default=Path("~/.codex/hooks.json").expanduser())
+    codex_home = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
+    parser.add_argument("--hooks-file", type=Path, default=codex_home / "hooks.json")
     parser.add_argument("--cwd", type=Path, default=Path.cwd())
 
     async def handler(args: argparse.Namespace) -> int:
