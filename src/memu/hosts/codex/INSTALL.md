@@ -76,37 +76,6 @@ report the executor startup failure and ask the user to restart Codex; the bypas
 flag is not evidence that the underlying failure will be fixed.
 
 
-## Installation checks — keep the user-facing flow short
-
-Reuse successful checks from this run: resolve executables once, run `doctor`
-once after the final backend/package change, and only test changed integrations.
-For an unchanged hook command with current trust and matching successful local
-logs, reuse that evidence instead of starting another model turn. Otherwise use
-one short fresh Codex turn for both hooks. Only repeat a check when a relevant
-change invalidates it.
-
-Batch independent read-only checks into one call and return a concise summary,
-not whole configurations, guides or logs. Read this guide once. Resolve the
-Codex executable before registering notify so `install-hook` runs once. Use one
-app-server connection for preflight, registration/trust readback; match RPC
-responses by id while skipping notifications. Check both hook logs in one call.
-Print stage headings before their work, never together retrospectively.
-
-If Part 3's existing hook is already loaded and trusted, its `hooks/list`
-response satisfies preflight and trust readback; do not open another connection
-or rewrite identical trust. Use `hook-status --since` for runtime log readback. A registration already completed in this run also
-satisfies M2; do not execute the same install command again for migration.
-
-If Windows blocks package replacement because a worker is using that environment,
-report the installation blocker and resume after it exits; do not spend the
-interactive installation inventing alternate tool directories or rebinding shims.
-
-Record notify startup and its log path, then leave memorization running in the
-background. Full memory evolution and cursor validation belong to development
-acceptance, not the interactive installation. Finish with at most four short
-lines: result/backend, migration status, exact background log path, and the
-permission-mode reminder. Do not recap commands or diagnostics after success.
-
 ## Choose the installation path
 
 **New installation:** follow Parts 1–3 below.
@@ -142,6 +111,9 @@ for one; a Python runtime is required regardless, because the bridging task runs
 Python.
 
 ### 1.1 Install
+
+Skip any installation, registration or check already completed in this run
+unless its inputs or configuration have changed.
 
 If you just installed or upgraded memu-cli, skip this step.
 Otherwise, use the user's requested package manager and source. The default is:
@@ -441,7 +413,8 @@ memu-codex install-prompt-hook --codex 'C:/path/to/codex.exe' --hooks-file 'C:/U
 ```
 
 The command reports success only after Codex confirms the exact registered hook
-is trusted. If it fails, follow **Execution permissions** and rerun after the
+is trusted. Use this command for registration and trust, and `hook-status --since`
+for runtime checks. If it fails, follow **Execution permissions** and rerun after the
 relevant access issue is fixed. Do not edit trust fingerprints manually.
 
 ### ✅ Verify Part 3
