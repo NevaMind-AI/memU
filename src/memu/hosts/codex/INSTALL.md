@@ -473,19 +473,12 @@ must each be recorded; do not assume a single task or the `\\memU\\` folder.
 
 ### M2 — Verify the replacement before removing anything
 
-1. Complete Part 2.0's CLI probe, installing the native CLI only if missing.
-   A version check proves startup only, not authentication or model execution.
-2. Keep the configured backend and pass `memu-codex doctor` from Part 1.
-3. Run `memu-codex install-hook`, replacing any existing notify without a backup.
-   Read the configuration back and verify the callback and agent paths exist.
-   Repeating an identical installation is a no-op.
-4. Verify the registered command is memU's callback and unrelated Codex settings
-   are preserved.
-5. Complete Part 3's prompt-hook registration and trust verification.
-6. Enter M3 once to handle all legacy entries. If old schedules exist, perform
-   the production startup check only after their safe handoff in M3; do not
-   launch competing workers. Runtime verification may follow the next user
-   message, but do not wait for the worker's jobs or commit.
+Complete Parts 1–3's backend verification, notify registration and prompt-hook
+registration/trust, reusing results already obtained in this run. Then handle
+all legacy entries in M3. If old schedules exist, defer the runtime startup
+check until their safe handoff in M3 to avoid competing workers. Runtime
+verification may follow the next user message; do not wait for background
+memorization to finish.
 
 ### M3 — Migrate and remove legacy entries
 
