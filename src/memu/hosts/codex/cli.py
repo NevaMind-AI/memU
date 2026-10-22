@@ -30,7 +30,7 @@ import argparse
 import sys
 
 from memu.hosts import hooks
-from memu.hosts.codex import notify_console, prompt_hook
+from memu.hosts.codex import hook_status, notify_console, prompt_hook, prompt_hook_install
 from memu.hosts.codex.sessions import SESSION_DIR, CodexTranscriptSource
 from memu.hosts.host_cli import HostSpec, run
 
@@ -68,6 +68,13 @@ HOOK = hooks.HookSpec(
     stream_output=notify_console.stream_agent,
 )
 
+
+def _register_extra(sub: object) -> None:
+    prompt_hook.register(sub)
+    hook_status.register(sub)
+    prompt_hook_install.register(sub)
+
+
 SPEC = HostSpec(
     host=HOST,
     display="Codex",
@@ -87,7 +94,7 @@ SPEC = HostSpec(
         "  macOS/Linux: curl -fsSL https://chatgpt.com/codex/install.sh | sh\n"
         "Refresh PATH, verify `codex --version`, then retry `memu-codex install-hook`."
     ),
-    register_extra=prompt_hook.register,
+    register_extra=_register_extra,
 )
 
 

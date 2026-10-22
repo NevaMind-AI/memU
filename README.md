@@ -154,6 +154,13 @@ Notify workers sharing a workspace run serially under an OS file lock; the lock
 is released before the Enter prompt and when the process exits. This slice does
 not add scheduling or per-turn deduplication.
 
+Register and trust the retrieval hook with `memu-codex install-prompt-hook`.
+It preserves unrelated hooks and uses Codex app-server to verify the registered
+hook's trust. After a verification turn, run
+`memu-codex hook-status --since <ISO-8601-time>` to read retrieval and notify
+startup status and log paths without displaying memory contents or waiting for
+background memorization to finish.
+
 ## Self-hosted
 
 **Private · Single-device · Embedding key required**

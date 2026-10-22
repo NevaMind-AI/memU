@@ -39,9 +39,19 @@ next action briefly, without narrating commands, process details or reasoning.
 
 Finish with `✅ memU installation complete`, the background task status and its
 exact log path, plus the reminder about restoring the previous permission mode.
-If a stage is blocked or startup remains pending, report that stage and the
-remaining action instead of announcing completion. Memorization itself runs in
-the background; do not add progress stages for processing its jobs.
+If a stage is blocked, report that stage and the remaining action. If registration
+and trust succeeded and only the next user turn is needed, say:
+
+> Send one more message here to start your first memorize task. Memorization
+> runs in the background and processes only new conversation content since the
+> previous run. You can follow its logs in
+> `~/.memu/hosts/codex/log/hooks/notify/`.
+
+Resolve the log directory to the user's actual local path. State that runtime
+verification will follow that message. Handle all legacy entries together in
+INSTALL's M3 cleanup stage before asking for it, following that stage's handoff
+requirements. Claim a running task only after startup is observed. Memorization itself runs
+in the background; do not add progress stages for processing its jobs.
 
 ## Before installing — Codex permissions
 
@@ -51,20 +61,34 @@ Continue only when the mode is `danger-full-access`. Approval policy is separate
 `approval_policy = never` does not establish Full access. If sandbox mode is not
 provided, say that you cannot confirm it and ask the user to check the setting.
 
-For a restricted or unconfirmed session, pause installation and tell the user:
+For a restricted or unconfirmed session, pause at stage 1 and show **both**
+instructions below. Let the user choose the one matching their application:
 
-> Installation needs to write to your user directory and configure Codex
-> integrations and background execution. The sandbox may block these operations
-> even after directory access is approved. Please temporarily switch to
-> Full access / 完全访问权限, then reply "continue installation". You can switch back to your previous
-> permission mode after installation.
+- **Codex Desktop:** temporarily switch to **Full access / 完全访问权限**, then
+  reply "continue installation" in this conversation. Confirm the effective
+  mode is `danger-full-access` before resuming. If it is still restricted,
+  explain that the change has not taken effect and remain paused.
+- **Codex CLI:** exit this session and start a new one from the same directory:
 
-After the user replies, confirm that the current session's effective sandbox
-mode is `danger-full-access` before continuing. Stay in this conversation. If
-it still reports restricted permissions, report that the change has not taken
-effect and remain paused at stage 1. Do not change the permission mode or
-Windows ACLs yourself. Apply this gate to Codex
-setup and migration; other hosts follow their own guides.
+  ```sh
+  codex --dangerously-bypass-approvals-and-sandbox
+  ```
+
+  Ask the user to repeat the installation request in that session. This flag
+  disables sandboxing and approval prompts for that session. After installation,
+  exit and launch Codex normally to restore the usual restrictions.
+
+Installation writes user configuration and enables background execution; a
+restricted sandbox can block it even after directory access is approved.
+Always show both Desktop and CLI instructions; do not infer the application
+from session metadata or installed binaries. Do not change modes or Windows
+ACLs yourself.
+
+If an execution helper fails before running a command (for example,
+`setup refresh had errors`), stop retrying through alternate shells, Node or
+computer-use channels. Show both access instructions above.
+If the session already has Full access, report the startup failure and ask the
+user to restart Codex; do not claim the bypass flag repairs an executor failure.
 
 ## Step 1 — install the package
 

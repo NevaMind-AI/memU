@@ -1,7 +1,7 @@
 # Install memU for Codex
 
 <!-- memu-codex-record: notify-v2 -->
-<!-- memu-codex-permissions: v14 -->
+<!-- memu-codex-permissions: v20 -->
 
 ## Task identity
 
@@ -39,8 +39,9 @@ without narrating commands, process details or reasoning.
 
 After successful installation checks, print `✅ memU installation complete`,
 the background task status and exact log path, then the permission-mode reminder.
-For a blocker or pending startup, name the stage and remaining action instead
-of announcing completion. Background job processing does not add stages.
+For a blocker, name the stage and remaining action. When registration and trust
+succeeded and only the next user turn is needed, use the activation message in
+Part 2 instead. Background job processing does not add stages.
 
 ## Execution permissions — Full access before installation
 
@@ -50,20 +51,30 @@ Approval policy is separate: `approval_policy = never` does not establish Full
 access. If sandbox mode is not provided, say that you cannot confirm it and ask
 the user to check the setting.
 
-Otherwise pause installation and tell the user:
+If the session is restricted or its mode is unknown, pause at stage 1 and show
+**both** options below so the user can choose:
 
-> Installation needs to write to your user directory and configure Codex
-> integrations and background execution. The sandbox may block these operations
-> even after directory access is approved. Please temporarily switch to
-> Full access / 完全访问权限, then reply "continue installation". You can switch back to your previous
-> permission mode after installation.
+- **Codex Desktop:** ask the user to switch to **Full access / 完全访问权限**
+  and reply "continue installation" here. Recheck the effective mode before
+  resuming; remain paused if the change has not taken effect.
+- **Codex CLI:** ask the user to exit and start a new session from the same
+  directory, then repeat the installation request:
 
-Confirm the current session's effective mode after the user replies, then resume
-from the pending step in this conversation. If it still reports restricted
-permissions, report that the change has not taken effect and remain paused at
-stage 1. Do not switch modes or change Windows ACLs yourself.
-Normal OS permissions still apply in Full access; an access error must be
-resolved before continuing. Do not rerun an unchanged failing command.
+  ```sh
+  codex --dangerously-bypass-approvals-and-sandbox
+  ```
+
+  The flag disables sandboxing and approval prompts for that session. After
+  installation, exit and launch Codex normally to restore the usual restrictions.
+
+Always show both instructions; do not infer Desktop versus CLI from session
+metadata or installed binaries. Do not switch modes or change Windows ACLs
+yourself. Normal OS permissions still apply. If the execution helper fails
+before a command starts (for example, `setup refresh had errors`), stop
+alternate-shell, Node and computer-use retries and show both access instructions.
+If already in Full access,
+report the executor startup failure and ask the user to restart Codex; the bypass
+flag is not evidence that the underlying failure will be fixed.
 
 
 ## Installation checks — keep the user-facing flow short
@@ -84,7 +95,7 @@ Print stage headings before their work, never together retrospectively.
 
 If Part 3's existing hook is already loaded and trusted, its `hooks/list`
 response satisfies preflight and trust readback; do not open another connection
-or rewrite identical trust. A registration already completed in this run also
+or rewrite identical trust. Use `hook-status --since` for runtime log readback. A registration already completed in this run also
 satisfies M2; do not execute the same install command again for migration.
 
 If Windows blocks package replacement because a worker is using that environment,
@@ -373,13 +384,44 @@ existing notify, including Desktop's `turn-ended` command, without a backup.
 Other Codex settings are preserved. For old memU schedules or retrieval entries,
 follow **Existing installations — migration** below.
 
+### Runtime check — one CLI call
+
+Before the short verification turn, record its start time (PowerShell:
+`$since = [DateTimeOffset]::Now.ToUnixTimeSeconds()`). After the turn, run:
+
+```text
+memu-codex hook-status --since <start-time>
+```
+
+The command returns JSON with `retrieve.status`, `retrieve.exit_code`,
+`notify.status` and each log path. Exit 0 means retrieval succeeded (context or
+empty result) and notify startup was observed; exit 1 means retrieval failed;
+exit 2 means evidence is pending. `notify.status = started` proves startup only,
+not worker completion. Use this output directly instead of writing log parsers,
+reading source code or enumerating processes. It does not wait or retrieve memory.
+The time filter excludes logs started before the check; avoid concurrent test
+turns, as the two newest logs are not correlated by session ID.
+
 ### ✅ Verify Part 2
 
 Use matching startup evidence for an unchanged callback, or the single short
 Codex turn in Part 3 when runtime testing is needed. For notify, confirm
 that a new log under `~/.memu/hosts/codex/log/hooks/notify/` records the worker
 starting for that turn. Allow at most 15 seconds for startup; if it is not
-observed, report startup as pending and provide the log directory.
+observed because no subsequent user turn has occurred, tell the user:
+
+> Send one more message here to start your first memorize task. Memorization
+> runs in the background and processes only new conversation content since the
+> previous run. You can follow its logs in
+> `~/.memu/hosts/codex/log/hooks/notify/`.
+
+Resolve that directory to the user's actual local path. Explain that runtime
+verification and any remaining schedule cleanup will follow their next message.
+Complete M3's legacy-entry cleanup before asking for that message, except any
+schedule removal that still requires a safe runtime handoff.
+Continue in this conversation; a new session is unnecessary unless Codex reports
+that the changed configuration requires one. If a verification turn already ran
+without startup evidence, report the missing evidence or concrete error instead.
 
 Once startup is observed, continue installation immediately. Do not wait for
 memorization jobs, commit, cursor updates or worker completion, and do not tail
@@ -398,143 +440,47 @@ user submits a prompt. The command reads the hook's stdin JSON, passes the
 original prompt to shared retrieval, and returns
 `hookSpecificOutput.additionalContext` before the model answers.
 
-### 3.0 Preflight — app-server access before hook edits
+### 3.0 Register and trust the hook
 
-When using app-server for trust, first verify it can start against the real
-Codex home. Resolve that home from the existing configuration/environment;
-sandbox `USERPROFILE` or home lookup can differ from the signed-in user's.
-If lookup fails, pass the confirmed home environment and `CODEX_HOME` to the
-child process without changing which user's configuration is used.
+Run the CLI command; it merges the memU `UserPromptSubmit` hook into
+`~/.codex/hooks.json`, backs up the original once, asks Codex app-server to load
+it, trusts Codex's returned fingerprint, and verifies `trustStatus`:
 
-Before launching, resolve the installed version's actual temporary-file and
-SQLite runtime paths. On the verified Windows
-CLI, `state_5.sqlite` and its `-wal` / `-shm` files live directly under
-`~/.codex/`, not `~/.codex/sqlite/`. App-server needs writable state files,
-parent access for creating companion files, and `~/.codex/tmp/`. Other versions may
-use different names or additional runtime files. Do not hard-code this one
-version's list as complete, move the database, delete locks or reset state.
-
-Prefer a small subprocess script that keeps stdin open, reads JSON responses
-with a bounded timeout and closes the child in `finally`; match the installed
-Python or PowerShell version. This avoids a separate approval for every input
-to an escalated terminal.
-Start `codex app-server --stdio` and send this `initialize` request:
-
-```json
-{
-  "id": 1,
-  "method": "initialize",
-  "params": {
-    "clientInfo": {"name": "memu-install", "version": "1"},
-    "capabilities": {"experimentalApi": true}
-  }
-}
+```powershell
+memu-codex install-prompt-hook
 ```
 
-Wait for its successful response, send `initialized`, then call `hooks/list`
-with the installation directory in `cwds` and wait for its response. Empty hooks
-are valid at this stage; startup failure,
-RPC errors or hook-loading errors fail this gate. Do not pipe all requests and
-immediately close stdin, or treat `codex --version` as this check.
+If `codex` is not on PATH or the active Codex home differs from the default,
+pass the actual paths:
 
-If startup or access fails, follow **Execution permissions** above. An approved
-request is not proof of effective access. Verify startup again only after a
-relevant change, and do not edit the hook or trust state while this gate fails.
-Once it passes, register the command below and use a live app-server connection
-that reads the final definition for trust approval.
-
-### 3.1 Register the command
-
-Resolve the installed `memu-codex` executable to an absolute path. The hook must
-use that executable followed by `prompt-hook`, so it does not depend on Codex's
-background PATH. Use the host's command shell syntax: an executable path with
-no spaces needs no quotes. For Windows PowerShell, a quoted executable must be
-invoked with `&`, for example `& 'C:/Program Files/memu/memu-codex.exe' prompt-hook`.
-A bare `"C:/path/memu-codex.exe" prompt-hook` is a PowerShell parse error: trust
-can succeed while the process never starts and no memU log is created. For POSIX
-shells, quote paths containing spaces using that shell's syntax. Windows JSON
-paths can use forward slashes. Write `hooks.json` as UTF-8 without a BOM;
-Windows PowerShell 5.1's `Set-Content -Encoding utf8` adds a BOM that Codex rejects.
-Use a writer with explicit BOM-free UTF-8, then require `hooks/list` to load the
-file without parse warnings.
-
-Back up `~/.codex/hooks.json` locally, then merge a command hook under
-`hooks.UserPromptSubmit`. Preserve every unrelated event, matcher and command;
-if the exact memU entry is already present, reuse it instead of appending a
-second entry. The following is the structure; replace the command with
-the resolved path and the appropriate invocation syntax described above:
-
-```json
-{
-  "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "<absolute-path-without-spaces>/memu-codex.exe prompt-hook",
-            "timeout": 50,
-            "additionalContextLimit": 0,
-            "statusMessage": "Retrieving memU memory"
-          }
-        ]
-      }
-    ]
-  }
-}
+```powershell
+memu-codex install-prompt-hook --codex 'C:/path/to/codex.exe' --hooks-file 'C:/Users/<user>/.codex/hooks.json' --cwd 'C:/path/to/install'
 ```
 
-The CLI currently implements `prompt-hook`; `install-hook` installs **notify
-only**. Automatic retrieval-hook registration and trust management are not yet
-integrated. Apply and verify these steps using the installed Codex version's
-supported hook configuration and approval facilities. If those facilities are
-unavailable, report Part 3 as incomplete; do not report a successful installation.
-
-### 3.2 Add trust for the registered definition
-
-After the command definition is final, approve that exact hook using Codex's
-hook trust/approval mechanism. Registration alone does not establish trust.
-On the currently verified Windows Codex version, persisted approval appears in
-`~/.codex/config.toml` under `hooks.state`, keyed by the absolute hooks file path,
-`user_prompt_submit`, matcher index and command index, with a `trusted_hash`.
-Those indices must match the merged configuration; do not assume `0:0` when
-other hooks already exist.
-
-Preserve unrelated approvals. Do not copy a fingerprint from another machine,
-path or hook definition, or invent a hash algorithm. If the command definition
-changes during an upgrade, recheck its approval with the installed Codex version
-before relying on it. An existing identical, trusted entry can be retained.
-
-For the verified CLI 0.163.0, automation can use `codex app-server --stdio`:
-initialize the JSON-RPC connection as in Part 3.0, then call `hooks/list` with the installation
-working directory in `cwds`. Select the exact registered `userPromptSubmit`
-entry by `sourcePath` and `command`; use its returned `key` and `currentHash`.
-Parse these directly from the JSON response; do not retype a fingerprint from
-wrapped terminal output, which can duplicate or truncate characters.
-After reviewing that command, call `config/value/write` with
-`keyPath = hooks.state.<TOML-quoted returned key>.trusted_hash`,
-`value = <returned currentHash>` and `mergeStrategy = upsert`.
-Call `hooks/list` again and require `trustStatus = trusted`. This uses Codex's
-own fingerprint and config writer. Do not pass `--dangerously-bypass-hook-trust`
-as a substitute for registration or verification.
+The command reports success only after Codex confirms the exact registered hook
+is trusted. If it fails, follow **Execution permissions** and rerun after the
+relevant access issue is fixed. Do not edit trust fingerprints manually.
 
 ### ✅ Verify Part 3
 
-Read back the merged hook configuration and its corresponding trust state.
-Confirm one intended memU command and an existing executable; retain unrelated
-hooks and user configuration.
-
 Use matching successful local logs when the registered hook command is unchanged
-and its current trust is confirmed. Otherwise use one fresh Codex turn with a
-fixed short reply to check hook execution; reuse the same turn for Part 2.
-Inspect only the matching retrieval log's status
-and exit code under `~/.memu/hosts/codex/log/hooks/retrieve/`. Successful context
-return or an empty result is valid; do not inspect or display retrieved memory
-as part of installation. An untrusted or unexecuted hook does not pass.
+and current trust is confirmed. Otherwise, use one fresh Codex turn to exercise
+both hooks. If this session cannot initiate that turn, give Part 2's activation
+message and resume verification after the user's next message. Then check once:
 
-After retrieval and notify startup are confirmed, finish installation and
-report the background log path. Legacy skill cleanup belongs to the migration
-section and does not depend on the new memorize worker finishing.
+```powershell
+memu-codex hook-status --since <ISO-8601-time>
+```
+
+Successful retrieval context return or an empty result is valid; notify must
+show `started`. Do not inspect or display retrieved memory. An untrusted or
+unexecuted hook does not pass.
+
+
+After retrieval and notify startup are confirmed, finish runtime verification
+and report the background log path. All legacy cleanup belongs to M3; its
+retrieval cleanup follows registration and trust without waiting for runtime
+verification or the new memorize worker.
 
 ---
 
@@ -579,23 +525,36 @@ must each be recorded; do not assume a single task or the `\\memU\\` folder.
    Repeating an identical installation is a no-op.
 4. Verify the registered command is memU's callback and unrelated Codex settings
    are preserved.
-5. Use Part 2's worker-startup check and share its log path. If no old schedules
-   exist, proceed directly to Part 3 and M4. Do not wait for the new worker's
-   jobs or commit. If old schedules exist, perform the production startup check
-   only after their safe handoff below; do not launch competing workers.
+5. Complete Part 3's prompt-hook registration and trust verification.
+6. Enter M3 once to handle all legacy entries. If old schedules exist, perform
+   the production startup check only after their safe handoff in M3; do not
+   launch competing workers. Runtime verification may follow the next user
+   message, but do not wait for the worker's jobs or commit.
 
-### M3 — Remove old scheduled tasks
+### M3 — Migrate and remove legacy entries
 
-Use the task IDs and ownership results from M1; do not repeat discovery.
+This is the single cleanup stage for old memU schedules, retrieval skills,
+managed instruction pointers and other version-specific residue. Add future
+legacy cleanup requirements here. Process both checklists before leaving this
+stage; a deferred schedule handoff does not defer safe retrieval cleanup.
+Use M1's ownership results and backups without repeating discovery. Preserve
+backend configuration, memories, session cursors and unrelated integrations.
+
+#### Old scheduled tasks
+
 Handle each scheduler independently:
 
 - **Windows Task Scheduler:** disable the confirmed task by its exact task path
   and name, then unregister it after the handoff below.
-- **Codex native automations:** pause the confirmed automation by ID through
-  Codex's automation management tools, then delete it after the handoff below.
-  Re-list native automations to verify removal. Paused is not deleted; if deletion
-  is unavailable, report that task as pending cleanup. Do not delete session
-  history or edit the application database as a substitute.
+- **Codex native automations:** use the Codex automation management tool with
+  the confirmed automation ID. For `update`, include `kind: "cron"` and the
+  complete saved definition (name, prompt, rrule, projectId, model,
+  reasoningEffort, executionEnvironment, status); change only status to
+  `PAUSED`. Verify by viewing it. After the handoff succeeds, call `delete` with
+  the ID and verify the automation is gone. Do not infer that pause/delete is
+  unavailable from a rejected update with missing required fields; do not
+  reconstruct or shorten the saved prompt.
+  Do not delete session history or edit the application database as a substitute.
 
 Only after the replacement gates pass, disable future triggers on each confirmed
 old registration through its original scheduler. Recheck its running state.
@@ -619,21 +578,13 @@ definitions, wrappers, logs, backend config, memories and session cursors.
 A repeated migration with no remaining old task is a no-op; it must preserve the
 existing memU notify and retrieval hooks.
 
-### Migration recovery
+#### Old retrieve skill and AGENTS pointer
 
-If a replacement gate fails, leave the old registration unchanged. If a problem
-appears after disabling/removing it, first stop future memU notify launches while
-preserving the user's other notifier, then wait for any worker to finish.
-Restore the exact saved task path/ID, definition and original enabled state
-through the same scheduler, using its supported import. S4U/password principals
-may require credentials again; verify the restored registration and referenced
-files before relying on it. Do not reset the backend or cursor to repair a trigger.
-
-### M4 — Remove the old retrieve skill and its AGENTS pointer
-
-First complete Part 3's prompt-hook registration, trust and runtime check
-(reusing matching evidence when allowed there).
-Keep the old retrieval entry until the replacement works. Back up
+First complete Part 3's prompt-hook registration and trust verification.
+After Codex confirms the replacement is loaded and trusted, clean up the old
+retrieval entry in this installation turn, including when runtime verification
+awaits the user's next message. This prevents the old skill and AGENTS pointer
+from requesting a second retrieval on that message. Back up
 `~/.codex/skills/memu-retrieve/` and `~/.codex/AGENTS.md` locally.
 Inspect `~/.codex/skills/memu-retrieve/SKILL.md` and the AGENTS pointer to confirm
 memU ownership; the removal command treats SKILL.md in that named directory as
@@ -652,7 +603,8 @@ memu-codex remove-instruction
 ```
 
 The managed block's "do not edit" warning requires this CLI writer; it is not a
-reason to retain the obsolete entry once the replacement works. If an actual
+reason to retain the obsolete entry once the replacement is registered and
+trusted. If an actual
 user instruction forbids removal, report migration as partial.
 
 This removes memU's marked AGENTS pointer first, then the owned `memu-retrieve/`
@@ -661,23 +613,32 @@ instructions. Do not delete `~/.codex/skills/`, another host's skill or memU's
 distribution/install SKILL.md. A custom location or unmarked reference requires
 explicit ownership confirmation and targeted cleanup; do not delete user text.
 
-Use Part 3's result for this gate; do not launch another
+Use Part 3's registration and trust result for this gate; do not launch another
 model turn or wait for the new memorize worker. Read back both locations: the
-old owned skill and pointer must be gone and unrelated content intact. Reuse
-the verified hook trust and notify-startup evidence from this installation.
-Repeating cleanup with no old entry is a no-op. If retrieval must
-be reverted, restore only the backed-up owned skill and its pointer, preserving
-unrelated edits made since backup.
+old owned skill and pointer must be gone and unrelated content intact.
+Runtime verification may follow on the next user message; it does not defer
+this cleanup. Repeating cleanup with no old entry is a no-op. Use Cleanup
+recovery below if runtime verification fails.
 
-### ✅ Verify migration
+#### Verify legacy cleanup
 
-Report verified notify and trusted prompt-hook entries, confirmed schedules
-removed (or none found), old skill/pointer cleanup and local recovery location.
-An unresolved native-task inventory or retained old retrieval entry means
-migration is partial; do not report complete installation.
-Leave migration pending while a gate, old scheduled agent or ownership question
-remains unresolved. The new memorize worker may continue in the background.
-Keep backend config, memory, session cursors and logs intact.
+Check every M3 cleanup item together: confirmed old schedules are removed or
+explicitly pending a safe handoff, the owned retrieval skill and AGENTS pointer
+are gone, and unrelated entries survive. Record the recovery location. Missing
+inventory, an ownership question or an unhandled legacy entry leaves migration
+partial. Keep backend config, memory, session cursors and logs intact.
+
+#### Cleanup recovery
+
+If a replacement gate fails, leave the old registration unchanged. If a problem
+appears after disabling/removing it, first stop future memU notify launches while
+preserving the user's other notifier, then wait for any worker to finish.
+Restore the exact saved task path/ID, definition and original enabled state
+through the same scheduler, using its supported import. S4U/password principals
+may require credentials again; verify the restored registration and referenced
+files before relying on it. For retrieval failures, restore only the backed-up
+owned skill and AGENTS pointer, preserving unrelated edits made since backup.
+Do not reset the backend or cursor to repair a trigger.
 
 ---
 
@@ -730,8 +691,10 @@ Report back to the user:
 
 - remind the user they can switch back to their previous permission mode after
   installation;
-- notify startup status and the exact local log path; memorization continues in
-  the background and its completion is not an installation gate;
+- notify startup status and the exact local log path, or Part 2's activation
+  message and resolved log directory when awaiting the next user turn;
+  memorization continues in the background and its completion is not an
+  installation gate;
 - the selected mode and its cloud endpoint or local store/provider;
 - the verified notify record entry and the outcome of old-task migration;
 - the retrieval entry retained or installed for this machine, and whether a fresh
