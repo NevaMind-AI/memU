@@ -34,8 +34,8 @@ next action briefly, without narrating commands, process details or reasoning.
 3. `## 🔔 [3/5] Setting up automatic memorization` — register notify and perform
    any required old-schedule handoff.
 4. `## 🧠 [4/5] Setting up memory retrieval` — register and trust the prompt hook.
-5. `## 🚀 [5/5] Starting your first memorize task` — one short turn to check
-   retrieval and notify startup, then finish required legacy instruction cleanup.
+5. `## 🚀 [5/5] Starting your first memorize task` — reuse valid runtime evidence
+   or use one short turn for both hooks, then finish legacy instruction cleanup.
 
 Finish with `✅ memU installation complete`, the background task status and its
 exact log path, plus the reminder about restoring the previous permission mode.

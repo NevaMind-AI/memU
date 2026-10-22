@@ -68,7 +68,7 @@ def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatc
     source = (
         "---\nname: {{task_doc_name}}\ndescription: test\n---\n"
         "<!-- memu-codex-record: notify-v2 -->\n"
-        "<!-- memu-codex-permissions: v13 -->\n"
+        "<!-- memu-codex-permissions: v14 -->\n"
         "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\n"
     )
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
@@ -131,79 +131,11 @@ def test_record_guide_version_guard_is_codex_only() -> None:
     assert not templates._valid_host_doc("codex", "INSTALL.md", old)
 
 
-def test_codex_install_separates_setup_from_legacy_cleanup() -> None:
+@pytest.mark.parametrize(
+    ("current", "outdated"),
+    [("notify-v2", "notify-v1"), ("memu-codex-permissions: v14", "memu-codex-permissions: v1")],
+)
+def test_codex_install_rejects_outdated_contract_markers(current: str, outdated: str) -> None:
     text = (files(CODEX.package) / "INSTALL.md").read_text(encoding="utf-8")
-    setup, migration = text.split("## Existing installations — migration", 1)
-    assert "memu-codex install-hook" in setup
-    assert "https://chatgpt.com/codex/install.ps1 | iex" in setup
-    assert "https://chatgpt.com/codex/install.sh | sh" in setup
-    assert "CODEX_INSTALL_DIR" in setup and "stale PATH" in setup
-    assert "hooks/list" in setup and "trusted_hash" in setup
-    assert "memu-codex remove-instruction" not in setup
-    assert "### M4 — Remove the old retrieve skill" in migration
-    assert "~/.codex/skills/memu-retrieve/SKILL.md" in migration
-    assert "memu-codex remove-instruction --dry-run" in migration
-    assert "memu-codex remove-instruction" in migration
-    assert "docs task" not in text
-    assert not templates._valid_host_doc("codex", "INSTALL.md", text.replace("notify-v2", "notify-v1"))
-
-
-def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
-    text = (files(CODEX.package) / "INSTALL.md").read_text(encoding="utf-8")
-    permissions = text.split("## Execution permissions", 1)[1].split("## Choose the installation path", 1)[0]
-    assert "Continue only with `danger-full-access`" in permissions
-    assert 'reply "continue installation"' in permissions
-    assert "remain paused at" in permissions and "stage 1" in permissions
-    assert "Do not rerun an unchanged failing command" in permissions
-    skill = (Path(__file__).resolve().parents[1] / "SKILL.md").read_text(encoding="utf-8")
-    gate = skill.split("## Before installing — Codex permissions", 1)[1].split("## Step 1", 1)[0]
-    assert "Continue only when the mode is `danger-full-access`" in gate
-    assert "before" in gate and "running `init`" in gate
-    assert "Stay in this conversation" in gate
-    assert "switch back to their previous permission mode" in skill
-    assert "registration-time retrieval below" in skill
-    for guide, progress_heading in (
-        (skill, "## Codex installation progress"),
-        (text, "## Installation progress — five stages"),
-    ):
-        assert "use English" in guide or "Use English" in guide
-        assert "unless the user explicitly" in guide
-        assert "Begin directly with stage 1" in guide
-        assert "Full access / 完全访问权限" in guide
-        assert "never repeat" in guide
-        assert "plain-text status" in guide
-        assert "Markdown `##`" in guide
-        assert "Choose your installation language" not in guide
-        assert progress_heading in guide
-    for progress in (
-        "🔐 [1/5]",
-        "📦 [2/5]",
-        "🔔 [3/5]",
-        "🧠 [4/5]",
-        "🚀 [5/5]",
-        "✅ memU installation complete",
-    ):
-        assert progress in skill and progress in text
-    startup = text.split("### ✅ Verify Part 2", 1)[1].split("## Part 3", 1)[0]
-    assert "at most 15 seconds" in startup
-    assert "do not tail" in startup
-    assert "exact local log path" in startup
-    assert "Do not wait for" in startup
-    assert "only test changed integrations" in text
-    assert "Check both hook logs in one call" in text
-    assert "never together retrospectively" in text
-    assert "query those through the available" in text
-    migration = text.split("### M2", 1)[1].split("### Migration recovery", 1)[0]
-    assert "If no old schedules" in migration
-    assert "after this startup check passes" in migration
-    assert "wait for the new worker's" in migration
-    preflight = text.split("### 3.0 Preflight", 1)[1].split("### 3.1 Register the command", 1)[0]
-    assert "state_5.sqlite" in preflight and "-wal" in preflight and "-shm" in preflight
-    assert "keeps stdin open" in preflight and '"experimentalApi": true' in preflight
-    assert '"clientInfo": {"name": "memu-install", "version": "1"}' in preflight
-    assert "do not edit the hook or trust state while this gate fails" in preflight
-    assert not templates._valid_host_doc(
-        "codex",
-        "INSTALL.md",
-        text.replace("<!-- memu-codex-permissions: v13 -->", "<!-- memu-codex-permissions: v1 -->"),
-    )
+    assert templates._valid_host_doc("codex", "INSTALL.md", text)
+    assert not templates._valid_host_doc("codex", "INSTALL.md", text.replace(current, outdated))

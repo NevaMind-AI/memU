@@ -1,7 +1,7 @@
 # Install memU for Codex
 
 <!-- memu-codex-record: notify-v2 -->
-<!-- memu-codex-permissions: v13 -->
+<!-- memu-codex-permissions: v14 -->
 
 ## Task identity
 
@@ -82,13 +82,20 @@ app-server connection for preflight, registration/trust readback; match RPC
 responses by id while skipping notifications. Check both hook logs in one call.
 Print stage headings before their work, never together retrospectively.
 
+If Part 3's existing hook is already loaded and trusted, its `hooks/list`
+response satisfies preflight and trust readback; do not open another connection
+or rewrite identical trust. A registration already completed in this run also
+satisfies M2; do not execute the same install command again for migration.
+
 If Windows blocks package replacement because a worker is using that environment,
 report the installation blocker and resume after it exits; do not spend the
 interactive installation inventing alternate tool directories or rebinding shims.
 
 Record notify startup and its log path, then leave memorization running in the
 background. Full memory evolution and cursor validation belong to development
-acceptance, not the interactive installation.
+acceptance, not the interactive installation. Finish with at most four short
+lines: result/backend, migration status, exact background log path, and the
+permission-mode reminder. Do not recap commands or diagnostics after success.
 
 ## Choose the installation path
 
@@ -577,7 +584,18 @@ must each be recorded; do not assume a single task or the `\\memU\\` folder.
    jobs or commit. If old schedules exist, perform the production startup check
    only after their safe handoff below; do not launch competing workers.
 
-### M3 — Complete the schedule switch
+### M3 — Remove old scheduled tasks
+
+Use the task IDs and ownership results from M1; do not repeat discovery.
+Handle each scheduler independently:
+
+- **Windows Task Scheduler:** disable the confirmed task by its exact task path
+  and name, then unregister it after the handoff below.
+- **Codex native automations:** pause the confirmed automation by ID through
+  Codex's automation management tools, then delete it after the handoff below.
+  Re-list native automations to verify removal. Paused is not deleted; if deletion
+  is unavailable, report that task as pending cleanup. Do not delete session
+  history or edit the application database as a substitute.
 
 Only after the replacement gates pass, disable future triggers on each confirmed
 old registration through its original scheduler. Recheck its running state.
@@ -590,8 +608,8 @@ pending; do not claim completion. During this wait, prevent new memU notify
 launches while retaining the user's other notifier; if that cannot be done
 safely, stop before changing the old registrations.
 
-Once idle, enable/retain the memU notify callback and use the single short
-Codex turn from Part 3 to confirm worker startup as described in Part 2. On a
+Once idle, enable/retain the memU notify callback and reuse matching startup
+evidence or the single short Codex turn from Part 3, as described in Part 2. On a
 startup error, follow Recovery and restore the old entry; do not delete its
 registration. The new worker continues in the background.
 
@@ -613,7 +631,8 @@ files before relying on it. Do not reset the backend or cursor to repair a trigg
 
 ### M4 — Remove the old retrieve skill and its AGENTS pointer
 
-First complete Part 3's prompt-hook registration, trust and real-turn verification.
+First complete Part 3's prompt-hook registration, trust and runtime check
+(reusing matching evidence when allowed there).
 Keep the old retrieval entry until the replacement works. Back up
 `~/.codex/skills/memu-retrieve/` and `~/.codex/AGENTS.md` locally.
 Inspect `~/.codex/skills/memu-retrieve/SKILL.md` and the AGENTS pointer to confirm
@@ -632,13 +651,17 @@ Then apply:
 memu-codex remove-instruction
 ```
 
+The managed block's "do not edit" warning requires this CLI writer; it is not a
+reason to retain the obsolete entry once the replacement works. If an actual
+user instruction forbids removal, report migration as partial.
+
 This removes memU's marked AGENTS pointer first, then the owned `memu-retrieve/`
 directory, including its `SKILL.md`. Preserve all unrelated skills and user
 instructions. Do not delete `~/.codex/skills/`, another host's skill or memU's
 distribution/install SKILL.md. A custom location or unmarked reference requires
 explicit ownership confirmation and targeted cleanup; do not delete user text.
 
-Use Part 3's single fresh-turn result for this gate; do not launch another
+Use Part 3's result for this gate; do not launch another
 model turn or wait for the new memorize worker. Read back both locations: the
 old owned skill and pointer must be gone and unrelated content intact. Reuse
 the verified hook trust and notify-startup evidence from this installation.
