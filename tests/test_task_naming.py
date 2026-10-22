@@ -68,7 +68,7 @@ def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatc
     source = (
         "---\nname: {{task_doc_name}}\ndescription: test\n---\n"
         "<!-- memu-codex-record: notify-v2 -->\n"
-        "<!-- memu-codex-permissions: v2 -->\n"
+        "<!-- memu-codex-permissions: v3 -->\n"
         "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\n"
     )
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
@@ -169,5 +169,5 @@ def test_codex_install_checks_session_permissions_before_hook_edits() -> None:
     assert not templates._valid_host_doc(
         "codex",
         "INSTALL.md",
-        text.replace("<!-- memu-codex-permissions: v2 -->", "<!-- memu-codex-permissions: v1 -->"),
+        text.replace("<!-- memu-codex-permissions: v3 -->", "<!-- memu-codex-permissions: v1 -->"),
     )

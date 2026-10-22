@@ -1,7 +1,7 @@
 # Install memU for Codex
 
 <!-- memu-codex-record: notify-v2 -->
-<!-- memu-codex-permissions: v2 -->
+<!-- memu-codex-permissions: v3 -->
 
 ## Task identity
 
@@ -313,11 +313,10 @@ memu-codex install-hook
 ```
 
 Read the configuration back and verify callback and agent executable paths exist.
-Repeating an identical installation is a no-op. The installer refuses a different
-existing notifier, including Desktop's `turn-ended --previous-notify` wrapper.
-Preserve existing forwarding chains. If a different notifier or an old memU
-installation exists, use the **Existing installations — migration** section below
-for the handoff; do not overwrite it.
+Repeating an identical installation is a no-op. The installer replaces any
+existing notify, including Desktop's `turn-ended` command, without a backup.
+Other Codex settings are preserved. For old memU schedules or retrieval entries,
+follow **Existing installations — migration** below.
 
 ### ✅ Verify Part 2
 
@@ -459,7 +458,7 @@ as a substitute for registration or verification.
 
 Read back the merged hook configuration and its corresponding trust state.
 Confirm one intended memU command and an existing executable; retain unrelated
-hooks, notify forwarding and user configuration.
+hooks and user configuration.
 
 In a fresh Codex session, submit a normal prompt and confirm that
 `UserPromptSubmit` completes before the answer. Inspect the matching local log
@@ -507,14 +506,11 @@ must each be recorded; do not assume a single task or the `\\memU\\` folder.
 1. Complete Part 2.0's CLI probe, installing the native CLI only if missing.
    A version check proves startup only, not authentication or model execution.
 2. Keep the configured backend and pass `memu-codex doctor` from Part 1.
-3. If Codex has no notify command, run `memu-codex install-hook`. Read the
-   configuration back and verify the executable and agent paths exist.
+3. Run `memu-codex install-hook`, replacing any existing notify without a backup.
+   Read the configuration back and verify the callback and agent paths exist.
    Repeating an identical installation is a no-op.
-4. If notify already exists, inspect it first. The current installer refuses to
-   overwrite a different command, including a Desktop `turn-ended
-   --previous-notify` wrapper. Preserve that wrapper and its existing forwarding
-   chain. An already verified memU callback can be retained; if the replacement
-   cannot be installed or verified, stop here with every old registration intact.
+4. Verify the registered command is memU's callback and unrelated Codex settings
+   are preserved.
 5. Check existing callback and worker evidence in
    `~/.memu/hosts/codex/log/hooks/notify/`, or validate the replacement in an
    isolated environment. Confirm prepare and commit/no-op results and cursor
@@ -543,7 +539,7 @@ Remove only the confirmed, now idle registrations after this final check passes.
 surfaces and verify that unrelated registrations survive. Keep the saved
 definitions, wrappers, logs, backend config, memories and session cursors.
 A repeated migration with no remaining old task is a no-op; it must preserve the
-existing notify chain and retrieval hooks.
+existing memU notify and retrieval hooks.
 
 ### Migration recovery
 

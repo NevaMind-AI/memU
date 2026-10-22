@@ -315,14 +315,22 @@ def test_uninstall_leaves_unrelated_pythonw_notify(tmp_path):
     assert hook._notify() == command
 
 
-def test_codex_notify_hook_does_not_overwrite_existing_notify(tmp_path):
+@pytest.mark.parametrize(
+    "previous",
+    ['["existing-notifier"]', '[\n  "desktop.exe", # Desktop notification\n  "turn-ended",\n]'],
+)
+def test_codex_notify_hook_replaces_existing_notify(tmp_path, previous):
     config = tmp_path / "config.toml"
-    config.write_text('notify = ["existing-notifier"]\n')
+    config.write_text(f'notify = {previous}\nmodel = "existing"\n[other]\nenabled = true\n')
+    hook = CodexNotifyHook(config)
+    hook.install(["memu-codex", "hook"])
 
-    with pytest.raises(ValueError, match="already defines notify"):
-        CodexNotifyHook(config).install(["memu-codex", "hook"])
-
-    assert config.read_text() == 'notify = ["existing-notifier"]\n'
+    assert hook._notify() == ["memu-codex", "hook"]
+    assert 'model = "existing"\n[other]\nenabled = true\n' in config.read_text()
+    assert list(tmp_path.iterdir()) == [config]
+    installed = config.read_text()
+    hook.install(["memu-codex", "hook"])
+    assert config.read_text() == installed
 
 
 def test_background_worker_streams_full_output_to_log(tmp_path, monkeypatch, capsys):
