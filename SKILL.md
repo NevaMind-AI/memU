@@ -18,52 +18,11 @@ answering). Each supported host has its own adapter binary carrying its own
 install guide. Your job here is three steps: install the package, pick your
 binary, print and follow its guide.
 
-## Before installing — choose the guide language
-
-For Codex installation or migration, ask the user to choose the guide language
-**before stage 1, the Full access check, or any installation commands**. If the
-user already explicitly selected a language for this installation, reuse it.
-Otherwise the first response is a **language-selection turn only**. Offer EN,
-ZH and Other (with a custom language answer). Prefer native interactive options
-supported by the current environment over a plain-text reply. If native options
-are unavailable, show this concise numbered menu without a preface:
-
-```text
-🌐 Choose your installation language / 请选择安装引导语言
-
-1. EN — English
-2. ZH — 中文
-3. Other — enter your preferred language / 输入其他语言
-```
-
-**End the response immediately after the question and wait for the answer.**
-Until the user chooses, do not check or discuss permissions, mention Full access,
-print a numbered stage, run commands, read another guide, or explain later steps.
-The language prompt is the entire response, not a summary of this document.
-If Other has no language filled in, ask only which language and wait again.
-Do not infer a selection from the language of the initial request alone.
-Use the selected language for stage labels, permission prompts, blockers
-and the final report; keep commands, paths and configuration keys unchanged.
-For every selected language, translate the permission explanation and the
-continuation reply naturally, while preserving the stage emoji and `[1/5]`.
-Use the setting's localized UI name alongside `Full access` so users can find it
-(for Chinese: `Full access / 完全访问权限`). Ask the user to switch temporarily
-and reply with the localized equivalent of "continue installation"; explain
-that they can restore their previous permission mode after installation.
-
-Use `danger-full-access` to check effective permissions internally; the
-user-facing setting name should match the selected language's UI label.
-Carry the selection into the packaged guide without asking again. Language
-selection is an introduction, not a numbered installation stage.
-
-After language selection, begin the next response with the stage 1 heading,
-including its emoji and `[1/5]`, even when permission is blocked. The permission
-prompt belongs under that heading; it never replaces the progress message.
-
 ## Codex installation progress
 
-For Codex, show these five progress messages in the user's language as Markdown
-`##` headings. Print each heading exactly once when entering its stage, before
+For Codex, use English for installation guidance unless the user explicitly
+requests another language. Begin directly with stage 1, even when permissions
+are blocked. Show these five progress messages as Markdown `##` headings. Print each heading exactly once when entering its stage, before
 its tools. On continuation, resume silently without repeating that heading.
 Within a stage, use at most one short plain-text status when needed; never repeat
 the emoji, counter or stage name in status updates. Show a concrete blocker and
@@ -96,8 +55,8 @@ For a restricted or unconfirmed session, pause installation and tell the user:
 
 > Installation needs to write to your user directory and configure Codex
 > integrations and background execution. The sandbox may block these operations
-> even after directory access is approved. Please temporarily switch to Full
-> access, then reply "continue installation". You can switch back to your previous
+> even after directory access is approved. Please temporarily switch to
+> Full access / 完全访问权限, then reply "continue installation". You can switch back to your previous
 > permission mode after installation.
 
 After the user replies, confirm that the current session's effective sandbox

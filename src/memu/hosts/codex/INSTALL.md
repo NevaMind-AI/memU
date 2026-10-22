@@ -1,7 +1,7 @@
 # Install memU for Codex
 
 <!-- memu-codex-record: notify-v2 -->
-<!-- memu-codex-permissions: v11 -->
+<!-- memu-codex-permissions: v12 -->
 
 ## Task identity
 
@@ -19,52 +19,11 @@
 > However this run ends — finished or abandoned — close it out with **Report
 > the outcome to memU** at the bottom of this file.
 
-## Before installing — choose the guide language
-
-Before stage 1, the Full access check, or any installation commands, use the
-language explicitly selected for this installation. If none was selected, the
-first response is a **language-selection turn only**. Offer EN, ZH and Other
-(with a custom language answer). Prefer native interactive options supported by
-the current environment over a plain-text reply. If native options are
-unavailable, show this concise numbered menu without a preface:
-
-```text
-🌐 Choose your installation language / 请选择安装引导语言
-
-1. EN — English
-2. ZH — 中文
-3. Other — enter your preferred language / 输入其他语言
-```
-
-**End the response immediately after the question and wait for the answer.**
-Until the user chooses, do not check or discuss permissions, mention Full access,
-print a numbered stage, run commands, read another guide, or explain later steps.
-The language prompt is the entire response, not a summary of this document.
-If Other has no language filled in, ask only which language and wait again.
-Do not infer a selection from the initial request's language alone.
-Use the selected language
-for all progress, permission prompts, blockers and the final report, preserving
-commands, paths and configuration keys. For every selected language, translate
-the permission explanation and continuation reply naturally, while preserving
-the stage emoji and `[1/5]`. Use the setting's localized UI name alongside
-`Full access` so users can find it (for Chinese: `Full access / 完全访问权限`).
-Ask the user to switch temporarily and reply with the localized equivalent of
-"continue installation"; explain that they can restore their previous permission
-mode after installation.
-
-Use `danger-full-access` to check effective permissions internally; the
-user-facing setting name should match the selected language's UI label.
-Reuse the choice from `SKILL.md` without
-asking again. This introduction is outside the five numbered stages.
-
-After language selection, begin the next response with the stage 1 heading,
-including its emoji and `[1/5]`, even when permission is blocked. The permission
-prompt belongs under that heading; it never replaces the progress message.
-
 ## Installation progress — five stages
 
-Use the user's language and render each stage message below as a Markdown `##`
-heading exactly once before its work. If already printed while following
+Use English for installation guidance unless the user explicitly requests
+another language. Begin directly with stage 1, even when permissions are blocked.
+Render each stage message below as a Markdown `##` heading exactly once before its work. If already printed while following
 `SKILL.md`, resume silently without repeating the heading. Within a stage, use
 at most one short plain-text status when needed; never repeat the emoji, counter
 or stage name in status updates. Show a concrete blocker and next action briefly,
@@ -95,8 +54,8 @@ Otherwise pause installation and tell the user:
 
 > Installation needs to write to your user directory and configure Codex
 > integrations and background execution. The sandbox may block these operations
-> even after directory access is approved. Please temporarily switch to Full
-> access, then reply "continue installation". You can switch back to your previous
+> even after directory access is approved. Please temporarily switch to
+> Full access / 完全访问权限, then reply "continue installation". You can switch back to your previous
 > permission mode after installation.
 
 Confirm the current session's effective mode after the user replies, then resume
