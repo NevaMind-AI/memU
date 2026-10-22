@@ -447,29 +447,16 @@ verification or the new memorize worker.
 Use this branch when Codex already has a memU schedule, retrieve skill, hook or
 notify callback. Keep the existing backend and progress; do not reinitialize a
 store to repair trigger configuration. The new-install parts above describe the
-replacement entries, while this section owns backups, handoff and cleanup.
+replacement entries, while this section owns legacy discovery, handoff and cleanup.
 
-### M1 — Inventory and preserve the old entry points
+### M1 — Identify the old entry points
 
-Inspect both Windows Task Scheduler (all task folders) and Codex's own
-scheduled-task surface when present. Windows Task Scheduler cannot establish
-that Codex native automations are absent; query those through the available
-Codex automation tools. If that inventory is unavailable, report it as unresolved.
-Candidate names are {{all_task_names}}.
-A name is only a search hint: confirm that the action, wrapper or prompt invokes
-**Codex's** memU prepare / self-evolve / commit pipeline. Generic historical
-names may belong to another host. Leave unrelated or ambiguous tasks untouched
-and report them for review. Do not use another host's `schedule uninstall`.
-
-Before changing a confirmed registration, save its exact task path/ID,
-action and arguments or full prompt, working directory, principal, triggers,
-enabled state and current running state locally. Export Windows task XML and
-keep referenced wrapper/prompt files; use the native surface's supported export
-for native tasks. If a restorable definition cannot be saved, stop migration.
-Backups may contain private content and must stay local.
-
-No matching task is a normal installation. Multiple confirmed registrations
-must each be recorded; do not assume a single task or the `\\memU\\` folder.
+Query Codex's native automations through its management tools. Candidate names
+are {{all_task_names}}. Confirm that each matching task's prompt invokes Codex's
+memU prepare / self-evolve / commit pipeline; a name alone does not establish
+ownership. Use the confirmed IDs and current running states for M3. Leave
+unrelated or ambiguous tasks untouched. If inventory is unavailable, report it
+as unresolved. No matching task is normal; handle every confirmed match.
 
 ### M2 — Verify the replacement before removing anything
 
@@ -486,24 +473,18 @@ This is the single cleanup stage for old memU schedules, retrieval skills,
 managed instruction pointers and other version-specific residue. Add future
 legacy cleanup requirements here. Process both checklists before leaving this
 stage; a deferred schedule handoff does not defer safe retrieval cleanup.
-Use M1's ownership results and backups without repeating discovery. Preserve
+Use M1's ownership results without repeating discovery. Preserve
 backend configuration, memories, session cursors and unrelated integrations.
 
 #### Old scheduled tasks
 
-Handle each scheduler independently:
-
-- **Windows Task Scheduler:** disable the confirmed task by its exact task path
-  and name, then unregister it after the handoff below.
-- **Codex native automations:** use the Codex automation management tool with
-  the confirmed automation ID. For `update`, include `kind: "cron"` and the
-  complete saved definition (name, prompt, rrule, projectId, model,
-  reasoningEffort, executionEnvironment, status); change only status to
-  `PAUSED`. Verify by viewing it. After the handoff succeeds, call `delete` with
-  the ID and verify the automation is gone. Do not infer that pause/delete is
-  unavailable from a rejected update with missing required fields; do not
-  reconstruct or shorten the saved prompt.
-  Do not delete session history or edit the application database as a substitute.
+Use Codex's automation management tool with the confirmed ID. For `update`,
+include `kind: "cron"` and the full current definition returned by the tool
+(name, prompt, rrule, projectId, model, reasoningEffort, executionEnvironment,
+status); change only status to `PAUSED`. Verify by viewing it. Do not reconstruct
+or shorten the prompt, or infer that pause/delete is unavailable from an update
+rejected for missing required fields. Do not edit the application database or
+session history.
 
 Only after the replacement gates pass, disable future triggers on each confirmed
 old registration through its original scheduler. Recheck its running state.
@@ -511,19 +492,19 @@ Deleting a registration does **not** terminate an already running agent; do not
 kill it. Wait for the run and its descendants to finish naturally before allowing
 notify to prepare the same working tree or cleaning any files. Old scheduled
 agents do not necessarily acquire notify's workspace lock. If safe handoff cannot
-be established, retain the saved disabled registration and report migration as
+be established, leave the old automation paused and report migration as
 pending; do not claim completion. During this wait, prevent new memU notify
 launches while retaining the user's other notifier; if that cannot be done
 safely, stop before changing the old registrations.
 
 Once idle, enable/retain the memU notify callback and reuse matching startup
-evidence or the single short Codex turn from Part 3, as described in Part 2. On a
-startup error, follow Recovery and restore the old entry; do not delete its
-registration. The new worker continues in the background.
+evidence or the single short Codex turn from Part 3, as described in Part 2.
+On a startup error, leave the old automation paused, report the error and stop
+before deleting it. The new worker continues in the background after startup.
 
-Remove only the confirmed, now idle old registrations after this startup check passes. Re-list both scheduler
-surfaces and verify that unrelated registrations survive. Keep the saved
-definitions, wrappers, logs, backend config, memories and session cursors.
+After startup passes, delete the confirmed idle old automations by ID through
+Codex's management tool. Query again to verify removal and preserve unrelated
+automations, logs, backend config, memories and session cursors.
 A repeated migration with no remaining old task is a no-op; it must preserve the
 existing memU notify and retrieval hooks.
 
@@ -573,21 +554,17 @@ recovery below if runtime verification fails.
 
 Check every M3 cleanup item together: confirmed old schedules are removed or
 explicitly pending a safe handoff, the owned retrieval skill and AGENTS pointer
-are gone, and unrelated entries survive. Record the recovery location. Missing
+are gone, and unrelated entries survive. Missing
 inventory, an ownership question or an unhandled legacy entry leaves migration
 partial. Keep backend config, memory, session cursors and logs intact.
 
 #### Cleanup recovery
 
-If a replacement gate fails, leave the old registration unchanged. If a problem
-appears after disabling/removing it, first stop future memU notify launches while
-preserving the user's other notifier, then wait for any worker to finish.
-Restore the exact saved task path/ID, definition and original enabled state
-through the same scheduler, using its supported import. S4U/password principals
-may require credentials again; verify the restored registration and referenced
-files before relying on it. For retrieval failures, restore only the backed-up
-owned skill and AGENTS pointer, preserving unrelated edits made since backup.
-Do not reset the backend or cursor to repair a trigger.
+If a replacement gate fails, stop cleanup and report the failed gate. Leave
+any paused old automation in place until the new record trigger works. For
+retrieval failures, restore only the backed-up owned skill and AGENTS pointer,
+preserving unrelated edits made since backup. Do not reset the backend or cursor
+to repair a trigger.
 
 ---
 
