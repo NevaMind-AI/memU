@@ -478,77 +478,45 @@ backend configuration, memories, session cursors and unrelated integrations.
 
 #### Old scheduled tasks
 
-Use Codex's automation management tool with the confirmed ID. For `update`,
-include `kind: "cron"` and the full current definition returned by the tool
-(name, prompt, rrule, projectId, model, reasoningEffort, executionEnvironment,
-status); change only status to `PAUSED`. Verify by viewing it. Do not reconstruct
-or shorten the prompt, or infer that pause/delete is unavailable from an update
-rejected for missing required fields. Do not edit the application database or
-session history.
+Use M1's confirmed IDs. After M2 passes, pause each old automation through
+Codex's management tool. For `update`, pass `kind: "cron"` and the full current
+definition returned by the tool (name, prompt, rrule, projectId, model,
+reasoningEffort, executionEnvironment, status); change only status to `PAUSED`.
+Preserve the
+prompt exactly. Verify the paused status; missing required arguments do not
+mean the tool lacks update support.
 
-Only after the replacement gates pass, disable future triggers on each confirmed
-old registration through its original scheduler. Recheck its running state.
-Deleting a registration does **not** terminate an already running agent; do not
-kill it. Wait for the run and its descendants to finish naturally before allowing
-notify to prepare the same working tree or cleaning any files. Old scheduled
-agents do not necessarily acquire notify's workspace lock. If safe handoff cannot
-be established, leave the old automation paused and report migration as
-pending; do not claim completion. During this wait, prevent new memU notify
-launches while retaining the user's other notifier; if that cannot be done
-safely, stop before changing the old registrations.
+Wait for any running old task and its descendants to finish naturally before
+allowing the new notify worker to process the same workspace. Prevent new memU
+notify launches during this handoff; if that cannot be done safely, stop before
+changing registrations. Do not kill running tasks.
 
-Once idle, enable/retain the memU notify callback and reuse matching startup
-evidence or the single short Codex turn from Part 3, as described in Part 2.
-On a startup error, leave the old automation paused, report the error and stop
-before deleting it. The new worker continues in the background after startup.
-
-After startup passes, delete the confirmed idle old automations by ID through
-Codex's management tool. Query again to verify removal and preserve unrelated
-automations, logs, backend config, memories and session cursors.
-A repeated migration with no remaining old task is a no-op; it must preserve the
-existing memU notify and retrieval hooks.
+Once idle, verify notify startup using Part 2's check. If successful, delete the
+old automations by ID and query again to verify removal. If startup fails or
+runtime verification awaits the next user message, leave them paused and report
+the remaining step. Preserve unrelated automations and session history; use
+Codex's management tool rather than editing its database.
 
 #### Old retrieve skill and AGENTS pointer
 
-First complete Part 3's prompt-hook registration and trust verification.
-After Codex confirms the replacement is loaded and trusted, clean up the old
-retrieval entry in this installation turn, including when runtime verification
-awaits the user's next message. This prevents the old skill and AGENTS pointer
-from requesting a second retrieval on that message. Back up
-`~/.codex/skills/memu-retrieve/` and `~/.codex/AGENTS.md` locally.
-Inspect `~/.codex/skills/memu-retrieve/SKILL.md` and the AGENTS pointer to confirm
-memU ownership; the removal command treats SKILL.md in that named directory as
-its ownership marker. Stop if ownership is ambiguous or user edits need review.
+After Part 3 confirms the new hook is loaded and trusted, remove the old
+retrieval entry in this installation turn, even if runtime verification awaits
+the next user message. Confirm memU ownership of
+`~/.codex/skills/memu-retrieve/SKILL.md` and the managed AGENTS pointer; stop if
+ownership or user edits are ambiguous.
 
-Preview and review the targeted removal:
+Review the targeted removal, then apply it:
 
 ```text
 memu-codex remove-instruction --dry-run
-```
-
-Then apply:
-
-```text
 memu-codex remove-instruction
 ```
 
-The managed block's "do not edit" warning requires this CLI writer; it is not a
-reason to retain the obsolete entry once the replacement is registered and
-trusted. If an actual
-user instruction forbids removal, report migration as partial.
-
-This removes memU's marked AGENTS pointer first, then the owned `memu-retrieve/`
-directory, including its `SKILL.md`. Preserve all unrelated skills and user
-instructions. Do not delete `~/.codex/skills/`, another host's skill or memU's
-distribution/install SKILL.md. A custom location or unmarked reference requires
-explicit ownership confirmation and targeted cleanup; do not delete user text.
-
-Use Part 3's registration and trust result for this gate; do not launch another
-model turn or wait for the new memorize worker. Read back both locations: the
-old owned skill and pointer must be gone and unrelated content intact.
-Runtime verification may follow on the next user message; it does not defer
-this cleanup. Repeating cleanup with no old entry is a no-op. Use Cleanup
-recovery below if runtime verification fails.
+Use this CLI to remove the managed block and owned skill, including when the
+block says "do not edit". Respect explicit user instructions forbidding removal.
+Verify both are gone and unrelated content remains. Preserve other skills,
+AGENTS instructions and the distribution/install SKILL.md. Custom locations or
+unmarked references require confirmed ownership and targeted cleanup.
 
 #### Verify legacy cleanup
 
@@ -557,14 +525,6 @@ explicitly pending a safe handoff, the owned retrieval skill and AGENTS pointer
 are gone, and unrelated entries survive. Missing
 inventory, an ownership question or an unhandled legacy entry leaves migration
 partial. Keep backend config, memory, session cursors and logs intact.
-
-#### Cleanup recovery
-
-If a replacement gate fails, stop cleanup and report the failed gate. Leave
-any paused old automation in place until the new record trigger works. For
-retrieval failures, restore only the backed-up owned skill and AGENTS pointer,
-preserving unrelated edits made since backup. Do not reset the backend or cursor
-to repair a trigger.
 
 ---
 
