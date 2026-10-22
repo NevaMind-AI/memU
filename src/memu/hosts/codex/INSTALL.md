@@ -141,14 +141,10 @@ memU is distributed as a **pip package**. There is no npm package — do not loo
 for one; a Python runtime is required regardless, because the bridging task runs
 Python.
 
-### 1.1 Reuse the installed package
+### 1.1 Install
 
-If you followed `SKILL.md`, package installation and executable selection are
-already complete. Reuse that installation, source and executable path; do not
-install again or repeat successful executable checks.
-
-If you opened this guide directly and have not installed or updated the package,
-use the user's requested package manager and source. The default is:
+If you just installed or upgraded memu-cli, skip this step.
+Otherwise, use the user's requested package manager and source. The default is:
 
 ```text
 pip install --upgrade memu-cli
