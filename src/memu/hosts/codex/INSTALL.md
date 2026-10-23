@@ -343,9 +343,9 @@ memu-codex hook-status --since <start-time>
 ```
 
 The command returns JSON with `retrieve.status`, `retrieve.exit_code`,
-`notify.status` and each log path. Exit 0 means retrieval succeeded (context or
+`memorize.status` and each log path. Exit 0 means retrieval succeeded (context or
 empty result) and background memorization startup was observed; exit 1 means retrieval failed;
-exit 2 means evidence is pending. `notify.status = started` proves startup only,
+exit 2 means evidence is pending. `memorize.status = started` proves startup only,
 not worker completion. Use this output directly instead of writing log parsers,
 reading source code or enumerating processes. It does not wait or retrieve memory.
 The time filter excludes logs started before the check; avoid concurrent test
@@ -362,7 +362,7 @@ report. This is a content example, not text to append verbatim:
 > memU is installed. Send one more message here to trigger your first memory
 > retrieval and background memorize task. You can ask: "What did memU retrieve
 > for this message?" Memorization processes new conversation content in the
-> background; follow its logs in `~/.memu/hosts/codex/log/hooks/notify/`.
+> background; follow its logs in `~/.memu/hosts/codex/log/hooks/memorize/`.
 
 Resolve the directory to the user's actual local path. Use the existing
 conversation unless Codex explicitly requires a new session. Do not claim a

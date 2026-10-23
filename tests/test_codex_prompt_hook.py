@@ -35,7 +35,7 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
     assert main(["prompt-hook"]) == 0
     output = capsys.readouterr()
     logs = list((tmp_path / ".memu/hosts/codex/log/hooks/retrieve").glob("*.log"))
-    assert not (tmp_path / ".memu/hosts/codex/log/hooks/notify").exists()
+    assert not (tmp_path / ".memu/hosts/codex/log/hooks/memorize").exists()
     assert len(logs) == 1
     records = [json.loads(line) for line in logs[0].read_text(encoding="utf-8").splitlines()]
     assert records[0]["status"] == "started"

@@ -33,7 +33,7 @@ def test_console_agent_output_is_live(tmp_path, capsys):
         try:
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
-                logs = list((tmp_path / "log/hooks/notify").glob("*.log"))
+                logs = list((tmp_path / "log/hooks/memorize").glob("*.log"))
                 if logs and "agent stderr" in logs[0].read_text():
                     break
                 time.sleep(0.01)
@@ -65,7 +65,7 @@ def test_console_agent_failure_and_timeout(tmp_path, script, timeout, error):
             Layout.default("codex", tmp_path),
             stream_output=notify_console.stream_agent,
         )
-    assert next((tmp_path / "log/hooks/notify").glob("*.log")).read_text()
+    assert next((tmp_path / "log/hooks/memorize").glob("*.log")).read_text()
 
 
 @pytest.mark.parametrize("ending", ["pass", "sys.exit(7)", "time.sleep(30)"])
@@ -93,7 +93,7 @@ def test_agent_thread_is_excluded_from_next_prepare(tmp_path, ending):
     with expected:
         notify_console.stream_agent([sys.executable, "-c", script], layout, "test", 1)
     assert self_sessions.load(layout.self_sessions) == [thread_id]
-    assert event in next((tmp_path / "log/hooks/notify").glob("*.log")).read_text()
+    assert event in next((tmp_path / "log/hooks/memorize").glob("*.log")).read_text()
 
     source_dir = tmp_path / "source"
     source_dir.mkdir()
@@ -206,7 +206,7 @@ def test_background_worker_streams_full_output_to_log(tmp_path, monkeypatch, cap
     )
     assert notify_console.main() == 0
     assert capsys.readouterr() == ("", "")
-    logs = list((tmp_path / "log/hooks/notify").glob("*.log"))
+    logs = list((tmp_path / "log/hooks/memorize").glob("*.log"))
     assert not (tmp_path / "log/hooks/retrieve").exists()
     assert len(logs) == 1
     log = logs[0].read_text()
@@ -237,7 +237,7 @@ runpy.run_module("memu.hosts.codex.notify_console", run_name="__main__")
 """
     historical = tmp_path / "hook.log"
     historical.write_bytes(b"historical log\n")
-    previous_logs = set((tmp_path / "log/hooks/notify").glob("*.log"))
+    previous_logs = set((tmp_path / "log/hooks/memorize").glob("*.log"))
     for number in range(2):
         run_message = f"{message} run-{number}"
         agent = (
@@ -259,7 +259,7 @@ runpy.run_module("memu.hosts.codex.notify_console", run_name="__main__")
             check=False,
         )
         assert result.returncode == 0, result.stderr.decode(errors="replace")
-        logs = set((tmp_path / "log/hooks/notify").glob("*.log"))
+        logs = set((tmp_path / "log/hooks/memorize").glob("*.log"))
         new_logs = logs - previous_logs
         assert len(new_logs) == 1
         path = new_logs.pop()
@@ -326,7 +326,7 @@ def test_console_window_logs_failure_and_holds(tmp_path, monkeypatch):
         sys, "argv", ["diagnostic", "--label", "desktop-codex", "--hold", "--", "hook-run", "--base-dir", str(tmp_path)]
     )
     assert notify_console.main() == 2
-    log = next((tmp_path / "log/hooks/notify").glob("*.log")).read_text()
+    log = next((tmp_path / "log/hooks/memorize").glob("*.log")).read_text()
     assert "prepare failed" in log
     assert "FINISHED desktop-codex exit=2" in log
     assert len(held) == 1
