@@ -383,8 +383,20 @@ finds an error, report it then; do not wait for jobs or worker completion.
 
 This part owns the *inject* seam: Codex runs `memu-codex prompt-hook` when the
 user submits a prompt. The command reads the hook's stdin JSON, passes the
-original prompt to shared retrieval, and returns
+original prompt's first 2,000 Unicode characters to shared retrieval, and returns
 `hookSpecificOutput.additionalContext` before the model answers.
+
+Automatic retrieval uses at most the first 2,000 Unicode code points (Python
+characters, not bytes or tokens), preserving whitespace within that prefix.
+Longer prompts are truncated only for retrieval; Codex's full message and the
+memorization transcript remain intact. The log records `prompt_chars`,
+`query_chars`, `query_truncated` and the full prompt's hash, without logging the
+query text. An all-whitespace prefix skips retrieval as `empty_query` even if
+nonblank text follows the limit. The subprocess reads the query as UTF-8 stdin, avoiding Windows
+command-line length limits. Manual `retrieve "<query>"` retains its full input;
+`retrieve --query-stdin` also accepts a complete query, with exactly one input
+source required. The 2,000-character limit bounds embedding input; it does not
+guarantee latency or extract the topic from a long document.
 
 The independent `memorize-hook` handler launches the existing background worker and
 returns after at most a half-second admission check, without waiting for processing.

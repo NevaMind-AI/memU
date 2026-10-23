@@ -14,6 +14,8 @@ from typing import Any
 
 from memu.hosts.codex.notify_console import _new_log_path
 
+QUERY_MAX_CHARS = 2000
+
 
 async def _cmd_prompt_hook(args: argparse.Namespace) -> int:
     started = time.monotonic()
@@ -51,8 +53,14 @@ def _retrieve(trace: dict[str, Any]) -> None:
     if not isinstance(prompt, str):
         raise TypeError("prompt must be a string")  # noqa: TRY003
     trace["prompt_sha256"] = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    # ponytail: prefix cap bounds embedding input; topic extraction can recover relevant text beyond it.
+    query = prompt[:QUERY_MAX_CHARS]
+    trace.update(prompt_chars=len(prompt), query_chars=len(query), query_truncated=len(prompt) > len(query))
     if not prompt.strip():
         trace["status"] = "empty_prompt"
+        return
+    if not query.strip():
+        trace["status"] = "empty_query"
         return
     flags = 0
     if sys.platform == "win32":
@@ -61,24 +69,22 @@ def _retrieve(trace: dict[str, Any]) -> None:
     retrieve_started = time.monotonic()
     try:
         result = subprocess.run(  # noqa: S603
-            [sys.executable, "-m", "memu.hosts.codex.cli", "retrieve", prompt],
-            stdin=subprocess.DEVNULL,
+            [sys.executable, "-m", "memu.hosts.codex.cli", "retrieve", "--query-stdin"],
+            input=query.encode("utf-8"),
             capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
             timeout=45,
             check=False,
             creationflags=flags,
         )
     finally:
         trace["retrieve_elapsed_ms"] = round((time.monotonic() - retrieve_started) * 1000)
-    trace.update(retrieve_exit_code=result.returncode, stderr=result.stderr)
+    stderr = result.stderr.decode("utf-8", errors="replace")
+    trace.update(retrieve_exit_code=result.returncode, stderr=stderr)
     if result.returncode:
         trace["status"] = "failed"
-        print(f"memU retrieve exited {result.returncode}: {result.stderr}", file=sys.stderr)
+        print(f"memU retrieve exited {result.returncode}: {stderr}", file=sys.stderr)
         return
-    memories = json.loads(result.stdout)
+    memories = json.loads(result.stdout.decode("utf-8", errors="replace"))
     layers = ("segments", "files", "resources")
     if not isinstance(memories, dict) or any(not isinstance(memories.get(layer, []), list) for layer in layers):
         raise ValueError("retrieve must return an object containing result lists")  # noqa: TRY003
