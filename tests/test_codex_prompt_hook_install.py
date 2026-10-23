@@ -159,8 +159,10 @@ def test_windows_command_executes_path_with_spaces_and_apostrophe(tmp_path, monk
     executable.parent.mkdir()
     executable.write_text("@echo HOOK_QUOTE_OK\n", encoding="ascii")
     monkeypatch.setattr(installer.sys, "argv", [str(executable)])
+    powershell = installer.shutil.which("powershell.exe")
+    assert powershell is not None
     result = subprocess.run(  # noqa: S603
-        [installer.shutil.which("powershell.exe"), "-NoProfile", "-NonInteractive", "-Command", installer._command()],
+        [powershell, "-NoProfile", "-NonInteractive", "-Command", installer._command()],
         capture_output=True,
         text=True,
         timeout=15,
