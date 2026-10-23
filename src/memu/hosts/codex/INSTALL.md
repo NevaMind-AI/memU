@@ -98,7 +98,7 @@ Parts 2 and 3 must share one configured mode. In local mode they must also share
 one store and embedding space, or retrieval silently returns nothing. Part 1 is
 what makes them agree.
 
-## Notify record trigger (Codex)
+## Submit record trigger (Codex)
 
 The record trigger is UserPromptSubmit: a short handler launches prepare → headless `codex exec` → commit in the background without waiting for completion.
 Follow Part 2 after the backend gate passes. Existing installations use the

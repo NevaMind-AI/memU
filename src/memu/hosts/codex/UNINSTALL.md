@@ -21,10 +21,10 @@ and keep the package while any confirmed entry still needs its executable.
 
 Uninstalling has three parts:
 
-1. **Remove the memU notify entry and confirmed old schedules** — prevent new
+1. **Remove the Submit hooks and legacy record triggers** — prevent new
    record runs, then let existing agents finish (the *record* seam).
-2. **Remove both Submit hooks and their trust entries** — clean up the
-   `UserPromptSubmit` command and any old memU skill/instruction (the *inject* seam).
+2. **Verify hook/trust removal and clean up old instructions** — preserve
+   unrelated hooks and remove any old memU skill/instruction (the *inject* seam).
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
    tooling is removed — and close by reporting both.
 
@@ -41,7 +41,14 @@ instruction file exactly as they are.
 
 ## Part 1 — Remove record triggers and wait for running agents
 
-### 1.1 Current entry — notify
+### 1.1 Current entries — UserPromptSubmit hooks
+
+First follow Part 2.1 to remove both memU Submit handlers and their approvals.
+In particular, remove `memorize-hook` before waiting for running agents; leaving
+it registered allows new user submissions to start more workers. Read the hooks
+back and confirm unrelated handlers remain intact.
+
+### 1.2 Legacy entry — notify
 
 Inspect the parsed notify chain. If it contains no memU callback, continue to
 historical schedules without modifying the user's notifier.
@@ -58,7 +65,7 @@ backup belongs to this chain. Never overwrite an unrelated or newer notifier
 from a stale backup. If this cannot be done safely, stop the uninstall and
 report the remaining callback; do not remove its executable.
 
-### 1.2 Historical entries — scheduled bridging tasks
+### 1.3 Historical entries — scheduled bridging tasks
 
 Inspect Windows Task Scheduler in all folders and Codex's native task surface.
 Candidate names are {{all_task_names}}, but actions, wrapper contents or the full
@@ -69,7 +76,7 @@ the migration section of `memu-codex docs install`. Do not invoke another host's
 schedule helper. No confirmed task is a no-op; multiple confirmed registrations
 must each be removed, even if a current notify callback was also found.
 
-### 1.3 Wait for affected runs before cleanup
+### 1.4 Wait for affected runs before cleanup
 
 Disable future triggers first. Removing a registration does not stop a running
 agent. Do not terminate it; wait for all affected runs and descendants to finish
@@ -79,8 +86,8 @@ recovery definitions, original wrappers, backend config, memories and cursors.
 
 ### ✅ Verify Part 1
 
-The parsed notify chain no longer invokes memU, confirmed old registrations are
-absent from both scheduler surfaces, and affected agents have finished. Other
+Both memU Submit handlers are absent, the parsed notify chain no longer invokes
+memU, confirmed old registrations are absent from both scheduler surfaces, and affected agents have finished. Other
 notifiers and hosts remain intact. Repeating the removal is a no-op.
 
 ---
@@ -96,7 +103,7 @@ check. Remove a leftover approval only if its ownership can still be confirmed.
 Back up `~/.codex/hooks.json` and the relevant Codex hook trust state locally.
 Identify the `UserPromptSubmit` command by its resolved memu-codex executable
 and `prompt-hook` or `memorize-hook` argument. Remove both confirmed entries, preserving other
-hooks and events. Remove its corresponding approval using the installed Codex
+hooks and events. Remove each corresponding approval using the installed Codex
 version's hook trust facilities; current Windows versions persist the fingerprint
 in `~/.codex/config.toml` under `hooks.state` as `trusted_hash`.
 

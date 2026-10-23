@@ -93,7 +93,7 @@ SPEC = HostSpec(
         "Install the standalone Codex CLI using the official native installer:\n"
         "  Windows (PowerShell): irm https://chatgpt.com/codex/install.ps1 | iex\n"
         "  macOS/Linux: curl -fsSL https://chatgpt.com/codex/install.sh | sh\n"
-        "Refresh PATH, verify `codex --version`, then retry `memu-codex install-hook`."
+        "Refresh PATH, verify `codex --version`, then retry `memu-codex install-prompt-hook`."
     ),
     register_extra=_register_extra,
 )
