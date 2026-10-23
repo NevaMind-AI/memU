@@ -51,15 +51,16 @@ class _Tee(io.TextIOBase):
             self.log.flush()
 
 
-def launch_background(argv: list[str], layout: Layout, label: str) -> None:
+def launch_background(argv: list[str], layout: Layout, label: str) -> Path:
     """Run the logged worker independently of the notifying frontend's console."""
     layout.base.mkdir(parents=True, exist_ok=True)
     interpreter = str(Path(sys.executable).with_name("python.exe")) if sys.platform == "win32" else sys.executable
     flags = 0
     if sys.platform == "win32":
         flags = subprocess.CREATE_NO_WINDOW
+    log_path = _new_log_path(layout.base).resolve()
     subprocess.Popen(  # noqa: S603
-        [interpreter, "-u", "-m", __name__, "--label", label, "--background", "--", *argv],
+        [interpreter, "-u", "-m", __name__, "--label", label, "--background", "--log-path", str(log_path), "--", *argv],
         cwd=layout.base,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
@@ -67,6 +68,7 @@ def launch_background(argv: list[str], layout: Layout, label: str) -> None:
         start_new_session=sys.platform != "win32",
         creationflags=flags,
     )
+    return log_path
 
 
 def launch(argv: list[str], layout: Layout, label: str, hold: bool) -> None:
@@ -256,6 +258,7 @@ def memorize_run(layout: Layout) -> Iterator[bool]:
             if elapsed < 0:
                 print(f"warning: memorize clock moved backwards ({now} < {previous}); resetting", flush=True)
             elif elapsed < COOLDOWN_SECONDS:
+                print(f"=== COOLDOWN until={previous + COOLDOWN_SECONDS} ===", flush=True)
                 print("=== MEMORIZE status=cooldown ===", flush=True)
                 yield False
                 return
@@ -272,11 +275,12 @@ def main() -> int:
     parser.add_argument("--label", required=True)
     parser.add_argument("--hold", action="store_true")
     parser.add_argument("--background", action="store_true")
+    parser.add_argument("--log-path", type=Path)
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:]
     base = Path(command[command.index("--base-dir") + 1]).expanduser()
-    log_path = _new_log_path(base)
+    log_path = args.log_path or _new_log_path(base)
 
     def report(message: str) -> None:
         message = f"[{time.strftime('%Y-%m-%d %H:%M:%S%z')}] {message}"

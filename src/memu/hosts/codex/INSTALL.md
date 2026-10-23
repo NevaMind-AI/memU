@@ -351,6 +351,11 @@ means it acquired the lock, passed cooldown and entered processing. `succeeded`
 and `failed` report the pipeline result. A worker launch is not proof of processing.
 Use this output directly instead of writing log parsers,
 reading source code or enumerating processes. It does not wait or retrieve memory.
+`cooldown` also includes `cooldown_until` (Unix seconds) and
+`cooldown_remaining_minutes`, recalculated and rounded up when queried.
+A zero remaining value means another submission may try again; it does not
+schedule a run.
+
 The time filter excludes logs started before the check; avoid concurrent test
 turns, as the two newest logs are not correlated by session ID.
 
@@ -382,7 +387,16 @@ original prompt to shared retrieval, and returns
 `hookSpecificOutput.additionalContext` before the model answers.
 
 The independent `memorize-hook` handler launches the existing background worker and
-returns immediately. Retrieval waits for its own result, never for memorization.
+returns after at most a half-second admission check, without waiting for processing.
+It supplies an `additionalContext` status snapshot for the model to use only when
+the user asks about memorization; ordinary replies need not mention it. The snapshot
+includes its observation time, this worker's log path, and the outcome: `started`
+(processing began; completion unconfirmed), `busy`, `cooldown`, `succeeded` or `failed`.
+Cooldown includes remaining minutes rounded up. If admission is not observed within
+half a second, it reports `worker_started` (still starting, admission unconfirmed).
+These are observations at submission time; use `hook-status` for updated evidence,
+and do not infer that an old `started` snapshot proves a worker is still alive.
+Retrieval waits for its own result, never for memorization.
 Background evolve processes mark their environment so they do not start another
 memorization worker. Every submission can launch a lightweight worker. The worker
 tries the whole-workspace lock once: if another run owns it, it records `busy` and

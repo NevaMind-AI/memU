@@ -304,7 +304,14 @@ def test_default_callback_and_cli_share_host_base(tmp_path, monkeypatch, capsys)
     monkeypatch.setattr(sys, "stdin", io.StringIO('{"hook_event_name":"UserPromptSubmit"}'))
     monkeypatch.delenv("MEMU_CODEX_MEMORIZE", raising=False)
     calls = []
-    monkeypatch.setattr(notify_console, "launch_background", lambda *args: calls.append(args))
+    path = tmp_path / "worker.log"
+    path.write_text("=== MEMORIZE status=started ===\n")
+
+    def launch(*args):
+        calls.append(args)
+        return path
+
+    monkeypatch.setattr(notify_console, "launch_background", launch)
     args = cli.build_parser().parse_args(["memorize-hook", "--agent", "unused"])
     assert asyncio.run(memorize_hook._cmd_memorize_hook(args)) == 0
     expected = str(tmp_path / ".memu/hosts/codex")
