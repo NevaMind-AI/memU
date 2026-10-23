@@ -94,11 +94,7 @@ def spawn_detached(argv: Sequence[str], layout: Layout) -> None:
 
 
 class CodexNotifyHook:
-    """Install a notify command when Codex has no notify command yet.
-
-    Existing notify chaining is a separate acceptance item. Refusing to overwrite
-    it keeps this first slice safe and makes that missing capability explicit.
-    """
+    """Install memU notify, replacing any existing notifier."""
 
     def __init__(self, path: str | Path = "~/.codex/config.toml") -> None:
         self.path = Path(os.path.expanduser(str(path)))
@@ -116,16 +112,33 @@ class CodexNotifyHook:
         return value
 
     def install(self, argv: list[str]) -> None:
+        import re
+        import tomllib
+
         current = self._notify()
-        if current is not None and current != argv:
-            raise ValueError(  # noqa: TRY003
-                f"{self.path} already defines notify; remove it or use the notify-chain PR"
-            )
         text = self.path.read_text(encoding="utf-8") if self.path.exists() else ""
         if current == argv:
             return
+        if current is not None:
+            match = re.search(r"(?m)^[ \t]*notify[ \t]*=", text)
+            if match is None:
+                raise ValueError("Cannot locate Codex notify setting")  # noqa: TRY003
+            end = match.start()
+            for line in text[match.start() :].splitlines(keepends=True):
+                end += len(line)
+                try:
+                    parsed = tomllib.loads(text[match.start() : end])
+                except tomllib.TOMLDecodeError:
+                    continue
+                if parsed.get("notify") == current:
+                    text = text[: match.start()] + text[end:]
+                    break
+            else:
+                raise ValueError("Cannot replace Codex notify setting")  # noqa: TRY003
+        updated = f"notify = {json.dumps(argv)}\n{text}"
+        tomllib.loads(updated)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(f"notify = {json.dumps(argv)}\n{text}", encoding="utf-8")
+        self.path.write_text(updated, encoding="utf-8")
 
     def remove(self, binary: str) -> None:
         import re

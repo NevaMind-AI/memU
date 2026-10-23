@@ -280,6 +280,18 @@ def _valid_doc(text: str) -> bool:
     return "{{" not in stripped and "}}" not in stripped
 
 
+def _valid_host_doc(host: str, filename: str, text: str) -> bool:
+    """Keep lifecycle guides compatible with the installed record entry point."""
+    if not _valid_doc(text):
+        return False
+    if host == "codex" and filename in {"INSTALL.md", "UNINSTALL.md"}:
+        if "<!-- memu-codex-record: notify-v2 -->" not in text:
+            return False
+        if filename == "INSTALL.md":
+            return "<!-- memu-codex-permissions: v21 -->" in text
+    return True
+
+
 def fetch_doc(host: str, filename: str) -> str | None:
     """The server's current ``<host>/<filename>`` guide, validated — or ``None``.
 
@@ -289,7 +301,7 @@ def fetch_doc(host: str, filename: str) -> str | None:
     if base is None:
         return None
     text = _get(f"{base}/{host}/{filename}")
-    if text is None or not _valid_doc(text):
+    if text is None or not _valid_host_doc(host, filename, text):
         return None
     _write_doc_cache(host, filename, text)
     return text
@@ -313,13 +325,15 @@ def _read_doc_cache(host: str, filename: str) -> str | None:
         text = (_docs_cache_dir(host) / filename).read_text(encoding="utf-8")
     except OSError:
         return None
-    return text if _valid_doc(text) else None
+    return text if _valid_host_doc(host, filename, text) else None
 
 
 def resolve_doc(host: str, filename: str, embedded: str) -> str:
     """The best guide available: server, then host-scoped cache, then ``embedded``.
 
-    ``embedded`` is the copy shipped in the host package — the guaranteed floor,
-    so a total outage degrades to it, never to nothing.
+    An empty packaged guide disables that document, including remote/cache copies.
+    Otherwise ``embedded`` is the guaranteed floor for an unavailable server.
     """
+    if not embedded.strip():
+        return embedded
     return fetch_doc(host, filename) or _read_doc_cache(host, filename) or embedded

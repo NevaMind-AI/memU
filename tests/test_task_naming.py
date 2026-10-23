@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from importlib.resources import files
+from pathlib import Path
 
 import pytest
 
@@ -24,6 +25,9 @@ SPECS = (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
 @pytest.mark.parametrize("filename", DOCS.values())
 def test_embedded_docs_render_names_only_from_host_spec(spec: HostSpec, filename: str) -> None:
     source = (files(spec.package) / filename).read_text(encoding="utf-8")
+    if spec.host == "codex" and filename == "BRIDGING_TASK.md":
+        assert source == ""
+        return
 
     assert templates._valid_doc(source)
     assert "{{task_name}}" in source
@@ -63,12 +67,75 @@ def test_remote_doc_without_naming_contract_is_rejected(monkeypatch: pytest.Monk
 def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatch) -> None:
     source = (
         "---\nname: {{task_doc_name}}\ndescription: test\n---\n"
+        "<!-- memu-codex-record: notify-v2 -->\n"
+        "<!-- memu-codex-permissions: v21 -->\n"
         "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\n"
     )
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
     monkeypatch.setattr(templates, "_get", lambda url: source)
 
-    resolved = templates.resolve_doc(CODEX.host, "BRIDGING_TASK.md", "unused")
+    resolved = templates.resolve_doc(CODEX.host, "INSTALL.md", "unused")
 
-    assert CODEX.render_doc(resolved).startswith(f"---\nname: {CODEX.task_doc_name}\n")
-    assert (templates._docs_cache_dir(CODEX.host) / "BRIDGING_TASK.md").read_text(encoding="utf-8") == source
+    assert CODEX.task_name in CODEX.render_doc(resolved)
+    assert (templates._docs_cache_dir(CODEX.host) / "INSTALL.md").read_text(encoding="utf-8") == source
+
+
+@pytest.mark.parametrize("filename", ("INSTALL.md", "UNINSTALL.md"))
+def test_codex_record_guides_reject_old_remote_and_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, filename: str
+) -> None:
+    embedded = (files(CODEX.package) / filename).read_text(encoding="utf-8")
+    old = "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\nCreate a scheduled task.\n"
+    if filename == "INSTALL.md":
+        old = "<!-- memu-codex-record: notify-v2 -->\n" + old
+    cache = tmp_path / filename
+    cache.write_text(old, encoding="utf-8")
+    monkeypatch.setattr(templates, "_docs_cache_dir", lambda _: tmp_path)
+    monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
+    monkeypatch.setattr(templates, "_get", lambda _: old)
+
+    assert templates._valid_doc(old)  # Naming tokens alone cannot detect the old flow.
+    assert templates.resolve_doc("codex", filename, embedded) == embedded
+    assert cache.read_text(encoding="utf-8") == old
+
+    monkeypatch.setattr(templates, "_get", lambda _: embedded)
+    assert templates.resolve_doc("codex", filename, "unused") == embedded
+    assert cache.read_text(encoding="utf-8") == embedded
+    monkeypatch.setattr(templates, "_get", lambda _: None)
+    assert templates.resolve_doc("codex", filename, "unused") == embedded
+
+
+def test_codex_task_guide_stays_empty_without_remote_or_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from memu.hosts.codex.cli import main
+
+    assert (files(CODEX.package) / "BRIDGING_TASK.md").read_bytes() == b""
+    cache = tmp_path / "BRIDGING_TASK.md"
+    old = "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\nCreate a recurring task.\n"
+    cache.write_text(old, encoding="utf-8")
+    monkeypatch.setattr(templates, "_docs_cache_dir", lambda _: tmp_path)
+
+    def unexpected_fetch(_url: str) -> str:
+        pytest.fail("A disabled guide must not fetch remote instructions")
+
+    monkeypatch.setattr(templates, "_get", unexpected_fetch)
+    assert main(["docs", "task"]) == 0
+    assert capsys.readouterr().out.strip() == ""
+    assert cache.read_text(encoding="utf-8") == old
+
+
+def test_record_guide_version_guard_is_codex_only() -> None:
+    old = "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}."
+    assert templates._valid_host_doc("claude-code", "INSTALL.md", old)
+    assert not templates._valid_host_doc("codex", "INSTALL.md", old)
+
+
+@pytest.mark.parametrize(
+    ("current", "outdated"),
+    [("notify-v2", "notify-v1"), ("memu-codex-permissions: v21", "memu-codex-permissions: v1")],
+)
+def test_codex_install_rejects_outdated_contract_markers(current: str, outdated: str) -> None:
+    text = (files(CODEX.package) / "INSTALL.md").read_text(encoding="utf-8")
+    assert templates._valid_host_doc("codex", "INSTALL.md", text)
+    assert not templates._valid_host_doc("codex", "INSTALL.md", text.replace(current, outdated))

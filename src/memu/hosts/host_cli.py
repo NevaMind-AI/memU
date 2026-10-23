@@ -747,7 +747,10 @@ async def _cmd_install_hook(spec: HostSpec, args: argparse.Namespace) -> int:
     binary = shutil.which(notify_binary)
     if not binary:
         raise RuntimeError(f"`{notify_binary}` is not on PATH; reinstall {spec.binary}")  # noqa: TRY003
-    agent = shutil.which(hook.agent.argv[0]) or hook.agent.argv[0]
+    agent = shutil.which(hook.agent.argv[0])
+    if not agent:
+        hint = spec.install_hint or f"Install {spec.display}'s standalone CLI and retry."
+        raise RuntimeError(f"`{hook.agent.argv[0]}` is not on PATH.\n{hint}")  # noqa: TRY003
     notify = [binary, "hook", "--agent", agent]
     if args.console:
         notify += ["--console", "--label", args.label]

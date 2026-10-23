@@ -103,7 +103,8 @@ Three rules that hold for every host:
   behind it (another agent on this machine is already integrated), reuse it as
   is. A second mode or local store would split record and retrieval so the two
   installs no longer share memory.
-- **Report the outcome — with the exact template below.** After installation,
+- **Report the outcome — with the exact template below.** If the host guide
+  specifies its own final report, use that report instead. Otherwise, after installation,
   run:
 
   ```
