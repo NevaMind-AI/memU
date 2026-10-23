@@ -67,8 +67,8 @@ def test_remote_doc_without_naming_contract_is_rejected(monkeypatch: pytest.Monk
 def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatch) -> None:
     source = (
         "---\nname: {{task_doc_name}}\ndescription: test\n---\n"
-        "<!-- memu-codex-record: notify-v2 -->\n"
-        "<!-- memu-codex-permissions: v21 -->\n"
+        "<!-- memu-codex-record: submit-v1 -->\n"
+        "<!-- memu-codex-permissions: v22 -->\n"
         "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\n"
     )
     monkeypatch.setenv("MEMU_DOCS_BASE_URL", "https://example.test/docs")
@@ -87,7 +87,7 @@ def test_codex_record_guides_reject_old_remote_and_cache(
     embedded = (files(CODEX.package) / filename).read_text(encoding="utf-8")
     old = "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\nCreate a scheduled task.\n"
     if filename == "INSTALL.md":
-        old = "<!-- memu-codex-record: notify-v2 -->\n" + old
+        old = "<!-- memu-codex-record: submit-v1 -->\n" + old
     cache = tmp_path / filename
     cache.write_text(old, encoding="utf-8")
     monkeypatch.setattr(templates, "_docs_cache_dir", lambda _: tmp_path)
@@ -133,7 +133,7 @@ def test_record_guide_version_guard_is_codex_only() -> None:
 
 @pytest.mark.parametrize(
     ("current", "outdated"),
-    [("notify-v2", "notify-v1"), ("memu-codex-permissions: v21", "memu-codex-permissions: v1")],
+    [("submit-v1", "notify-v1"), ("memu-codex-permissions: v22", "memu-codex-permissions: v1")],
 )
 def test_codex_install_rejects_outdated_contract_markers(current: str, outdated: str) -> None:
     text = (files(CODEX.package) / "INSTALL.md").read_text(encoding="utf-8")

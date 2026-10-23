@@ -7,15 +7,7 @@ import pytest
 
 from memu.hosts.bridging import Layout
 from memu.hosts.codex import notify_console
-from memu.hosts.hooks import CodexNotifyHook, HeadlessAgent, run_agent
-
-
-def _patch_console_launcher(monkeypatch, launch):
-    from dataclasses import replace
-
-    from memu.hosts.codex import cli
-
-    monkeypatch.setattr(cli, "SPEC", replace(cli.SPEC, hook=replace(cli.HOOK, launch_console=launch)))
+from memu.hosts.hooks import HeadlessAgent, run_agent
 
 
 def test_console_agent_output_is_live(tmp_path, capsys):
@@ -41,7 +33,7 @@ def test_console_agent_output_is_live(tmp_path, capsys):
         try:
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
-                logs = list((tmp_path / "log/hooks/notify").glob("*.log"))
+                logs = list((tmp_path / "log/hooks/memorize").glob("*.log"))
                 if logs and "agent stderr" in logs[0].read_text():
                     break
                 time.sleep(0.01)
@@ -73,7 +65,7 @@ def test_console_agent_failure_and_timeout(tmp_path, script, timeout, error):
             Layout.default("codex", tmp_path),
             stream_output=notify_console.stream_agent,
         )
-    assert next((tmp_path / "log/hooks/notify").glob("*.log")).read_text()
+    assert next((tmp_path / "log/hooks/memorize").glob("*.log")).read_text()
 
 
 @pytest.mark.parametrize("ending", ["pass", "sys.exit(7)", "time.sleep(30)"])
@@ -101,7 +93,7 @@ def test_agent_thread_is_excluded_from_next_prepare(tmp_path, ending):
     with expected:
         notify_console.stream_agent([sys.executable, "-c", script], layout, "test", 1)
     assert self_sessions.load(layout.self_sessions) == [thread_id]
-    assert event in next((tmp_path / "log/hooks/notify").glob("*.log")).read_text()
+    assert event in next((tmp_path / "log/hooks/memorize").glob("*.log")).read_text()
 
     source_dir = tmp_path / "source"
     source_dir.mkdir()
@@ -124,32 +116,6 @@ def test_agent_thread_is_excluded_from_next_prepare(tmp_path, ending):
     assert "background bookkeeping" not in (layout.sessions / "1_full.jsonl").read_text()
     pending = json.loads(layout.session_manifest_pending.read_text())
     assert len(pending) == 1 and user_id in next(iter(pending))
-
-
-def test_hook_passes_console_options(tmp_path, monkeypatch):
-    from memu.hosts.codex.cli import main
-
-    calls = []
-    _patch_console_launcher(monkeypatch, lambda *args: calls.append(args))
-    assert (
-        main([
-            "hook",
-            "--base-dir",
-            str(tmp_path),
-            "--session-dir",
-            "~/sessions",
-            "--console",
-            "--hold",
-            "--label",
-            "desktop-codex",
-            '{"turn-id":"test"}',
-        ])
-        == 0
-    )
-    argv, _layout, label, hold = calls[0]
-    assert "--console" in argv
-    assert argv[argv.index("--session-dir") + 1] == "~/sessions"
-    assert label == "desktop-codex" and hold
 
 
 @pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
@@ -190,20 +156,6 @@ def test_background_launch_has_no_console(tmp_path, monkeypatch, platform):
     assert all(kwargs[stream] == subprocess.DEVNULL for stream in ("stdin", "stdout", "stderr"))
 
 
-def test_background_hook_uses_packaged_worker(tmp_path, monkeypatch):
-    from dataclasses import replace
-
-    from memu.hosts.codex import cli
-
-    calls = []
-    hook = replace(cli.HOOK, launch_background=lambda *args: calls.append(args))
-    monkeypatch.setattr(cli, "SPEC", replace(cli.SPEC, hook=hook))
-    assert cli.main(["hook", "--base-dir", str(tmp_path)]) == 0
-    argv, layout, label = calls[0]
-    assert argv[0] == "hook-run" and "--console" not in argv
-    assert layout.base == tmp_path and label == "codex"
-
-
 @pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
 def test_agent_launch_platform_flags(tmp_path, monkeypatch, platform):
     import io
@@ -237,102 +189,6 @@ def test_agent_launch_platform_flags(tmp_path, monkeypatch, platform):
     assert kwargs["start_new_session"] == (platform != "win32")
 
 
-def test_codex_notify_hook_installs_and_removes_its_own_command(tmp_path):
-    config = tmp_path / "config.toml"
-    hook = CodexNotifyHook(config)
-    argv = ["memu-codex", "hook"]
-
-    hook.install(argv)
-    assert config.read_text() == 'notify = ["memu-codex", "hook"]\n'
-
-    hook.remove("memu-codex")
-    assert config.read_text() == ""
-
-
-@pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
-def test_install_hook_uses_windowless_package_entry_only_on_windows(tmp_path, monkeypatch, platform):
-    from dataclasses import replace
-
-    from memu.hosts import host_cli
-    from memu.hosts.codex import cli
-
-    config = tmp_path / "config.toml"
-    hook = replace(cli.HOOK, installer=CodexNotifyHook(config))
-    monkeypatch.setattr(cli, "SPEC", replace(cli.SPEC, hook=hook))
-    monkeypatch.setattr(host_cli.sys, "platform", platform)
-    monkeypatch.setattr(host_cli.shutil, "which", lambda binary: binary)
-    assert cli.main(["install-hook"]) == 0
-    command = hook.installer._notify()
-    assert command is not None
-    if platform == "win32":
-        assert command[:2] == ["memu-codex-notify", "hook"]
-    else:
-        assert command[:2] == ["memu-codex", "hook"]
-    hook.installer.remove("memu-codex")
-    assert hook.installer._notify() is None
-
-
-def test_install_hook_missing_entry_leaves_config_untouched(tmp_path, monkeypatch):
-    from dataclasses import replace
-
-    from memu.hosts import host_cli
-    from memu.hosts.codex import cli
-
-    config = tmp_path / "config.toml"
-    config.write_text('model = "test"\n')
-    hook = replace(cli.HOOK, installer=CodexNotifyHook(config))
-    monkeypatch.setattr(cli, "SPEC", replace(cli.SPEC, hook=hook))
-    monkeypatch.setattr(host_cli.shutil, "which", lambda _: None)
-    assert cli.main(["install-hook"]) == 1
-    assert config.read_text() == 'model = "test"\n'
-
-
-def test_install_hook_missing_agent_preserves_existing_entry(tmp_path, monkeypatch, capsys):
-    from dataclasses import replace
-
-    from memu.hosts import host_cli
-    from memu.hosts.codex import cli
-
-    config = tmp_path / "config.toml"
-    original = 'notify = ["previous-notifier"]\nmodel = "existing"\n'
-    config.write_text(original, encoding="utf-8")
-    hook = replace(cli.HOOK, installer=CodexNotifyHook(config))
-    monkeypatch.setattr(cli, "SPEC", replace(cli.SPEC, hook=hook))
-    monkeypatch.setattr(host_cli.shutil, "which", lambda binary: None if binary == "codex" else binary)
-    assert cli.main(["install-hook"]) == 1
-    assert config.read_text(encoding="utf-8") == original
-    error = capsys.readouterr().err
-    assert "codex` is not on PATH" in error
-    assert "https://chatgpt.com/codex/install.ps1" in error
-
-
-def test_uninstall_leaves_unrelated_pythonw_notify(tmp_path):
-    config = tmp_path / "config.toml"
-    hook = CodexNotifyHook(config)
-    command = ["pythonw.exe", "-m", "other.cli", "hook"]
-    hook.install(command)
-    hook.remove("memu-codex")
-    assert hook._notify() == command
-
-
-@pytest.mark.parametrize(
-    "previous",
-    ['["existing-notifier"]', '[\n  "desktop.exe", # Desktop notification\n  "turn-ended",\n]'],
-)
-def test_codex_notify_hook_replaces_existing_notify(tmp_path, previous):
-    config = tmp_path / "config.toml"
-    config.write_text(f'notify = {previous}\nmodel = "existing"\n[other]\nenabled = true\n')
-    hook = CodexNotifyHook(config)
-    hook.install(["memu-codex", "hook"])
-
-    assert hook._notify() == ["memu-codex", "hook"]
-    assert 'model = "existing"\n[other]\nenabled = true\n' in config.read_text()
-    assert list(tmp_path.iterdir()) == [config]
-    installed = config.read_text()
-    hook.install(["memu-codex", "hook"])
-    assert config.read_text() == installed
-
-
 def test_background_worker_streams_full_output_to_log(tmp_path, monkeypatch, capsys):
     import sys
 
@@ -350,7 +206,7 @@ def test_background_worker_streams_full_output_to_log(tmp_path, monkeypatch, cap
     )
     assert notify_console.main() == 0
     assert capsys.readouterr() == ("", "")
-    logs = list((tmp_path / "log/hooks/notify").glob("*.log"))
+    logs = list((tmp_path / "log/hooks/memorize").glob("*.log"))
     assert not (tmp_path / "log/hooks/retrieve").exists()
     assert len(logs) == 1
     log = logs[0].read_text()
@@ -381,7 +237,7 @@ runpy.run_module("memu.hosts.codex.notify_console", run_name="__main__")
 """
     historical = tmp_path / "hook.log"
     historical.write_bytes(b"historical log\n")
-    previous_logs = set((tmp_path / "log/hooks/notify").glob("*.log"))
+    previous_logs = set((tmp_path / "log/hooks/memorize").glob("*.log"))
     for number in range(2):
         run_message = f"{message} run-{number}"
         agent = (
@@ -403,7 +259,7 @@ runpy.run_module("memu.hosts.codex.notify_console", run_name="__main__")
             check=False,
         )
         assert result.returncode == 0, result.stderr.decode(errors="replace")
-        logs = set((tmp_path / "log/hooks/notify").glob("*.log"))
+        logs = set((tmp_path / "log/hooks/memorize").glob("*.log"))
         new_logs = logs - previous_logs
         assert len(new_logs) == 1
         path = new_logs.pop()
@@ -470,7 +326,7 @@ def test_console_window_logs_failure_and_holds(tmp_path, monkeypatch):
         sys, "argv", ["diagnostic", "--label", "desktop-codex", "--hold", "--", "hook-run", "--base-dir", str(tmp_path)]
     )
     assert notify_console.main() == 2
-    log = next((tmp_path / "log/hooks/notify").glob("*.log")).read_text()
+    log = next((tmp_path / "log/hooks/memorize").glob("*.log")).read_text()
     assert "prepare failed" in log
     assert "FINISHED desktop-codex exit=2" in log
     assert len(held) == 1
@@ -481,23 +337,7 @@ def test_headless_codex_disables_recursive_notify():
 
     assert "notify=[]" in HOOK.agent.argv
     assert "--dangerously-bypass-approvals-and-sandbox" in HOOK.agent.argv
-    assert HOOK.launch_background is notify_console.launch_background
-    assert HOOK.launch_console is notify_console.launch
     assert HOOK.stream_output is notify_console.stream_agent
-
-
-def test_hook_preserves_home_and_backend_config(tmp_path, monkeypatch):
-    import os
-
-    from memu.hosts.codex.cli import main
-
-    expected = {key: str(tmp_path / key) for key in ("HOME", "USERPROFILE", "CODEX_HOME", "MEMU_CONFIG_ENV")}
-    for key, value in expected.items():
-        monkeypatch.setenv(key, value)
-    seen = []
-    _patch_console_launcher(monkeypatch, lambda *args: seen.append(dict(os.environ)))
-    assert main(["hook", "--console", "--base-dir", str(tmp_path)]) == 0
-    assert {key: seen[0][key] for key in expected} == expected
 
 
 def test_console_workspace_lock_serializes_and_releases(tmp_path):

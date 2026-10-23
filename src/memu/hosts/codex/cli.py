@@ -30,7 +30,7 @@ import argparse
 import sys
 
 from memu.hosts import hooks
-from memu.hosts.codex import hook_status, notify_console, prompt_hook, prompt_hook_install
+from memu.hosts.codex import hook_status, memorize_hook, notify_console, prompt_hook, prompt_hook_install
 from memu.hosts.codex.sessions import SESSION_DIR, CodexTranscriptSource
 from memu.hosts.host_cli import HostSpec, run
 
@@ -61,16 +61,13 @@ HOOK = hooks.HookSpec(
             "-",
         )
     ),
-    installer=hooks.CodexNotifyHook(),
-    windows_notify_binary="memu-codex-notify",
-    launch_background=notify_console.launch_background,
-    launch_console=notify_console.launch,
     stream_output=notify_console.stream_agent,
 )
 
 
 def _register_extra(sub: object) -> None:
     prompt_hook.register(sub)
+    memorize_hook.register(sub)
     hook_status.register(sub)
     prompt_hook_install.register(sub)
 
@@ -92,7 +89,7 @@ SPEC = HostSpec(
         "Install the standalone Codex CLI using the official native installer:\n"
         "  Windows (PowerShell): irm https://chatgpt.com/codex/install.ps1 | iex\n"
         "  macOS/Linux: curl -fsSL https://chatgpt.com/codex/install.sh | sh\n"
-        "Refresh PATH, verify `codex --version`, then retry `memu-codex install-hook`."
+        "Refresh PATH, verify `codex --version`, then retry `memu-codex install-prompt-hook`."
     ),
     register_extra=_register_extra,
 )

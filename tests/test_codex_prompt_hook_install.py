@@ -8,7 +8,8 @@ import pytest
 from memu.hosts.codex import prompt_hook_install as installer
 
 
-def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, monkeypatch):
+@pytest.mark.parametrize("previous", ['["memu-codex", "hook"]', '["other-notifier", "--flag"]'])
+def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, monkeypatch, previous):
     hooks_file = tmp_path / "hooks.json"
     hooks_file.write_text(
         json.dumps({
@@ -37,20 +38,21 @@ def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, mon
             if method != "hooks/list":
                 return {}
             config = json.loads(hooks_file.read_text(encoding="utf-8"))
-            command = config["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
             return {
                 "data": [
                     {
                         "hooks": [
                             {
-                                "command": command,
+                                "command": hook["command"],
                                 "sourcePath": str(hooks_file),
                                 "key": "hook:key",
                                 "currentHash": "sha256:current",
                                 "trustStatus": "trusted"
-                                if sum(name == "config/value/write" for name, _ in calls)
+                                if any(name == "config/value/write" for name, _ in calls)
                                 else "untrusted",
                             }
+                            for group in config["hooks"]["UserPromptSubmit"]
+                            for hook in group["hooks"]
                         ]
                     }
                 ]
@@ -64,10 +66,20 @@ def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, mon
 
     monkeypatch.setattr(installer, "AppServer", FakeServer)
     monkeypatch.setattr(installer.sys, "argv", [str(tmp_path / "memu-codex.exe")])
-    installer.install("codex", hooks_file, tmp_path)
+    base = tmp_path / "custom base"
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(f'notify = {previous}\nmodel = "kept"\n')
+    installer.install("codex", hooks_file, tmp_path, str(base))
+    installer.install("codex", hooks_file, tmp_path, str(base))
+    expected = f'notify = {previous}\nmodel = "kept"\n'
+    assert config_file.read_text() == expected
 
     config = json.loads(hooks_file.read_text(encoding="utf-8"))
     entries = config["hooks"]["UserPromptSubmit"][0]["hooks"]
+    all_hooks = [hook for group in config["hooks"]["UserPromptSubmit"] for hook in group["hooks"]]
+    assert len(all_hooks) == 3
+    assert "memorize-hook" in all_hooks[-1]["command"]
+    assert str(base) in all_hooks[-1]["command"]
     assert config["other"] == {"preserved": True}
     assert len(entries) == 2
     expected_command = (
@@ -170,3 +182,29 @@ def test_windows_command_executes_path_with_spaces_and_apostrophe(tmp_path, monk
     )
     assert result.returncode == 0, result.stderr
     assert "HOOK_QUOTE_OK" in result.stdout
+
+
+@pytest.mark.parametrize("notify", ['["other-notifier", "--flag"]', '["memu-codex", "hook"]'])
+def test_trust_failure_keeps_existing_notify(tmp_path, monkeypatch, notify):
+    hooks_file = tmp_path / "hooks.json"
+    config = tmp_path / "config.toml"
+    original = f"notify = {notify}\n"
+    config.write_text(original)
+
+    class FailedServer:
+        def __init__(self, *args):
+            pass
+
+        def request(self, *args):
+            return {}
+
+        def notify(self, *args):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(installer, "AppServer", FailedServer)
+    with pytest.raises(RuntimeError, match="Expected one loaded"):
+        installer.install("codex", hooks_file, tmp_path)
+    assert config.read_text() == original

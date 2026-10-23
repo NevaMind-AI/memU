@@ -38,7 +38,7 @@ def _latest(directory: Path, since: float) -> Path | None:
 
 def status(base: Path, since: float) -> dict[str, Any]:
     result: dict[str, Any] = {}
-    for kind in ("retrieve", "notify"):
+    for kind in ("retrieve", "memorize"):
         path = _latest(base / "log" / "hooks" / kind, since)
         entry: dict[str, Any] = {"status": "not_observed", "log": str(path) if path else None}
         if path is not None:
@@ -67,13 +67,13 @@ async def _cmd(args: argparse.Namespace) -> int:
         return 1
     return (
         0
-        if retrieval["status"] in {"context_returned", "empty_result"} and result["notify"]["status"] == "started"
+        if retrieval["status"] in {"context_returned", "empty_result"} and result["memorize"]["status"] == "started"
         else 2
     )
 
 
 def register(sub: Any) -> None:
-    parser = sub.add_parser("hook-status", help="Read retrieval and notify startup evidence without waiting")
+    parser = sub.add_parser("hook-status", help="Read retrieval and memorization startup evidence without waiting")
     parser.add_argument("--since", type=_since, required=True, help="Start of the check: Unix seconds or ISO 8601")
     parser.add_argument("--base-dir", default="~/.memu/hosts/codex")
     parser.set_defaults(handler=_cmd)

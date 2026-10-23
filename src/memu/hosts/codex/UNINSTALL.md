@@ -1,6 +1,6 @@
 # Uninstall memU for Codex
 
-<!-- memu-codex-record: notify-v2 -->
+<!-- memu-codex-record: submit-v1 -->
 
 ## Task identity
 
@@ -21,10 +21,10 @@ and keep the package while any confirmed entry still needs its executable.
 
 Uninstalling has three parts:
 
-1. **Remove the memU notify entry and confirmed old schedules** — prevent new
+1. **Remove the Submit hooks and old scheduled tasks** — prevent new
    record runs, then let existing agents finish (the *record* seam).
-2. **Remove the retrieval hook and its trust entry** — clean up the
-   `UserPromptSubmit` command and any old memU skill/instruction (the *inject* seam).
+2. **Verify hook/trust removal and clean up old instructions** — preserve
+   unrelated hooks and remove any old memU skill/instruction (the *inject* seam).
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
    tooling is removed — and close by reporting both.
 
@@ -41,22 +41,12 @@ instruction file exactly as they are.
 
 ## Part 1 — Remove record triggers and wait for running agents
 
-### 1.1 Current entry — notify
+### 1.1 Current entries — UserPromptSubmit hooks
 
-Inspect the parsed notify chain. If it contains no memU callback, continue to
-historical schedules without modifying the user's notifier.
-
-Save the current notify configuration locally before changing it. For a direct
-memU notify command, use `memu-codex remove-hook`; repeating it is a no-op and
-unrelated notify commands are preserved. Read the configuration back.
-
-The current remover does not unwrap Desktop's `turn-ended --previous-notify`
-chain. If that wrapper contains memU, preserve the outer Desktop command and
-remove only the confirmed memU callback through the wrapper's supported
-configuration path. Restore a saved predecessor only after verifying that the
-backup belongs to this chain. Never overwrite an unrelated or newer notifier
-from a stale backup. If this cannot be done safely, stop the uninstall and
-report the remaining callback; do not remove its executable.
+First follow Part 2.1 to remove both memU Submit handlers and their approvals.
+In particular, remove `memorize-hook` before waiting for running agents; leaving
+it registered allows new user submissions to start more workers. Read the hooks
+back and confirm unrelated handlers remain intact.
 
 ### 1.2 Historical entries — scheduled bridging tasks
 
@@ -67,7 +57,7 @@ other hosts and ambiguous registrations untouched. Save restorable definitions
 and original states locally before disabling/removing confirmed tasks, following
 the migration section of `memu-codex docs install`. Do not invoke another host's
 schedule helper. No confirmed task is a no-op; multiple confirmed registrations
-must each be removed, even if a current notify callback was also found.
+must each be removed.
 
 ### 1.3 Wait for affected runs before cleanup
 
@@ -79,13 +69,12 @@ recovery definitions, original wrappers, backend config, memories and cursors.
 
 ### ✅ Verify Part 1
 
-The parsed notify chain no longer invokes memU, confirmed old registrations are
-absent from both scheduler surfaces, and affected agents have finished. Other
-notifiers and hosts remain intact. Repeating the removal is a no-op.
+Both memU Submit handlers are absent, confirmed old registrations are absent from both scheduler surfaces, and affected agents have finished. Other
+hooks and hosts remain intact. Repeating the removal is a no-op.
 
 ---
 
-## Part 2 — Remove the retrieval hook, trust and old instruction
+## Part 2 — Remove the Submit hooks, trust and old instruction
 
 ### 2.1 Current entry — UserPromptSubmit hook and trust
 
@@ -95,8 +84,8 @@ check. Remove a leftover approval only if its ownership can still be confirmed.
 
 Back up `~/.codex/hooks.json` and the relevant Codex hook trust state locally.
 Identify the `UserPromptSubmit` command by its resolved memu-codex executable
-and `prompt-hook` argument. Remove only that confirmed entry, preserving other
-hooks and events. Remove its corresponding approval using the installed Codex
+and `prompt-hook` or `memorize-hook` argument. Remove both confirmed entries, preserving other
+hooks and events. Remove each corresponding approval using the installed Codex
 version's hook trust facilities; current Windows versions persist the fingerprint
 in `~/.codex/config.toml` under `hooks.state` as `trusted_hash`.
 
@@ -150,8 +139,8 @@ ownership and targeted cleanup; do not remove unrelated user text.
 
 ### ✅ Verify Part 2
 
-Read back `hooks.json` and the hook trust state: the confirmed memU prompt-hook
-and its approval are gone, and unrelated hooks remain configured and trusted.
+Read back `hooks.json` and the hook trust state: the confirmed memU prompt-hook and memorize-hook
+and their approvals are gone, and unrelated hooks remain configured and trusted.
 `~/.codex/AGENTS.md` has no memU instruction markers, its user content is intact,
 and the owned `~/.codex/skills/memu-retrieve` skill is gone. A fresh Codex session
 must no longer attempt to run memU retrieval. The session you are working in may
@@ -241,7 +230,7 @@ Close the report with the two things the user needs to hear, in this order:
 1. **What was kept:** their memory — the store at `MEMU_DB`,
    `~/.memu/config.env`, and the session cursor — untouched. A later reinstall
    picks it up as is and resumes mining right where it left off.
-2. **What was removed:** list current notify/hook/trust entries and historical
+2. **What was removed:** list current hook/trust entries and historical
    schedules/instructions/skills separately, noting entries already absent and
    any unresolved remnants. Also report this host's working state and whether
    the shared `memu-cli` package was removed or retained for another host.
