@@ -21,7 +21,7 @@ and keep the package while any confirmed entry still needs its executable.
 
 Uninstalling has three parts:
 
-1. **Remove the Submit hooks and legacy record triggers** — prevent new
+1. **Remove the Submit hooks and old scheduled tasks** — prevent new
    record runs, then let existing agents finish (the *record* seam).
 2. **Verify hook/trust removal and clean up old instructions** — preserve
    unrelated hooks and remove any old memU skill/instruction (the *inject* seam).
@@ -48,24 +48,7 @@ In particular, remove `memorize-hook` before waiting for running agents; leaving
 it registered allows new user submissions to start more workers. Read the hooks
 back and confirm unrelated handlers remain intact.
 
-### 1.2 Legacy entry — notify
-
-Inspect the parsed notify chain. If it contains no memU callback, continue to
-historical schedules without modifying the user's notifier.
-
-Save the current notify configuration locally before changing it. For a direct
-memU notify command, use `memu-codex remove-hook`; repeating it is a no-op and
-unrelated notify commands are preserved. Read the configuration back.
-
-The current remover does not unwrap Desktop's `turn-ended --previous-notify`
-chain. If that wrapper contains memU, preserve the outer Desktop command and
-remove only the confirmed memU callback through the wrapper's supported
-configuration path. Restore a saved predecessor only after verifying that the
-backup belongs to this chain. Never overwrite an unrelated or newer notifier
-from a stale backup. If this cannot be done safely, stop the uninstall and
-report the remaining callback; do not remove its executable.
-
-### 1.3 Historical entries — scheduled bridging tasks
+### 1.2 Historical entries — scheduled bridging tasks
 
 Inspect Windows Task Scheduler in all folders and Codex's native task surface.
 Candidate names are {{all_task_names}}, but actions, wrapper contents or the full
@@ -74,9 +57,9 @@ other hosts and ambiguous registrations untouched. Save restorable definitions
 and original states locally before disabling/removing confirmed tasks, following
 the migration section of `memu-codex docs install`. Do not invoke another host's
 schedule helper. No confirmed task is a no-op; multiple confirmed registrations
-must each be removed, even if a current notify callback was also found.
+must each be removed.
 
-### 1.4 Wait for affected runs before cleanup
+### 1.3 Wait for affected runs before cleanup
 
 Disable future triggers first. Removing a registration does not stop a running
 agent. Do not terminate it; wait for all affected runs and descendants to finish
@@ -86,9 +69,8 @@ recovery definitions, original wrappers, backend config, memories and cursors.
 
 ### ✅ Verify Part 1
 
-Both memU Submit handlers are absent, the parsed notify chain no longer invokes
-memU, confirmed old registrations are absent from both scheduler surfaces, and affected agents have finished. Other
-notifiers and hosts remain intact. Repeating the removal is a no-op.
+Both memU Submit handlers are absent, confirmed old registrations are absent from both scheduler surfaces, and affected agents have finished. Other
+hooks and hosts remain intact. Repeating the removal is a no-op.
 
 ---
 
@@ -248,7 +230,7 @@ Close the report with the two things the user needs to hear, in this order:
 1. **What was kept:** their memory — the store at `MEMU_DB`,
    `~/.memu/config.env`, and the session cursor — untouched. A later reinstall
    picks it up as is and resumes mining right where it left off.
-2. **What was removed:** list current notify/hook/trust entries and historical
+2. **What was removed:** list current hook/trust entries and historical
    schedules/instructions/skills separately, noting entries already absent and
    any unresolved remnants. Also report this host's working state and whether
    the shared `memu-cli` package was removed or retained for another host.

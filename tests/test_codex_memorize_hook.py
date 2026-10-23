@@ -51,3 +51,15 @@ def test_invalid_submit_does_not_start_worker(monkeypatch, capsys):
     result = capsys.readouterr()
     assert json.loads(result.out) == {}
     assert "expected a UserPromptSubmit" in result.err
+
+
+def test_codex_exposes_submit_entry_and_background_worker():
+    from memu.hosts.codex.cli import SPEC
+    from memu.hosts.host_cli import build_parser
+
+    parser = build_parser(SPEC)
+    assert parser.parse_args(["memorize-hook", "--agent", "codex"]).agent == "codex"
+    assert parser.parse_args(["hook-run"]).console is False
+    help_text = parser.format_help()
+    assert "install-hook" not in help_text
+    assert "remove-hook" not in help_text

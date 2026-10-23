@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any
 
 from memu.hosts.bridging import Layout
-from memu.hosts.hooks import CodexNotifyHook
 
 
 class AppServer:
@@ -237,7 +236,6 @@ def install(codex: str, hooks_file: Path, cwd: Path, base_dir: str | None = None
             raise RuntimeError("Codex reported hook loading warnings or errors")  # noqa: TRY003
         for registered_command in (command, memorize):
             _trust(server, listed, registered_command, hooks_file, cwd)
-        CodexNotifyHook(hooks_file.parent / "config.toml").remove("memu-codex")
         print("Registered retrieval and memorization UserPromptSubmit hooks; Codex reports both trusted.")
         print(f"Backup: {backup}")
     finally:

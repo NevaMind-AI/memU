@@ -1,13 +1,11 @@
-"""Minimal Codex notify hook support for the first record-run PR."""
+"""Headless memory worker configuration and execution."""
 
 from __future__ import annotations
 
-import json
-import os
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,10 +21,6 @@ class HeadlessAgent:
 @dataclass(frozen=True)
 class HookSpec:
     agent: HeadlessAgent
-    installer: CodexNotifyHook
-    windows_notify_binary: str = ""
-    launch_background: Callable[[list[str], Layout, str], None] | None = None
-    launch_console: Callable[[list[str], Layout, str, bool], None] | None = None
     stream_output: Callable[[list[str], Layout, str, int], None] | None = None
 
 
@@ -75,85 +69,3 @@ def run_agent(
         print(result.stderr.strip()[-4000:], file=sys.stderr)
     if result.returncode:
         raise RuntimeError(f"`{argv[0]}` exited {result.returncode}")  # noqa: TRY003
-
-
-def spawn_detached(argv: Sequence[str], layout: Layout) -> None:
-    log = layout.base / "hook.log"
-    log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("a", encoding="utf-8") as output:
-        output.write("\n=== hook run ===\n")
-        output.flush()
-        subprocess.Popen(  # noqa: S603
-            list(argv),
-            stdin=subprocess.DEVNULL,
-            stdout=output,
-            stderr=subprocess.STDOUT,
-            cwd=layout.base,
-            start_new_session=sys.platform != "win32",
-        )
-
-
-class CodexNotifyHook:
-    """Install memU notify, replacing any existing notifier."""
-
-    def __init__(self, path: str | Path = "~/.codex/config.toml") -> None:
-        self.path = Path(os.path.expanduser(str(path)))
-
-    def _notify(self) -> list[str] | None:
-        import tomllib
-
-        if not self.path.exists():
-            return None
-        value = tomllib.loads(self.path.read_text(encoding="utf-8")).get("notify")
-        if value is None:
-            return None
-        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-            raise ValueError("Codex notify must be a string array")  # noqa: TRY003
-        return value
-
-    def install(self, argv: list[str]) -> None:
-        import re
-        import tomllib
-
-        current = self._notify()
-        text = self.path.read_text(encoding="utf-8") if self.path.exists() else ""
-        if current == argv:
-            return
-        if current is not None:
-            match = re.search(r"(?m)^[ \t]*notify[ \t]*=", text)
-            if match is None:
-                raise ValueError("Cannot locate Codex notify setting")  # noqa: TRY003
-            end = match.start()
-            for line in text[match.start() :].splitlines(keepends=True):
-                end += len(line)
-                try:
-                    parsed = tomllib.loads(text[match.start() : end])
-                except tomllib.TOMLDecodeError:
-                    continue
-                if parsed.get("notify") == current:
-                    text = text[: match.start()] + text[end:]
-                    break
-            else:
-                raise ValueError("Cannot replace Codex notify setting")  # noqa: TRY003
-        updated = f"notify = {json.dumps(argv)}\n{text}"
-        tomllib.loads(updated)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(updated, encoding="utf-8")
-
-    def remove(self, binary: str) -> None:
-        import re
-        import tomllib
-
-        text = self.path.read_text(encoding="utf-8") if self.path.exists() else ""
-        current = self._notify()
-        if not current:
-            return
-        owns_command = Path(current[0]).name.lower().removesuffix(".exe") == binary
-        owns_windowless = (
-            binary == "memu-codex" and Path(current[0]).name.lower().removesuffix(".exe") == "memu-codex-notify"
-        )
-        if not (owns_command or owns_windowless):
-            return
-        updated = re.sub(r"(?m)^notify\s*=\s*\[[^\n]*\]\n?", "", text, count=1)
-        tomllib.loads(updated)
-        self.path.write_text(updated, encoding="utf-8")

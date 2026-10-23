@@ -61,10 +61,6 @@ HOOK = hooks.HookSpec(
             "-",
         )
     ),
-    installer=hooks.CodexNotifyHook(),
-    windows_notify_binary="memu-codex-notify",
-    launch_background=notify_console.launch_background,
-    launch_console=notify_console.launch,
     stream_output=notify_console.stream_agent,
 )
 

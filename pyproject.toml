@@ -74,11 +74,6 @@ memu-pi = "memu.hosts.pi.cli:main"
 # the two seams (memorization / retrieval) work for that agent.
 memu-agent = "memu.hosts.generic.cli:main"
 
-[project.gui-scripts]
-# Installers generate a Windows GUI-subsystem launcher, so notify never allocates
-# a console before Python hook code runs. It shares the Codex CLI implementation.
-memu-codex-notify = "memu.hosts.codex.cli:main"
-
 [project.urls]
 "Homepage" = "https://github.com/NevaMind-AI/MemU"
 "Bug Tracker" = "https://github.com/NevaMind-AI/MemU/issues"

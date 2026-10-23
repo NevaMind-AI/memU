@@ -331,9 +331,7 @@ but cannot start, report and repair that failure before registration.
 
 After the CLI probe and Part 1's backend gate pass, continue to Part 3.
 The installation command registers retrieval and background memorization together.
-It preserves unrelated notify commands and removes a direct legacy memU notify only
-after both new hooks are loaded and trusted. Existing Desktop wrappers containing
-memU require the ownership-checked legacy cleanup in M3; do not delete the wrapper.
+It preserves unrelated hooks and leaves Codex notify configuration unchanged.
 
 ### Runtime check — one CLI call
 
@@ -432,8 +430,7 @@ during installation.
 
 ## Existing installations — migration
 
-Use this branch when Codex already has a memU schedule, retrieve skill, hook or
-notify callback. Keep the existing backend and progress; do not reinitialize a
+Use this branch when Codex already has a memU schedule, retrieve skill or hook. Keep the existing backend and progress; do not reinitialize a
 store to repair trigger configuration. The new-install parts above describe the
 replacement entries, while this section owns legacy discovery, handoff and cleanup.
 
@@ -456,13 +453,6 @@ Runtime verification follows the next user message and does not delay cleanup.
 
 ### M3 — Migrate and remove legacy entries
 
-The installer removes a direct legacy memU notify after both Submit hooks are
-trusted. Read back the active Codex home's config.toml. If a Desktop
-`turn-ended --previous-notify` wrapper still contains a memU callback, remove
-only the confirmed memU callback from its nested command, preserving the wrapper
-and unrelated commands. If safe unwrapping cannot be established, report a
-migration blocker rather than leaving duplicate record triggers. No legacy
-memU notify callback may remain when migration is reported complete.
 
 This is the single cleanup stage for old memU schedules, retrieval skills,
 managed instruction pointers and other version-specific residue. Add future

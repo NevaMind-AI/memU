@@ -71,7 +71,7 @@ def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, mon
     config_file.write_text(f'notify = {previous}\nmodel = "kept"\n')
     installer.install("codex", hooks_file, tmp_path, str(base))
     installer.install("codex", hooks_file, tmp_path, str(base))
-    expected = 'model = "kept"\n' if "memu-codex" in previous else f'notify = {previous}\nmodel = "kept"\n'
+    expected = f'notify = {previous}\nmodel = "kept"\n'
     assert config_file.read_text() == expected
 
     config = json.loads(hooks_file.read_text(encoding="utf-8"))
