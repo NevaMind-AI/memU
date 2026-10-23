@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -125,9 +126,15 @@ async def _cmd_retrieve(args: argparse.Namespace) -> int:
     # `events.flush()` here would drain the whole spool, up to 200 serial requests on
     # the hottest path in the product, and that bound is what may never be relaxed.
     # The query text is deliberately not among what is recorded — counts only.
+    query = args.query
+    if args.query_stdin:
+        reconfigure = getattr(sys.stdin, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8", newline="")
+        query = sys.stdin.read()
     started = time.monotonic()
     try:
-        result = await retrieve(args.query)
+        result = await retrieve(query)
     except Exception:
         # `memory_search_failed`, and only ever for an exception this command
         # actually raised. An agent reporting `--stage retrieve` — retrieval quietly
@@ -185,5 +192,7 @@ def register(sub: Any, *, host: str = "", session_id_env: str = "") -> None:
         "retrieve",
         help="LLM-free single-shot retrieval over memory, skills, and resources (what the inject hook runs)",
     )
-    parser.add_argument("query", help="Natural-language query")
+    query = parser.add_mutually_exclusive_group(required=True)
+    query.add_argument("query", nargs="?", help="Natural-language query")
+    query.add_argument("--query-stdin", action="store_true", help="Read the complete UTF-8 query from stdin")
     parser.set_defaults(handler=_cmd_retrieve, host=host, session_id_env=session_id_env)

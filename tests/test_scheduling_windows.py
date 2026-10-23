@@ -558,7 +558,6 @@ def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
         ("cursor", "memu-cursor", r"hosts/cursor/bridge\.sh|memU bridging pipeline"),
         ("hermes", "memu-hermes", r"hosts/hermes/bridge\.sh|memU bridging pipeline"),
         ("generic", "memu-agent", r"hosts/agent/bridge\.sh|memU bridging pipeline"),
-        ("codex", "memu-codex", "load-bearing deletion identity"),
         ("openclaw", "memu-openclaw", ".cron_job.openclaw.json"),
         ("workbuddy", "memu-workbuddy", "WorkBuddy's automation list"),
         ("cola", "memu-cola", "{{all_task_names}}"),
@@ -681,12 +680,7 @@ def test_native_scheduler_identity_docs_stay_explicit() -> None:
     assert "desktop:local" in cola
 
     codex_source = (files("memu.hosts.codex") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
-    codex_uninstall_source = (files("memu.hosts.codex") / "UNINSTALL.md").read_text(encoding="utf-8")
-    codex = " ".join(CODEX.render_doc(codex_source).split())
-    codex_uninstall = " ".join(CODEX.render_doc(codex_uninstall_source).split())
-    assert f"named `{CODEX.task_name}`" in codex
-    assert "name is only a hint" in codex_uninstall
-    assert "prepare / self-evolve / commit" in codex_uninstall
+    assert codex_source == ""
 
     openclaw_source = (files("memu.hosts.openclaw") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
     openclaw_uninstall_source = (files("memu.hosts.openclaw") / "UNINSTALL.md").read_text(encoding="utf-8")
