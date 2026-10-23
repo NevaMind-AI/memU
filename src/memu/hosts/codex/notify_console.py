@@ -234,13 +234,17 @@ COOLDOWN_SECONDS = 30 * 60
 
 
 @contextlib.contextmanager
-def memorize_run(layout: Layout) -> Iterator[bool]:
+def memorize_run(layout: Layout, *, recovery: bool = False) -> Iterator[bool]:
     """Coordinate admission for every Codex hook-run before touching pipeline state."""
     layout.state.mkdir(parents=True, exist_ok=True)
     with _workspace_lock(layout.state) as acquired:
         if not acquired:
             print("=== MEMORIZE status=busy ===", flush=True)
             yield False
+            return
+        if recovery:
+            print("=== MEMORIZE status=started ===", flush=True)
+            yield True
             return
         state = layout.state / ".memorize_last_started.codex.json"
         now = time.time()

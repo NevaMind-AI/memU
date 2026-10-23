@@ -964,7 +964,7 @@ def test_a_failing_bridging_run_does_flush_because_its_flush_point_is_what_broke
     monkeypatch.setattr(host_cli, "commit", _boom)
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
 
-    assert run(CODEX_SPEC, ["commit"]) == 1
+    assert run(CODEX_SPEC, ["commit", "--run-id", "legacy", "--base-dir", str(reporting.parent / "work")]) == 1
     names = [event["event_name"] for event in posted.events]
     assert events.CLI_ERROR in names
 
@@ -1022,7 +1022,7 @@ def _commit(base: pathlib.Path, monkeypatch: pytest.MonkeyPatch, recall_files: i
     posted = _Posted()
     monkeypatch.setattr(host_cli, "commit", _committed)
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
-    assert run(CODEX_SPEC, ["commit", "--base-dir", str(base)]) == 0
+    assert run(CODEX_SPEC, ["commit", "--run-id", "legacy", "--base-dir", str(base)]) == 0
     return posted
 
 
@@ -1126,7 +1126,7 @@ def test_a_failed_commit_reports_the_call_and_leaves_the_cycle_to_the_agent(
     monkeypatch.setattr(host_cli, "commit", _fails)
     monkeypatch.setattr(events.urllib.request, "urlopen", posted)
     # Delivered by the CLI's top-level error handler, which flushes.
-    assert run(CODEX_SPEC, ["commit", "--base-dir", str(base)]) == 1
+    assert run(CODEX_SPEC, ["commit", "--run-id", "legacy", "--base-dir", str(base)]) == 1
 
     names = [event["event_name"] for event in posted.events]
     assert events.MEMORY_COMMIT_FAILED in names

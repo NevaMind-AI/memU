@@ -126,7 +126,7 @@ def test_commit_cleanup_failure_reports_durable_success(
 
     with monkeypatch.context() as patch:
         if stage == "snapshot":
-            patch.setattr("memu.app.memorize.lifecycle.snapshot_tracked", fail_cleanup)
+            patch.setattr("memu.hosts.bridging.manifest.snapshot_tracked", fail_cleanup)
         elif stage == "job":
             patch.setattr(Path, "unlink", fail_job_unlink)
         else:

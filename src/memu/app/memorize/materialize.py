@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import contextlib
 import json
-import os
-import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +8,7 @@ from pathlib import Path
 from pydantic import JsonValue
 
 from memu.app.memorize.input import MemorizeInput, SkillInputItem, project_memory, project_skill
+from memu.run import atomic_write_text as _atomic_write_text
 
 
 @dataclass(frozen=True)
@@ -40,18 +38,6 @@ def _serialize_items(items: Sequence[SkillInputItem]) -> str:
         + "\n"
         for item in items
     )
-
-
-def _atomic_write_text(path: Path, content: str) -> None:
-    fd, temporary_name = tempfile.mkstemp(dir=path.parent, prefix=".tmp-", suffix=path.suffix)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(content)
-        os.replace(temporary_name, path)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            os.unlink(temporary_name)
-        raise
 
 
 def materialize_memorize_input(

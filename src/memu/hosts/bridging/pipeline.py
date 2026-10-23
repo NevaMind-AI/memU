@@ -1,13 +1,4 @@
-"""The record seam: prepare -> (the agent self-evolves) -> commit.
-
-Three steps, of which only the first and last are code. The middle step is real
-agent work — reading transcripts, making judgement calls, writing markdown — so
-prepare's job is to leave behind a set of self-contained instruction files, and
-commit's job is to pick up whatever the agent actually left on disk.
-
-Nothing here knows what a Codex is. The host arrives as a
-:class:`~memu.hosts.base.TranscriptSource`.
-"""
+"""Host transcript/cursor adapter over the shared run lifecycle."""
 
 from __future__ import annotations
 
@@ -18,14 +9,11 @@ from typing import Any
 
 from memu import events
 from memu.env import build_agentic_memory_backend_from_env
-from memu.hosts import templates
+from memu.hosts import templates  # noqa: F401 -- existing template override seam
 from memu.hosts.base import TranscriptSource
-from memu.hosts.bridging.instructions import MEMORY_JOB_TEMPLATE, SKILL_JOB_TEMPLATE, prepare_instruction_jobs
-from memu.hosts.bridging.layout import TRACK_DIRS, Layout
-from memu.hosts.bridging.manifest import diff_tracked, snapshot_tracked
-from memu.hosts.bridging.recall_files import read_recall_file, write_recall_file
-from memu.hosts.bridging.resources import RESOURCE_JOB_TEMPLATE, prepare_resource_job, read_resources
+from memu.hosts.bridging.layout import Layout
 from memu.hosts.bridging.transcripts import prepare_transcripts
+from memu.run import commit_run, finish_run, mirror_run, prepare_run, read_receipt, submit_run
 
 MAX_JOBS = 10
 
@@ -40,20 +28,6 @@ async def prepare(
     host: str = "",
     session_id_env: str = "",
 ) -> int:
-    """Regenerate the job files from whatever the host has logged since last run.
-
-    ``skip_sessions`` are the bridging runs' own host sessions, which must not be
-    mined (#606); the caller collects them because only the CLI knows how this
-    host names the environment variable carrying them.
-
-    ``host`` and ``session_id_env`` are labels for the ``memory_list`` event the
-    store mirror below records, and nothing else — exactly as ``retrieval.register``
-    carries them for its own event. This module still knows nothing about what a
-    Codex *is*; it only knows what to call the platform it is running for.
-
-    Returns the number of sessions prepared. Zero is a correct, common outcome —
-    a scheduled run on a day with no new sessions has nothing to do.
-    """
     num_sessions = prepare_transcripts(
         source,
         out_dir=layout.sessions,
@@ -62,117 +36,39 @@ async def prepare(
         pending_path=layout.session_manifest_pending,
         skip_sessions=skip_sessions,
     )
-
-    # Mirror the store's current recall files to disk. The snapshot is only
-    # *bootstrapped* here (first contact, from store-derived — i.e. committed —
-    # content); afterwards it is re-taken by a successful commit and means
-    # "state as of the last commit". Re-snapshotting on every prepare would
-    # absorb files a crashed run wrote but never committed, making them
-    # undiffable — and therefore uncommittable — forever.
-    # list_all_recall_files returns one keyset page per call (ADR 0014); follow
-    # next_cursor to mirror every file, writing each page to disk as it arrives
-    # so the whole store is never held in memory at once.
-    # Reported as one `memory_list` action covering the whole sweep, not one per
-    # page: a page count is an implementation detail of ADR 0014's keyset paging,
-    # while "how long did mirroring the store take, and how much came back" is the
-    # thing that changes as a user's memory grows. Spooled only — `_cmd_prepare`
-    # flushes once at the end of the run, so this rides out with the rest of it.
     backend = build_agentic_memory_backend_from_env()
     started = time.monotonic()
     listed = 0
-    cursor: str | None = None
+
+    def progress(count: int) -> None:
+        nonlocal listed
+        listed = count
+
     try:
-        while True:
-            result = await backend.list_all_recall_files(cursor=cursor)
-            page = result["recall_files"]
-            listed += len(page)
-            for recall_file in page:
-                subdir = TRACK_DIRS.get(recall_file.get("track"))
-                if subdir is None:
-                    continue
-                write_recall_file(layout.base, subdir, recall_file)
-            cursor = result.get("next_cursor")
-            if not cursor:
-                break
+        await mirror_run(backend, layout, progress=progress)
     except Exception:
         events.record_list(started=started, listed=listed, success=False, host=host, session_id_env=session_id_env)
         raise
     events.record_list(started=started, listed=listed, success=True, host=host, session_id_env=session_id_env)
-
-    # Jobs enumerate both tracks even when the store has no files for one of them.
     for subdir in layout.track_dirs:
         (layout.base / subdir).mkdir(parents=True, exist_ok=True)
-
-    if not layout.memory_manifest.exists():
-        snapshot_tracked(layout.base, layout.track_dirs, layout.memory_manifest)
-
-    # The touched-file log is per-run. Left in place it accumulates across runs,
-    # and since the verify pass caps at the first N paths, stale entries would
-    # eventually crowd out every file the current run actually touched.
-    layout.resource_log.unlink(missing_ok=True)
-
-    # Resolve job templates with a persistent 24-hour remote refresh cooldown,
-    # falling back to the last-good cache and then the embedded copy.
-    prepare_instruction_jobs(
-        job_dir=layout.jobs,
-        session_dir=layout.sessions,
-        memory_dir=layout.memory,
-        skill_dir=layout.skill,
-        resource_log=layout.resource_log,
-        num_sessions=num_sessions,
-        memory_template=templates.resolve(templates.MEMORY_JOB, MEMORY_JOB_TEMPLATE),
-        skill_template=templates.resolve(templates.SKILL_JOB, SKILL_JOB_TEMPLATE),
-    )
-    # The resource job describes files the skill jobs logged as touched. With no
-    # sessions there are no skill jobs, so the touched-file log stays empty and
-    # there is nothing to describe — skipping keeps a no-new-session run a true
-    # no-op instead of a pointless agent pass over an empty log.
-    if num_sessions:
-        prepare_resource_job(
-            job_dir=layout.jobs,
-            verify_command=verify_command,
-            resource_file=layout.resources,
-            job_index=2 * num_sessions + 1,
-            template=templates.resolve(templates.RESOURCE_JOB, RESOURCE_JOB_TEMPLATE),
-        )
+    prepare_run(layout, num_sessions, verify_command=verify_command)
     return num_sessions
 
 
 async def commit(layout: Layout) -> dict[str, Any]:
-    """Submit whatever the agent created or changed, then make the run durable.
-
-    State advances on durable success, not on intent (#518): the session
-    cursor staged by ``prepare`` is promoted here, and the memory snapshot is
-    re-taken here — both strictly after the store accepted the submission. A
-    run that dies anywhere earlier leaves the previous cursor and snapshot in
-    force, so everything unfinished is re-offered next time: bounded re-work,
-    never silent loss.
-    """
-    subdir_track = {subdir: track for track, subdir in TRACK_DIRS.items()}
-
-    changed = diff_tracked(layout.base, layout.track_dirs, layout.memory_manifest)
-    recall_files = [read_recall_file(path, subdir_track[path.relative_to(layout.base).parts[0]]) for path in changed]
-    resources = read_resources(layout.resources)
-
-    backend = build_agentic_memory_backend_from_env()
-    result: dict[str, Any] = await backend.commit_results(recall_files=recall_files, resource=resources)
-
-    snapshot_tracked(layout.base, layout.track_dirs, layout.memory_manifest)
+    """Submit a run and then promote host progress; receipt retries only finalize."""
+    private = (layout.base / ".run.json").exists()
+    if private and layout.receipt.exists():
+        result = read_receipt(layout)
+    else:
+        backend = build_agentic_memory_backend_from_env()
+        result = await commit_run(layout, backend) if private else await submit_run(layout, backend)
+    # The pending file stays in place until replacement succeeds. Once it is
+    # promoted, a finalization retry must not replace it with another run's state.
     pending = layout.session_manifest_pending
     if pending.exists():
         layout.session_manifest.parent.mkdir(parents=True, exist_ok=True)
         os.replace(pending, layout.session_manifest)
-
-    # The run is durable, so clear this run's ephemeral working files: the job
-    # instructions, the session slices they mine, and the touched-file log.
-    # Done strictly last — after the store accepted the submission and the
-    # cursor/snapshot advanced — so a crash anywhere earlier leaves jobs/ and
-    # sessions/ intact and the next run's LEFTOVERS step recovers them. Without
-    # this, a *successful* run's jobs survive too, and every following run
-    # re-mines already-committed sessions before prepare wipes them.
-    for stale in layout.jobs.glob("*.txt"):
-        stale.unlink()
-    for stale in layout.sessions.glob("*.jsonl"):
-        stale.unlink()
-    layout.resource_log.unlink(missing_ok=True)
+    finish_run(layout)
     return result

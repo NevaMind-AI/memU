@@ -25,10 +25,8 @@ import asyncio
 import json
 import os
 import pathlib
-import re
 import shutil
 import sys
-import tempfile
 import time
 from collections.abc import Callable, Coroutine
 from typing import Any
@@ -44,6 +42,7 @@ from memu.app.memorize.lifecycle import (
 )
 from memu.env import build_agentic_memory_backend_from_env, embedding_provider, env
 from memu.hosts.bridging.resources import verify_resource_log
+from memu.run import run_path
 
 MEMORIZE_WORKSPACE = "~/.memu/developer"
 MAX_MEMORIZE_SESSIONS = 10
@@ -174,21 +173,8 @@ async def _cmd_commit(args: argparse.Namespace) -> int:
 
 def _memorize_workspace(run_id: str | None = None) -> MemorizeWorkspace:
     """Allocate a private run, or resolve an existing id within the runs root."""
-    root = (pathlib.Path(MEMORIZE_WORKSPACE).expanduser() / "runs").resolve()
-    if run_id is None:
-        root.mkdir(parents=True, exist_ok=True)
-        return MemorizeWorkspace(pathlib.Path(tempfile.mkdtemp(prefix="run-", dir=root)))
-    if not re.fullmatch(r"run-[a-z0-9_]{1,64}", run_id):
-        msg = "invalid memorize run id"
-        raise ValueError(msg)
-    path = root / run_id
-    if path.is_symlink() or path.resolve() != path:
-        msg = "memorize run must be a directory directly below the runs root"
-        raise ValueError(msg)
-    if not path.is_dir():
-        msg = f"no such memorize run: {run_id}"
-        raise FileNotFoundError(msg)
-    return MemorizeWorkspace(path)
+    root = pathlib.Path(MEMORIZE_WORKSPACE).expanduser() / "runs"
+    return MemorizeWorkspace(run_path(root, run_id))
 
 
 def _memorize_commit_command(run_id: str) -> str:

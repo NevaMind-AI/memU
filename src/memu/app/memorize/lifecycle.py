@@ -12,35 +12,18 @@ from memu.app.memorize.materialize import (
     _atomic_write_text,
     materialize_memorize_inputs,
 )
-from memu.hosts import templates
-from memu.hosts.bridging.instructions import MEMORY_JOB_TEMPLATE, SKILL_JOB_TEMPLATE, prepare_instruction_jobs
-from memu.hosts.bridging.layout import TRACK_DIRS
-from memu.hosts.bridging.manifest import diff_tracked, snapshot_tracked
-from memu.hosts.bridging.recall_files import read_recall_file, write_recall_file
-from memu.hosts.bridging.resources import RESOURCE_JOB_TEMPLATE, prepare_resource_job, read_resources
+from memu.hosts import templates  # noqa: F401 -- compatibility for template overrides
+from memu.hosts.bridging.manifest import snapshot_tracked
+from memu.run import RunWorkspace, commit_run, finish_run, mirror_run, prepare_run
 
 
 @dataclass(frozen=True)
-class MemorizeWorkspace:
-    """The developer-owned working tree for one evolving run at a time."""
-
-    base: Path
+class MemorizeWorkspace(RunWorkspace):
+    """Developer input paths over the shared run workspace."""
 
     @property
     def input(self) -> Path:
         return self.base / "input"
-
-    @property
-    def jobs(self) -> Path:
-        return self.base / "jobs"
-
-    @property
-    def memory(self) -> Path:
-        return self.base / TRACK_DIRS["memory"]
-
-    @property
-    def skill(self) -> Path:
-        return self.base / TRACK_DIRS["skill"]
 
     @property
     def manifest(self) -> Path:
@@ -49,18 +32,6 @@ class MemorizeWorkspace:
     @property
     def active_run(self) -> Path:
         return self.base / ".memorize_run.json"
-
-    @property
-    def resource_log(self) -> Path:
-        return self.base / ".resource.tmp"
-
-    @property
-    def resources(self) -> Path:
-        return self.base / "resources.md"
-
-    @property
-    def track_dirs(self) -> list[str]:
-        return list(TRACK_DIRS.values())
 
 
 @dataclass(frozen=True, init=False)
@@ -88,19 +59,6 @@ def _numeric_path_key(path: Path) -> int:
     return int(path.stem)
 
 
-async def _mirror_recall_files(backend: AgenticMemoryBackend, workspace: MemorizeWorkspace) -> None:
-    cursor: str | None = None
-    while True:
-        result = await backend.list_all_recall_files(cursor=cursor)
-        for recall_file in result["recall_files"]:
-            subdir = TRACK_DIRS.get(recall_file.get("track"))
-            if subdir is not None:
-                write_recall_file(workspace.base, subdir, recall_file)
-        cursor = result.get("next_cursor")
-        if not cursor:
-            return
-
-
 async def prepare_memorize(
     memorize_input: list[MemorizeInput] | MemorizeInput,
     workspace: MemorizeWorkspace,
@@ -120,29 +78,11 @@ async def prepare_memorize(
 
     workspace.base.mkdir(parents=True, exist_ok=True)
     transcripts = materialize_memorize_inputs(memorize_inputs, workspace.input)
-    await _mirror_recall_files(backend, workspace)
+    await mirror_run(backend, workspace)
     snapshot_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
-
-    workspace.resource_log.unlink(missing_ok=True)
+    workspace.receipt.unlink(missing_ok=True)
     workspace.resources.unlink(missing_ok=True)
-    num_sessions = len(memorize_inputs)
-    prepare_instruction_jobs(
-        job_dir=workspace.jobs,
-        session_dir=workspace.input,
-        memory_dir=workspace.memory,
-        skill_dir=workspace.skill,
-        resource_log=workspace.resource_log,
-        num_sessions=num_sessions,
-        memory_template=templates.resolve(templates.MEMORY_JOB, MEMORY_JOB_TEMPLATE),
-        skill_template=templates.resolve(templates.SKILL_JOB, SKILL_JOB_TEMPLATE),
-    )
-    prepare_resource_job(
-        job_dir=workspace.jobs,
-        verify_command=verify_command,
-        resource_file=workspace.resources,
-        job_index=num_sessions * 2 + 1,
-        template=templates.resolve(templates.RESOURCE_JOB, RESOURCE_JOB_TEMPLATE),
-    )
+    prepare_run(workspace, len(memorize_inputs), verify_command=verify_command)
 
     _atomic_write_text(
         workspace.active_run,
@@ -163,11 +103,7 @@ async def commit_memorize(workspace: MemorizeWorkspace, backend: AgenticMemoryBa
         msg = "memorize run already committed; do not resubmit; discard the stopped run"
         raise RuntimeError(msg)
 
-    subdir_track = {subdir: track for track, subdir in TRACK_DIRS.items()}
-    changed = diff_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
-    recall_files = [read_recall_file(path, subdir_track[path.relative_to(workspace.base).parts[0]]) for path in changed]
-    resources = read_resources(workspace.resources)
-    result = await backend.commit_results(recall_files=recall_files, resource=resources)
+    result = await commit_run(workspace, backend)
 
     # Persist the acknowledgement before cleanup can fail and leave a retryable run.
     # This does not cover an ambiguous backend failure or a crash before this write.
@@ -182,12 +118,7 @@ async def commit_memorize(workspace: MemorizeWorkspace, backend: AgenticMemoryBa
         raise RuntimeError(msg) from exc
 
     try:
-        snapshot_tracked(workspace.base, workspace.track_dirs, workspace.manifest)
-        for stale in workspace.jobs.glob("*.txt"):
-            stale.unlink()
-        for stale in workspace.input.glob("*.jsonl"):
-            stale.unlink()
-        workspace.resource_log.unlink(missing_ok=True)
+        finish_run(workspace)
         workspace.resources.unlink(missing_ok=True)
         workspace.active_run.unlink()
     except OSError as exc:

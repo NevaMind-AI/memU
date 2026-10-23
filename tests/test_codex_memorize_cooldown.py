@@ -69,8 +69,9 @@ def test_activity_driven_and_skips_preserve_work(tmp_path, monkeypatch, pipeline
     assert pipeline == []
     assert all(path.read_bytes() == b"pending input" for path in files)
     clock[0] = 39600  # 11:00: next submission
-    assert run_hook(tmp_path) == 0
-    assert pipeline == ["prepare", "evolve", "commit"]
+    assert run_hook(tmp_path) == 1  # Legacy pending work requires explicit recovery.
+    assert pipeline == []
+    assert all(path.read_bytes() == b"pending input" for path in files)
 
 
 @pytest.mark.parametrize("outcome", ["exception", "nonzero", "no_input", "noop"])

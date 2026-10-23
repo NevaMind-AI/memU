@@ -27,6 +27,7 @@ import json
 import os
 import platform
 import re
+import shlex
 import sys
 import time
 import urllib.request
@@ -39,9 +40,10 @@ from typing import Any, Literal
 from memu import events
 from memu.hosts import config_cmd, hooks, instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
-from memu.hosts.bridging import Layout, commit, prepare, self_sessions
+from memu.hosts.bridging import Layout, commit, prepare, runs, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
 from memu.hosts.bridging.resources import verify_resource_log
+from memu.run import atomic_write_text, discard_run
 
 ScheduleBackend = Literal["os", "native", "external"]
 """The existing scheduler arrangement a host documents; informational only."""
@@ -264,7 +266,87 @@ class HostSpec:
 
 
 def _layout(spec: HostSpec, args: argparse.Namespace) -> Layout:
-    return Layout.default(host=spec.host, base=args.base_dir)
+    base = Layout.default(host=spec.host, base=args.base_dir)
+    workspace = getattr(args, "workspace", None)
+    if isinstance(workspace, Layout):
+        return workspace
+    run_id = getattr(args, "run_id", None)
+    return runs.resolve(base, run_id) if spec.host == "codex" and run_id else base
+
+
+def _run_command(spec: HostSpec, layout: Layout, command: str) -> str:
+    return shlex.join([spec.binary, command, "--base-dir", str(layout.state), "--run-id", layout.base.name])
+
+
+async def _cmd_private_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
+    from memu.hosts.codex.notify_console import _workspace_lock
+
+    root = Layout.default(spec.host, args.base_dir).state.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    with _workspace_lock(root) as acquired:
+        if not acquired:
+            raise RuntimeError("memorization workspace is busy")  # noqa: TRY003
+        return await _prepare_private_run(spec, args)
+
+
+async def _prepare_private_run(spec: HostSpec, args: argparse.Namespace) -> int:
+    root = Layout.default(spec.host, args.base_dir)
+    root = Layout(root.base.resolve(), spec.host)
+    args.workspace = runs.allocate(root)
+    print(f"run-id: {args.workspace.base.name}; workspace: {args.workspace.base}", flush=True)
+    code = await _cmd_prepare(spec, args)
+    if code == 0:
+        runs.set_phase(args.workspace, "prepared")
+        print(f"commit: {_run_command(spec, args.workspace, 'commit')}")
+    return code
+
+
+async def _cmd_private_commit(spec: HostSpec, args: argparse.Namespace) -> int:
+    from memu.hosts.codex.notify_console import _workspace_lock
+
+    layout = _layout(spec, args)
+    layout.state.mkdir(parents=True, exist_ok=True)
+    with _workspace_lock(layout.state) as acquired:
+        if not acquired:
+            raise RuntimeError("memorization workspace is busy")  # noqa: TRY003
+        return await _commit_private_run(spec, args)
+
+
+async def _commit_private_run(spec: HostSpec, args: argparse.Namespace) -> int:
+    layout = _layout(spec, args)
+    legacy = getattr(args, "run_id", None) == "legacy"
+    if not runs.cleanup_pending(layout):
+        if legacy:
+            if any((layout.state / "runs").glob("run-*")):
+                raise RuntimeError("finish the private run before committing legacy work")  # noqa: TRY003
+            if not (layout.base / ".run.json").exists():
+                runs.set_phase(layout, "prepared")
+        elif runs.phase(layout) == "preparing":
+            raise RuntimeError("prepare did not complete; discard this stopped run and prepare again")  # noqa: TRY003
+        code = await _cmd_commit(spec, args)
+        if code or legacy:
+            return code
+        atomic_write_text(runs.cleanup_marker(layout), json.dumps({"run_id": layout.base.name}) + "\n")
+    if layout.base.exists():
+        discard_run(layout)
+    runs.cleanup_marker(layout).unlink()
+    return 0
+
+
+async def _cmd_private_discard(spec: HostSpec, args: argparse.Namespace) -> int:
+    from memu.hosts.codex.notify_console import _workspace_lock
+
+    layout = _layout(spec, args)
+    with _workspace_lock(layout.state) as acquired:
+        if not acquired:
+            raise RuntimeError("memorization workspace is busy")  # noqa: TRY003
+        if layout.base == layout.state:
+            raise ValueError("finish legacy work with commit --run-id legacy")  # noqa: TRY003
+        if layout.receipt.exists() or runs.cleanup_pending(layout):
+            raise ValueError("run already committed; use commit to finish cursor promotion and cleanup")  # noqa: TRY003
+        discard_run(layout)
+    print(f"discarded run {args.run_id}; uncommitted input remains selectable")
+    return 0
 
 
 def _refresh_retrieval(spec: HostSpec) -> None:
@@ -332,7 +414,9 @@ async def _cmd_prepare(spec: HostSpec, args: argparse.Namespace) -> int:
     num_sessions = await prepare(
         source,
         layout,
-        verify_command=spec.verify_command,
+        verify_command=(
+            _run_command(spec, layout, "verify-resources") if layout.state_base is not None else spec.verify_command
+        ),
         max_jobs=args.max_jobs,
         skip_sessions=skip_sessions,
         # Carried purely so the `memory_list` event the store mirror records can
@@ -705,7 +789,9 @@ async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
     if spec.host == "codex":
         from memu.hosts.codex.notify_console import memorize_run
 
-        with memorize_run(_layout(spec, args)) as admitted:
+        with memorize_run(
+            Layout.default(spec.host, args.base_dir), recovery=bool(getattr(args, "run_id", None))
+        ) as admitted:
             if not admitted:
                 return 0
             code = 1
@@ -721,14 +807,29 @@ async def _run_hook_pipeline(spec: HostSpec, args: argparse.Namespace) -> int:
     hook = spec.hook
     if hook is None:
         raise RuntimeError(f"{spec.display} has no notify hook")  # noqa: TRY003
+    private = spec.host == "codex"
+    run_id = getattr(args, "run_id", None)
+    if private and run_id:
+        args.workspace = _layout(spec, args)
+        if runs.cleanup_pending(args.workspace):
+            return await _commit_private_run(spec, args)
+        phase = runs.phase(args.workspace)
+        if phase == "preparing":
+            raise RuntimeError("prepare did not complete; discard this stopped run and prepare again")  # noqa: TRY003
+    else:
+        code = await (_prepare_private_run(spec, args) if private else _cmd_prepare(spec, args))
+        if code:
+            return code
+        phase = "prepared"
     layout = _layout(spec, args)
-    code = await _cmd_prepare(spec, args)
-    if code:
-        return code
-    if hooks.pending_jobs(layout):
+    if phase != "evolved" and not layout.receipt.exists() and hooks.pending_jobs(layout):
         if args.console and hook.stream_output is None:
             raise ValueError(f"{spec.display} has no live agent output")  # noqa: TRY003
         hooks.run_agent(hook.agent, layout, executable=args.agent, stream_output=hook.stream_output)
+    if private:
+        if not layout.receipt.exists():
+            runs.set_phase(layout, "evolved")
+        return await _commit_private_run(spec, args)
     return await _cmd_commit(spec, args)
 
 
@@ -866,6 +967,21 @@ def _register_report(sub: Any, handler: Any) -> None:
     flusher.set_defaults(handler=handler)
 
 
+def _register_hook_run(spec: HostSpec, sub: Any, with_base: Any, bind: Any) -> None:
+    if spec.hook is not None:
+        hook = spec.hook
+        p = with_base(sub.add_parser("hook-run", help="Run one background memorization pass"))
+        p.add_argument("--session-dir", default=spec.session_dir, help=spec.session_help)
+        p.add_argument("--max-jobs", type=int, default=MAX_JOBS)
+        p.add_argument("--agent", default="", help=f"Path to {hook.agent.argv[0]}")
+        if spec.host == "codex":
+            p.add_argument("--run-id", help="Explicitly resume a stopped run, bypassing cooldown")
+        p.add_argument(
+            "--console", action="store_true", help="Tee agent output to the run log and the foreground terminal"
+        )
+        p.set_defaults(handler=bind(_cmd_hook_run))
+
+
 def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=spec.binary,
@@ -917,15 +1033,24 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
         help=f"{spec.session_help}" + (f" (default: {spec.session_dir})" if spec.session_dir else ""),
     )
     p.add_argument("--max-jobs", type=int, default=MAX_JOBS, help=f"Sessions per run (default: {MAX_JOBS})")
-    p.set_defaults(handler=bind(_cmd_prepare))
+    p.set_defaults(handler=bind(_cmd_private_prepare if spec.host == "codex" else _cmd_prepare))
 
     p = with_base(sub.add_parser("commit", help="Submit what the self-evolve jobs produced back into memU"))
-    p.set_defaults(handler=bind(_cmd_commit))
+    if spec.host == "codex":
+        p.add_argument("--run-id", required=True, help="Run id from prepare, or legacy for existing shared work")
+    p.set_defaults(handler=bind(_cmd_private_commit if spec.host == "codex" else _cmd_commit))
 
     p = with_base(
         sub.add_parser("verify-resources", help="Filter the touched-file log into the describe-me resource file")
     )
+    if spec.host == "codex":
+        p.add_argument("--run-id", required=True)
     p.set_defaults(handler=bind(_cmd_verify_resources))
+
+    if spec.host == "codex":
+        p = with_base(sub.add_parser("discard", help="Remove a stopped, uncommitted run without advancing progress"))
+        p.add_argument("--run-id", required=True)
+        p.set_defaults(handler=bind(_cmd_private_discard))
 
     p = sub.add_parser("doctor", help="Verify MEMU_* config resolves and the selected memory backend is reachable")
     p.set_defaults(handler=bind(_cmd_doctor))
@@ -956,16 +1081,7 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     if spec.register_extra is not None:
         spec.register_extra(sub)
 
-    if spec.hook is not None:
-        hook = spec.hook
-        p = with_base(sub.add_parser("hook-run", help="Run one background memorization pass"))
-        p.add_argument("--session-dir", default=spec.session_dir, help=spec.session_help)
-        p.add_argument("--max-jobs", type=int, default=MAX_JOBS)
-        p.add_argument("--agent", default="", help=f"Path to {hook.agent.argv[0]}")
-        p.add_argument(
-            "--console", action="store_true", help="Tee agent output to the run log and the foreground terminal"
-        )
-        p.set_defaults(handler=bind(_cmd_hook_run))
+    _register_hook_run(spec, sub, with_base, bind)
 
     return parser
 
