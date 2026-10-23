@@ -140,8 +140,11 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
     with tempfile.TemporaryFile() as source, log_context as log:
         source.write(prompt.encode("utf-8"))
         source.seek(0)
+        env = os.environ.copy()
+        env["MEMU_CODEX_MEMORIZE"] = "1"
         with subprocess.Popen(  # noqa: S603
             argv,
+            env=env,
             stdin=source,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,

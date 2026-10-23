@@ -30,7 +30,7 @@ import argparse
 import sys
 
 from memu.hosts import hooks
-from memu.hosts.codex import hook_status, notify_console, prompt_hook, prompt_hook_install
+from memu.hosts.codex import hook_status, memorize_hook, notify_console, prompt_hook, prompt_hook_install
 from memu.hosts.codex.sessions import SESSION_DIR, CodexTranscriptSource
 from memu.hosts.host_cli import HostSpec, run
 
@@ -71,6 +71,7 @@ HOOK = hooks.HookSpec(
 
 def _register_extra(sub: object) -> None:
     prompt_hook.register(sub)
+    memorize_hook.register(sub)
     hook_status.register(sub)
     prompt_hook_install.register(sub)
 

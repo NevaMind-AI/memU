@@ -1,7 +1,7 @@
 # Install memU for Codex
 
-<!-- memu-codex-record: notify-v2 -->
-<!-- memu-codex-permissions: v21 -->
+<!-- memu-codex-record: submit-v1 -->
+<!-- memu-codex-permissions: v22 -->
 
 ## Task identity
 
@@ -32,11 +32,11 @@ without narrating commands, process details or reasoning.
 | --- | --- |
 | 🔐 [1/5] Checking installation permissions | Full-access gate below |
 | 📦 [2/5] Preparing memU and the memory backend | Part 1; reuse existing configuration |
-| 🔔 [3/5] Setting up automatic memorization | Part 2 registration; old-schedule handoff if needed |
+| 🔔 [3/5] Setting up automatic memorization | Part 2 prerequisite; Part 3 dual-hook registration; old-schedule handoff if needed |
 | 🧠 [4/5] Setting up memory retrieval | Part 3 registration and trust |
 | 🚀 [5/5] Starting your first memorize task | Finish legacy cleanup and invite the next user message |
 
-Installation is complete once the backend check, notify registration,
+Installation is complete once the backend check, Submit hook registration,
 prompt-hook registration/trust and M3 cleanup pass. Print
 `✅ memU installation complete` and Part 2's activation message. The first
 user-triggered retrieval and memorize run is a post-install check, not a
@@ -89,7 +89,7 @@ is needed.
 New installation has three parts:
 
 1. **Install memU** — a Python package and the memory backend it uses.
-2. **Register and verify notify** — turn recent
+2. **Verify the standalone CLI** — turn recent
    Codex sessions into durable memory (the *record* seam).
 3. **Register and trust `UserPromptSubmit`** — retrieve memory before each
    user turn (the *inject* seam).
@@ -100,7 +100,7 @@ what makes them agree.
 
 ## Notify record trigger (Codex)
 
-The record trigger is Codex notify: prepare → headless `codex exec` → commit.
+The record trigger is UserPromptSubmit: a short handler launches prepare → headless `codex exec` → commit in the background without waiting for completion.
 Follow Part 2 after the backend gate passes. Existing installations use the
 migration section for safe handoff.
 
@@ -275,9 +275,9 @@ on this working, and both fail *silently* if it is wrong.
 
 ---
 
-## Part 2 — Register and verify notify
+## Part 2 — Verify the background CLI prerequisite
 
-The *record* seam runs after a Codex turn: prepare → headless `codex exec` →
+The *record* seam starts on user prompt submission: prepare → headless `codex exec` →
 commit. In cloud mode, workspace resources are submitted but not persisted.
 
 ### 2.0 Prerequisite — a standalone Codex CLI
@@ -316,7 +316,7 @@ The current official default landing directories are:
 
 Honor an explicit `CODEX_INSTALL_DIR` instead of these defaults. Prepend the
 actual landing directory to the current install process's PATH before calling
-`memu-codex install-hook`; a persistent PATH change does not refresh an already
+`memu-codex install-prompt-hook`; a persistent PATH change does not refresh an already
 running Desktop or its shells. Read the registered `--agent` back and require an
 absolute path to the verified executable. Restart Desktop or open a fresh session
 when necessary, then check the callback again.
@@ -327,19 +327,13 @@ new credentials. A successful `--version` proves startup, while the real record
 check below proves the configured execution path. If an existing CLI resolves
 but cannot start, report and repair that failure before registration.
 
-### 2.1 Register the callback
+### 2.1 Register both Submit handlers in Part 3
 
-After the CLI probe and Part 1's backend gate pass, run:
-
-```text
-memu-codex install-hook
-```
-
-Read the configuration back and verify callback and agent executable paths exist.
-Repeating an identical installation is a no-op. The installer replaces any
-existing notify, including Desktop's `turn-ended` command, without a backup.
-Other Codex settings are preserved. For old memU schedules or retrieval entries,
-follow **Existing installations — migration** below.
+After the CLI probe and Part 1's backend gate pass, continue to Part 3.
+The installation command registers retrieval and background memorization together.
+It preserves unrelated notify commands and removes a direct legacy memU notify only
+after both new hooks are loaded and trusted. Existing Desktop wrappers containing
+memU require the ownership-checked legacy cleanup in M3; do not delete the wrapper.
 
 ### Runtime check — one CLI call
 
@@ -352,7 +346,7 @@ memu-codex hook-status --since <start-time>
 
 The command returns JSON with `retrieve.status`, `retrieve.exit_code`,
 `notify.status` and each log path. Exit 0 means retrieval succeeded (context or
-empty result) and notify startup was observed; exit 1 means retrieval failed;
+empty result) and background memorization startup was observed; exit 1 means retrieval failed;
 exit 2 means evidence is pending. `notify.status = started` proves startup only,
 not worker completion. Use this output directly instead of writing log parsers,
 reading source code or enumerating processes. It does not wait or retrieve memory.
@@ -379,16 +373,23 @@ finds an error, report it then; do not wait for jobs or worker completion.
 
 ---
 
-## Part 3 — Register and trust the UserPromptSubmit retrieval hook
+## Part 3 — Register and trust both UserPromptSubmit hooks
 
 This part owns the *inject* seam: Codex runs `memu-codex prompt-hook` when the
 user submits a prompt. The command reads the hook's stdin JSON, passes the
 original prompt to shared retrieval, and returns
 `hookSpecificOutput.additionalContext` before the model answers.
 
-### 3.0 Register and trust the hook
+The independent `memorize-hook` handler launches the existing background worker and
+returns immediately. Retrieval waits for its own result, never for memorization.
+Background evolve processes mark their environment so they do not start another
+memorization worker. Each user submission can start a worker; no cooldown is
+implemented in this version. Conversation content appended later is processed on
+a subsequent submission.
 
-Run the CLI command; it merges the memU `UserPromptSubmit` hook into
+### 3.0 Register and trust the hooks
+
+Run the CLI command; it merges both memU `UserPromptSubmit` handlers into
 `~/.codex/hooks.json`, backs up the original once, asks Codex app-server to load
 it, trusts Codex's returned fingerprint, and verifies `trustStatus`:
 
@@ -403,14 +404,14 @@ pass the actual paths:
 memu-codex install-prompt-hook --codex 'C:/path/to/codex.exe' --hooks-file 'C:/Users/<user>/.codex/hooks.json' --cwd 'C:/path/to/install'
 ```
 
-The command reports success only after Codex confirms the exact registered hook
-is trusted. Use this command for registration and trust, and `hook-status --since`
+The command reports success only after Codex confirms the registered hooks
+are trusted. Use this command for registration and trust, and `hook-status --since`
 for runtime checks. If it fails, follow **Execution permissions** and rerun after the
 relevant access issue is fixed. Do not edit trust fingerprints manually.
 
 ### ✅ Verify Part 3
 
-Require `install-prompt-hook` to confirm that the hook is registered and trusted.
+Require `install-prompt-hook` to confirm that both hooks are registered and trusted.
 That completes this installation gate. After the next user message, runtime
 execution can be checked once with:
 
@@ -418,7 +419,7 @@ execution can be checked once with:
 memu-codex hook-status --since <ISO-8601-time>
 ```
 
-Successful retrieval context return or an empty result is valid; notify startup
+Successful retrieval context return or an empty result is valid; background startup
 appears as `started`. Missing evidence before the first subsequent message is
 normal. Keep retrieved memory out of installation diagnostics; if the user asks
 what was retrieved, answer from the actual context available for that message
@@ -447,13 +448,21 @@ as unresolved. No matching task is normal; handle every confirmed match.
 
 ### M2 — Verify the replacement before removing anything
 
-Complete Parts 1–3's backend verification, notify registration and prompt-hook
+Complete Parts 1–3's backend verification, Submit hook registration and prompt-hook
 registration/trust, reusing results already obtained in this run. Then handle
 all legacy entries in M3 before announcing installation completion. Keep new
-notify workers from processing the workspace until the old tasks are idle.
+background workers from processing the workspace until the old tasks are idle.
 Runtime verification follows the next user message and does not delay cleanup.
 
 ### M3 — Migrate and remove legacy entries
+
+The installer removes a direct legacy memU notify after both Submit hooks are
+trusted. Read back the active Codex home's config.toml. If a Desktop
+`turn-ended --previous-notify` wrapper still contains a memU callback, remove
+only the confirmed memU callback from its nested command, preserving the wrapper
+and unrelated commands. If safe unwrapping cannot be established, report a
+migration blocker rather than leaving duplicate record triggers. No legacy
+memU notify callback may remain when migration is reported complete.
 
 This is the single cleanup stage for old memU schedules, retrieval skills,
 managed instruction pointers and other version-specific residue. Add future
@@ -472,13 +481,13 @@ prompt exactly. Verify the paused status; missing required arguments do not
 mean the tool lacks update support.
 
 Wait for any running old task and its descendants to finish naturally before
-allowing the new notify worker to process the same workspace. Prevent new memU
-notify launches during this handoff; if that cannot be done safely, stop before
+allowing the new background worker to process the same workspace. Prevent new memU
+memorization launches during this handoff; if that cannot be done safely, stop before
 changing registrations. Do not kill running tasks.
 
 Once idle, delete the confirmed old automations by ID and query again to verify
 removal. M2's verified registration is the replacement gate; do not wait for a
-new notify run before deleting old schedules. Preserve unrelated automations
+new background run before deleting old schedules. Preserve unrelated automations
 and session history; use Codex's management tool rather than editing its database.
 
 #### Old retrieve skill and AGENTS pointer
@@ -576,10 +585,10 @@ Report back to the user:
   memorization continues in the background and its completion is not an
   installation gate;
 - the selected mode and its cloud endpoint or local store/provider;
-- the verified notify record entry and the outcome of old-task migration;
+- the verified Submit memorization entry and the outcome of old-task migration;
 - the retrieval entry retained or installed for this machine, and whether a fresh
   Codex session is needed to pick it up.
 
-Record (Part 2) and inject (Part 3) both read `~/.memu/config.env`, so they
+Record and inject (Part 3) both read `~/.memu/config.env`, so they
 provably share the backend configured in Part 1 — what the task learns tonight
 is what retrieval finds tomorrow.

@@ -1,6 +1,6 @@
 # Uninstall memU for Codex
 
-<!-- memu-codex-record: notify-v2 -->
+<!-- memu-codex-record: submit-v1 -->
 
 ## Task identity
 
@@ -23,7 +23,7 @@ Uninstalling has three parts:
 
 1. **Remove the memU notify entry and confirmed old schedules** — prevent new
    record runs, then let existing agents finish (the *record* seam).
-2. **Remove the retrieval hook and its trust entry** — clean up the
+2. **Remove both Submit hooks and their trust entries** — clean up the
    `UserPromptSubmit` command and any old memU skill/instruction (the *inject* seam).
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
    tooling is removed — and close by reporting both.
@@ -85,7 +85,7 @@ notifiers and hosts remain intact. Repeating the removal is a no-op.
 
 ---
 
-## Part 2 — Remove the retrieval hook, trust and old instruction
+## Part 2 — Remove the Submit hooks, trust and old instruction
 
 ### 2.1 Current entry — UserPromptSubmit hook and trust
 
@@ -95,7 +95,7 @@ check. Remove a leftover approval only if its ownership can still be confirmed.
 
 Back up `~/.codex/hooks.json` and the relevant Codex hook trust state locally.
 Identify the `UserPromptSubmit` command by its resolved memu-codex executable
-and `prompt-hook` argument. Remove only that confirmed entry, preserving other
+and `prompt-hook` or `memorize-hook` argument. Remove both confirmed entries, preserving other
 hooks and events. Remove its corresponding approval using the installed Codex
 version's hook trust facilities; current Windows versions persist the fingerprint
 in `~/.codex/config.toml` under `hooks.state` as `trusted_hash`.
@@ -150,8 +150,8 @@ ownership and targeted cleanup; do not remove unrelated user text.
 
 ### ✅ Verify Part 2
 
-Read back `hooks.json` and the hook trust state: the confirmed memU prompt-hook
-and its approval are gone, and unrelated hooks remain configured and trusted.
+Read back `hooks.json` and the hook trust state: the confirmed memU prompt-hook and memorize-hook
+and their approvals are gone, and unrelated hooks remain configured and trusted.
 `~/.codex/AGENTS.md` has no memU instruction markers, its user content is intact,
 and the owned `~/.codex/skills/memu-retrieve` skill is gone. A fresh Codex session
 must no longer attempt to run memU retrieval. The session you are working in may

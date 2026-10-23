@@ -17,6 +17,9 @@ import time
 from pathlib import Path
 from typing import Any
 
+from memu.hosts.bridging import Layout
+from memu.hosts.hooks import CodexNotifyHook
+
 
 class AppServer:
     def __init__(self, executable: str, cwd: Path, codex_home: Path) -> None:
@@ -112,16 +115,22 @@ def _entries(value: Any, command: str, source: str) -> list[dict[str, Any]]:
     return found
 
 
-def _command() -> str:
+def _quote(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'" if sys.platform == "win32" else shlex.quote(value)
+
+
+def _command(subcommand: str = "prompt-hook") -> str:
     executable = str(Path(sys.argv[0]).resolve())
     if sys.platform == "win32":
-        return "& '" + executable.replace("'", "''") + "' prompt-hook"
-    return shlex.join([executable, "prompt-hook"])
+        return "& " + _quote(executable) + " " + subcommand
+    return shlex.join([executable, subcommand])
 
 
-def _owns_command(command: str) -> bool:
+def _owns_command(command: str, subcommand: str = "prompt-hook") -> bool:
+    if subcommand == "memorize-hook":
+        command = command.split(" --agent ", 1)[0]
     match = re.fullmatch(
-        r"""\s*(?:&\s+)?(?:"([^"]+)"|'((?:[^']|'')+)'|([^\s'"&;|]+))\s+prompt-hook\s*""",
+        r"""\s*(?:&\s+)?(?:"([^"]+)"|'((?:[^']|'')+)'|([^\s'"&;|]+))\s+""" + re.escape(subcommand) + r"\s*",
         command,
     )
     if match is None:
@@ -130,19 +139,19 @@ def _owns_command(command: str) -> bool:
     return executable.replace("\\", "/").rsplit("/", 1)[-1].casefold() in {"memu-codex", "memu-codex.exe"}
 
 
-def _definition(groups: list[dict[str, Any]], command: str) -> None:
+def _definition(groups: list[dict[str, Any]], command: str, subcommand: str = "prompt-hook") -> None:
     matches = [
         hook
         for group in groups
         for hook in group.get("hooks", [])
-        if hook.get("type") == "command" and _owns_command(hook.get("command", ""))
+        if hook.get("type") == "command" and _owns_command(hook.get("command", ""), subcommand)
     ]
     definition = {
         "type": "command",
         "command": command,
-        "timeout": 50,
+        "timeout": 50 if subcommand == "prompt-hook" else 10,
         "additionalContextLimit": 0,
-        "statusMessage": "Retrieving memU memory",
+        "statusMessage": "Retrieving memU memory" if subcommand == "prompt-hook" else "Starting memU memory processing",
     }
     if matches:
         matches[0].update(definition)
@@ -154,8 +163,42 @@ def _definition(groups: list[dict[str, Any]], command: str) -> None:
         groups.append({"hooks": [definition]})
 
 
-def install(codex: str, hooks_file: Path, cwd: Path) -> None:
+def _trust(server: AppServer, listed: dict[str, Any], command: str, hooks_file: Path, cwd: Path) -> None:
+    entries = _entries(listed, command, str(hooks_file))
+    if len(entries) != 1:
+        raise RuntimeError(  # noqa: TRY003
+            f"Expected one loaded memU hook, found {len(entries)}; check Codex hooks/list warnings"
+        )
+    entry = entries[0]
+    key, fingerprint = entry.get("key"), entry.get("currentHash")
+    if not key or not fingerprint:
+        raise RuntimeError("Codex did not return hook key and currentHash")  # noqa: TRY003
+    server.request(
+        "config/value/write",
+        {
+            "keyPath": "hooks.state." + json.dumps(key) + ".trusted_hash",
+            "value": fingerprint,
+            "mergeStrategy": "upsert",
+        },
+    )
+    verified = _entries(server.request("hooks/list", {"cwds": [str(cwd)]}), command, str(hooks_file))
+    if len(verified) != 1 or verified[0].get("trustStatus") != "trusted":
+        raise RuntimeError("Codex did not confirm the memU prompt hook as trusted")  # noqa: TRY003
+
+
+def install(codex: str, hooks_file: Path, cwd: Path, base_dir: str | None = None) -> None:
+    codex = str(Path(shutil.which(codex) or codex).resolve())
     command = _command()
+    base = (Layout.default("codex", base_dir).base if base_dir is not None else Layout.default("codex").base).resolve()
+    memorize = (
+        _command("memorize-hook")
+        + " --agent "
+        + _quote(codex)
+        + " --base-dir "
+        + _quote(str(base))
+        + " --session-dir "
+        + _quote(str(hooks_file.parent / "sessions"))
+    )
     if hooks_file.exists() and not hooks_file.is_file():
         raise FileNotFoundError(f"Codex hooks path is not a file: {hooks_file}")  # noqa: TRY003
 
@@ -181,6 +224,7 @@ def install(codex: str, hooks_file: Path, cwd: Path) -> None:
         if not isinstance(groups, list) or any(not isinstance(group, dict) for group in groups):
             raise ValueError("hooks.UserPromptSubmit must be an array of hook groups")  # noqa: TRY003
         _definition(groups, command)
+        _definition(groups, memorize, "memorize-hook")
 
         backup = hooks_file.with_name("hooks.json.memu-backup")
         if not backup.exists() and hooks_file.exists():
@@ -191,41 +235,27 @@ def install(codex: str, hooks_file: Path, cwd: Path) -> None:
         data = listed.get("data", [])
         if any(item.get("errors") or item.get("warnings") for item in data):
             raise RuntimeError("Codex reported hook loading warnings or errors")  # noqa: TRY003
-        entries = _entries(listed, command, str(hooks_file))
-        if len(entries) != 1:
-            raise RuntimeError(f"Expected one loaded memU hook, found {len(entries)}; check Codex hooks/list warnings")  # noqa: TRY003
-        entry = entries[0]
-        key, fingerprint = entry.get("key"), entry.get("currentHash")
-        if not key or not fingerprint:
-            raise RuntimeError("Codex did not return hook key and currentHash")  # noqa: TRY003
-        server.request(
-            "config/value/write",
-            {
-                "keyPath": "hooks.state." + json.dumps(key) + ".trusted_hash",
-                "value": fingerprint,
-                "mergeStrategy": "upsert",
-            },
-        )
-        verified = _entries(server.request("hooks/list", {"cwds": [str(cwd)]}), command, str(hooks_file))
-        if len(verified) != 1 or verified[0].get("trustStatus") != "trusted":
-            raise RuntimeError("Codex did not confirm the memU prompt hook as trusted")  # noqa: TRY003
-        print("Registered one memU UserPromptSubmit hook; Codex reports it trusted.")
+        for registered_command in (command, memorize):
+            _trust(server, listed, registered_command, hooks_file, cwd)
+        CodexNotifyHook(hooks_file.parent / "config.toml").remove("memu-codex")
+        print("Registered retrieval and memorization UserPromptSubmit hooks; Codex reports both trusted.")
         print(f"Backup: {backup}")
     finally:
         server.close()
 
 
 def register(sub: Any) -> None:
-    parser = sub.add_parser("install-prompt-hook", help="Register and trust the Codex retrieval hook")
+    parser = sub.add_parser("install-prompt-hook", help="Register and trust Codex retrieval and memorization hooks")
     parser.add_argument("--codex", default=shutil.which("codex"), help="Codex CLI executable (default: PATH)")
     codex_home = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
     parser.add_argument("--hooks-file", type=Path, default=codex_home / "hooks.json")
     parser.add_argument("--cwd", type=Path, default=Path.cwd())
+    parser.add_argument("--base-dir", default=None)
 
     async def handler(args: argparse.Namespace) -> int:
         if not args.codex:
             raise FileNotFoundError("Codex CLI is not on PATH; pass --codex with its executable path")  # noqa: TRY003
-        install(args.codex, args.hooks_file.expanduser().resolve(), args.cwd.resolve())
+        install(args.codex, args.hooks_file.expanduser().resolve(), args.cwd.resolve(), args.base_dir)
         return 0
 
     parser.set_defaults(handler=handler)
