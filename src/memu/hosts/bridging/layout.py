@@ -19,10 +19,22 @@ TRACK_DIRS: dict[str, str] = {"memory": "memory", "skill": "skill"}
 
 @dataclass(frozen=True)
 class Layout:
-    """The ``~/.memu`` working tree for one host's bridging runs."""
+    """A host's bridging workspace and optional separate durable-state root.
+
+    ``base`` owns this run's editable files. ``state_base`` keeps the promoted
+    cursor and self-session registry stable across workspaces. Callers must
+    serialize the complete prepare/evolve/commit cycle for that state root;
+    separate workspaces do not reserve input or coordinate cursor promotion.
+    """
 
     base: Path
     host: str
+    state_base: Path | None = None
+
+    @property
+    def state(self) -> Path:
+        """Stable host state; existing callers keep everything under ``base``."""
+        return self.state_base if self.state_base is not None else self.base
 
     @classmethod
     def default(cls, host: str, base: str | Path = BASE_DIR) -> Layout:
@@ -52,7 +64,7 @@ class Layout:
         successful ``commit``. Scoped by host: two hosts' session keys are
         unrelated, and sharing one cursor file would let each hide the other's
         new turns."""
-        return self.base / f".session_manifest.{self.host}.json"
+        return self.state / f".session_manifest.{self.host}.json"
 
     @property
     def session_manifest_pending(self) -> Path:
@@ -62,7 +74,7 @@ class Layout:
         only commit knows what survived into the store. Promoting on commit is
         what makes a bare ``prepare`` harmless and a run that dies mid-pipeline
         recoverable instead of silently lossy (#518)."""
-        return self.session_manifest.with_name(self.session_manifest.name + ".pending")
+        return self.base / (self.session_manifest.name + ".pending")
 
     @property
     def run_marker(self) -> Path:
@@ -89,7 +101,7 @@ class Layout:
         Host-scoped like the cursor, and for the same reason: two hosts' session
         ids are unrelated, and a shared file would let one host's run id mask an
         unrelated real session on the other."""
-        return self.base / f".self_sessions.{self.host}.json"
+        return self.state / f".self_sessions.{self.host}.json"
 
     @property
     def memory_manifest(self) -> Path:

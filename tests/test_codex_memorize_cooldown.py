@@ -174,6 +174,24 @@ sys.exit(cli.main(['hook-run', '--base-dir', sys.argv[1]]))
         assert admitted
 
 
+def test_split_workspaces_share_admission_state(tmp_path, monkeypatch, capsys):
+    state = tmp_path / "host"
+    first = Layout(tmp_path / "runs" / "A", "codex", state_base=state)
+    second = Layout(tmp_path / "runs" / "B", "codex", state_base=state)
+    monkeypatch.setattr(notify_console.time, "time", lambda: 36000.0)
+    with notify_console.memorize_run(first) as admitted:
+        assert admitted
+        with notify_console.memorize_run(second) as competing:
+            assert not competing
+        assert "status=busy" in capsys.readouterr().out
+    with notify_console.memorize_run(second) as admitted:
+        assert not admitted
+    assert "status=cooldown" in capsys.readouterr().out
+    assert json.loads((state / ".memorize_last_started.codex.json").read_text()) == 36000
+    assert (state / ".diagnostic.lock").is_file()
+    assert not first.base.exists() and not second.base.exists()
+
+
 def test_real_lock_error_is_not_busy(tmp_path, monkeypatch):
     module = __import__("msvcrt" if sys.platform == "win32" else "fcntl")
 

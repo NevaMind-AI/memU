@@ -19,3 +19,4 @@
 - [0017: `config.env` Is Written by a Command — `init` for the Entry, `config` for the Detail](0017-config-env-as-a-command.md)
 - [0018: Mine Claude Cowork Through the Claude Code Bridge](0018-cowork-through-claude-code-bridge.md)
 - [0019: Allocate a Private Workspace for Each Developer Memorize Run](0019-developer-run-workspaces.md)
+- [0020: Separate Bridging Workspace Paths from Stable Host State](0020-bridging-workspace-state-paths.md)

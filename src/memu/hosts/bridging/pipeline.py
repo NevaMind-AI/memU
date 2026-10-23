@@ -160,6 +160,7 @@ async def commit(layout: Layout) -> dict[str, Any]:
     snapshot_tracked(layout.base, layout.track_dirs, layout.memory_manifest)
     pending = layout.session_manifest_pending
     if pending.exists():
+        layout.session_manifest.parent.mkdir(parents=True, exist_ok=True)
         os.replace(pending, layout.session_manifest)
 
     # The run is durable, so clear this run's ephemeral working files: the job

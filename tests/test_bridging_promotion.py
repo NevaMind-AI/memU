@@ -49,13 +49,19 @@ class FakeService:
         return {"recall_files": recall_files, "resources": resource}
 
 
-@pytest.fixture()
-def rig(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> tuple[FakeSource, Layout, FakeService]:
+@pytest.fixture(params=[False, True], ids=["shared-workspace", "separate-state"])
+def rig(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> tuple[FakeSource, Layout, FakeService]:
     logs = tmp_path / "logs"
     logs.mkdir()
     (logs / "s1.jsonl").write_text('{"role":"user","content":"hi"}\n{"role":"assistant","content":"yo"}\n')
 
-    layout = Layout.default(host="fake", base=tmp_path / "memu")
+    layout = Layout(
+        base=tmp_path / "memu",
+        host="fake",
+        state_base=tmp_path / "state" if request.param else None,
+    )
     service = FakeService()
     import memu.hosts.bridging.pipeline as pipeline
 
@@ -198,3 +204,78 @@ async def test_snapshot_is_retaken_at_commit_so_reruns_are_clean(rig) -> None:
 
     assert [f["name"] for f in service.committed[0]["recall_files"]] == ["note"]
     assert service.committed[1]["recall_files"] == [], "the post-commit snapshot must absorb committed work"
+
+
+async def test_separate_workspaces_share_progress_but_not_working_files(rig) -> None:
+    source, original, service = rig
+    first = Layout(original.base / "runs" / "A", original.host, state_base=original.state)
+    second = Layout(original.base / "runs" / "B", original.host, state_base=original.state)
+    assert first.session_manifest == second.session_manifest == original.session_manifest
+    assert first.self_sessions == second.self_sessions == original.self_sessions
+    for layout in (first, second):
+        assert await prepare(source, layout, verify_command="unused") == 1
+        assert all(
+            path.parent == layout.base
+            for path in (
+                layout.sessions,
+                layout.jobs,
+                layout.memory,
+                layout.skill,
+                layout.memory_manifest,
+                layout.session_manifest_pending,
+                layout.run_marker,
+                layout.resource_log,
+                layout.resources,
+            )
+        )
+
+    # Independent files do not claim input: both prepares still observe the old
+    # promoted cursor. The caller must serialize the complete cycle.
+    assert first.session_manifest_pending.read_bytes() == second.session_manifest_pending.read_bytes()
+    assert (first.sessions / "1.jsonl").read_bytes() == (second.sessions / "1.jsonl").read_bytes()
+    assert not first.session_manifest.exists()
+    (first.memory / "A.md").write_text("---\nname: A\n---\nfirst run\n", encoding="utf-8")
+    (second.memory / "B.md").write_text("---\nname: B\n---\nsecond run\n", encoding="utf-8")
+    second.resource_log.write_text("second run log\n", encoding="utf-8")
+    before = {path.relative_to(second.base): path.read_bytes() for path in second.base.rglob("*") if path.is_file()}
+
+    await commit(first)
+
+    assert [file["name"] for file in service.committed[0]["recall_files"]] == ["A"]
+    assert json.loads(first.session_manifest.read_text())["s1.jsonl"]["lines"] == 2
+    assert not first.session_manifest_pending.exists()
+    assert not list(first.sessions.iterdir()) and not list(first.jobs.iterdir())
+    assert before == {
+        path.relative_to(second.base): path.read_bytes() for path in second.base.rglob("*") if path.is_file()
+    }
+    # A fresh workspace reads the successful run's promoted cursor.
+    third = Layout(original.base / "runs" / "C", original.host, state_base=original.state)
+    assert await prepare(source, third, verify_command="unused") == 0
+    assert not list(third.jobs.iterdir())
+
+
+async def test_failed_commit_preserves_cursor_and_run_for_retry(rig, monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    source, layout, service = rig
+    await prepare(source, layout, verify_command="unused")
+    await commit(layout)
+    cursor = layout.session_manifest.read_bytes()
+    with (source.root() / "s1.jsonl").open("a", encoding="utf-8") as stream:
+        stream.write('{"role":"user","content":"new turn"}\n')
+    await prepare(source, layout, verify_command="unused")
+    (layout.memory / "retry.md").write_text("---\nname: retry\n---\nretained\n", encoding="utf-8")
+    baseline = layout.memory_manifest.read_bytes()
+    pending = layout.session_manifest_pending.read_bytes()
+    with monkeypatch.context() as patch:
+        patch.setattr(service, "commit_results", AsyncMock(side_effect=RuntimeError("synthetic failure")))
+        with pytest.raises(RuntimeError, match="synthetic failure"):
+            await commit(layout)
+    assert layout.session_manifest.read_bytes() == cursor
+    assert layout.session_manifest_pending.read_bytes() == pending
+    assert layout.memory_manifest.read_bytes() == baseline
+    assert list(layout.jobs.iterdir()) and list(layout.sessions.iterdir())
+
+    await commit(layout)
+    assert layout.session_manifest.read_bytes() == pending
+    assert [file["name"] for file in service.committed[-1]["recall_files"]] == ["retry"]

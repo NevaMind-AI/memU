@@ -10,12 +10,14 @@ from memu.hosts.codex import notify_console
 from memu.hosts.hooks import HeadlessAgent, run_agent
 
 
-def test_console_agent_output_is_live(tmp_path, capsys):
+@pytest.mark.parametrize("separate_state", [False, True])
+def test_console_agent_output_is_live(tmp_path, capsys, separate_state):
     import concurrent.futures
     import sys
     import time
 
-    layout = Layout.default("codex", tmp_path)
+    state = tmp_path / "host" if separate_state else tmp_path
+    layout = Layout(base=tmp_path, host="codex", state_base=state)
     thread_id = "01a15739-1522-7003-b1d4-c13585d5ac95"
     script = (
         "import sys,time,pathlib; sys.stdin.read(); "
@@ -33,7 +35,7 @@ def test_console_agent_output_is_live(tmp_path, capsys):
         try:
             deadline = time.monotonic() + 5
             while time.monotonic() < deadline:
-                logs = list((tmp_path / "log/hooks/memorize").glob("*.log"))
+                logs = list((state / "log/hooks/memorize").glob("*.log"))
                 if logs and "agent stderr" in logs[0].read_text():
                     break
                 time.sleep(0.01)
@@ -42,6 +44,7 @@ def test_console_agent_output_is_live(tmp_path, capsys):
             assert "agent stdout" in log.read_text()
             assert "agent stderr" in log.read_text()
             assert json.loads(layout.self_sessions.read_text()) == [thread_id]
+            assert layout.self_sessions.parent == state
             assert not future.done()
         finally:
             (tmp_path / "release").touch()
@@ -140,15 +143,19 @@ def test_console_launch_platform(tmp_path, monkeypatch, platform):
 
 
 @pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
-def test_background_launch_has_no_console(tmp_path, monkeypatch, platform):
+@pytest.mark.parametrize("separate_state", [False, True])
+def test_background_launch_has_no_console(tmp_path, monkeypatch, platform, separate_state):
     calls = []
     monkeypatch.setattr(notify_console.sys, "platform", platform)
     monkeypatch.setattr(notify_console.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
     monkeypatch.setattr(notify_console.subprocess, "Popen", lambda *a, **k: calls.append((a, k)))
-    notify_console.launch_background(
-        ["hook-run", "--base-dir", str(tmp_path)], Layout.default("codex", tmp_path), "codex"
+    state = tmp_path / "host" if separate_state else tmp_path
+    path = notify_console.launch_background(
+        ["hook-run", "--base-dir", str(state)], Layout(tmp_path, "codex", state_base=state), "codex"
     )
+    assert path.parent == state / "log/hooks/memorize"
     args, kwargs = calls[0]
+    assert kwargs["cwd"] == state
     assert "memu.hosts.codex.notify_console" in args[0]
     assert "--hold" not in args[0] and "--background" in args[0]
     assert kwargs["creationflags"] == (0x08000000 if platform == "win32" else 0)
