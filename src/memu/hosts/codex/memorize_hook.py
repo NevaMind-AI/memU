@@ -20,7 +20,7 @@ async def _cmd_memorize_hook(args: argparse.Namespace) -> int:
         if not isinstance(event, dict) or event.get("hook_event_name") != "UserPromptSubmit":
             raise ValueError("expected a UserPromptSubmit object")  # noqa: TRY003, TRY301
         if os.environ.get(BACKGROUND_ENV) != "1":
-            layout = Layout.default("codex", args.base_dir) if args.base_dir is not None else Layout.default("codex")
+            layout = Layout.default("codex", args.base_dir or "~/.memu/hosts/codex")
             notify_console.launch_background(
                 ["hook-run", "--base-dir", str(layout.base), "--agent", args.agent, "--session-dir", args.session_dir],
                 layout,

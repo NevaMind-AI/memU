@@ -19,7 +19,8 @@ async def _cmd_prompt_hook(args: argparse.Namespace) -> int:
     started = time.monotonic()
     trace: dict[str, Any] = {"hook": "UserPromptSubmit", "pid": os.getpid(), "status": "started"}
     try:
-        log_path = _new_log_path(Path.home() / ".memu" / "hosts" / "codex", "retrieve")
+        base = Path(args.base_dir).expanduser() if args.base_dir is not None else Path.home() / ".memu/hosts/codex"
+        log_path = _new_log_path(base, "retrieve")
         with log_path.open("a", encoding="utf-8") as log:
             print(json.dumps(trace), file=log, flush=True)
             try:
@@ -109,4 +110,5 @@ def _retrieve(trace: dict[str, Any]) -> None:
 
 def register(sub: Any) -> None:
     parser = sub.add_parser("prompt-hook", help="Retrieve memory for a Codex UserPromptSubmit event on stdin")
+    parser.add_argument("--base-dir", default=None, help="Host state directory for hook logs")
     parser.set_defaults(handler=_cmd_prompt_hook)

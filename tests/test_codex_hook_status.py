@@ -28,7 +28,10 @@ def test_hook_status_filters_by_start_time_and_reports_only_metadata(tmp_path, c
         encoding="utf-8",
     )
     notify = tmp_path / "log/hooks/memorize/2026-01-02_00-00-02.000000-3.log"
-    notify.write_text("[2026-01-02 00:00:02+0800] === START codex pid=3 ===\nPRIVATE\n", encoding="utf-8")
+    notify.write_text(
+        "[2026-01-02 00:00:02+0800] === WORKER codex pid=3 ===\n=== MEMORIZE status=started ===\nPRIVATE\n",
+        encoding="utf-8",
+    )
     assert main(argv) == 0
     output = capsys.readouterr().out
     assert "PRIVATE" not in output

@@ -7,6 +7,7 @@ import contextlib
 import errno
 import io
 import json
+import math
 import os
 import shlex
 import shutil
@@ -189,8 +190,8 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
 
 
 @contextlib.contextmanager
-def _workspace_lock(base: Path) -> Iterator[None]:
-    """Serialize notify workers; the OS releases the lock if a process exits."""
+def _workspace_lock(base: Path) -> Iterator[bool]:
+    """Try the whole-pass lock once; process exit also releases it."""
     with (base / ".diagnostic.lock").open("a+b") as lock:
         if lock.tell() == 0:
             lock.write(b"0")
@@ -199,27 +200,71 @@ def _workspace_lock(base: Path) -> Iterator[None]:
         if sys.platform == "win32":
             import msvcrt
 
-            while True:
-                try:
-                    msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
-                    break
-                except OSError as exc:
-                    if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
-                        raise
-                    time.sleep(0.1)
             try:
-                yield
+                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+            except OSError as exc:
+                if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                    raise
+                yield False
+                return
+            try:
+                yield True
             finally:
                 lock.seek(0)
                 msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
         else:
             import fcntl
 
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
             try:
-                yield
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as exc:
+                if exc.errno not in (errno.EACCES, errno.EAGAIN):
+                    raise
+                yield False
+                return
+            try:
+                yield True
             finally:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+COOLDOWN_SECONDS = 30 * 60
+
+
+@contextlib.contextmanager
+def memorize_run(layout: Layout) -> Iterator[bool]:
+    """Coordinate admission for every Codex hook-run before touching pipeline state."""
+    layout.base.mkdir(parents=True, exist_ok=True)
+    with _workspace_lock(layout.base) as acquired:
+        if not acquired:
+            print("=== MEMORIZE status=busy ===", flush=True)
+            yield False
+            return
+        state = layout.base / ".memorize_last_started.codex.json"
+        now = time.time()
+        try:
+            previous = json.loads(state.read_text(encoding="utf-8"))
+            if type(previous) not in (int, float) or not math.isfinite(previous) or previous < 0:
+                raise ValueError("expected a finite nonnegative Unix timestamp")  # noqa: TRY003, TRY301
+        except FileNotFoundError:
+            previous = None
+        except (ValueError, UnicodeError, OverflowError) as exc:
+            print(f"warning: invalid memorize cooldown state at {state}: {exc}; resetting", flush=True)
+            previous = None
+        if previous is not None:
+            elapsed = now - previous
+            if elapsed < 0:
+                print(f"warning: memorize clock moved backwards ({now} < {previous}); resetting", flush=True)
+            elif elapsed < COOLDOWN_SECONDS:
+                print("=== MEMORIZE status=cooldown ===", flush=True)
+                yield False
+                return
+        # Persist before prepare: failures, no-input runs and crashes consume cooldown too.
+        from memu.hosts.codex.prompt_hook_install import _atomic_write
+
+        _atomic_write(state, json.dumps(now).encode("utf-8"))
+        print("=== MEMORIZE status=started ===", flush=True)
+        yield True
 
 
 def main() -> int:
@@ -241,20 +286,21 @@ def main() -> int:
             print(message, flush=True)
 
     code = 1
-    report(f"=== START {args.label} pid={os.getpid()} ===")
+    report(f"=== WORKER {args.label} pid={os.getpid()} ===")
     report(f"worker parent={os.getppid()} source={__file__}")
     try:
         from memu.hosts.codex.cli import main as codex_main
 
-        report("Waiting for notify workspace...")
         with (
-            _workspace_lock(base),
             log_path.open("a", encoding="utf-8", buffering=1) as log,
             contextlib.redirect_stdout(log if args.background else cast(TextIO, _Tee(sys.stdout, log))),
             contextlib.redirect_stderr(log if args.background else cast(TextIO, _Tee(sys.stderr, log))),
         ):
             code = codex_main(command)
+            if code:
+                print("=== MEMORIZE status=failed ===", flush=True)
     except Exception:
+        report("=== MEMORIZE status=failed ===")
         report(traceback.format_exc())
     finally:
         report(f"=== FINISHED {args.label} exit={code} ===")

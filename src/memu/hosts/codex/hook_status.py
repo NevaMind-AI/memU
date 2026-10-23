@@ -52,9 +52,13 @@ def status(base: Path, since: float) -> dict[str, Any]:
                         if isinstance(trace, dict) and trace.get("hook") == "UserPromptSubmit":
                             entry["status"] = trace.get("status", "started")
                             entry["exit_code"] = trace.get("retrieve_exit_code")
-                    elif re.fullmatch(r"(?:\[[^\]\r\n]+\] )?=== START .+ pid=\d+ ===\s*", line):
-                        entry["status"] = "started"
-                        break  # Startup is the installation gate; do not scan worker output.
+                    elif match := re.fullmatch(
+                        r"(?:\[[^\]\r\n]+\] )?=== MEMORIZE status=(started|busy|cooldown|succeeded|failed) ===\s*",
+                        line,
+                    ):
+                        entry["status"] = match[1]
+                    elif re.fullmatch(r"(?:\[[^\]\r\n]+\] )?=== WORKER .+ pid=\d+ ===\s*", line):
+                        entry["status"] = "worker_started"
         result[kind] = entry
     return result
 
@@ -63,11 +67,12 @@ async def _cmd(args: argparse.Namespace) -> int:
     result = status(Path(args.base_dir).expanduser(), args.since)
     print(json.dumps(result, ensure_ascii=False))
     retrieval = result["retrieve"]
-    if retrieval["status"] == "failed":
+    if retrieval["status"] == "failed" or result["memorize"]["status"] == "failed":
         return 1
     return (
         0
-        if retrieval["status"] in {"context_returned", "empty_result"} and result["memorize"]["status"] == "started"
+        if retrieval["status"] in {"context_returned", "empty_result"}
+        and result["memorize"]["status"] in {"started", "succeeded", "busy", "cooldown"}
         else 2
     )
 
