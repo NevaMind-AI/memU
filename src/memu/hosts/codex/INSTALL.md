@@ -344,10 +344,18 @@ memu-codex hook-status --since <start-time>
 
 The command returns JSON with `retrieve.status`, `retrieve.exit_code`,
 `memorize.status` and each log path. Exit 0 means retrieval succeeded (context or
-empty result) and background memorization startup was observed; exit 1 means retrieval failed;
-exit 2 means evidence is pending. `memorize.status = started` proves startup only,
-not worker completion. Use this output directly instead of writing log parsers,
+empty result) and memorization either started, succeeded, or skipped normally
+(`busy` / `cooldown`); exit 1 means retrieval or memorization failed; exit 2 means
+evidence is pending. `worker_started` only means the worker launched; `started`
+means it acquired the lock, passed cooldown and entered processing. `succeeded`
+and `failed` report the pipeline result. A worker launch is not proof of processing.
+Use this output directly instead of writing log parsers,
 reading source code or enumerating processes. It does not wait or retrieve memory.
+`cooldown` also includes `cooldown_until` (Unix seconds) and
+`cooldown_remaining_minutes`, recalculated and rounded up when queried.
+A zero remaining value means another submission may try again; it does not
+schedule a run.
+
 The time filter excludes logs started before the check; avoid concurrent test
 turns, as the two newest logs are not correlated by session ID.
 
@@ -379,11 +387,44 @@ original prompt to shared retrieval, and returns
 `hookSpecificOutput.additionalContext` before the model answers.
 
 The independent `memorize-hook` handler launches the existing background worker and
-returns immediately. Retrieval waits for its own result, never for memorization.
+returns after at most a half-second admission check, without waiting for processing.
+It supplies an `additionalContext` status snapshot for the model to use only when
+the user asks about memorization; ordinary replies need not mention it. The snapshot
+includes its observation time, this worker's log path, and the outcome: `started`
+(processing began; completion unconfirmed), `busy`, `cooldown`, `succeeded` or `failed`.
+Cooldown includes remaining minutes rounded up. If admission is not observed within
+half a second, it reports `worker_started` (still starting, admission unconfirmed).
+These are observations at submission time; use `hook-status` for updated evidence,
+and do not infer that an old `started` snapshot proves a worker is still alive.
+Retrieval waits for its own result, never for memorization.
 Background evolve processes mark their environment so they do not start another
-memorization worker. Each user submission can start a worker; no cooldown is
-implemented in this version. Conversation content appended later is processed on
-a subsequent submission.
+memorization worker. Every submission can launch a lightweight worker. The worker
+tries the whole-workspace lock once: if another run owns it, it records `busy` and
+exits successfully without waiting. After acquiring the lock, it checks a persistent
+30-minute cooldown measured from the last admitted run's start, records the new
+start before prepare, and holds the lock through prepare → evolve → commit.
+A run longer than 30 minutes still excludes every other worker. `cooldown` skips
+also exit successfully. Both skips leave cursors and pending work untouched.
+
+Every admitted run consumes cooldown, including failure, no new input, and a
+successful no-op. A crash releases the OS lock and keeps its recorded start time;
+retry requires a later submission after cooldown. At exactly 30 minutes a new
+submission can run. For example: a 10:00 start skips a 10:10 submission; if the
+next submission is at 11:00, processing starts at 11:00. No submission at 10:30
+means no automatic run. Content added while busy or cooling down waits for a
+later admitted submission, possibly indefinitely after the last message; there
+is no 30-minute ingestion guarantee or deferred rerun.
+
+Lock and cooldown are shared by background, diagnostic and direct `hook-run`
+execution. The stable workspace defaults to `~/.memu/hosts/codex`; the cooldown
+file is `.memorize_last_started.codex.json` there, alongside `.diagnostic.lock`.
+The presence of the lock file alone does not mean a process owns the lock.
+`install-prompt-hook --base-dir <path>` registers that same path in the callback;
+use it with `hook-run --base-dir <path>` and `hook-status --base-dir <path>` too.
+A backward wall-clock jump or invalid cooldown content emits a warning and allows
+one new run that rewrites the timestamp. Other state I/O and lock errors fail
+with diagnostics. Retrieval continues on every submission independently of this
+lock and cooldown.
 
 ### 3.0 Register and trust the hooks
 
@@ -417,8 +458,8 @@ execution can be checked once with:
 memu-codex hook-status --since <ISO-8601-time>
 ```
 
-Successful retrieval context return or an empty result is valid; background startup
-appears as `started`. Missing evidence before the first subsequent message is
+Successful retrieval context return or an empty result is valid; memorization
+appears as `started`, `succeeded`, `busy` or `cooldown`. Missing evidence before the first subsequent message is
 normal. Keep retrieved memory out of installation diagnostics; if the user asks
 what was retrieved, answer from the actual context available for that message
 without inventing results. All legacy cleanup belongs to M3 and is completed

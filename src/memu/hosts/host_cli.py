@@ -702,6 +702,22 @@ def _report_guide_opened(spec: HostSpec, event: str) -> None:
 
 
 async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
+    if spec.host == "codex":
+        from memu.hosts.codex.notify_console import memorize_run
+
+        with memorize_run(_layout(spec, args)) as admitted:
+            if not admitted:
+                return 0
+            code = 1
+            try:
+                code = await _run_hook_pipeline(spec, args)
+                return code
+            finally:
+                print(f"=== MEMORIZE status={'failed' if code else 'succeeded'} ===", flush=True)
+    return await _run_hook_pipeline(spec, args)
+
+
+async def _run_hook_pipeline(spec: HostSpec, args: argparse.Namespace) -> int:
     hook = spec.hook
     if hook is None:
         raise RuntimeError(f"{spec.display} has no notify hook")  # noqa: TRY003

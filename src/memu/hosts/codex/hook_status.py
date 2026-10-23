@@ -6,6 +6,7 @@ import argparse
 import json
 import math
 import re
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -36,11 +37,33 @@ def _latest(directory: Path, since: float) -> Path | None:
     return max(candidates, default=(0.0, None), key=lambda entry: entry[0])[1]
 
 
+def memorize_status(path: Path) -> dict[str, Any]:
+    """Read one worker's admission/result snapshot without waiting for its pipeline."""
+    entry: dict[str, Any] = {"status": "worker_started", "log": str(path)}
+    with path.open(encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            if match := re.fullmatch(
+                r"(?:\[[^\]\r\n]+\] )?=== MEMORIZE status=(started|busy|cooldown|succeeded|failed) ===\s*",
+                line,
+            ):
+                entry["status"] = match[1]
+            elif match := re.fullmatch(r"=== COOLDOWN until=(\d+(?:\.\d+)?) ===\s*", line):
+                until = float(match[1])
+                if math.isfinite(until):
+                    entry["cooldown_until"] = until
+    if entry["status"] == "cooldown" and "cooldown_until" in entry:
+        entry["cooldown_remaining_minutes"] = math.ceil(max(0, entry["cooldown_until"] - time.time()) / 60)
+    return entry
+
+
 def status(base: Path, since: float) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for kind in ("retrieve", "memorize"):
         path = _latest(base / "log" / "hooks" / kind, since)
         entry: dict[str, Any] = {"status": "not_observed", "log": str(path) if path else None}
+        if path is not None and kind == "memorize":
+            result[kind] = memorize_status(path)
+            continue
         if path is not None:
             with path.open(encoding="utf-8", errors="replace") as stream:
                 for line in stream:
@@ -52,9 +75,6 @@ def status(base: Path, since: float) -> dict[str, Any]:
                         if isinstance(trace, dict) and trace.get("hook") == "UserPromptSubmit":
                             entry["status"] = trace.get("status", "started")
                             entry["exit_code"] = trace.get("retrieve_exit_code")
-                    elif re.fullmatch(r"(?:\[[^\]\r\n]+\] )?=== START .+ pid=\d+ ===\s*", line):
-                        entry["status"] = "started"
-                        break  # Startup is the installation gate; do not scan worker output.
         result[kind] = entry
     return result
 
@@ -63,11 +83,12 @@ async def _cmd(args: argparse.Namespace) -> int:
     result = status(Path(args.base_dir).expanduser(), args.since)
     print(json.dumps(result, ensure_ascii=False))
     retrieval = result["retrieve"]
-    if retrieval["status"] == "failed":
+    if retrieval["status"] == "failed" or result["memorize"]["status"] == "failed":
         return 1
     return (
         0
-        if retrieval["status"] in {"context_returned", "empty_result"} and result["memorize"]["status"] == "started"
+        if retrieval["status"] in {"context_returned", "empty_result"}
+        and result["memorize"]["status"] in {"started", "succeeded", "busy", "cooldown"}
         else 2
     )
 

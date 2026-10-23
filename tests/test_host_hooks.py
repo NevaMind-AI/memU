@@ -340,24 +340,24 @@ def test_headless_codex_disables_recursive_notify():
     assert HOOK.stream_output is notify_console.stream_agent
 
 
-def test_console_workspace_lock_serializes_and_releases(tmp_path):
+def test_console_workspace_lock_skips_and_releases(tmp_path):
     import concurrent.futures
-    import threading
 
     from memu.hosts.codex.notify_console import _workspace_lock
 
-    entered = threading.Event()
-    attempted = threading.Event()
-
-    def second_worker():
-        attempted.set()
-        with _workspace_lock(tmp_path):
-            entered.set()
-
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        with _workspace_lock(tmp_path):
-            future = pool.submit(second_worker)
-            assert attempted.wait(2)
-            assert not entered.wait(0.2)
-        future.result(timeout=3)
-        assert entered.is_set()
+        with _workspace_lock(tmp_path) as acquired:
+            assert acquired
+
+            def second_worker():
+                with _workspace_lock(tmp_path) as second:
+                    return second
+
+            assert pool.submit(second_worker).result(timeout=2) is False
+        with _workspace_lock(tmp_path) as acquired:
+            assert acquired
+    with pytest.raises(RuntimeError), _workspace_lock(tmp_path) as acquired:
+        assert acquired
+        raise RuntimeError("pipeline failed")  # noqa: TRY003
+    with _workspace_lock(tmp_path) as acquired:
+        assert acquired

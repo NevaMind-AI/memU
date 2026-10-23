@@ -8,8 +8,9 @@ import pytest
 from memu.hosts.codex import prompt_hook_install as installer
 
 
+@pytest.mark.parametrize("custom_base", [True, False])
 @pytest.mark.parametrize("previous", ['["memu-codex", "hook"]', '["other-notifier", "--flag"]'])
-def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, monkeypatch, previous):
+def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, monkeypatch, previous, custom_base):
     hooks_file = tmp_path / "hooks.json"
     hooks_file.write_text(
         json.dumps({
@@ -66,11 +67,16 @@ def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, mon
 
     monkeypatch.setattr(installer, "AppServer", FakeServer)
     monkeypatch.setattr(installer.sys, "argv", [str(tmp_path / "memu-codex.exe")])
-    base = tmp_path / "custom base"
+    base = (
+        tmp_path / "custom base"
+        if custom_base
+        else installer.Layout.default("codex", "~/.memu/hosts/codex").base.resolve()
+    )
+    base_arg = str(base) if custom_base else None
     config_file = tmp_path / "config.toml"
     config_file.write_text(f'notify = {previous}\nmodel = "kept"\n')
-    installer.install("codex", hooks_file, tmp_path, str(base))
-    installer.install("codex", hooks_file, tmp_path, str(base))
+    installer.install("codex", hooks_file, tmp_path, base_arg)
+    installer.install("codex", hooks_file, tmp_path, base_arg)
     expected = f'notify = {previous}\nmodel = "kept"\n'
     assert config_file.read_text() == expected
 
@@ -87,6 +93,7 @@ def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, mon
         if installer.sys.platform == "win32"
         else installer.shlex.join([str(tmp_path / "memu-codex.exe"), "prompt-hook"])
     )
+    expected_command += " --base-dir " + installer._quote(str(base))
     assert entries[0]["command"] == expected_command
     assert entries[1]["command"] == "custom-command"
     assert (tmp_path / "hooks.json.memu-backup").exists()
@@ -99,6 +106,8 @@ def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, mon
     "command",
     [
         "memu-codex prompt-hook",
+        "memu-codex prompt-hook --base-dir '/tmp/host state'",
+        "& 'C:/User''s Tools/memu-codex.exe' prompt-hook --base-dir 'C:/host''s state'",
         '"C:/Program Files/memu/memu-codex.exe" prompt-hook',
         "& 'C:/User''s Tools/memu-codex.exe' prompt-hook",
         r"C:\tools\memu-codex.exe prompt-hook",
@@ -116,6 +125,7 @@ def test_owns_only_direct_memu_commands(command):
         "memu-codex retrieve prompt-hook",
         "wrapper memu-codex prompt-hook",
         "memu-codex prompt-hook && other-command",
+        "memu-codex prompt-hook --base-dir /tmp/host && other-command",
     ],
 )
 def test_preserves_unrelated_commands(command):
