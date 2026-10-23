@@ -383,7 +383,7 @@ finds an error, report it then; do not wait for jobs or worker completion.
 
 This part owns the *inject* seam: Codex runs `memu-codex prompt-hook` when the
 user submits a prompt. The command reads the hook's stdin JSON, passes the
-original prompt to shared retrieval, and returns
+a query to shared retrieval, and returns
 `hookSpecificOutput.additionalContext` before the model answers.
 
 The independent `memorize-hook` handler launches the existing background worker and

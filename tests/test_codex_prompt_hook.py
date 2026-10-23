@@ -25,11 +25,11 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
         if outcome == "timeout":
             raise subprocess.TimeoutExpired(argv, 45)
         if outcome == "failure":
-            return subprocess.CompletedProcess(argv, 1, "", "permission denied")
+            return subprocess.CompletedProcess(argv, 1, b"", b"permission denied")
         if outcome == "invalid":
-            return subprocess.CompletedProcess(argv, 0, "[]", "")
+            return subprocess.CompletedProcess(argv, 0, b"[]", b"")
         memories = {"segments": [{"content": "记忆"}] if outcome == "success" else [], "files": [], "resources": []}
-        return subprocess.CompletedProcess(argv, 0, json.dumps(memories), "")
+        return subprocess.CompletedProcess(argv, 0, json.dumps(memories).encode("utf-8"), b"")
 
     monkeypatch.setattr(prompt_hook.subprocess, "run", retrieve)
     assert main(["prompt-hook"]) == 0
@@ -43,7 +43,10 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
     assert final["session_id"] == "test-session"
     assert final["elapsed_ms"] >= final["retrieve_elapsed_ms"] >= 0
     assert "second line" not in logs[0].read_text(encoding="utf-8")
-    assert calls[0][0] == [sys.executable, "-m", "memu.hosts.codex.cli", "retrieve", prompt]
+    assert calls[0][0] == [sys.executable, "-m", "memu.hosts.codex.cli", "retrieve", "--query-stdin"]
+    assert calls[0][1]["input"] == prompt.encode("utf-8")
+    assert final["prompt_chars"] == final["query_chars"] == len(prompt)
+    assert final["query_truncated"] is False
     assert not calls[0][1].get("shell", False)
     if outcome == "success":
         specific = json.loads(output.out)["hookSpecificOutput"]
