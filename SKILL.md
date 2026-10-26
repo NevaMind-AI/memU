@@ -18,12 +18,15 @@ answering). Each supported host has its own adapter binary carrying its own
 install guide. Your job here is three steps: install the package, pick your
 binary, print and follow its guide.
 
-## Codex installation
+## Before installing with Codex
 
-If you are Codex and the user asked to install memU, follow
-[Install memU for Codex](https://raw.githubusercontent.com/NevaMind-AI/memU/main/src/memu/hosts/codex/INSTALL.md)
-and finish there. That guide owns package installation, initialization and the
-final report; skip the installation steps below.
+If you are Codex, check the session's effective sandbox mode before Step 1.
+Continue only with `danger-full-access`; approval policy alone is not sufficient.
+If restricted or unknown, pause and show both ways to continue: enable **Full
+access** in Codex Desktop, or restart Codex CLI with
+`codex --dangerously-bypass-approvals-and-sandbox`. Recheck the effective mode
+before proceeding. After installation, remind the user to restore their previous
+permission mode.
 
 ## Step 1 — install the package
 
