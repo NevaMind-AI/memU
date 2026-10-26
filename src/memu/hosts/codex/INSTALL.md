@@ -91,8 +91,8 @@ New installation has three parts:
 1. **Install memU** — a Python package and the memory backend it uses.
 2. **Verify the standalone CLI** — turn recent
    Codex sessions into durable memory (the *record* seam).
-3. **Register and trust `UserPromptSubmit`** — retrieve memory before each
-   user turn (the *inject* seam).
+3. **Register and trust `UserPromptSubmit`** — retrieve memory asynchronously
+   on each user submission (the *inject* seam).
 
 Parts 2 and 3 must share one configured mode. In local mode they must also share
 one store and embedding space, or retrieval silently returns nothing. Part 1 is
@@ -381,10 +381,15 @@ finds an error, report it then; do not wait for jobs or worker completion.
 
 ## Part 3 — Register and trust both UserPromptSubmit hooks
 
-This part owns the *inject* seam: Codex runs `memu-codex prompt-hook` when the
-user submits a prompt. The command reads the hook's stdin JSON, passes the
-a query to shared retrieval, and returns
-`hookSpecificOutput.additionalContext` before the model answers.
+This part owns the *inject* seam: Codex runs `memu-codex prompt-hook` with
+`async: true` when the user submits a prompt. The command reads the hook's stdin
+JSON, passes a query to shared retrieval, and returns
+`hookSpecificOutput.additionalContext`. Codex starts its first model request
+without waiting for retrieval and consumes completed hook context at a later
+model-request boundary. Results may cause a follow-up response in the same turn;
+if they arrive after the turn ends, they may be consumed on the next turn instead.
+They cannot change a model request already in flight. Retrieval failures or
+timeouts do not block the user's turn.
 
 The independent `memorize-hook` handler launches the existing background worker and
 returns after at most a half-second admission check, without waiting for processing.
@@ -396,7 +401,8 @@ Cooldown includes remaining minutes rounded up. If admission is not observed wit
 half a second, it reports `worker_started` (still starting, admission unconfirmed).
 These are observations at submission time; use `hook-status` for updated evidence,
 and do not infer that an old `started` snapshot proves a worker is still alive.
-Retrieval waits for its own result, never for memorization.
+The retrieval hook waits for its own result independently of the user's turn
+and memorization.
 Background evolve processes mark their environment so they do not start another
 memorization worker. Every submission can launch a lightweight worker. The worker
 tries the whole-workspace lock once: if another run owns it, it records `busy` and
@@ -443,10 +449,12 @@ pass the actual paths:
 memu-codex install-prompt-hook --codex 'C:/path/to/codex.exe' --hooks-file 'C:/Users/<user>/.codex/hooks.json' --cwd 'C:/path/to/install'
 ```
 
-The command reports success only after Codex confirms the registered hooks
-are trusted. Use this command for registration and trust, and `hook-status --since`
-for runtime checks. If it fails, follow **Execution permissions** and rerun after the
-relevant access issue is fixed. Do not edit trust fingerprints manually.
+The command reports success only after Codex confirms asynchronous retrieval
+(`async: true`) and that both registered hooks are trusted. If Codex does not
+confirm async support, update Codex and retry. Use this command for registration
+and trust, and `hook-status --since` for runtime checks. If it fails, follow
+**Execution permissions** and rerun after the relevant access issue is fixed.
+Do not edit trust fingerprints manually.
 
 ### ✅ Verify Part 3
 
@@ -458,8 +466,11 @@ execution can be checked once with:
 memu-codex hook-status --since <ISO-8601-time>
 ```
 
-Successful retrieval context return or an empty result is valid; memorization
-appears as `started`, `succeeded`, `busy` or `cooldown`. Missing evidence before the first subsequent message is
+Successful retrieval context return or an empty result is valid. With asynchronous
+retrieval, evidence may still be pending after the reply; a later `hook-status`
+check can observe completion. `context_returned` means the hook emitted context,
+not that the model has consumed it. Memorization appears as `started`, `succeeded`,
+`busy` or `cooldown`. Missing evidence before the first subsequent message is
 normal. Keep retrieved memory out of installation diagnostics; if the user asks
 what was retrieved, answer from the actual context available for that message
 without inventing results. All legacy cleanup belongs to M3 and is completed

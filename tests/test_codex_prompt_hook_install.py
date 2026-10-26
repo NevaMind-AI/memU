@@ -45,6 +45,7 @@ def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, mon
                         "hooks": [
                             {
                                 "command": hook["command"],
+                                "async": hook.get("async", False),
                                 "sourcePath": str(hooks_file),
                                 "key": "hook:key",
                                 "currentHash": "sha256:current",
@@ -95,11 +96,46 @@ def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, mon
     )
     expected_command += " --base-dir " + installer._quote(str(base))
     assert entries[0]["command"] == expected_command
-    assert entries[1]["command"] == "custom-command"
+    assert entries[0]["async"] is True
+    assert "async" not in all_hooks[-1]
+    assert entries[1] == {"type": "command", "command": "custom-command"}
     assert (tmp_path / "hooks.json.memu-backup").exists()
     trust = next(params for method, params in calls if method == "config/value/write")
     assert trust["keyPath"] == 'hooks.state."hook:key".trusted_hash'
     assert trust["value"] == "sha256:current"
+
+
+@pytest.mark.parametrize("reported_async", [False, None])
+def test_install_requires_codex_to_confirm_async_retrieval(tmp_path, monkeypatch, reported_async):
+    hooks_file = tmp_path / "hooks.json"
+    calls = []
+
+    class UnsupportedServer:
+        def __init__(self, *args):
+            pass
+
+        def request(self, method, params=None):
+            calls.append(method)
+            if method != "hooks/list" or not hooks_file.exists():
+                return {}
+            config = json.loads(hooks_file.read_text(encoding="utf-8"))
+            hook = config["hooks"]["UserPromptSubmit"][0]["hooks"][0]
+            entry = {"command": hook["command"], "sourcePath": str(hooks_file)}
+            if reported_async is not None:
+                entry["async"] = reported_async
+            return {"data": [{"hooks": [entry]}]}
+
+        def notify(self, method):
+            pass
+
+        def close(self):
+            calls.append("close")
+
+    monkeypatch.setattr(installer, "AppServer", UnsupportedServer)
+    with pytest.raises(RuntimeError, match="Codex did not confirm asynchronous retrieval; update Codex"):
+        installer.install("codex", hooks_file, tmp_path)
+    assert "config/value/write" not in calls
+    assert calls[-1] == "close"
 
 
 @pytest.mark.parametrize(
