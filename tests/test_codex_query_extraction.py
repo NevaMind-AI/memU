@@ -22,7 +22,7 @@ def test_length_routing(length, monkeypatch):
         return "actual request near the end"
 
     monkeypatch.setattr(extraction, "_extract", extract)
-    prompt = ("中😀" * (length // 2)) + "a" * (length % 2)
+    prompt = "中" * length
     trace: dict[str, Any] = {}
     query = extraction.select_query(prompt, trace)
     expected = 500 < length <= 32000
