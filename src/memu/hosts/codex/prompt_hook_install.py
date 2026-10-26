@@ -154,6 +154,8 @@ def _definition(groups: list[dict[str, Any]], command: str, subcommand: str = "p
         "additionalContextLimit": 0,
         "statusMessage": "Retrieving memU memory" if subcommand == "prompt-hook" else "Starting memU memory processing",
     }
+    if subcommand == "prompt-hook":
+        definition["async"] = True
     if matches:
         matches[0].update(definition)
         for duplicate in matches[1:]:
@@ -236,9 +238,14 @@ def install(codex: str, hooks_file: Path, cwd: Path, base_dir: str | None = None
         data = listed.get("data", [])
         if any(item.get("errors") or item.get("warnings") for item in data):
             raise RuntimeError("Codex reported hook loading warnings or errors")  # noqa: TRY003
+        retrieval = _entries(listed, command, str(hooks_file))
+        if len(retrieval) == 1 and retrieval[0].get("async") is not True:
+            raise RuntimeError(  # noqa: TRY003
+                "Codex did not confirm asynchronous retrieval; update Codex and retry install-prompt-hook"
+            )
         for registered_command in (command, memorize):
             _trust(server, listed, registered_command, hooks_file, cwd)
-        print("Registered retrieval and memorization UserPromptSubmit hooks; Codex reports both trusted.")
+        print("Registered asynchronous retrieval and background memorization hooks; Codex reports both trusted.")
         print(f"Backup: {backup}")
     finally:
         server.close()
