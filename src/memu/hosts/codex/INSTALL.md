@@ -139,11 +139,8 @@ and one embedding space — or retrieval keeps succeeding and finds nothing.
 given is left alone, including comments and another host's settings), sets
 the file's permissions, and refuses the edits that break retrieval silently.
 
-**Came from memU's `SKILL.md`? You already ran `init`** — it created the file
-and, if the user handed over a memU Cloud key, already selected cloud memory.
-Read the state below rather than assuming which.
-
-If you came straight to this guide instead, run it now:
+If `init` has already completed in this run, read the state below rather than
+assuming which mode it selected. Otherwise, initialize now:
 
 ```
 memu-codex init --cloud-api-key <the user's memU key>

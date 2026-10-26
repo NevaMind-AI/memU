@@ -18,6 +18,13 @@ answering). Each supported host has its own adapter binary carrying its own
 install guide. Your job here is three steps: install the package, pick your
 binary, print and follow its guide.
 
+## Codex installation
+
+If you are Codex and the user asked to install memU, follow
+[Install memU for Codex](https://raw.githubusercontent.com/NevaMind-AI/memU/main/src/memu/hosts/codex/INSTALL.md)
+and finish there. That guide owns package installation, initialization and the
+final report; skip the installation steps below.
+
 ## Step 1 — install the package
 
 ```
