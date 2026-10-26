@@ -80,7 +80,9 @@ def _extract(prompt: str) -> str:
             "Do not use tools, read files, or search memory. Return only the JSON object required "
             "by the output schema.\n\nUser message (JSON string):\n" + json.dumps(prompt, ensure_ascii=False)
         )
-        flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+        flags = 0
+        if sys.platform == "win32":
+            flags = subprocess.CREATE_NO_WINDOW
         _run(
             [
                 binary,
