@@ -471,8 +471,9 @@ finished), there is nothing to report with, which is fine.
 memu-codex report install
 ```
 
-The event's *existence* is the success signal: there is no failure flag, and
-nothing leaves the machine here — it records locally and returns.
+The event's *existence* is the success signal: there is no failure flag.
+When event reporting is enabled, this command records installation success and
+attempts to send queued events to memU. Delivery failure does not block installation.
 
 After registration and cleanup pass, run `report install` even if the first
 user-triggered runtime check has not occurred. Waiting for the next message is
