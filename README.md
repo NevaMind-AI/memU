@@ -175,7 +175,7 @@ By default, uninstalling removes the host integration and tooling while keeping 
 memU runs as a sidecar to a desktop agent, one binary per host. Each binds two seams:
 
 - **record** — a scheduled bridging task slices new session logs into self-contained job files; the agent itself distills them into memory/skill Markdown; `commit` submits whatever the agent left on disk back through `commit_results`.
-- **inject** — a host hook or standing instruction triggers `<binary> retrieve` (→ `progressive_retrieve`) to bring memory into the conversation.
+- **inject** — a standing instruction in the host's instruction file tells the agent to run `<binary> retrieve` (→ `progressive_retrieve`) before answering.
 
 | Host | Binary | Session log it mines | Instruction file it patches |
 | --- | --- | --- | --- |
@@ -210,12 +210,7 @@ See the [developer guide](docs/developer.md) for the input format and integratio
 
 With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
 
-Once installed, your agent retrieves relevant memory automatically. Codex uses an
-asynchronous `UserPromptSubmit` hook, so retrieval does not block the first model
-request. Results can inform a follow-up response in the same turn or a subsequent
-turn; they are not guaranteed to be available for the first response. See the
-[Codex install guide](src/memu/hosts/codex/INSTALL.md#part-3--register-and-trust-both-userpromptsubmit-hooks).
-To retrieve manually, run the adapter for your host:
+Once installed, your agent retrieves relevant memory automatically before answering. To retrieve manually, run the adapter for your host:
 
 ```bash
 memu-codex retrieve "What should I remember about this project?"

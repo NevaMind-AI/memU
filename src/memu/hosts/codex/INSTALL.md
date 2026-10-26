@@ -38,7 +38,7 @@ without narrating commands, process details or reasoning.
 
 Installation is complete once the backend check, Submit hook registration,
 prompt-hook registration/trust and M3 cleanup pass. Print
-`✅ memU installation complete` and Part 2's activation message. The first
+`✅ memU installation complete`. The first
 user-triggered retrieval and memorize run is a post-install check, not a
 completion gate. Report actual configuration or cleanup blockers when present.
 
@@ -91,8 +91,7 @@ New installation has three parts:
 1. **Install memU** — a Python package and the memory backend it uses.
 2. **Verify the standalone CLI** — turn recent
    Codex sessions into durable memory (the *record* seam).
-3. **Register and trust `UserPromptSubmit`** — retrieve memory asynchronously
-   on each user submission (the *inject* seam).
+3. **Register and trust the hooks** — enable retrieval and background memorization.
 
 Parts 2 and 3 must share one configured mode. In local mode they must also share
 one store and embedding space, or retrieval silently returns nothing. Part 1 is
@@ -333,110 +332,16 @@ After the CLI probe and Part 1's backend gate pass, continue to Part 3.
 The installation command registers retrieval and background memorization together.
 It preserves unrelated hooks and leaves Codex notify configuration unchanged.
 
-### Runtime check — one CLI call
-
-Before the short verification turn, record its start time (PowerShell:
-`$since = [DateTimeOffset]::Now.ToUnixTimeSeconds()`). After the turn, run:
-
-```text
-memu-codex hook-status --since <start-time>
-```
-
-The command returns JSON with `retrieve.status`, `retrieve.exit_code`,
-`memorize.status` and each log path. Exit 0 means retrieval succeeded (context or
-empty result) and memorization either started, succeeded, or skipped normally
-(`busy` / `cooldown`); exit 1 means retrieval or memorization failed; exit 2 means
-evidence is pending. `worker_started` only means the worker launched; `started`
-means it acquired the lock, passed cooldown and entered processing. `succeeded`
-and `failed` report the pipeline result. A worker launch is not proof of processing.
-Use this output directly instead of writing log parsers,
-reading source code or enumerating processes. It does not wait or retrieve memory.
-`cooldown` also includes `cooldown_until` (Unix seconds) and
-`cooldown_remaining_minutes`, recalculated and rounded up when queried.
-A zero remaining value means another submission may try again; it does not
-schedule a run.
-
-The time filter excludes logs started before the check; avoid concurrent test
-turns, as the two newest logs are not correlated by session ID.
-
 ### ✅ Verify Part 2
 
-Verify that the registered callback and agent paths exist. Runtime startup is
-checked after the next user message; it does not delay cleanup or installation
-completion. When installation and M3 cleanup are complete, include the following
-meaning once in the final report, using the same language as the rest of that
-report. This is a content example, not text to append verbatim:
-
-> memU is installed. Send one more message here to trigger your first memory
-> retrieval and background memorize task. You can ask: "What did memU retrieve
-> for this message?" Memorization processes new conversation content in the
-> background; follow its logs in `~/.memu/hosts/codex/log/hooks/memorize/`.
-
-Resolve the directory to the user's actual local path. Use the existing
-conversation unless Codex explicitly requires a new session. Do not claim a
-worker is already running without startup evidence. If a later runtime check
-finds an error, report it then; do not wait for jobs or worker completion.
+Require `codex --version` to succeed and continue to Part 3.
 
 ---
 
-## Part 3 — Register and trust both UserPromptSubmit hooks
+## Part 3 — Register and trust the hooks
 
-This part owns the *inject* seam: Codex runs `memu-codex prompt-hook` with
-`async: true` when the user submits a prompt. The command reads the hook's stdin
-JSON, passes a query to shared retrieval, and returns
-`hookSpecificOutput.additionalContext`. Codex starts its first model request
-without waiting for retrieval and consumes completed hook context at a later
-model-request boundary. Results may cause a follow-up response in the same turn;
-if they arrive after the turn ends, they may be consumed on the next turn instead.
-They cannot change a model request already in flight. Retrieval failures or
-timeouts do not block the user's turn.
-
-The independent `memorize-hook` handler launches the existing background worker and
-returns after at most a half-second admission check, without waiting for processing.
-It supplies an `additionalContext` status snapshot for the model to use only when
-the user asks about memorization; ordinary replies need not mention it. The snapshot
-includes its observation time, this worker's log path, and the outcome: `started`
-(processing began; completion unconfirmed), `busy`, `cooldown`, `succeeded` or `failed`.
-Cooldown includes remaining minutes rounded up. If admission is not observed within
-half a second, it reports `worker_started` (still starting, admission unconfirmed).
-These are observations at submission time; use `hook-status` for updated evidence,
-and do not infer that an old `started` snapshot proves a worker is still alive.
-The retrieval hook waits for its own result independently of the user's turn
-and memorization.
-Background evolve processes mark their environment so they do not start another
-memorization worker. Every submission can launch a lightweight worker. The worker
-tries the whole-workspace lock once: if another run owns it, it records `busy` and
-exits successfully without waiting. After acquiring the lock, it checks a persistent
-30-minute cooldown measured from the last admitted run's start, records the new
-start before prepare, and holds the lock through prepare → evolve → commit.
-A run longer than 30 minutes still excludes every other worker. `cooldown` skips
-also exit successfully. Both skips leave cursors and pending work untouched.
-
-Every admitted run consumes cooldown, including failure, no new input, and a
-successful no-op. A crash releases the OS lock and keeps its recorded start time;
-retry requires a later submission after cooldown. At exactly 30 minutes a new
-submission can run. For example: a 10:00 start skips a 10:10 submission; if the
-next submission is at 11:00, processing starts at 11:00. No submission at 10:30
-means no automatic run. Content added while busy or cooling down waits for a
-later admitted submission, possibly indefinitely after the last message; there
-is no 30-minute ingestion guarantee or deferred rerun.
-
-Lock and cooldown are shared by background, diagnostic and direct `hook-run`
-execution. The stable workspace defaults to `~/.memu/hosts/codex`; the cooldown
-file is `.memorize_last_started.codex.json` there, alongside `.diagnostic.lock`.
-The presence of the lock file alone does not mean a process owns the lock.
-`install-prompt-hook --base-dir <path>` registers that same path in the callback;
-use it with `hook-run --base-dir <path>` and `hook-status --base-dir <path>` too.
-A backward wall-clock jump or invalid cooldown content emits a warning and allows
-one new run that rewrites the timestamp. Other state I/O and lock errors fail
-with diagnostics. Retrieval continues on every submission independently of this
-lock and cooldown.
-
-### 3.0 Register and trust the hooks
-
-Run the CLI command; it merges both memU `UserPromptSubmit` handlers into
-`~/.codex/hooks.json`, backs up the original once, asks Codex app-server to load
-it, trusts Codex's returned fingerprint, and verifies `trustStatus`:
+Run the installation command. It registers both memU handlers, preserves
+unrelated hooks, and verifies their configuration and trust:
 
 ```powershell
 memu-codex install-prompt-hook
@@ -449,34 +354,23 @@ pass the actual paths:
 memu-codex install-prompt-hook --codex 'C:/path/to/codex.exe' --hooks-file 'C:/Users/<user>/.codex/hooks.json' --cwd 'C:/path/to/install'
 ```
 
-The command reports success only after Codex confirms asynchronous retrieval
-(`async: true`) and that both registered hooks are trusted. If Codex does not
-confirm async support, update Codex and retry. Use this command for registration
-and trust, and `hook-status --since` for runtime checks. If it fails, follow
-**Execution permissions** and rerun after the relevant access issue is fixed.
-Do not edit trust fingerprints manually.
+If registration fails, follow the command's diagnostic, resolve the blocker, and
+retry. Let the CLI manage hook configuration and trust.
 
 ### ✅ Verify Part 3
 
-Require `install-prompt-hook` to confirm that both hooks are registered and trusted.
-That completes this installation gate. After the next user message, runtime
-execution can be checked once with:
+Require the installation command to succeed and verify that the registered
+callback and agent paths exist. Complete any applicable M3 cleanup before
+reporting installation success. Runtime processing does not block installation.
 
-```powershell
-memu-codex hook-status --since <ISO-8601-time>
+For a runtime check after a user message, use:
+
+```text
+memu-codex hook-status --since <check-start-time>
 ```
 
-Successful retrieval context return or an empty result is valid. With asynchronous
-retrieval, evidence may still be pending after the reply; a later `hook-status`
-check can observe completion. `context_returned` means the hook emitted context,
-not that the model has consumed it. Memorization appears as `started`, `succeeded`,
-`busy` or `cooldown`. Missing evidence before the first subsequent message is
-normal. Keep retrieved memory out of installation diagnostics; if the user asks
-what was retrieved, answer from the actual context available for that message
-without inventing results. All legacy cleanup belongs to M3 and is completed
-during installation.
-
----
+Use the CLI's status and diagnostics directly. Pending evidence can be checked
+again later; do not wait for background completion to finish installation.
 
 ---
 
@@ -584,8 +478,8 @@ The event's *existence* is the success signal: there is no failure flag, and
 nothing leaves the machine here — it records locally and returns.
 
 After registration and cleanup pass, run `report install` even if the first
-user-triggered runtime check has not occurred. Give Part 2's activation message;
-waiting for the next message is normal after successful installation.
+user-triggered runtime check has not occurred. Waiting for the next message is
+normal after successful installation.
 
 **An installation step failed or a required prerequisite is unavailable** —
 tell the user and report the actual failure:
@@ -613,19 +507,13 @@ nothing secret.
 
 ## Done
 
-Give one concise final report in a consistent language. Combine installation
-success, the next-message invitation and background log location into that
-report; do not append a second activation paragraph or repeat the same facts
-in English and Chinese.
+Give one concise final report in the user's language.
 
 Report back to the user:
 
 - remind the user they can switch back to their previous permission mode after
   installation;
-- notify startup status and the exact local log path, or Part 2's activation
-  message and resolved log directory when awaiting the next user turn;
-  memorization continues in the background and its completion is not an
-  installation gate;
+- installation outcome and any unresolved blockers;
 - the selected mode and its cloud endpoint or local store/provider;
 - the verified Submit memorization entry and the outcome of old-task migration;
 - the retrieval entry retained or installed for this machine, and whether a fresh
