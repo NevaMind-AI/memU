@@ -13,8 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from memu.hosts.codex.notify_console import _new_log_path
-
-QUERY_MAX_CHARS = 2000
+from memu.hosts.codex.query_extraction import select_query
 
 
 async def _cmd_prompt_hook(args: argparse.Namespace) -> int:
@@ -28,7 +27,7 @@ async def _cmd_prompt_hook(args: argparse.Namespace) -> int:
             try:
                 _retrieve(trace)
             except subprocess.TimeoutExpired:
-                trace.update(status="failed", error="retrieve timed out after 45 seconds")
+                trace.update(status="failed", error="retrieve subprocess timed out")
                 print(trace["error"], file=sys.stderr)
             except (OSError, ValueError, TypeError, subprocess.SubprocessError) as exc:
                 trace.update(status="failed", error=str(exc))
@@ -53,9 +52,13 @@ def _retrieve(trace: dict[str, Any]) -> None:
     if not isinstance(prompt, str):
         raise TypeError("prompt must be a string")  # noqa: TRY003
     trace["prompt_sha256"] = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-    # ponytail: prefix cap bounds embedding input; topic extraction can recover relevant text beyond it.
-    query = prompt[:QUERY_MAX_CHARS]
-    trace.update(prompt_chars=len(prompt), query_chars=len(query), query_truncated=len(prompt) > len(query))
+    started = time.monotonic()
+    query = select_query(prompt, trace)
+    trace.update(
+        prompt_chars=len(prompt),
+        query_chars=len(query),
+        query_truncated=trace["query_source"] == "prefix",
+    )
     if not prompt.strip():
         trace["status"] = "empty_prompt"
         return
@@ -72,7 +75,7 @@ def _retrieve(trace: dict[str, Any]) -> None:
             [sys.executable, "-m", "memu.hosts.codex.cli", "retrieve", "--query-stdin"],
             input=query.encode("utf-8"),
             capture_output=True,
-            timeout=45,
+            timeout=max(1, 43 - (time.monotonic() - started)),
             check=False,
             creationflags=flags,
         )
