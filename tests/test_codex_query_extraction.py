@@ -59,8 +59,9 @@ def test_failure_falls_back(error, monkeypatch):
     "value",
     [
         {"query": "topic"},
+        {"query": "中" * 200},
         {"query": " "},
-        {"query": "x" * 501},
+        {"query": "中" * 201},
         [],
         {"query": 3},
         "invalid-json",
@@ -86,8 +87,8 @@ def test_extraction_output_and_command(value, monkeypatch):
             )
 
     monkeypatch.setattr(extraction, "_run", run)
-    if value == {"query": "topic"}:
-        assert extraction._extract(prompt) == "topic"
+    if value in ({"query": "topic"}, {"query": "中" * 200}):
+        assert extraction._extract(prompt) == value["query"]
     else:
         with pytest.raises((OSError, ValueError)):
             extraction._extract(prompt)
