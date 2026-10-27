@@ -13,7 +13,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-EXTRACT_THRESHOLD = 500
+EXTRACT_THRESHOLD = 200
 EXTRACT_INPUT_LIMIT = 32000
 EXTRACT_TIMEOUT = 12
 QUERY_MAX_CHARS = 2000
@@ -23,7 +23,7 @@ def select_query(prompt: str, trace: dict[str, Any]) -> str:
     """Use the original short prompt, or extract a query with a bounded fallback."""
     fallback = prompt[:QUERY_MAX_CHARS]
     trace["query_source"] = "original" if len(prompt) <= QUERY_MAX_CHARS else "prefix"
-    if len(prompt) <= EXTRACT_THRESHOLD or not prompt.strip():
+    if sum(not char.isspace() for char in prompt) < EXTRACT_THRESHOLD:
         trace["extraction_status"] = "not_needed"
         return fallback
     if len(prompt) > EXTRACT_INPUT_LIMIT:

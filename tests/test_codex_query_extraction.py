@@ -13,8 +13,9 @@ from memu.hosts.codex import query_extraction as extraction
 from memu.hosts.codex.cli import main
 
 
-@pytest.mark.parametrize("length", [499, 500, 501, 2000, 2001, 32000, 32001])
-def test_length_routing(length, monkeypatch):
+@pytest.mark.parametrize("length", [199, 200, 201, 2000, 2001, 32000, 32001])
+@pytest.mark.parametrize("whitespace", ["", " \t\n\u3000"])
+def test_length_routing(length, whitespace, monkeypatch):
     calls = []
 
     def extract(prompt):
@@ -22,14 +23,14 @@ def test_length_routing(length, monkeypatch):
         return "actual request near the end"
 
     monkeypatch.setattr(extraction, "_extract", extract)
-    prompt = "中" * length
+    prompt = whitespace + "中" * (length // 2) + whitespace + "中" * (length - length // 2) + whitespace
     trace: dict[str, Any] = {}
     query = extraction.select_query(prompt, trace)
-    expected = 500 < length <= 32000
+    expected = length >= 200 and len(prompt) <= 32000
     assert calls == ([prompt] if expected else [])
     assert query == ("actual request near the end" if expected else prompt[:2000])
-    assert trace["query_source"] == ("extracted" if expected else "original" if length <= 2000 else "prefix")
-    if length > 32000:
+    assert trace["query_source"] == ("extracted" if expected else "original" if len(prompt) <= 2000 else "prefix")
+    if len(prompt) > 32000:
         assert trace["extraction_status"] == "input_limit"
 
 
