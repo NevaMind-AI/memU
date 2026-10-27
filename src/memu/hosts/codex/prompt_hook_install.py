@@ -131,7 +131,7 @@ def _owns_command(command: str, subcommand: str = "prompt-hook") -> bool:
     match = re.fullmatch(
         r"""\s*(?:&\s+)?(?:"([^"]+)"|'((?:[^']|'')+)'|([^\s'"&;|]+))\s+"""
         + re.escape(subcommand)
-        + r"""(?:\s+--base-dir\s+(?:"[^"]*"|'(?:[^']|'')*'|[^\s'"&;|]+))?\s*""",
+        + r"""(?:\s+--(?:base-dir|codex-home)\s+(?:"[^"]*"|'(?:[^']|'')*'|[^\s'"&;|]+))*\s*""",
         command,
     )
     if match is None:
@@ -192,9 +192,11 @@ def _trust(server: AppServer, listed: dict[str, Any], command: str, hooks_file: 
 def install(codex: str, hooks_file: Path, cwd: Path, base_dir: str | None = None) -> None:
     codex = str(Path(shutil.which(codex) or codex).resolve())
     base = Layout.default("codex", base_dir or "~/.memu/hosts/codex").base.resolve()
-    command = _command() + " --base-dir " + _quote(str(base))
+    home_arg = " --codex-home " + _quote(str(hooks_file.parent.resolve()))
+    command = _command() + " --base-dir " + _quote(str(base)) + home_arg
     memorize = (
         _command("memorize-hook")
+        + home_arg
         + " --agent "
         + _quote(codex)
         + " --base-dir "

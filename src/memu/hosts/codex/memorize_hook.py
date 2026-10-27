@@ -13,6 +13,7 @@ from typing import Any
 
 from memu.hosts.bridging import Layout
 from memu.hosts.codex import hook_status, notify_console
+from memu.hosts.codex.environment import codex_environment
 
 BACKGROUND_ENV = "MEMU_CODEX_MEMORIZE"
 
@@ -51,11 +52,20 @@ async def _cmd_memorize_hook(args: argparse.Namespace) -> int:
             raise ValueError("expected a UserPromptSubmit object")  # noqa: TRY003, TRY301
         if os.environ.get(BACKGROUND_ENV) != "1":
             layout = Layout.default("codex", args.base_dir or "~/.memu/hosts/codex")
-            path = notify_console.launch_background(
-                ["hook-run", "--base-dir", str(layout.base), "--agent", args.agent, "--session-dir", args.session_dir],
-                layout,
-                "codex",
-            )
+            with codex_environment(args.codex_home):
+                path = notify_console.launch_background(
+                    [
+                        "hook-run",
+                        "--base-dir",
+                        str(layout.base),
+                        "--agent",
+                        args.agent,
+                        "--session-dir",
+                        args.session_dir,
+                    ],
+                    layout,
+                    "codex",
+                )
             output = _context(_startup_snapshot(path))
     except (OSError, ValueError, TypeError) as exc:
         print(f"memU memorize hook failed: {exc}", file=sys.stderr)
@@ -69,4 +79,5 @@ def register(sub: Any) -> None:
     parser.add_argument("--base-dir", default=None)
     parser.add_argument("--agent", required=True)
     parser.add_argument("--session-dir", default="~/.codex/sessions")
+    parser.add_argument("--codex-home", default=None, help="Codex home selected during hook installation")
     parser.set_defaults(handler=_cmd_memorize_hook)

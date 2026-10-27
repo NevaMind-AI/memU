@@ -24,7 +24,9 @@ def test_submit_injects_own_worker_snapshot(tmp_path, monkeypatch, capsys, statu
 
     ticks = iter([0, 0, 0.6])
     monkeypatch.setattr(memorize_hook, "time", SimpleNamespace(monotonic=lambda: next(ticks), sleep=lambda _: None))
-    args = memorize_hook.argparse.Namespace(base_dir=str(tmp_path), agent="unused", session_dir="unused")
+    args = memorize_hook.argparse.Namespace(
+        base_dir=str(tmp_path), agent="unused", session_dir="unused", codex_home=None
+    )
     assert asyncio.run(memorize_hook._cmd_memorize_hook(args)) == 0
     context = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["additionalContext"]
     snapshot = json.loads(context.split("\n", 1)[1])

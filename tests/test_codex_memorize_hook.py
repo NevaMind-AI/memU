@@ -19,7 +19,7 @@ def test_submit_starts_background_without_waiting(tmp_path, monkeypatch, capsys)
         return path
 
     monkeypatch.setattr(memorize_hook.notify_console, "launch_background", launch)
-    args = argparse.Namespace(base_dir=str(tmp_path), agent="codex.exe", session_dir="sessions")
+    args = argparse.Namespace(base_dir=str(tmp_path), agent="codex.exe", session_dir="sessions", codex_home=None)
     assert asyncio.run(memorize_hook._cmd_memorize_hook(args)) == 0
     argv, layout, _ = calls[0]
     assert argv == ["hook-run", "--base-dir", str(tmp_path), "--agent", "codex.exe", "--session-dir", "sessions"]
@@ -34,7 +34,7 @@ def test_submit_skips_own_background_and_releases_failed_launch(tmp_path, monkey
         raise OSError("launch failed")  # noqa: TRY003
 
     monkeypatch.setattr(memorize_hook.notify_console, "launch_background", fail)
-    args = argparse.Namespace(base_dir=str(tmp_path), agent="codex.exe", session_dir="sessions")
+    args = argparse.Namespace(base_dir=str(tmp_path), agent="codex.exe", session_dir="sessions", codex_home=None)
     for own in (True, False):
         monkeypatch.setenv(memorize_hook.BACKGROUND_ENV, "1" if own else "")
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit"})))

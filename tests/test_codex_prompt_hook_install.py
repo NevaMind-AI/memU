@@ -11,6 +11,7 @@ from memu.hosts.codex import prompt_hook_install as installer
 @pytest.mark.parametrize("custom_base", [True, False])
 @pytest.mark.parametrize("previous", ['["memu-codex", "hook"]', '["other-notifier", "--flag"]'])
 def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, monkeypatch, previous, custom_base):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "different inherited home"))
     hooks_file = tmp_path / "hooks.json"
     hooks_file.write_text(
         json.dumps({
@@ -95,6 +96,8 @@ def test_install_merges_hook_trusts_and_preserves_unrelated_config(tmp_path, mon
         else installer.shlex.join([str(tmp_path / "memu-codex.exe"), "prompt-hook"])
     )
     expected_command += " --base-dir " + installer._quote(str(base))
+    expected_command += " --codex-home " + installer._quote(str(hooks_file.parent.resolve()))
+    assert " --codex-home " + installer._quote(str(hooks_file.parent.resolve())) in all_hooks[-1]["command"]
     assert entries[0]["command"] == expected_command
     assert entries[0]["async"] is True
     assert "async" not in all_hooks[-1]

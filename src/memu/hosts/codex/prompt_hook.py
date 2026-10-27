@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from memu.hosts.codex.environment import codex_environment
 from memu.hosts.codex.notify_console import _new_log_path
 from memu.hosts.codex.query_extraction import select_query
 
@@ -25,7 +26,8 @@ async def _cmd_prompt_hook(args: argparse.Namespace) -> int:
         with log_path.open("a", encoding="utf-8") as log:
             print(json.dumps(trace), file=log, flush=True)
             try:
-                _retrieve(trace)
+                with codex_environment(args.codex_home):
+                    _retrieve(trace)
             except subprocess.TimeoutExpired:
                 trace.update(status="failed", error="retrieve subprocess timed out")
                 print(trace["error"], file=sys.stderr)
@@ -120,4 +122,5 @@ def _retrieve(trace: dict[str, Any]) -> None:
 def register(sub: Any) -> None:
     parser = sub.add_parser("prompt-hook", help="Retrieve memory for a Codex UserPromptSubmit event on stdin")
     parser.add_argument("--base-dir", default=None, help="Host state directory for hook logs")
+    parser.add_argument("--codex-home", default=None, help="Codex home selected during hook installation")
     parser.set_defaults(handler=_cmd_prompt_hook)
