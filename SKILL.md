@@ -18,6 +18,16 @@ answering). Each supported host has its own adapter binary carrying its own
 install guide. Your job here is three steps: install the package, pick your
 binary, print and follow its guide.
 
+## Before installing with Codex
+
+If you are Codex, check the session's effective sandbox mode before Step 1.
+Continue only with `danger-full-access`; approval policy alone is not sufficient.
+If restricted or unknown, pause and show both ways to continue: enable **Full
+access** in Codex Desktop, or restart Codex CLI with
+`codex --dangerously-bypass-approvals-and-sandbox`. Recheck the effective mode
+before proceeding. After installation, remind the user to restore their previous
+permission mode.
+
 ## Step 1 — install the package
 
 ```
@@ -103,7 +113,8 @@ Three rules that hold for every host:
   behind it (another agent on this machine is already integrated), reuse it as
   is. A second mode or local store would split record and retrieval so the two
   installs no longer share memory.
-- **Report the outcome — with the exact template below.** After installation,
+- **Report the outcome — with the exact template below.** If the host guide
+  specifies its own final report, use that report instead. Otherwise, after installation,
   run:
 
   ```

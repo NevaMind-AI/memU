@@ -1,5 +1,7 @@
 # Uninstall memU for Codex
 
+<!-- memu-codex-record: submit-v1 -->
+
 ## Task identity
 
 - Current task name: `{{task_name}}`
@@ -10,12 +12,19 @@
 > guide to uninstall memU"). Work top to bottom. Each part ends with a
 > **verify** gate — do not proceed until the current one passes.
 
-Uninstalling is the install run in reverse, and it is three parts:
+This guide removes both current and known historical Codex memU integrations,
+including partial upgrades. Check every subsection: finding a current hook does
+not mean old tasks or instructions are gone. An absent entry is a normal no-op;
+do not create or reinstall anything in order to uninstall it. Preserve unrelated
+hosts, hooks, tasks and user instructions. Report unresolved ownership separately
+and keep the package while any confirmed entry still needs its executable.
 
-1. **Unregister the bridging task** — stop the scheduled job first, so nothing
-   fires mid-teardown (the *record* seam).
-2. **Unpatch `~/.codex/AGENTS.md`** — remove the standing retrieval
-   instruction and the `memu-retrieve` skill it points at (the *inject* seam).
+Uninstalling has three parts:
+
+1. **Remove the Submit hooks and old scheduled tasks** — prevent new
+   record runs, then let existing agents finish (the *record* seam).
+2. **Verify hook/trust removal and clean up old instructions** — preserve
+   unrelated hooks and remove any old memU skill/instruction (the *inject* seam).
 3. **Apply the data-and-package defaults** — the user's memory is kept, the
    tooling is removed — and close by reporting both.
 
@@ -30,25 +39,84 @@ instruction file exactly as they are.
 
 ---
 
-## Part 1 — Unregister the bridging (record) task
+## Part 1 — Remove record triggers and wait for running agents
 
-Find the Codex scheduled task that runs the memU bridging pipeline — current installs name it `{{task_name}}`; older installs may use any name in
-{{former_task_names}} or another user-chosen name — and delete **that task only**, through the same
-scheduled-task surface Codex used to create it. The name is only a hint; the
-load-bearing signal is the prompt, which runs the prepare / self-evolve / commit
-pipeline. Any other scheduled tasks the user has are theirs and stay.
+### 1.1 Current entries — UserPromptSubmit hooks
+
+First follow Part 2.1 to remove both memU Submit handlers and their approvals.
+In particular, remove `memorize-hook` before waiting for running agents; leaving
+it registered allows new user submissions to start more workers. Read the hooks
+back and confirm unrelated handlers remain intact.
+
+### 1.2 Historical entries — scheduled bridging tasks
+
+Inspect Windows Task Scheduler in all folders and Codex's native task surface.
+Candidate names are {{all_task_names}}, but actions, wrapper contents or the full
+prepare / self-evolve / commit prompt must confirm **Codex** ownership. Leave
+other hosts and ambiguous registrations untouched. Save restorable definitions
+and original states locally before disabling/removing confirmed tasks, following
+the migration section of `memu-codex docs install`. Do not invoke another host's
+schedule helper. No confirmed task is a no-op; multiple confirmed registrations
+must each be removed.
+
+### 1.3 Wait for affected runs before cleanup
+
+Disable future triggers first. Removing a registration does not stop a running
+agent. Do not terminate it; wait for all affected runs and descendants to finish
+naturally before deleting registrations, working files or the package. If a run
+is still active or ownership is unresolved, leave uninstall pending. Keep logs,
+recovery definitions, original wrappers, backend config, memories and cursors.
 
 ### ✅ Verify Part 1
 
-Codex's scheduled-task list no longer shows a memU bridging task.
+Both memU Submit handlers are absent, confirmed old registrations are absent from both scheduler surfaces, and affected agents have finished. Other
+hooks and hosts remain intact. Repeating the removal is a no-op.
 
 ---
 
-## Part 2 — Remove the retrieval instruction
+## Part 2 — Remove the Submit hooks, trust and old instruction
 
-**Do not hand-edit the block out.** memU owns the text and removes it for you:
+### 2.1 Current entry — UserPromptSubmit hook and trust
 
+Inspect `~/.codex/hooks.json` and relevant trust state if they exist. A missing
+file or absent memU hook is a normal no-op; continue to the historical instruction
+check. Remove a leftover approval only if its ownership can still be confirmed.
+
+Back up `~/.codex/hooks.json` and the relevant Codex hook trust state locally.
+Identify the `UserPromptSubmit` command by its resolved memu-codex executable
+and `prompt-hook` or `memorize-hook` argument. Remove both confirmed entries, preserving other
+hooks and events. Remove each corresponding approval using the installed Codex
+version's hook trust facilities; current Windows versions persist the fingerprint
+in `~/.codex/config.toml` under `hooks.state` as `trusted_hash`.
+
+Trust keys include the hooks file path and matcher/command indices. If removal
+changes other hooks' indices, verify their approvals through Codex rather than
+copying or deleting unrelated fingerprints. Repeating removal when the memU
+entry is absent must preserve all unrelated configuration.
+
+Automatic hook/trust removal is not yet integrated in memu-cli. If safe removal
+cannot be completed with the installed Codex version, report uninstall as pending
+and retain the executable. Do not leave a registered hook pointing at a removed
+package.
+
+### 2.2 Historical entries — AGENTS instruction and retrieve skill
+
+Check these independently of the current hook; they can remain after a partial
+upgrade. Inspect `~/.codex/AGENTS.md` for memU's marked block and
+`~/.codex/skills/memu-retrieve/SKILL.md` for the owned retrieval procedure.
+Confirm ownership before removal: the shared command treats an existing
+SKILL.md in that named directory as its marker. Preserve ambiguous or user-owned
+content and report it for review.
+
+Preview the existing cleanup command and review its diff:
+
+```text
+memu-codex remove-instruction --dry-run
 ```
+
+Then remove the confirmed old instruction and skill:
+
+```text
 memu-codex remove-instruction
 ```
 
@@ -64,14 +132,19 @@ at `~/.codex/skills/memu-retrieve/`. The same command takes that skill out too
 at a deleted skill. The directory is memU's own (the install wrote it whole, so
 it goes whole); a same-named directory without memU's `SKILL.md` is left alone,
 as are the user's or Codex's other entries in `~/.codex/skills/`. So there is
-nothing to remove by hand.
+nothing to remove by hand. If both old entries are absent, this step is already
+complete. Never delete the whole skills directory or memU's distribution/install
+SKILL.md. Custom skill locations or unmarked references require confirmed
+ownership and targeted cleanup; do not remove unrelated user text.
 
 ### ✅ Verify Part 2
 
-`cat ~/.codex/AGENTS.md` — no `memu:begin`/`memu:end` markers remain, and the
-user's own content is intact; `~/.codex/skills/memu-retrieve` no longer exists.
-The session you are working in already loaded the old file, so the instruction
-may still be in your own context; a fresh session is what picks the removal up.
+Read back `hooks.json` and the hook trust state: the confirmed memU prompt-hook and memorize-hook
+and their approvals are gone, and unrelated hooks remain configured and trusted.
+`~/.codex/AGENTS.md` has no memU instruction markers, its user content is intact,
+and the owned `~/.codex/skills/memu-retrieve` skill is gone. A fresh Codex session
+must no longer attempt to run memU retrieval. The session you are working in may
+still carry the old instruction in its context.
 
 ---
 
@@ -95,7 +168,8 @@ Only one thing overrides a default: the user's own explicit words.
   store marks history as already mined, and it would never be mined again.
 - **Remove this host's residue.** Codex's run-scoped working tree is
   `~/.memu/hosts/codex/`: the `jobs/`, `sessions/`, `memory/`, and `skill/`
-  directories and `resources.md` — but **not** the `.session_manifest*` cursor
+  directories and `resources.md` — but **not** logs, recovery definitions,
+  original scheduler wrappers or the `.session_manifest*` cursor
   files there (see above), unless the store is going too. The shared
   `~/.memu/config.env` and the store file sit at the `~/.memu/` root, outside
   this tree, so removing the tree never touches them. Also
@@ -156,6 +230,7 @@ Close the report with the two things the user needs to hear, in this order:
 1. **What was kept:** their memory — the store at `MEMU_DB`,
    `~/.memu/config.env`, and the session cursor — untouched. A later reinstall
    picks it up as is and resumes mining right where it left off.
-2. **What was removed:** the bridging schedule, the retrieval instruction,
-   this host's working state, and (unless another host still needs it) the
-   `memu-cli` package.
+2. **What was removed:** list current hook/trust entries and historical
+   schedules/instructions/skills separately, noting entries already absent and
+   any unresolved remnants. Also report this host's working state and whether
+   the shared `memu-cli` package was removed or retained for another host.

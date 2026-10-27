@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from memu import events
-from memu.hosts import config_cmd, instruction, retrieval, templates
+from memu.hosts import config_cmd, hooks, instruction, retrieval, templates
 from memu.hosts.base import TranscriptSource
 from memu.hosts.bridging import Layout, commit, prepare, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
@@ -202,6 +202,9 @@ class HostSpec:
     Native schedulers can instead resolve their registered task from structural
     host metadata, without asking the model to carry identity.
     """
+
+    hook: Any = None
+    """Optional host-triggered notify hook. Hook-specific behavior is opt-in."""
 
     def __post_init__(self) -> None:
         if not _TASK_NAME_RE.fullmatch(self.task_name):
@@ -698,6 +701,37 @@ def _report_guide_opened(spec: HostSpec, event: str) -> None:
     events.flush()
 
 
+async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
+    if spec.host == "codex":
+        from memu.hosts.codex.notify_console import memorize_run
+
+        with memorize_run(_layout(spec, args)) as admitted:
+            if not admitted:
+                return 0
+            code = 1
+            try:
+                code = await _run_hook_pipeline(spec, args)
+                return code
+            finally:
+                print(f"=== MEMORIZE status={'failed' if code else 'succeeded'} ===", flush=True)
+    return await _run_hook_pipeline(spec, args)
+
+
+async def _run_hook_pipeline(spec: HostSpec, args: argparse.Namespace) -> int:
+    hook = spec.hook
+    if hook is None:
+        raise RuntimeError(f"{spec.display} has no notify hook")  # noqa: TRY003
+    layout = _layout(spec, args)
+    code = await _cmd_prepare(spec, args)
+    if code:
+        return code
+    if hooks.pending_jobs(layout):
+        if args.console and hook.stream_output is None:
+            raise ValueError(f"{spec.display} has no live agent output")  # noqa: TRY003
+        hooks.run_agent(hook.agent, layout, executable=args.agent, stream_output=hook.stream_output)
+    return await _cmd_commit(spec, args)
+
+
 async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
     """Register/inspect the existing OS-scheduled bridging task on Windows Task Scheduler.
 
@@ -921,6 +955,17 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
 
     if spec.register_extra is not None:
         spec.register_extra(sub)
+
+    if spec.hook is not None:
+        hook = spec.hook
+        p = with_base(sub.add_parser("hook-run", help="Run one background memorization pass"))
+        p.add_argument("--session-dir", default=spec.session_dir, help=spec.session_help)
+        p.add_argument("--max-jobs", type=int, default=MAX_JOBS)
+        p.add_argument("--agent", default="", help=f"Path to {hook.agent.argv[0]}")
+        p.add_argument(
+            "--console", action="store_true", help="Tee agent output to the run log and the foreground terminal"
+        )
+        p.set_defaults(handler=bind(_cmd_hook_run))
 
     return parser
 

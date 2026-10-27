@@ -1,5 +1,8 @@
 # Install memU for Codex
 
+<!-- memu-codex-record: submit-v1 -->
+<!-- memu-codex-permissions: v22 -->
+
 ## Task identity
 
 - Current task name: `{{task_name}}`
@@ -16,17 +19,89 @@
 > However this run ends — finished or abandoned — close it out with **Report
 > the outcome to memU** at the bottom of this file.
 
-Installing memU on Codex is three parts:
+## Installation progress — five stages
+
+Use English for installation guidance unless the user explicitly requests
+another language. Begin directly with stage 1, even when permissions are blocked.
+Render each stage message below as a Markdown `##` heading exactly once before its work. Within a stage, use
+at most one short plain-text status when needed; never repeat the emoji, counter
+or stage name in status updates. Show a concrete blocker and next action briefly,
+without narrating commands, process details or reasoning.
+
+| Stage message | Work |
+| --- | --- |
+| 🔐 [1/5] Checking installation permissions | Full-access gate below |
+| 📦 [2/5] Preparing memU and the memory backend | Part 1; reuse existing configuration |
+| 🔔 [3/5] Setting up automatic memorization | Part 2 prerequisite; Part 3 dual-hook registration; old-schedule handoff if needed |
+| 🧠 [4/5] Setting up memory retrieval | Part 3 registration and trust |
+| 🚀 [5/5] Starting your first memorize task | Finish legacy cleanup and invite the next user message |
+
+Installation is complete once the backend check, Submit hook registration,
+prompt-hook registration/trust and M3 cleanup pass. Print
+`✅ memU installation complete`. The first
+user-triggered retrieval and memorize run is a post-install check, not a
+completion gate. Report actual configuration or cleanup blockers when present.
+
+## Execution permissions — Full access before installation
+
+Before package installation, `init`, setup or migration changes, inspect the
+current session's actual sandbox mode. Continue only with `danger-full-access`.
+Approval policy is separate: `approval_policy = never` does not establish Full
+access. If sandbox mode is not provided, say that you cannot confirm it and ask
+the user to check the setting.
+
+If the session is restricted or its mode is unknown, pause at stage 1 and show
+**both** options below so the user can choose. Bold only the application name,
+placing the colon outside the bold markers, e.g. `**Codex Desktop**: ...` or
+`**Codex Desktop**：切换……`:
+
+- **Codex Desktop**: ask the user to switch to **Full access / 完全访问权限**
+  and reply "continue installation" here. Recheck the effective mode before
+  resuming; remain paused if the change has not taken effect.
+- **Codex CLI**: ask the user to exit and start a new session from the same
+  directory, then repeat the installation request:
+
+  ```sh
+  codex --dangerously-bypass-approvals-and-sandbox
+  ```
+
+  The flag disables sandboxing and approval prompts for that session. After
+  installation, exit and launch Codex normally to restore the usual restrictions.
+
+Always show both instructions; do not infer Desktop versus CLI from session
+metadata or installed binaries. Do not switch modes or change Windows ACLs
+yourself. Normal OS permissions still apply. If the execution helper fails
+before a command starts (for example, `setup refresh had errors`), stop
+alternate-shell, Node and computer-use retries and show both access instructions.
+If already in Full access,
+report the executor startup failure and ask the user to restart Codex; the bypass
+flag is not evidence that the underlying failure will be fixed.
+
+
+## Choose the installation path
+
+**New installation:** follow Parts 1–3 below.
+**Existing installation:** start with **Existing installations — migration**
+later in this same guide. It references the setup parts for the new entries and
+owns old schedule/skill cleanup. Read this guide once; no additional docs command
+is needed.
+
+New installation has three parts:
 
 1. **Install memU** — a Python package and the memory backend it uses.
-2. **Register the bridging task** — the scheduled job that turns recent Codex
-   sessions into durable memory (the *record* seam).
-3. **Patch `~/.codex/AGENTS.md`** — a standing instruction that tells you to pull
-   relevant memory before you answer (the *inject* seam).
+2. **Verify the standalone CLI** — turn recent
+   Codex sessions into durable memory (the *record* seam).
+3. **Register and trust the hooks** — enable retrieval and background memorization.
 
 Parts 2 and 3 must share one configured mode. In local mode they must also share
 one store and embedding space, or retrieval silently returns nothing. Part 1 is
 what makes them agree.
+
+## Submit record trigger (Codex)
+
+The record trigger is UserPromptSubmit: a short handler launches prepare → headless `codex exec` → commit in the background without waiting for completion.
+Follow Part 2 after the backend gate passes. Existing installations use the
+migration section for safe handoff.
 
 ---
 
@@ -38,33 +113,20 @@ Python.
 
 ### 1.1 Install
 
-```
+Skip any installation, registration or check already completed in this run
+unless its inputs or configuration have changed.
+
+If you just installed or upgraded memu-cli, skip this step.
+Otherwise, use the user's requested package manager and source. The default is:
+
+```text
 pip install --upgrade memu-cli
 ```
 
-**`--upgrade` matters, and a bare install is not enough.** A machine that
-already carries an older `memu-cli` keeps it otherwise, and this guide names
-subcommands (`init`, `config`) that older builds answer with `invalid choice`.
-If you meet that error anywhere below, you are on a stale build: upgrade, then
-re-run the command that failed.
+For uv, use `uv tool install --upgrade memu-cli`. Confirm `memu-codex --help`
+succeeds once after installation. Keep the executable available to Codex's
+background processes; respect any explicit executable path supplied by the user.
 
-This puts two commands on `PATH`:
-
-- **`memu`** — memU itself (commit, list-files, retrieve). The library's own
-  surface; this guide does not use it directly.
-- **`memu-codex`** — the Codex adapter. Both Part 2 (record) and Part 3 (inject)
-  go through it.
-
-Confirm it resolves:
-
-```
-memu-codex --help
-```
-
-If it is not found, the install landed in an environment that isn't on your
-`PATH`. Fix that now rather than working around it — the scheduled task in Part 2
-and the hook in Part 3 both need this command to resolve from a bare, non-
-interactive environment.
 
 ### 1.2 Configure the memory backend
 
@@ -77,11 +139,8 @@ and one embedding space — or retrieval keeps succeeding and finds nothing.
 given is left alone, including comments and another host's settings), sets
 the file's permissions, and refuses the edits that break retrieval silently.
 
-**Came from memU's `SKILL.md`? You already ran `init`** — it created the file
-and, if the user handed over a memU Cloud key, already selected cloud memory.
-Read the state below rather than assuming which.
-
-If you came straight to this guide instead, run it now:
+If `init` has already completed in this run, read the state below rather than
+assuming which mode it selected. Otherwise, initialize now:
 
 ```
 memu-codex init --cloud-api-key <the user's memU key>
@@ -212,137 +271,195 @@ on this working, and both fail *silently* if it is wrong.
 
 ---
 
-## Part 2 — Register the bridging (record) task
+## Part 2 — Verify the background CLI prerequisite
 
-The *record* seam: a Codex scheduled task that periodically mines recent Codex
-sessions into memU memory, skills, and resources. In cloud mode, workspace
-resources are submitted but are not currently persisted.
+The *record* seam starts on user prompt submission: prepare → headless `codex exec` →
+commit. In cloud mode, workspace resources are submitted but not persisted.
 
-**Refresh an existing bridging registration before continuing.** Inspect
-Codex's scheduled-task surface. Check every recognized name in
-{{all_task_names}}, then confirm the task's prompt runs the memU prepare /
-self-evolve / commit pipeline. Record its current cadence and delete **only that
-confirmed task** through the same surface. A name narrows the search; the
-complete pipeline prompt remains the load-bearing deletion identity. Re-list scheduled tasks and verify
-no memU bridging task remains. Leave the store, session cursor, working tree,
-and retrieval instruction untouched. An absent task is the normal first-install
-case. Reuse the recorded cadence below unless the user requested a change.
+### 2.0 Prerequisite — a standalone Codex CLI
 
-**Do not reinvent this.** Follow the packaged procedure:
+Probe before installing: resolve `codex` and run `codex --version`. Reuse a
+working CLI, including an existing npm-managed installation. If lookup fails,
+check the official installer's landing directory before reinstalling; an older
+shell may simply have a stale PATH.
 
-```
-memu-codex docs task
-```
+If Codex is missing, announce the action and run the official native installer:
 
-It is authoritative. In summary, you will settle a cron schedule with the user
-(default: every hour, `0 * * * *`) and create a Codex scheduled task whose
-recurring prompt is the three-step block that document gives you verbatim —
-`memu-codex prepare`, then the agent works through `~/.memu/hosts/codex/jobs/*.txt` in order,
-then `memu-codex commit`.
+- Windows, from PowerShell:
 
-Nothing in that prompt is machine-specific. If you find yourself substituting an
-absolute path into it, you are doing it wrong.
+  ```powershell
+  irm https://chatgpt.com/codex/install.ps1 | iex
+  ```
+
+- macOS / Linux:
+
+  ```sh
+  curl -fsSL https://chatgpt.com/codex/install.sh | sh
+  ```
+
+These installers do not require Node.js or npm. Use an already available package
+manager only as a fallback if the native installer fails or the user has stated
+a preference; for existing npm environments, `npm install -g @openai/codex` is
+supported. Do not install a second Node.js manager to install Codex. If download,
+approval or installation fails, report the blocker and retain the old record
+entry; do not register a callback whose agent cannot start.
+
+After installation, resolve the actual executable and run its `--version`.
+The current official default landing directories are:
+
+- Windows: `$env:LOCALAPPDATA\Programs\OpenAI\Codex\bin`.
+- macOS/Linux: `$HOME/.local/bin`.
+
+Honor an explicit `CODEX_INSTALL_DIR` instead of these defaults. Prepend the
+actual landing directory to the current install process's PATH before calling
+`memu-codex install-prompt-hook`; a persistent PATH change does not refresh an already
+running Desktop or its shells. Read the registered `--agent` back and require an
+absolute path to the verified executable. Restart Desktop or open a fresh session
+when necessary, then check the callback again.
+
+Keep the existing Codex home, model/provider and authentication configuration.
+Desktop and CLI normally share that configuration; reuse it before asking for
+new credentials. A successful `--version` proves startup, while the real record
+check below proves the configured execution path. If an existing CLI resolves
+but cannot start, report and repair that failure before registration.
+
+### 2.1 Register both Submit handlers in Part 3
+
+After the CLI probe and Part 1's backend gate pass, continue to Part 3.
+The installation command registers retrieval and background memorization together.
+It preserves unrelated hooks and leaves Codex notify configuration unchanged.
 
 ### ✅ Verify Part 2
 
-Confirm the scheduled task exists with the expected name and cron. Then dry-run
-the first step by hand:
-
-```
-memu-codex prepare
-```
-
-It should report how many sessions it prepared (zero, if there is nothing new
-since the cursor — that is fine and correct). Report the task name and schedule
-back to the user.
+Require `codex --version` to succeed and continue to Part 3.
 
 ---
 
-## Part 3 — Patch `~/.codex/AGENTS.md` with the retrieval instruction
+## Part 3 — Register and trust the hooks
 
-The *inject* seam: a standing instruction in Codex's **global AGENTS.md** telling
-you to pull relevant memory before you answer. Codex loads `~/.codex/AGENTS.md`
-into every session, so the instruction is simply always there — no hook, no
-wrapper, no per-turn process. You run the retrieval yourself and factor the
-results into your answer.
+Run the installation command. It registers both memU handlers, preserves
+unrelated hooks, and verifies their configuration and trust:
 
-**Do not hand-write the instruction.** memU owns the text and installs it for you:
-
-```
-memu-codex install-instruction
+```powershell
+memu-codex install-prompt-hook
 ```
 
-That is the whole step. It writes two files and prints the diff of each, creating
-either if it does not exist:
+If `codex` is not on PATH or the active Codex home differs from the default,
+pass the actual paths:
 
-- **`~/.codex/skills/memu-retrieve/SKILL.md`** — the procedure: the command to run
-  and how to read what comes back.
-- **`~/.codex/AGENTS.md`** — two sentences telling you to use that skill before
-  answering.
+```powershell
+memu-codex install-prompt-hook --codex 'C:/path/to/codex.exe' --hooks-file 'C:/Users/<user>/.codex/hooks.json' --cwd 'C:/path/to/install'
+```
 
-The split is the point. AGENTS.md is in your context on *every* turn, whether or
-not the turn has anything to do with memory, so it carries only what you need in
-order to decide to retrieve; the skill carries the detail and is loaded only once
-you act on it.
-
-Three properties worth knowing, because they are what make it safe to just run:
-
-- **It appends; it never overwrites.** `~/.codex/AGENTS.md` is the *user's* global
-  instruction file and may already hold rules that have nothing to do with memU.
-  Everything already in there survives, and the previous contents are backed up to
-  `~/.codex/AGENTS.md.bak` before anything is written. (The skill directory is
-  memU's own — nothing of the user's lives there — so it is simply overwritten.)
-- **It is idempotent.** memU's text goes inside a marked block. Re-running replaces
-  that block in place rather than appending a second copy, so running it twice is
-  harmless — and so a later memU release can *improve* the instruction and have the
-  upgrade actually reach users who already installed it. A copy pasted in by hand
-  could never be upgraded. The same holds for the skill.
-- **It shows its work.** `--dry-run` prints the diffs and writes nothing; `--print`
-  prints what would be installed. If the user wants to see what lands in their file
-  before it lands, that is how.
-
-If you want to read the text itself, run `memu-codex install-instruction --print`.
-In short: the skill tells you to run `memu-codex retrieve "<query>"` before
-answering — the LLM-free single-shot retrieval, not the LLM-routed `memu retrieve`,
-which would cost an LLM call on every turn — and it explains how to read the
-`segments`/`files`/`resources` layers that come back.
+If registration fails, follow the command's diagnostic, resolve the blocker, and
+retry. Let the CLI manage hook configuration and trust.
 
 ### ✅ Verify Part 3
 
-Read both files back:
+Require the installation command to succeed and verify that the registered
+callback and agent paths exist. Complete any applicable M3 cleanup before
+reporting installation success. Runtime processing does not block installation.
 
-```
-cat ~/.codex/AGENTS.md
-cat ~/.codex/skills/memu-retrieve/SKILL.md
-```
+For a runtime check after a user message, use:
 
-The memU block must appear in AGENTS.md exactly once and name the `memu-retrieve`
-skill, that skill must exist, and anything the user had in AGENTS.md beforehand
-must still be intact.
-
-Then confirm the command the skill names actually works against the Part 1
-store:
-
-```
-memu-codex retrieve "smoke test"
+```text
+memu-codex hook-status --since <check-start-time>
 ```
 
-Empty result lists are fine — you are testing that the read path works, not that
-the store has content yet.
-
-Finally, note that a *fresh* Codex session is what picks up the new AGENTS.md and
-the new skill. The session you are installing from already loaded the old one, so
-do not be surprised that the instruction is not in your own context yet.
+Use the CLI's status and diagnostics directly. Pending evidence can be checked
+again later; do not wait for background completion to finish installation.
 
 ---
+
+## Existing installations — migration
+
+Use this branch when Codex already has a memU schedule, retrieve skill or hook. Keep the existing backend and progress; do not reinitialize a
+store to repair trigger configuration. The new-install parts above describe the
+replacement entries, while this section owns legacy discovery, handoff and cleanup.
+
+### M1 — Identify the old entry points
+
+Query Codex's native automations through its management tools. Candidate names
+are {{all_task_names}}. Confirm that each matching task's prompt invokes Codex's
+memU prepare / self-evolve / commit pipeline; a name alone does not establish
+ownership. Use the confirmed IDs and current running states for M3. Leave
+unrelated or ambiguous tasks untouched. If inventory is unavailable, report it
+as unresolved. No matching task is normal; handle every confirmed match.
+
+### M2 — Verify the replacement before removing anything
+
+Complete Parts 1–3's backend verification, Submit hook registration and prompt-hook
+registration/trust, reusing results already obtained in this run. Then handle
+all legacy entries in M3 before announcing installation completion. Keep new
+background workers from processing the workspace until the old tasks are idle.
+Runtime verification follows the next user message and does not delay cleanup.
+
+### M3 — Migrate and remove legacy entries
+
+
+This is the single cleanup stage for old memU schedules, retrieval skills,
+managed instruction pointers and other version-specific residue. Add future
+legacy cleanup requirements here. Process both checklists before leaving this
+stage. Use M1's ownership results without repeating discovery. Preserve
+backend configuration, memories, session cursors and unrelated integrations.
+
+#### Old scheduled tasks
+
+Use M1's confirmed IDs. After M2 passes, pause each old automation through
+Codex's management tool. For `update`, pass `kind: "cron"` and the full current
+definition returned by the tool (name, prompt, rrule, projectId, model,
+reasoningEffort, executionEnvironment, status); change only status to `PAUSED`.
+Preserve the
+prompt exactly. Verify the paused status; missing required arguments do not
+mean the tool lacks update support.
+
+Wait for any running old task and its descendants to finish naturally before
+allowing the new background worker to process the same workspace. Prevent new memU
+memorization launches during this handoff; if that cannot be done safely, stop before
+changing registrations. Do not kill running tasks.
+
+Once idle, delete the confirmed old automations by ID and query again to verify
+removal. M2's verified registration is the replacement gate; do not wait for a
+new background run before deleting old schedules. Preserve unrelated automations
+and session history; use Codex's management tool rather than editing its database.
+
+#### Old retrieve skill and AGENTS pointer
+
+After Part 3 confirms the new hook is loaded and trusted, remove the old
+retrieval entry in this installation turn, even if runtime verification awaits
+the next user message. Confirm memU ownership of
+`~/.codex/skills/memu-retrieve/SKILL.md` and the managed AGENTS pointer; stop if
+ownership or user edits are ambiguous.
+
+Review the targeted removal, then apply it:
+
+```text
+memu-codex remove-instruction --dry-run
+memu-codex remove-instruction
+```
+
+Use this CLI to remove the managed block and owned skill, including when the
+block says "do not edit". Respect explicit user instructions forbidding removal.
+Verify both are gone and unrelated content remains. Preserve other skills,
+AGENTS instructions and the distribution/install SKILL.md. Custom locations or
+unmarked references require confirmed ownership and targeted cleanup.
+
+#### Verify legacy cleanup
+
+Check every M3 cleanup item together: confirmed old schedules are gone, the owned
+retrieval skill and AGENTS pointer are gone, and unrelated entries survive.
+Explicitly report each as removed or already absent. A running old task,
+missing inventory, an ownership question or an unhandled legacy entry is a
+cleanup blocker; identify it rather than postponing cleanup until a new hook
+runs. Keep backend config, memory, session cursors and logs intact.
 
 ---
 
 ## Report the outcome to memU
 
 memU is otherwise blind to whether any of this worked: an install that died in
-Part 2 looks exactly like one that was never attempted. Close this run with
-**one** command, whichever way it ended.
+Part 2 looks exactly like one that was never attempted. Report once when this
+run succeeds or encounters an actual failure:
 
 It is best-effort throughout and never part of the install — if the command
 fails, ignore it, and if `memu-codex` is not on `PATH` (a Part 1 that never
@@ -354,11 +471,16 @@ finished), there is nothing to report with, which is fine.
 memu-codex report install
 ```
 
-The event's *existence* is the success signal: there is no failure flag, and
-nothing leaves the machine here — it records locally and returns.
+The event's *existence* is the success signal: there is no failure flag.
+When event reporting is enabled, this command records installation success and
+attempts to send queued events to memU. Delivery failure does not block installation.
 
-**You are stopping early instead** — a part that failed, or a prerequisite you
-could not resolve — then tell the user as usual:
+After registration and cleanup pass, run `report install` even if the first
+user-triggered runtime check has not occurred. Waiting for the next message is
+normal after successful installation.
+
+**An installation step failed or a required prerequisite is unavailable** —
+tell the user and report the actual failure:
 
 ```
 memu-codex report error --stage install --detail "<a full account of what went wrong>"
@@ -383,13 +505,18 @@ nothing secret.
 
 ## Done
 
+Give one concise final report in the user's language.
+
 Report back to the user:
 
+- remind the user they can switch back to their previous permission mode after
+  installation;
+- installation outcome and any unresolved blockers;
 - the selected mode and its cloud endpoint or local store/provider;
-- the scheduled task's name and cron, in words (e.g. "daily at 00:00 local");
-- that the retrieval instruction is now in `~/.codex/AGENTS.md`, pointing at the
-  `memu-retrieve` skill, and that it takes effect in their next Codex session.
+- the verified Submit memorization entry and the outcome of old-task migration;
+- the retrieval entry retained or installed for this machine, and whether a fresh
+  Codex session is needed to pick it up.
 
-Record (Part 2) and inject (Part 3) both read `~/.memu/config.env`, so they
+Record and inject (Part 3) both read `~/.memu/config.env`, so they
 provably share the backend configured in Part 1 — what the task learns tonight
 is what retrieval finds tomorrow.
