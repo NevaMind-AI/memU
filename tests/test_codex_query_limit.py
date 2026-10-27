@@ -6,12 +6,20 @@ import sys
 
 import pytest
 
-from memu.hosts.codex import prompt_hook
+from memu.hosts.codex import prompt_hook, query_extraction
 from memu.hosts.codex.cli import main
 
 
+@pytest.fixture(autouse=True)
+def extraction_failure(monkeypatch):
+    def fail(prompt):
+        raise OSError("unavailable")
+
+    monkeypatch.setattr(query_extraction, "_extract", fail)
+
+
 @pytest.mark.parametrize("length", [1999, 2000, 2001, 40000])
-def test_automatic_query_uses_first_2000_unicode_characters(tmp_path, monkeypatch, capsys, length):
+def test_automatic_query_fallback_uses_first_2000_unicode_characters(tmp_path, monkeypatch, capsys, length):
     prompt = (' 中😀"\\\r\n' * 6000)[:length]
     event = {"hook_event_name": "UserPromptSubmit", "prompt": prompt}
     original = json.dumps(event)
