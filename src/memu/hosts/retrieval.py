@@ -63,6 +63,10 @@ def _shape_for_agent(result: dict[str, Any]) -> dict[str, Any]:
     Matching the instruction's contract that files and resources come back as
     *a location plus a summary* rather than full text:
 
+    * Only agent-facing fields survive: segment text/source, file identity/summary/
+      location (or inline fallback content), resource location/caption, and scores/
+      timestamps for inspection. Ranking order is preserved; database IDs and scope
+      metadata stay out of context.
     * ``files`` shed their ``content`` for a ``path``. The mirror at
       ``~/.memu/<track>/<name>.md`` is now the retrieve hook's own to keep: since
       every memorize run writes under its per-host tree (``~/.memu/hosts/<host>/``,
@@ -115,7 +119,19 @@ def _shape_for_agent(result: dict[str, Any]) -> dict[str, Any]:
         if "url" in resource:
             resource["path"] = resource.pop("url")
 
-    return result
+    fields = {
+        "segments": ("text", "source_file"),
+        "files": ("name", "track", "description", "path", "content"),
+        "resources": ("path", "caption"),
+    }
+    inspection_fields = ("score", "created_at", "updated_at")
+    return {
+        layer: [
+            {key: record[key] for key in (*keys, *inspection_fields) if key in record}
+            for record in result.get(layer, [])
+        ]
+        for layer, keys in fields.items()
+    }
 
 
 async def _cmd_retrieve(args: argparse.Namespace) -> int:
@@ -164,7 +180,7 @@ async def _cmd_retrieve(args: argparse.Namespace) -> int:
     # the retrieval itself — rather than growing to include serialising the result
     # and the reporting POST that now follows it.
     latency_ms = round((time.monotonic() - started) * 1000)
-    print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    print(json.dumps(result, separators=(",", ":"), ensure_ascii=False, default=str))
     # Recorded after the result is on stdout, never before: this is the one part of
     # the command that blocks on the network, and the agent's answer must not sit
     # behind it.

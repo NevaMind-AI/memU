@@ -13,6 +13,7 @@ url/local_path down to one ``path``.
 from __future__ import annotations
 
 import pathlib
+from typing import Any
 
 from memu.hosts import retrieval
 from memu.hosts.bridging.recall_files import write_recall_file
@@ -98,5 +99,48 @@ def test_resource_collapses_to_single_path(tmp_path: pathlib.Path, monkeypatch) 
     shaped = retrieval._shape_for_agent(_result())
 
     res = shaped["resources"][0]
-    assert res["path"] == "notes/onboarding.md"
-    assert "url" not in res and "local_path" not in res
+    assert res == {"path": "notes/onboarding.md", "caption": "notes"}
+
+
+def test_projection_keeps_only_agent_fields_and_hit_order(tmp_path: pathlib.Path, monkeypatch) -> None:
+    monkeypatch.setattr(retrieval, "BASE_DIR", str(tmp_path))
+    result = _result()
+    metadata = {
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-02T00:00:00Z",
+        "user_id": "u1",
+        "agent_id": "a1",
+        "user_name": None,
+        "agent_name": None,
+        "custom_scope": "private",
+    }
+    for records in result.values():
+        for record in records:
+            record.update(metadata)
+    result["backend_metadata"] = {"request_id": "internal"}
+
+    shaped = retrieval._shape_for_agent(result)
+
+    expected: dict[str, list[dict[str, Any]]] = {
+        "segments": [
+            {"text": "No sugar.", "source_file": "memory/coffee preferences"},
+            {"text": "orphan", "source_file": None},
+        ],
+        "files": [
+            {
+                "name": "coffee preferences",
+                "track": "memory",
+                "description": "How the user likes their coffee",
+                "path": str(tmp_path / "memory" / "coffee-preferences.md"),
+            }
+        ],
+        "resources": [{"path": "notes/onboarding.md", "caption": "notes"}],
+    }
+    for layer, records in expected.items():
+        for record, original in zip(records, result[layer], strict=True):
+            record.update({key: original[key] for key in ("score", "created_at", "updated_at") if key in original})
+    assert shaped == expected
+
+
+def test_projection_returns_all_layers_for_empty_results() -> None:
+    assert retrieval._shape_for_agent({}) == {"segments": [], "files": [], "resources": []}

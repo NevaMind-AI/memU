@@ -158,6 +158,8 @@ memu-codex retrieve "What should I remember about this project?"
 # or: memu-claude-code / memu-cursor / memu-openclaw / memu-hermes / memu-workbuddy / memu-cola / memu-pi / memu-agent
 ```
 
+Host retrieval returns compact JSON: segments contain `text` and `source_file`; files contain `name`, `track`, `description`, and a local mirror `path` (or inline `content` when no mirror is available); resources contain `path` and `caption`. Hits remain ranked and include available `score`, `created_at`, and `updated_at` fields for inspection. Database IDs and scope metadata are omitted from the agent-facing output.
+
 Install or invoke the CLI directly:
 
 ```bash
