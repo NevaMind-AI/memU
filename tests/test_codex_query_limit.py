@@ -29,7 +29,7 @@ def test_automatic_query_fallback_uses_first_2000_unicode_characters(tmp_path, m
 
     def retrieve(argv, **kwargs):
         calls.append((argv, kwargs))
-        return subprocess.CompletedProcess(argv, 0, b'{"segments":[]}', b"")
+        return subprocess.CompletedProcess(argv, 0, b'{"hits":[]}', b"")
 
     monkeypatch.setattr(prompt_hook.subprocess, "run", retrieve)
     assert main(["prompt-hook", "--base-dir", str(tmp_path)]) == 0
@@ -72,7 +72,7 @@ import hashlib, sys
 from memu.hosts import retrieval
 from memu.hosts.codex.cli import main
 async def retrieve(query):
-    return {'segments': [], 'query_chars': len(query), 'sha256': hashlib.sha256(query.encode('utf-8')).hexdigest()}
+    return {'hits': [], 'query_chars': len(query), 'sha256': hashlib.sha256(query.encode('utf-8')).hexdigest()}
 retrieval.retrieve = retrieve
 retrieval.events.record_outcome = lambda *a, **k: None
 sys.exit(main(['retrieve', *sys.argv[1:]]))

@@ -272,7 +272,7 @@ def test_retrieve_ignores_memorize_lock_and_cooldown(tmp_path, monkeypatch, caps
 
     def retrieve(argv, **_):
         calls.append(argv)
-        return subprocess.CompletedProcess(argv, 0, b'{"segments":[{"content":"synthetic memory"}]}', b"")
+        return subprocess.CompletedProcess(argv, 0, b'{"hits":[{"text":"synthetic memory"}]}', b"")
 
     monkeypatch.setattr(prompt_hook.subprocess, "run", retrieve)
     with notify_console._workspace_lock(base) as acquired:

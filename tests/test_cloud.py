@@ -326,7 +326,7 @@ async def test_doctor_reports_cloud_mode_endpoint_and_resource_limitation(
 
     async def retrieve_ok(query: str) -> dict[str, list[Any]]:
         assert query == "smoke test"
-        return {"segments": [], "files": [], "resources": []}
+        return {"hits": [{"text": "tea"}], "resources": []}
 
     monkeypatch.setattr(retrieval, "retrieve", retrieve_ok)
 
@@ -335,7 +335,7 @@ async def test_doctor_reports_cloud_mode_endpoint_and_resource_limitation(
     assert "mode      cloud" in output
     assert f"endpoint  {DEFAULT_CLOUD_BASE_URL}" in output
     assert "accepted but not currently persisted" in output
-    assert "retrieval ok" in output
+    assert "retrieval ok (1 hit(s)" in output
 
 
 async def test_host_retrieval_uses_shared_backend_factory(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -351,8 +351,4 @@ async def test_host_retrieval_uses_shared_backend_factory(monkeypatch: pytest.Mo
 
     monkeypatch.setattr(retrieval, "build_agentic_memory_backend_from_env", lambda: Backend())
 
-    assert await retrieval.retrieve("tea", where={"user_id": "u1"}) == {
-        "segments": [],
-        "files": [],
-        "resources": [],
-    }
+    assert await retrieval.retrieve("tea", where={"user_id": "u1"}) == {"hits": [], "resources": []}

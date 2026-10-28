@@ -28,7 +28,7 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
             return subprocess.CompletedProcess(argv, 1, b"", b"permission denied")
         if outcome == "invalid":
             return subprocess.CompletedProcess(argv, 0, b"[]", b"")
-        memories = {"segments": [{"content": "记忆"}] if outcome == "success" else [], "files": [], "resources": []}
+        memories = {"hits": [{"text": "记忆"}] if outcome == "success" else [], "resources": []}
         return subprocess.CompletedProcess(argv, 0, json.dumps(memories).encode("utf-8"), b"")
 
     monkeypatch.setattr(prompt_hook.subprocess, "run", retrieve)
@@ -57,14 +57,14 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
         assert "not total answer time" in specific["additionalContext"]
         assert final["retrieve_result"] == json.loads(specific["additionalContext"].split("\n", 2)[2])
         assert final["status"] == "context_returned"
-        assert final["counts"] == {"segments": 1, "files": 0, "resources": 0}
+        assert final["counts"] == {"hits": 1, "resources": 0}
     else:
         assert not output.out
         if outcome != "empty":
             assert final["status"] == "failed"
             assert output.err
     if outcome == "empty":
-        assert final["retrieve_result"] == {"segments": [], "files": [], "resources": []}
+        assert final["retrieve_result"] == {"hits": [], "resources": []}
         assert "additional_context" not in final
     if outcome == "failure":
         assert final["retrieve_exit_code"] == 1
