@@ -116,5 +116,20 @@ def test_projection_retains_source_timestamps_and_removes_metadata(tmp_path: pat
     assert result == original
 
 
+def test_projection_limits_hits_to_first_five_without_limiting_resources(tmp_path: pathlib.Path, monkeypatch) -> None:
+    monkeypatch.setattr(retrieval, "BASE_DIR", str(tmp_path))
+    result = _result()
+    result["segments"] = [
+        {"recall_file_id": "f1", "text": f"excerpt {index}", "score": 1 - index / 10} for index in range(8)
+    ]
+    result["resources"] = [{"url": f"notes/{index}.md", "caption": "notes"} for index in range(6)]
+
+    shaped = retrieval._shape_for_agent(result)
+
+    assert [hit["text"] for hit in shaped["hits"]] == [f"excerpt {index}" for index in range(5)]
+    assert [hit["score"] for hit in shaped["hits"]] == [1 - index / 10 for index in range(5)]
+    assert len(shaped["resources"]) == 6
+
+
 def test_projection_returns_empty_layers() -> None:
     assert retrieval._shape_for_agent({}) == {"hits": [], "resources": []}

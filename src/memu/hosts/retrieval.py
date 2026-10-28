@@ -47,6 +47,7 @@ def _shape_for_agent(result: dict[str, Any]) -> dict[str, Any]:
     """Join matched text with source details so each hit is self-contained.
 
     Scores describe the matched segment; timestamps describe its source file.
+    Return at most five hits in ranked order to bound per-turn context overhead.
     Files without matched segments remain source-only hits. Missing sources do
     not discard matched text. Mirrorable sources provide a path; others retain
     their content inline. Database IDs and scope fields stay internal.
@@ -86,7 +87,7 @@ def _shape_for_agent(result: dict[str, Any]) -> dict[str, Any]:
         if path is not None:
             item["path"] = path
         resources.append(item)
-    return {"hits": hits, "resources": resources}
+    return {"hits": hits[:5], "resources": resources}
 
 
 async def _cmd_retrieve(args: argparse.Namespace) -> int:
