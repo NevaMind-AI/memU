@@ -413,7 +413,7 @@ def test_a_skill_host_upgrades_from_the_old_inline_block(tmp_path: pathlib.Path)
     path = tmp_path / "AGENTS.md"
     path.write_text("# My rules\n", encoding="utf-8")
     instruction.install(path, BINARY)
-    assert "segments" in path.read_text(encoding="utf-8")
+    assert "`hits`" in path.read_text(encoding="utf-8")
 
     changed, _ = instruction.install(path, BINARY, skill=True)
 
@@ -445,7 +445,7 @@ def test_cli_without_a_skills_dir_keeps_the_full_text_and_writes_no_skill(tmp_pa
     assert instruction._cmd_install_instruction(args) == 0
 
     text = (tmp_path / "AGENTS.md").read_text(encoding="utf-8")
-    assert "memu-codex retrieve" in text and "segments" in text
+    assert "memu-codex retrieve" in text and "`hits`" in text
     assert not (tmp_path / "skills").exists()
 
 

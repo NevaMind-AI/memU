@@ -158,7 +158,7 @@ memu-codex retrieve "What should I remember about this project?"
 # or: memu-claude-code / memu-cursor / memu-openclaw / memu-hermes / memu-workbuddy / memu-cola / memu-pi / memu-agent
 ```
 
-Host retrieval returns compact JSON: segments contain `text` and `source_file`; files contain `name`, `track`, `description`, and a local mirror `path` (or inline `content` when no mirror is available); resources contain `path` and `caption`. Hits remain ranked and include available `score`, `created_at`, and `updated_at` fields for inspection. Database IDs and scope metadata are omitted from the agent-facing output.
+Host retrieval returns compact JSON with self-contained `hits` and `resources`. Each hit combines matched `text` with its source's `description`, `track`, and local mirror `path` (or inline `content` when no mirror is available). Its `score` describes the matched segment; `created_at` and `updated_at` describe the source file when available. Hits retain segment order, including excerpts whose source is missing; sources without matched excerpts remain source-only hits. Resources contain `path`, `caption`, and available scores/timestamps. Database IDs and scope metadata are omitted from the agent-facing output.
 
 Install or invoke the CLI directly:
 

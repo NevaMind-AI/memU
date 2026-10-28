@@ -639,7 +639,7 @@ async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
             if hint:
                 print(hint, file=sys.stderr)
         return 1
-    found = sum(len(result.get(layer, [])) for layer in ("segments", "files", "resources"))
+    found = events.counts(result, layers=("hits", "resources"))
     print(f"config    {os.path.expanduser(CONFIG_ENV)}")
     print(f"mode      {mode}")
     if mode == "cloud":

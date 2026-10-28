@@ -403,7 +403,7 @@ def test_a_retrieve_that_cannot_report_is_still_a_successful_retrieve(
     from memu.hosts import retrieval
 
     async def _fake(query: str, where: Any = None) -> dict[str, Any]:
-        return {"segments": [{"text": "hi"}], "files": [], "resources": []}
+        return {"hits": [{"text": "hi"}], "resources": []}
 
     def _explode(*args: object, **kwargs: object) -> None:
         raise RuntimeError("boom")
@@ -882,7 +882,7 @@ def test_retrieve_delivers_counts_and_never_the_query(reporting: pathlib.Path, m
     from memu.hosts import retrieval
 
     async def _fake(query: str, where: Any = None) -> dict[str, Any]:
-        return {"segments": [{"text": "a"}, {"text": "b"}], "files": [{"name": "f"}], "resources": []}
+        return {"hits": [{"text": "a"}, {"text": "b"}], "resources": [{"path": "notes.md"}]}
 
     posted = _Posted()
     monkeypatch.setattr(retrieval, "retrieve", _fake)
@@ -912,7 +912,7 @@ def test_a_retrieve_that_cannot_deliver_still_succeeds_and_keeps_its_event(
     from memu.hosts import retrieval
 
     async def _fake(query: str, where: Any = None) -> dict[str, Any]:
-        return {"segments": [{"text": "a"}], "files": [], "resources": []}
+        return {"hits": [{"text": "a"}], "resources": []}
 
     monkeypatch.setattr(retrieval, "retrieve", _fake)
     monkeypatch.setattr(events.urllib.request, "urlopen", _Posted(error=OSError("no route to host")))

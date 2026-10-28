@@ -88,7 +88,7 @@ def _retrieve(trace: dict[str, Any]) -> None:
         print(f"memU retrieve exited {result.returncode}: {stderr}", file=sys.stderr)
         return
     memories = json.loads(result.stdout.decode("utf-8", errors="replace"))
-    layers = ("segments", "files", "resources")
+    layers = ("hits", "resources")
     if not isinstance(memories, dict) or any(not isinstance(memories.get(layer, []), list) for layer in layers):
         raise ValueError("retrieve must return an object containing result lists")  # noqa: TRY003
     trace["retrieve_result"] = memories

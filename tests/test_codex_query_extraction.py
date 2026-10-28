@@ -202,7 +202,7 @@ def test_hook_retrieves_extracted_query_with_shared_deadline(tmp_path, monkeypat
     def retrieve(argv, **kwargs):
         seen.append(kwargs)
         clock[0] += 2
-        return subprocess.CompletedProcess(argv, 0, b'{"segments":[]}', b"")
+        return subprocess.CompletedProcess(argv, 0, b'{"hits":[]}', b"")
 
     monkeypatch.setattr(extraction, "_extract", extract)
     monkeypatch.setattr(prompt_hook.subprocess, "run", retrieve)
