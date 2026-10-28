@@ -26,6 +26,13 @@ EMBEDDING_PROVIDER_ENDPOINTS: dict[str, tuple[str, str]] = {
 }
 
 
+# The SDK always appends /embeddings; HTTP backends may carry a provider prefix
+# in their endpoint instead (OpenRouter uses /api/v1/embeddings).
+EMBEDDING_SDK_BASE_URLS: dict[str, str] = {
+    "openrouter": "https://openrouter.ai/api/v1",
+}
+
+
 def default_embedding_model(provider: str) -> str | None:
     """Return the default embedding model for ``provider`` (``None`` if unknown)."""
     return EMBEDDING_PROVIDER_DEFAULTS.get(provider.lower())

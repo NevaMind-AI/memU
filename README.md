@@ -182,6 +182,11 @@ For Local / self-hosted installations, every CLI flag has a matching variable:
 | Embedding model | `MEMU_EMBED_MODEL` | the provider's default |
 | Base URL | `MEMU_BASE_URL` | the provider's default |
 
+OpenRouter uses `https://openrouter.ai/api/v1` with the default SDK transport.
+With `client_backend="httpx"`, its base remains `https://openrouter.ai` because
+the HTTP backend supplies `/api/v1/embeddings`. Explicit custom base URLs are
+kept as configured.
+
 Run `<binary> doctor` to display the resolved mode and verify the same retrieval
 path the host uses.
 
