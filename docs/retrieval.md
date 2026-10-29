@@ -3,6 +3,12 @@
 Host segment score cutoffs are selected by `MEMU_MEMORY_MODE`. Configure overrides
 in `~/.memu/config.env`; process environment variables take precedence.
 
+`<binary> init` and `<binary> config --cloud|--local` add a commented configuration
+template once. The template explains the defaults and independent backend
+settings; existing overrides and edits to the template are preserved on reruns.
+The commands leave threshold assignments commented so Cloud defaults can evolve
+with package upgrades and Local users can supply their own calibration.
+
 ## Cloud
 
 Cloud retrieval uses the calibrated defaults below. They apply to the Cloud

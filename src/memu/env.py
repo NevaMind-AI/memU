@@ -189,6 +189,8 @@ def embedding_profile() -> dict[str, Any]:
 
 QueryKind = Literal["short", "long", "extracted"]
 LONG_QUERY_CHARS = 200
+# Calibrated for the Cloud embedding model; review on model changes. Local models
+# need their own calibration, so these defaults must stay on the Cloud path.
 _CLOUD_RETRIEVAL_MIN_SCORES: dict[QueryKind, float] = {"short": 0.55, "long": 0.60, "extracted": 0.58}
 
 
