@@ -200,6 +200,7 @@ def test_hook_retrieves_extracted_query_with_shared_deadline(tmp_path, monkeypat
         return "Windows hook WinError 206"
 
     def retrieve(argv, **kwargs):
+        assert argv[-2:] == ["--query-kind", "extracted"]
         seen.append(kwargs)
         clock[0] += 2
         return subprocess.CompletedProcess(argv, 0, b'{"hits":[]}', b"")

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import codecs
 import locale
+import math
 import os
 from functools import cache
 from pathlib import Path
@@ -184,6 +185,25 @@ def embedding_profile() -> dict[str, Any]:
         if value := env(var):
             profile[key] = value
     return profile
+
+
+QueryKind = Literal["short", "long", "extracted"]
+LONG_QUERY_CHARS = 200
+
+
+def retrieval_min_score(kind: QueryKind) -> float | None:
+    """Optional host segment cutoff; cosine scores must be finite and in [-1, 1]."""
+    name = f"MEMU_RETRIEVE_MIN_SCORE_{kind.upper()}"
+    value = env(name)
+    if value is None:
+        return None
+    try:
+        score = float(value)
+    except ValueError as exc:
+        raise ConfigError(name, "must be a finite number between -1 and 1") from exc
+    if not math.isfinite(score) or not -1 <= score <= 1:
+        raise ConfigError(name, "must be a finite number between -1 and 1")
+    return score
 
 
 MemoryMode = Literal["local", "cloud"]

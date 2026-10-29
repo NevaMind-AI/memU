@@ -34,7 +34,15 @@ def test_automatic_query_fallback_uses_first_2000_unicode_characters(tmp_path, m
     monkeypatch.setattr(prompt_hook.subprocess, "run", retrieve)
     assert main(["prompt-hook", "--base-dir", str(tmp_path)]) == 0
     assert not capsys.readouterr().out
-    assert calls[0][0] == [sys.executable, "-m", "memu.hosts.codex.cli", "retrieve", "--query-stdin"]
+    assert calls[0][0] == [
+        sys.executable,
+        "-m",
+        "memu.hosts.codex.cli",
+        "retrieve",
+        "--query-stdin",
+        "--query-kind",
+        "long",
+    ]
     assert calls[0][1]["input"] == prompt[:2000].encode("utf-8")
     assert event["prompt"] == prompt
     assert source.getvalue() == original

@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from memu.env import LONG_QUERY_CHARS
 from memu.hosts.codex.notify_console import _new_log_path
 from memu.hosts.codex.query_extraction import select_query
 
@@ -54,6 +55,14 @@ def _retrieve(trace: dict[str, Any]) -> None:
     trace["prompt_sha256"] = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
     started = time.monotonic()
     query = select_query(prompt, trace)
+    query_kind = (
+        "extracted"
+        if trace["query_source"] == "extracted"
+        else "long"
+        if sum(not c.isspace() for c in prompt) >= LONG_QUERY_CHARS
+        else "short"
+    )
+    trace["query_kind"] = query_kind
     trace.update(
         prompt_chars=len(prompt),
         query_chars=len(query),
@@ -72,7 +81,7 @@ def _retrieve(trace: dict[str, Any]) -> None:
     retrieve_started = time.monotonic()
     try:
         result = subprocess.run(  # noqa: S603
-            [sys.executable, "-m", "memu.hosts.codex.cli", "retrieve", "--query-stdin"],
+            [sys.executable, "-m", "memu.hosts.codex.cli", "retrieve", "--query-stdin", "--query-kind", query_kind],
             input=query.encode("utf-8"),
             capture_output=True,
             timeout=max(1, 43 - (time.monotonic() - started)),

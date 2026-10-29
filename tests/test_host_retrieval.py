@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import copy
 import pathlib
+from types import SimpleNamespace
 
+import pytest
+
+from memu import env
 from memu.hosts import retrieval
 from memu.hosts.bridging.recall_files import write_recall_file
 
@@ -133,3 +137,52 @@ def test_projection_limits_hits_to_first_five_without_limiting_resources(tmp_pat
 
 def test_projection_returns_empty_layers() -> None:
     assert retrieval._shape_for_agent({}) == {"hits": [], "resources": []}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("query", "kind", "expected"),
+    [
+        ("topic", None, 1),
+        ("中" * 199 + " \n", None, 1),
+        ("中" * 200, None, 0),
+        ("topic", "long", 0),
+        ("topic", "extracted", 1),
+    ],
+)
+async def test_configured_cutoff_filters_before_mirroring(tmp_path, monkeypatch, query, kind, expected):
+    monkeypatch.setattr(env, "_file_values", lambda: {})
+    for category, score in (("SHORT", "0.4"), ("LONG", "0.6"), ("EXTRACTED", "0.4")):
+        monkeypatch.setenv(f"MEMU_RETRIEVE_MIN_SCORE_{category}", score)
+    seen = []
+
+    async def search(query, where):
+        seen.append(where)
+        return _result()
+
+    monkeypatch.setattr(
+        retrieval, "build_agentic_memory_backend_from_env", lambda: SimpleNamespace(progressive_retrieve=search)
+    )
+    monkeypatch.setattr(retrieval, "BASE_DIR", str(tmp_path))
+    result = await retrieval.retrieve(query, where={"user_id": "u"}, query_kind=kind)
+    assert seen == [{"user_id": "u"}]
+    assert len(result["hits"]) == expected
+    assert (tmp_path / "memory/coffee-preferences.md").exists() is bool(expected)
+    assert len(result["resources"]) == 1  # Segment calibration does not cover resources.
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf", "1.01", "-1.01", "invalid"])
+def test_invalid_cutoff_is_rejected(monkeypatch, value):
+    monkeypatch.setenv("MEMU_RETRIEVE_MIN_SCORE_SHORT", value)
+    with pytest.raises(env.ConfigError, match="MEMU_RETRIEVE_MIN_SCORE_SHORT"):
+        env.retrieval_min_score("short")
+
+
+def test_cutoff_uses_shared_config_and_environment_override(monkeypatch):
+    monkeypatch.delenv("MEMU_RETRIEVE_MIN_SCORE_SHORT", raising=False)
+    monkeypatch.setattr(env, "_file_values", lambda: {})
+    assert env.retrieval_min_score("short") is None
+    monkeypatch.setattr(env, "_file_values", lambda: {"MEMU_RETRIEVE_MIN_SCORE_SHORT": "0.55"})
+    assert env.retrieval_min_score("short") == 0.55
+    monkeypatch.setenv("MEMU_RETRIEVE_MIN_SCORE_SHORT", "0")
+    assert env.retrieval_min_score("short") == 0

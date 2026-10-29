@@ -13,7 +13,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-EXTRACT_THRESHOLD = 200
+from memu.env import LONG_QUERY_CHARS
+
+EXTRACT_THRESHOLD = LONG_QUERY_CHARS
 EXTRACT_INPUT_LIMIT = 32000
 EXTRACT_TIMEOUT = 12
 QUERY_MAX_CHARS = 2000
