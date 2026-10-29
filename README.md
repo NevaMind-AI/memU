@@ -151,6 +151,9 @@ See the [developer guide](docs/developer.md) for the input format and integratio
 
 With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
 
+Prepared memory and skill Markdown files use standalone `---` lines to delimit metadata.
+A name or description ending in `---` remains ordinary metadata when the file is committed.
+
 Once installed, your agent retrieves relevant memory automatically before answering. To retrieve manually, run the adapter for your host:
 
 ```bash
