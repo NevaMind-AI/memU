@@ -1,20 +1,44 @@
 # Host retrieval configuration
 
-Configure optional host segment score cutoffs in `~/.memu/config.env` for
-Local and Cloud results:
+Host segment score cutoffs are selected by `MEMU_MEMORY_MODE`. Configure overrides
+in `~/.memu/config.env`; process environment variables take precedence.
+
+## Cloud
+
+Cloud retrieval uses the calibrated defaults below. They apply to the Cloud
+embedding model used for calibration; a change to that model requires reviewing
+the defaults. Users can override individual categories:
 
 ```dotenv
-# Example calibration for voyage-3.5-lite through NevaToken:
-MEMU_RETRIEVE_MIN_SCORE_SHORT=0.55
-MEMU_RETRIEVE_MIN_SCORE_LONG=0.60
-MEMU_RETRIEVE_MIN_SCORE_EXTRACTED=0.58
+MEMU_MEMORY_MODE=cloud
+MEMU_CLOUD_RETRIEVE_MIN_SCORE_SHORT=0.55
+MEMU_CLOUD_RETRIEVE_MIN_SCORE_LONG=0.60
+MEMU_CLOUD_RETRIEVE_MIN_SCORE_EXTRACTED=0.58
 ```
 
-Unset cutoffs disable filtering for that category. Values must be finite numbers
-between -1 and 1; segments at or above the cutoff survive. Only files referenced
-by surviving segments are returned and mirrored. Resources are scored separately
-and are unaffected. These example values are model/corpus-specific, not defaults;
-Cloud users should calibrate against their Cloud results.
+An unset Cloud category uses its default. Set a category to `-1` to retain all
+valid cosine-scored candidates in that category.
+
+## Local
+
+Local retrieval has no default cutoff. Users calibrate their own embedding model
+and corpus, then set the corresponding optional variables:
+
+| Category | Variable | Default |
+|---|---|---|
+| Short | `MEMU_LOCAL_RETRIEVE_MIN_SCORE_SHORT` | Filtering disabled |
+| Long | `MEMU_LOCAL_RETRIEVE_MIN_SCORE_LONG` | Filtering disabled |
+| Extracted | `MEMU_LOCAL_RETRIEVE_MIN_SCORE_EXTRACTED` | Filtering disabled |
+
+Recalibrate Local thresholds when changing the embedding model. Local and Cloud
+settings are independent: changing `MEMU_MEMORY_MODE` selects only that backend's
+thresholds.
+
+## Filtering and query categories
+
+Values must be finite numbers between -1 and 1; segments at or above the cutoff
+survive. Only files referenced by surviving segments are returned and mirrored.
+Resources are scored separately and are unaffected.
 
 `<binary> retrieve` classifies the original query as short below 200 non-whitespace
 characters and long otherwise. `--query-kind short|long|extracted` overrides that

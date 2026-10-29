@@ -189,14 +189,16 @@ def embedding_profile() -> dict[str, Any]:
 
 QueryKind = Literal["short", "long", "extracted"]
 LONG_QUERY_CHARS = 200
+_CLOUD_RETRIEVAL_MIN_SCORES: dict[QueryKind, float] = {"short": 0.55, "long": 0.60, "extracted": 0.58}
 
 
 def retrieval_min_score(kind: QueryKind) -> float | None:
-    """Optional host segment cutoff; cosine scores must be finite and in [-1, 1]."""
-    name = f"MEMU_RETRIEVE_MIN_SCORE_{kind.upper()}"
+    """Resolve the active backend's host cutoff, with calibrated Cloud defaults."""
+    mode = memory_mode()
+    name = f"MEMU_{mode.upper()}_RETRIEVE_MIN_SCORE_{kind.upper()}"
     value = env(name)
     if value is None:
-        return None
+        return _CLOUD_RETRIEVAL_MIN_SCORES[kind] if mode == "cloud" else None
     try:
         score = float(value)
     except ValueError as exc:

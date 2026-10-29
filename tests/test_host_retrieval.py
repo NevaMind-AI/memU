@@ -150,10 +150,12 @@ def test_projection_returns_empty_layers() -> None:
         ("topic", "extracted", 1),
     ],
 )
-async def test_configured_cutoff_filters_before_mirroring(tmp_path, monkeypatch, query, kind, expected):
+@pytest.mark.parametrize("mode", ["local", "cloud"])
+async def test_configured_cutoff_filters_before_mirroring(tmp_path, monkeypatch, query, kind, expected, mode):
     monkeypatch.setattr(env, "_file_values", lambda: {})
+    monkeypatch.setenv("MEMU_MEMORY_MODE", mode)
     for category, score in (("SHORT", "0.4"), ("LONG", "0.6"), ("EXTRACTED", "0.4")):
-        monkeypatch.setenv(f"MEMU_RETRIEVE_MIN_SCORE_{category}", score)
+        monkeypatch.setenv(f"MEMU_{mode.upper()}_RETRIEVE_MIN_SCORE_{category}", score)
     seen = []
 
     async def search(query, where):
@@ -172,17 +174,38 @@ async def test_configured_cutoff_filters_before_mirroring(tmp_path, monkeypatch,
 
 
 @pytest.mark.parametrize("value", ["nan", "inf", "-inf", "1.01", "-1.01", "invalid"])
-def test_invalid_cutoff_is_rejected(monkeypatch, value):
-    monkeypatch.setenv("MEMU_RETRIEVE_MIN_SCORE_SHORT", value)
-    with pytest.raises(env.ConfigError, match="MEMU_RETRIEVE_MIN_SCORE_SHORT"):
+@pytest.mark.parametrize("mode", ["local", "cloud"])
+def test_invalid_cutoff_is_rejected(monkeypatch, value, mode):
+    monkeypatch.setenv("MEMU_MEMORY_MODE", mode)
+    name = f"MEMU_{mode.upper()}_RETRIEVE_MIN_SCORE_SHORT"
+    monkeypatch.setenv(name, value)
+    with pytest.raises(env.ConfigError, match=name):
         env.retrieval_min_score("short")
 
 
-def test_cutoff_uses_shared_config_and_environment_override(monkeypatch):
-    monkeypatch.delenv("MEMU_RETRIEVE_MIN_SCORE_SHORT", raising=False)
+@pytest.mark.parametrize("mode", ["local", "cloud"])
+def test_cutoff_uses_shared_config_and_environment_override(monkeypatch, mode):
+    monkeypatch.setenv("MEMU_MEMORY_MODE", mode)
+    name = f"MEMU_{mode.upper()}_RETRIEVE_MIN_SCORE_SHORT"
+    monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(env, "_file_values", lambda: {})
-    assert env.retrieval_min_score("short") is None
-    monkeypatch.setattr(env, "_file_values", lambda: {"MEMU_RETRIEVE_MIN_SCORE_SHORT": "0.55"})
-    assert env.retrieval_min_score("short") == 0.55
-    monkeypatch.setenv("MEMU_RETRIEVE_MIN_SCORE_SHORT", "0")
+    assert env.retrieval_min_score("short") == (0.55 if mode == "cloud" else None)
+    monkeypatch.setattr(env, "_file_values", lambda: {name: "0.65"})
+    assert env.retrieval_min_score("short") == 0.65
+    monkeypatch.setenv(name, "0")
     assert env.retrieval_min_score("short") == 0
+
+
+@pytest.mark.parametrize("mode", ["local", "cloud"])
+@pytest.mark.parametrize(("kind", "cloud_default"), [("short", 0.55), ("long", 0.60), ("extracted", 0.58)])
+def test_backend_cutoffs_are_independent(monkeypatch, mode, kind, cloud_default):
+    monkeypatch.setenv("MEMU_MEMORY_MODE", mode)
+    monkeypatch.setattr(env, "_file_values", lambda: {})
+    monkeypatch.delenv(f"MEMU_{mode.upper()}_RETRIEVE_MIN_SCORE_{kind.upper()}", raising=False)
+    other_mode = "LOCAL" if mode == "cloud" else "CLOUD"
+    monkeypatch.setenv(f"MEMU_{other_mode}_RETRIEVE_MIN_SCORE_{kind.upper()}", "invalid")
+    assert env.retrieval_min_score(kind) == (cloud_default if mode == "cloud" else None)
+    # Switching backends selects that backend's independently configured threshold.
+    monkeypatch.setenv(f"MEMU_{other_mode}_RETRIEVE_MIN_SCORE_{kind.upper()}", "0.75")
+    monkeypatch.setenv("MEMU_MEMORY_MODE", other_mode.lower())
+    assert env.retrieval_min_score(kind) == 0.75
