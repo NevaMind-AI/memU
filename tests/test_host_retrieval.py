@@ -169,8 +169,42 @@ async def test_configured_cutoff_filters_before_mirroring(tmp_path, monkeypatch,
     result = await retrieval.retrieve(query, where={"user_id": "u"}, query_kind=kind)
     assert seen == [{"user_id": "u"}]
     assert len(result["hits"]) == expected
+    assert result["retrieval_status"] == {
+        "status": "succeeded",
+        "query_kind": kind or ("long" if query == "中" * 200 else "short"),
+        "min_score": 0.6 if expected == 0 else 0.4,
+        "candidate_segments": 2,
+        "filtered_segments": 2 - expected,
+        "retained_segments": expected,
+        "returned_hits": expected,
+    }
     assert (tmp_path / "memory/coffee-preferences.md").exists() is bool(expected)
     assert len(result["resources"]) == 1  # Segment calibration does not cover resources.
+
+
+@pytest.mark.asyncio
+async def test_disabled_filter_reports_successful_unfiltered_counts(tmp_path, monkeypatch):
+    monkeypatch.setattr(env, "_file_values", lambda: {})
+    monkeypatch.setenv("MEMU_MEMORY_MODE", "local")
+    monkeypatch.delenv("MEMU_LOCAL_RETRIEVE_MIN_SCORE_SHORT", raising=False)
+
+    async def search(query, where):
+        return _result()
+
+    monkeypatch.setattr(
+        retrieval, "build_agentic_memory_backend_from_env", lambda: SimpleNamespace(progressive_retrieve=search)
+    )
+    monkeypatch.setattr(retrieval, "BASE_DIR", str(tmp_path))
+    result = await retrieval.retrieve("topic")
+    assert result["retrieval_status"] == {
+        "status": "succeeded",
+        "query_kind": "short",
+        "min_score": None,
+        "candidate_segments": 2,
+        "filtered_segments": 0,
+        "retained_segments": 2,
+        "returned_hits": 2,
+    }
 
 
 @pytest.mark.parametrize("value", ["nan", "inf", "-inf", "1.01", "-1.01", "invalid"])

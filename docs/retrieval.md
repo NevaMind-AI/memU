@@ -46,6 +46,18 @@ Values must be finite numbers between -1 and 1; segments at or above the cutoff
 survive. Only files referenced by surviving segments are returned and mirrored.
 Resources are scored separately and are unaffected.
 
+Host retrieval also returns `retrieval_status`: successful completion, query
+category, applied cutoff (`null` when disabled), candidate segment count,
+filtered and retained segment counts, and final returned hit count. Retained
+segments are counted before the five-hit output cap. Score filtering is a
+heuristic, not a definitive semantic relevance judgment.
+
+The Codex prompt hook includes this status in the agent's context even when
+there are no hits or resources. For example, five candidates all below the
+cutoff are reported as a successful retrieval with five filtered segments and
+zero returned hits. The agent can distinguish that outcome from a retrieval
+failure or missing hook context.
+
 `<binary> retrieve` classifies the original query as short below 200 non-whitespace
 characters and long otherwise. `--query-kind short|long|extracted` overrides that
 classification. The Codex prompt hook passes `extracted` only after successful

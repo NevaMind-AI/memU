@@ -33,7 +33,7 @@ def test_automatic_query_fallback_uses_first_2000_unicode_characters(tmp_path, m
 
     monkeypatch.setattr(prompt_hook.subprocess, "run", retrieve)
     assert main(["prompt-hook", "--base-dir", str(tmp_path)]) == 0
-    assert not capsys.readouterr().out
+    assert "completed successfully" in capsys.readouterr().out
     assert calls[0][0] == [
         sys.executable,
         "-m",
