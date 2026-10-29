@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import errno
 import io
 import json
-import math
 import os
 import shlex
 import shutil
@@ -25,6 +23,7 @@ from typing import TextIO, cast
 from uuid import UUID
 
 from memu.hosts.bridging import Layout, self_sessions
+from memu.hosts.hooks import admission
 
 
 class _Tee(io.TextIOBase):
@@ -191,83 +190,15 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
                 raise RuntimeError(f"Agent exited {code}")  # noqa: TRY003
 
 
-@contextlib.contextmanager
-def _workspace_lock(base: Path) -> Iterator[bool]:
-    """Try the whole-pass lock once; process exit also releases it."""
-    with (base / ".diagnostic.lock").open("a+b") as lock:
-        if lock.tell() == 0:
-            lock.write(b"0")
-            lock.flush()
-        lock.seek(0)
-        if sys.platform == "win32":
-            import msvcrt
-
-            try:
-                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
-            except OSError as exc:
-                if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
-                    raise
-                yield False
-                return
-            try:
-                yield True
-            finally:
-                lock.seek(0)
-                msvcrt.locking(lock.fileno(), msvcrt.LK_UNLCK, 1)
-        else:
-            import fcntl
-
-            try:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except OSError as exc:
-                if exc.errno not in (errno.EACCES, errno.EAGAIN):
-                    raise
-                yield False
-                return
-            try:
-                yield True
-            finally:
-                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
-
-
 COOLDOWN_SECONDS = 30 * 60
+_workspace_lock = admission.workspace_lock
 
 
 @contextlib.contextmanager
 def memorize_run(layout: Layout) -> Iterator[bool]:
-    """Coordinate admission for every Codex hook-run before touching pipeline state."""
-    layout.base.mkdir(parents=True, exist_ok=True)
-    with _workspace_lock(layout.base) as acquired:
-        if not acquired:
-            print("=== MEMORIZE status=busy ===", flush=True)
-            yield False
-            return
-        state = layout.base / ".memorize_last_started.codex.json"
-        now = time.time()
-        try:
-            previous = json.loads(state.read_text(encoding="utf-8"))
-            if type(previous) not in (int, float) or not math.isfinite(previous) or previous < 0:
-                raise ValueError("expected a finite nonnegative Unix timestamp")  # noqa: TRY003, TRY301
-        except FileNotFoundError:
-            previous = None
-        except (ValueError, UnicodeError, OverflowError) as exc:
-            print(f"warning: invalid memorize cooldown state at {state}: {exc}; resetting", flush=True)
-            previous = None
-        if previous is not None:
-            elapsed = now - previous
-            if elapsed < 0:
-                print(f"warning: memorize clock moved backwards ({now} < {previous}); resetting", flush=True)
-            elif elapsed < COOLDOWN_SECONDS:
-                print(f"=== COOLDOWN until={previous + COOLDOWN_SECONDS} ===", flush=True)
-                print("=== MEMORIZE status=cooldown ===", flush=True)
-                yield False
-                return
-        # Persist before prepare: failures, no-input runs and crashes consume cooldown too.
-        from memu.hosts.codex.prompt_hook_install import _atomic_write
-
-        _atomic_write(state, json.dumps(now).encode("utf-8"))
-        print("=== MEMORIZE status=started ===", flush=True)
-        yield True
+    """Keep the Codex entry point and cooldown while sharing worker admission."""
+    with admission.memorize_run(layout, cooldown_seconds=COOLDOWN_SECONDS) as admitted:
+        yield admitted
 
 
 def main() -> int:
