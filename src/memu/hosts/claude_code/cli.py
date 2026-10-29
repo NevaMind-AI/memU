@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import sys
 
-from memu.hosts.claude_code import cowork_cmd
+from memu.hosts.claude_code import cowork_cmd, prompt_hook
 from memu.hosts.claude_code.desktop_sessions import ClaudeDesktopTranscriptSource
 from memu.hosts.claude_code.sessions import SESSION_DIR
 from memu.hosts.host_cli import HostSpec, run
@@ -43,6 +43,12 @@ file name (``<projects>/<escaped cwd>/<sessionId>.jsonl``), which is exactly wha
 :meth:`TranscriptSource.session_id` reads back, so the bridging run can recognise
 its own session without matching any content (#606)."""
 
+
+def _register_extra(sub: object) -> None:
+    cowork_cmd.register(sub)
+    prompt_hook.register(sub)
+
+
 SPEC = HostSpec(
     host=HOST,
     display="Claude Code",
@@ -58,7 +64,7 @@ SPEC = HostSpec(
     schedule_command="claude -p {prompt}",
     session_id_env=SESSION_ID_ENV,
     needs_headless_auth=True,
-    register_extra=cowork_cmd.register,
+    register_extra=_register_extra,
     install_hint=(
         "  Install a standalone claude:\n"
         "    winget install Anthropic.ClaudeCode\n"

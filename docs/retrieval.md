@@ -40,6 +40,20 @@ Recalibrate Local thresholds when changing the embedding model. Local and Cloud
 settings are independent: changing `MEMU_MEMORY_MODE` selects only that backend's
 thresholds.
 
+## Claude Code prompt hook
+
+`memu-claude-code prompt-hook` accepts a Claude `UserPromptSubmit` event on stdin
+and calls the installed shared retrieval adapter. Register the installed command
+in Claude settings as a command hook with a 45-second timeout. It uses the
+original prompt's short/long category, with a 2000-character query limit, and
+does not run query extraction. Retrieval has a 40-second deadline.
+
+The returned context includes filtering status even for zero hits. Context is
+bounded to 9500 UTF-16 units; `context_counts` reports the hits and resources
+actually included after that budget is applied. Logs are stored under
+`~/.memu/hosts/claude-code/log/hooks/retrieve/`. Runs marked
+`MEMU_CLAUDE_MEMORIZE=1` skip retrieval to avoid processing the background worker.
+
 ## Filtering and query categories
 
 Values must be finite numbers between -1 and 1; segments at or above the cutoff
