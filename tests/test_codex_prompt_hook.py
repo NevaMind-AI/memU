@@ -43,7 +43,15 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
     assert final["session_id"] == "test-session"
     assert final["elapsed_ms"] >= final["retrieve_elapsed_ms"] >= 0
     assert "second line" not in logs[0].read_text(encoding="utf-8")
-    assert calls[0][0] == [sys.executable, "-m", "memu.hosts.codex.cli", "retrieve", "--query-stdin"]
+    assert calls[0][0] == [
+        sys.executable,
+        "-m",
+        "memu.hosts.codex.cli",
+        "retrieve",
+        "--query-stdin",
+        "--query-kind",
+        "short",
+    ]
     assert calls[0][1]["input"] == prompt.encode("utf-8")
     assert final["prompt_chars"] == final["query_chars"] == len(prompt)
     assert final["query_truncated"] is False

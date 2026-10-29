@@ -25,12 +25,14 @@ from pathlib import Path
 from typing import Any
 
 from memu import events
-from memu.env import build_agentic_memory_backend_from_env
+from memu.env import LONG_QUERY_CHARS, QueryKind, build_agentic_memory_backend_from_env, retrieval_min_score
 from memu.hosts.bridging.layout import BASE_DIR, TRACK_DIRS
 from memu.hosts.bridging.recall_files import write_recall_file
 
 
-async def retrieve(query: str, where: dict[str, Any] | None = None) -> dict[str, Any]:
+async def retrieve(
+    query: str, where: dict[str, Any] | None = None, *, query_kind: QueryKind | None = None
+) -> dict[str, Any]:
     """Retrieve against the configured backend. Returns self-contained ``hits`` and ``resources``.
 
     Embeddings are already stripped from the hits, so the result is safe to print.
@@ -38,8 +40,14 @@ async def retrieve(query: str, where: dict[str, Any] | None = None) -> dict[str,
     self-contained form the standing instruction promises (see
     :mod:`memu.hosts.instruction`).
     """
+    kind = query_kind or ("long" if sum(not c.isspace() for c in query) >= LONG_QUERY_CHARS else "short")
+    min_score = retrieval_min_score(kind)
     backend = build_agentic_memory_backend_from_env()
     result: dict[str, Any] = await backend.progressive_retrieve(query, where=where)
+    if min_score is not None:
+        result["segments"] = [s for s in result.get("segments", []) if s["score"] >= min_score]
+        file_ids = {s["recall_file_id"] for s in result["segments"]}
+        result["files"] = [f for f in result.get("files", []) if f["id"] in file_ids]
     return _shape_for_agent(result)
 
 
@@ -106,7 +114,7 @@ async def _cmd_retrieve(args: argparse.Namespace) -> int:
         query = sys.stdin.read()
     started = time.monotonic()
     try:
-        result = await retrieve(query)
+        result = await retrieve(query, query_kind=args.query_kind) if args.query_kind else await retrieve(query)
     except Exception:
         # `memory_search_failed`, and only ever for an exception this command
         # actually raised. An agent reporting `--stage retrieve` — retrieval quietly
@@ -167,4 +175,9 @@ def register(sub: Any, *, host: str = "", session_id_env: str = "") -> None:
     query = parser.add_mutually_exclusive_group(required=True)
     query.add_argument("query", nargs="?", help="Natural-language query")
     query.add_argument("--query-stdin", action="store_true", help="Read the complete UTF-8 query from stdin")
+    parser.add_argument(
+        "--query-kind",
+        choices=("short", "long", "extracted"),
+        help="Score cutoff category; defaults to short/long by 200 non-whitespace characters",
+    )
     parser.set_defaults(handler=_cmd_retrieve, host=host, session_id_env=session_id_env)
