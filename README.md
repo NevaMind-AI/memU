@@ -160,6 +160,8 @@ memu-codex retrieve "What should I remember about this project?"
 
 Host retrieval returns compact JSON with at most five self-contained `hits` plus independent `resources`. Each hit combines matched `text` with its source's `description`, `track`, and local mirror `path` (or inline `content` when no mirror is available). Its `score` describes the matched segment; `created_at` and `updated_at` describe the source file when available. Hits retain segment order, including excerpts whose source is missing; sources without matched excerpts remain source-only hits. Resources contain `path`, `caption`, and available scores/timestamps. Database IDs and scope metadata are omitted from the agent-facing output.
 
+Claude Code also exposes `memu-claude-code prompt-hook` for a manually configured synchronous `UserPromptSubmit` command hook (set the outer hook timeout to at least 45 seconds). It reads the event JSON on stdin and retrieves through the shared backend with a 40-second subprocess timeout. The complete `additionalContext`, including its prefix and JSON, is limited to 9,500 UTF-16 code units. Hits are considered before resources; oversized entries are skipped whole and later entries can still fit. If no entry fits, no context is emitted. Local logs under `~/.memu/hosts/claude-code/log/hooks/retrieve/` record input/returned/omitted counts and output length. Failures let the prompt proceed. This command does not register hooks or migrate existing retrieval instructions; avoid enabling duplicate retrieval for the same session.
+
 Install or invoke the CLI directly:
 
 ```bash
