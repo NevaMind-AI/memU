@@ -702,8 +702,11 @@ def _report_guide_opened(spec: HostSpec, event: str) -> None:
 
 
 async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
-    if spec.host == "codex":
-        from memu.hosts.codex.notify_console import memorize_run
+    if spec.host in {"codex", "claude-code"}:
+        if spec.host == "codex":
+            from memu.hosts.codex.notify_console import memorize_run
+        else:
+            from memu.hosts.claude_code.memorize_hook import memorize_run
 
         with memorize_run(_layout(spec, args)) as admitted:
             if not admitted:
