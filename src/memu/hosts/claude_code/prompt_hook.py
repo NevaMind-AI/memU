@@ -78,7 +78,7 @@ def _retrieve(trace: dict[str, Any]) -> dict[str, Any] | None:
         timeout=40,
         env=env,
         check=False,
-        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     trace["retrieve_exit_code"] = result.returncode
     if result.returncode:
