@@ -29,7 +29,7 @@ def jobs_prompt(layout: Layout) -> str:
         "Process the memU self-evolve jobs. List "
         f"{layout.jobs}/*.txt and process them in ascending numeric order. "
         "Read each job and follow its instructions exactly. Finish one job before "
-        "starting the next. Do not run memu-codex prepare or commit; the worker "
+        f"starting the next. Do not run memu-{layout.host} prepare or commit; the worker "
         "runs those commands itself."
     )
 

@@ -19,8 +19,10 @@ Usage:
 from __future__ import annotations
 
 import sys
+from typing import Any
 
-from memu.hosts.claude_code import cowork_cmd, prompt_hook
+from memu.hosts import hooks
+from memu.hosts.claude_code import cowork_cmd, memorize_hook, prompt_hook
 from memu.hosts.claude_code.desktop_sessions import ClaudeDesktopTranscriptSource
 from memu.hosts.claude_code.sessions import SESSION_DIR
 from memu.hosts.host_cli import HostSpec, run
@@ -44,9 +46,10 @@ file name (``<projects>/<escaped cwd>/<sessionId>.jsonl``), which is exactly wha
 its own session without matching any content (#606)."""
 
 
-def _register_extra(sub: object) -> None:
+def _register_extra(sub: Any) -> None:
     cowork_cmd.register(sub)
     prompt_hook.register(sub)
+    memorize_hook.register(sub)
 
 
 SPEC = HostSpec(
@@ -64,6 +67,10 @@ SPEC = HostSpec(
     schedule_command="claude -p {prompt}",
     session_id_env=SESSION_ID_ENV,
     needs_headless_auth=True,
+    hook=hooks.HookSpec(
+        agent=hooks.HeadlessAgent(argv=("claude", "-p", "--dangerously-skip-permissions")),
+        stream_output=memorize_hook.stream_agent,
+    ),
     register_extra=_register_extra,
     install_hint=(
         "  Install a standalone claude:\n"
