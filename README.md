@@ -89,7 +89,7 @@ Once the scheduled bridging task is installed, memU can turn useful agent histor
 1. **Capture new sessions.** The host adapter reads new session history, including messages and tool calls.
 2. **Prepare self-evolve jobs.** `prepare` slices each session into a self-contained job with the paths and context the agent needs.
 3. **Let the agent decide.** The agent reads related existing skills, then chooses to do nothing, patch an existing skill, or create a new one.
-4. **Write readable skill Markdown.** Each skill has a name, description, and reusable workflow, including useful branches, edge cases, and pitfalls.
+4. **Write readable skill Markdown.** Each skill has a name, description, and reusable workflow, including useful branches, edge cases, and pitfalls. Packaged self-evolve prompts ask for prose, lists, and steps instead of tables; memory facts stay on complete, self-contained lines.
 5. **Commit and index.** `commit` submits changed skill files through `commit_results`; memU embeds the skill name and description and stores it under the `skill` track.
 6. **Retrieve it later.** On a similar future task, memU returns the relevant skill so any connected agent can use the learned workflow.
 
