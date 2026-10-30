@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -28,7 +29,7 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
             return subprocess.CompletedProcess(argv, 1, b"", b"permission denied")
         if outcome == "invalid":
             return subprocess.CompletedProcess(argv, 0, b"[]", b"")
-        memories = {"hits": [{"text": "记忆"}] if outcome == "success" else [], "resources": []}
+        memories: dict[str, Any] = {"hits": [{"text": "记忆"}] if outcome == "success" else [], "resources": []}
         if outcome == "filtered":
             memories["retrieval_status"] = {
                 "status": "succeeded",
