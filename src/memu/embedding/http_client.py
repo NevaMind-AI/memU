@@ -64,7 +64,11 @@ def _load_proxy(base_url: str) -> str | None:
         # different — it states intent about memU's own traffic (e.g. capturing
         # it with a local debugging proxy) — so it still wins.
         return explicit
-    return explicit or os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY") or None
+    # Passing an HTTP proxy to an HTTPS request overrides httpx's correct
+    # scheme-specific environment handling.
+    scheme = urllib.parse.urlsplit(base_url).scheme.lower()
+    proxy_key = {"http": "HTTP_PROXY", "https": "HTTPS_PROXY"}.get(scheme)
+    return explicit or (os.getenv(proxy_key) if proxy_key else None)
 
 
 logger = logging.getLogger(__name__)
