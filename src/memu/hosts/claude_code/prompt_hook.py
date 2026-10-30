@@ -56,10 +56,6 @@ def _read_event() -> tuple[dict[str, Any], str]:
 
 async def _cmd_prompt_hook(args: argparse.Namespace) -> int:
     started = time.monotonic()
-    for stream in (sys.stdin, sys.stdout):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            reconfigure(encoding="utf-8", errors="strict")
     trace: dict[str, Any] = {"status": "started"}
     try:
         event, prompt = _read_event()
