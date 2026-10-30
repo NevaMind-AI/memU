@@ -55,12 +55,9 @@ For the session as a whole, pick ONE of:
 
 You may combine (b) and (c) if the session warrants it.
 
-Extract what would help a future agent make a decision or act: stable facts,
-preferences, decisions, constraints, and reusable lessons. Synthesize the useful
-conclusion rather than retelling the session. Omit operational logs, event-by-event
-history, temporary counts, and intermediate status unless they change how that
-conclusion should be applied. Preserve uncertainty and conditions that limit a
-finding; do not turn a historical observation into an unconditional current fact.
+Keep information that is likely to remain useful in future sessions. Extract the
+lasting fact or lesson, rather than preserving the sequence of events or the
+temporary state of the current task.
 
 ## Step 3 — write the memory files
 
