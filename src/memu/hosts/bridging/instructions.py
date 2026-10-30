@@ -55,13 +55,21 @@ For the session as a whole, pick ONE of:
 
 You may combine (b) and (c) if the session warrants it.
 
+Extract what would help a future agent make a decision or act: stable facts,
+preferences, decisions, constraints, and reusable lessons. Synthesize the useful
+conclusion rather than retelling the session. Omit operational logs, event-by-event
+history, temporary counts, and intermediate status unless they change how that
+conclusion should be applied. Preserve uncertainty and conditions that limit a
+finding; do not turn a historical observation into an unconditional current fact.
+
 ## Step 3 — write the memory files
 
 Use prose or bullet points, not Markdown tables. Write each fact on one physical
 line as a complete, independently understandable statement: include its subject,
-what the value describes, and any necessary date, scope, or condition. Keep a fact
-on one line even when it is long. Express comparisons and timelines as full
-statements; do not use bare values or references such as "same as above".
+what the value describes, and the necessary scope or conditions. Keep a fact on
+one line even when it is long. Include dates only when they establish validity or
+scope, or the user explicitly needs historical recall. Express comparisons as
+complete statements; do not use bare values or references such as "same as above".
 When patching a file that already has a table, write new or updated facts in this
 form rather than adding table rows. Preserve unrelated existing content.
 
