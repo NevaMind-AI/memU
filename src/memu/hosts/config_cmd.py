@@ -27,6 +27,21 @@ from typing import Any
 from memu import config_file, events
 from memu import env as env_module
 
+_RETRIEVAL_CONFIG_COMMENTS = """# Host retrieval score cutoffs (docs/retrieval.md)
+# MEMU_MEMORY_MODE selects independent Cloud or Local settings.
+# Cloud uses calibrated defaults; review them when the Cloud embedding model changes.
+# Uncomment to override; leave commented to follow defaults across upgrades.
+# MEMU_CLOUD_RETRIEVE_MIN_SCORE_SHORT=0.55
+# MEMU_CLOUD_RETRIEVE_MIN_SCORE_LONG=0.60
+# MEMU_CLOUD_RETRIEVE_MIN_SCORE_EXTRACTED=0.58
+# Local defaults to no filtering. Calibrate for your embedding model and corpus.
+# Replace the placeholders before uncommenting; recalibrate when changing models.
+# MEMU_LOCAL_RETRIEVE_MIN_SCORE_SHORT=<your-calibrated-score>
+# MEMU_LOCAL_RETRIEVE_MIN_SCORE_LONG=<your-calibrated-score>
+# MEMU_LOCAL_RETRIEVE_MIN_SCORE_EXTRACTED=<your-calibrated-score>
+# Values: finite [-1, 1]; score >= cutoff survives; -1 retains all valid cosine scores.
+"""
+
 IDENTITY_KEYS = ("MEMU_DB", "MEMU_EMBED_PROVIDER", "MEMU_EMBED_MODEL")
 """Keys that bind an embedding space, and may never be *changed* without ``--force``.
 
@@ -127,7 +142,7 @@ def _write(updates: dict[str, str]) -> None:
     own rows: what the agent needs first is what this machine's backend now is, and
     where the file lives only matters once it is asking a different question.
     """
-    path, _ = config_file.write_values(updates)
+    path, _ = config_file.write_values(updates, comments=_RETRIEVAL_CONFIG_COMMENTS)
     env_module.reload()
     _row("config", f"{path} ({config_file.permission_note()})")
 

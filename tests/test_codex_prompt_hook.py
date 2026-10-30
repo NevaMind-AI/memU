@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -12,7 +13,7 @@ from memu.hosts.codex import prompt_hook
 from memu.hosts.codex.cli import main
 
 
-@pytest.mark.parametrize("outcome", ["success", "empty", "failure", "timeout", "invalid"])
+@pytest.mark.parametrize("outcome", ["success", "empty", "filtered", "failure", "timeout", "invalid"])
 def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, outcome):
     prompt = '  中文 "quoted"\nsecond line  '
     event = {"hook_event_name": "UserPromptSubmit", "session_id": "test-session", "prompt": prompt}
@@ -28,7 +29,17 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
             return subprocess.CompletedProcess(argv, 1, b"", b"permission denied")
         if outcome == "invalid":
             return subprocess.CompletedProcess(argv, 0, b"[]", b"")
-        memories = {"hits": [{"text": "记忆"}] if outcome == "success" else [], "resources": []}
+        memories: dict[str, Any] = {"hits": [{"text": "记忆"}] if outcome == "success" else [], "resources": []}
+        if outcome == "filtered":
+            memories["retrieval_status"] = {
+                "status": "succeeded",
+                "query_kind": "short",
+                "min_score": 0.55,
+                "candidate_segments": 5,
+                "filtered_segments": 5,
+                "retained_segments": 0,
+                "returned_hits": 0,
+            }
         return subprocess.CompletedProcess(argv, 0, json.dumps(memories).encode("utf-8"), b"")
 
     monkeypatch.setattr(prompt_hook.subprocess, "run", retrieve)
@@ -43,7 +54,15 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
     assert final["session_id"] == "test-session"
     assert final["elapsed_ms"] >= final["retrieve_elapsed_ms"] >= 0
     assert "second line" not in logs[0].read_text(encoding="utf-8")
-    assert calls[0][0] == [sys.executable, "-m", "memu.hosts.codex.cli", "retrieve", "--query-stdin"]
+    assert calls[0][0] == [
+        sys.executable,
+        "-m",
+        "memu.hosts.codex.cli",
+        "retrieve",
+        "--query-stdin",
+        "--query-kind",
+        "short",
+    ]
     assert calls[0][1]["input"] == prompt.encode("utf-8")
     assert final["prompt_chars"] == final["query_chars"] == len(prompt)
     assert final["query_truncated"] is False
@@ -55,17 +74,20 @@ def test_prompt_hook_preserves_query_and_logs(tmp_path, monkeypatch, capsys, out
         assert final["additional_context"] == specific["additionalContext"]
         assert f"memU retrieval subprocess elapsed: {final['retrieve_elapsed_ms']} ms" in specific["additionalContext"]
         assert "not total answer time" in specific["additionalContext"]
-        assert final["retrieve_result"] == json.loads(specific["additionalContext"].split("\n", 2)[2])
+        assert final["retrieve_result"] == json.loads(specific["additionalContext"].rsplit("\n", 1)[1])
         assert final["status"] == "context_returned"
         assert final["counts"] == {"hits": 1, "resources": 0}
-    else:
+    elif outcome not in ("empty", "filtered"):
         assert not output.out
-        if outcome != "empty":
-            assert final["status"] == "failed"
-            assert output.err
-    if outcome == "empty":
-        assert final["retrieve_result"] == {"hits": [], "resources": []}
-        assert "additional_context" not in final
+        assert final["status"] == "failed"
+        assert output.err
+    if outcome in ("empty", "filtered"):
+        context = json.loads(output.out)["hookSpecificOutput"]["additionalContext"]
+        result = json.loads(context.rsplit("\n", 1)[1])
+        assert result["hits"] == result["resources"] == []
+        assert result.get("retrieval_status", {}).get("filtered_segments", 0) == 5 * (outcome == "filtered")
+        assert "completed successfully" in context
+        assert final["status"] == "empty_result"
     if outcome == "failure":
         assert final["retrieve_exit_code"] == 1
         assert final["stderr"] == "permission denied"

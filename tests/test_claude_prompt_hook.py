@@ -46,7 +46,9 @@ def test_no_fitting_entries_return_no_context(payload: dict) -> None:
     assert hook.bounded_context(payload, {}) is None
 
 
-@pytest.mark.parametrize("outcome", ["success", "empty", "oversized", "failure", "timeout", "invalid", "bad_entry"])
+@pytest.mark.parametrize(
+    "outcome", ["success", "empty", "filtered_empty", "oversized", "failure", "timeout", "invalid", "bad_entry"]
+)
 def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcome):
     prompt = '中文😀"\r\n' * 600
     event = {"hook_event_name": "UserPromptSubmit", "session_id": "synthetic-session", "prompt": prompt}
@@ -63,6 +65,16 @@ def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcom
         payload = {
             "success": {"hits": [{"text": "记忆😀"}], "resources": []},
             "empty": {"hits": [], "resources": []},
+            "filtered_empty": {
+                "hits": [],
+                "resources": [],
+                "retrieval_status": {
+                    "status": "succeeded",
+                    "min_score": 0.6,
+                    "candidate_segments": 10,
+                    "filtered_segments": 10,
+                },
+            },
             "oversized": {"hits": [{"text": "x" * 10000}], "resources": []},
             "invalid": [],
             "bad_entry": {"hits": ["not an object"]},
@@ -74,7 +86,15 @@ def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcom
     output = capsys.readouterr()
     trace = json.loads(next((tmp_path / "log/hooks/retrieve").glob("*.json")).read_text(encoding="utf-8"))
     argv, kwargs = calls[0]
-    assert argv == [sys.executable, "-m", "memu.hosts.claude_code.cli", "retrieve", "--query-stdin"]
+    assert argv == [
+        sys.executable,
+        "-m",
+        "memu.hosts.claude_code.cli",
+        "retrieve",
+        "--query-stdin",
+        "--query-kind",
+        "long",
+    ]
     assert kwargs["input"].decode("utf-8") == prompt[:2000]
     assert kwargs["env"]["CLAUDE_CODE_SESSION_ID"] == "synthetic-session"
     assert kwargs["timeout"] == 40
@@ -85,6 +105,13 @@ def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcom
         assert len(context.encode("utf-16-le")) // 2 <= hook.CONTEXT_BUDGET
         assert trace["status"] == "context_returned"
         assert trace["omitted_counts"] == {"hits": 0, "resources": 0}
+    elif outcome == "filtered_empty":
+        context = json.loads(output.out)["hookSpecificOutput"]["additionalContext"]
+        payload = json.loads(context[len(hook.CONTEXT_PREFIX) :])
+        assert payload["retrieval_status"]["filtered_segments"] == 10
+        assert payload["context_counts"] == {"hits": 0, "resources": 0}
+        assert trace["status"] == "context_returned"
+        assert trace["retrieval_status"] == payload["retrieval_status"]
     else:
         assert not output.out
         expected = {"empty": "empty_result", "oversized": "budget_exhausted"}.get(outcome, "failed")
@@ -122,3 +149,20 @@ def test_log_failure_does_not_discard_context(tmp_path, monkeypatch, capsys):
     output = capsys.readouterr()
     assert json.loads(output.out)["hookSpecificOutput"]["additionalContext"] == "memory"
     assert "log failed" in output.err
+
+
+@pytest.mark.parametrize("hits", [[], [{"text": "memory", "score": 0.6}], [{"text": "😀" * 6000}]])
+def test_filter_metadata_survives_context_budget(hits):
+    status = {"status": "succeeded", "min_score": 0.55, "candidate_segments": 10}
+    trace: dict = {}
+    context = hook.bounded_context({"hits": hits, "resources": [], "retrieval_status": status}, trace)
+    assert context is not None
+    payload = json.loads(context[len(hook.CONTEXT_PREFIX) :])
+    assert payload["retrieval_status"] == status
+    assert payload["context_counts"]["hits"] == len(payload["hits"])
+    assert trace["context_utf16_units"] <= hook.CONTEXT_BUDGET
+
+
+def test_oversized_metadata_fails_explicitly():
+    with pytest.raises(ValueError, match="metadata exceeds context budget"):
+        hook.bounded_context({"retrieval_status": {"status": "x" * 10000}}, {})

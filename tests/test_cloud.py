@@ -351,4 +351,7 @@ async def test_host_retrieval_uses_shared_backend_factory(monkeypatch: pytest.Mo
 
     monkeypatch.setattr(retrieval, "build_agentic_memory_backend_from_env", lambda: Backend())
 
-    assert await retrieval.retrieve("tea", where={"user_id": "u1"}) == {"hits": [], "resources": []}
+    result = await retrieval.retrieve("tea", where={"user_id": "u1"})
+    assert result["hits"] == result["resources"] == []
+    assert result["retrieval_status"]["status"] == "succeeded"
+    assert result["retrieval_status"]["candidate_segments"] == 0

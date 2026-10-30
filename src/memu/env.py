@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import codecs
 import locale
+import math
 import os
 from functools import cache
 from pathlib import Path
@@ -184,6 +185,29 @@ def embedding_profile() -> dict[str, Any]:
         if value := env(var):
             profile[key] = value
     return profile
+
+
+QueryKind = Literal["short", "long", "extracted"]
+LONG_QUERY_CHARS = 200
+# Calibrated for the Cloud embedding model; review on model changes. Local models
+# need their own calibration, so these defaults must stay on the Cloud path.
+_CLOUD_RETRIEVAL_MIN_SCORES: dict[QueryKind, float] = {"short": 0.55, "long": 0.60, "extracted": 0.58}
+
+
+def retrieval_min_score(kind: QueryKind) -> float | None:
+    """Resolve the active backend's host cutoff, with calibrated Cloud defaults."""
+    mode = memory_mode()
+    name = f"MEMU_{mode.upper()}_RETRIEVE_MIN_SCORE_{kind.upper()}"
+    value = env(name)
+    if value is None:
+        return _CLOUD_RETRIEVAL_MIN_SCORES[kind] if mode == "cloud" else None
+    try:
+        score = float(value)
+    except ValueError as exc:
+        raise ConfigError(name, "must be a finite number between -1 and 1") from exc
+    if not math.isfinite(score) or not -1 <= score <= 1:
+        raise ConfigError(name, "must be a finite number between -1 and 1")
+    return score
 
 
 MemoryMode = Literal["local", "cloud"]
