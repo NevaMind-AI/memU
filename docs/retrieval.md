@@ -1,5 +1,18 @@
 # Host retrieval configuration
 
+## Recall-file segments
+
+The local service indexes memory content one nonblank, non-heading line at a
+time, excluding Markdown table blocks (header, delimiter, and data rows).
+The complete table remains in the stored recall file. Skill segments continue
+to use only the skill name and description.
+
+Existing table segments are removed when their recall file is recommitted under
+the updated service; unchanged prose segments keep their IDs and embeddings.
+Cloud segmentation is controlled by the deployed server and requires the same
+server-side update before recommitting existing files can clean up those segments.
+
+
 Host segment score cutoffs are selected by `MEMU_MEMORY_MODE`. Configure overrides
 in `~/.memu/config.env`; process environment variables take precedence.
 

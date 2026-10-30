@@ -488,3 +488,42 @@ async def test_normalization_does_not_migrate_legacy_record(service: MemoryServi
         legacy_name,
         "personal-memory",
     }
+
+
+@pytest.mark.parametrize(
+    "table",
+    [
+        "| host | count |\n| --- | --- |\n| hermes | 4 of 5 |",
+        "host | count\n:--- | ---:\nhermes | 4 of 5",
+        "| host | count |\r\n| :- | -: |\r\n| hermes | 4 of 5 |",
+    ],
+)
+async def test_tables_stay_in_content_but_not_segments(service: MemoryService, table: str) -> None:
+    content = "before fact\n" + table + "\n\nafter fact\ncommand | argument"
+    await service.commit_results(recall_files=[{"name": "tables", "content": content}])
+    listed = await service.list_all_recall_files()
+    assert listed["recall_files"][0]["content"] == content
+    repo = service._get_database().recall_file_segment_repo
+    assert {s.text for s in repo.list_segments()} == {"before fact", "after fact", "command | argument"}
+
+
+async def test_recommit_removes_legacy_table_segments(service: MemoryService) -> None:
+    content = "stable fact\n\n| host | count |\n| --- | --- |\n| hermes | 4 of 5 |"
+    result = await service.commit_results(recall_files=[{"name": "legacy", "content": content}])
+    file = result["recall_files"][0]
+    repo = service._get_database().recall_file_segment_repo
+    stable_id = repo.list_segments()[0].id
+    for text in ("| host | count |", "| --- | --- |", "| hermes | 4 of 5 |"):
+        repo.create_segment(
+            recall_file_id=file["id"], track="memory", text=text, embedding=[1.0, 0.0, 0.0, 0.0], user_data={}
+        )
+    await service.commit_results(recall_files=[{"name": "legacy", "content": content}])
+    segments = repo.list_segments()
+    assert [(s.id, s.text) for s in segments] == [(stable_id, "stable fact")]
+
+
+def test_pipe_prose_is_not_a_table() -> None:
+    content = "command | argument\nnot a separator | value\nonly \\| escaped\n--- | ---"
+    assert MemoryService._commit_segment_texts_for_file(
+        name="pipes", description="", content=content, file_track="memory"
+    ) == content.split("\n")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -659,15 +660,32 @@ class AgenticMixin:
 
         - ``skill``: a single ``name: ...\\ndescription: ...`` segment for the whole skill.
         - ``memory``: one segment per content line, skipping blank lines and markdown
-          headings, de-duplicated while preserving order.
+          headings and Markdown table blocks, de-duplicated while preserving order.
         """
         if file_track == "skill":
             return [f"name: {name}\ndescription: {description}"]
 
+        lines = (content or "").split("\n")
+        table_lines: set[int] = set()
+        for index in range(1, len(lines)):
+            cells = re.split(r"(?<!\\)\|", lines[index].strip().strip("|"))
+            header = re.split(r"(?<!\\)\|", lines[index - 1].strip().strip("|"))
+            if len(cells) < 2 or len(header) != len(cells):
+                continue
+            if not all(re.fullmatch(r":?-+:?", cell.strip()) for cell in cells):
+                continue
+            table_lines.update((index - 1, index))
+            end = index + 1
+            while end < len(lines) and lines[end].strip() and re.search(r"(?<!\\)\|", lines[end]):
+                if lines[end].lstrip().startswith(("#", "```", "~~~")):
+                    break
+                table_lines.add(end)
+                end += 1
+
         texts: list[str] = []
-        for line in (content or "").split("\n"):
+        for index, line in enumerate(lines):
             stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
+            if index in table_lines or not stripped or stripped.startswith("#"):
                 continue
             texts.append(stripped)
         return list(dict.fromkeys(texts))
