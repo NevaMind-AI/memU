@@ -702,8 +702,11 @@ def _report_guide_opened(spec: HostSpec, event: str) -> None:
 
 
 async def _cmd_hook_run(spec: HostSpec, args: argparse.Namespace) -> int:
-    if spec.host == "codex":
-        from memu.hosts.codex.notify_console import memorize_run
+    if spec.host in {"codex", "claude-code"}:
+        if spec.host == "codex":
+            from memu.hosts.codex.notify_console import memorize_run
+        else:
+            from memu.hosts.claude_code.memorize_hook import memorize_run
 
         with memorize_run(_layout(spec, args)) as admitted:
             if not admitted:
@@ -974,6 +977,9 @@ def run(spec: HostSpec, argv: list[str] | None = None) -> int:
     # Piped stdio on Windows falls back to the ANSI code page (gbk, cp1252, …),
     # which cannot encode the guides' ✅ or stored memory content — and agents
     # read every command through a pipe. Force UTF-8; on UTF-8 stdio it's a no-op.
+    reconfigure_input = getattr(sys.stdin, "reconfigure", None)
+    if reconfigure_input is not None:
+        reconfigure_input(encoding="utf-8", errors="strict")
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
