@@ -10,18 +10,18 @@ full evidence requirements.
 - `prompt-hook` retrieves on `UserPromptSubmit` and returns bounded context.
   Native `async: true` registration lets Claude proceed before retrieval finishes;
   [retrieval configuration](retrieval.md#claude-code-prompt-hook) documents delivery
-  on subsequent conversation turns and the internal timeout.
+  at later model-request boundaries and the internal timeout.
 - `memorize-hook --agent <executable>` starts the detached prepare → evolve →
   commit worker with shared admission and cooldown.
 - The packaged INSTALL and UNINSTALL guides still describe scheduled bridging
   and skill-based retrieval. Hook installation and migration remain unfinished.
-- CLI and Desktop Code have delivered dual-handler probe context. A Windows
-  Claude Code 2.1.312 stream-JSON probe also verified native asynchronous retrieval:
-  the first answer completed while a gated retrieval subprocess was still waiting;
-  after hook completion was observed, a subsequent answer received its random
-  marker through the existing `prompt-hook` output. Retrieval data was synthetic;
-  this does not establish real backend retrieval, background persistence,
-  interactive Desktop behavior, or installation acceptance.
+- CLI and Desktop Code have delivered dual-handler probe context. Controlled
+  Windows CLI 2.1.312 and Desktop Code runtime 2.1.234 checks also verified native
+  asynchronous retrieval within one user turn: the hook completed during a tool
+  call, and the model reproduced a random marker after the tool returned. The
+  marker was absent from the user prompt and tool output. Retrieval data was
+  synthetic; real backend behavior, installation acceptance, and permission-mode
+  coverage remain separate checks.
 
 ## Installation and lifecycle changes
 
