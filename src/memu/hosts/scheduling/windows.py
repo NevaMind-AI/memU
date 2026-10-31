@@ -280,6 +280,9 @@ def _auth_gate(spec: HostSpec, agent_path: str, workdir: Path) -> int:
 def install(spec: HostSpec, layout: Layout, *, interval_minutes: int = DEFAULT_INTERVAL_MINUTES) -> int:
     """Register the bridging task, gating on a usable CLI first."""
     _require_windows()
+    if spec.schedule_backend == "native":
+        print(f"error: {spec.display} uses native hooks; scheduled registration is retired", file=sys.stderr)
+        return 1
     if interval_minutes < 1:
         print(f"error: --interval must be a positive number of minutes (got {interval_minutes})", file=sys.stderr)
         return 2
@@ -374,6 +377,22 @@ def _display_names(names: tuple[str, ...]) -> str:
 def status(spec: HostSpec, layout: Layout) -> int:
     """Print whether the current task is registered or migration is needed."""
     _require_windows()
+    if spec.schedule_backend == "native":
+        names = ", ".join(_ps_quote(name) for name in spec.all_task_names)
+        proc = _run_powershell(
+            "$ErrorActionPreference = 'Stop'; "
+            "Get-ScheduledTask -ErrorAction Stop | "
+            f"Where-Object {{ $_.TaskPath -eq {_ps_quote(TASK_PATH)} -and $_.TaskName -in @({names}) }} | "
+            "Select-Object -ExpandProperty TaskName"
+        )
+        if proc.returncode:
+            print(f"error: could not inspect legacy tasks: {proc.stderr.strip()}", file=sys.stderr)
+            return 1
+        if proc.stdout.strip():
+            print(f"legacy registration(s): {proc.stdout.strip()} (run `{spec.binary} schedule uninstall`)")
+            return 1
+        print("no legacy scheduled tasks registered")
+        return 0
     proc = _run_powershell(status_script(spec.task_name))
     former_names = _former_registrations(spec)
     if proc.returncode == 0 and not former_names:
@@ -402,6 +421,9 @@ def verify(spec: HostSpec, layout: Layout) -> int:
     run — the same "trust traces, not the run's self-report" rule the cron guide uses.
     """
     _require_windows()
+    if spec.schedule_backend == "native":
+        print(f"error: {spec.display} uses native hooks; use `{spec.binary} schedule status`", file=sys.stderr)
+        return 1
     registered = _run_powershell(status_script(spec.task_name)).returncode == 0
     former_names = _former_registrations(spec)
     if not registered or former_names:

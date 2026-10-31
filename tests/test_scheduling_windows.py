@@ -166,9 +166,9 @@ def test_claude_task_guide_uses_host_spec_tokens() -> None:
     task_doc = CLAUDE.render_doc(task_source)
     install_doc = CLAUDE.render_doc(install_source)
 
-    assert f"name: {CLAUDE.task_doc_name}" in task_doc
-    assert CLAUDE.task_name in task_doc and CLAUDE.task_name in install_doc
-    assert all(name in task_doc and name in install_doc for name in CLAUDE.former_task_names)
+    assert task_doc == ""
+    assert CLAUDE.task_name in install_doc
+    assert all(name in install_doc for name in CLAUDE.former_task_names)
     assert windows.TASK_PATH not in task_doc and windows.TASK_PATH not in install_doc
     assert "{{" not in task_doc and "{{" not in install_doc
 
@@ -182,34 +182,30 @@ def test_legacy_task_script_is_limited_to_the_given_task() -> None:
     assert "Unregister-ScheduledTask" in script
 
 
-def test_claude_install_migrates_the_legacy_task_before_registering(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_claude_install_is_retired_without_side_effects(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    scripts: list[str] = []
     monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
-    monkeypatch.setattr(windows, "_resolve_agent", lambda spec: "C:\\bin\\claude.exe")
-    monkeypatch.setattr(windows, "_auth_gate", lambda spec, path, workdir: 0)
-    monkeypatch.setattr(windows.shutil, "which", lambda binary: None)
 
-    def run(script: str) -> subprocess.CompletedProcess[str]:
-        scripts.append(script)
-        return subprocess.CompletedProcess([], 0, "", "")
+    def unexpected(*args: object) -> None:
+        pytest.fail("Retired registration must not resolve an agent, probe auth, or execute PowerShell")
 
-    monkeypatch.setattr(windows, "_run_powershell", run)
-
-    assert windows.install(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 0
-    assert "memu-remember-claude-code" in scripts[0]
-    assert "memu-bridging-claude-code" in scripts[1]
-    assert len(scripts) == 2
+    monkeypatch.setattr(windows, "_resolve_agent", unexpected)
+    monkeypatch.setattr(windows, "_auth_gate", unexpected)
+    monkeypatch.setattr(windows, "_run_powershell", unexpected)
+    base = tmp_path / "host"
+    assert windows.install(CLAUDE, Layout.default(host=CLAUDE.host, base=base)) == 1
+    assert "retired" in capsys.readouterr().err
+    assert not base.exists()
 
 
 @pytest.mark.parametrize(
     ("canonical", "legacy", "expected"),
     [
-        (False, False, "not registered"),
-        (False, True, "former registration"),
-        (True, False, "current"),
-        (True, True, "duplicate registrations"),
+        (False, False, "no legacy scheduled tasks"),
+        (False, True, "memu-remember-claude-code"),
+        (True, False, "memu-bridging-claude-code"),
+        (True, True, "legacy registration"),
     ],
 )
 def test_claude_status_reports_migration_states(
@@ -223,36 +219,43 @@ def test_claude_status_reports_migration_states(
     monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
 
     def run(script: str) -> subprocess.CompletedProcess[str]:
-        registered = "memu-bridging-claude-code" in script and canonical
-        legacy_registered = "memu-remember-claude-code" in script and legacy
-        return subprocess.CompletedProcess([], 0 if registered or legacy_registered else 1, "current", "")
+        assert windows.TASK_PATH in script
+        assert all(name in script for name in CLAUDE.all_task_names)
+        assert "-ErrorAction Stop" in script
+        names = [
+            name for name, registered in zip(CLAUDE.all_task_names, (canonical, legacy), strict=True) if registered
+        ]
+        return subprocess.CompletedProcess([], 0, "\n".join(names), "")
 
     monkeypatch.setattr(windows, "_run_powershell", run)
-    assert windows.status(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 0
-    assert expected in capsys.readouterr().out
+    assert windows.status(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == int(canonical or legacy)
+    output = capsys.readouterr().out
+    assert expected in output
+    assert "schedule install" not in output
 
 
-@pytest.mark.parametrize(
-    ("canonical", "legacy"),
-    [(False, False), (False, True), (True, True)],
-)
-def test_claude_verify_rejects_missing_or_legacy_registration(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    canonical: bool,
-    legacy: bool,
+def test_claude_status_does_not_treat_inspection_failure_as_absence(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(windows, "_run_powershell", lambda _: subprocess.CompletedProcess([], 1, "", "Access denied"))
+    assert windows.status(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 1
+    output = capsys.readouterr()
+    assert "Access denied" in output.err
+    assert "no legacy" not in output.out
+
+
+def test_claude_verify_does_not_probe_a_retired_schedule(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
 
-    def run(script: str) -> subprocess.CompletedProcess[str]:
-        registered = "memu-bridging-claude-code" in script and canonical
-        legacy_registered = "memu-remember-claude-code" in script and legacy
-        return subprocess.CompletedProcess([], 0 if registered or legacy_registered else 1, "", "")
+    def unexpected(script: str) -> subprocess.CompletedProcess[str]:
+        pytest.fail("Retired verification must not invoke PowerShell")
 
-    monkeypatch.setattr(windows, "_run_powershell", run)
+    monkeypatch.setattr(windows, "_run_powershell", unexpected)
     assert windows.verify(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 1
-    assert "schedule install" in capsys.readouterr().err
+    assert "schedule status" in capsys.readouterr().err
 
 
 def test_verify_says_it_did_not_run_the_scheduled_task(
@@ -293,7 +296,7 @@ def test_claude_uninstall_removes_only_known_identities(monkeypatch: pytest.Monk
 def test_windows_lifecycle_checks_every_former_name(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    spec = dataclasses.replace(CLAUDE, former_task_names=("memu-old-one", "memu-old-two"))
+    spec = dataclasses.replace(CLAUDE, schedule_backend="os", former_task_names=("memu-old-one", "memu-old-two"))
     scripts: list[str] = []
     monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
 
@@ -384,7 +387,7 @@ def test_pipeline_prompt_is_verbatim_but_parameterized() -> None:
 
 
 def test_schedule_verb_is_wired() -> None:
-    for spec in (CLAUDE, CURSOR, HERMES):
+    for spec in (CURSOR, HERMES, PI):
         parser = build_parser(spec)
         args = parser.parse_args(["schedule", "install"])
         assert callable(args.handler)
@@ -399,7 +402,7 @@ def test_schedule_backends_describe_existing_host_arrangements() -> None:
     assert {
         spec.host: spec.schedule_backend for spec in (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
     } == {
-        "claude-code": "os",
+        "claude-code": "native",
         "cursor": "os",
         "hermes": "os",
         "codex": "native",
@@ -411,7 +414,7 @@ def test_schedule_backends_describe_existing_host_arrangements() -> None:
 
 
 @pytest.mark.parametrize("backend", ("os", "native", "external"))
-def test_schedule_backend_does_not_control_verb_wiring(backend: ScheduleBackend) -> None:
+def test_schedule_backend_preserves_maintenance_wiring(backend: ScheduleBackend) -> None:
     assert (
         build_parser(dataclasses.replace(CLAUDE, schedule_backend=backend)).parse_args(["schedule", "status"]).action
         == "status"
@@ -424,15 +427,14 @@ def test_schedule_backend_does_not_control_verb_wiring(backend: ScheduleBackend)
 
 
 def test_unwired_host_has_no_schedule_verb() -> None:
-    # Native and external hosts never advertise a `schedule` verb, not even a
-    # refusing stub. argparse rejects it as an unknown command.
+    # Hosts without a historical OS invocation do not advertise maintenance.
     for spec in (CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC):
         with pytest.raises(SystemExit):
             build_parser(spec).parse_args(["schedule", "status"])
     # ...while a wired host does have it.
     assert build_parser(CLAUDE).parse_args(["schedule", "status"]).action == "status"
 
-    # An OS invocation remains the capability gate, independent of its label.
+    # The invocation remains the gate for legacy maintenance.
     unwired = dataclasses.replace(CLAUDE, schedule_command="")
     with pytest.raises(SystemExit):
         build_parser(unwired).parse_args(["schedule", "status"])
@@ -444,7 +446,7 @@ def test_schedule_points_at_cron_off_windows(
     import memu.hosts.host_cli as host_cli
 
     monkeypatch.setattr(host_cli.platform, "system", lambda: "Linux")
-    assert run(CLAUDE, ["schedule", "status"]) == 0
+    assert run(CURSOR, ["schedule", "status"]) == 0
     assert "cron or launchd" in capsys.readouterr().out
 
 
@@ -477,17 +479,10 @@ def test_builders_escape_single_quotes_in_paths() -> None:
     )
 
 
-def test_pipeline_prompt_matches_the_bridging_doc() -> None:
-    # The prompt exists twice — this code builder and the doc's bridge-prompt.txt
-    # block (the single-line fence the Unix registration step writes to disk) — and
-    # they must stay verbatim. Lock it here: drift fails a test, not silently later.
+def test_claude_task_doc_is_disabled() -> None:
     from importlib.resources import files
 
-    doc = (files("memu.hosts.claude_code") / "BRIDGING_TASK.md").read_text(encoding="utf-8")
-    doc_prompt = next(
-        line.strip() for line in doc.splitlines() if line.strip().startswith("Run the memU bridging pipeline.")
-    )
-    assert doc_prompt == prompt.bridging_pipeline_prompt(CLAUDE)
+    assert (files("memu.hosts.claude_code") / "BRIDGING_TASK.md").read_text(encoding="utf-8") == ""
 
 
 def test_cursor_pipeline_prompt_matches_the_bridging_doc() -> None:
@@ -522,7 +517,7 @@ def test_pi_pipeline_prompt_matches_the_bridging_doc() -> None:
     assert doc_prompt == prompt.bridging_pipeline_prompt(PI)
 
 
-@pytest.mark.parametrize("pkg", ["claude_code", "cursor", "hermes", "pi", "generic"])
+@pytest.mark.parametrize("pkg", ["cursor", "hermes", "pi", "generic"])
 def test_bridging_doc_cron_entries_stay_short(pkg: str) -> None:
     # The bug class behind memU#591: an inlined pipeline prompt pushed the guide's
     # crontab entry past cron's ~1KB line buffer, so every tick died mid-quote
@@ -554,7 +549,6 @@ def test_hermes_guide_migrates_native_job_before_os_registration() -> None:
 @pytest.mark.parametrize(
     ("pkg", "binary", "identity"),
     [
-        ("claude_code", "memu-claude-code", r"hosts/claude-code/bridge\.sh|memU bridging pipeline"),
         ("cursor", "memu-cursor", r"hosts/cursor/bridge\.sh|memU bridging pipeline"),
         ("hermes", "memu-hermes", r"hosts/hermes/bridge\.sh|memU bridging pipeline"),
         ("generic", "memu-agent", r"hosts/agent/bridge\.sh|memU bridging pipeline"),
@@ -624,11 +618,6 @@ def test_openclaw_task_recreates_confirmed_bridge() -> None:
 @pytest.mark.parametrize(
     ("pkg", "task_doc_signals", "uninstall_signals"),
     [
-        (
-            "claude_code",
-            ("$HOME/.memu/hosts/claude-code/bridge.sh", "{{task_name}}"),
-            ("hosts/claude-code/bridge\\.sh|memU bridging pipeline", "schedule uninstall"),
-        ),
         (
             "cursor",
             ("$HOME/.memu/hosts/cursor/bridge.sh", "{{task_name}}"),
@@ -715,8 +704,9 @@ def test_claude_preflight_never_treats_task_presence_as_current() -> None:
     from importlib.resources import files
 
     doc = (files("memu.hosts.claude_code") / "INSTALL.md").read_text(encoding="utf-8")
-    assert "there is nothing to install" not in doc
-    assert "Part 2 always runs once its prerequisites pass" in doc
+    assert "Installation rollout is incomplete" in doc
+    assert "memu-claude-code schedule install" not in doc
+    assert "memu-claude-code docs task" not in doc
 
 
 def test_install_rejects_nonpositive_interval(
@@ -725,8 +715,8 @@ def test_install_rejects_nonpositive_interval(
     # Pretend we're on Windows so the interval guard (not the platform gate) fires;
     # `New-TimeSpan -Minutes 0` is an invalid trigger, so reject before Task Scheduler.
     monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
-    layout = Layout.default(host=CLAUDE.host, base=tmp_path)
-    assert windows.install(CLAUDE, layout, interval_minutes=0) == 2
+    layout = Layout.default(host=PI.host, base=tmp_path)
+    assert windows.install(PI, layout, interval_minutes=0) == 2
     assert "positive" in capsys.readouterr().err
 
 
@@ -764,12 +754,32 @@ def test_auth_gate_failure_speaks_the_hosts_own_remedy(
 def test_symptom_a_message_carries_concrete_install_commands(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # When claude isn't on PATH the refusal must be copy-pasteable — the host's own
-    # install commands (memU#538 Symptom A), not vague "winget/npm" prose.
+    # A host missing its agent gets its own concrete installation remedy.
     monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
     monkeypatch.setattr(windows, "_resolve_agent", lambda spec: None)
-    layout = Layout.default(host=CLAUDE.host, base=tmp_path)
-    assert windows.install(CLAUDE, layout) == 1
+    layout = Layout.default(host=CURSOR.host, base=tmp_path)
+    assert windows.install(CURSOR, layout) == 1
     err = capsys.readouterr().err
-    assert "winget install Anthropic.ClaudeCode" in err
+    assert "cursor-agent" in err
     assert "Symptom A" in err
+
+
+@pytest.mark.parametrize("action", ("install", "verify"))
+def test_claude_schedule_rejects_active_actions(action: str) -> None:
+    with pytest.raises(SystemExit) as exc:
+        build_parser(CLAUDE).parse_args(["schedule", action])
+    assert exc.value.code == 2
+    for maintenance in ("status", "uninstall"):
+        assert build_parser(CLAUDE).parse_args(["schedule", maintenance]).action == maintenance
+
+
+@pytest.mark.parametrize("system", ("Linux", "Darwin"))
+@pytest.mark.parametrize("action", ("status", "uninstall"))
+def test_claude_schedule_reports_unchecked_unix_state(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], system: str, action: str
+) -> None:
+    monkeypatch.setattr(windows.platform, "system", lambda: system)
+    assert run(CLAUDE, ["schedule", action]) == 1
+    output = capsys.readouterr()
+    assert "No scheduler state was checked or changed" in output.err
+    assert "docs task" not in output.err
