@@ -83,7 +83,7 @@ SPEC = HostSpec(
     session_help="Codex session log",
     instruction_path=AGENTS_MD,
     skills_dir=SKILLS_DIR,
-    schedule_backend="native",
+    schedule_backend="hook",
     hook=HOOK,
     install_hint=(
         "Install the standalone Codex CLI using the official native installer:\n"

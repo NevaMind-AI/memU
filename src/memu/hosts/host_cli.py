@@ -43,7 +43,7 @@ from memu.hosts.bridging import Layout, commit, prepare, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
 from memu.hosts.bridging.resources import verify_resource_log
 
-ScheduleBackend = Literal["os", "native", "external"]
+ScheduleBackend = Literal["os", "native", "hook", "external"]
 """The existing scheduler arrangement a host documents; informational only."""
 
 DOCS = {"install": "INSTALL.md", "task": "BRIDGING_TASK.md", "uninstall": "UNINSTALL.md"}
@@ -134,7 +134,8 @@ class HostSpec:
     Codex overrides this with the pre-multi-host ``~/.memu`` it has always used."""
 
     schedule_backend: ScheduleBackend = "external"
-    """The host's documented scheduler arrangement.
+    """How memorization is triggered: OS scheduler, host scheduler, event hook,
+    or an externally managed process.
 
     Informational metadata only: it never controls task registration, scheduler
     invocation, or which CLI commands are available.
@@ -872,7 +873,7 @@ def _register_report(sub: Any, handler: Any) -> None:
 def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=spec.binary,
-        description=f"memU's {spec.display} host adapter — the scheduled bridging task and its install guide.",
+        description=f"memU's {spec.display} host adapter — memory retrieval and memorization.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

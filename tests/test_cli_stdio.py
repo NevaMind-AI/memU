@@ -15,6 +15,7 @@ import sys
 import pytest
 
 from memu.cli import main
+from memu.hosts import templates
 from memu.hosts.claude_code.cli import SPEC
 from memu.hosts.host_cli import run
 
@@ -25,13 +26,14 @@ def _gbk_pipe() -> tuple[io.TextIOWrapper, io.BytesIO]:
 
 
 def test_host_docs_install_survives_gbk_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Without the entry-point reconfigure this is the field failure: the guide's
-    # first ✅ raises UnicodeEncodeError and the agent gets zero lines of it.
+    # Keep the encoding regression independent of the guide's current wording.
+    guide = "# 安装 ✅\n"
+    monkeypatch.setattr(templates, "resolve_doc", lambda *_: guide)
     stdout, buffer = _gbk_pipe()
     monkeypatch.setattr(sys, "stdout", stdout)
     assert run(SPEC, ["docs", "install"]) == 0
     stdout.flush()
-    assert "✅" in buffer.getvalue().decode("utf-8")
+    assert buffer.getvalue().decode("utf-8").strip() == guide.strip()
 
 
 def test_memu_entry_reconfigures_both_streams(monkeypatch: pytest.MonkeyPatch) -> None:

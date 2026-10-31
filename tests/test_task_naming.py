@@ -25,7 +25,7 @@ SPECS = (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
 @pytest.mark.parametrize("filename", DOCS.values())
 def test_embedded_docs_render_names_only_from_host_spec(spec: HostSpec, filename: str) -> None:
     source = (files(spec.package) / filename).read_text(encoding="utf-8")
-    if spec.host == "codex" and filename == "BRIDGING_TASK.md":
+    if spec.host in {"codex", "claude-code"} and filename == "BRIDGING_TASK.md":
         assert source == ""
         return
 
@@ -80,11 +80,14 @@ def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatc
     assert (templates._docs_cache_dir(CODEX.host) / "INSTALL.md").read_text(encoding="utf-8") == source
 
 
-@pytest.mark.parametrize("filename", ("INSTALL.md", "UNINSTALL.md"))
-def test_codex_record_guides_reject_old_remote_and_cache(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, filename: str
+@pytest.mark.parametrize(
+    ("spec", "filename"),
+    [(CODEX, "INSTALL.md"), (CODEX, "UNINSTALL.md"), (CLAUDE, "INSTALL.md")],
+)
+def test_record_guides_reject_old_remote_and_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spec: HostSpec, filename: str
 ) -> None:
-    embedded = (files(CODEX.package) / filename).read_text(encoding="utf-8")
+    embedded = (files(spec.package) / filename).read_text(encoding="utf-8")
     old = "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\nCreate a scheduled task.\n"
     if filename == "INSTALL.md":
         old = "<!-- memu-codex-record: submit-v1 -->\n" + old
@@ -95,22 +98,23 @@ def test_codex_record_guides_reject_old_remote_and_cache(
     monkeypatch.setattr(templates, "_get", lambda _: old)
 
     assert templates._valid_doc(old)  # Naming tokens alone cannot detect the old flow.
-    assert templates.resolve_doc("codex", filename, embedded) == embedded
+    assert templates.resolve_doc(spec.host, filename, embedded) == embedded
     assert cache.read_text(encoding="utf-8") == old
 
     monkeypatch.setattr(templates, "_get", lambda _: embedded)
-    assert templates.resolve_doc("codex", filename, "unused") == embedded
+    assert templates.resolve_doc(spec.host, filename, "unused") == embedded
     assert cache.read_text(encoding="utf-8") == embedded
     monkeypatch.setattr(templates, "_get", lambda _: None)
-    assert templates.resolve_doc("codex", filename, "unused") == embedded
+    assert templates.resolve_doc(spec.host, filename, "unused") == embedded
 
 
-def test_codex_task_guide_stays_empty_without_remote_or_cache(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize("spec", (CODEX, CLAUDE), ids=lambda spec: spec.host)
+def test_task_guide_stays_empty_without_remote_or_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], spec: HostSpec
 ) -> None:
-    from memu.hosts.codex.cli import main
+    from memu.hosts.host_cli import run
 
-    assert (files(CODEX.package) / "BRIDGING_TASK.md").read_bytes() == b""
+    assert (files(spec.package) / "BRIDGING_TASK.md").read_bytes() == b""
     cache = tmp_path / "BRIDGING_TASK.md"
     old = "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}.\nCreate a recurring task.\n"
     cache.write_text(old, encoding="utf-8")
@@ -120,14 +124,16 @@ def test_codex_task_guide_stays_empty_without_remote_or_cache(
         pytest.fail("A disabled guide must not fetch remote instructions")
 
     monkeypatch.setattr(templates, "_get", unexpected_fetch)
-    assert main(["docs", "task"]) == 0
+    assert run(spec, ["docs", "task"]) == 0
     assert capsys.readouterr().out.strip() == ""
     assert cache.read_text(encoding="utf-8") == old
 
 
-def test_record_guide_version_guard_is_codex_only() -> None:
+def test_record_guide_version_guards_are_host_scoped() -> None:
     old = "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}."
-    assert templates._valid_host_doc("claude-code", "INSTALL.md", old)
+    assert not templates._valid_host_doc("claude-code", "INSTALL.md", old)
+    assert templates._valid_host_doc("claude-code", "UNINSTALL.md", old)
+    assert templates._valid_host_doc("cursor", "INSTALL.md", old)
     assert not templates._valid_host_doc("codex", "INSTALL.md", old)
 
 
