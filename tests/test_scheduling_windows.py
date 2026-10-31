@@ -28,7 +28,7 @@ from memu.hosts.cola.cli import SPEC as COLA
 from memu.hosts.cursor.cli import SPEC as CURSOR
 from memu.hosts.generic.cli import SPEC as GENERIC
 from memu.hosts.hermes.cli import SPEC as HERMES
-from memu.hosts.host_cli import ScheduleBackend, build_parser, run
+from memu.hosts.host_cli import HostSpec, ScheduleBackend, build_parser, run
 from memu.hosts.openclaw.cli import SPEC as OPENCLAW
 from memu.hosts.pi.cli import SPEC as PI
 from memu.hosts.scheduling import prompt, windows
@@ -180,82 +180,6 @@ def test_legacy_task_script_is_limited_to_the_given_task() -> None:
     assert windows.TASK_PATH in script
     assert "Get-ScheduledTask" in script
     assert "Unregister-ScheduledTask" in script
-
-
-def test_claude_install_is_retired_without_side_effects(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
-
-    def unexpected(*args: object) -> None:
-        pytest.fail("Retired registration must not resolve an agent, probe auth, or execute PowerShell")
-
-    monkeypatch.setattr(windows, "_resolve_agent", unexpected)
-    monkeypatch.setattr(windows, "_auth_gate", unexpected)
-    monkeypatch.setattr(windows, "_run_powershell", unexpected)
-    base = tmp_path / "host"
-    assert windows.install(CLAUDE, Layout.default(host=CLAUDE.host, base=base)) == 1
-    assert "retired" in capsys.readouterr().err
-    assert not base.exists()
-
-
-@pytest.mark.parametrize(
-    ("canonical", "legacy", "expected"),
-    [
-        (False, False, "no legacy scheduled tasks"),
-        (False, True, "memu-remember-claude-code"),
-        (True, False, "memu-bridging-claude-code"),
-        (True, True, "legacy registration"),
-    ],
-)
-def test_claude_status_reports_migration_states(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    canonical: bool,
-    legacy: bool,
-    expected: str,
-) -> None:
-    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
-
-    def run(script: str) -> subprocess.CompletedProcess[str]:
-        assert windows.TASK_PATH in script
-        assert all(name in script for name in CLAUDE.all_task_names)
-        assert "-ErrorAction Stop" in script
-        names = [
-            name for name, registered in zip(CLAUDE.all_task_names, (canonical, legacy), strict=True) if registered
-        ]
-        return subprocess.CompletedProcess([], 0, "\n".join(names), "")
-
-    monkeypatch.setattr(windows, "_run_powershell", run)
-    assert windows.status(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == int(canonical or legacy)
-    output = capsys.readouterr().out
-    assert expected in output
-    assert "schedule install" not in output
-
-
-def test_claude_status_does_not_treat_inspection_failure_as_absence(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
-    monkeypatch.setattr(windows, "_run_powershell", lambda _: subprocess.CompletedProcess([], 1, "", "Access denied"))
-    assert windows.status(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 1
-    output = capsys.readouterr()
-    assert "Access denied" in output.err
-    assert "no legacy" not in output.out
-
-
-def test_claude_verify_does_not_probe_a_retired_schedule(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
-
-    def unexpected(script: str) -> subprocess.CompletedProcess[str]:
-        pytest.fail("Retired verification must not invoke PowerShell")
-
-    monkeypatch.setattr(windows, "_run_powershell", unexpected)
-    assert windows.verify(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 1
-    assert "scheduled verification is retired" in capsys.readouterr().err
 
 
 def test_verify_says_it_did_not_run_the_scheduled_task(
@@ -414,16 +338,13 @@ def test_schedule_backends_describe_existing_host_arrangements() -> None:
 
 
 @pytest.mark.parametrize("backend", ("os", "native", "hook", "external"))
-def test_schedule_backend_preserves_maintenance_wiring(backend: ScheduleBackend) -> None:
-    parser = build_parser(dataclasses.replace(CLAUDE, schedule_backend=backend))
-    assert parser.parse_args(["schedule", "status"]).action == "status"
-    if backend == "hook":
-        with pytest.raises(SystemExit):
-            parser.parse_args(["schedule", "install"])
-    else:
-        assert parser.parse_args(["schedule", "install"]).action == "install"
+def test_schedule_backend_does_not_control_verb_wiring(backend: ScheduleBackend) -> None:
+    assert (
+        build_parser(dataclasses.replace(CURSOR, schedule_backend=backend)).parse_args(["schedule", "status"]).action
+        == "status"
+    )
     with pytest.raises(SystemExit):
-        build_parser(dataclasses.replace(CLAUDE, schedule_command="", schedule_backend=backend)).parse_args([
+        build_parser(dataclasses.replace(CURSOR, schedule_command="", schedule_backend=backend)).parse_args([
             "schedule",
             "status",
         ])
@@ -431,14 +352,14 @@ def test_schedule_backend_preserves_maintenance_wiring(backend: ScheduleBackend)
 
 def test_unwired_host_has_no_schedule_verb() -> None:
     # Hosts without a historical OS invocation do not advertise maintenance.
-    for spec in (CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC):
+    for spec in (CLAUDE, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC):
         with pytest.raises(SystemExit):
             build_parser(spec).parse_args(["schedule", "status"])
     # ...while a wired host does have it.
-    assert build_parser(CLAUDE).parse_args(["schedule", "status"]).action == "status"
+    assert build_parser(CURSOR).parse_args(["schedule", "status"]).action == "status"
 
-    # The invocation remains the gate for legacy maintenance.
-    unwired = dataclasses.replace(CLAUDE, schedule_command="")
+    # The invocation remains the capability gate.
+    unwired = dataclasses.replace(CURSOR, schedule_command="")
     with pytest.raises(SystemExit):
         build_parser(unwired).parse_args(["schedule", "status"])
 
@@ -729,7 +650,7 @@ def test_auth_gate_warns_that_credential_must_persist(
     # A pass is necessary but not sufficient: the S4U task won't see a session-only
     # $env: token, so even the passing path must tell the user to persist it (#538 B).
     monkeypatch.setattr(windows, "_authenticates", lambda spec, path, workdir: (True, ""))
-    assert windows._auth_gate(CLAUDE, "C:\\claude.exe", tmp_path) == 0
+    assert windows._auth_gate(CURSOR, "C:\\ca.cmd", tmp_path) == 0
     assert "PERSISTENT" in capsys.readouterr().err
 
 
@@ -737,9 +658,9 @@ def test_auth_gate_aborts_when_unauthenticated(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(windows, "_authenticates", lambda spec, path, workdir: (False, "Not logged in"))
-    assert windows._auth_gate(CLAUDE, "C:\\claude.exe", tmp_path) == 1
+    assert windows._auth_gate(CURSOR, "C:\\ca.cmd", tmp_path) == 1
     err = capsys.readouterr().err
-    assert "setup-token" in err and "PERSISTENT" in err
+    assert "cursor-agent login" in err and "PERSISTENT" in err
 
 
 def test_auth_gate_failure_speaks_the_hosts_own_remedy(
@@ -767,22 +688,13 @@ def test_symptom_a_message_carries_concrete_install_commands(
     assert "Symptom A" in err
 
 
-@pytest.mark.parametrize("action", ("install", "verify"))
-def test_claude_schedule_rejects_active_actions(action: str) -> None:
-    with pytest.raises(SystemExit) as exc:
-        build_parser(CLAUDE).parse_args(["schedule", action])
-    assert exc.value.code == 2
-    for maintenance in ("status", "uninstall"):
-        assert build_parser(CLAUDE).parse_args(["schedule", maintenance]).action == maintenance
-
-
-@pytest.mark.parametrize("system", ("Linux", "Darwin"))
-@pytest.mark.parametrize("action", ("status", "uninstall"))
-def test_claude_schedule_reports_unchecked_unix_state(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], system: str, action: str
+@pytest.mark.parametrize("spec", (CLAUDE, CODEX), ids=lambda spec: spec.host)
+@pytest.mark.parametrize("system", ("Windows", "Linux", "Darwin"))
+@pytest.mark.parametrize("action", ("install", "verify", "status", "uninstall"))
+def test_hook_hosts_have_no_schedule_command_on_any_platform(
+    monkeypatch: pytest.MonkeyPatch, spec: HostSpec, system: str, action: str
 ) -> None:
     monkeypatch.setattr(windows.platform, "system", lambda: system)
-    assert run(CLAUDE, ["schedule", action]) == 1
-    output = capsys.readouterr()
-    assert "No scheduler state was checked or changed" in output.err
-    assert "docs task" not in output.err
+    with pytest.raises(SystemExit) as exc:
+        run(spec, ["schedule", action])
+    assert exc.value.code == 2

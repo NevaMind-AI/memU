@@ -1,5 +1,12 @@
 # Uninstall memU for Claude Code
 
+<!-- memu-claude-code-scheduling: retired-v1 -->
+
+Submit hooks and active workers must be removed through the coordinated lifecycle
+procedure tracked in [the installation rollout](https://github.com/NevaMind-AI/memU/pull/772).
+Do not remove the package or host working state, or report uninstall complete,
+while Submit hooks or workers remain active.
+
 ## Task identity
 
 - Current task name: `{{task_name}}`
@@ -32,36 +39,36 @@ instruction file exactly as they are.
 
 ## Part 1 — Unregister the bridging (record) task
 
-Find the scheduled entry that runs the memU bridging pipeline — a cron entry
-(or launchd job, if that is what the user chose at install time) invoking
-`~/.memu/hosts/claude-code/bridge.sh` (or, on installs predating the prompt-file
-layout, inlining `claude -p 'Run the memU bridging pipeline. …'` directly) —
-and delete **only that entry**. Everything else in the user's crontab is theirs
-and stays.
+Find legacy registrations with the platform's scheduler tools. Use
+{{all_task_names}} as candidate names and confirm that each action runs this
+Claude adapter's wrapper or Claude prepare / self-evolve / commit pipeline.
+Names or the generic `memU bridging pipeline` phrase alone are insufficient;
+leave unrelated and ambiguous entries untouched.
 
-- **cron** — `crontab -l` to find the line, then rewrite the crontab without
-  it, e.g.
-  `crontab -l | grep -vE '{{task_name_pattern}}|hosts/claude-code/bridge\.sh|memU bridging pipeline' | crontab -`.
-  If the memU line was the only reason a `PATH=` line was added, that line may
-  go too — but only if nothing else in the crontab needs it. If nothing at all
-  remains, `crontab -r` removes the now-empty crontab cleanly. The `bridge.sh`,
-  `bridge-prompt.txt`, and `bridge.log` files live under
-  `~/.memu/hosts/claude-code/` and go with the host residue in Part 3.
-- **launchd** — `launchctl bootout gui/$(id -u)/{{task_name}}` and delete the plist
-  under `~/Library/LaunchAgents`.
-- **Windows (Task Scheduler)** — the helper removes both the current bridging
-  task and the recognized legacy remember task, then deletes the generated wrapper
-  and prompt file:
+- **Windows:** inspect `Get-ScheduledTask` results, recording each confirmed
+  entry's exact task path, task name, action and state. Check historical paths
+  as well as the memU namespace.
+- **cron:** inspect `crontab -l`, identifying the Claude wrapper at
+  `~/.memu/hosts/claude-code/bridge.sh` or the confirmed inline Claude pipeline.
+  Preserve unrelated jobs and shared environment lines.
+- **launchd:** inspect loaded user jobs with `launchctl` and plist definitions
+  under `~/Library/LaunchAgents`, recording the confirmed labels and paths.
 
-  ```
-  memu-claude-code schedule uninstall
-  ```
+Disable or pause confirmed registrations to prevent new launches, then wait for
+running workers and their descendants to finish naturally. Do not kill workers.
+If inventory, ownership or running state cannot be established, stop and report
+the unresolved migration.
+
+Once idle, remove only confirmed registrations using the platform's scheduler
+tools, then query again. Remove confirmed generated wrappers and prompt files
+only after the registrations are gone; preserve pending jobs, results, cursors
+and logs during migration.
 
 ### ✅ Verify Part 1
 
-`crontab -l` (and `ls ~/Library/LaunchAgents`, if launchd was used) shows no
-memU bridging entry, and everything unrelated is still there. On Windows,
-`memu-claude-code schedule status` reports not-registered.
+Every confirmed Claude registration is absent, its old workers have exited, and
+unrelated registrations remain. An unavailable inventory is not a successful
+cleanup. Continue only after these checks pass.
 
 ---
 

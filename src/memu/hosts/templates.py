@@ -284,7 +284,7 @@ def _valid_host_doc(host: str, filename: str, text: str) -> bool:
     """Keep lifecycle guides compatible with the installed record entry point."""
     if not _valid_doc(text):
         return False
-    if host == "claude-code" and filename == "INSTALL.md":
+    if host == "claude-code" and filename in {"INSTALL.md", "UNINSTALL.md"}:
         return "<!-- memu-claude-code-scheduling: retired-v1 -->" in text
     if host == "codex" and filename in {"INSTALL.md", "UNINSTALL.md"}:
         if "<!-- memu-codex-record: submit-v1 -->" not in text:

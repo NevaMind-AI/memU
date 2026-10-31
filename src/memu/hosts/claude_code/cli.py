@@ -64,9 +64,7 @@ SPEC = HostSpec(
     instruction_path=CLAUDE_MD,
     skills_dir=SKILLS_DIR,
     schedule_backend="hook",
-    schedule_command="claude -p {prompt}",
     session_id_env=SESSION_ID_ENV,
-    needs_headless_auth=True,
     hook=hooks.HookSpec(
         agent=hooks.HeadlessAgent(argv=("claude", "-p", "--dangerously-skip-permissions")),
         stream_output=memorize_hook.stream_agent,
@@ -77,10 +75,6 @@ SPEC = HostSpec(
         "    winget install Anthropic.ClaudeCode\n"
         "    # or:  irm https://claude.ai/install.ps1 | iex\n"
         "    # or:  npm install -g @anthropic-ai/claude-code"
-    ),
-    auth_hint=(
-        "    claude setup-token   # writes a token into your profile the task can read\n"
-        "  or a persistent ANTHROPIC_API_KEY (`setx`, not a session-only `$env:`),"
     ),
 )
 

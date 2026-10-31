@@ -137,8 +137,8 @@ class HostSpec:
     """How memorization is triggered: OS scheduler, host scheduler, event hook,
     or an externally managed process.
 
-    Hook-driven hosts expose only maintenance actions for any legacy OS
-    invocation they retain; they cannot register a scheduled task.
+    Informational metadata only: it never controls task registration, scheduler
+    invocation, or which CLI commands are available.
     """
 
     schedule_command: str = ""
@@ -146,8 +146,7 @@ class HostSpec:
     template with a ``{prompt}`` placeholder — ``claude -p {prompt}``. The helper
     turns this into the scheduled task's wrapper, treats the first token as the
     agent binary to resolve on ``PATH``, and exposes the ``schedule`` subcommand
-    only when it is set. Hook-driven hosts retain it only for legacy task
-    inspection/removal. Empty means that helper is not wired for this host; Unix
+    only when it is set. Empty means that helper is not wired for this host; Unix
     scheduling remains doc-driven and never reads this field.
     """
 
@@ -740,19 +739,13 @@ async def _run_hook_pipeline(spec: HostSpec, args: argparse.Namespace) -> int:
 async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
     """Register/inspect the existing OS-scheduled bridging task on Windows Task Scheduler.
 
-    The parser exposes maintenance only for hook-driven hosts retaining a legacy
-    invocation; other wired hosts can also register and verify their schedule.
-    On macOS/Linux this helper never modifies cron or launchd.
+    The parser registers this handler only when ``schedule_command`` supplies an
+    invocation for the Windows helper. ``schedule_backend`` is informational and
+    does not affect this behavior. On macOS/Linux, this points at the existing
+    cron/launchd registration in ``BRIDGING_TASK.md`` and touches neither.
     """
     system = platform.system()
     if system != "Windows":
-        if spec.schedule_backend == "hook":
-            print(
-                f"Legacy cron/launchd inspection and removal are manual on {system or 'this OS'}; "
-                f"follow `{spec.binary} docs install`. No scheduler state was checked or changed.",
-                file=sys.stderr,
-            )
-            return 1
         print(
             f"{spec.display} bridging on {system or 'this OS'} is scheduled with cron or launchd — "
             f"follow that section of `{spec.binary} docs task`. The `schedule` helper automates "
@@ -945,31 +938,23 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     p.add_argument(
         "doc",
         choices=sorted(DOCS),
-        help="install: the setup guide; task: the legacy task guide (disabled for retired schedules); "
-        "uninstall: the removal guide",
+        help="install: the setup guide; task: the bridging-task procedure; uninstall: the removal guide",
     )
     p.set_defaults(handler=bind(_cmd_docs))
 
-    # A retained hook-driven host invocation exposes maintenance of old tasks only.
+    # Windows-only automation of the bridging task's registration. The invocation
+    # template, not the informational scheduler label, is the capability gate: hosts
+    # without a Windows wrapper never advertise a `schedule` verb they cannot honour.
     if spec.schedule_command:
-        hook_driven = spec.schedule_backend == "hook"
         p = with_base(
-            sub.add_parser(
-                "schedule",
-                help=f"Inspect/remove legacy {spec.display} tasks"
-                if hook_driven
-                else f"Register the {spec.display} bridging task (Windows Task Scheduler)",
-            )
+            sub.add_parser("schedule", help=f"Register the {spec.display} bridging task (Windows Task Scheduler)")
         )
         p.add_argument(
             "action",
-            choices=("uninstall", "status") if hook_driven else ("install", "uninstall", "status", "verify"),
-            help="remove legacy tasks or show their status"
-            if hook_driven
-            else "install/uninstall the task, show its status, or verify it can run",
+            choices=("install", "uninstall", "status", "verify"),
+            help="install/uninstall the task, show its status, or verify it can run",
         )
-        if not hook_driven:
-            p.add_argument("--interval", type=int, default=60, help="Minutes between runs, for install (default: 60)")
+        p.add_argument("--interval", type=int, default=60, help="Minutes between runs, for install (default: 60)")
         p.set_defaults(handler=bind(_cmd_schedule))
 
     if spec.register_extra is not None:

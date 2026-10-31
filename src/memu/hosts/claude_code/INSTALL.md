@@ -9,8 +9,7 @@
 - Names recognized during migration and removal: {{all_task_names}}
 
 Claude Code uses Submit hooks for retrieval and background memorization. The
-scheduled bridging registration procedure is retired. `docs task` is disabled,
-and `schedule` exposes only inspection and removal of legacy Windows tasks.
+scheduled bridging registration procedure is retired and `docs task` is disabled.
 
 **Installation rollout is incomplete.** CLI-managed hook installation and the
 complete installation acceptance procedure are tracked in
@@ -30,38 +29,32 @@ memu-claude-code doctor
 
 Keep the existing store, embedding identity, and shared `~/.memu/config.env`.
 
-## Inspect legacy schedules
+## Migrate legacy schedules
 
-**Windows:**
+Use the platform's scheduler tools to inventory existing registrations:
 
-```sh
-memu-claude-code schedule status
-```
+- **Windows:** inspect Task Scheduler with `Get-ScheduledTask`, including task
+  paths and actions. Historical registrations may use different task paths;
+  record the exact task path and name for each confirmed entry.
+- **Linux/macOS cron:** inspect the user's crontab with `crontab -l`.
+- **macOS launchd:** inspect loaded user jobs with `launchctl` and their plist
+  definitions under `~/Library/LaunchAgents`.
 
-Exit zero means neither recognized task is registered in the memU Task Scheduler
-namespace. A nonzero result means tasks remain or inspection failed; read the
-diagnostic.
+Use the recognized names as candidates, then confirm the action belongs to the
+Claude adapter: its `~/.memu/hosts/claude-code/bridge.sh` or `memu-bridge.ps1`
+wrapper, or an inline Claude prepare / self-evolve / commit pipeline. A name or
+an unqualified `memU bridging pipeline` match alone is insufficient for removal.
+Leave unrelated and ambiguous entries untouched. Unavailable inventory is an
+unresolved migration, not evidence that tasks are absent.
 
-Removing a schedule prevents future launches; it does not establish that an
-already-running worker has exited. Wait for a confirmed Claude bridging worker
-to finish before installing a replacement or deleting its wrapper. If its state
-cannot be established, stop migration and report the unresolved worker.
+Pause or disable confirmed registrations to prevent future launches. Wait for
+any running old worker and its descendants to finish naturally before installing
+a replacement or deleting its wrapper. Do not kill workers or run new background
+memorization alongside them. If their state cannot be established, stop migration.
 
-To remove recognized tasks after that check, the existing maintenance command is:
-
-```sh
-memu-claude-code schedule uninstall
-memu-claude-code schedule status
-```
-
-**macOS/Linux:** the helper does not inspect or modify cron/launchd. Inspect the
-user's crontab and `~/Library/LaunchAgents` directly. Identify entries by the
-recognized names **and** their Claude-specific action, such as
-`~/.memu/hosts/claude-code/bridge.sh` or `memu-claude-code prepare` followed by the
-Claude bridging pipeline. An unqualified `memU bridging pipeline` match can also
-select another host's task and is insufficient for removal. Remove only confirmed
-Claude entries, preserving unrelated tasks and environment lines.
-
-Keep jobs, pending results, session cursors, logs, the store, and other hosts'
-files. Full migration and uninstall acceptance remain part of the installation
-rollout.
+Once idle, remove only the confirmed registrations with the platform's scheduler
+tools, then query again to verify their absence and preservation of unrelated
+entries. Delete only confirmed generated wrappers and prompt files after that
+check. Keep jobs, pending results, session cursors, logs, the store, shared config,
+and other hosts' files. Full migration and installation acceptance remain part
+of the installation rollout.

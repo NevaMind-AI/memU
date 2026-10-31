@@ -6,8 +6,7 @@ and unchanged. What was missing is Windows — Task Scheduler can't take a paste
 ~1000-character quoted prompt (memU#539) and a bare scheduled process can't see a
 desktop-only ``claude`` (memU#538) — so this package automates *only* the Windows
 Task Scheduler registration, shared across every host adapter that sets
-:attr:`~memu.hosts.host_cli.HostSpec.schedule_command`. Hook-driven hosts
-retain only legacy-task inspection and removal, not registration.
+:attr:`~memu.hosts.host_cli.HostSpec.schedule_command`.
 
 Nothing here touches the cron or launchd code paths.
 """
