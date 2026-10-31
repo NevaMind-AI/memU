@@ -255,7 +255,7 @@ def test_claude_verify_does_not_probe_a_retired_schedule(
 
     monkeypatch.setattr(windows, "_run_powershell", unexpected)
     assert windows.verify(CLAUDE, Layout.default(host=CLAUDE.host, base=tmp_path)) == 1
-    assert "schedule status" in capsys.readouterr().err
+    assert "scheduled verification is retired" in capsys.readouterr().err
 
 
 def test_verify_says_it_did_not_run_the_scheduled_task(
@@ -402,10 +402,10 @@ def test_schedule_backends_describe_existing_host_arrangements() -> None:
     assert {
         spec.host: spec.schedule_backend for spec in (CLAUDE, CURSOR, HERMES, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC)
     } == {
-        "claude-code": "native",
+        "claude-code": "hook",
         "cursor": "os",
         "hermes": "os",
-        "codex": "native",
+        "codex": "hook",
         "openclaw": "native",
         "workbuddy": "native",
         "cola": "native",
@@ -413,12 +413,15 @@ def test_schedule_backends_describe_existing_host_arrangements() -> None:
     }
 
 
-@pytest.mark.parametrize("backend", ("os", "native", "external"))
+@pytest.mark.parametrize("backend", ("os", "native", "hook", "external"))
 def test_schedule_backend_preserves_maintenance_wiring(backend: ScheduleBackend) -> None:
-    assert (
-        build_parser(dataclasses.replace(CLAUDE, schedule_backend=backend)).parse_args(["schedule", "status"]).action
-        == "status"
-    )
+    parser = build_parser(dataclasses.replace(CLAUDE, schedule_backend=backend))
+    assert parser.parse_args(["schedule", "status"]).action == "status"
+    if backend == "hook":
+        with pytest.raises(SystemExit):
+            parser.parse_args(["schedule", "install"])
+    else:
+        assert parser.parse_args(["schedule", "install"]).action == "install"
     with pytest.raises(SystemExit):
         build_parser(dataclasses.replace(CLAUDE, schedule_command="", schedule_backend=backend)).parse_args([
             "schedule",

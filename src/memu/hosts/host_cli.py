@@ -43,7 +43,7 @@ from memu.hosts.bridging import Layout, commit, prepare, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
 from memu.hosts.bridging.resources import verify_resource_log
 
-ScheduleBackend = Literal["os", "native", "external"]
+ScheduleBackend = Literal["os", "native", "hook", "external"]
 """The existing scheduler arrangement a host documents; informational only."""
 
 DOCS = {"install": "INSTALL.md", "task": "BRIDGING_TASK.md", "uninstall": "UNINSTALL.md"}
@@ -134,9 +134,10 @@ class HostSpec:
     Codex overrides this with the pre-multi-host ``~/.memu`` it has always used."""
 
     schedule_backend: ScheduleBackend = "external"
-    """The host's documented scheduler arrangement.
+    """How memorization is triggered: OS scheduler, host scheduler, event hook,
+    or an externally managed process.
 
-    Hosts using native hooks expose only maintenance actions for any legacy OS
+    Hook-driven hosts expose only maintenance actions for any legacy OS
     invocation they retain; they cannot register a scheduled task.
     """
 
@@ -145,7 +146,7 @@ class HostSpec:
     template with a ``{prompt}`` placeholder — ``claude -p {prompt}``. The helper
     turns this into the scheduled task's wrapper, treats the first token as the
     agent binary to resolve on ``PATH``, and exposes the ``schedule`` subcommand
-    only when it is set. Native-hook hosts retain it only for legacy task
+    only when it is set. Hook-driven hosts retain it only for legacy task
     inspection/removal. Empty means that helper is not wired for this host; Unix
     scheduling remains doc-driven and never reads this field.
     """
@@ -739,13 +740,13 @@ async def _run_hook_pipeline(spec: HostSpec, args: argparse.Namespace) -> int:
 async def _cmd_schedule(spec: HostSpec, args: argparse.Namespace) -> int:
     """Register/inspect the existing OS-scheduled bridging task on Windows Task Scheduler.
 
-    The parser exposes maintenance only for native-hook hosts retaining a legacy
+    The parser exposes maintenance only for hook-driven hosts retaining a legacy
     invocation; other wired hosts can also register and verify their schedule.
     On macOS/Linux this helper never modifies cron or launchd.
     """
     system = platform.system()
     if system != "Windows":
-        if spec.schedule_backend == "native":
+        if spec.schedule_backend == "hook":
             print(
                 f"Legacy cron/launchd inspection and removal are manual on {system or 'this OS'}; "
                 f"follow `{spec.binary} docs install`. No scheduler state was checked or changed.",
@@ -949,25 +950,25 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     )
     p.set_defaults(handler=bind(_cmd_docs))
 
-    # A retained native-host invocation exposes maintenance of old tasks only.
+    # A retained hook-driven host invocation exposes maintenance of old tasks only.
     if spec.schedule_command:
-        native = spec.schedule_backend == "native"
+        hook_driven = spec.schedule_backend == "hook"
         p = with_base(
             sub.add_parser(
                 "schedule",
                 help=f"Inspect/remove legacy {spec.display} tasks"
-                if native
+                if hook_driven
                 else f"Register the {spec.display} bridging task (Windows Task Scheduler)",
             )
         )
         p.add_argument(
             "action",
-            choices=("uninstall", "status") if native else ("install", "uninstall", "status", "verify"),
+            choices=("uninstall", "status") if hook_driven else ("install", "uninstall", "status", "verify"),
             help="remove legacy tasks or show their status"
-            if native
+            if hook_driven
             else "install/uninstall the task, show its status, or verify it can run",
         )
-        if not native:
+        if not hook_driven:
             p.add_argument("--interval", type=int, default=60, help="Minutes between runs, for install (default: 60)")
         p.set_defaults(handler=bind(_cmd_schedule))
 
