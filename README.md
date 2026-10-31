@@ -135,14 +135,6 @@ For agents without a dedicated binary, `memu-agent detect` probes the machine an
 All hosts share one configured memory backend via `~/.memu/config.env` — local
 or MemU Cloud. What one host's sessions taught memU, another host retrieves.
 
-Claude Code's Submit retrieval can run as a native asynchronous command hook.
-Set `async: true` on the retrieval handler as shown in the
-[hook configuration](docs/retrieval.md#claude-code-prompt-hook). Claude continues
-without waiting and can receive completed results on later model requests,
-including after a tool call in the same user turn on the tested clients. Context
-is not guaranteed to reach the initial answer. Claude currently uses a
-2,000-character prompt prefix without query extraction.
-
 Installation is the one-message setup in [Quick start](#quick-start) or [Self-hosted](#self-hosted). [SKILL.md](SKILL.md) is the routing skill it hands your agent: install the package, identify which host you are (falling back to `memu-agent detect` for anything without a dedicated adapter), print that host's packaged install guide (`<binary> docs install`), and follow it — configure the memory backend, register the scheduled bridging task, patch the instruction file, each step behind a verify gate — then report which seams (memorization / retrieval) are now active.
 
 Afterwards `<binary> doctor` proves the whole loop resolves: config, selected
