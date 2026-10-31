@@ -68,6 +68,6 @@ the cron/launchd procedure above. Verify removal with the platform's scheduler
 tools before declaring the migration complete.
 
 Delete only confirmed generated wrappers and prompt files after the registration
-check. Keep jobs, pending results, session cursors, logs, the store, shared config,
-and other hosts' files. Full migration and installation acceptance remain part
-of the installation rollout.
+check. Keep jobs, pending results, formal and pending session cursors, self-session
+records, logs, the store, shared config, and other hosts' files. Full migration
+and installation acceptance remain part of the installation rollout.

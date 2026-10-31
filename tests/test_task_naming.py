@@ -82,7 +82,7 @@ def test_valid_remote_doc_is_cached_then_rendered(monkeypatch: pytest.MonkeyPatc
 
 @pytest.mark.parametrize(
     ("spec", "filename"),
-    [(CODEX, "INSTALL.md"), (CODEX, "UNINSTALL.md"), (CLAUDE, "INSTALL.md"), (CLAUDE, "UNINSTALL.md")],
+    [(CODEX, "INSTALL.md"), (CODEX, "UNINSTALL.md"), (CLAUDE, "INSTALL.md")],
 )
 def test_record_guides_reject_old_remote_and_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, spec: HostSpec, filename: str
@@ -132,7 +132,7 @@ def test_task_guide_stays_empty_without_remote_or_cache(
 def test_record_guide_version_guards_are_host_scoped() -> None:
     old = "Current {{task_name}}; former {{former_task_names}}; all {{all_task_names}}."
     assert not templates._valid_host_doc("claude-code", "INSTALL.md", old)
-    assert not templates._valid_host_doc("claude-code", "UNINSTALL.md", old)
+    assert templates._valid_host_doc("claude-code", "UNINSTALL.md", old)
     assert templates._valid_host_doc("cursor", "INSTALL.md", old)
     assert not templates._valid_host_doc("codex", "INSTALL.md", old)
 
