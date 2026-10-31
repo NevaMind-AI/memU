@@ -318,6 +318,8 @@ def test_schedule_verb_is_wired() -> None:
         assert args.action == "install"
         assert args.interval == 60
         assert parser.parse_args(["schedule", "install", "--interval", "30"]).interval == 30
+        for action in ("install", "status", "verify", "uninstall"):
+            assert parser.parse_args(["schedule", action]).action == action
         with pytest.raises(SystemExit):
             parser.parse_args(["schedule", "frobnicate"])
 
@@ -351,8 +353,8 @@ def test_schedule_backend_does_not_control_verb_wiring(backend: ScheduleBackend)
 
 
 def test_unwired_host_has_no_schedule_verb() -> None:
-    # Hosts without a historical OS invocation do not advertise maintenance.
-    for spec in (CLAUDE, CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC):
+    # These adapters have no OS schedule maintenance command.
+    for spec in (CODEX, OPENCLAW, WORKBUDDY, COLA, GENERIC):
         with pytest.raises(SystemExit):
             build_parser(spec).parse_args(["schedule", "status"])
     # ...while a wired host does have it.
@@ -691,10 +693,49 @@ def test_symptom_a_message_carries_concrete_install_commands(
 @pytest.mark.parametrize("spec", (CLAUDE, CODEX), ids=lambda spec: spec.host)
 @pytest.mark.parametrize("system", ("Windows", "Linux", "Darwin"))
 @pytest.mark.parametrize("action", ("install", "verify", "status", "uninstall"))
-def test_hook_hosts_have_no_schedule_command_on_any_platform(
+def test_hook_host_schedule_actions_on_every_platform(
     monkeypatch: pytest.MonkeyPatch, spec: HostSpec, system: str, action: str
 ) -> None:
     monkeypatch.setattr(windows.platform, "system", lambda: system)
+    if spec is CLAUDE and action == "uninstall":
+        args = build_parser(spec).parse_args(["schedule", action])
+        assert args.action == "uninstall" and callable(args.handler)
+        return
     with pytest.raises(SystemExit) as exc:
         run(spec, ["schedule", action])
     assert exc.value.code == 2
+
+
+@pytest.mark.parametrize("exit_code", (0, 1))
+def test_claude_legacy_uninstall_delegates_to_shared_helper(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, exit_code: int
+) -> None:
+    from memu.hosts import scheduling
+
+    monkeypatch.setattr(windows.platform, "system", lambda: "Windows")
+    calls: list[Layout] = []
+
+    def uninstall(spec: HostSpec, layout: Layout) -> int:
+        assert spec is CLAUDE
+        calls.append(layout)
+        return exit_code
+
+    monkeypatch.setattr(scheduling, "uninstall", uninstall)
+    assert run(CLAUDE, ["schedule", "uninstall", "--base-dir", str(tmp_path)]) == exit_code
+    assert len(calls) == 1 and calls[0].base == tmp_path
+
+
+@pytest.mark.parametrize("system", ("Linux", "Darwin"))
+def test_claude_legacy_uninstall_reports_unperformed_unix_cleanup(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], system: str
+) -> None:
+    from memu.hosts import scheduling
+
+    monkeypatch.setattr(windows.platform, "system", lambda: system)
+
+    def unexpected(spec: HostSpec, layout: Layout) -> int:
+        pytest.fail("Unix cleanup must not invoke the Windows helper")
+
+    monkeypatch.setattr(scheduling, "uninstall", unexpected)
+    assert run(CLAUDE, ["schedule", "uninstall"]) == 1
+    assert "No scheduled tasks were inspected or removed" in capsys.readouterr().err

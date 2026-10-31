@@ -54,7 +54,20 @@ memorization alongside them. If their state cannot be established, stop migratio
 
 Once idle, remove only the confirmed registrations with the platform's scheduler
 tools, then query again to verify their absence and preservation of unrelated
-entries. Delete only confirmed generated wrappers and prompt files after that
+entries. For confirmed Windows registrations in the helper's memU namespace,
+the existing cleanup command remains available:
+
+```sh
+memu-claude-code schedule uninstall
+```
+
+This helper removes recognized Windows tasks and their generated wrapper/prompt
+files; it does not establish worker completion or inspect registrations in other
+locations. On Linux/macOS, it reports that no cleanup was performed and refers to
+the cron/launchd procedure above. Verify removal with the platform's scheduler
+tools before declaring the migration complete.
+
+Delete only confirmed generated wrappers and prompt files after the registration
 check. Keep jobs, pending results, session cursors, logs, the store, shared config,
 and other hosts' files. Full migration and installation acceptance remain part
 of the installation rollout.

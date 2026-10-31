@@ -18,10 +18,13 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
+import platform
 import sys
 from typing import Any
 
 from memu.hosts import hooks
+from memu.hosts.bridging import Layout
 from memu.hosts.claude_code import cowork_cmd, memorize_hook, prompt_hook
 from memu.hosts.claude_code.desktop_sessions import ClaudeDesktopTranscriptSource
 from memu.hosts.claude_code.sessions import SESSION_DIR
@@ -46,10 +49,27 @@ file name (``<projects>/<escaped cwd>/<sessionId>.jsonl``), which is exactly wha
 its own session without matching any content (#606)."""
 
 
+async def _cmd_legacy_uninstall(args: argparse.Namespace) -> int:
+    if platform.system() != "Windows":
+        print(
+            "Use the cron/launchd migration procedure in `memu-claude-code docs install`. "
+            "No scheduled tasks were inspected or removed.",
+            file=sys.stderr,
+        )
+        return 1
+    from memu.hosts import scheduling
+
+    return scheduling.uninstall(SPEC, Layout.default(host=HOST, base=args.base_dir))
+
+
 def _register_extra(sub: Any) -> None:
     cowork_cmd.register(sub)
     prompt_hook.register(sub)
     memorize_hook.register(sub)
+    p = sub.add_parser("schedule", help="Remove legacy scheduled bridging registrations")
+    p.add_argument("action", choices=("uninstall",))
+    p.add_argument("--base-dir", default=SPEC.default_base_dir, help="memU working directory")
+    p.set_defaults(handler=_cmd_legacy_uninstall)
 
 
 SPEC = HostSpec(

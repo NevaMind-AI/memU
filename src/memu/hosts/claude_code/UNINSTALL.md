@@ -60,9 +60,14 @@ If inventory, ownership or running state cannot be established, stop and report
 the unresolved migration.
 
 Once idle, remove only confirmed registrations using the platform's scheduler
-tools, then query again. Remove confirmed generated wrappers and prompt files
-only after the registrations are gone; preserve pending jobs, results, cursors
-and logs during migration.
+tools, then query again. For confirmed Windows tasks in the helper's memU
+namespace, `memu-claude-code schedule uninstall` retains the existing targeted
+cleanup. It does not wait for workers or remove tasks at other paths; on
+Linux/macOS it reports that no cleanup was performed. Always verify removal
+through the platform's scheduler tools.
+
+Remove confirmed generated wrappers and prompt files only after the registrations
+are gone; preserve pending jobs, results, cursors and logs during migration.
 
 ### ✅ Verify Part 1
 
