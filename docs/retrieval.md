@@ -43,10 +43,60 @@ thresholds.
 ## Claude Code prompt hook
 
 `memu-claude-code prompt-hook` accepts a Claude `UserPromptSubmit` event on stdin
-and calls the installed shared retrieval adapter. Register the installed command
-in Claude settings as a command hook with a 45-second timeout. It uses the
-original prompt's short/long category, with a 2000-character query limit, and
-does not run query extraction. Retrieval has a 40-second deadline.
+and calls the installed shared retrieval adapter. Register it as an asynchronous
+command hook using Claude's native `async: true` setting. For example, merge this
+entry into `hooks.UserPromptSubmit` in the active Claude settings, replacing the
+executable path with the installed `memu-claude-code` executable (`.exe` on Windows):
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/absolute/path/to/memu-claude-code",
+            "args": ["prompt-hook"],
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Preserve other settings and hook handlers. If the memU retrieval handler already
+exists, set `async` on that entry instead of adding a duplicate. Exec form
+(`command` plus `args`) passes executable paths without shell quoting; it requires
+a Claude version that supports exec-form command hooks. Restart or reload the
+session as required by the client, and verify both nonblocking execution and
+context delivery on the installed runtime.
+
+Claude owns the background process and can deliver its result to later model
+requests, including a tool continuation within the same user turn on the tested
+clients. Retrieval does not block the initial answer, and the result is not
+guaranteed to reach that answer. A request already in flight cannot use context
+that arrives later; an idle session waits for another interaction.
+In non-interactive `claude -p` sessions, teardown cancels unfinished async hooks.
+Keep retrieval in the native hook process so Claude can collect its stdout.
+Do not detach another process and discard the output channel.
+
+The hook uses the original prompt's short/long category, with a 2000-character
+query limit, and does not run query extraction. Retrieval retains its internal
+40-second subprocess deadline: Claude does not enforce the hook `timeout` after
+an `async: true` hook has moved into the background.
+
+See Claude's [background hook reference](https://code.claude.com/docs/en/hooks#run-hooks-in-the-background)
+for the native execution and delivery contract.
+
+Same-turn delivery was verified on Windows with CLI 2.1.312 and Desktop Code
+runtime 2.1.234. Each controlled check used one user message: an asynchronous
+hook returned a random marker during a tool call, and the model reproduced it
+after the tool returned. The marker was absent from the user message and tool
+output. These checks used synthetic retrieval data; they do not establish
+backend latency, other platform behavior, or a minimum supported version.
 
 The returned context includes filtering status even for zero hits. Context is
 bounded to 9500 UTF-16 units; `context_counts` reports the hits and resources
