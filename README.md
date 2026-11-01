@@ -187,6 +187,8 @@ For Local / self-hosted installations, every CLI flag has a matching variable:
 Run `<binary> doctor` to display the resolved mode and verify the same retrieval
 path the host uses.
 
+Both embedding transports (`sdk` and `httpx`) treat an empty input batch as a no-op: no provider request is sent, and no vectors or usage response are returned.
+
 ### Storage backends
 
 | Provider | DSN | Vector search | Use for |
