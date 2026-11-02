@@ -44,10 +44,7 @@ def recall_file_path(base_dir: Path, subdir: str, name: str) -> Path:
     that needs to *locate* a mirrored file by name (e.g. retrieval, surfacing a
     file's path to the agent) agree by construction rather than by comment.
     """
-    # Keep legacy spaced names at their existing mirror paths; frontmatter retains
-    # the stored name. Names normalized by commit contain no spaces, so this is a
-    # no-op for them. Existing legacy collisions require separate reconciliation.
-    return base_dir / subdir / f"{name.replace(' ', '-')}.md"
+    return base_dir / subdir / f"{name}.md"
 
 
 def write_recall_file(base_dir: Path, subdir: str, recall_file: dict[str, Any]) -> Path:
