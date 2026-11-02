@@ -95,6 +95,10 @@ Once the scheduled bridging task is installed, memU can turn useful agent histor
 
 The judgment and synthesis stay inside the agent. `MemoryService` makes no LLM or chat calls; it stores, embeds, and retrieves the skill Markdown the agent prepared.
 
+The agent chooses recall-file names and reuses an existing name when updating a file.
+Names retain their case, spaces, and underscores in storage and mirror filenames;
+commits match names exactly within each track after trimming surrounding whitespace.
+
 ## Self-hosted
 
 **Private · Single-device · Embedding key required**

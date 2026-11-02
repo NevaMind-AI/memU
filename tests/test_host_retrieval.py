@@ -39,7 +39,7 @@ def _result() -> dict:
 def test_hit_joins_text_to_bootstrapped_source_path(tmp_path: pathlib.Path, monkeypatch) -> None:
     monkeypatch.setattr(retrieval, "BASE_DIR", str(tmp_path))
     shaped = retrieval._shape_for_agent(_result())
-    out_path = tmp_path / "memory" / "coffee-preferences.md"
+    out_path = tmp_path / "memory" / "coffee preferences.md"
     assert shaped == {
         "hits": [
             {
@@ -60,8 +60,8 @@ def test_bootstrap_overwrites_a_stale_mirror(tmp_path: pathlib.Path, monkeypatch
     monkeypatch.setattr(retrieval, "BASE_DIR", str(tmp_path))
     write_recall_file(tmp_path, "memory", {"name": "coffee preferences", "description": "d", "content": "STALE"})
     shaped = retrieval._shape_for_agent(_result())
-    assert shaped["hits"][0]["path"] == str(tmp_path / "memory" / "coffee-preferences.md")
-    assert (tmp_path / "memory" / "coffee-preferences.md").read_text(encoding="utf-8").endswith("No sugar.")
+    assert shaped["hits"][0]["path"] == str(tmp_path / "memory" / "coffee preferences.md")
+    assert (tmp_path / "memory" / "coffee preferences.md").read_text(encoding="utf-8").endswith("No sugar.")
 
 
 def test_unmappable_source_keeps_content_inline_with_no_path(tmp_path: pathlib.Path, monkeypatch) -> None:
@@ -93,7 +93,7 @@ def test_source_only_hit_is_preserved(tmp_path: pathlib.Path, monkeypatch) -> No
     assert hits[0]["description"] == "How the user likes their coffee"
     assert hits[0]["score"] == 0.4
     assert "text" not in hits[0]
-    assert hits[0]["path"] == str(tmp_path / "memory" / "coffee-preferences.md")
+    assert hits[0]["path"] == str(tmp_path / "memory" / "coffee preferences.md")
 
 
 def test_projection_retains_source_timestamps_and_removes_metadata(tmp_path: pathlib.Path, monkeypatch) -> None:
@@ -169,7 +169,7 @@ async def test_configured_cutoff_filters_before_mirroring(tmp_path, monkeypatch,
     result = await retrieval.retrieve(query, where={"user_id": "u"}, query_kind=kind)
     assert seen == [{"user_id": "u"}]
     assert len(result["hits"]) == expected
-    assert (tmp_path / "memory/coffee-preferences.md").exists() is bool(expected)
+    assert (tmp_path / "memory/coffee preferences.md").exists() is bool(expected)
     assert len(result["resources"]) == 1  # Segment calibration does not cover resources.
 
 
