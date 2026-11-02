@@ -9,7 +9,7 @@ LANGUAGE: ContextVar[str] = ContextVar("codex_install_language", default="en")
 
 _EN = {
     "   独立 Codex CLI：{path}": "   Standalone Codex CLI: {path}",
-    "\n🚀 欢迎安装 memU\n   为 Codex 配置自动检索和后台记忆。": "\n🚀 Welcome to memU\n   Set up automatic retrieval and background memory for Codex.",
+    "\n👋 欢迎安装 memU\n   为 Codex 配置自动检索和后台记忆。": "\n👋 Welcome to memU\n   Set up automatic retrieval and background memory for Codex.",
     "已完成": "Done",
     "安装暂时无法继续": "Installation needs your attention",
     "安装未完成": "Installation failed",

@@ -149,8 +149,8 @@ def test_language_selects_progress_and_final_notice(machine, capsys, language, t
 def test_human_output_includes_progress_and_user_follow_up(machine, capsys):
     assert main(["install", "--non-interactive", "--language", "zh", "--base-dir", str(machine[1])]) == 0
     output = capsys.readouterr().out
-    assert "🔎 1/5  检查安装条件" in output
-    assert "✨ 5/5  完成安装检查" in output
+    assert "🔎  1/5  检查安装条件" in output
+    assert "✨  5/5  完成安装检查" in output
     assert "🎉 memU 安装完成" in output
     assert "started" not in output and "passed" not in output
     assert output.count(install.NOTICE) == 1

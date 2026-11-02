@@ -208,7 +208,7 @@ def _render_progress(result: dict[str, Any], output: TextIO, *, json_output: boo
     elapsed = result["elapsed_ms"] / 1000
     icon = ("🔎", "🧠", "🛠️", "🔗", "✨")[stage - 1]
     if status == "started":
-        print(f"\n{icon} {stage}/5  {result['title']}", file=output, flush=True)
+        print(f"\n{icon}  {stage}/5  {result['title']}", file=output, flush=True)
     elif status == "passed":
         print(f"   ✅ {text('已完成')} · {elapsed:.1f}s", file=output, flush=True)
     else:
@@ -261,7 +261,7 @@ async def run(args: argparse.Namespace) -> int:
         _select_language(args)
         started = time.monotonic()
         if not args.json:
-            print(text("\n🚀 欢迎安装 memU\n   为 Codex 配置自动检索和后台记忆。"), file=output, flush=True)
+            print(text("\n👋 欢迎安装 memU\n   为 Codex 配置自动检索和后台记忆。"), file=output, flush=True)
         # Installation edits configuration, while workers own processing files.
         lock_dir = args.base_dir / ".install"
         lock_dir.mkdir(exist_ok=True)
