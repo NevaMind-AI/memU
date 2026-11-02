@@ -193,3 +193,82 @@ def test_uninstall_preserves_untrusted_hook_approvals(home):
     after = {"hooks": [{**entry, "trustStatus": "trusted"}]}
     with pytest.raises(RuntimeError, match="untrusted hook"):
         uninstall._trust_updates(before, after, {"foreign"}, path)
+
+
+@pytest.mark.parametrize("status", ["blocked", "failed"])
+def test_uninstall_without_working_codex_preserves_foreign_trust(home, monkeypatch, status):
+    import tomllib
+
+    path = home / "hooks.json"
+    owned = {"type": "command", "command": "memu-codex prompt-hook"}
+    foreign = {"type": "command", "command": "foreign"}
+    untrusted = {"type": "command", "command": "untrusted"}
+    path.write_text(json.dumps({"hooks": {"UserPromptSubmit": [{"hooks": [owned, foreign, untrusted]}]}}))
+    settings = home / "config.toml"
+    prefix = str(path) + ":user_prompt_submit:0:"
+    original = 'model = "user-model"\n# user comment\n'
+    for index, fingerprint in enumerate(("memu-hash", "foreign-hash", "stale-untrusted-hash")):
+        original += f'\n[hooks.state.{json.dumps(prefix + str(index))}]\ntrusted_hash = "{fingerprint}"\n'
+    settings.write_text(original, encoding="utf-8")
+    original_hooks = path.read_bytes()
+    monkeypatch.setattr(uninstall.cli_prepare, "prepare", lambda _: {"status": status, "reason": "missing"})
+    monkeypatch.setattr(uninstall.hooks, "AppServer", lambda *a: pytest.fail("Must not require Codex"))
+    assert main(["uninstall"]) == 0
+    assert json.loads(path.read_text())["hooks"]["UserPromptSubmit"][0]["hooks"] == [foreign, untrusted]
+    state = tomllib.loads(settings.read_text())["hooks"]["state"]
+    assert state == {
+        prefix + "0": {"trusted_hash": "foreign-hash"},
+        prefix + "1": {"trusted_hash": "stale-untrusted-hash"},
+    }
+    assert 'model = "user-model"\n# user comment\n' in settings.read_text()
+    assert (home / "config.toml.memu-uninstall-backup").read_text() == original
+    assert (home / "hooks.json.memu-uninstall-backup").read_bytes() == original_hooks
+    assert main(["uninstall"]) == 0
+
+
+def test_uninstall_without_codex_or_trust_configuration(home, monkeypatch):
+    path = home / "hooks.json"
+    path.write_text(
+        '{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"memu-codex prompt-hook"}]}]}}'
+    )
+    monkeypatch.setattr(uninstall.cli_prepare, "prepare", lambda _: {"status": "blocked"})
+    assert main(["uninstall"]) == 0
+    assert json.loads(path.read_text())["hooks"]["UserPromptSubmit"][0]["hooks"] == []
+    assert not (home / "config.toml").exists()
+
+
+def test_offline_uninstall_preserves_custom_trust_layout_before_mutation(home, monkeypatch):
+    path = home / "hooks.json"
+    original = b'{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"memu-codex prompt-hook"}]}]}}'
+    path.write_bytes(original)
+    settings = home / "config.toml"
+    state = json.dumps(str(path) + ":user_prompt_submit:0:0")
+    settings.write_text(f'[hooks]\nstate = {{ {state} = {{ trusted_hash = "original" }} }}\n')
+    before = settings.read_bytes()
+    monkeypatch.setattr(uninstall.cli_prepare, "prepare", lambda _: {"status": "blocked"})
+    assert main(["uninstall"]) == 1
+    assert path.read_bytes() == original
+    assert settings.read_bytes() == before
+
+
+def test_offline_uninstall_rolls_back_hooks_when_trust_write_fails(home, monkeypatch):
+    path = home / "hooks.json"
+    original = b'{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"memu-codex prompt-hook"}]}]}}'
+    path.write_bytes(original)
+    settings = home / "config.toml"
+    settings.write_text(
+        f'[hooks.state.{json.dumps(str(path) + ":user_prompt_submit:0:0")}]\ntrusted_hash = "original"\n'
+    )
+    before = settings.read_bytes()
+    write = uninstall.hooks._atomic_write
+
+    def fail(target, data):
+        if target == settings:
+            raise OSError("fixture write failed")  # noqa: TRY003
+        return write(target, data)
+
+    monkeypatch.setattr(uninstall.cli_prepare, "prepare", lambda _: {"status": "blocked"})
+    monkeypatch.setattr(uninstall.hooks, "_atomic_write", fail)
+    assert main(["uninstall"]) == 1
+    assert path.read_bytes() == original
+    assert settings.read_bytes() == before

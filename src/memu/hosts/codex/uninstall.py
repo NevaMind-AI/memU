@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +59,7 @@ def uninstall(codex: str | None, cwd: Path) -> int:
         return 0
     prepared = cli_prepare.prepare(codex)
     if prepared["status"] != "passed":
-        raise RuntimeError(prepared["detail"])
+        return _offline_uninstall(path, original, config, removed)
     server = hooks.AppServer(prepared["executable"], cwd, path.parent)
     try:
         server.request(
@@ -86,6 +88,88 @@ def uninstall(codex: str | None, cwd: Path) -> int:
         _apply_trust(server, updates, path, cwd)
     finally:
         server.close()
+    return len(removed)
+
+
+def _offline_trust(original: bytes, path: Path) -> dict[str, str | None]:
+    """Map Codex's positional trust keys to surviving definitions."""
+    config = json.loads(original.decode("utf-8-sig"))
+    updates: dict[str, str | None] = {}
+    for i, group in enumerate(config.get("hooks", {}).get("UserPromptSubmit", [])):
+        index = 0
+        for j, hook in enumerate(group.get("hooks", [])):
+            old = f"{path}:user_prompt_submit:{i}:{j}"
+            if _owned(hook):
+                updates[old] = None
+            else:
+                updates[old] = f"{path}:user_prompt_submit:{i}:{index}"
+                index += 1
+    return updates
+
+
+def _remap_trust(data: bytes, updates: dict[str, str | None]) -> bytes:
+    """Edit only Codex-generated trust tables, preserving surrounding TOML verbatim."""
+    source = data.decode("utf-8-sig")
+    state = tomllib.loads(source).get("hooks", {}).get("state", {})
+    affected = {key for key in state if key in updates and updates[key] != key}
+    if not affected:
+        return data
+    # Codex writes each approval as its own [hooks.state."key"] table.
+    sections = re.split(r"(?m)^(?=[ \t]*\[)", source)
+    found = set()
+    result = []
+    for section in sections:
+        header, separator, body = section.partition("\n")
+        try:
+            parsed = tomllib.loads(header.rstrip("\r")).get("hooks", {}).get("state", {})
+        except tomllib.TOMLDecodeError:
+            parsed = {}
+        keys = affected.intersection(parsed)
+        if not keys:
+            result.append(section)
+            continue
+        key = keys.pop()
+        if len(parsed) != 1 or parsed[key]:
+            raise ValueError("Unsupported hook trust table; preserve config.toml and inspect its layout")  # noqa: TRY003
+        found.add(key)
+        target = updates[key]
+        if target is not None:
+            ending = "\r\n" if header.endswith("\r") else separator
+            result.append(f"[hooks.state.{json.dumps(target, ensure_ascii=True)}]" + ending + body)
+    if found != affected:
+        raise ValueError("Hook trust uses a custom TOML layout; preserve config.toml and inspect it before removal")  # noqa: TRY003
+    updated = "".join(result)
+    tomllib.loads(updated)
+    return (b"\xef\xbb\xbf" if data.startswith(b"\xef\xbb\xbf") else b"") + updated.encode("utf-8")
+
+
+def _offline_uninstall(path: Path, original: bytes, config: dict[str, Any], removed: list[str]) -> int:
+    settings = path.with_name("config.toml")
+    if settings.is_symlink():
+        raise ValueError("Inspect the config.toml symlink before uninstalling")  # noqa: TRY003
+    previous = settings.read_bytes() if settings.exists() else None
+    trust = _remap_trust(previous, _offline_trust(original, path)) if previous is not None else None
+    updated = (json.dumps(config, ensure_ascii=True, indent=2) + "\n").encode()
+    for target, data in ((path, original), (settings, previous)):
+        backup = target.with_name(target.name + ".memu-uninstall-backup")
+        if data is not None and not backup.exists():
+            hooks._atomic_write(backup, data)
+    if path.read_bytes() != original or (settings.read_bytes() if settings.exists() else None) != previous:
+        raise RuntimeError("Codex configuration changed during uninstall; retry")  # noqa: TRY003
+    # Remove definitions first; a failed trust write restores this change when still owned.
+    hooks._atomic_write(path, updated)
+    try:
+        if trust is not None and trust != previous:
+            if settings.read_bytes() != previous:
+                raise RuntimeError("Codex trust configuration changed during uninstall")  # noqa: TRY003, TRY301
+            hooks._atomic_write(settings, trust)
+        if path.read_bytes() != updated:
+            raise RuntimeError("Hook configuration changed during uninstall")  # noqa: TRY003, TRY301
+    except Exception:
+        if path.read_bytes() == updated:
+            hooks._atomic_write(path, original)
+        raise
+    print("Removed memU hooks from local configuration; Codex CLI is not required.")
     return len(removed)
 
 
