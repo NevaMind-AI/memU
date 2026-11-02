@@ -193,7 +193,7 @@ def _select_language(args: argparse.Namespace) -> None:
         language = "en"
         if not args.non_interactive and sys.stdin.isatty():
             with contextlib.redirect_stdout(sys.stderr):
-                language = input("\nmemU Installer\n语言 / Language: en/zh [en]: ").strip().lower() or "en"
+                language = input("\n🚀 memU Installer\nLanguage: en/zh [en]: ").strip().lower() or "en"
             if language not in {"en", "zh"}:
                 raise Blocked("Choose en or zh / 请选择 en 或 zh。")
     args.language = language

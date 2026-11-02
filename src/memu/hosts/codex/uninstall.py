@@ -169,7 +169,6 @@ def _offline_uninstall(path: Path, original: bytes, config: dict[str, Any], remo
         if path.read_bytes() == updated:
             hooks._atomic_write(path, original)
         raise
-    print("Removed memU hooks from local configuration; Codex CLI is not required.")
     return len(removed)
 
 
@@ -207,8 +206,10 @@ def register(sub: Any) -> None:
     parser.add_argument("--cwd", type=Path, default=Path.cwd(), help="Working directory for Codex read-back")
 
     async def handler(args: argparse.Namespace) -> int:
+        print("\n🧹 memU Uninstaller", flush=True)
         removed = uninstall(args.codex, args.cwd.expanduser().resolve())
-        print(f"Unregistered {removed} memU hook(s)." if removed else "No memU hooks registered.")
+        print(f"✅ Removed {removed} memU hook(s)." if removed else "✅ No memU hooks to remove.")
+        print("💡 Memory, backend configuration and other integrations are preserved.")
         return 0
 
     parser.set_defaults(handler=handler)
