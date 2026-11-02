@@ -319,6 +319,10 @@ def _load_state(path: Path) -> dict[str, Any]:
 
 
 def _resume_args(args: argparse.Namespace, state: dict[str, Any]) -> None:
+    if args.stage is None and not args.agent and args.migration_evidence is None:
+        # A fresh terminal invocation follows terminal policy; single-stage calls resume the saved handoff.
+        for key in ("agent", "new_install", "migration_evidence"):
+            state.pop(key, None)
     args.agent = args.agent or state.get("agent", False)
     args.new_install = args.new_install or state.get("new_install", False)
     state.update(agent=args.agent, new_install=args.new_install)

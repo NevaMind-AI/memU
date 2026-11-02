@@ -160,6 +160,8 @@ create/view/update/delete 和 ACTIVE/PAUSED；未提供列表工具，说明要�
 
 安装状态写入宿主工作目录的 `install-state.json`，保存通过的阶段、已验证程序路径、Agent 模式、
 交接文件位置、任务 ID/定义哈希、hook 配置哈希、后端配置哈希与原有处理文件哈希。
+`--stage` 继续调用沿用保存的 Agent 模式；重新从终端执行完整的 `install` 则按终端策略处理，
+迁移状态记录为 `desktop_deferred`。
 不保存后端凭据。阶段 5 从保存位置重新读取最新的删除证据。
 完成后的普通重装重新检查，分阶段失败可使用 `--stage N` 重试失败阶段。
 

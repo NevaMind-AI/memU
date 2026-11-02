@@ -126,6 +126,16 @@ def test_agent_unknown_inventory_blocks_before_registration(machine, capsys):
     assert json.loads(capsys.readouterr().out.splitlines()[-1])["stage"] == 4
 
 
+def test_terminal_install_can_complete_after_an_unfinished_agent_handoff(machine, tmp_path, capsys):
+    path = evidence(tmp_path)
+    assert invoke(machine, "--agent", "--migration-evidence", str(path), "--through-stage", "4") == 0
+    assert invoke(machine, "--stage", "5") == 2
+    assert invoke(machine) == 0
+    final = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert final["migration"] == "desktop_deferred"
+    assert (tmp_path / "definition").is_file()
+
+
 def test_agent_confirmed_new_install(machine):
     assert invoke(machine, "--agent", "--new-install") == 0
 
