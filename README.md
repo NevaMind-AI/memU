@@ -158,6 +158,8 @@ Use `--non-interactive --json` for structured results. Exit codes are 0 (passed)
 2 (blocked), and 1 (failed). See the [installation contract](docs/codex-cli-installation.md)
 for staged Agent execution, configuration options, and migration evidence.
 `memu-codex prepare-cli` remains available for standalone executable preparation.
+Run `memu-codex uninstall` to disconnect the Codex integration while keeping your
+memory, backend configuration, and existing processing data.
 
 With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
 

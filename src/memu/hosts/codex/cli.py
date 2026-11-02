@@ -38,6 +38,7 @@ from memu.hosts.codex import (
     notify_console,
     prompt_hook,
     prompt_hook_install,
+    uninstall,
 )
 from memu.hosts.codex.sessions import SESSION_DIR, CodexTranscriptSource
 from memu.hosts.host_cli import HostSpec, run
@@ -75,6 +76,7 @@ HOOK = hooks.HookSpec(
 
 def _register_extra(sub: object) -> None:
     install.register(sub)
+    uninstall.register(sub)
     cli_prepare.register(sub)
     prompt_hook.register(sub)
     memorize_hook.register(sub)

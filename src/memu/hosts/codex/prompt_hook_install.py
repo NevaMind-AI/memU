@@ -144,12 +144,12 @@ def _command(subcommand: str = "prompt-hook") -> str:
 
 
 def _owns_command(command: str, subcommand: str = "prompt-hook") -> bool:
+    value = r"""(?:"[^"]*"|'(?:[^']|'')*'|[^\s'"&;|]+)"""
+    options = r"(?:\s+--base-dir\s+" + value + r")?(?:\s+--default-home)?"
     if subcommand == "memorize-hook":
-        command = command.split(" --agent ", 1)[0]
+        options = r"(?:\s+--(?:agent|base-dir|session-dir)\s+" + value + r"|\s+--default-home)*"
     match = re.fullmatch(
-        r"""\s*(?:&\s+)?(?:"([^"]+)"|'((?:[^']|'')+)'|([^\s'"&;|]+))\s+"""
-        + re.escape(subcommand)
-        + r"""(?:\s+--base-dir\s+(?:"[^"]*"|'(?:[^']|'')*'|[^\s'"&;|]+))?(?:\s+--default-home)?\s*""",
+        r"""\s*(?:&\s+)?(?:"([^"]+)"|'((?:[^']|'')+)'|([^\s'"&;|]+))\s+""" + re.escape(subcommand) + options + r"\s*",
         command,
     )
     if match is None:
@@ -191,6 +191,13 @@ def _trust(server: AppServer, listed: dict[str, Any], command: str, hooks_file: 
             f"Expected one loaded memU hook, found {len(entries)}; check Codex hooks/list warnings"
         )
     entry = entries[0]
+    _trust_entry(server, entry)
+    verified = _entries(server.request("hooks/list", {"cwds": [str(cwd)]}), command, str(hooks_file))
+    if len(verified) != 1 or verified[0].get("trustStatus") != "trusted":
+        raise RuntimeError("Codex did not confirm the memU prompt hook as trusted")  # noqa: TRY003
+
+
+def _trust_entry(server: AppServer, entry: dict[str, Any]) -> None:
     key, fingerprint = entry.get("key"), entry.get("currentHash")
     if not key or not fingerprint:
         raise RuntimeError("Codex did not return hook key and currentHash")  # noqa: TRY003
@@ -202,9 +209,6 @@ def _trust(server: AppServer, listed: dict[str, Any], command: str, hooks_file: 
             "mergeStrategy": "upsert",
         },
     )
-    verified = _entries(server.request("hooks/list", {"cwds": [str(cwd)]}), command, str(hooks_file))
-    if len(verified) != 1 or verified[0].get("trustStatus") != "trusted":
-        raise RuntimeError("Codex did not confirm the memU prompt hook as trusted")  # noqa: TRY003
 
 
 def install(

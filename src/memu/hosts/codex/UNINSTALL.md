@@ -94,10 +94,17 @@ changes other hooks' indices, verify their approvals through Codex rather than
 copying or deleting unrelated fingerprints. Repeating removal when the memU
 entry is absent must preserve all unrelated configuration.
 
-Automatic hook/trust removal is not yet integrated in memu-cli. If safe removal
-cannot be completed with the installed Codex version, report uninstall as pending
-and retain the executable. Do not leave a registered hook pointing at a removed
-package.
+The terminal command unregisters the two current memU handlers:
+
+```text
+memu-codex uninstall
+```
+
+It backs up hooks.json, verifies removal through Codex, and preserves other
+handlers and their existing trust. Repeating it is a no-op. It retains existing
+approval records, legacy integrations, processing data and the package. The
+remaining steps in this guide cover broader removal separately.
+If a required check fails, retain the executable and inspect the diagnostic.
 
 ### 2.2 Historical entries — AGENTS instruction and retrieve skill
 

@@ -181,6 +181,26 @@ managed pointer 和自有旧 skill；skill 归属不明或目录有额外文件�
 安装失败保留定义备份与处理状态。CLI 不恢复、删除或终止 Desktop 任务。成功事件由安装器发送，
 遥测失败不影响结果。真实检索交付和记忆提交留给下一次用户消息验收。
 
+## 双 hook 注销
+
+```sh
+memu-codex uninstall
+```
+
+此命令只移除默认 `~/.codex/hooks.json` 中 memU 的 `prompt-hook` 和 `memorize-hook` 注册，
+支持重复执行；不存在文件或自有入口时直接成功，也无需准备 Codex 程序。
+实际移除时复用已安装的 Codex CLI，以 `hooks/list` 回读确认入口已消失。
+可通过 `--codex PATH` 指定程序、`--cwd PATH` 指定回读工作目录。
+
+修改前保存 `hooks.json.memu-uninstall-backup`，保留第三方 hook、其他事件和原有分组元数据。
+若索引变化使原先受信任的第三方 hook 失去信任，通过 Codex API 对相同定义恢复原批准状态；
+无法维持原信任语义时返回失败。回读或信任预检失败会恢复本次写入，期间检测到外部文件改动时
+保留外部改动。恢复第三方信任的 API 操作失败时返回失败，保留已验证的 hook 注销和备份供检查。
+已有信任记录保留在 Codex 配置中。
+
+定时任务、skill、AGENTS 指令、共享后端配置、记忆、游标、self-session、pending jobs、结果与日志
+均保留。已启动的 worker 继续自然执行；命令只停止后续由这两个入口触发的工作。
+
 ## 可执行验收
 
 `tests/test_codex_install.py` 检查真实阶段调用、退出码、操作顺序和磁盘结果；
