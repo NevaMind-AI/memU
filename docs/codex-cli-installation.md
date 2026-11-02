@@ -42,20 +42,13 @@ flowchart TD
     Start -->|Agent 对话| A1
     Start -->|直接使用终端| C1
     subgraph Agent[Agent 负责]
-        A1[检查当前会话的有效权限与工具能力]
-        A1 --> A2{允许执行安装命令吗？}
-        A2 -->|允许| A3[收集必要选项并调用 CLI]
-        A2 -->|需要审批| U1
-        A2 -->|受限或无法确认| A4[说明阻碍与受支持的继续方式]
-        A4 --> U2
+        A1{当前会话已确认是 Full access 吗？}
+        A1 -->|是| A3[调用安装 CLI]
+        A1 -->|否或无法确认| U2
         A5[读取 CLI 结果并解释下一步]
     end
     subgraph Host[宿主与用户负责]
-        U1[宿主针对拟执行命令请求审批]
-        U1 --> U3{审批通过且命令允许执行吗？}
-        U3 -->|是| A3
-        U3 -->|否| A4
-        U2[用户授权或切换到支持安装的会话]
+        U2[用户切换到 Full access 后继续]
         U2 --> A1
         Login[用户完成受支持的登录操作]
     end
@@ -89,25 +82,24 @@ flowchart TD
     classDef agent fill:#dbeafe,stroke:#2563eb,color:#172554;
     classDef cli fill:#dcfce7,stroke:#16a34a,color:#14532d;
     classDef host fill:#ffedd5,stroke:#ea580c,color:#7c2d12;
-    class A1,A2,A3,A4,A5 agent;
+    class A1,A3,A5 agent;
     class C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11,Done,Blocked cli;
-    class U1,U2,U3,Login host;
+    class U2,Login host;
 ```
 
-蓝色表示 Agent 职责，绿色表示 CLI 职责，橙色表示宿主审批或用户操作。
+蓝色表示 Agent 职责，绿色表示 CLI 职责，橙色表示用户操作。
 颜色区分职责，不表示实现进度。本次已实现的是程序发现、可选安装及启动验证。
 
 ## 权限与交接边界
 
-- Agent 在调用前检查宿主的有效执行策略，权限改变后重试时重新检查。
-  Full access 和 ask-for-approval 属于宿主会话属性，CLI 不能通过可写文件、环境变量或成功启动子进程来推断。
-- 审批模式下，宿主必须批准拟执行命令及后续需要审批的操作；一次批准不代表全部操作获批。
-  权限未知或审批被拒绝时，说明受支持的继续方式，不绕路执行。
+- Agent 调用安装 CLI 前，只确认当前会话已处于 Full access。
+  未开启或无法确认时，提示用户切换；用户继续后重新确认有效模式，再调用 CLI。
+- Full access 属于宿主会话属性，由 Agent 确认；CLI 负责实际安装操作的执行与结果检查。
 - 直接终端调用跳过 Agent 权限检查。两条入口中的 CLI 都检查实际访问能力、报告操作失败并返回结构化结果，
   不修改调用方的沙箱或审批策略。
 - Agent 调用应使用非交互选项；缺少输入或登录时返回阻碍，由 Agent 解释。
   交互终端可引导登录。两条路径采用同一组安装完成条件。
-- 此图描述目标方案。现有 Codex INSTALL.md 的 Full-access 前提，在替代流程实现并验证前继续有效。
+- 目标流程沿用现有 Codex INSTALL.md 的 Full-access 前提。
 - 所有必要门槛均须通过，才能执行依赖它的操作。无法盘点旧入口属于阻碍，不能当作入口不存在。
 - 启用新触发前，旧 worker 必须空闲；保留恢复定义直到替代入口验证通过。
   无法确认归属或安全交接时暂停迁移。重跑时检查真实状态，不假定之前的阶段仍有效。
