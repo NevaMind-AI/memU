@@ -13,8 +13,8 @@ or unknown, ask the user to enable Full access and reconfirm before changes.
 Install/upgrade memu-cli using the user's tool and source (default:
 `pip install --upgrade memu-cli`); skip if already done in this run.
 
-Announce that installation is starting, then run **one command**. Replace `LANG`
-with `en` or `zh` for this invocation:
+Announce `🚀 Installing memU for Codex` in the user's language, then run **one
+command**. Replace `LANG` with `en` or `zh` for this invocation:
 
 ```sh
 memu-codex install --non-interactive --install-missing --json --language LANG
@@ -50,15 +50,26 @@ store/provider/model identity and respect configuration-change refusals.
 
 ## Report the result
 
-Report success and the configured backend, or explain the actual blocker. On
-success, relay the CLI's notice in the user's language:
+Use this compact report on success. Keep the emoji and Markdown heading, translate
+the text into the user's language, and fill values only from actual CLI results:
 
-> If you use Codex Desktop and previously set up memU scheduled tasks yourself,
-> you can now pause or remove them to avoid processing memory twice.
+```text
+## ✅ memU installation complete
+
+🧠 Memory backend: <configured backend>.
+🔗 Automatic retrieval and background memory hooks: registered and trusted.
+
+💡 If you use Codex Desktop and previously set up memU scheduled tasks yourself,
+you can now pause or remove them to avoid processing memory twice.
+
+💬 Send another message to check actual retrieval and background memory processing.
+🔐 You may now restore your previous permission mode.
+```
+
+For a blocked or failed installation, use `## ⚠️ memU installation blocked` or
+`## ❌ memU installation failed` in the user's language, followed by the actual
+diagnostic. Only claim successful checks confirmed by the CLI.
 
 Task-name references: current `{{task_name}}`; former {{former_task_names}};
 all recognized names: {{all_task_names}}. The user manages existing scheduled tasks
 after installation.
-
-Invite the next user message to check actual retrieval and background memory
-processing, and remind the user they may restore their previous permission mode.
