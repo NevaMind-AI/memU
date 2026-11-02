@@ -3,6 +3,8 @@
 import io
 import json
 import subprocess
+import urllib.error
+from email.message import Message
 from pathlib import Path
 
 import pytest
@@ -177,3 +179,15 @@ def test_cli_success_reports_executable_readiness(environment, capsys):
     result = json.loads(capsys.readouterr().out)
     assert result["stage"] == "host_executable"
     assert result["version"] == "codex-cli 0.163.0"
+
+
+def test_official_download_http_failure_reports_status(environment, monkeypatch):
+    def download():
+        raise urllib.error.HTTPError("https://chatgpt.com/codex/install.ps1", 403, "Forbidden", Message(), None)
+
+    monkeypatch.setattr(setup, "_install", download)
+    result = setup.prepare(install_missing=True)
+    assert result["status"] == "failed"
+    assert result["reason"] == "download_http_error"
+    assert result["http_status"] == 403
+    assert "HTTP 403 (Forbidden)" in result["detail"]

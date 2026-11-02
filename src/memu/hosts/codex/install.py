@@ -8,13 +8,14 @@ from __future__ import annotations
 import argparse
 import contextlib
 import getpass
+import io
 import json
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from memu import config_file, events
 from memu.hosts import instruction
@@ -37,6 +38,10 @@ class Blocked(Exception):
 
     def __str__(self) -> str:
         return text(super().__str__())
+
+
+class Failed(Blocked):
+    """A diagnosed installation failure safe to show to the caller."""
 
 
 def _home() -> Path:
@@ -76,7 +81,11 @@ async def _backend(args: argparse.Namespace) -> None:
                 argv.extend(["--" + name.replace("_", "-"), value])
         if await _command(argv):
             raise Blocked("后端配置未通过保护检查；已有配置保留，请检查 config 诊断。")
-    if await _command(["doctor"]):
+    diagnostics = io.StringIO()
+    with contextlib.redirect_stdout(sys.stdout if args.json else diagnostics):
+        status = await _command(["doctor"])
+    if status:
+        print(diagnostics.getvalue(), end="", file=sys.stderr)
         raise Blocked("后端 doctor 未通过，请修复连接或配置后重跑。")
 
 
@@ -153,10 +162,27 @@ def _prepare_host(args: argparse.Namespace) -> None:
         and input(text("是否使用官方安装器补装 Codex？[y/N] ")).strip().lower() == "y"
     ):
         result = cli_prepare.prepare(args.codex, install_missing=True)
+    detail = {
+        "missing": "未找到 Codex CLI。添加 --install-missing 可使用官方安装器补装。",
+        "install_incomplete": "官方安装器已退出，但仍未找到 Codex CLI。请检查安装器输出或使用 --codex PATH 指定程序。",
+        "startup_failed": "Codex CLI 启动检查失败，codex --version 未返回有效版本。请检查程序是否完整。",
+        "not_found": "指定的 Codex 程序不存在，请检查 --codex 路径。",
+    }.get(result.get("reason", ""), result.get("detail", ""))
     if result["status"] == "blocked":
-        raise Blocked(result["detail"])
+        raise Blocked(detail)
     if result["status"] != "passed":
-        raise RuntimeError("Codex CLI 准备失败。")
+        reason = result.get("reason")
+        if reason == "download_http_error":
+            detail = text("官方安装器下载失败：HTTP {code}。服务器拒绝了下载请求。", code=str(result["http_status"]))
+        elif reason == "download_connection_error":
+            detail = text("无法连接官方安装器下载服务，请检查网络和代理设置。") + "\n" + result["detail"]
+        elif reason == "timeout":
+            detail = text("Codex 命令等待超过 {seconds} 秒，已停止。", seconds=str(result["timeout_seconds"]))
+        elif reason == "installer_exit":
+            detail = text("官方安装器退出，错误码 {code}。请查看上方安装器输出。", code=str(result["exit_code"]))
+        else:
+            detail = text(detail)
+        raise Failed(detail + "\n" + text("可以在网络恢复后重新运行，或自行安装 Codex 后使用 --codex PATH 指定程序。"))
     args.codex = result["executable"]
 
 
@@ -173,6 +199,41 @@ def _select_language(args: argparse.Namespace) -> None:
     LANGUAGE.set(language)
 
 
+def _render_progress(result: dict[str, Any], output: TextIO, *, json_output: bool = False) -> None:
+    if json_output:
+        print(json.dumps(result, ensure_ascii=False), file=output, flush=True)
+        return
+    stage, status = result["stage"], result["status"]
+    elapsed = result["elapsed_ms"] / 1000
+    icon = ("🔎", "🧠", "🛠️", "🔗", "✨")[stage - 1]
+    if status == "started":
+        print(f"\n{icon} {stage}/5  {result['title']}", file=output, flush=True)
+    elif status == "passed":
+        print(f"   ✅ {text('已完成')} · {elapsed:.1f}s", file=output, flush=True)
+    else:
+        label = text("安装暂时无法继续") if status == "blocked" else text("安装未完成")
+        symbol = "⚠️" if status == "blocked" else "❌"
+        print(f"\n{symbol} {label}\n   {result.get('detail', '')}", file=output, flush=True)
+    if result.get("complete"):
+        print(text("\n🎉 memU 安装完成！自动检索和后台记忆已就绪。"), file=output, flush=True)
+    if result.get("notice"):
+        print("\n💡 " + result["notice"], file=output, flush=True)
+
+
+async def _run_stage(stage: int, args: argparse.Namespace, output: TextIO) -> None:
+    diagnostics = io.StringIO()
+    try:
+        destination = sys.stderr if args.json else (diagnostics if stage in {4, 5} else output)
+        with contextlib.redirect_stdout(destination):
+            await _stage(stage, args)
+    except Exception:
+        print(diagnostics.getvalue(), end="", file=sys.stderr, flush=True)
+        raise
+    if not args.json and stage == 2:
+        mode = config_file.read().get("MEMU_MEMORY_MODE", "local")
+        print(text("   {mode} 后端连接正常", mode=mode), file=output, flush=True)
+
+
 async def run(args: argparse.Namespace) -> int:
     started = time.monotonic()
     args.base_dir = args.base_dir.expanduser().resolve()
@@ -185,8 +246,6 @@ async def run(args: argparse.Namespace) -> int:
     output = sys.stdout
 
     def emit(status: str, **extra: Any) -> None:
-        if "detail" in extra:
-            extra["detail"] = text(extra["detail"])
         elapsed = time.monotonic() - started
         result = {
             "stage": stage,
@@ -195,36 +254,34 @@ async def run(args: argparse.Namespace) -> int:
             "elapsed_ms": int(elapsed * 1000),
             **extra,
         }
-        print(
-            json.dumps(result, ensure_ascii=False)
-            if args.json
-            else f"[{stage}/5] {result['title']}: {status} ({elapsed:.2f}s) {extra.get('detail', '')}",
-            file=output,
-            flush=True,
-        )
-        if not args.json and extra.get("notice"):
-            print(extra["notice"], file=output, flush=True)
+        _render_progress(result, output, json_output=args.json)
 
     try:
         _select_language(args)
+        started = time.monotonic()
+        if not args.json:
+            print(text("\n🚀 欢迎安装 memU\n   为 Codex 配置自动检索和后台记忆。"), file=output, flush=True)
         # Installation edits configuration, while workers own processing files.
         lock_dir = args.base_dir / ".install"
         lock_dir.mkdir(exist_ok=True)
         with workspace_lock(lock_dir) as acquired:
             if not acquired:
-                emit("blocked", detail="另一个安装进程正在运行，请稍后重新发起安装。", complete=False)
+                emit("blocked", detail=text("另一个安装进程正在运行，请稍后重新发起安装。"), complete=False)
                 return 2
             events.record(events.CLI_INSTALL_STARTED, host="codex")
             for stage in range(1, len(STAGES) + 1):
                 emit("started")
-                with contextlib.redirect_stdout(sys.stderr if args.json else output):
-                    await _stage(stage, args)
+                await _run_stage(stage, args, output)
                 if stage == len(STAGES):
                     events.record(events.CLI_INSTALL_SUCCEEDED, host="codex")
                     emit("passed", complete=True, notice=text(NOTICE))
                 else:
                     emit("passed", complete=False)
             return 0
+    except Failed as exc:
+        events.record_cli_error(exc, command="install", host="codex")
+        emit("failed", detail=str(exc), complete=False)
+        return 1
     except Blocked as exc:
         emit("blocked", detail=str(exc), complete=False)
         return 2

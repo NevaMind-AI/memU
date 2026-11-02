@@ -13,6 +13,11 @@ or unknown, ask the user to enable Full access and reconfirm before changes.
 Install/upgrade memu-cli using the user's tool and source (default:
 `pip install --upgrade memu-cli`); skip if already done in this run.
 
+The terminal installer uses emoji progress headings, concise backend results and
+an elapsed time measured after language selection. Download and installer failures
+include the cause and a suggested next action. Use `--json` for machine-readable
+progress.
+
 Announce `🚀 Installing memU for Codex` in the user's language, then run **one
 command**. Replace `LANG` with `en` or `zh` for this invocation:
 

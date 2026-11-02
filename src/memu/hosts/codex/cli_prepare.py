@@ -1,5 +1,8 @@
 """Prepare the standalone Codex executable without changing memU integration."""
 
+# Installer messages use Chinese punctuation.
+# ruff: noqa: RUF001
+
 from __future__ import annotations
 
 import argparse
@@ -9,11 +12,13 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
 
 from memu import trust
+from memu.hosts.codex.install_language import text
 
 
 def _installation_directory() -> Path:
@@ -48,6 +53,7 @@ def _install() -> None:
         raise FileNotFoundError("The official Codex installer requires PowerShell on Windows or sh on Unix")  # noqa: TRY003
     extension = "ps1" if windows else "sh"
     url = f"https://chatgpt.com/codex/install.{extension}"
+    print(text("📥 正在下载官方 Codex 安装器：{url}", url=url), file=sys.stderr, flush=True)
     with tempfile.TemporaryDirectory(prefix="memu-codex-install-") as directory:
         script = Path(directory) / f"install.{extension}"
         with urllib.request.urlopen(url, timeout=30, **trust.urlopen_kwargs()) as response:  # noqa: S310
@@ -60,10 +66,28 @@ def _install() -> None:
             if windows
             else [shell, str(script)]
         )
+        print(text("📦 正在运行官方安装器，下载和安装可能需要几分钟……"), file=sys.stderr, flush=True)
         # Keep installer diagnostics separate from the command's optional JSON result.
         subprocess.run(  # noqa: S603
             argv, stdin=subprocess.DEVNULL, stdout=sys.stderr, stderr=sys.stderr, timeout=300, check=True
         )
+
+
+def _probe(path: Path) -> dict[str, Any]:
+    probe = subprocess.run(  # noqa: S603
+        [str(path), "--version"],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=20,
+        check=False,
+    )
+    version = probe.stdout.strip()
+    if probe.returncode or not version.startswith("codex-cli "):
+        return {"status": "failed", "reason": "startup_failed", "detail": "Codex --version did not succeed."}
+    return {"status": "passed", "version": version}
 
 
 def prepare(executable: str | None = None, *, install_missing: bool = False) -> dict[str, Any]:
@@ -84,21 +108,34 @@ def prepare(executable: str | None = None, *, install_missing: bool = False) -> 
                 result.update(reason="install_incomplete", detail="Installer finished but Codex CLI was not found.")
                 return result
         result["executable"] = str(path)
-        probe = subprocess.run(  # noqa: S603
-            [str(path), "--version"],
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=20,
-            check=False,
+        result.update(_probe(path))
+    except urllib.error.HTTPError as exc:
+        result.update(
+            status="failed",
+            reason="download_http_error",
+            http_status=exc.code,
+            detail=f"Official Codex installer download failed: HTTP {exc.code} ({exc.reason}).",
         )
-        version = probe.stdout.strip()
-        if probe.returncode or not version.startswith("codex-cli "):
-            result.update(status="failed", reason="startup_failed", detail="Codex --version did not succeed.")
-            return result
-        result.update(status="passed", version=version)
+    except urllib.error.URLError as exc:
+        result.update(
+            status="failed",
+            reason="download_connection_error",
+            detail=f"Could not connect to the official Codex installer: {exc.reason}.",
+        )
+    except subprocess.TimeoutExpired as exc:
+        result.update(
+            status="failed",
+            reason="timeout",
+            timeout_seconds=exc.timeout,
+            detail=f"Codex command timed out after {exc.timeout} seconds.",
+        )
+    except subprocess.CalledProcessError as exc:
+        result.update(
+            status="failed",
+            reason="installer_exit",
+            exit_code=exc.returncode,
+            detail=f"Official Codex installer exited with code {exc.returncode}; see its output above.",
+        )
     except FileNotFoundError as exc:
         result.update(reason="not_found", detail=str(exc))
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:

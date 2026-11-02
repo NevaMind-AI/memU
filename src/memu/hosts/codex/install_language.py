@@ -8,6 +8,23 @@ from contextvars import ContextVar
 LANGUAGE: ContextVar[str] = ContextVar("codex_install_language", default="en")
 
 _EN = {
+    "\n🚀 欢迎安装 memU\n   为 Codex 配置自动检索和后台记忆。": "\n🚀 Welcome to memU\n   Set up automatic retrieval and background memory for Codex.",
+    "已完成": "Done",
+    "安装暂时无法继续": "Installation needs your attention",
+    "安装未完成": "Installation failed",
+    "\n🎉 memU 安装完成！自动检索和后台记忆已就绪。": "\n🎉 memU is ready! Automatic retrieval and background memory are configured.",
+    "   {mode} 后端连接正常": "   {mode} backend connection verified",
+    "📥 正在下载官方 Codex 安装器：{url}": "📥 Downloading the official Codex installer: {url}",
+    "📦 正在运行官方安装器，下载和安装可能需要几分钟……": "📦 Running the official installer; download and setup may take a few minutes…",
+    "官方安装器下载失败：HTTP {code}。服务器拒绝了下载请求。": "Official installer download failed: HTTP {code}. The server refused the download request.",
+    "无法连接官方安装器下载服务，请检查网络和代理设置。": "Cannot connect to the official installer download service. Check your network and proxy settings.",
+    "Codex 命令等待超过 {seconds} 秒，已停止。": "The Codex command timed out after {seconds} seconds.",
+    "官方安装器退出，错误码 {code}。请查看上方安装器输出。": "The official installer exited with code {code}. See its output above.",
+    "可以在网络恢复后重新运行，或自行安装 Codex 后使用 --codex PATH 指定程序。": "Retry once connectivity is restored, or install Codex yourself and select it with --codex PATH.",
+    "未找到 Codex CLI。添加 --install-missing 可使用官方安装器补装。": "Codex CLI was not found. Add --install-missing to use the official installer.",
+    "官方安装器已退出，但仍未找到 Codex CLI。请检查安装器输出或使用 --codex PATH 指定程序。": "The official installer finished but Codex CLI was not found. Check its output or select the executable with --codex PATH.",
+    "Codex CLI 启动检查失败，codex --version 未返回有效版本。请检查程序是否完整。": "Codex --version did not return a valid version. Check that the executable is intact.",
+    "指定的 Codex 程序不存在，请检查 --codex 路径。": "The selected Codex executable does not exist. Check the --codex path.",
     "检查安装条件": "Checking installation conditions",
     "准备 memU 与记忆后端": "Preparing memU and the memory backend",
     "准备 Codex CLI": "Preparing Codex CLI",

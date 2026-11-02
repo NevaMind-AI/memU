@@ -149,9 +149,58 @@ def test_language_selects_progress_and_final_notice(machine, capsys, language, t
 def test_human_output_includes_progress_and_user_follow_up(machine, capsys):
     assert main(["install", "--non-interactive", "--language", "zh", "--base-dir", str(machine[1])]) == 0
     output = capsys.readouterr().out
-    assert "[1/5] 检查安装条件: started" in output
-    assert "[5/5] 完成安装检查: passed" in output
+    assert "🔎 1/5  检查安装条件" in output
+    assert "✨ 5/5  完成安装检查" in output
+    assert "🎉 memU 安装完成" in output
+    assert "started" not in output and "passed" not in output
     assert output.count(install.NOTICE) == 1
+
+
+@pytest.mark.parametrize("json_output", [True, False])
+def test_codex_download_failure_explains_cause_and_next_step(machine, monkeypatch, capsys, json_output):
+    monkeypatch.setattr(
+        install.cli_prepare,
+        "prepare",
+        lambda *a, **k: {
+            "status": "failed",
+            "reason": "download_http_error",
+            "http_status": 403,
+            "detail": "Official Codex installer download failed: HTTP 403 (Forbidden).",
+        },
+    )
+    options = ["install", "--non-interactive", "--language", "zh", "--base-dir", str(machine[1])]
+    if json_output:
+        options.append("--json")
+    assert main(options) == 1
+    output = capsys.readouterr().out
+    assert "HTTP 403" in output
+    assert "--codex PATH" in output
+    assert "RuntimeError" not in output
+    assert ("register",) not in machine[2]
+    if json_output:
+        assert json.loads(output.splitlines()[-1])["status"] == "failed"
+    else:
+        assert "❌ 安装未完成" in output
+
+
+def test_codex_install_prompt_remains_visible(machine, monkeypatch, capsys):
+    choices = []
+
+    def prepare(*a, **kw):
+        if not kw.get("install_missing"):
+            return {"status": "blocked", "reason": "missing", "detail": "missing"}
+        return {"status": "passed", "executable": "codex"}
+
+    def confirm(prompt):
+        print(prompt, end="")
+        choices.append(prompt)
+        return "y"
+
+    monkeypatch.setattr(install.cli_prepare, "prepare", prepare)
+    monkeypatch.setattr("builtins.input", confirm)
+    assert main(["install", "--language", "zh", "--base-dir", str(machine[1])]) == 0
+    assert len(choices) == 1
+    assert "是否使用官方安装器补装 Codex" in capsys.readouterr().out
 
 
 def test_interactive_language_choice_applies_to_each_invocation(machine, monkeypatch, capsys):
