@@ -322,7 +322,8 @@ def _load_state(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict) or data.get("version") != 1:
         raise Blocked("安装状态文件无效，请保留现场并检查。")
     if data.get("complete"):
-        return {"version": 1, "complete": False, "language": data.get("language")}
+        return {"version": 1, "complete": False}
+    data.pop("language", None)
     return data
 
 
@@ -342,8 +343,8 @@ def _resume_args(args: argparse.Namespace, state: dict[str, Any]) -> None:
         state["migration_evidence"] = str(args.migration_evidence)
 
 
-def _select_language(args: argparse.Namespace, state: dict[str, Any]) -> None:
-    language = args.language or state.get("language")
+def _select_language(args: argparse.Namespace) -> None:
+    language = args.language
     if language not in {"en", "zh"}:
         language = "en"
         if not args.non_interactive and sys.stdin.isatty():
@@ -352,7 +353,6 @@ def _select_language(args: argparse.Namespace, state: dict[str, Any]) -> None:
             if language not in {"en", "zh"}:
                 raise Blocked("Choose en or zh / 请选择 en 或 zh。")
     args.language = language
-    state["language"] = language
     LANGUAGE.set(language)
 
 
@@ -387,7 +387,7 @@ async def run(args: argparse.Namespace) -> int:
                 emit("blocked", detail="工作目录有活跃 worker 或安装进程，请等待其结束后重试。", complete=False)
                 return 2
             state = _load_state(state_path)
-            _select_language(args, state)
+            _select_language(args)
             _resume_args(args, state)
             if args.stage and args.stage > 1 and state.get("last_stage", 0) < args.stage - 1:
                 emit("blocked", detail="请先执行前置安装阶段。", complete=False)

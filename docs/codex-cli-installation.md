@@ -18,9 +18,9 @@ memu-codex install --agent --non-interactive --json --stage 4 --migration-eviden
 memu-codex install --agent --non-interactive --json --stage 5
 ```
 
-`--language en` 或 `--language zh` 指定安装器语言。首次交互终端运行会询问 English/中文，
-未指定时默认 English；非交互或重定向 stdin 时不提问。选择保存在安装状态中，后续阶段与重装沿用，
-显式参数可覆盖。阶段标题、安装器提示与阻碍信息随语言切换；JSON 的状态值保持稳定，
+`--language en` 或 `--language zh` 指定本次调用的安装器语言。交互终端每次未指定时询问
+English/中文，直接回车默认 English；非交互或重定向 stdin 时默认 English。
+Agent 在每次阶段调用中传入所需语言。阶段标题、安装器提示与阻碍信息随语言切换；JSON 的状态值保持稳定，
 Codex、config、doctor 与安装器子进程的原始诊断保留原语言。
 Codex 对已有未知配置项的“忽略设置”提示统一显示为 WARN，保留配置项详情；
 其他错误诊断与 RPC/进程失败继续按原结果报告。此处理不修改用户配置。

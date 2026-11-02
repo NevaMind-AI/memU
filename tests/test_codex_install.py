@@ -152,7 +152,7 @@ def test_language_selects_stage_titles_and_notices(machine, capsys, language, ti
     assert notice in output.err
 
 
-def test_interactive_language_choice_persists_across_stages_and_can_be_overridden(machine, monkeypatch, capsys):
+def test_interactive_language_choice_applies_to_each_invocation(machine, monkeypatch, capsys):
     prompts = []
 
     def choose(prompt):
@@ -165,24 +165,33 @@ def test_interactive_language_choice_persists_across_stages_and_can_be_overridde
     assert len(prompts) == 1
     assert "en/zh" in prompts[0]
     capsys.readouterr()
-    assert invoke(machine, "--stage", "2") == 0
+    assert main(["install", "--base-dir", str(machine[1]), "--json", "--stage", "2"]) == 0
     assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "准备 memU 与记忆后端"
-    assert len(prompts) == 1
+    assert len(prompts) == 2
+    assert "language" not in json.loads((machine[1] / "install-state.json").read_text())
     assert invoke(machine, "--stage", "3", "--language", "en") == 0
     assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "Preparing Codex CLI"
+    assert len(prompts) == 2
 
 
 def test_noninteractive_default_language_does_not_prompt(machine, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: pytest.fail("Must not prompt"))
     assert invoke(machine, "--stage", "1") == 0
     assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "Checking installation conditions"
+    path = machine[1] / "install-state.json"
+    state = json.loads(path.read_text())
+    state["language"] = "zh"
+    path.write_text(json.dumps(state))
+    assert invoke(machine, "--stage", "2") == 0
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "Preparing memU and the memory backend"
+    assert "language" not in json.loads(path.read_text())
 
 
-def test_language_translates_blockers_and_survives_completed_installation(machine, capsys):
+def test_language_applies_to_one_installation_and_its_blockers(machine, capsys):
     assert invoke(machine, "--language", "zh") == 0
     capsys.readouterr()
     assert invoke(machine) == 0
-    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "完成交接与安装检查"
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "Completing handoff and installation checks"
     config_file.config_path().unlink()
     assert invoke(machine, "--language", "en", "--through-stage", "2") == 2
     blocker = json.loads(capsys.readouterr().out.splitlines()[-1])

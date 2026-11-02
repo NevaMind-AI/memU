@@ -151,7 +151,7 @@ See the [developer guide](docs/developer.md) for the input format and integratio
 
 Run `memu-codex install` to configure memory, prepare Codex, and finish integration
 with visible stage progress. Choose English or 中文 when prompted, or pass
-`--language en` or `--language zh`; the choice is retained for later stages.
+`--language en` or `--language zh`. Choose a language for each invocation.
 If you have old memU scheduled tasks, pause them in
 Codex Desktop as prompted; a Desktop Agent can complete their migration.
 Use `--non-interactive --json` for structured results. Exit codes are 0 (passed),
