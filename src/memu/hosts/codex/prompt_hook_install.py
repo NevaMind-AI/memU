@@ -49,12 +49,27 @@ class AppServer:
         for line in self.process.stderr:
             # Codex logs this nonfatal configuration advisory at ERROR severity.
             plain = re.sub(r"\x1b\[[0-9;]*m", "", line)
-            if re.fullmatch(
-                r"(?:\S+\s+)?ERROR codex_app_server: Codex is ignoring \d+ unrecognized configuration settings?\. "
-                r"Check for typos or deprecated settings\.\s*",
-                plain,
-            ):
+            advisory = (
+                r"Codex is ignoring \d+ unrecognized configuration settings?\. "
+                r"Check for typos or deprecated settings\."
+            )
+            if re.fullmatch(r"(?:\S+\s+)?ERROR codex_app_server: " + advisory + r"\s*", plain):
                 line = plain.replace("ERROR codex_app_server:", "WARN codex_app_server:", 1)
+            elif plain.lstrip().startswith("{"):
+                try:
+                    diagnostic = json.loads(plain)
+                except ValueError:
+                    diagnostic = None
+                if (
+                    isinstance(diagnostic, dict)
+                    and diagnostic.get("level") == "ERROR"
+                    and diagnostic.get("target") == "codex_app_server"
+                    and isinstance(diagnostic.get("fields"), dict)
+                    and isinstance(message := diagnostic["fields"].get("message"), str)
+                    and re.match(advisory + r"(?:\n|$)", message)
+                ):
+                    diagnostic["level"] = "WARN"
+                    line = json.dumps(diagnostic, ensure_ascii=False) + "\n"
             print(line, end="", file=sys.stderr, flush=True)
 
     def _read(self) -> None:

@@ -195,6 +195,11 @@ sys.stderr.write('\x1b[2m2026-11-02T04:43:33Z\x1b[0m \x1b[31mERROR\x1b[0m \x1b[2
 sys.stderr.write('  user (config.toml): `disable_response_storage` is ignored.\n')
 sys.stderr.write('ERROR codex_app_server: Codex is ignoring 2 unrecognized configuration settings. Check for typos or deprecated settings.\n')
 sys.stderr.write('ERROR codex_app_server: Unexpected configuration failure.\n')
+for message in (
+    'Codex is ignoring 1 unrecognized configuration setting. Check for typos or deprecated settings.\n  user (config.toml): `disable_response_storage` is ignored.',
+    'Unexpected configuration failure.',
+):
+    sys.stderr.write(json.dumps({'level': 'ERROR', 'target': 'codex_app_server', 'fields': {'message': message}}) + '\n')
 sys.stderr.flush()
 for line in sys.stdin:
     request = json.loads(line)
@@ -219,6 +224,9 @@ for line in sys.stdin:
     assert "`disable_response_storage` is ignored." in diagnostics
     assert "ERROR codex_app_server: Unexpected configuration failure." in diagnostics
     assert "ERROR codex_app_server: Codex is ignoring" not in diagnostics
+    structured = [json.loads(line) for line in diagnostics.splitlines() if line.startswith("{")]
+    assert [entry["level"] for entry in structured] == ["WARN", "ERROR"]
+    assert "`disable_response_storage` is ignored." in structured[0]["fields"]["message"]
 
 
 def test_app_server_failure_keeps_error_diagnostic_and_fails_request(tmp_path, monkeypatch, capfd):

@@ -1,4 +1,4 @@
-"""Installation scenarios use isolated homes and real stage orchestration."""
+"""One-shot installation scenarios use isolated homes and real orchestration."""
 
 import io
 import json
@@ -7,12 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from memu import config_file
+from memu import config_file, events
 from memu.hosts import host_cli, instruction
 from memu.hosts.codex import install, memorize_hook, prompt_hook
 from memu.hosts.codex.cli import main
 
-READBACK = install._integration_readback
 REGISTER_HOOKS = install.prompt_hook_install.install
 COMMAND = install._command
 
@@ -42,45 +41,14 @@ def machine(tmp_path, monkeypatch):
         assert args[1] == home / "hooks.json"
         (home / "hooks.json").write_text('{"hooks": {"UserPromptSubmit": []}}', encoding="utf-8")
 
-    async def readback(*args):
-        calls.append(("readback",))
-
     monkeypatch.setattr(install, "_command", command)
     monkeypatch.setattr(install.cli_prepare, "prepare", prepare)
     monkeypatch.setattr(install.prompt_hook_install, "install", register)
-    monkeypatch.setattr(install, "_integration_readback", readback)
     return home, base, calls
 
 
 def invoke(machine, *args):
     return main(["install", "--non-interactive", "--json", "--base-dir", str(machine[1]), *args])
-
-
-def evidence(tmp_path, *, deleted=False):
-    for name in ("definition", "pause", "delete", "inventory"):
-        (tmp_path / name).write_text("Desktop tool evidence fixture", encoding="utf-8")
-    task = {
-        "id": "owned-memu-task",
-        "owned": True,
-        "paused": True,
-        "idle": True,
-        "definition_file": "definition",
-        "pause_evidence_file": "pause",
-    }
-    if deleted:
-        task.update(deleted=True, delete_evidence_file="delete")
-    path = tmp_path / "migration.json"
-    path.write_text(
-        json.dumps({
-            "version": 1,
-            "source": "desktop",
-            "inventory_complete": True,
-            "inventory_evidence_file": "inventory",
-            "tasks": [task],
-        }),
-        encoding="utf-8",
-    )
-    return path
 
 
 @pytest.mark.parametrize("hook", ["prompt-hook", "memorize-hook"])
@@ -105,51 +73,85 @@ def test_registered_handlers_use_default_home_in_child_environment(machine, monk
     assert observed == [str(tmp_path / ".codex")]
 
 
-def test_terminal_install_completes_without_desktop_migration(machine, capsys, monkeypatch):
+def test_one_invocation_verifies_installation_and_can_be_repeated(machine, capsys, monkeypatch):
     before = config_file.config_path().read_bytes()
+    recorded = []
+    monkeypatch.setattr(events, "record", lambda name, **kwargs: recorded.append(name))
+    monkeypatch.setattr(events, "flush", lambda: pytest.fail("Installation must not drain historical telemetry"))
     assert invoke(machine) == 0
-    output = capsys.readouterr()
-    progress = [json.loads(line) for line in output.out.splitlines()]
+    progress = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
     assert [p["stage"] for p in progress if p["status"] == "passed"] == [1, 2, 3, 4, 5]
+    assert all(p.get("complete") is not True for p in progress[:-1])
     assert progress[-1]["complete"] is True
-    assert progress[-1]["migration"] == "desktop_deferred"
-    assert "Pause old memU scheduled tasks" in output.err
+    assert "If you use Codex Desktop" in progress[-1]["notice"]
+    assert "pause or remove" in progress[-1]["notice"]
+    assert [p["elapsed_ms"] for p in progress] == sorted(p["elapsed_ms"] for p in progress)
+    assert machine[2] == [("doctor",), ("prepare-cli",), ("register",), ("remove-instruction",)]
+    assert recorded == [events.CLI_INSTALL_STARTED, events.CLI_INSTALL_SUCCEEDED]
     assert config_file.config_path().read_bytes() == before
     assert os.environ["CODEX_HOME"] == "original-home"
-    assert machine[2].index(("register",)) < machine[2].index(("readback",))
+    assert not (machine[1] / "install-state.json").exists()
     assert invoke(machine) == 0
 
 
-def test_agent_unknown_inventory_blocks_before_registration(machine, capsys):
-    assert invoke(machine, "--agent") == 2
-    assert ("register",) not in machine[2]
-    assert json.loads(capsys.readouterr().out.splitlines()[-1])["stage"] == 4
+def test_existing_tasks_and_processing_data_are_preserved_without_inventory(machine, monkeypatch):
+    home, base, _ = machine
+    task = home / "automations/user-task/automation.toml"
+    task.parent.mkdir(parents=True)
+    task.write_text("name='my memU schedule'", encoding="utf-8")
+    files = [
+        ".session_manifest.codex.json",
+        ".session_manifest.codex.json.pending",
+        ".self_sessions.codex.json",
+        "jobs/1.txt",
+        "results/pending.json",
+        "log/previous.log",
+        "install-state.json",
+    ]
+    for name in files:
+        path = base / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("preserved", encoding="utf-8")
+    read_bytes = Path.read_bytes
+    glob = Path.glob
 
+    def read(path):
+        assert not path.is_relative_to(base), "Installation must not hash historical processing files"
+        return read_bytes(path)
 
-def test_terminal_install_can_complete_after_an_unfinished_agent_handoff(machine, tmp_path, capsys):
-    path = evidence(tmp_path)
-    assert invoke(machine, "--agent", "--migration-evidence", str(path), "--through-stage", "4") == 0
-    assert invoke(machine, "--stage", "5") == 2
-    assert invoke(machine) == 0
-    final = json.loads(capsys.readouterr().out.splitlines()[-1])
-    assert final["migration"] == "desktop_deferred"
-    assert (tmp_path / "definition").is_file()
+    def discover(path, pattern):
+        assert path != home / "automations", "Installation must not inspect Desktop tasks"
+        return glob(path, pattern)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "read_bytes", read)
+        patch.setattr(Path, "glob", discover)
+        assert invoke(machine) == 0
+    assert all((base / name).read_text() == "preserved" for name in files)
+    assert task.read_text() == "name='my memU schedule'"
 
 
 @pytest.mark.parametrize(
     ("language", "title", "notice"),
     [
-        ("en", "Checking installation conditions", "Pause old memU scheduled tasks"),
-        ("zh", "检查安装条件", "Desktop 暂停旧 memU"),
+        ("en", "Checking installation conditions", "If you use Codex Desktop"),
+        ("zh", "检查安装条件", "如果你使用 Codex Desktop"),
     ],
 )
-def test_language_selects_stage_titles_and_notices(machine, capsys, language, title, notice):
-    assert invoke(machine, "--language", language, "--stage", "1") == 0
-    output = capsys.readouterr()
-    progress = [json.loads(line) for line in output.out.splitlines()]
-    assert progress[-1]["title"] == title
-    assert progress[-1]["status"] == "passed"
-    assert notice in output.err
+def test_language_selects_progress_and_final_notice(machine, capsys, language, title, notice):
+    assert invoke(machine, "--language", language) == 0
+    progress = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert progress[0]["title"] == title
+    assert notice in progress[-1]["notice"]
+    assert all("notice" not in p for p in progress[:-1])
+
+
+def test_human_output_includes_progress_and_user_follow_up(machine, capsys):
+    assert main(["install", "--non-interactive", "--language", "zh", "--base-dir", str(machine[1])]) == 0
+    output = capsys.readouterr().out
+    assert "[1/5] 检查安装条件: started" in output
+    assert "[5/5] 完成安装检查: passed" in output
+    assert output.count(install.NOTICE) == 1
 
 
 def test_interactive_language_choice_applies_to_each_invocation(machine, monkeypatch, capsys):
@@ -161,86 +163,28 @@ def test_interactive_language_choice_applies_to_each_invocation(machine, monkeyp
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
     monkeypatch.setattr("builtins.input", choose)
-    assert main(["install", "--base-dir", str(machine[1]), "--json", "--stage", "1"]) == 0
-    assert len(prompts) == 1
-    assert "en/zh" in prompts[0]
-    capsys.readouterr()
-    assert main(["install", "--base-dir", str(machine[1]), "--json", "--stage", "2"]) == 0
-    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "准备 memU 与记忆后端"
+    for _ in range(2):
+        assert main(["install", "--base-dir", str(machine[1]), "--json"]) == 0
+        assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "完成安装检查"
     assert len(prompts) == 2
-    assert "language" not in json.loads((machine[1] / "install-state.json").read_text())
-    assert invoke(machine, "--stage", "3", "--language", "en") == 0
-    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "Preparing Codex CLI"
+    assert all("en/zh" in prompt for prompt in prompts)
+    assert invoke(machine, "--language", "en") == 0
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "Completing installation checks"
     assert len(prompts) == 2
 
 
-def test_noninteractive_default_language_does_not_prompt(machine, monkeypatch, capsys):
+def test_noninteractive_language_defaults_to_english_and_localizes_blockers(machine, monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda _: pytest.fail("Must not prompt"))
-    assert invoke(machine, "--stage", "1") == 0
-    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "Checking installation conditions"
-    path = machine[1] / "install-state.json"
-    state = json.loads(path.read_text())
-    state["language"] = "zh"
-    path.write_text(json.dumps(state))
-    assert invoke(machine, "--stage", "2") == 0
-    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "Preparing memU and the memory backend"
-    assert "language" not in json.loads(path.read_text())
-
-
-def test_language_applies_to_one_installation_and_its_blockers(machine, capsys):
     assert invoke(machine, "--language", "zh") == 0
     capsys.readouterr()
     assert invoke(machine) == 0
-    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "Completing handoff and installation checks"
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "Completing installation checks"
     config_file.config_path().unlink()
-    assert invoke(machine, "--language", "en", "--through-stage", "2") == 2
+    assert invoke(machine) == 2
     blocker = json.loads(capsys.readouterr().out.splitlines()[-1])
     assert blocker["status"] == "blocked"
     assert "backend is not configured" in blocker["detail"]
-
-
-def test_agent_confirmed_new_install(machine):
-    assert invoke(machine, "--agent", "--new-install") == 0
-
-
-def test_new_install_cannot_hide_existing_automations(machine):
-    task = machine[0] / "automations/foreign/automation.toml"
-    task.parent.mkdir(parents=True)
-    task.write_text("name='other task'", encoding="utf-8")
-    assert invoke(machine, "--agent", "--new-install") == 2
-    assert machine[2] == []
-    assert task.read_text() == "name='other task'"
-
-
-def test_desktop_handoff_registers_before_deletion_and_resumes(machine, tmp_path, capsys):
-    path = evidence(tmp_path)
-    assert invoke(machine, "--agent", "--migration-evidence", str(path), "--through-stage", "4") == 0
-    assert json.loads(capsys.readouterr().out.splitlines()[-1])["complete"] is False
-    assert invoke(machine, "--stage", "5") == 2
-    assert ("remove-instruction",) not in machine[2]
-    evidence(tmp_path, deleted=True)
-    assert invoke(machine, "--stage", "5") == 0
-    assert machine[2].count(("register",)) == 1
-    state = json.loads((machine[1] / "install-state.json").read_text())
-    assert state["complete"] is True
-    assert state["migration_source"] == "desktop"
-
-
-@pytest.mark.parametrize("field", ["owned", "paused", "idle"])
-def test_unsafe_task_blocks_before_registration(machine, tmp_path, field):
-    path = evidence(tmp_path)
-    data = json.loads(path.read_text())
-    data["tasks"][0][field] = False
-    path.write_text(json.dumps(data))
-    assert invoke(machine, "--agent", "--migration-evidence", str(path)) == 2
-    assert ("register",) not in machine[2]
-
-
-def test_missing_evidence_files_block(machine, tmp_path):
-    path = evidence(tmp_path)
-    (tmp_path / "pause").unlink()
-    assert invoke(machine, "--agent", "--migration-evidence", str(path)) == 2
-    assert ("register",) not in machine[2]
+    assert "notice" not in blocker
 
 
 def test_doctor_failure_stops_before_host_and_hooks(machine, monkeypatch):
@@ -259,47 +203,11 @@ def test_noninteractive_unconfigured_backend_does_not_prompt(machine, monkeypatc
     assert machine[2] == []
 
 
-def test_preserves_cursors_self_sessions_pending_results_and_logs(machine):
-    base = machine[1]
-    files = [
-        ".session_manifest.codex.json",
-        ".session_manifest.codex.json.pending",
-        ".self_sessions.codex.json",
-        "jobs/1.txt",
-        "results/pending.json",
-        "log/previous.log",
-    ]
-    for name in files:
-        path = base / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("preserved", encoding="utf-8")
-    assert invoke(machine) == 0
-    assert all((base / name).read_text() == "preserved" for name in files)
-
-
-def test_change_during_handoff_blocks_finalization(machine):
-    path = machine[1] / ".session_manifest.codex.json"
-    path.write_text("before")
-    assert invoke(machine, "--through-stage", "3") == 0
-    path.write_text("changed")
-    assert invoke(machine) == 2
-    assert ("remove-instruction",) not in machine[2]
-
-
 def test_active_worker_blocks_installation(machine):
     with install.workspace_lock(machine[1]) as acquired:
         assert acquired
         assert invoke(machine) == 2
     assert machine[2] == []
-
-
-def test_ambiguous_legacy_skill_is_preserved(machine):
-    skill = machine[0] / "skills/memu-retrieve/SKILL.md"
-    skill.parent.mkdir(parents=True)
-    skill.write_text("user content")
-    assert invoke(machine) == 2
-    assert skill.read_text() == "user content"
-    assert ("remove-instruction",) not in machine[2]
 
 
 def test_malformed_hooks_not_overwritten(machine):
@@ -330,7 +238,7 @@ def test_legacy_cleanup_removes_owned_entries_and_preserves_user_text(machine, m
 
 
 @pytest.mark.parametrize("customization", ["skill-edit", "extra-file", "instruction-edit"])
-def test_legacy_cleanup_preserves_customizations(machine, customization):
+def test_legacy_cleanup_preserves_customizations_before_registration(machine, customization):
     home = machine[0]
     skill = home / "skills/memu-retrieve/SKILL.md"
     skill.parent.mkdir(parents=True)
@@ -344,25 +252,7 @@ def test_legacy_cleanup_preserves_customizations(machine, customization):
     before = skill.read_bytes()
     assert invoke(machine) == 2
     assert skill.read_bytes() == before
-    assert ("remove-instruction",) not in machine[2]
-
-
-def test_state_contains_no_backend_credentials(machine):
-    assert invoke(machine) == 0
-    assert "fixture-only" not in (machine[1] / "install-state.json").read_text()
-
-
-def test_individual_stages_allow_progress_without_repeating_work(machine):
-    for stage in range(1, 6):
-        assert invoke(machine, "--stage", str(stage)) == 0
-    assert machine[2].count(("doctor",)) == 1
-    assert machine[2].count(("register",)) == 1
-
-
-def test_new_install_confirmation_survives_stage_boundary(machine):
-    assert invoke(machine, "--agent", "--through-stage", "3") == 0
-    assert invoke(machine, "--agent", "--stage", "4", "--new-install") == 0
-    assert invoke(machine, "--stage", "5") == 0
+    assert machine[2] == []
 
 
 @pytest.mark.parametrize("backend", ["cloud", "local"])
@@ -374,7 +264,10 @@ def test_backend_uses_shared_config_writer_and_doctor(machine, monkeypatch, tmp_
         observed.append(config_file.read())
         return 0
 
-    monkeypatch.setattr(install, "_command", COMMAND)
+    async def command(argv):
+        return 0 if argv[0] == "remove-instruction" else await COMMAND(argv)
+
+    monkeypatch.setattr(install, "_command", command)
     monkeypatch.setattr(host_cli, "_cmd_doctor", doctor)
     options = ["--backend", backend]
     if backend == "cloud":
@@ -390,13 +283,13 @@ def test_backend_uses_shared_config_writer_and_doctor(machine, monkeypatch, tmp_
             "--embed-api-key",
             "sensitive-fixture",
         ]
-    assert invoke(machine, "--through-stage", "2", *options) == 0
+    assert invoke(machine, *options) == 0
     assert len(observed) == 1
     assert observed[0]["MEMU_MEMORY_MODE"] == backend
     assert observed[0]["MEMU_CLAUDE_MODEL"] == "existing-model"
     assert "# user setting" in config_file.config_path().read_text()
     assert "sensitive-fixture" not in capsys.readouterr().out
-    assert "sensitive-fixture" not in (machine[1] / "install-state.json").read_text()
+    assert not (machine[1] / "install-state.json").exists()
 
 
 def test_interactive_install_configures_a_backend_when_only_client_metadata_exists(machine, monkeypatch, tmp_path):
@@ -404,79 +297,55 @@ def test_interactive_install_configures_a_backend_when_only_client_metadata_exis
     inputs = iter(["local", str(tmp_path / "memory.sqlite3"), "openai", "fixture-model", "http://localhost:11434/v1"])
     monkeypatch.setattr("builtins.input", lambda _: next(inputs))
     monkeypatch.setattr(install.getpass, "getpass", lambda _: "fixture-secret")
-    monkeypatch.setattr(install, "_command", COMMAND)
     observed = []
 
     async def doctor(spec, args):
         observed.append(config_file.read())
         return 0
 
+    async def command(argv):
+        return 0 if argv[0] == "remove-instruction" else await COMMAND(argv)
+
+    monkeypatch.setattr(install, "_command", command)
     monkeypatch.setattr(host_cli, "_cmd_doctor", doctor)
-    assert main(["install", "--json", "--base-dir", str(machine[1]), "--through-stage", "2"]) == 0
+    assert main(["install", "--json", "--language", "en", "--base-dir", str(machine[1])]) == 0
     assert observed[0]["MEMU_CLIENT_ID"] == "existing-client"
     assert observed[0]["MEMU_MEMORY_MODE"] == "local"
     assert observed[0]["MEMU_BASE_URL"] == "http://localhost:11434/v1"
     assert observed[0]["MEMU_DB"] == str((tmp_path / "memory.sqlite3").resolve())
 
 
-def test_desktop_definition_change_blocks_cleanup(machine, tmp_path):
-    path = evidence(tmp_path)
-    assert invoke(machine, "--agent", "--migration-evidence", str(path), "--through-stage", "4") == 0
-    evidence(tmp_path, deleted=True)
-    (tmp_path / "definition").write_text("changed definition")
-    assert invoke(machine, "--stage", "5") == 2
-    assert ("remove-instruction",) not in machine[2]
-
-
-def test_missing_inventory_artifact_blocks_even_an_empty_agent_report(machine, tmp_path):
-    path = evidence(tmp_path)
-    data = json.loads(path.read_text())
-    data["tasks"] = []
-    path.write_text(json.dumps(data))
-    (tmp_path / "inventory").unlink()
-    assert invoke(machine, "--agent", "--migration-evidence", str(path)) == 2
-    assert ("register",) not in machine[2]
-
-
-def test_stage_cannot_skip_prerequisites(machine):
-    assert invoke(machine, "--stage", "4") == 2
-    assert machine[2] == []
-
-
-def test_finalization_detects_changed_backend(machine):
-    assert invoke(machine, "--through-stage", "4") == 0
-    config_file.write_values({"MEMU_CLOUD_API_KEY": "changed-fixture"})
-    assert invoke(machine, "--stage", "5") == 2
-    assert ("remove-instruction",) not in machine[2]
-
-
-def test_registration_failure_can_be_retried(machine, monkeypatch):
+def test_registration_failure_can_be_retried_as_a_whole(machine, monkeypatch, capsys):
     def fail(*args, **kwargs):
-        raise RuntimeError("untrusted hook")  # noqa: TRY003
+        raise RuntimeError("fixture-only-secret")
 
     with monkeypatch.context() as patch:
         patch.setattr(install.prompt_hook_install, "install", fail)
         assert invoke(machine) == 1
-    state = json.loads((machine[1] / "install-state.json").read_text())
-    assert state["last_stage"] == 3
-    assert invoke(machine, "--stage", "4") == 0
-    assert invoke(machine, "--stage", "5") == 0
+    output = capsys.readouterr().out
+    assert "fixture-only-secret" not in output
+    assert json.loads(output.splitlines()[-1])["complete"] is False
+    assert ("remove-instruction",) not in machine[2]
+    assert os.environ["CODEX_HOME"] == "original-home"
+    assert invoke(machine) == 0
 
 
 @pytest.mark.parametrize("trusted", [True, False])
-def test_real_registration_and_final_readback_preserve_foreign_hooks(machine, monkeypatch, trusted):
+def test_real_registration_verifies_both_hooks_in_one_server_and_preserves_foreign_hooks(machine, monkeypatch, trusted):
     home, _, _ = machine
     hooks = home / "hooks.json"
     hooks.write_text(
         json.dumps({
-            "other": "kept",
+            "description": "kept",
             "hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "third-party"}]}]},
         })
     )
+    starts = []
 
     class Server:
         def __init__(self, executable, cwd, codex_home):
             assert codex_home == home
+            starts.append(executable)
 
         def request(self, method, params=None):
             if method != "hooks/list":
@@ -509,11 +378,11 @@ def test_real_registration_and_final_readback_preserve_foreign_hooks(machine, mo
 
     monkeypatch.setattr(install.prompt_hook_install, "AppServer", Server)
     monkeypatch.setattr(install.prompt_hook_install, "install", REGISTER_HOOKS)
-    monkeypatch.setattr(install, "_integration_readback", READBACK)
     monkeypatch.setattr(install.prompt_hook_install.sys, "argv", [str(home / "memu-codex.exe")])
     assert invoke(machine) == (0 if trusted else 1)
+    assert len(starts) == 1
     data = json.loads(hooks.read_text())
-    assert data["other"] == "kept"
+    assert data["description"] == "kept"
     assert data["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"] == "third-party"
     commands = [
         hook["command"]
