@@ -149,18 +149,6 @@ See the [developer guide](docs/developer.md) for the input format and integratio
 
 ## CLI
 
-Run `memu-codex install` to configure memory, prepare Codex, and finish integration
-with visible stage progress. Choose English or 中文 when prompted, or pass
-`--language en` or `--language zh`. Choose a language for each invocation.
-If you have old memU scheduled tasks, pause them in
-Codex Desktop as prompted; a Desktop Agent can complete their migration.
-Use `--non-interactive --json` for structured results. Exit codes are 0 (passed),
-2 (blocked), and 1 (failed). See the [installation contract](docs/codex-cli-installation.md)
-for staged Agent execution, configuration options, and migration evidence.
-`memu-codex prepare-cli` remains available for standalone executable preparation.
-Run `memu-codex uninstall` to disconnect the Codex integration while keeping your
-memory, backend configuration, and existing processing data.
-
 With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
 
 Once installed, your agent retrieves relevant memory automatically before answering. To retrieve manually, run the adapter for your host:
