@@ -180,7 +180,7 @@ def test_codex_download_failure_explains_cause_and_next_step(machine, monkeypatc
     if json_output:
         assert json.loads(output.splitlines()[-1])["status"] == "failed"
     else:
-        assert "❌ 安装未完成" in output
+        assert "❌  安装未完成" in output
 
 
 def test_codex_install_prompt_remains_visible(machine, monkeypatch, capsys):
