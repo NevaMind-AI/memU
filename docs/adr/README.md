@@ -20,4 +20,3 @@
 - [0018: Mine Claude Cowork Through the Claude Code Bridge](0018-cowork-through-claude-code-bridge.md)
 - [0019: Allocate a Private Workspace for Each Developer Memorize Run](0019-developer-run-workspaces.md)
 - [0020: Self-Contained Host Retrieval Hits](0020-self-contained-host-retrieval-hits.md)
-- [0021: Codex 分阶段 CLI 安装与 Desktop Agent 交接](0021-staged-codex-installation.md)
