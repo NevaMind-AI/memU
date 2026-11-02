@@ -203,11 +203,24 @@ def test_noninteractive_unconfigured_backend_does_not_prompt(machine, monkeypatc
     assert machine[2] == []
 
 
-def test_active_worker_blocks_installation(machine):
+def test_active_worker_does_not_block_configuration_only_installation(machine):
     with install.workspace_lock(machine[1]) as acquired:
+        assert acquired
+        assert invoke(machine) == 0
+    assert machine[2].count(("register",)) == 1
+
+
+def test_concurrent_installer_blocks_without_retrying(machine, capsys):
+    lock_dir = machine[1] / ".install"
+    lock_dir.mkdir()
+    with install.workspace_lock(lock_dir) as acquired:
         assert acquired
         assert invoke(machine) == 2
     assert machine[2] == []
+    progress = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert len(progress) == 1
+    assert progress[0]["status"] == "blocked"
+    assert "Another installer is running" in progress[0]["detail"]
 
 
 def test_malformed_hooks_not_overwritten(machine):

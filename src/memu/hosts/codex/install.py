@@ -207,9 +207,12 @@ async def run(args: argparse.Namespace) -> int:
 
     try:
         _select_language(args)
-        with workspace_lock(args.base_dir) as acquired:
+        # Installation edits configuration, while workers own processing files.
+        lock_dir = args.base_dir / ".install"
+        lock_dir.mkdir(exist_ok=True)
+        with workspace_lock(lock_dir) as acquired:
             if not acquired:
-                emit("blocked", detail="工作目录有活跃 worker 或安装进程，请等待其结束后重试。", complete=False)
+                emit("blocked", detail="另一个安装进程正在运行，请稍后重新发起安装。", complete=False)
                 return 2
             events.record(events.CLI_INSTALL_STARTED, host="codex")
             for stage in range(1, len(STAGES) + 1):

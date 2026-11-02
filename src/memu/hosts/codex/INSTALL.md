@@ -28,7 +28,10 @@ It prints progress and elapsed time for the whole installation. Honor user-suppl
 Wait for the same command to exit. If the tool returns a running session ID, poll
 that session until exit; partial output is still an active installation. Exit 0
 with `complete: true` means installation succeeded. Exit 2 is blocked; exit 1 is
-failed. Only retry after the command has exited and the reported issue is resolved.
+failed. If another installer holds the installation lock, report that installation
+is blocked and end this attempt. Leave process inspection, worker-status polling,
+and retrying to a separate user-requested troubleshooting session. For other
+failures, report the diagnostic and stop; missing backend inputs are handled below.
 
 ## Missing backend inputs
 

@@ -37,7 +37,7 @@ _EN = {
     "如果你使用 Codex Desktop，且以前自行安装过 memU 定时任务，现在可以自行暂停或移除它们，避免重复处理记忆。": "If you use Codex Desktop and previously set up memU scheduled tasks yourself, you can now pause or remove them to avoid processing memory twice.",
     "是否使用官方安装器补装 Codex？[y/N] ": "Install missing Codex using the official installer? [y/N] ",
     "Codex CLI 准备失败。": "Codex CLI preparation failed.",
-    "工作目录有活跃 worker 或安装进程，请等待其结束后重试。": "A worker or installer holds the state directory lock; wait for it to finish and retry.",
+    "另一个安装进程正在运行，请稍后重新发起安装。": "Another installer is running; start installation again later.",
     "请检查本地诊断并重新运行安装。": "Check the local diagnostics and run the installer again.",
 }
 
