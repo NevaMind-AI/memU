@@ -131,7 +131,7 @@ def _owns_command(command: str, subcommand: str = "prompt-hook") -> bool:
     match = re.fullmatch(
         r"""\s*(?:&\s+)?(?:"([^"]+)"|'((?:[^']|'')+)'|([^\s'"&;|]+))\s+"""
         + re.escape(subcommand)
-        + r"""(?:\s+--base-dir\s+(?:"[^"]*"|'(?:[^']|'')*'|[^\s'"&;|]+))?\s*""",
+        + r"""(?:\s+--base-dir\s+(?:"[^"]*"|'(?:[^']|'')*'|[^\s'"&;|]+))?(?:\s+--default-home)?\s*""",
         command,
     )
     if match is None:
@@ -189,7 +189,9 @@ def _trust(server: AppServer, listed: dict[str, Any], command: str, hooks_file: 
         raise RuntimeError("Codex did not confirm the memU prompt hook as trusted")  # noqa: TRY003
 
 
-def install(codex: str, hooks_file: Path, cwd: Path, base_dir: str | None = None) -> None:
+def install(
+    codex: str, hooks_file: Path, cwd: Path, base_dir: str | None = None, *, default_home: bool = False
+) -> None:
     codex = str(Path(shutil.which(codex) or codex).resolve())
     base = Layout.default("codex", base_dir or "~/.memu/hosts/codex").base.resolve()
     command = _command() + " --base-dir " + _quote(str(base))
@@ -202,6 +204,9 @@ def install(codex: str, hooks_file: Path, cwd: Path, base_dir: str | None = None
         + " --session-dir "
         + _quote(str(hooks_file.parent / "sessions"))
     )
+    if default_home:
+        command += " --default-home"
+        memorize += " --default-home"
     if hooks_file.exists() and not hooks_file.is_file():
         raise FileNotFoundError(f"Codex hooks path is not a file: {hooks_file}")  # noqa: TRY003
 

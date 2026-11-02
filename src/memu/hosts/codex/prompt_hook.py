@@ -18,6 +18,8 @@ from memu.hosts.codex.query_extraction import select_query
 
 
 async def _cmd_prompt_hook(args: argparse.Namespace) -> int:
+    if getattr(args, "default_home", False):
+        os.environ["CODEX_HOME"] = str(Path.home() / ".codex")
     started = time.monotonic()
     trace: dict[str, Any] = {"hook": "UserPromptSubmit", "pid": os.getpid(), "status": "started"}
     try:
@@ -128,5 +130,6 @@ def _retrieve(trace: dict[str, Any]) -> None:
 
 def register(sub: Any) -> None:
     parser = sub.add_parser("prompt-hook", help="Retrieve memory for a Codex UserPromptSubmit event on stdin")
+    parser.add_argument("--default-home", action="store_true", help="Use ~/.codex for query extraction configuration")
     parser.add_argument("--base-dir", default=None, help="Host state directory for hook logs")
     parser.set_defaults(handler=_cmd_prompt_hook)

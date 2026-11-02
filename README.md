@@ -149,12 +149,13 @@ See the [developer guide](docs/developer.md) for the input format and integratio
 
 ## CLI
 
-To prepare the standalone Codex executable, run `memu-codex prepare-cli`.
-Use `--install-missing` to allow the official Codex installer when no executable
-is found, `--codex /path/to/codex` to select an existing executable, and `--json`
-for a structured result. Exit codes are 0 (executable ready), 2 (blocked), and
-1 (failed). This checks executable startup only; authentication and memU
-integration are separate steps.
+Run `memu-codex install` to configure memory, prepare Codex, and finish integration
+with visible stage progress. If you have old memU scheduled tasks, pause them in
+Codex Desktop as prompted; a Desktop Agent can complete their migration.
+Use `--non-interactive --json` for structured results. Exit codes are 0 (passed),
+2 (blocked), and 1 (failed). See the [installation contract](docs/codex-cli-installation.md)
+for staged Agent execution, configuration options, and migration evidence.
+`memu-codex prepare-cli` remains available for standalone executable preparation.
 
 With memU Cloud, sign in at [memu.so](https://memu.so) to view your memory files. With a local installation, memory lives in the shared store configured by `MEMU_DB` in `~/.memu/config.env` — typically `~/.memu/memu.sqlite3` for local SQLite, or a Postgres DSN.
 

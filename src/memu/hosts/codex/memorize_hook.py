@@ -44,6 +44,8 @@ def _context(snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _cmd_memorize_hook(args: argparse.Namespace) -> int:
+    if getattr(args, "default_home", False):
+        os.environ["CODEX_HOME"] = str(Path.home() / ".codex")
     output: dict[str, Any] = {}
     try:
         event = json.load(sys.stdin)
@@ -66,6 +68,7 @@ async def _cmd_memorize_hook(args: argparse.Namespace) -> int:
 
 def register(sub: Any) -> None:
     parser = sub.add_parser("memorize-hook", help="Start background memory processing on prompt submission")
+    parser.add_argument("--default-home", action="store_true", help="Use ~/.codex for background configuration")
     parser.add_argument("--base-dir", default=None)
     parser.add_argument("--agent", required=True)
     parser.add_argument("--session-dir", default="~/.codex/sessions")

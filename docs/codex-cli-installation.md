@@ -1,207 +1,184 @@
 # Codex CLI 安装契约
 
-状态：开发中。`memu-codex install` 尚未实现。本次提供程序准备命令：
+`memu-codex install` 在 Python 中编排安装，终端和 Agent 使用同一组阶段实现。
+CLI 负责配置、doctor、Codex 程序准备、双 hook 注册与回读。Desktop Agent 负责旧定时任务迁移。
 
 ```sh
-memu-codex prepare-cli --json
-memu-codex prepare-cli --install-missing --json
-memu-codex prepare-cli --codex /path/to/codex --json
+# 终端安装：交互收集缺少的输入，连续显示阶段结果
+memu-codex install
+
+# 非交互安装：缺少输入时返回阻碍
+memu-codex install --non-interactive --json
+
+# Agent 逐阶段执行，在每次返回后汇报真实结果
+memu-codex install --agent --non-interactive --json --stage 1
+memu-codex install --agent --non-interactive --json --stage 2
+memu-codex install --agent --non-interactive --json --stage 3
+memu-codex install --agent --non-interactive --json --stage 4 --migration-evidence /path/to/migration.json
+memu-codex install --agent --non-interactive --json --stage 5
 ```
 
-默认只查找程序并验证启动；显式传入 `--install-missing` 才允许安装，命令不会弹出交互提问。
-结果包含 `stage`、`status`、`executable`，以及 `version` 或诊断字段 `reason`、`detail`。
-退出码为 0（通过）、2（受阻）、1（失败）。共享配置接入、hook 注册和迁移需要后续步骤完成。
+`--stage N` 只执行一个阶段，要求前置阶段已通过；`--through-stage N` 从第一阶段连续执行到指定边界。
+默认执行全部五阶段。退出码为 0（本次阶段通过）、2（受阻）、1（失败）。
+`--json` 输出逐行 JSON，包含 `stage`、`title`、`status`；诊断和嵌套命令输出写入 stderr。
+只有最后的 `complete: true` 表示 CLI 集成完成。迁移结果另外由 `migration` 标明。
 
-## 目标
+## 两条安装路径
 
-终端用户与安装 Agent 使用同一个 `memu-codex install` 入口。
-安装代码负责执行顺序、配置修改与完成判定；Agent 收集输入并解释结果。
-复用现有配置、doctor 和双 hook 注册实现。
+- 终端直接安装：提示用户到 Codex Desktop 暂停旧 memU 定时任务，随后继续安装。
+  不要求迁移证据，完成结果记录 `migration: desktop_deferred`；旧任务的完整迁移交给 Desktop Agent。
+- Agent 安装：先确认 Full access，使用 `--agent --non-interactive`。
+  在第 4 阶段前完成旧任务盘点、归属确认、定义备份、暂停和 worker 空闲确认；
+  第 4 阶段通过后删除已确认的旧任务并回读，第 5 阶段提交结果。
+  清单未知、归属不明或操作未确认时返回受阻。
 
-## 安装阶段
+确认是新装且本地没有 automations 时，Agent 可使用 `--new-install`。
+本地存在其他自动化任务时，应通过 Desktop 盘点后提交空的 memU 任务列表。
+普通终端也可以显式传入迁移证据，执行完整交接检查。
 
-| 阶段 | 职责 | 通过条件 |
+## 阶段与职责
+
+| 阶段 | CLI 执行 | Agent 补充工作 |
 | --- | --- | --- |
-| 检查现状 | CLI 读取 memU config.env、~/.codex 和已有双 hook；Agent 通过 Desktop 发现旧任务 | 明确复用的配置与待注册入口；任务清单未知时保留迁移阻碍 |
-| 准备后端 | 通过现有命令复用或配置后端 | doctor 通过，已有存储及 embedding identity 保留 |
-| 准备宿主 | CLI 查找 Codex 程序，缺失时安装并验证启动，复用 ~/.codex 中的 CLI/Desktop 共享配置 | Codex 程序可启动，共享配置沿用 ~/.codex |
-| 配置集成 | 注册检索与记忆 handler | Codex 确认两者已加载且受信任，检索支持异步 |
-| 完成交接 | Agent 通过 Desktop 工具清理已确认旧任务；CLI 验证集成及处理状态 | 旧任务清理证据完整，处理状态及其他集成保留 |
+| 🔐 [1/5] 检查安装条件 | 检查已有 hooks 格式，保存处理状态快照 | 确认会话 Full access |
+| 📦 [2/5] 准备 memU 与记忆后端 | 复用或通过现有 config 命令配置后端，doctor 验证 | 收集缺少的后端选择和输入 |
+| 🛠️ [3/5] 准备 Codex CLI | 查找程序、可选补装、验证启动并保存绝对路径 | 缺失时解释官方安装并提供补装选项 |
+| 🔔 [4/5] 配置自动记忆与检索 | 检查适用的交接证据，注册双 hook，验证加载与信任 | 先暂停旧任务、等待 worker 结束 |
+| ✅ [5/5] 完成交接与安装检查 | 检查证据连续性、后端与 hooks、受保护文件，清理旧检索入口 | 删除已确认旧任务并回读，汇报结果 |
 
-这些是内部职责边界，不要求用户经历五次提问。
-每阶段返回通过、受阻或失败，以及明确的下一步；所有适用门槛通过后才可报告安装完成。
-用户提交后的真实检索交付与记忆提交属于独立运行验收。
+Agent 在每个阶段前告知阶段标题，返回后及时说明真实结果，再执行下一阶段。
+同步工具调用期间无法发言的宿主，使用 `--stage` 边界获得结果，不能把 stdout 刷新当成对话进度已交付。
 
-## 目标全流程
+## 流程
 
-用户先安装 memu-cli Python 包，再进入此流程。本次仅实现其中的程序准备部分。
+用户先安装 memu-cli 包。蓝色表示 Agent，绿色表示 CLI，橙色表示用户或宿主；颜色表示职责。
 
 ```mermaid
 flowchart TD
     Start{安装入口}
     Start -->|Agent 对话| A1
-    Start -->|直接使用终端| C1
+    Start -->|直接终端| C1
     subgraph Agent[Agent 负责]
-        A1{当前会话已确认是 Full access 吗？}
-        A1 -->|是| A3[调用安装 CLI]
-        A1 -->|否或无法确认| U2
-        A5[实时汇报阶段进度并解释最终结果]
-        Legacy[通过 Desktop 查找旧 memU 任务并确认归属]
-        Legacy --> LegacyFound{任务清单与归属已确认吗？}
-        LegacyFound -->|否| Blocked
-        LegacyFound -->|是| LegacyExists{存在旧 memU 任务吗？}
-        LegacyExists -->|否| C9
-        LegacyExists -->|是| Pause[保存定义并通过 Desktop 暂停旧触发，等待 worker 结束]
-        Pause --> C9
-        Cleanup[通过 Desktop 删除已确认旧任务并核对结果]
-        Cleanup --> Evidence[向 CLI 提供宿主迁移结果]
-        Evidence --> C11
+        A1{当前会话已确认 Full access 吗？}
+        A1 -->|是| A3[逐阶段调用安装 CLI]
+        A1 -->|否或未知| U1
+        Inventory[通过 Desktop 盘点旧 memU 任务并确认归属]
+        Inventory --> Known{清单完整且归属明确吗？}
+        Known -->|否| Blocked
+        Known -->|是| Legacy{存在旧 memU 任务吗？}
+        Legacy -->|是| Pause[保存定义并暂停旧触发，等待 worker 结束]
+        Legacy -->|否| Empty[提供空清单或已确认的新装声明]
+        Pause --> C4
+        Empty --> C4
+        Delete[通过 Desktop 删除已确认旧任务并回读]
+        Delete --> C5
+        Progress[逐阶段汇报真实结果]
     end
-    subgraph Host[宿主与用户负责]
-        U2[用户切换到 Full access 后继续]
-        U2 --> A1
+    subgraph Host[用户与宿主负责]
+        U1[用户切换 Full access 后重新确认]
+        U1 --> A1
+        TerminalNotice[提示用户到 Desktop 暂停旧 memU 任务]
     end
     subgraph CLI[CLI 负责]
-        C1[读取 memU config.env 和 ~/.codex]
-        C1 --> InspectHooks[读取 hooks.json 中的 memU 双 hook]
-        InspectHooks --> C2[复用或配置后端并运行 doctor]
-        C2 --> C3[查找 Codex 程序，缺失时安装并验证启动]
-        C3 --> SharedConfig[复用 Codex CLI 与 Desktop 共享配置]
-        SharedConfig --> C7{已确认是无需迁移的新装吗？}
-        C7 -->|否或未知| HostNeeded[返回需要 Desktop Agent 处理迁移的状态]
-        C7 -->|是| C9[注册检索与记忆双 hook]
-        C9 --> C10[验证加载、异步检索、信任状态及程序路径]
-        C10 --> Migration{本次涉及旧任务交接吗？}
-        Migration -->|是| Cleanup
-        Migration -->|否| C11[验证迁移结果、集成与处理状态完整]
-        C11 --> Done[报告安装完成]
-        Blocked[返回受阻或失败的阶段与下一步]
+        C1[检查已有配置与集成]
+        C1 --> C2[复用或配置后端，运行 doctor]
+        C2 --> C3[发现或补装 Codex，验证启动，复用默认共享配置]
+        C3 --> Mode{Agent 安装或提供了迁移证据吗？}
+        Mode -->|是| Inventory
+        Mode -->|否| TerminalNotice
+        TerminalNotice --> C4[注册双 hook，验证加载、异步检索与信任]
+        C4 --> Migrated{本次有旧任务交接吗？}
+        Migrated -->|是| Delete
+        Migrated -->|否| C5[验证适用的迁移结果、配置与处理状态，清理旧检索入口]
+        C5 --> Done[报告集成完成及迁移状态]
+        Blocked[返回受阻或失败阶段，保留现场]
     end
     A3 --> C1
-    C1 -. 实际访问被拒绝 .-> Blocked
-    HostNeeded --> Handoff{Desktop Agent 可用吗？}
-    Handoff -->|是| Legacy
-    Handoff -->|否| Blocked
     Pause -. 无法安全交接 .-> Blocked
-    Cleanup -. 无法确认删除结果 .-> Blocked
-    C1 -. 阶段进度 .-> Progress{当前安装入口}
-    C2 -. 阶段进度 .-> Progress
-    C3 -. 阶段进度 .-> Progress
-    C9 -. 阶段进度 .-> Progress
-    C11 -. 阶段进度 .-> Progress
-    Progress -->|Agent 对话| A5
-    Progress -->|直接终端| TerminalProgress[终端实时显示阶段进度]
-    Done --> Route{由 Agent 调用吗？}
-    Blocked --> Route
-    Route -->|是| A5
-    Route -->|否| Terminal[终端显示结果与下一步]
-    Done -. 下一次用户提交 .-> Runtime[独立验收真实检索交付与记忆提交]
+    Delete -. 无法确认结果 .-> Blocked
+    C1 -. 阶段结果 .-> Progress
+    C2 -. 阶段结果 .-> Progress
+    C3 -. 阶段结果 .-> Progress
+    C4 -. 阶段结果 .-> Progress
+    C5 -. 阶段结果 .-> Progress
+    Done -. 下一次用户提交 .-> Runtime[独立验收检索交付与记忆提交]
     classDef agent fill:#dbeafe,stroke:#2563eb,color:#172554;
     classDef cli fill:#dcfce7,stroke:#16a34a,color:#14532d;
     classDef host fill:#ffedd5,stroke:#ea580c,color:#7c2d12;
-    class A1,A3,A5,Legacy,LegacyFound,LegacyExists,Pause,Cleanup,Evidence agent;
-    class C1,InspectHooks,C2,C3,SharedConfig,C7,HostNeeded,C9,C10,Migration,C11,Done,Blocked cli;
-    class U2 host;
+    class A1,A3,Inventory,Known,Legacy,Pause,Empty,Delete,Progress agent;
+    class C1,C2,C3,Mode,C4,Migrated,C5,Done,Blocked cli;
+    class U1,TerminalNotice,Runtime host;
 ```
 
-蓝色表示 Agent 职责，绿色表示 CLI 职责，橙色表示用户操作。
-颜色区分职责，不表示实现进度。本次已实现的是程序发现、可选安装及启动验证。
+## 配置与程序准备
 
-## 权限与交接边界
+- 安装入口使用默认 `~/.codex`，沿用 CLI/Desktop 的共享配置和认证。
+  新注册的检索与记忆命令也固定使用该目录。实际模型执行属于用户提交后的运行验收。
+- 后端仍通过 `config_file` 的现有命令写入，保留其他宿主设置、注释和已有存储/embedding identity。
+  新本地后端支持数据库、embedding provider/model/endpoint/key；Cloud 使用 memU key。
+- 程序发现顺序：显式路径 → PATH → `CODEX_INSTALL_DIR` 或平台官方默认目录。
+  无效显式路径和损坏程序返回诊断；确实缺失时，交互安装询问是否补装，非交互需 `--install-missing`。
+- Python 调用官方 Windows PowerShell 或 Unix sh 安装器，限制下载大小、下载时间和执行时间。
+  完成后重新发现程序并运行 `codex --version`，安装器退出零不足以判定程序就绪。
+- `memu-codex prepare-cli [--codex PATH] [--install-missing] [--json]` 可独立用于程序准备诊断。
 
-- Agent 调用安装 CLI 前，只确认当前会话已处于 Full access。
-  未开启或无法确认时，提示用户切换；用户继续后重新确认有效模式，再调用 CLI。
-- Full access 属于宿主会话属性，由 Agent 确认；CLI 负责实际安装操作的执行与结果检查。
-- 直接终端调用跳过 Agent 权限检查。两条入口中的 CLI 都检查实际访问能力、报告操作失败并返回结构化结果，
-  不修改调用方的沙箱或审批策略。
-- Agent 调用应使用非交互选项；缺少必要输入时返回阻碍，由 Agent 解释。
-  两条路径采用同一组安装完成条件。
-- Codex CLI 与 Desktop 统一复用 `~/.codex` 中的共享配置及认证，注册的后台命令也使用该目录；
-  从 CLI 安装时复用当前程序，从 Desktop 安装时由安装器发现或补装独立 Codex CLI。
-- 目标流程沿用现有 Codex INSTALL.md 的 Full-access 前提。
-- 所有必要门槛均须通过，才能执行依赖它的操作。无法盘点旧入口属于阻碍，不能当作入口不存在。
-- 启用新触发前，旧 worker 必须空闲；保留恢复定义直到替代入口验证通过。
-  无法确认归属或安全交接时暂停迁移。重跑时检查真实状态，不假定之前的阶段仍有效。
-- 用户提交后的实际模型执行与记忆提交属于运行验收。
+## Desktop 交接证据
 
-## 用户可见的阶段进度
+独立 CLI 0.163.0 和 Desktop 内置 CLI 0.162.0-alpha.17.2 的帮助及实验 app-server 协议均未暴露
+定时任务管理入口。Desktop 26.1007.9446.0 实际工具清单中 `automation_update` 提供
+create/view/update/delete 和 ACTIVE/PAUSED；未提供列表工具，说明要求读取 automations 目录发现 ID。
+本地文件不能自行证明完整清单。调查尚未验证真实创建、暂停、删除的完整闭环。
 
-两条入口均展示阶段进度。Agent 及时汇报 CLI 阶段结果及宿主迁移操作的真实结果：
+`--migration-evidence` 指向 Desktop Agent 保存的 JSON。所有引用文件均相对此 JSON 解析：
 
-| 用户看到的阶段 | 对应工作 |
-| --- | --- |
-| 🔐 [1/5] 检查安装条件 | Agent 确认 Full access；CLI 读取已有配置与集成状态 |
-| 📦 [2/5] 准备 memU 与记忆后端 | 复用或配置后端并运行 doctor |
-| 🛠️ [3/5] 准备 Codex CLI | 复用或安装程序，验证启动并沿用共享配置 |
-| 🔔 [4/5] 配置自动记忆与检索 | 注册并验证双 hook；涉及迁移时先满足安全交接条件 |
-| ✅ [5/5] 完成交接与安装检查 | 验证适用的旧入口清理和处理状态保留，报告结果并邀请下一次用户提交 |
+```json
+{
+  "version": 1,
+  "source": "desktop",
+  "inventory_complete": true,
+  "inventory_evidence_file": "inventory.txt",
+  "tasks": [{
+    "id": "confirmed-owned-task-id",
+    "owned": true,
+    "paused": true,
+    "idle": true,
+    "definition_file": "definition.json",
+    "pause_evidence_file": "paused.txt"
+  }]
+}
+```
 
-Agent 在开始各阶段时展示标题，取得阶段结果后及时汇报通过或阻碍，再继续下一阶段。
-只依据 CLI 或 Desktop 工具已返回的证据汇报，不用预计进度代替实际完成状态。
-直接终端安装由 CLI 展示同样的阶段与结果；非交互调用提供机器可读的阶段信息。
+第 4 阶段检查 owned/paused/idle 声明、非空清单回读文件、定义备份及暂停证据文件。
+注册通过后，Agent 才能删除旧任务。第 5 阶段还要求每项 `deleted: true` 和非空的
+`delete_evidence_file`，并核对原任务 ID 和定义哈希连续性。检查完成的空清单使用 `tasks: []`。
 
-不能假定同步工具调用期间 Agent 能读取流并发言。后续实现需提供阶段执行边界，
-让 Agent 在阶段之间取得结果并汇报；宿主支持可靠的异步进度时可消费阶段事件。
-两种方式共用 CLI 的阶段逻辑和完成条件，不让 Agent 自行编排安装内部操作。
-目前 `prepare-cli` 只返回程序准备阶段结果，上述完整进度机制尚待实现。
+这是有证据文件的 Agent 交接报告。CLI 验证报告格式和本地文件，不能独立认证远端 Desktop 状态；
+真实性、盘点完整性和 worker 空闲观察由 Desktop Agent 负责，不能凭空填写布尔值。
+宿主工具不可用或无法观察到结果时，Agent 路径保持受阻。
 
-## 旧任务迁移的宿主边界
+## 恢复与保护
 
-Windows 只读调查检查了独立 Codex CLI 0.163.0 和 Desktop 内置 CLI 0.162.0-alpha.17.2：
-命令帮助及含实验方法的 app-server 协议中均未发现定时任务管理入口。
-实际枚举 Desktop 26.1007.9446.0 的工具，确认 `automation_update` 提供 create、view、update、delete，
-状态支持 ACTIVE/PAUSED；未提供任务列表工具，其说明要求读取 automations 目录查找任务 ID。
-本轮未执行真实任务的创建、暂停或删除，完整操作闭环仍需验收。
+安装状态写入宿主工作目录的 `install-state.json`，保存通过的阶段、已验证程序路径、Agent 模式、
+交接文件位置、任务 ID/定义哈希、hook 配置哈希、后端配置哈希与原有处理文件哈希。
+不保存后端凭据。阶段 5 从保存位置重新读取最新的删除证据。
+完成后的普通重装重新检查，分阶段失败可使用 `--stage N` 重试失败阶段。
 
-当前将旧任务发现、归属确认、暂停、等待 worker 和删除交给 Desktop Agent，通过宿主工具完成。
-CLI 返回需要宿主迁移的状态；宿主准备好交接后，CLI 继续注册与验证双 hook，
-替代入口验证通过后由 Agent 删除旧任务并核对结果，最后 CLI 记录迁移结果并完成检查。
-宿主操作结果如何传回、证据如何校验以及阶段恢复入口，均待实现；不能仅凭一个调用参数宣布迁移完成。
+安装使用现有 `.diagnostic.lock` 与记忆 worker 互斥。所有阶段保留正式及 pending cursor、
+self-session 记录、待处理任务、可恢复结果与日志；检测原有文件变化时保留现场并返回阻碍。
+注册保留第三方 hook 和 Codex 用户配置，回读需要双 handler 已加载且 trusted，检索为异步。
+最终阶段核对注册文件、后端配置、工作目录和受保护文件，再通过现有 `remove-instruction` 清理
+managed pointer 和自有旧 skill；skill 归属不明或目录有额外文件时停止清理。
 
-确认无需迁移的新装可以直接走 CLI。迁移需求未知、Desktop 工具不可用、任务归属不明或操作失败时，
-返回迁移受阻，保留旧入口和处理状态。当前设计不依赖独立 CLI 管理 Desktop 自动化任务。
+安装失败保留定义备份与处理状态。CLI 不恢复、删除或终止 Desktop 任务。成功事件由安装器发送，
+遥测失败不影响结果。真实检索交付和记忆提交留给下一次用户消息验收。
 
-## 第一片：准备 Codex 程序
+## 可执行验收
 
-1. 优先使用显式指定的程序；指定无效时返回阻碍。
-2. 否则先查 PATH，再查 CODEX_INSTALL_DIR；未设置时查当前平台的官方默认安装目录。
-3. 找到后复用并检查启动；已有程序损坏时报告启动错误，不把它当作缺失。
-4. 确实缺失时，必须有 `--install-missing` 才调用官方原生安装器。
-   本命令不提问，完整安装入口以后可先收集用户选择。
-5. 安装器输出诊断，并有执行时限；失败或超时立即停止，不自动尝试其他包管理器。
-6. 安装后重新查找程序，处理父进程 PATH 未刷新的情况。验证启动成功，并保留绝对路径供注册使用。
-   安装器退出码为零本身不足以证明程序就绪。
+`tests/test_codex_install.py` 检查真实阶段调用、退出码、操作顺序和磁盘结果；
+`tests/test_codex_cli_prepare.py` 检查发现、补装、超时、重新发现与启动失败。
+注册场景复用实际双 hook 实现，以替代 app-server 验证回读、去重、第三方配置保留和信任失败。
+普通 CI 替代外部宿主、安装器和 backend；不据此宣称干净机器安装或真实 Desktop 任务迁移已通过。
 
-本片不修改 hook 或旧任务。依赖补装属于可恢复的准备操作，不应仅因发现缺失就上报安装失败。
-最终阻碍只报告一次，遥测发送是否成功不影响本地安装判定。
-
-## 后续切片
-
-- 将 `~/.codex` 中的共享配置接入注册命令，验证双 hook 使用该目录和绝对程序路径。
-- 将后端准备、程序准备和现有 `install-prompt-hook` 串入 `install`。
-- 接入 Desktop Agent 的旧任务迁移交接，定义宿主结果证据及 CLI 恢复方式；不可用时返回受阻。
-- CLI 接管相应行为后，再精简 INSTALL.md。
-
-## 可执行场景测试
-
-通过真实实现调用与子进程边界检查行为，使用临时 home 和配置。
-普通 CI 替代外部安装器与 Codex 进程，真实协议另外验收。
-
-| 场景 ID | 初始条件 | 必须观察到的结果 |
-| --- | --- | --- |
-| codex.host.explicit | 显式指定程序 | 使用该程序，不另行发现或安装 |
-| codex.host.explicit-invalid | 显式路径无效 | 返回受阻，不静默替换程序 |
-| codex.host.reuse | PATH 上已有可用程序 | 验证启动，不调用安装器 |
-| codex.host.stale-path | 程序仅存在于安装目录 | 能发现并复用，不重复安装 |
-| codex.host.missing | 程序缺失且允许安装 | 调用选定安装器，重新发现并验证绝对路径 |
-| codex.host.noninteractive-missing | 程序缺失且未授权安装 | 及时返回受阻，不提问、不安装 |
-| codex.host.install-failed | 安装器失败或超时 | 停止，不注册 hook、不清理旧入口 |
-| codex.host.install-incomplete | 安装器成功但程序仍缺失或损坏 | 返回受阻或失败，不报告就绪 |
-| codex.host.broken | 已有程序无法启动 | 报告启动失败，不自动重装 |
-
-后续用同样方式覆盖共享配置复用、注册去重、第三方配置保留、部分失败后重试及迁移。
-安装与升级始终保留正式及 pending cursor、self-session 记录、待恢复任务与结果、日志、共享配置和记忆。
-
-真实验收记录绑定场景 ID/修订、memU commit/包版本、宿主版本、OS、所选配置、结果和证据位置。
-Agent 引导运行还记录 Agent/model，以及实际渲染引导的哈希与来源。证据不得包含凭据。
-跳过或未观察到的检查不能记为通过；CI 可重复执行不代表 Desktop hook 交付或真实登录已验证。
+真实验收需记录场景修订、memU commit/包版本、宿主版本、OS、结果及证据位置。
+Agent 运行还记录 Agent/model，以及实际渲染引导的哈希和来源；证据不得含凭据。
+未观察到的检查不能记为通过。
