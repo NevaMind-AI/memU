@@ -40,6 +40,9 @@ failed. If another installer holds the installation lock, report that installati
 is blocked and end this attempt. Leave process inspection, worker-status polling,
 and retrying to a separate user-requested troubleshooting session. For other
 failures, report the diagnostic and stop; missing backend inputs are handled below.
+Ctrl+C returns exit 130 with `status: cancelled`; EOF returns exit 2 with an
+input-ended diagnostic. Neither means installation completed. Changes from
+completed steps may remain.
 
 ## Missing backend inputs
 

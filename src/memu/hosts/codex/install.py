@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import contextlib
 import getpass
 import io
@@ -212,8 +213,10 @@ def _render_progress(result: dict[str, Any], output: TextIO, *, json_output: boo
     elif status == "passed":
         print(f"   ✅ {text('已完成')} · {elapsed:.1f}s", file=output, flush=True)
     else:
-        label = text("安装暂时无法继续") if status == "blocked" else text("安装未完成")
-        symbol = "⚠️" if status == "blocked" else "❌"
+        label, symbol = {
+            "blocked": (text("安装暂时无法继续"), "⚠️"),
+            "cancelled": (text("安装已取消"), "👋"),
+        }.get(status, (text("安装未完成"), "❌"))
         print(f"\n{symbol} {label}\n   {result.get('detail', '')}", file=output, flush=True)
     if result.get("complete"):
         print(text("\n🎉 memU 安装完成！自动检索和后台记忆已就绪。"), file=output, flush=True)
@@ -233,6 +236,21 @@ async def _run_stage(stage: int, args: argparse.Namespace, output: TextIO) -> No
     if not args.json and stage == 2:
         mode = config_file.read().get("MEMU_MEMORY_MODE", "local")
         print(text("   {mode} 后端连接正常", mode=mode), file=output, flush=True)
+
+
+def _stop_reason(exc: BaseException) -> tuple[str, int, str]:
+    if isinstance(exc, (KeyboardInterrupt, asyncio.CancelledError)):
+        return "cancelled", 130, ""
+    if isinstance(exc, EOFError):
+        return (
+            "blocked",
+            2,
+            text("输入已结束，安装已停止。请在交互终端重新运行，或使用 --non-interactive 并提供所需参数。"),
+        )
+    if isinstance(exc, Failed):
+        events.record_cli_error(exc, command="install", host="codex")
+        return "failed", 1, str(exc)
+    return "blocked", 2, str(exc)
 
 
 async def run(args: argparse.Namespace) -> int:
@@ -279,13 +297,10 @@ async def run(args: argparse.Namespace) -> int:
                 else:
                     emit("passed", complete=False)
             return 0
-    except Failed as exc:
-        events.record_cli_error(exc, command="install", host="codex")
-        emit("failed", detail=str(exc), complete=False)
-        return 1
-    except Blocked as exc:
-        emit("blocked", detail=str(exc), complete=False)
-        return 2
+    except (KeyboardInterrupt, asyncio.CancelledError, EOFError, Blocked) as exc:
+        status, code, detail = _stop_reason(exc)
+        emit(status, detail=detail, complete=False)
+        return code
     except (OSError, ValueError, TypeError, RuntimeError, KeyError, subprocess.SubprocessError) as exc:
         # Keep credential-bearing provider errors out of machine-readable progress.
         events.record_cli_error(exc, command="install", host="codex")

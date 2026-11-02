@@ -1008,7 +1008,10 @@ def run(spec: HostSpec, argv: list[str] | None = None) -> int:
         # already delivered its own `memory_search_failed` envelope by now, which is
         # the bounded way to say the same thing. Only this `cli_error` waits.
         if command != "retrieve":
-            events.flush()
+            try:
+                events.flush()
+            except KeyboardInterrupt:
+                return 130
         if os.environ.get("MEMU_DEBUG") == "1":
             raise
         print(f"error: {exc} (set MEMU_DEBUG=1 for a traceback)", file=sys.stderr)

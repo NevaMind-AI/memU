@@ -8,6 +8,8 @@ from contextvars import ContextVar
 LANGUAGE: ContextVar[str] = ContextVar("codex_install_language", default="en")
 
 _EN = {
+    "安装已取消": "Installation cancelled",
+    "输入已结束，安装已停止。请在交互终端重新运行，或使用 --non-interactive 并提供所需参数。": "Input ended; installation stopped. Run in an interactive terminal, or use --non-interactive with the required options.",
     "   独立 Codex CLI：{path}": "   Standalone Codex CLI: {path}",
     "\n👋 欢迎安装 memU\n   为 Codex 配置自动检索和后台记忆。": "\n👋 Welcome to memU\n   Set up automatic retrieval and background memory for Codex.",
     "已完成": "Done",

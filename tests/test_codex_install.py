@@ -458,3 +458,50 @@ def test_real_registration_verifies_both_hooks_in_one_server_and_preserves_forei
         assert invoke(machine) == 0
         data = json.loads(hooks.read_text())
         assert sum(len(group["hooks"]) for group in data["hooks"]["UserPromptSubmit"]) == 3
+
+
+@pytest.mark.parametrize("where", ["language", "backend", "codex"])
+@pytest.mark.parametrize("interruption", [EOFError, KeyboardInterrupt])
+def test_install_input_ends_cleanly(machine, monkeypatch, capsys, where, interruption):
+    def stop(_):
+        raise interruption
+
+    monkeypatch.setattr("builtins.input", stop)
+    monkeypatch.setattr(events, "flush", lambda: pytest.fail("Cancellation must not flush telemetry"))
+    options = ["install", "--base-dir", str(machine[1]), "--json"]
+    if where == "language":
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    else:
+        options += ["--language", "zh"]
+    if where == "backend":
+        config_file.config_path().unlink()
+    if where == "codex":
+        monkeypatch.setattr(
+            install.cli_prepare,
+            "prepare",
+            lambda *a, **k: {
+                "status": "blocked",
+                "reason": "missing",
+                "detail": "missing",
+            },
+        )
+    assert main(options) == (130 if interruption is KeyboardInterrupt else 2)
+    output = capsys.readouterr()
+    result = json.loads(output.out.splitlines()[-1])
+    assert result["status"] == ("cancelled" if interruption is KeyboardInterrupt else "blocked")
+    assert result["complete"] is False
+    assert "Traceback" not in output.err
+    assert os.environ["CODEX_HOME"] == "original-home"
+    assert ("register",) not in machine[2]
+
+
+def test_cancel_during_async_installation_returns_130(machine, monkeypatch, capsys):
+    import asyncio
+
+    async def cancel(argv):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(install, "_command", cancel)
+    monkeypatch.setattr(events, "flush", lambda: pytest.fail("Cancellation must not flush telemetry"))
+    assert invoke(machine) == 130
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["status"] == "cancelled"
