@@ -49,31 +49,82 @@ The user installs the memu-cli Python package before invoking this flow.
 
 ```mermaid
 flowchart TD
-    A[Terminal user or agent invokes memu-codex install] --> B[Inspect configuration, permissions, current integration and legacy entries]
-    B --> C[Reuse or configure backend; run doctor]
-    C --> D[Discover Codex executable]
-    D --> E{Executable found?}
-    E -->|Yes| H[Verify executable startup]
-    E -->|No| F{Dependency installation allowed?}
-    F -->|Yes| G[Run official installer; rediscover executable]
-    G --> H
-    F -->|No| X[Blocked: report next action; rerun after resolving]
-    H --> I[Check required capabilities and background authentication]
-    I --> J{Authentication ready?}
-    J -->|No| K{Interactive login available?}
-    K -->|Yes| T[Complete login]
-    T --> I
-    K -->|No| X
-    J -->|Yes| L[Verify isolated background execution readiness]
-    L --> M{Legacy entry present?}
-    M -->|Yes| N[Preserve recovery definitions; pause old launches; wait for workers]
-    M -->|No| O[Register retrieval and memorization hooks]
-    N --> O
-    O --> P[Verify loaded hooks, async retrieval, trust and executable paths]
-    P --> Q[Remove confirmed legacy entries; verify protected state]
-    Q --> R[Report installation complete]
-    R -. Next user submission .-> S[Separate runtime acceptance: retrieval delivery and memory commit]
+    Start{Installation entry}
+    Start -->|Agent conversation| A1
+    Start -->|Direct terminal| C1
+    subgraph Agent[Agent responsibilities]
+        A1[Inspect effective session permissions and tool availability]
+        A1 --> A2{Can the installation command run?}
+        A2 -->|Yes| A3[Collect required choices and invoke the CLI]
+        A2 -->|Approval required| U1
+        A2 -->|Restricted or unknown| A4[Explain blocker and supported continuation]
+        A4 --> U2
+        A5[Read CLI result and explain next action]
+    end
+    subgraph Host[Host and user responsibilities]
+        U1[Host requests approval for the proposed command]
+        U1 --> U3{Approved and command permitted?}
+        U3 -->|Yes| A3
+        U3 -->|No| A4
+        U2[User grants permission or switches to a supported session]
+        U2 --> A1
+        Login[User completes supported login]
+    end
+    subgraph CLI[CLI installation responsibilities]
+        C1[Inspect actual configuration, executable paths and legacy entries]
+        C1 --> C2[Reuse or configure backend and run doctor]
+        C2 --> C3[Discover or explicitly install Codex and verify startup]
+        C3 --> C4[Check capabilities and background authentication]
+        C4 --> C5{Authentication ready?}
+        C5 -->|No and interactive login supported| Login
+        Login --> C4
+        C5 -->|No and noninteractive| Blocked
+        C5 -->|Yes| C6[Verify isolated background execution readiness]
+        C6 --> C7{Legacy entry present?}
+        C7 -->|Yes| C8[Save recovery definitions, pause launches and wait for workers]
+        C7 -->|No| C9[Register retrieval and memorization hooks]
+        C8 --> C9
+        C9 --> C10[Verify hook loading, async retrieval, trust and executable paths]
+        C10 --> C11[Remove confirmed legacy entries and verify protected state]
+        C11 --> Done[Report installation complete]
+        Blocked[Return blocked or failed with stage and next action]
+    end
+    A3 --> C1
+    C1 -. Required access denied .-> Blocked
+    C8 -. Inventory or safe handoff unavailable .-> Blocked
+    Done --> Route{Called by agent?}
+    Blocked --> Route
+    Route -->|Yes| A5
+    Route -->|No| Terminal[Terminal displays result and next action]
+    Done -. Next user submission .-> Runtime[Separate runtime acceptance for retrieval and memory commit]
+    classDef agent fill:#dbeafe,stroke:#2563eb,color:#172554;
+    classDef cli fill:#dcfce7,stroke:#16a34a,color:#14532d;
+    classDef host fill:#ffedd5,stroke:#ea580c,color:#7c2d12;
+    class A1,A2,A3,A4,A5 agent;
+    class C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11,Done,Blocked cli;
+    class U1,U2,U3,Login host;
 ```
+
+Blue identifies Agent responsibilities, green CLI responsibilities, and orange
+host/user approval or login. Colors indicate responsibility, not implementation
+status. Only executable preparation is implemented by this change.
+
+The Agent checks its effective host execution policy before invocation and before
+retrying after a permission change. Full access and ask-for-approval are host
+session properties: the CLI must not infer them from writable files, environment
+variables or its own successful subprocesses. In ask-for-approval mode, the host
+must authorize the proposed command and any later required operations; approval
+of one command is not blanket permission. An unknown mode or rejected approval
+requires a supported continuation rather than an alternate execution route.
+
+Direct terminal invocation skips the Agent gate. The CLI checks actual access,
+reports operation failures, and returns structured results in either entry path.
+It does not change the caller's sandbox or approval policy. Agent invocation
+should use noninteractive options; missing inputs or login return a blocker for
+the Agent to explain. Interactive terminal invocation may guide supported login.
+Neither path changes the installation completion gates. The new flow is a target
+design; the existing Codex INSTALL.md Full-access prerequisite remains in effect
+until its replacement is implemented and verified.
 
 Any unmet required gate stops dependent actions with a blocked or failed result.
 An unavailable legacy inventory is a blocker, not an empty inventory. Old workers
