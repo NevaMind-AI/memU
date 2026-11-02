@@ -22,9 +22,9 @@ memu-codex prepare-cli --codex /path/to/codex --json
 
 | 阶段 | 职责 | 通过条件 |
 | --- | --- | --- |
-| 检查现状 | 读取 memU config.env，定位 Codex 配置目录，盘点 hooks.json 中的 memU handler 与旧 memU 任务 | 明确复用的配置、待注册入口和需交接的旧任务 |
+| 检查现状 | 读取 memU config.env 和 ~/.codex，盘点 hooks.json 中的 memU handler 与旧 memU 任务 | 明确复用的配置、待注册入口和需交接的旧任务 |
 | 准备后端 | 通过现有命令复用或配置后端 | doctor 通过，已有存储及 embedding identity 保留 |
-| 准备宿主 | CLI 查找 Codex 程序，缺失时安装并验证启动，复用 CLI/Desktop 共享配置 | Codex 程序可启动，配置目录明确 |
+| 准备宿主 | CLI 查找 Codex 程序，缺失时安装并验证启动，复用 ~/.codex 中的 CLI/Desktop 共享配置 | Codex 程序可启动，共享配置沿用 ~/.codex |
 | 配置集成 | 注册检索与记忆 handler | Codex 确认两者已加载且受信任，检索支持异步 |
 | 完成交接 | 迁移旧入口并验证保留状态 | 已确认的旧入口移除，处理状态及其他集成完整 |
 
@@ -52,7 +52,7 @@ flowchart TD
         U2 --> A1
     end
     subgraph CLI[CLI 负责]
-        C1[读取 memU config.env，定位 CODEX_HOME 或默认 .codex]
+        C1[读取 memU config.env 和 ~/.codex]
         C1 --> InspectHooks[读取 hooks.json 中的 memU 双 hook]
         InspectHooks --> InspectTasks[盘点旧 memU 自动化任务及运行状态]
         InspectTasks --> C2[复用或配置后端并运行 doctor]
@@ -95,7 +95,7 @@ flowchart TD
   不修改调用方的沙箱或审批策略。
 - Agent 调用应使用非交互选项；缺少必要输入时返回阻碍，由 Agent 解释。
   两条路径采用同一组安装完成条件。
-- Codex CLI 与 Desktop 复用共享配置及认证。CLI 安装器定位实际配置目录，注册的后台命令沿用它；
+- Codex CLI 与 Desktop 统一复用 `~/.codex` 中的共享配置及认证，注册的后台命令也使用该目录；
   从 CLI 安装时复用当前程序，从 Desktop 安装时由安装器发现或补装独立 Codex CLI。
 - 目标流程沿用现有 Codex INSTALL.md 的 Full-access 前提。
 - 所有必要门槛均须通过，才能执行依赖它的操作。无法盘点旧入口属于阻碍，不能当作入口不存在。
@@ -119,7 +119,7 @@ flowchart TD
 
 ## 后续切片
 
-- 将 Codex CLI/Desktop 共享配置目录接入注册命令，验证双 hook 使用所选配置和绝对程序路径。
+- 将 `~/.codex` 中的共享配置接入注册命令，验证双 hook 使用该目录和绝对程序路径。
 - 将后端准备、程序准备和现有 `install-prompt-hook` 串入 `install`。
 - 宿主提供适用管理接口时实现安全交接，否则返回明确阻碍与下一步。
 - CLI 接管相应行为后，再精简 INSTALL.md。
