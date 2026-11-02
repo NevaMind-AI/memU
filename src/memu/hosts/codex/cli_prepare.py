@@ -56,7 +56,8 @@ def _install() -> None:
     print(text("📥 正在下载官方 Codex 安装器：{url}", url=url), file=sys.stderr, flush=True)
     with tempfile.TemporaryDirectory(prefix="memu-codex-install-") as directory:
         script = Path(directory) / f"install.{extension}"
-        with urllib.request.urlopen(url, timeout=30, **trust.urlopen_kwargs()) as response:  # noqa: S310
+        request = urllib.request.Request(url, headers={"User-Agent": "memu-cli"})  # noqa: S310
+        with urllib.request.urlopen(request, timeout=30, **trust.urlopen_kwargs()) as response:  # noqa: S310
             data = response.read(1024 * 1024 + 1)
         if not data or len(data) > 1024 * 1024:
             raise ValueError("The Codex installer download is empty or exceeds 1 MiB")  # noqa: TRY003

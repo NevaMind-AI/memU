@@ -106,8 +106,9 @@ def test_official_installer_invocation(monkeypatch, platform):
     downloads = []
     scripts = []
 
-    def download(url, **kwargs):
-        downloads.append(url)
+    def download(request, **kwargs):
+        downloads.append(request.full_url)
+        assert request.get_header("User-agent") == "memu-cli"
         assert kwargs["timeout"] == 30
         return io.BytesIO(b"official installer fixture")
 
