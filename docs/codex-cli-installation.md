@@ -18,6 +18,11 @@ memu-codex install --agent --non-interactive --json --stage 4 --migration-eviden
 memu-codex install --agent --non-interactive --json --stage 5
 ```
 
+`--language en` 或 `--language zh` 指定安装器语言。首次交互终端运行会询问 English/中文，
+未指定时默认 English；非交互或重定向 stdin 时不提问。选择保存在安装状态中，后续阶段与重装沿用，
+显式参数可覆盖。阶段标题、安装器提示与阻碍信息随语言切换；JSON 的状态值保持稳定，
+Codex、config、doctor 与安装器子进程的原始诊断保留原语言。
+
 `--stage N` 只执行一个阶段，要求前置阶段已通过；`--through-stage N` 从第一阶段连续执行到指定边界。
 默认执行全部五阶段。退出码为 0（本次阶段通过）、2（受阻）、1（失败）。
 `--json` 输出逐行 JSON，包含 `stage`、`title`、`status`；诊断和嵌套命令输出写入 stderr。

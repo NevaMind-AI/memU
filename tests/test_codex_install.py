@@ -113,7 +113,7 @@ def test_terminal_install_completes_without_desktop_migration(machine, capsys, m
     assert [p["stage"] for p in progress if p["status"] == "passed"] == [1, 2, 3, 4, 5]
     assert progress[-1]["complete"] is True
     assert progress[-1]["migration"] == "desktop_deferred"
-    assert "Desktop 暂停旧 memU" in output.err
+    assert "Pause old memU scheduled tasks" in output.err
     assert config_file.config_path().read_bytes() == before
     assert os.environ["CODEX_HOME"] == "original-home"
     assert machine[2].index(("register",)) < machine[2].index(("readback",))
@@ -134,6 +134,60 @@ def test_terminal_install_can_complete_after_an_unfinished_agent_handoff(machine
     final = json.loads(capsys.readouterr().out.splitlines()[-1])
     assert final["migration"] == "desktop_deferred"
     assert (tmp_path / "definition").is_file()
+
+
+@pytest.mark.parametrize(
+    ("language", "title", "notice"),
+    [
+        ("en", "Checking installation conditions", "Pause old memU scheduled tasks"),
+        ("zh", "检查安装条件", "Desktop 暂停旧 memU"),
+    ],
+)
+def test_language_selects_stage_titles_and_notices(machine, capsys, language, title, notice):
+    assert invoke(machine, "--language", language, "--stage", "1") == 0
+    output = capsys.readouterr()
+    progress = [json.loads(line) for line in output.out.splitlines()]
+    assert progress[-1]["title"] == title
+    assert progress[-1]["status"] == "passed"
+    assert notice in output.err
+
+
+def test_interactive_language_choice_persists_across_stages_and_can_be_overridden(machine, monkeypatch, capsys):
+    prompts = []
+
+    def choose(prompt):
+        prompts.append(prompt)
+        return "zh"
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", choose)
+    assert main(["install", "--base-dir", str(machine[1]), "--json", "--stage", "1"]) == 0
+    assert len(prompts) == 1
+    assert "en/zh" in prompts[0]
+    capsys.readouterr()
+    assert invoke(machine, "--stage", "2") == 0
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "准备 memU 与记忆后端"
+    assert len(prompts) == 1
+    assert invoke(machine, "--stage", "3", "--language", "en") == 0
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "Preparing Codex CLI"
+
+
+def test_noninteractive_default_language_does_not_prompt(machine, monkeypatch, capsys):
+    monkeypatch.setattr("builtins.input", lambda _: pytest.fail("Must not prompt"))
+    assert invoke(machine, "--stage", "1") == 0
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "Checking installation conditions"
+
+
+def test_language_translates_blockers_and_survives_completed_installation(machine, capsys):
+    assert invoke(machine, "--language", "zh") == 0
+    capsys.readouterr()
+    assert invoke(machine) == 0
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["title"] == "完成交接与安装检查"
+    config_file.config_path().unlink()
+    assert invoke(machine, "--language", "en", "--through-stage", "2") == 2
+    blocker = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert blocker["status"] == "blocked"
+    assert "backend is not configured" in blocker["detail"]
 
 
 def test_agent_confirmed_new_install(machine):

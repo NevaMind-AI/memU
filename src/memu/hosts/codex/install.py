@@ -19,6 +19,7 @@ from typing import Any
 from memu import config_file, events
 from memu.hosts import instruction
 from memu.hosts.codex import cli_prepare, prompt_hook_install
+from memu.hosts.codex.install_language import LANGUAGE, text
 from memu.hosts.codex.notify_console import _workspace_lock as workspace_lock
 
 STAGES = (
@@ -32,6 +33,9 @@ STAGES = (
 
 class Blocked(Exception):
     """A missing input or host-side action that permits a later retry."""
+
+    def __str__(self) -> str:
+        return text(super().__str__())
 
 
 def _home() -> Path:
@@ -84,13 +88,13 @@ def _task_evidence(task: Any, path: Path, *, deleted: bool) -> None:
         raise Blocked("任务归属尚未确认；请由 Desktop Agent 核实清单。")
     for field in ("deleted",) if deleted else ("paused", "idle"):
         if task.get(field) is not True:
-            raise Blocked(f"Desktop 任务尚未确认 {field}：{task['id']}")
+            raise Blocked(text("Desktop 任务尚未确认 {field}：{id}", field=field, id=task["id"]))
     required = ("definition_file", "delete_evidence_file") if deleted else ("definition_file", "pause_evidence_file")
     for field in required:
         value = task.get(field)
         target = path.parent / value if isinstance(value, str) else None
         if target is None or not target.is_file() or not target.read_bytes().strip():
-            raise Blocked(f"Desktop 任务缺少本地证据文件：{field}")
+            raise Blocked(text("Desktop 任务缺少本地证据文件：{field}", field=field))
 
 
 def _migration(args: argparse.Namespace, state: dict[str, Any], *, deleted: bool = False) -> dict[str, Any]:
@@ -128,7 +132,7 @@ async def _backend(args: argparse.Namespace) -> None:
     if not configured and mode is None:
         if args.non_interactive:
             raise Blocked("后端尚未配置；使用 --backend cloud 或 --backend local 提供配置。")
-        mode = input("记忆后端 [cloud/local]：").strip()
+        mode = input(text("记忆后端 [cloud/local]：")).strip()
         if mode not in {"cloud", "local"}:
             raise Blocked("请选择 cloud 或 local。")
     if mode is not None or supplied:
@@ -149,14 +153,16 @@ def _backend_inputs(args: argparse.Namespace, mode: str) -> None:
     if mode == "cloud" and not args.cloud_api_key and not config_file.read().get("MEMU_CLOUD_API_KEY"):
         if args.non_interactive:
             raise Blocked("Cloud 后端需要 --cloud-api-key 或已有配置。")
-        args.cloud_api_key = getpass.getpass("memU Cloud API key：")
+        args.cloud_api_key = getpass.getpass(text("memU Cloud API key："))
     if mode == "local" and not args.non_interactive and not config_file.read().get("MEMU_DB") and not args.db:
-        args.db = input("本地数据库路径 [~/.memu/memu.sqlite3]：").strip() or str(Path.home() / ".memu/memu.sqlite3")
+        args.db = input(text("本地数据库路径 [~/.memu/memu.sqlite3]：")).strip() or str(
+            Path.home() / ".memu/memu.sqlite3"
+        )
         args.db = str(Path(args.db).expanduser().resolve())
-        args.embed_provider = args.embed_provider or input("Embedding provider [openai]：").strip() or "openai"
-        args.embed_model = args.embed_model or input("Embedding model [provider 默认]：").strip()
-        args.embed_base_url = args.embed_base_url or input("Embedding endpoint [provider 默认]：").strip()
-        args.embed_api_key = args.embed_api_key or getpass.getpass("Embedding API key（本地服务可使用占位值）：")
+        args.embed_provider = args.embed_provider or input(text("Embedding provider [openai]：")).strip() or "openai"
+        args.embed_model = args.embed_model or input(text("Embedding model [provider 默认]：")).strip()
+        args.embed_base_url = args.embed_base_url or input(text("Embedding endpoint [provider 默认]：")).strip()
+        args.embed_api_key = args.embed_api_key or getpass.getpass(text("Embedding API key（本地服务可使用占位值）："))
     if mode == "local" and args.db and "://" not in args.db:
         args.db = str(Path(args.db).expanduser().resolve())
     if mode == "local" and not args.db and not config_file.read().get("MEMU_DB"):
@@ -276,7 +282,9 @@ async def _stage(stage: int, args: argparse.Namespace, state: dict[str, Any]) ->
         _inspect(args, state)
         if not args.agent and args.migration_evidence is None:
             print(
-                "请到 Codex Desktop 暂停旧 memU 定时任务，避免它与新的后台记忆同时运行；旧任务迁移交给 Desktop Agent 处理。",
+                text(
+                    "请到 Codex Desktop 暂停旧 memU 定时任务，避免它与新的后台记忆同时运行；旧任务迁移交给 Desktop Agent 处理。"
+                ),
                 file=sys.stderr,
             )
     elif stage == 2:
@@ -296,7 +304,7 @@ def _prepare_host(args: argparse.Namespace, state: dict[str, Any]) -> None:
         result.get("reason") == "missing"
         and not args.non_interactive
         and not args.install_missing
-        and input("是否使用官方安装器补装 Codex？[y/N] ").strip().lower() == "y"
+        and input(text("是否使用官方安装器补装 Codex？[y/N] ")).strip().lower() == "y"
     ):
         result = cli_prepare.prepare(args.codex, install_missing=True)
     if result["status"] == "blocked":
@@ -314,7 +322,7 @@ def _load_state(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict) or data.get("version") != 1:
         raise Blocked("安装状态文件无效，请保留现场并检查。")
     if data.get("complete"):
-        return {"version": 1, "complete": False}
+        return {"version": 1, "complete": False, "language": data.get("language")}
     return data
 
 
@@ -334,6 +342,20 @@ def _resume_args(args: argparse.Namespace, state: dict[str, Any]) -> None:
         state["migration_evidence"] = str(args.migration_evidence)
 
 
+def _select_language(args: argparse.Namespace, state: dict[str, Any]) -> None:
+    language = args.language or state.get("language")
+    if language not in {"en", "zh"}:
+        language = "en"
+        if not args.non_interactive and sys.stdin.isatty():
+            with contextlib.redirect_stdout(sys.stderr):
+                language = input("Language / 语言 [en/zh] (English/中文) [en]: ").strip().lower() or "en"
+            if language not in {"en", "zh"}:
+                raise Blocked("Choose en or zh / 请选择 en 或 zh。")
+    args.language = language
+    state["language"] = language
+    LANGUAGE.set(language)
+
+
 async def run(args: argparse.Namespace) -> int:
     args.base_dir = args.base_dir.expanduser().resolve()
     args.cwd = args.cwd.expanduser().resolve()
@@ -341,17 +363,20 @@ async def run(args: argparse.Namespace) -> int:
     state_path = args.base_dir / "install-state.json"
     state: dict[str, Any] = {}
     stage = args.stage or 1
+    language_token = LANGUAGE.set(args.language or "en")
     previous_home = os.environ.get("CODEX_HOME")
     os.environ["CODEX_HOME"] = str(_home())
     # Nested commands write diagnostics to stderr in JSON mode; stdout is JSONL progress only.
     output = sys.stdout
 
     def emit(status: str, **extra: Any) -> None:
-        result = {"stage": stage, "title": STAGES[stage - 1], "status": status, **extra}
+        if "detail" in extra:
+            extra["detail"] = text(extra["detail"])
+        result = {"stage": stage, "title": text(STAGES[stage - 1]), "status": status, **extra}
         print(
             json.dumps(result, ensure_ascii=False)
             if args.json
-            else f"[{stage}/5] {STAGES[stage - 1]}：{status} {extra.get('detail', '')}",
+            else f"[{stage}/5] {result['title']}: {status} {extra.get('detail', '')}",
             file=output,
             flush=True,
         )
@@ -362,6 +387,7 @@ async def run(args: argparse.Namespace) -> int:
                 emit("blocked", detail="工作目录有活跃 worker 或安装进程，请等待其结束后重试。", complete=False)
                 return 2
             state = _load_state(state_path)
+            _select_language(args, state)
             _resume_args(args, state)
             if args.stage and args.stage > 1 and state.get("last_stage", 0) < args.stage - 1:
                 emit("blocked", detail="请先执行前置安装阶段。", complete=False)
@@ -390,9 +416,10 @@ async def run(args: argparse.Namespace) -> int:
     except (OSError, ValueError, TypeError, RuntimeError, KeyError, subprocess.SubprocessError) as exc:
         # Keep credential-bearing provider errors out of machine-readable progress/state.
         events.record_cli_error(exc, command="install", host="codex")
-        emit("failed", detail=f"{type(exc).__name__}，请检查本地诊断并重跑当前阶段。", complete=False)
+        emit("failed", detail=f"{type(exc).__name__}: {text('请检查本地诊断并重跑当前阶段。')}", complete=False)
         return 1
     finally:
+        LANGUAGE.reset(language_token)
         if previous_home is None:
             os.environ.pop("CODEX_HOME", None)
         else:
@@ -401,6 +428,7 @@ async def run(args: argparse.Namespace) -> int:
 
 def register(sub: Any) -> None:
     parser = sub.add_parser("install", help="Install Codex memU integration with staged progress and Desktop handoff")
+    parser.add_argument("--language", choices=("en", "zh"), help="Installer language (English or 中文)")
     parser.add_argument(
         "--stage", type=int, choices=range(1, 6), help="Run one stage after its prerequisites have passed"
     )

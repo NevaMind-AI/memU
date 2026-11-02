@@ -13,6 +13,9 @@
 This guide is for the installation Agent. Use the user's language. The Python
 `memu-codex install` command owns backend configuration, executable preparation,
 registration and installation checks. Report actual results between stages.
+Pass `--language en` or `--language zh` in stage 1 to match the user's language;
+subsequent stages retain that choice. Installer messages are translated; child
+commands retain their original diagnostics.
 
 ## 1. 🔐 Check installation conditions
 
