@@ -32,18 +32,44 @@ def _installation_directory() -> Path:
     return Path.home() / ".local/bin"
 
 
+def _desktop_binary(path: Path) -> bool:
+    """Desktop bundles are not standalone CLI installations."""
+    normalized = str(path).replace("\\", "/").casefold()
+    parts = normalized.split("/")
+    local = os.environ.get("LOCALAPPDATA")
+    desktop = str(Path(local) / "OpenAI/Codex").replace("\\", "/").casefold() if local else ""
+    return (
+        bool(desktop and normalized.startswith(desktop + "/"))
+        or "/openai/codex/bin/" in normalized
+        or "/codex.app/contents/" in normalized
+        or any(part.startswith("openai.codex_") for part in parts)
+    )
+
+
 def _discover(executable: str | None) -> Path | None:
     if executable is not None:
         selected = Path(executable).expanduser()
         found = str(selected) if selected.is_file() else shutil.which(executable)
         if found is None:
             raise FileNotFoundError("The selected Codex executable does not exist")  # noqa: TRY003
-        return Path(found).resolve()
-    if found := shutil.which("codex"):
-        return Path(found).resolve()
+        selected = Path(found).resolve()
+        if _desktop_binary(selected):
+            raise ValueError("Select a standalone Codex CLI, not the executable bundled with Codex Desktop")  # noqa: TRY003
+        return selected
     name = "codex.exe" if sys.platform == "win32" else "codex"
     candidate = _installation_directory() / name
-    return candidate.resolve() if candidate.is_file() else None
+    if candidate.is_file() and not _desktop_binary(candidate.resolve()):
+        return candidate.resolve()
+    found = shutil.which("codex")
+    if found and not _desktop_binary(Path(found).resolve()):
+        return Path(found).resolve()
+    # Desktop can prepend its own binary directory to PATH; search remaining entries.
+    if found:
+        paths = [entry for entry in os.get_exec_path() if not _desktop_binary(Path(entry) / name)]
+        alternative = shutil.which("codex", path=os.pathsep.join(paths))
+        if alternative and not _desktop_binary(Path(alternative).resolve()):
+            return Path(alternative).resolve()
+    return None
 
 
 def _install() -> None:

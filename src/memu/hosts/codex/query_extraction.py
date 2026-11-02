@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import signal
 import subprocess
 import sys
@@ -14,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from memu.env import LONG_QUERY_CHARS
+from memu.hosts.codex import cli_prepare
 
 EXTRACT_THRESHOLD = LONG_QUERY_CHARS
 EXTRACT_INPUT_LIMIT = 32000
@@ -47,9 +47,10 @@ def select_query(prompt: str, trace: dict[str, Any]) -> str:
 
 
 def _extract(prompt: str) -> str:
-    binary = shutil.which("codex")
-    if not binary:
-        raise FileNotFoundError("Codex CLI unavailable")  # noqa: TRY003
+    executable = cli_prepare._discover(None)
+    if executable is None:
+        raise FileNotFoundError("Standalone Codex CLI unavailable")  # noqa: TRY003
+    binary = str(executable)
     if sys.platform == "win32" and Path(binary).suffix.lower() != ".exe":
         # Resolve npm's wrapper to its native executable so timeout kills the actual agent.
         candidates = list(

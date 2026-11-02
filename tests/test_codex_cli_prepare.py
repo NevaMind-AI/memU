@@ -192,3 +192,56 @@ def test_official_download_http_failure_reports_status(environment, monkeypatch)
     assert result["reason"] == "download_http_error"
     assert result["http_status"] == 403
     assert "HTTP 403 (Forbidden)" in result["detail"]
+
+
+@pytest.mark.parametrize(
+    "bundle",
+    [
+        "AppData/Local/OpenAI/Codex/bin/build-id/codex.exe",
+        "WindowsApps/OpenAI.Codex_1.0_x64/package/codex.exe",
+        "Applications/Codex.app/Contents/Resources/codex",
+    ],
+)
+def test_desktop_bundle_is_not_a_standalone_cli(environment, monkeypatch, bundle):
+    binary = environment / bundle
+    binary.parent.mkdir(parents=True)
+    binary.touch()
+    monkeypatch.setattr(setup.shutil, "which", lambda name, **kw: None if kw else str(binary))
+    assert setup.prepare()["reason"] == "missing"
+    assert setup.prepare(str(binary))["status"] == "failed"
+
+
+def test_official_installation_wins_over_desktop_path(environment, monkeypatch):
+    monkeypatch.setattr(setup.sys, "platform", "win32")
+    binary = environment / "codex.exe"
+    binary.touch()
+    monkeypatch.setattr(
+        setup.shutil, "which", lambda *a, **kw: "C:/Users/test/AppData/Local/OpenAI/Codex/bin/build/codex.exe"
+    )
+    assert setup.prepare()["executable"] == str(binary.resolve())
+
+
+def test_searches_path_after_excluding_desktop(environment, monkeypatch):
+    binary = environment / "tools/codex.exe"
+    binary.parent.mkdir()
+    binary.touch()
+    desktop = environment / "AppData/Local/OpenAI/Codex/bin/build/codex.exe"
+    monkeypatch.setattr(setup.shutil, "which", lambda name, **kw: str(binary) if kw else str(desktop))
+    assert setup.prepare()["executable"] == str(binary.resolve())
+
+
+def test_desktop_only_environment_installs_standalone_cli(environment, monkeypatch):
+    monkeypatch.setattr(setup.sys, "platform", "win32")
+    desktop = environment / "AppData/Local/OpenAI/Codex/bin/build/codex.exe"
+    monkeypatch.setattr(setup.shutil, "which", lambda name, **kw: None if kw else str(desktop))
+    calls = []
+
+    def install():
+        calls.append("installed")
+        (environment / "codex.exe").touch()
+
+    monkeypatch.setattr(setup, "_install", install)
+    result = setup.prepare(install_missing=True)
+    assert result["status"] == "passed"
+    assert result["executable"] == str((environment / "codex.exe").resolve())
+    assert calls == ["installed"]

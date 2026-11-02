@@ -69,7 +69,7 @@ def test_failure_falls_back(error, monkeypatch):
     ],
 )
 def test_extraction_output_and_command(value, monkeypatch):
-    monkeypatch.setattr(extraction.shutil, "which", lambda name: "C:/tools/codex.exe")
+    monkeypatch.setattr(extraction.cli_prepare, "_discover", lambda _: Path("C:/tools/codex.exe"))
     prompt = "background" * 300 + "最后需求:修复 WinError 206"
 
     def run(argv, source, cwd, flags):
@@ -95,7 +95,7 @@ def test_extraction_output_and_command(value, monkeypatch):
 
 
 def test_missing_codex(monkeypatch):
-    monkeypatch.setattr(extraction.shutil, "which", lambda name: None)
+    monkeypatch.setattr(extraction.cli_prepare, "_discover", lambda _: None)
     trace: dict[str, Any] = {}
     assert extraction.select_query("x" * 600, trace) == "x" * 600
     assert trace["extraction_status"] == "failed"
@@ -104,7 +104,7 @@ def test_missing_codex(monkeypatch):
 @pytest.mark.parametrize("candidates", [[], [Path("native/codex.exe")]])
 def test_windows_npm_wrapper_resolution(candidates, monkeypatch):
     monkeypatch.setattr(extraction, "sys", SimpleNamespace(platform="win32"))
-    monkeypatch.setattr(extraction.shutil, "which", lambda name: "C:/tools/codex.CMD")
+    monkeypatch.setattr(extraction.cli_prepare, "_discover", lambda _: Path("C:/tools/codex.CMD"))
     monkeypatch.setattr(Path, "glob", lambda *a: iter(candidates))
     monkeypatch.setattr(extraction.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
     seen = []
@@ -221,3 +221,16 @@ def test_hook_retrieves_extracted_query_with_shared_deadline(tmp_path, monkeypat
     assert prompt not in json.dumps(trace)
     assert "Windows hook WinError 206" not in json.dumps(trace)
     assert trace["extraction_elapsed_ms"] == 6000
+
+
+def test_desktop_only_query_extraction_falls_back_without_launching(monkeypatch, tmp_path):
+    setup = extraction.cli_prepare
+    desktop = tmp_path / "AppData/Local/OpenAI/Codex/bin/build/codex.exe"
+    monkeypatch.setattr(setup, "_installation_directory", lambda: tmp_path / "standalone")
+    monkeypatch.setattr(setup.shutil, "which", lambda name, **kw: None if kw else str(desktop))
+    monkeypatch.setattr(extraction, "_run", lambda *a: pytest.fail("Desktop binary must not execute"))
+    prompt = "x" * extraction.EXTRACT_THRESHOLD
+    trace: dict[str, Any] = {}
+    assert extraction.select_query(prompt, trace) == prompt
+    assert trace["extraction_status"] == "failed"
+    assert trace["extraction_error_type"] == "FileNotFoundError"

@@ -184,6 +184,7 @@ def _prepare_host(args: argparse.Namespace) -> None:
             detail = text(detail)
         raise Failed(detail + "\n" + text("可以在网络恢复后重新运行，或自行安装 Codex 后使用 --codex PATH 指定程序。"))
     args.codex = result["executable"]
+    print(text("   独立 Codex CLI：{path}", path=args.codex), flush=True)
 
 
 def _select_language(args: argparse.Namespace) -> None:

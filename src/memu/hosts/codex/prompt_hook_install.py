@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from memu.hosts.bridging import Layout
+from memu.hosts.codex import cli_prepare
 
 
 class AppServer:
@@ -295,16 +296,17 @@ def install(
 
 def register(sub: Any) -> None:
     parser = sub.add_parser("install-prompt-hook", help="Register and trust Codex retrieval and memorization hooks")
-    parser.add_argument("--codex", default=shutil.which("codex"), help="Codex CLI executable (default: PATH)")
+    parser.add_argument("--codex", default=None, help="Standalone Codex CLI executable")
     codex_home = Path(os.environ.get("CODEX_HOME") or "~/.codex").expanduser()
     parser.add_argument("--hooks-file", type=Path, default=codex_home / "hooks.json")
     parser.add_argument("--cwd", type=Path, default=Path.cwd())
     parser.add_argument("--base-dir", default=None)
 
     async def handler(args: argparse.Namespace) -> int:
-        if not args.codex:
-            raise FileNotFoundError("Codex CLI is not on PATH; pass --codex with its executable path")  # noqa: TRY003
-        install(args.codex, args.hooks_file.expanduser().resolve(), args.cwd.resolve(), args.base_dir)
+        prepared = cli_prepare.prepare(args.codex)
+        if prepared["status"] != "passed":
+            raise RuntimeError(prepared["detail"])
+        install(prepared["executable"], args.hooks_file.expanduser().resolve(), args.cwd.resolve(), args.base_dir)
         return 0
 
     parser.set_defaults(handler=handler)
