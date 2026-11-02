@@ -191,6 +191,10 @@ def test_app_server_uses_selected_home_and_drains_diagnostics(tmp_path, monkeypa
     popen = subprocess.Popen
     script = r"""import json, os, sys
 sys.stderr.write('x' * 131072 + '\n')
+sys.stderr.write('\x1b[2m2026-11-02T04:43:33Z\x1b[0m \x1b[31mERROR\x1b[0m \x1b[2mcodex_app_server\x1b[0m\x1b[2m:\x1b[0m Codex is ignoring 1 unrecognized configuration setting. Check for typos or deprecated settings.\n')
+sys.stderr.write('  user (config.toml): `disable_response_storage` is ignored.\n')
+sys.stderr.write('ERROR codex_app_server: Codex is ignoring 2 unrecognized configuration settings. Check for typos or deprecated settings.\n')
+sys.stderr.write('ERROR codex_app_server: Unexpected configuration failure.\n')
 sys.stderr.flush()
 for line in sys.stdin:
     request = json.loads(line)
@@ -198,7 +202,7 @@ for line in sys.stdin:
 """
 
     def start(argv, **kwargs):
-        assert "stderr" not in kwargs
+        assert kwargs["stderr"] == subprocess.PIPE
         return popen([sys.executable, "-u", "-c", script], **kwargs)
 
     monkeypatch.setattr(installer.subprocess, "Popen", start)
@@ -208,7 +212,30 @@ for line in sys.stdin:
         assert server.request("initialize") == {"home": str(selected_home)}
     finally:
         server.close()
-    assert "x" * 131072 in capfd.readouterr().err
+    diagnostics = capfd.readouterr().err
+    assert "x" * 131072 in diagnostics
+    assert "WARN codex_app_server: Codex is ignoring 1 unrecognized configuration setting." in diagnostics
+    assert "WARN codex_app_server: Codex is ignoring 2 unrecognized configuration settings." in diagnostics
+    assert "`disable_response_storage` is ignored." in diagnostics
+    assert "ERROR codex_app_server: Unexpected configuration failure." in diagnostics
+    assert "ERROR codex_app_server: Codex is ignoring" not in diagnostics
+
+
+def test_app_server_failure_keeps_error_diagnostic_and_fails_request(tmp_path, monkeypatch, capfd):
+    popen = subprocess.Popen
+    script = "import sys; print('ERROR codex_app_server: Cannot load configuration.', file=sys.stderr); sys.exit(1)"
+
+    def start(argv, **kwargs):
+        return popen([sys.executable, "-u", "-c", script], **kwargs)
+
+    monkeypatch.setattr(installer.subprocess, "Popen", start)
+    server = installer.AppServer("codex", tmp_path, tmp_path)
+    try:
+        with pytest.raises((RuntimeError, BrokenPipeError)):
+            server.request("initialize")
+    finally:
+        server.close()
+    assert "ERROR codex_app_server: Cannot load configuration." in capfd.readouterr().err
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows PowerShell command execution")

@@ -30,7 +30,8 @@ class AppServer:
             env=env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            # Inherit stderr so diagnostics remain visible and cannot fill an unread pipe.
+            # Drain diagnostics concurrently so a verbose server cannot block its RPC responses.
+            stderr=subprocess.PIPE,
             text=True,
             encoding="utf-8",
         )
@@ -39,6 +40,22 @@ class AppServer:
         if self.process.stdout is None:
             raise RuntimeError("Codex app-server stdout is unavailable")  # noqa: TRY003
         threading.Thread(target=self._read, daemon=True).start()
+        self.stderr_thread = threading.Thread(target=self._read_stderr, daemon=True)
+        self.stderr_thread.start()
+
+    def _read_stderr(self) -> None:
+        if self.process.stderr is None:
+            return
+        for line in self.process.stderr:
+            # Codex logs this nonfatal configuration advisory at ERROR severity.
+            plain = re.sub(r"\x1b\[[0-9;]*m", "", line)
+            if re.fullmatch(
+                r"(?:\S+\s+)?ERROR codex_app_server: Codex is ignoring \d+ unrecognized configuration settings?\. "
+                r"Check for typos or deprecated settings\.\s*",
+                plain,
+            ):
+                line = plain.replace("ERROR codex_app_server:", "WARN codex_app_server:", 1)
+            print(line, end="", file=sys.stderr, flush=True)
 
     def _read(self) -> None:
         if self.process.stdout is None:
@@ -88,6 +105,7 @@ class AppServer:
             except subprocess.TimeoutExpired:
                 self.process.terminate()
                 self.process.wait(timeout=5)
+        self.stderr_thread.join(timeout=5)
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
