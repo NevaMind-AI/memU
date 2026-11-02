@@ -22,11 +22,11 @@ memu-codex prepare-cli --codex /path/to/codex --json
 
 | 阶段 | 职责 | 通过条件 |
 | --- | --- | --- |
-| 检查现状 | 读取 memU config.env 和 ~/.codex，盘点 hooks.json 中的 memU handler 与旧 memU 任务 | 明确复用的配置、待注册入口和需交接的旧任务 |
+| 检查现状 | 读取 memU config.env 和 ~/.codex，盘点 hooks.json 中的 memU handler，确认是否涉及旧任务迁移 | 明确复用的配置、待注册入口；旧任务管理能力待验证时标明阻碍 |
 | 准备后端 | 通过现有命令复用或配置后端 | doctor 通过，已有存储及 embedding identity 保留 |
 | 准备宿主 | CLI 查找 Codex 程序，缺失时安装并验证启动，复用 ~/.codex 中的 CLI/Desktop 共享配置 | Codex 程序可启动，共享配置沿用 ~/.codex |
 | 配置集成 | 注册检索与记忆 handler | Codex 确认两者已加载且受信任，检索支持异步 |
-| 完成交接 | 迁移旧入口并验证保留状态 | 已确认的旧入口移除，处理状态及其他集成完整 |
+| 完成交接 | 通过已验证的宿主任务管理接口交接旧入口，或报告迁移受阻 | 已确认的旧入口移除，处理状态及其他集成完整；依赖未验证接口时不宣布迁移完成 |
 
 这些是内部职责边界，不要求用户经历五次提问。
 每阶段返回通过、受阻或失败，以及明确的下一步；所有适用门槛通过后才可报告安装完成。
@@ -45,7 +45,7 @@ flowchart TD
         A1{当前会话已确认是 Full access 吗？}
         A1 -->|是| A3[调用安装 CLI]
         A1 -->|否或无法确认| U2
-        A5[读取 CLI 结果并解释下一步]
+        A5[实时转述 CLI 阶段进度并解释最终结果]
     end
     subgraph Host[宿主与用户负责]
         U2[用户切换到 Full access 后继续]
@@ -54,13 +54,15 @@ flowchart TD
     subgraph CLI[CLI 负责]
         C1[读取 memU config.env 和 ~/.codex]
         C1 --> InspectHooks[读取 hooks.json 中的 memU 双 hook]
-        InspectHooks --> InspectTasks[盘点旧 memU 自动化任务及运行状态]
+        InspectHooks --> InspectTasks[标明旧任务迁移需求及管理能力验证状态]
         InspectTasks --> C2[复用或配置后端并运行 doctor]
         C2 --> C3[查找 Codex 程序，缺失时安装并验证启动]
         C3 --> SharedConfig[复用 Codex CLI 与 Desktop 共享配置]
-        SharedConfig --> C7{存在旧 memU 任务吗？}
-        C7 -->|存在| C8[保存恢复定义、暂停旧触发并等待 worker 结束]
-        C7 -->|不存在| C9[注册检索与记忆双 hook]
+        SharedConfig --> C7{已确认无旧任务迁移需求吗？}
+        C7 -->|否或未知| TaskAPI{旧任务管理接口已验证吗？}
+        TaskAPI -->|否| Blocked
+        TaskAPI -->|是| C8[通过已验证接口盘点任务、保存定义、暂停旧触发并等待 worker]
+        C7 -->|是| C9[注册检索与记忆双 hook]
         C8 --> C9
         C9 --> C10[验证加载、异步检索、信任状态及程序路径]
         C10 --> C11[移除已确认旧入口并验证处理状态完整]
@@ -70,6 +72,13 @@ flowchart TD
     A3 --> C1
     C1 -. 实际访问被拒绝 .-> Blocked
     C8 -. 无法盘点或安全交接 .-> Blocked
+    C1 -. 阶段进度 .-> Progress{当前安装入口}
+    C2 -. 阶段进度 .-> Progress
+    C3 -. 阶段进度 .-> Progress
+    C9 -. 阶段进度 .-> Progress
+    C11 -. 阶段进度 .-> Progress
+    Progress -->|Agent 对话| A5
+    Progress -->|直接终端| TerminalProgress[终端实时显示阶段进度]
     Done --> Route{由 Agent 调用吗？}
     Blocked --> Route
     Route -->|是| A5
@@ -79,7 +88,7 @@ flowchart TD
     classDef cli fill:#dcfce7,stroke:#16a34a,color:#14532d;
     classDef host fill:#ffedd5,stroke:#ea580c,color:#7c2d12;
     class A1,A3,A5 agent;
-    class C1,InspectHooks,InspectTasks,C2,C3,SharedConfig,C7,C8,C9,C10,C11,Done,Blocked cli;
+    class C1,InspectHooks,InspectTasks,C2,C3,SharedConfig,C7,TaskAPI,C8,C9,C10,C11,Done,Blocked cli;
     class U2 host;
 ```
 
@@ -102,6 +111,37 @@ flowchart TD
 - 启用新触发前，旧 worker 必须空闲；保留恢复定义直到替代入口验证通过。
   无法确认归属或安全交接时暂停迁移。重跑时检查真实状态，不假定之前的阶段仍有效。
 - 用户提交后的实际模型执行与记忆提交属于运行验收。
+
+## 用户可见的阶段进度
+
+两条入口均展示阶段进度。Agent 负责及时汇报，CLI 提供阶段事实及结果：
+
+| 用户看到的阶段 | 对应工作 |
+| --- | --- |
+| 🔐 [1/5] 检查安装条件 | Agent 确认 Full access；CLI 读取已有配置与集成状态 |
+| 📦 [2/5] 准备 memU 与记忆后端 | 复用或配置后端并运行 doctor |
+| 🛠️ [3/5] 准备 Codex CLI | 复用或安装程序，验证启动并沿用共享配置 |
+| 🔔 [4/5] 配置自动记忆与检索 | 注册并验证双 hook；涉及迁移时先满足安全交接条件 |
+| ✅ [5/5] 完成交接与安装检查 | 验证适用的旧入口清理和处理状态保留，报告结果并邀请下一次用户提交 |
+
+Agent 在开始各阶段时展示标题，取得阶段结果后及时汇报通过或阻碍，再继续下一阶段。
+只依据 CLI 已返回的证据汇报，不用预计进度代替实际完成状态。
+直接终端安装由 CLI 展示同样的阶段与结果；非交互调用提供机器可读的阶段信息。
+
+不能假定同步工具调用期间 Agent 能读取流并发言。后续实现需提供阶段执行边界，
+让 Agent 在阶段之间取得结果并汇报；宿主支持可靠的异步进度时可消费阶段事件。
+两种方式共用 CLI 的阶段逻辑和完成条件，不让 Agent 自行编排安装内部操作。
+目前 `prepare-cli` 只返回程序准备阶段结果，上述完整进度机制尚待实现。
+
+## 旧任务管理能力待验证
+
+尚未验证 codex-cli 是否能列出、创建、暂停、删除 Desktop 的自动化任务，
+也未验证两者是否共享同一任务集合。流程图中的任务管理分支描述能力门槛，不代表已有 CLI 接口。
+
+后续先在隔离测试任务上验证发现、运行状态读取、创建、暂停和删除，以及 CLI/Desktop 双向可见性。
+保留任务定义与清理证据，不触碰用户已有任务。只有通过验证的接口才能接入迁移；
+若只能通过 Desktop 管理工具完成，则把对应步骤交给宿主工具并返回证据，CLI 不虚构成功。
+需要迁移而管理能力或任务清单无法确认时，返回迁移受阻，保留旧入口和处理状态。
 
 ## 第一片：准备 Codex 程序
 
