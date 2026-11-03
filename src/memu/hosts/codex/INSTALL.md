@@ -27,16 +27,7 @@ memu-codex install --non-interactive --install-missing --json --language LANG
 
 The CLI reuses the existing backend, runs doctor, prepares the standalone Codex CLI,
 registers and verifies both memory hooks, and cleans up recognized legacy retrieval
-entries. Both hooks discover the current standalone CLI when needed instead of
-storing its versioned path. If it is missing, retrieval falls back to the original
-query and background memorization reports failure without starting a worker.
-Desktop-bundled executables are excluded; a missing standalone CLI is
-installed through the official installer. Query extraction uses the same discovery
-rules, prioritizing the standalone installation directory over PATH. On macOS/Linux,
-that directory is `CODEX_INSTALL_DIR` or `~/.local/bin`; the official `install.sh`
-runs with `CODEX_NON_INTERACTIVE=1` so it does not prompt through `/dev/tty`.
-It prints progress and elapsed time for the whole installation. Honor user-supplied
-`--codex PATH`, `--base-dir` and `--cwd` options.
+entries. Honor user-supplied `--codex PATH`, `--base-dir` and `--cwd` options.
 
 Wait for the same command to exit. If the tool returns a running session ID, poll
 that session until exit; partial output is still an active installation. Exit 0
