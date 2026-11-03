@@ -330,7 +330,7 @@ async def test_doctor_reports_cloud_mode_endpoint_and_resource_limitation(
 
     monkeypatch.setattr(retrieval, "retrieve", retrieve_ok)
 
-    assert await _cmd_doctor(SPEC, argparse.Namespace()) == 0
+    assert await _cmd_doctor(SPEC, argparse.Namespace(backend_only=True)) == 0
     output = capsys.readouterr().out
     assert "mode      cloud" in output
     assert f"endpoint  {DEFAULT_CLOUD_BASE_URL}" in output
