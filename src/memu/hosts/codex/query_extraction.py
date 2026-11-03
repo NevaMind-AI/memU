@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +46,23 @@ def select_query(prompt: str, trace: dict[str, Any]) -> str:
         return query
     finally:
         trace["extraction_elapsed_ms"] = round((time.monotonic() - started) * 1000)
+
+
+def _https_options() -> list[str]:
+    """One-shot extraction should not spend its deadline retrying WebSockets."""
+    home = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex").expanduser()
+    config = home / "config.toml"
+    values = tomllib.loads(config.read_text(encoding="utf-8-sig")) if config.is_file() else {}
+    providers = [
+        name
+        for name, settings in values.get("model_providers", {}).items()
+        if settings.get("supports_websockets") is True and re.fullmatch(r"[A-Za-z0-9_-]+", name)
+    ]
+    return [
+        option
+        for provider in sorted(providers)
+        for option in ("-c", f"model_providers.{provider}.supports_websockets=false")
+    ]
 
 
 def _extract(prompt: str) -> str:
@@ -100,6 +119,7 @@ def _extract(prompt: str) -> str:
             [
                 binary,
                 "exec",
+                *_https_options(),
                 "--ephemeral",
                 "--disable",
                 "hooks",

@@ -234,3 +234,21 @@ def test_desktop_only_query_extraction_falls_back_without_launching(monkeypatch,
     assert extraction.select_query(prompt, trace) == prompt
     assert trace["extraction_status"] == "failed"
     assert trace["extraction_error_type"] == "FileNotFoundError"
+
+
+def test_query_extraction_uses_https_for_configured_providers_without_editing_config(tmp_path, monkeypatch):
+    config = tmp_path / "config.toml"
+    original = 'model_provider = "custom"\n[model_providers.custom]\nsupports_websockets = true\n'
+    config.write_text(original, encoding="utf-8")
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:7897")
+    monkeypatch.setattr(extraction.cli_prepare, "_discover", lambda _: Path("C:/tools/codex.exe"))
+
+    def run(argv, source, cwd, flags):
+        assert "model_providers.custom.supports_websockets=false" in argv
+        assert not any("model_providers.openai" in value for value in argv)
+        Path(argv[argv.index("-o") + 1]).write_text('{"query":"topic"}', encoding="utf-8")
+
+    monkeypatch.setattr(extraction, "_run", run)
+    assert extraction._extract("test prompt") == "topic"
+    assert config.read_text(encoding="utf-8") == original
