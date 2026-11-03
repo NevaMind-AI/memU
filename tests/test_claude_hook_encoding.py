@@ -15,6 +15,7 @@ import pytest
 def test_utf8_hook_pipes(tmp_path, encoding, command):
     script = """
 import json, subprocess, sys
+from pathlib import Path
 from memu.hosts.claude_code import memorize_hook, prompt_hook
 from memu.hosts.claude_code.cli import main
 original_load = json.load
@@ -31,6 +32,10 @@ def retrieve(argv, **kwargs):
     payload = {'hits': [{'text': '中文记忆😀'}], 'resources': []}
     return subprocess.CompletedProcess(argv, 0, json.dumps(payload, ensure_ascii=False).encode('utf-8'), b'')
 prompt_hook.subprocess.run = retrieve
+def find_cli():
+    calls.append('discover')
+    return Path(sys.executable)
+memorize_hook.cli_prepare.find_executable = find_cli
 memorize_hook.launch_background = lambda args: calls.append('launch')
 command, base = sys.argv[1:]
 args = [command, '--base-dir', base]
@@ -39,6 +44,7 @@ if command == 'memorize-hook':
 assert main(args) == 0
 assert 'input' in calls
 if command == 'memorize-hook':
+    assert 'discover' in calls
     assert 'launch' in calls
 """
     env = {**os.environ, "PYTHONIOENCODING": encoding}
