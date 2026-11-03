@@ -15,6 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 from memu.hosts.bridging import Layout, self_sessions
+from memu.hosts.claude_code import cli_prepare
 from memu.hosts.hooks import admission, worker
 
 BACKGROUND_ENV = "MEMU_CLAUDE_MEMORIZE"
@@ -89,6 +90,7 @@ async def _cmd_memorize_hook(args: argparse.Namespace) -> int:
         if not isinstance(event, dict) or event.get("hook_event_name") != "UserPromptSubmit":
             raise ValueError("expected a UserPromptSubmit object")  # noqa: TRY003, TRY301
         if os.environ.get(BACKGROUND_ENV) != "1":
+            args.agent = str(cli_prepare.find_executable())
             launch_background(args)
     except (OSError, ValueError, TypeError) as exc:
         print(f"memU memorize hook failed: {exc}", file=sys.stderr)
@@ -102,7 +104,7 @@ def register(sub: Any) -> None:
     parser = sub.add_parser("memorize-hook", help="Start background memory processing on Claude prompt submission")
     parser.add_argument("--base-dir", default="~/.memu/hosts/claude-code")
     parser.add_argument("--session-dir", default=SESSION_DIR)
-    parser.add_argument("--agent", required=True, help="Path to the Claude executable")
+    parser.add_argument("--agent", help=argparse.SUPPRESS)
     parser.set_defaults(handler=_cmd_memorize_hook)
 
 

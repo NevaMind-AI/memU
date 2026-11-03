@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -56,7 +57,8 @@ async def _command(argv: list[str]) -> int:
     return int(await args.handler(args))
 
 
-async def _backend(args: argparse.Namespace) -> None:
+async def _backend(args: argparse.Namespace, command: Callable[[list[str]], Awaitable[int]] | None = None) -> None:
+    invoke = command or _command
     supplied = any(
         getattr(args, name)
         for name in ("cloud_api_key", "db", "embed_provider", "embed_model", "embed_api_key", "embed_base_url")
@@ -80,11 +82,11 @@ async def _backend(args: argparse.Namespace) -> None:
         for name in ("cloud_api_key", "db", "embed_provider", "embed_model", "embed_api_key", "embed_base_url"):
             if value := getattr(args, name):
                 argv.extend(["--" + name.replace("_", "-"), value])
-        if await _command(argv):
+        if await invoke(argv):
             raise Blocked("后端配置未通过保护检查；已有配置保留，请检查 config 诊断。")
     diagnostics = io.StringIO()
     with contextlib.redirect_stdout(sys.stdout if args.json else diagnostics):
-        status = await _command(["doctor", "--backend-only"])
+        status = await invoke(["doctor", "--backend-only"])
     if status:
         print(diagnostics.getvalue(), end="", file=sys.stderr)
         raise Blocked("后端 doctor 未通过，请修复连接或配置后重跑。")

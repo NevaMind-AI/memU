@@ -21,6 +21,11 @@ from memu.hosts.claude_code import memorize_hook as hook
 from memu.hosts.hooks import admission
 
 
+@pytest.fixture(autouse=True)
+def standalone_cli(monkeypatch, tmp_path):
+    monkeypatch.setattr(hook.cli_prepare, "find_executable", lambda: tmp_path / "claude.exe")
+
+
 @pytest.mark.parametrize("platform", ["win32", "darwin", "linux"])
 def test_submit_detaches_without_frontend_session(tmp_path, monkeypatch, capsys, platform):
     monkeypatch.setattr(sys, "platform", platform)
@@ -46,6 +51,7 @@ def test_submit_detaches_without_frontend_session(tmp_path, monkeypatch, capsys,
     assert json.loads(capsys.readouterr().out) == {}
     (argv,), kwargs = calls[0]
     assert argv[:4] == [sys.executable, "-u", "-m", "memu.hosts.claude_code.memorize_hook"]
+    assert argv[argv.index("--agent") + 1] == str(tmp_path / "claude.exe")
     assert "CLAUDE_CODE_SESSION_ID" not in kwargs["env"]
     assert "CLAUDECODE" not in kwargs["env"]
     assert kwargs["creationflags"] == (0x08000000 if platform == "win32" else 0)

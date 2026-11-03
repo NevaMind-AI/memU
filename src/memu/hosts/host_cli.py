@@ -43,7 +43,7 @@ from memu.hosts.bridging import Layout, commit, prepare, self_sessions
 from memu.hosts.bridging.pipeline import MAX_JOBS
 from memu.hosts.bridging.resources import verify_resource_log
 
-ScheduleBackend = Literal["os", "native", "external"]
+ScheduleBackend = Literal["os", "native", "external", "hook"]
 """The existing scheduler arrangement a host documents; informational only."""
 
 DOCS = {"install": "INSTALL.md", "task": "BRIDGING_TASK.md", "uninstall": "UNINSTALL.md"}
@@ -617,10 +617,15 @@ def _proxy_hint(base_url: str) -> str | None:
 
 async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
     backend_status = await _cmd_backend_doctor(spec, args)
-    if spec.host == "codex" and not getattr(args, "backend_only", False):
-        from memu.hosts.codex import doctor
+    if spec.host in {"codex", "claude-code"} and not getattr(args, "backend_only", False):
+        if spec.host == "codex":
+            from memu.hosts.codex.doctor import check
+        else:
+            from memu.hosts.claude_code.doctor import check as check_claude
 
-        integration_status = doctor.check()
+            check = check_claude
+
+        integration_status = check()
         return int(bool(backend_status or integration_status))
     return backend_status
 
@@ -943,12 +948,12 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     p = sub.add_parser(
         "doctor",
         help=(
-            "Check backend, standalone Codex CLI and local hook definitions"
-            if spec.host == "codex"
+            f"Check backend, standalone {spec.display} CLI and local hook definitions"
+            if spec.host in {"codex", "claude-code"}
             else "Verify MEMU_* config resolves and the selected memory backend is reachable"
         ),
     )
-    if spec.host == "codex":
+    if spec.host in {"codex", "claude-code"}:
         p.add_argument(
             "--backend-only", action="store_true", help="Check only the memory backend (installer preflight)"
         )
