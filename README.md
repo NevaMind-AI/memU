@@ -140,6 +140,14 @@ Installation is the one-message setup in [Quick start](#quick-start) or [Self-ho
 Afterwards `<binary> doctor` proves the whole loop resolves: config, selected
 mode, and a live retrieval.
 
+For Claude Code background memory, `memu-claude-code auth` checks existing CLI
+credentials or offers account login, API key / third-party configuration (including
+cc-switch), and configuring later. Use `--method login|provider|later` to select
+an option directly. API keys and tokens are entered without echo and saved in
+plaintext in `~/.claude/settings.json`. `--non-interactive` never opens login or
+prompts for credentials; missing authentication returns exit code 2. After
+configuring authentication, rerun installation to finish enabling the hooks.
+
 Adding another host means implementing one `TranscriptSource` (where its session logs live, how its records are shaped) plus a `HostSpec`-sized CLI — the pipeline, verbs, and instruction text are shared.
 
 ## Developer integration

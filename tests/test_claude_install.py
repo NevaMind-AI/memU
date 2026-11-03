@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 
 from memu.hosts import installation as lifecycle
-from memu.hosts.claude_code import cli_prepare, doctor, hook_install, install, memorize_hook
+from memu.hosts.claude_code import auth, cli_prepare, doctor, hook_install, install, memorize_hook
 from memu.hosts.claude_code.cli import SPEC, main
 from memu.hosts.hooks.admission import workspace_lock
 
@@ -52,6 +52,25 @@ def machine(tmp_path, monkeypatch):
 
 def invoke(machine, *options):
     return main(["install", "--non-interactive", "--json", "--base-dir", str(machine[1]), *options])
+
+
+@pytest.mark.parametrize("choice", ["login", "provider", "later"])
+def test_install_authentication_choices(machine, monkeypatch, capsys, choice):
+    calls = []
+
+    def configure(executable, *, method, non_interactive):
+        calls.append((method, non_interactive))
+        if method == "later":
+            raise lifecycle.Blocked("Authentication deferred")  # noqa: TRY003
+
+    monkeypatch.setattr(auth, "configure", configure)
+    code = main(["install", "--json", "--language", "en", "--base-dir", str(machine[1]), "--auth", choice])
+    assert code == (2 if choice == "later" else 0)
+    assert calls == [(choice, False)]
+    progress = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert progress[-1]["complete"] is (choice != "later")
+    if choice == "later":
+        assert not (machine[0] / "settings.json").exists()
 
 
 def test_install_uninstall_preserves_third_party_settings_and_processing(machine, capsys):

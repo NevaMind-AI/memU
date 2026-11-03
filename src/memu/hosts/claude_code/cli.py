@@ -25,7 +25,7 @@ from typing import Any
 
 from memu.hosts import hooks
 from memu.hosts.bridging import Layout
-from memu.hosts.claude_code import cowork_cmd, install, memorize_hook, prompt_hook, uninstall
+from memu.hosts.claude_code import auth, cowork_cmd, install, memorize_hook, prompt_hook, uninstall
 from memu.hosts.claude_code.desktop_sessions import ClaudeDesktopTranscriptSource
 from memu.hosts.claude_code.sessions import SESSION_DIR
 from memu.hosts.host_cli import HostSpec, run
@@ -63,6 +63,7 @@ async def _cmd_legacy_uninstall(args: argparse.Namespace) -> int:
 
 
 def _register_extra(sub: Any) -> None:
+    auth.register(sub)
     install.register(sub)
     uninstall.register(sub)
     cowork_cmd.register(sub)

@@ -9,7 +9,7 @@ import argparse
 from typing import Any
 
 from memu.hosts import installation as lifecycle
-from memu.hosts.claude_code import cli_prepare, hook_install
+from memu.hosts.claude_code import auth, cli_prepare, hook_install
 from memu.hosts.hooks.admission import workspace_lock
 
 STAGES = (
@@ -45,10 +45,7 @@ def _prepare_host(args: argparse.Namespace) -> None:
         ):
             raise lifecycle.Blocked("Standalone Claude CLI required; rerun with --install-missing") from None
         executable = cli_prepare.prepare(install_missing=True)
-    if not cli_prepare.auth_status(executable):
-        raise lifecycle.Blocked(
-            "Claude CLI is not authenticated. Run `claude auth login` or configure your provider credentials, then retry."
-        )
+    auth.configure(executable, method=args.auth, non_interactive=args.non_interactive)
     print(f"   Claude CLI: {executable}", flush=True)
 
 
@@ -100,4 +97,7 @@ def register(sub: Any) -> None:
     parser = sub.add_parser("install", help="Configure Claude memory hooks in one invocation")
     lifecycle.add_arguments(parser, "claude-code")
     parser.add_argument("--claude", default=None)
+    parser.add_argument(
+        "--auth", choices=("login", "provider", "later"), help="Authentication choice when not configured"
+    )
     parser.set_defaults(handler=run)

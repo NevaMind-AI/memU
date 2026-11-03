@@ -21,7 +21,7 @@ def check() -> int:
                 print("authentication configured (CLI status; credentials and provider access unverified)")
             else:
                 print(
-                    "authentication missing; configure provider credentials (for example, with cc-switch) or run `claude auth login`"
+                    "authentication missing; run `memu-claude-code auth` to choose account login or provider configuration (including cc-switch)"
                 )
                 failed = True
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
