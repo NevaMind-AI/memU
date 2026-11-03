@@ -104,6 +104,7 @@ def test_missing_codex(monkeypatch):
 @pytest.mark.parametrize("candidates", [[], [Path("native/codex.exe")]])
 def test_windows_npm_wrapper_resolution(candidates, monkeypatch):
     monkeypatch.setattr(extraction, "sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setattr(extraction.cli_prepare, "sys", SimpleNamespace(platform="win32"))
     monkeypatch.setattr(extraction.cli_prepare, "_discover", lambda _: Path("C:/tools/codex.CMD"))
     monkeypatch.setattr(Path, "glob", lambda *a: iter(candidates))
     monkeypatch.setattr(extraction.subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)

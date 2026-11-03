@@ -66,20 +66,7 @@ def _https_options() -> list[str]:
 
 
 def _extract(prompt: str) -> str:
-    executable = cli_prepare._discover(None)
-    if executable is None:
-        raise FileNotFoundError("Standalone Codex CLI unavailable")  # noqa: TRY003
-    binary = str(executable)
-    if sys.platform == "win32" and Path(binary).suffix.lower() != ".exe":
-        # Resolve npm's wrapper to its native executable so timeout kills the actual agent.
-        candidates = list(
-            Path(binary).parent.glob(
-                "node_modules/@openai/codex/node_modules/@openai/codex-win32-*/vendor/*/bin/codex.exe"
-            )
-        )
-        if len(candidates) != 1:
-            raise FileNotFoundError("Native Codex executable unavailable")  # noqa: TRY003
-        binary = str(candidates[0])
+    binary = str(cli_prepare.find_executable())
     with tempfile.TemporaryDirectory(prefix="memu-query-") as directory:
         base = Path(directory)
         schema = base / "schema.json"

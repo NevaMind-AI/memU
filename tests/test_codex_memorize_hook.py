@@ -4,6 +4,7 @@ import io
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,7 +16,12 @@ def standalone_cli(monkeypatch):
     monkeypatch.setattr(memorize_hook.cli_prepare, "_discover", lambda _: Path("current/codex.exe"))
 
 
-def test_submit_starts_background_without_waiting(tmp_path, monkeypatch, capsys):
+@pytest.mark.parametrize("npm_wrapper", [False, True])
+def test_submit_starts_background_without_waiting(tmp_path, monkeypatch, capsys, npm_wrapper):
+    if npm_wrapper:
+        monkeypatch.setattr(memorize_hook.cli_prepare, "sys", SimpleNamespace(platform="win32"))
+        monkeypatch.setattr(memorize_hook.cli_prepare, "_discover", lambda _: Path("npm/codex.cmd"))
+        monkeypatch.setattr(Path, "glob", lambda *args: iter([Path("current/codex.exe")]))
     calls = []
     monkeypatch.delenv(memorize_hook.BACKGROUND_ENV, raising=False)
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit"})))

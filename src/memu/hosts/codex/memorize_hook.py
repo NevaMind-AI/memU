@@ -52,9 +52,7 @@ async def _cmd_memorize_hook(args: argparse.Namespace) -> int:
         if not isinstance(event, dict) or event.get("hook_event_name") != "UserPromptSubmit":
             raise ValueError("expected a UserPromptSubmit object")  # noqa: TRY003, TRY301
         if os.environ.get(BACKGROUND_ENV) != "1":
-            executable = cli_prepare._discover(None)
-            if executable is None:
-                raise FileNotFoundError("Standalone Codex CLI unavailable")  # noqa: TRY003
+            executable = cli_prepare.find_executable()
             layout = Layout.default("codex", args.base_dir or "~/.memu/hosts/codex")
             path = notify_console.launch_background(
                 [

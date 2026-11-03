@@ -72,6 +72,23 @@ def _discover(executable: str | None) -> Path | None:
     return None
 
 
+def find_executable() -> Path:
+    """Find the current standalone CLI, resolving Windows npm wrappers for both hooks."""
+    executable = _discover(None)
+    if executable is None:
+        raise FileNotFoundError("Standalone Codex CLI unavailable")  # noqa: TRY003
+    if sys.platform == "win32" and executable.suffix.lower() != ".exe":
+        candidates = list(
+            executable.parent.glob(
+                "node_modules/@openai/codex/node_modules/@openai/codex-win32-*/vendor/*/bin/codex.exe"
+            )
+        )
+        if len(candidates) != 1:
+            raise FileNotFoundError("Native Codex executable unavailable")  # noqa: TRY003
+        executable = candidates[0]
+    return executable
+
+
 def _install() -> None:
     windows = sys.platform == "win32"
     shell = shutil.which("powershell.exe" if windows else "sh")
