@@ -37,7 +37,7 @@ def read() -> tuple[Path, bytes | None, dict[str, Any]]:
     return path, original, data
 
 
-def owns(hook: dict[str, Any], subcommand: str) -> bool:
+def owns(hook: dict[str, Any], subcommand: str) -> bool:  # noqa: C901 — validate legacy and exec-form arguments
     if hook.get("type") != "command" or not isinstance(hook.get("command"), str):
         return False
     command = hook["command"]
@@ -58,6 +58,9 @@ def owns(hook: dict[str, Any], subcommand: str) -> bool:
         return False
     rest = args[1:]
     while rest:
+        if rest[0] == "--rewake" and subcommand == "prompt-hook":
+            rest = rest[1:]
+            continue
         if len(rest) < 2 or rest[0] not in {"--base-dir", "--session-dir", "--agent"} or not isinstance(rest[1], str):
             return False
         rest = rest[2:]
@@ -71,9 +74,9 @@ def definitions(base: Path) -> list[dict[str, Any]]:
             "type": "command",
             "command": executable,
             "args": [subcommand, "--base-dir", str(base)]
-            + (["--session-dir", str(home() / "projects")] if subcommand == "memorize-hook" else []),
+            + (["--session-dir", str(home() / "projects")] if subcommand == "memorize-hook" else ["--rewake"]),
             "timeout": 45 if subcommand == "prompt-hook" else 10,
-            **({"async": True} if subcommand == "prompt-hook" else {}),
+            **({"asyncRewake": True} if subcommand == "prompt-hook" else {}),
         }
         for subcommand in SUBCOMMANDS
     ]
@@ -150,7 +153,9 @@ def problems() -> list[str]:
                 group.get("matcher")
                 or "args" not in hook
                 or "--agent" in hook["args"]
-                or hook.get("async", False) != (subcommand == "prompt-hook")
+                or hook.get("async", False)
+                or hook.get("asyncRewake", False) != (subcommand == "prompt-hook")
+                or ("--rewake" in hook["args"]) != (subcommand == "prompt-hook")
                 or hook.get("timeout") != (45 if subcommand == "prompt-hook" else 10)
             ):
                 issues.append(f"{subcommand}: outdated definition; update recommended")

@@ -120,6 +120,9 @@ async def _cmd_prompt_hook(args: argparse.Namespace) -> int:
     if trace["status"] == "failed":
         print("memU retrieve hook failed; see local retrieve logs", file=sys.stderr)
     if output is not None:
+        if args.rewake:
+            print(output["hookSpecificOutput"]["additionalContext"], file=sys.stderr)
+            return 2
         print(json.dumps(output, ensure_ascii=False))
     return 0
 
@@ -127,4 +130,5 @@ async def _cmd_prompt_hook(args: argparse.Namespace) -> int:
 def register(sub: Any) -> None:
     parser = sub.add_parser("prompt-hook", help="Retrieve bounded context for a Claude UserPromptSubmit event on stdin")
     parser.add_argument("--base-dir", default=None, help="Host state directory for hook logs")
+    parser.add_argument("--rewake", action="store_true", help="Wake Claude with retrieved context via asyncRewake")
     parser.set_defaults(handler=_cmd_prompt_hook)

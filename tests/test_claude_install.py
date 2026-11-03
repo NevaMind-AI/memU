@@ -157,7 +157,9 @@ def test_doctor_reports_definition_problems(machine, capsys, problem):
     elif problem == "duplicate":
         groups.append(groups[0])
     elif problem == "old":
-        groups[0]["hooks"][0].pop("async")
+        groups[0]["hooks"][0].pop("asyncRewake")
+        groups[0]["hooks"][0]["async"] = True
+        groups[0]["hooks"][0]["args"].remove("--rewake")
     elif problem == "missing-entry":
         Path(groups[0]["hooks"][0]["command"]).unlink()
     else:
@@ -165,6 +167,14 @@ def test_doctor_reports_definition_problems(machine, capsys, problem):
     path.write_text(json.dumps(data))
     assert doctor.check() == 1
     assert "memu-claude-code install" in capsys.readouterr().out
+    if problem == "old":
+        hook_install.install(base)
+        assert hook_install.problems() == []
+        handlers = json.loads(path.read_text())["hooks"]["UserPromptSubmit"]
+        retrieval = next(h for g in handlers for h in g["hooks"] if h["args"][0] == "prompt-hook")
+        assert retrieval["asyncRewake"] is True
+        assert "async" not in retrieval
+        assert "--rewake" in retrieval["args"]
 
 
 def test_missing_runtime_cli_fails_open_without_launch(machine, monkeypatch, capsys):

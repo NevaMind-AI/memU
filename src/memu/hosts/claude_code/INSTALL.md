@@ -44,6 +44,7 @@ On success, translate and fill this report from actual CLI results:
 
 🧠 Memory backend: <configured backend>.
 🔗 Retrieval and background memory hooks: configured and read back locally.
+💬 Relevant retrieval results can wake Claude after its initial response.
 
 💡 Open a new Claude session to load the hooks. If you previously configured memU
 scheduled tasks, pause or remove them yourself to avoid duplicate processing.

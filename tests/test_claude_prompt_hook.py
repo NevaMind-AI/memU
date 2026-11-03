@@ -46,8 +46,9 @@ def test_no_fitting_entries_return_no_context(payload: dict) -> None:
     assert hook.bounded_context(payload, {}) is None
 
 
+@pytest.mark.parametrize("rewake", [False, True])
 @pytest.mark.parametrize("outcome", ["success", "empty", "oversized", "failure", "timeout", "invalid", "bad_entry"])
-def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcome):
+def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcome, rewake):
     prompt = '中文😀"\r\n' * 600
     event = {"hook_event_name": "UserPromptSubmit", "session_id": "synthetic-session", "prompt": prompt}
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
@@ -70,7 +71,8 @@ def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcom
         return subprocess.CompletedProcess(argv, 0, json.dumps(payload).encode(), b"")
 
     monkeypatch.setattr(hook.subprocess, "run", retrieve)
-    assert main(["prompt-hook", "--base-dir", str(tmp_path)]) == 0
+    options = ["--rewake"] if rewake else []
+    assert main(["prompt-hook", "--base-dir", str(tmp_path), *options]) == (2 if rewake and outcome == "success" else 0)
     output = capsys.readouterr()
     trace = json.loads(next((tmp_path / "log/hooks/retrieve").glob("*.json")).read_text(encoding="utf-8"))
     argv, kwargs = calls[0]
@@ -80,7 +82,9 @@ def test_cli_returns_context_or_fails_open(tmp_path, monkeypatch, capsys, outcom
     assert kwargs["timeout"] == 40
     assert trace["query_truncated"]
     if outcome == "success":
-        context = json.loads(output.out)["hookSpecificOutput"]["additionalContext"]
+        context = output.err.strip() if rewake else json.loads(output.out)["hookSpecificOutput"]["additionalContext"]
+        if rewake:
+            assert not output.out
         assert "记忆😀" in context
         assert len(context.encode("utf-16-le")) // 2 <= hook.CONTEXT_BUDGET
         assert trace["status"] == "context_returned"
