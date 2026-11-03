@@ -5,9 +5,13 @@
 
 from contextvars import ContextVar
 
-LANGUAGE: ContextVar[str] = ContextVar("codex_install_language", default="en")
+LANGUAGE: ContextVar[str] = ContextVar("host_install_language", default="en")
 
 _EN = {
+    "准备 Claude CLI": "Preparing Claude CLI",
+    "\n👋  欢迎安装 memU · Claude Code": "\n👋  Welcome to memU · Claude Code",
+    "重新打开 Claude 会话使 hook 配置生效。如曾配置 memU 定时任务，请自行暂停或移除。": "Open a new Claude session to load hooks. Pause or remove any previously configured memU schedules yourself.",
+    "📥  正在下载官方 {host} 安装器：{url}": "📥  Downloading the official {host} installer: {url}",
     "安装已取消": "Installation cancelled",
     "输入已结束，安装已停止。请在交互终端重新运行，或使用 --non-interactive 并提供所需参数。": "Input ended; installation stopped. Run in an interactive terminal, or use --non-interactive with the required options.",
     "   独立 Codex CLI：{path}": "   Standalone Codex CLI: {path}",
