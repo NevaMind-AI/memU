@@ -16,6 +16,7 @@ from uuid import uuid4
 
 from memu.hosts.bridging import Layout, self_sessions
 from memu.hosts.claude_code import cli_prepare
+from memu.hosts.claude_code.submit import is_automatic
 from memu.hosts.hooks import admission, worker
 
 BACKGROUND_ENV = "MEMU_CLAUDE_MEMORIZE"
@@ -90,7 +91,7 @@ async def _cmd_memorize_hook(args: argparse.Namespace) -> int:
         event = json.load(sys.stdin)
         if not isinstance(event, dict) or event.get("hook_event_name") != "UserPromptSubmit":
             raise ValueError("expected a UserPromptSubmit object")  # noqa: TRY003, TRY301
-        if os.environ.get(BACKGROUND_ENV) != "1":
+        if not is_automatic(event) and os.environ.get(BACKGROUND_ENV) != "1":
             args.agent = str(cli_prepare.find_executable())
             launch_background(args)
     except (OSError, ValueError, TypeError) as exc:
