@@ -84,7 +84,7 @@ async def _backend(args: argparse.Namespace) -> None:
             raise Blocked("后端配置未通过保护检查；已有配置保留，请检查 config 诊断。")
     diagnostics = io.StringIO()
     with contextlib.redirect_stdout(sys.stdout if args.json else diagnostics):
-        status = await _command(["doctor"])
+        status = await _command(["doctor", "--backend-only"])
     if status:
         print(diagnostics.getvalue(), end="", file=sys.stderr)
         raise Blocked("后端 doctor 未通过，请修复连接或配置后重跑。")

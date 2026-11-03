@@ -616,6 +616,16 @@ def _proxy_hint(base_url: str) -> str | None:
 
 
 async def _cmd_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
+    backend_status = await _cmd_backend_doctor(spec, args)
+    if spec.host == "codex" and not getattr(args, "backend_only", False):
+        from memu.hosts.codex import doctor
+
+        integration_status = doctor.check()
+        return int(bool(backend_status or integration_status))
+    return backend_status
+
+
+async def _cmd_backend_doctor(spec: HostSpec, args: argparse.Namespace) -> int:
     """Prove config resolves and the selected backend answers.
 
     Deliberately exercises the same call the inject hook will, so a green doctor
@@ -927,7 +937,18 @@ def build_parser(spec: HostSpec) -> argparse.ArgumentParser:
     )
     p.set_defaults(handler=bind(_cmd_verify_resources))
 
-    p = sub.add_parser("doctor", help="Verify MEMU_* config resolves and the selected memory backend is reachable")
+    p = sub.add_parser(
+        "doctor",
+        help=(
+            "Check backend, standalone Codex CLI and local hook definitions"
+            if spec.host == "codex"
+            else "Verify MEMU_* config resolves and the selected memory backend is reachable"
+        ),
+    )
+    if spec.host == "codex":
+        p.add_argument(
+            "--backend-only", action="store_true", help="Check only the memory backend (installer preflight)"
+        )
     p.set_defaults(handler=bind(_cmd_doctor))
 
     p = sub.add_parser("docs", help="Print a packaged agent-facing guide")

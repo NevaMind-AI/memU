@@ -86,7 +86,7 @@ def test_one_invocation_verifies_installation_and_can_be_repeated(machine, capsy
     assert "If you use Codex Desktop" in progress[-1]["notice"]
     assert "pause or remove" in progress[-1]["notice"]
     assert [p["elapsed_ms"] for p in progress] == sorted(p["elapsed_ms"] for p in progress)
-    assert machine[2] == [("doctor",), ("prepare-cli",), ("register",), ("remove-instruction",)]
+    assert machine[2] == [("doctor", "--backend-only"), ("prepare-cli",), ("register",), ("remove-instruction",)]
     assert recorded == [events.CLI_INSTALL_STARTED, events.CLI_INSTALL_SUCCEEDED]
     assert config_file.config_path().read_bytes() == before
     assert os.environ["CODEX_HOME"] == "original-home"
