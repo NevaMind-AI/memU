@@ -220,7 +220,7 @@ def test_hook_retrieves_extracted_query_with_shared_deadline(tmp_path, monkeypat
     assert trace["query_source"] == "extracted"
     assert trace["query_truncated"] is False
     assert prompt not in json.dumps(trace)
-    assert "Windows hook WinError 206" not in json.dumps(trace)
+    assert trace["query"] == "Windows hook WinError 206"
     assert trace["extraction_elapsed_ms"] == 6000
 
 
