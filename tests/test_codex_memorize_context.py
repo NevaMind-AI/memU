@@ -18,6 +18,7 @@ def test_submit_injects_own_worker_snapshot(tmp_path, monkeypatch, capsys, statu
     )
     monkeypatch.delenv("MEMU_CODEX_MEMORIZE", raising=False)
     monkeypatch.setattr(sys, "stdin", io.StringIO('{"hook_event_name":"UserPromptSubmit"}'))
+    monkeypatch.setattr(memorize_hook.cli_prepare, "_discover", lambda _: tmp_path / "codex.exe")
     monkeypatch.setattr(notify_console, "launch_background", lambda *args: path)
     monkeypatch.setattr(hook_status.time, "time", lambda: 61)
     from types import SimpleNamespace

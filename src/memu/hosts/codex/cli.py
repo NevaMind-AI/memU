@@ -19,7 +19,7 @@ Usage:
     memu-codex prepare               # slice new sessions into job files
     memu-codex verify-resources      # filter the touched-file log (run by a job)
     memu-codex commit                # submit what the agent produced back to memU
-    memu-codex doctor                # check config + store before relying on them
+    memu-codex doctor                # check backend, standalone CLI and hook definitions
     memu-codex docs install          # print the agent-facing install guide
     memu-codex docs uninstall        # print the agent-facing removal guide
 """
@@ -30,7 +30,16 @@ import argparse
 import sys
 
 from memu.hosts import hooks
-from memu.hosts.codex import hook_status, memorize_hook, notify_console, prompt_hook, prompt_hook_install
+from memu.hosts.codex import (
+    cli_prepare,
+    hook_status,
+    install,
+    memorize_hook,
+    notify_console,
+    prompt_hook,
+    prompt_hook_install,
+    uninstall,
+)
 from memu.hosts.codex.sessions import SESSION_DIR, CodexTranscriptSource
 from memu.hosts.host_cli import HostSpec, run
 
@@ -66,6 +75,9 @@ HOOK = hooks.HookSpec(
 
 
 def _register_extra(sub: object) -> None:
+    install.register(sub)
+    uninstall.register(sub)
+    cli_prepare.register(sub)
     prompt_hook.register(sub)
     memorize_hook.register(sub)
     hook_status.register(sub)

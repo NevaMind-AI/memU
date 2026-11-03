@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from memu.hosts.bridging import Layout
-from memu.hosts.codex import hook_status, notify_console
+from memu.hosts.codex import cli_prepare, hook_status, notify_console
 
 BACKGROUND_ENV = "MEMU_CODEX_MEMORIZE"
 
@@ -44,15 +44,26 @@ def _context(snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _cmd_memorize_hook(args: argparse.Namespace) -> int:
+    if getattr(args, "default_home", False):
+        os.environ["CODEX_HOME"] = str(Path.home() / ".codex")
     output: dict[str, Any] = {}
     try:
         event = json.load(sys.stdin)
         if not isinstance(event, dict) or event.get("hook_event_name") != "UserPromptSubmit":
             raise ValueError("expected a UserPromptSubmit object")  # noqa: TRY003, TRY301
         if os.environ.get(BACKGROUND_ENV) != "1":
+            executable = cli_prepare.find_executable()
             layout = Layout.default("codex", args.base_dir or "~/.memu/hosts/codex")
             path = notify_console.launch_background(
-                ["hook-run", "--base-dir", str(layout.base), "--agent", args.agent, "--session-dir", args.session_dir],
+                [
+                    "hook-run",
+                    "--base-dir",
+                    str(layout.base),
+                    "--agent",
+                    str(executable),
+                    "--session-dir",
+                    args.session_dir,
+                ],
                 layout,
                 "codex",
             )
@@ -66,7 +77,9 @@ async def _cmd_memorize_hook(args: argparse.Namespace) -> int:
 
 def register(sub: Any) -> None:
     parser = sub.add_parser("memorize-hook", help="Start background memory processing on prompt submission")
+    parser.add_argument("--default-home", action="store_true", help="Use ~/.codex for background configuration")
     parser.add_argument("--base-dir", default=None)
-    parser.add_argument("--agent", required=True)
+    # Accept existing hook definitions; discover the current standalone CLI at runtime.
+    parser.add_argument("--agent", help=argparse.SUPPRESS)
     parser.add_argument("--session-dir", default="~/.codex/sessions")
     parser.set_defaults(handler=_cmd_memorize_hook)

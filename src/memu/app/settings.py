@@ -56,13 +56,19 @@ class EmbeddingConfig(BaseModel):
     def set_provider_defaults(self) -> "EmbeddingConfig":
         # Each field is only overridden while it still holds the OpenAI default,
         # so explicit values survive.
-        from memu.embedding.defaults import EMBEDDING_PROVIDER_ENDPOINTS, default_embedding_model
+        from memu.embedding.defaults import (
+            EMBEDDING_PROVIDER_ENDPOINTS,
+            EMBEDDING_SDK_BASE_URLS,
+            default_embedding_model,
+        )
 
         endpoint = EMBEDDING_PROVIDER_ENDPOINTS.get(self.provider)
         if endpoint is not None:
             base_url, api_key = endpoint
             if self.base_url == "https://api.openai.com/v1":
-                self.base_url = base_url
+                self.base_url = (
+                    EMBEDDING_SDK_BASE_URLS.get(self.provider, base_url) if self.client_backend == "sdk" else base_url
+                )
             if self.api_key == "OPENAI_API_KEY":
                 self.api_key = api_key
         if self.embed_model == "text-embedding-3-small":
