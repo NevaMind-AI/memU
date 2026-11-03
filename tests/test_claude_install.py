@@ -23,9 +23,12 @@ BACKEND = lifecycle.backend
 
 @pytest.fixture
 def machine(tmp_path, monkeypatch):
-    home = tmp_path / "claude"
+    home = tmp_path / ".claude"
     home.mkdir()
-    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(home))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    redirected = tmp_path / "redirected-claude"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(redirected))
+    assert hook_install.home() == home
     executable = tmp_path / "memu-claude-code.exe"
     executable.touch()
     monkeypatch.setattr(sys, "argv", [str(executable)])
@@ -86,6 +89,7 @@ def test_install_uninstall_preserves_third_party_settings_and_processing(machine
     assert json.loads(capsys.readouterr().out)["removed"] == 0
     assert (home / "settings.json.memu-backup").exists()
     assert calls[0] == ["backend"]
+    assert not (home.parent / "redirected-claude").exists()
 
 
 @pytest.mark.parametrize("condition", ["auth", "missing-cli", "disabled", "invalid", "edited-skill"])
@@ -285,10 +289,13 @@ def test_missing_cli_installs_only_with_opt_in(tmp_path, monkeypatch, allowed):
 )
 def test_auth_status_is_read_only_and_clears_frontend_marker(tmp_path, monkeypatch, logged_in, method, provider):
     monkeypatch.setenv("CLAUDECODE", "frontend")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "redirected"))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     def probe(argv, **kwargs):
         assert argv[1:] == ["auth", "status", "--json"]
         assert "CLAUDECODE" not in kwargs["env"]
+        assert kwargs["env"]["CLAUDE_CONFIG_DIR"] == str(tmp_path / ".claude")
         assert kwargs["stdin"] == subprocess.DEVNULL
         return subprocess.CompletedProcess(
             argv,

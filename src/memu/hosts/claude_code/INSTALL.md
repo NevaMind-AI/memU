@@ -15,7 +15,8 @@ memu-claude-code install --non-interactive --install-missing --json --language L
 ```
 
 The CLI owns backend configuration and verification, CLI preparation,
-authentication-status checking, hook registration and local settings read-back,
+authentication-status checking, hook registration in `~/.claude/settings.json`
+and local settings read-back,
 and cleanup of recognized legacy retrieval instructions. Honor user-supplied
 `--claude PATH` and `--base-dir` options.
 

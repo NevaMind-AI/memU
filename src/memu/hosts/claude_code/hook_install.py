@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shlex
 import shutil
 import sys
@@ -16,7 +15,7 @@ SUBCOMMANDS = ("prompt-hook", "memorize-hook")
 
 
 def home() -> Path:
-    return Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude").expanduser().resolve()
+    return Path.home() / ".claude"
 
 
 def read() -> tuple[Path, bytes | None, dict[str, Any]]:

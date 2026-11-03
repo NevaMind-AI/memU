@@ -75,6 +75,7 @@ def auth_status(executable: Path) -> bool:
     """Read CLI authentication status without a model turn or exposing credentials."""
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)
+    env["CLAUDE_CONFIG_DIR"] = str(Path.home() / ".claude")
     result = subprocess.run(  # noqa: S603
         [str(executable), "auth", "status", "--json"],
         capture_output=True,

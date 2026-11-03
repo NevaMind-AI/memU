@@ -102,6 +102,7 @@ def test_agent_receives_fresh_session_and_guard_before_start(tmp_path, monkeypat
         assert env[hook.SESSION_ENV] == session_id
         assert env[hook.BACKGROUND_ENV] == "1"
         assert "CLAUDECODE" not in env
+        assert env["CLAUDE_CONFIG_DIR"] == str(Path.home() / ".claude")
         assert "memu-claude-code prepare or commit" in prompt
         calls.append(argv)
 

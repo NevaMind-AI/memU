@@ -46,6 +46,7 @@ def stream_agent(argv: list[str], layout: Layout, prompt: str, timeout: int) -> 
     session_id = os.environ[SESSION_ENV]
     self_sessions.remember(layout.self_sessions, session_id)
     env = os.environ.copy()
+    env["CLAUDE_CONFIG_DIR"] = str(Path.home() / ".claude")
     # A detached headless run is independent of the invoking Claude frontend.
     env.pop("CLAUDECODE", None)
     worker.stream_agent([*argv, "--session-id", session_id], layout, prompt, timeout, env=env)
